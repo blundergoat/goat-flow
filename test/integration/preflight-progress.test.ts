@@ -846,6 +846,26 @@ describe("preflight Tests failure details", () => {
     };
   }
 
+  // Minimized TAP counts retain the recorded coverage diagnostic and a runner-failure control.
+  for (const [label, cause] of [
+    [
+      "Coverage reporting failed",
+      "# Warning: Could not report code coverage. TypeError: Cannot read properties of null (reading 'sourcesContent')",
+    ],
+    ["Test runner failed", "runner teardown failed"],
+  ]) {
+    it(`keeps ${label} failing despite zero assertion failures`, () => {
+      const captured = runTestsFailureSection(
+        `# tests 1\n# pass 1\n# fail 0\n${cause}\n`,
+      );
+      assert.equal(captured.status, 1);
+      assert.deepEqual(captured.rows, [
+        `ROW\tFAIL\t${label} (exit 1; tests reported 0/1 failures)`,
+      ]);
+      assert.ok(captured.details.join("\n").includes(cause));
+    });
+  }
+
   it("shows the first failure's assertion within a fixed bound and keeps Tests failing", () => {
     const captured = runTestsFailureSection(capturedPrefixFailure);
     assert.equal(captured.status, 1, captured.stderr);

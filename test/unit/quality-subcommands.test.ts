@@ -62,6 +62,7 @@ function currentQualityReport(
   detail = `Token fixture ${QUALITY_REPORT_TOKEN_FIXTURE}`,
 ) {
   const version = getPackageVersion();
+  const snapshot = `review-v1:sha256:${"a".repeat(64)}`;
   return {
     report_kind: "goat-flow-quality-report",
     goat_flow_version: version,
@@ -79,6 +80,7 @@ function currentQualityReport(
       grounding_status: "complete",
       unverified_probes: [],
       score_confidence: "high",
+      workspace_snapshot: { start: snapshot, end: snapshot },
     },
     scores: {
       setup: {
@@ -148,10 +150,7 @@ function runQualitySaveText(projectPath: string, input: string) {
 
 /** Run the public source CLI saver with one in-memory report body. */
 function runQualitySave(projectPath: string, report: unknown) {
-  return runQualitySaveText(
-    projectPath,
-    `${JSON.stringify(report, null, 2)}\n`,
-  );
+  return runQualitySaveText(projectPath, `${JSON.stringify(report)}\n`);
 }
 
 /**
@@ -330,6 +329,7 @@ describe("quality assessment context", () => {
     grounding_status: "partial",
     unverified_probes: ["bash scripts/preflight-checks.sh: denied"],
     score_confidence: "medium",
+    workspace_snapshot: { start: null, end: null },
   };
 
   it("accepts comparable provenance on a current report", () => {

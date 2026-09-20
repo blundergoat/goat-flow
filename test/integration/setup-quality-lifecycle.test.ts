@@ -307,6 +307,10 @@ function consumerQualityReport(consumerTargetPath: string): object {
       grounding_status: "complete",
       unverified_probes: [],
       score_confidence: "high",
+      workspace_snapshot: {
+        start: `review-v1:sha256:${"a".repeat(64)}`,
+        end: `review-v1:sha256:${"a".repeat(64)}`,
+      },
     },
     scores: {
       setup: {

@@ -8,6 +8,7 @@ import {
   BUILD_CHECKS,
   CODEX_WORKSPACE_ROOT_ENTRIES,
   PROFILES,
+  PROJECT_ROOT,
   assert,
   assertExists,
   codexWorkspaceRootsTable,
@@ -15,9 +16,72 @@ import {
   extractSettingsFacts,
   it,
   makeCtx,
+  readFileSync,
   stubAgentFacts,
   stubFS,
 } from "./helpers.js";
+
+describe("plaintext credential-store coverage", () => {
+  it("does not count Git credentials as Claude private-key coverage", () => {
+    const template = JSON.parse(
+      readFileSync(
+        `${PROJECT_ROOT}/workflow/hooks/agent-config/claude.json`,
+        "utf8",
+      ),
+    ) as { permissions: { deny: string[] } };
+    template.permissions.deny = template.permissions.deny.filter(
+      (rule) => !/\*\.(pem|key|pfx)/u.test(rule),
+    );
+    const facts = extractSettingsFacts(
+      stubFS({
+        exists: (path) => path === ".claude/settings.json",
+        readJson: (path) =>
+          path === ".claude/settings.json" ? template : null,
+      }),
+      PROFILES.claude,
+    );
+    assert.equal(facts.readDenyCoversSecrets, false);
+  });
+
+  for (const agent of ["claude", "codex"] as const) {
+    for (const store of [
+      ".netrc",
+      ".git-credentials",
+      ".config/gh/hosts.yml",
+      ".pgpass",
+    ]) {
+      it(`requires ${store} protection in the ${agent} settings audit`, () => {
+        const configPath =
+          agent === "claude" ? ".claude/settings.json" : ".codex/config.toml";
+        const templatePath = `workflow/hooks/agent-config/${agent === "claude" ? "claude.json" : "codex.toml"}`;
+        const template = readFileSync(
+          `${PROJECT_ROOT}/${templatePath}`,
+          "utf8",
+        );
+        for (const missing of [false, true]) {
+          const text = missing
+            ? template
+                .split("\n")
+                .filter((line) => !line.includes(store))
+                .join("\n")
+            : template;
+          const facts = extractSettingsFacts(
+            stubFS({
+              exists: (path) => path === configPath,
+              readFile: (path) => (path === configPath ? text : null),
+              readJson: (path) =>
+                path === configPath && agent === "claude"
+                  ? JSON.parse(text)
+                  : null,
+            }),
+            PROFILES[agent],
+          );
+          assert.equal(facts.readDenyCoversSecrets, !missing);
+        }
+      });
+    }
+  }
+});
 
 describe("codex settings feature flags", () => {
   it("continues parsing nested Codex workspace-root permission tables", () => {
@@ -189,6 +253,10 @@ describe("codex settings feature flags", () => {
                   '"**/.kube/**" = "deny"',
                   '"**/.npmrc" = "deny"',
                   '"**/.pypirc" = "deny"',
+                  '"**/.netrc" = "deny"',
+                  '"**/.git-credentials" = "deny"',
+                  '"**/.config/gh/hosts.yml" = "deny"',
+                  '"**/.pgpass" = "deny"',
                   '"**/*.pem" = "deny"',
                   '"**/*.key" = "deny"',
                   '"**/*.pfx" = "deny"',

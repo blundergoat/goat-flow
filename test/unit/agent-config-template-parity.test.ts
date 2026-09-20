@@ -146,6 +146,35 @@ describe("agent config template parity", () => {
     });
   }
 
+  for (const store of [
+    ".netrc",
+    ".git-credentials",
+    ".config/gh/hosts.yml",
+    ".pgpass",
+  ]) {
+    it(`protects the plaintext ${store} store in both templates and installed configs`, () => {
+      const installedClaude = JSON.parse(
+        readFileSync(join(PROJECT_ROOT, ".claude/settings.json"), "utf8"),
+      ) as { permissions: { deny: string[] } };
+      const installedCodex = readFileSync(
+        join(PROJECT_ROOT, ".codex/config.toml"),
+        "utf8",
+      );
+      for (const verb of ["Read", "Edit"]) {
+        assert.ok(claudeDeny.includes(`${verb}(~/${store})`));
+        assert.ok(
+          installedClaude.permissions.deny.includes(`${verb}(~/${store})`),
+        );
+      }
+      for (const config of [codexTemplate, installedCodex]) {
+        assert.match(
+          config,
+          new RegExp(`"${escapeRegExp(`**/${store}`)}"\\s*=\\s*"deny"`),
+        );
+      }
+    });
+  }
+
   // Bare **/ patterns resolve under the working directory, so an in-project rule for a
   // credential store never protects the real one in the home directory. Every store is
   // anchored at ~/ on Claude; Codex workspace-root grammar cannot express home paths.
@@ -159,6 +188,10 @@ describe("agent config template parity", () => {
       ".kube",
       ".npmrc",
       ".pypirc",
+      ".netrc",
+      ".git-credentials",
+      ".config/gh/hosts.yml",
+      ".pgpass",
     ];
     const inProjectStoreRules = claudeDeny.filter((entry) =>
       storeNames.some((store) => entry.includes(`(**/${store}`)),

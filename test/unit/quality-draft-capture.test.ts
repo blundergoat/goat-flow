@@ -95,6 +95,7 @@ function validReport(projectRoot: string): string {
       grounding_status: "blocked",
       unverified_probes: ["fixture does not run project grounding"],
       score_confidence: "low",
+      workspace_snapshot: { start: null, end: null },
     },
     scores: {
       setup: {

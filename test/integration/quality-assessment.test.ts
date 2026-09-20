@@ -125,7 +125,13 @@ describe("quality assessment evidence", () => {
     const legacy = makeAssessmentReport();
     delete legacy.improvements;
     delete legacy.assessment_context?.workspace_snapshot;
-    assert.deepEqual(parseQualityReport(legacy), { ok: true, report: legacy });
+    assert.deepEqual(
+      parseQualityReport(legacy, { requireCurrentFields: false }),
+      { ok: true, report: legacy },
+    );
+    const strict = parseQualityReport(legacy, { requireCurrentFields: true });
+    assert.ok(!strict.ok);
+    assert.match(strict.error, /workspace_snapshot/u);
 
     const report = makeAssessmentReport();
     const recommendation = report.improvements?.[0];
@@ -240,6 +246,17 @@ describe("quality assessment evidence", () => {
         ".goat-flow/logs/quality/*.json\n",
       );
       const report = makeAssessmentReport(projectPath);
+      const missingSnapshot = structuredClone(report);
+      delete missingSnapshot.assessment_context?.workspace_snapshot;
+      assert.throws(
+        () =>
+          persistQualityReportText(
+            { projectPath, rawText: JSON.stringify(missingSnapshot) },
+            { CLIError },
+          ),
+        /workspace_snapshot is required for current reports/u,
+      );
+      assert.equal(loadQualityHistory(projectPath).entries.length, 0);
       const savedPath = persistQualityReportText(
         { projectPath, rawText: JSON.stringify(report) },
         { CLIError },
