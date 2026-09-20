@@ -979,7 +979,12 @@ function parseReportInternal(
     raw,
     "assessment_context",
     options,
-    parseAssessmentContext,
+    (value, path) =>
+      parseAssessmentContext(
+        value,
+        path,
+        options.requireCurrentFields === true,
+      ),
   );
   // Malformed provenance would hide the limits behind this report's scores.
   if (!assessmentContext.ok) return assessmentContext;

@@ -350,7 +350,7 @@ function denyHookHasNormalizedSecretRoots(content: string): boolean {
 }
 
 /**
- * Detect the secret-path families the Bash hook must still block: env files, the SSH and AWS stores, registry credentials, and key extensions.
+ * Detect the required Bash secret-path families: env files, SSH and AWS stores, registry and plaintext credentials, and key extensions.
  * A bare `secrets` folder is deliberately not a family, so a project with a secrets route passes this check.
  *
  * @param content - text of the installed secret-path policy file; an older hook without these markers reports no coverage
@@ -368,6 +368,12 @@ function denyHookHasSecretFamilyMarkers(content: string): boolean {
     /\\\.env/.test(content),
     /\\\.env\\\.example/.test(content) || /\.env\.example/.test(content),
     hasCredentialStoreFamilies,
+    [
+      "\\.netrc",
+      "\\.git-credentials",
+      "\\.config/gh/hosts\\.yml",
+      "\\.pgpass",
+    ].every((marker) => content.includes(marker)),
     /credentials/.test(content) || /\\\.npmrc|\\\.pypirc/.test(content),
     hasKeyExtensionFamily,
   ].every(Boolean);

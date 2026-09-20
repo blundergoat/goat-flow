@@ -224,8 +224,14 @@ function checkReadDenyCoversSecrets(
   /** Whether key/credential paths are covered by deny rules */
   const hasKeys =
     /Read\(.*\.(pem|key|pfx)\b/.test(denyStr) ||
-    /Read\(.*credentials/.test(denyStr);
-  return hasEnv && hasSsh && hasAws && hasKeys;
+    /Read\((?:[^)]*\/)?credentials/.test(denyStr);
+  const hasPlaintextStores = [
+    ".netrc",
+    ".git-credentials",
+    ".config/gh/hosts.yml",
+    ".pgpass",
+  ].every((store) => denyArr.includes(`Read(~/${store})`));
+  return [hasEnv, hasSsh, hasAws, hasKeys, hasPlaintextStores].every(Boolean);
 }
 
 /** Detect Codex TOML permission profiles that deny the main secret path families. */
@@ -402,7 +408,7 @@ function hasCodexEnvDeny(denied: Set<string>, fs: ReadonlyFS): boolean {
 
 /**
  * Detect the credential-store and key-extension denies a Codex profile must carry: Docker, GnuPG, and Kubernetes stores,
- * the npm and PyPI registry auth files, and pem, key, and pfx extensions. A `credentials*` name rule is not required,
+ * registry auth and plaintext credential files, and pem, key, and pfx extensions. A `credentials*` name rule is not required,
  * because it blocked ordinary application files such as a credentials.ts auth provider.
  *
  * @param denied - workspace-root patterns the active profile denies; an empty set reports no coverage
@@ -421,6 +427,12 @@ function hasCodexCredentialRootDeny(
     ].every((patternGroup) => hasAnyCodexPattern(denied, patternGroup)) &&
     (hasEveryCodexPattern(denied, ["**/.npmrc", "**/.pypirc"]) ||
       existingExactPathsAreDenied(denied, fs, [".npmrc", ".pypirc"])) &&
+    hasEveryCodexPattern(denied, [
+      "**/.netrc",
+      "**/.git-credentials",
+      "**/.config/gh/hosts.yml",
+      "**/.pgpass",
+    ]) &&
     ["pem", "key", "pfx"].every((extension) =>
       hasAnyCodexPattern(denied, [`**/*.${extension}`, `*.${extension}`]),
     )

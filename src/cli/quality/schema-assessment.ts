@@ -284,13 +284,22 @@ function validateSnapshotGrounding(
  * @param raw - snapshot object; omission keeps legacy reports readable, while null endpoints record unavailable captures
  * @param groundingStatus - reported evidence coverage, checked against snapshot availability and drift
  * @param path - context field used to identify the evidence the author must repair
+ * @param requireCurrentFields - current saves must disclose capture metadata, including unavailable endpoints
  * @returns optional snapshot fields ready to retain, or the first validation error
  */
 function parseAssessmentWorkspace(
   raw: unknown,
   groundingStatus: QualityAssessmentContext["grounding_status"],
   path: string,
+  requireCurrentFields?: boolean,
 ): FieldResult<Pick<QualityAssessmentContext, "workspace_snapshot">> {
+  // Only historical loading may omit capture metadata; partial current runs can disclose null endpoints.
+  if (requireCurrentFields && raw === undefined) {
+    return {
+      ok: false,
+      error: `${path}.workspace_snapshot is required for current reports`,
+    };
+  }
   const workspace = parseWorkspaceSnapshot(raw, `${path}.workspace_snapshot`);
   // Malformed capture identifiers cannot establish whether the assessed files stayed the same.
   if (!workspace.ok) return workspace;
@@ -317,11 +326,13 @@ function parseAssessmentWorkspace(
  *
  * @param raw - authored context; missing or non-object values cannot explain this run's evidence coverage
  * @param path - context field shown in quality save's repair message
+ * @param requireCurrentFields - current saves require explicit snapshot metadata; historical loading may omit it
  * @returns validated context with optional legacy snapshot absence, or the first field the author must correct
  */
 export function parseAssessmentContext(
   raw: unknown,
   path: string,
+  requireCurrentFields?: boolean,
 ): FieldResult<QualityAssessmentContext> {
   // Assessment context must name the workspace and coverage behind the displayed scores.
   if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
@@ -385,6 +396,7 @@ export function parseAssessmentContext(
     raw.workspace_snapshot,
     groundingStatus.value,
     path,
+    requireCurrentFields,
   );
   // The capture must be valid and consistent with the coverage the author claimed.
   if (!workspace.ok) return workspace;
