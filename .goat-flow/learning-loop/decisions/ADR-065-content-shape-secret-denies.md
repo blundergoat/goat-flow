@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-09-02
 **Ticket/Context:** `.goat-flow/plans/permissions-rebalance/M01-rebalance-secret-denies.md` (local working state, not committed evidence)
-**Updated:** 2026-09-05 - condensed; the release-documentation consequence records that the changelog entry is still outstanding.
+**Updated:** 2026-09-20 - include the measured plaintext credential-store gaps in shell, template, installer and audit coverage; existing Claude additions still require reviewed reconciliation.
 
 ## Context
 
@@ -18,7 +18,7 @@ Two more defects surfaced against the Claude Code permissions documentation. Bar
 Shipped deny rules match secret content shapes and credential stores, never plain folder or file names.
 
 - Keep the ADR-025 `Bash(*git commit*)` and `Bash(*git push*)` rules, the eight enumerated `.env` variants for Read and Edit, and the `pem`, `key`, and `pfx` extensions for Read and Edit. The settings layer keeps only those two Bash rules, whose bluntness ADR-025 accepts deliberately; fail-closed enforcement belongs in the hook, whose parser can tell a command from a quotation.
-- Anchor credential-store rules at the home directory on Claude: `~/.ssh/**`, `~/.aws/**`, `~/.gnupg/**`, `~/.config/gcloud/**`, `~/.docker/**`, `~/.kube/**`, `~/.npmrc`, `~/.pypirc`, each for Read and Edit. The Read tool bypasses the Bash hook, so only a `~/` rule stops it opening `~/.aws/credentials`. Codex workspace-root grammar cannot express home paths, so its profile keeps the workspace-relative forms plus `**/.config/gcloud/**`, and the Bash hook covers shell access to home stores for every agent.
+- Anchor credential-store rules at the home directory on Claude: `~/.ssh/**`, `~/.aws/**`, `~/.gnupg/**`, `~/.config/gcloud/**`, `~/.docker/**`, `~/.kube/**`, `~/.npmrc`, `~/.pypirc`, `~/.netrc`, `~/.git-credentials`, `~/.config/gh/hosts.yml`, `~/.pgpass`, each for Read and Edit. The Read tool bypasses the Bash hook, so only a `~/` rule stops it opening `~/.aws/credentials`. Codex workspace-root grammar cannot express home paths, so its profile keeps the workspace-relative forms, and the Bash hook covers shell access to home stores for every agent. The four exact plaintext filenames added on 2026-09-20 must not deny their `.example` documentation controls.
 - Retire `**/secrets/**` and `**/credentials*` from both templates, the dashboard reporting profile, and the hook's path regexes. The hook keeps the exact `credentials.json` download and the registry auth files. A folder or file name is not evidence of secret content; an extension such as `.pem` or a dotfile store such as `.aws` is, and content-shape rules have no known collision with application code.
 - Retire `Bash(*sudo *)`, `Bash(*mkfs*)`, `Bash(*dd if=*)`, and `Bash(*git reset --hard*)` from the settings layer; the hook owns them.
 
@@ -38,7 +38,7 @@ Upgrades carry the change through narrow, printed migrations, never wholesale re
 
 - `test/unit/agent-config-template-parity.test.ts` forbids folder-name heuristics and in-project credential-store rules on either template and limits settings-layer Bash denies to the ADR-025 pair.
 - The hook self-test and `test/integration/deny-dangerous-policy.test.ts` assert that a nested secrets route and a `credentials.ts` provider stay readable while `.env`, key files, `credentials.json`, and home stores stay blocked.
-- `deny-covers-secrets` no longer requires a secrets-directory family in the hook or a `secrets/**` or `credentials*` pattern in a Codex profile; env, key-store, registry, and key-extension families remain required.
+- `deny-covers-secrets` no longer requires a secrets-directory family in the hook or a `secrets/**` or `credentials*` pattern in a Codex profile; env, key-store, registry, plaintext credential-store and key-extension families remain required. Existing Claude settings missing the new stores need the reviewed setup reconcile step; a normal install does not silently add those denies.
 - A project whose secret material lives in an extensionless file under a folder named `secrets/` loses the folder-level deny. The Stop-time safety scan and the env and key-extension rules remain; teams that want the folder rule add it as a project-owned deny, which upgrades preserve.
 - The retired rules and the reconcile step are not in the v1.17.0 changelog as of 2026-09-05; documenting them is an open release task outside this decision.
 
