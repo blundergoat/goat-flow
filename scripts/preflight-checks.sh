@@ -2024,6 +2024,14 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     elif [[ "$test_exit" -eq 127 ]] && [[ "$test_output" == *"[preflight] command failed to start:"* ]]; then
         fail "$test_label unavailable: command failed to start"
         printf '%s\n' "$test_output" | tail -20 | details_pipe || true
+    # Zero assertion failures cannot override a failed runner or missing coverage report.
+    elif [[ "$fail_count" == "0" && "$test_count" =~ ^[1-9][0-9]*$ ]]; then
+        if [[ "$test_reports_coverage" == true && "$test_output" == *"Warning: Could not report code coverage."* ]]; then
+            fail "Coverage reporting failed (exit $test_exit; tests reported $fail_count/$test_count failures)"
+        else
+            fail "Test runner failed (exit $test_exit; tests reported $fail_count/$test_count failures)"
+        fi
+        printf '%s\n' "$test_output" | tail -20 | details_pipe || true
     else
         fail "Tests failed ($fail_count/$test_count failures)"
         # Name up to five failing tests, then show the first failure's diagnostic without its stack so the maintainer sees why Tests stopped.
