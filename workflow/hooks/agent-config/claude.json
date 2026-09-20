@@ -43,6 +43,10 @@
       "Read(~/.docker/**)",
       "Read(~/.kube/**)",
       "Read(~/.npmrc)",
+      "Read(~/.netrc)",
+      "Read(~/.git-credentials)",
+      "Read(~/.config/gh/hosts.yml)",
+      "Read(~/.pgpass)",
       "Read(~/.pypirc)",
       "Edit(~/.ssh/**)",
       "Edit(~/.aws/**)",
@@ -51,6 +55,10 @@
       "Edit(~/.docker/**)",
       "Edit(~/.kube/**)",
       "Edit(~/.npmrc)",
+      "Edit(~/.netrc)",
+      "Edit(~/.git-credentials)",
+      "Edit(~/.config/gh/hosts.yml)",
+      "Edit(~/.pgpass)",
       "Edit(~/.pypirc)"
     ]
   },
