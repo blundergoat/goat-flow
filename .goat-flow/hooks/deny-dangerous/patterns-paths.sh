@@ -297,7 +297,7 @@ is_secret_path_touch() {
   local secret_directory_re='(^|[[:space:]]|=|:|/|['\''"])(\.ssh|\.aws|\.config/gcloud|\.gnupg)(/|[[:space:]]|$|['\''"])'
   # Exact directory operands matter because users usually copy a whole key store without a slash.
   if [[ "$c" =~ $secret_directory_re ]]; then return 0; fi
-  local secret_config_file_re='(^|[[:space:]]|=|:|/|['\''"])(\.docker/config\.json|\.kube/config)([[:space:]]|$|['\''"])'
+  local secret_config_file_re='(^|[[:space:]]|=|:|/|['\''"])(\.docker/config\.json|\.kube/config|\.netrc|\.git-credentials|\.config/gh/hosts\.yml|\.pgpass)([[:space:]]|$|['\''"])'
   # Exact client config files contain credentials even though their parent directories are ordinary.
   if [[ "$c" =~ $secret_config_file_re ]]; then return 0; fi
   if [[ "$c" =~ application_default_credentials\.json ]]; then return 0; fi

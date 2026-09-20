@@ -998,6 +998,7 @@ strip_xargs_payload_command() {
       # A separated value must be skipped with its option; otherwise the value itself looks like
       # the payload and hides the real command, as `--process-slot-var VAR git push` once did.
       -a|--arg-file|-I|-L|-n|-P|-s|-E|-d|--max-args|--max-procs|--max-chars|--delimiter|--process-slot-var)
+        [[ $((xargs_word_index + 1)) -lt "${#xargs_words[@]}" ]] || return 2
         xargs_word_index=$((xargs_word_index + 2))
         continue
         ;;
@@ -1005,9 +1006,11 @@ strip_xargs_payload_command() {
         xargs_word_index=$((xargs_word_index + 1))
         continue
         ;;
+      --help|--version)
+        return 1
+        ;;
       -*)
-        xargs_word_index=$((xargs_word_index + 1))
-        continue
+        return 2
         ;;
     esac
     break
@@ -1015,7 +1018,13 @@ strip_xargs_payload_command() {
 
   # Missing payload means there is no downstream user command to classify.
   [[ "$xargs_word_index" -lt "${#xargs_words[@]}" ]] || return 1
-  join_shell_words_from xargs_words "$xargs_word_index"
+  # Keep the original option prefix recoverable and quoted payload data intact.
+  local payload="$developer_command"
+  local dropped_word
+  for ((dropped_word = 0; dropped_word < xargs_word_index; dropped_word++)); do
+    payload=$(drop_first_shell_word "$payload")
+  done
+  printf '%s' "$payload"
 }
 
 # Return the repeated command after supported watch display and timing options.
@@ -1435,7 +1444,7 @@ word_starts_with_redirection() {
   [[ "$1" =~ $redirection_re ]]
 }
 
-# Reveal a supported exec payload; missing operands or unfamiliar options keep the original command visible for inspection.
+# Reveal a supported exec payload; uncertain option arity must fail closed at the caller.
 normalize_exec_prefix() {
   local c="$1"
   local -a words=()
@@ -1451,7 +1460,7 @@ normalize_exec_prefix() {
         break
         ;;
       -a)
-        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 2
         i=$((i + 2))
         continue
         ;;
@@ -1461,7 +1470,7 @@ normalize_exec_prefix() {
           i=$((i + 1))
           continue
         fi
-        return 1
+        return 2
         ;;
     esac
     break
@@ -1472,7 +1481,7 @@ normalize_exec_prefix() {
   join_shell_words_from words "$i"
 }
 
-# Reveal the command after timeout options and duration; incomplete or unfamiliar forms remain unnormalized for inspection.
+# Reveal the command after timeout options and duration; uncertain option arity must fail closed at the caller.
 normalize_timeout_prefix() {
   local c="$1"
   local -a words=()
@@ -1488,7 +1497,7 @@ normalize_timeout_prefix() {
         break
         ;;
       -s|-k|--signal|--kill-after)
-        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 2
         i=$((i + 2))
         continue
         ;;
@@ -1504,7 +1513,7 @@ normalize_timeout_prefix() {
         return 1
         ;;
       -*)
-        return 1
+        return 2
         ;;
     esac
     break
@@ -1543,7 +1552,7 @@ normalize_setsid_prefix() {
           i=$((i + 1))
           continue
         fi
-        return 1
+        return 2
         ;;
     esac
     break
@@ -1568,7 +1577,7 @@ normalize_stdbuf_prefix() {
         break
         ;;
       -i|-o|-e|--input|--output|--error)
-        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 2
         i=$((i + 2))
         continue
         ;;
@@ -1580,7 +1589,7 @@ normalize_stdbuf_prefix() {
         return 1
         ;;
       -*)
-        return 1
+        return 2
         ;;
     esac
     break
@@ -1608,7 +1617,7 @@ normalize_ionice_prefix() {
         return 1
         ;;
       -c|-n|--class|--classdata)
-        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 2
         i=$((i + 2))
         continue
         ;;
@@ -1620,7 +1629,7 @@ normalize_ionice_prefix() {
         return 1
         ;;
       -*)
-        return 1
+        return 2
         ;;
     esac
     break
@@ -1655,7 +1664,7 @@ normalize_taskset_prefix() {
         return 1
         ;;
       -*)
-        return 1
+        return 2
         ;;
     esac
     break
@@ -1689,7 +1698,7 @@ normalize_chrt_prefix() {
         continue
         ;;
       -T|-P|-D|--sched-runtime|--sched-period|--sched-deadline)
-        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 2
         i=$((i + 2))
         continue
         ;;
@@ -1701,7 +1710,7 @@ normalize_chrt_prefix() {
         return 1
         ;;
       -*)
-        return 1
+        return 2
         ;;
     esac
     break
@@ -1728,7 +1737,7 @@ normalize_flock_prefix() {
         break
         ;;
       -c|--command)
-        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 2
         printf '%s' "${words[$((i + 1))]}"
         return 0
         ;;
@@ -1741,7 +1750,7 @@ normalize_flock_prefix() {
         return 0
         ;;
       -E|-w|--conflict-exit-code|--timeout)
-        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 2
         i=$((i + 2))
         continue
         ;;
@@ -1757,7 +1766,7 @@ normalize_flock_prefix() {
         return 1
         ;;
       -*)
-        return 1
+        return 2
         ;;
     esac
     break
@@ -1771,7 +1780,7 @@ normalize_flock_prefix() {
   [[ "$i" -lt "${#words[@]}" ]] || return 1
   # An explicit locked command string is the action to classify rather than the lock file itself.
   if [[ "${words[$i]}" == "-c" || "${words[$i]}" == "--command" ]]; then
-    [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+    [[ $((i + 1)) -lt "${#words[@]}" ]] || return 2
     printf '%s' "${words[$((i + 1))]}"
     return 0
   fi
@@ -1786,6 +1795,7 @@ normalize_command_candidate() {
   local word=""
   local base=""
   local after_word=""
+  local xargs_prefix=""
   local case_arm_re='^case[[:space:]][^)]*\)[[:space:]]*'
 
   # Peel supported wrappers repeatedly so nested launch syntax cannot conceal the command the agent would actually run.
@@ -1887,10 +1897,30 @@ normalize_command_candidate() {
     if [[ "$base" == "nice" ]]; then
       c="${c#"$word"}"
       c="${c#"${c%%[![:space:]]*}"}"
-      # The priority value configures nice; the following executable determines the actual policy verdict.
-      if [[ "$c" =~ ^(-n[[:space:]]+[^[:space:]]+|--adjustment(=|[[:space:]]+)[^[:space:]]+|-[0-9]+)[[:space:]]+ ]]; then
-        c="${c#"${BASH_REMATCH[0]}"}"
-      fi
+      # Nice accepts repeated priority options, including attached -n values.
+      local -a nice_words=()
+      split_shell_words_into nice_words "$c"
+      local nice_index=0 nice_word=""
+      while [[ "$nice_index" -lt "${#nice_words[@]}" ]]; do
+        nice_word="${nice_words[$nice_index]}"
+        case "$nice_word" in
+          --) nice_index=$((nice_index + 1)); break ;;
+          -n|--adjustment)
+            [[ $((nice_index + 1)) -lt "${#nice_words[@]}" ]] || return 2
+            nice_index=$((nice_index + 2))
+            ;;
+          -n?*|--adjustment=*|-[0-9]*)
+            nice_index=$((nice_index + 1))
+            ;;
+          --help|--version)
+            printf '%s' "nice $c"
+            return 0
+            ;;
+          -*) return 2 ;;
+          *) break ;;
+        esac
+      done
+      c=$(join_shell_words_from nice_words "$nice_index")
       continue
     fi
     # Privilege elevation wraps the action but does not authorize an otherwise guarded command.
@@ -1908,6 +1938,8 @@ normalize_command_candidate() {
         if stripped=$(normalize_exec_prefix "$after_word"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
       timeout)
@@ -1915,6 +1947,8 @@ normalize_command_candidate() {
         if stripped=$(normalize_timeout_prefix "$after_word"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
       setsid)
@@ -1922,6 +1956,8 @@ normalize_command_candidate() {
         if stripped=$(normalize_setsid_prefix "$after_word"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
       stdbuf)
@@ -1929,6 +1965,8 @@ normalize_command_candidate() {
         if stripped=$(normalize_stdbuf_prefix "$after_word"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
       ionice)
@@ -1936,6 +1974,8 @@ normalize_command_candidate() {
         if stripped=$(normalize_ionice_prefix "$after_word"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
       taskset)
@@ -1943,6 +1983,8 @@ normalize_command_candidate() {
         if stripped=$(normalize_taskset_prefix "$after_word"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
       chrt)
@@ -1950,6 +1992,8 @@ normalize_command_candidate() {
         if stripped=$(normalize_chrt_prefix "$after_word"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
       flock)
@@ -1957,6 +2001,19 @@ normalize_command_candidate() {
         if stripped=$(normalize_flock_prefix "$after_word"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
+        fi
+        ;;
+      xargs)
+        # Normalize the child while retaining the outer xargs options and stdin
+        # target semantics. Returning the original child hides nested wrappers.
+        if stripped=$(strip_xargs_payload_command "$c"); then
+          [[ -n "$xargs_prefix" ]] || xargs_prefix="${c:0:${#c}-${#stripped}}"
+          c="$stripped"
+          continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
       watch)
@@ -1998,7 +2055,7 @@ normalize_command_candidate() {
     break
   done
 
-  printf '%s' "$c"
+  printf '%s' "$xargs_prefix$c"
 }
 
 # Split a developer's command at executable top-level boundaries before policy checks.
@@ -2293,17 +2350,27 @@ prepare_segment_context() {
   local pipe_stripped="${CMD_UNQUOTED//||/}"
   [[ "$pipe_stripped" == *"|"* ]] && HAS_PIPE=1
 
-  # A downstream wrapper has its own option grammar; uncertainty must reach the hook verdict
-  # before policy-specific helpers consume normalized stages through command substitution.
+  # Every real pipeline stage executes independently. Check its complete policy,
+  # not just uncertain options, without replacing the outer command's shared state.
   if [[ "$HAS_PIPE" -eq 1 ]]; then
     local -a wrapper_pipeline_stages=()
-    local wrapper_pipeline_stage
+    local wrapper_pipeline_stage wrapper_pipeline_output
     split_top_level_pipeline_stages_into wrapper_pipeline_stages "$policy_cmd"
-    for wrapper_pipeline_stage in "${wrapper_pipeline_stages[@]}"; do
-      if ! normalize_command_candidate "$wrapper_pipeline_stage" >/dev/null; then
-        block "Cannot inspect wrapper options; use supported options or invoke the command directly." || return $?
-      fi
-    done
+    # A pipe inside a nested construct is not another top-level stage.
+    if [[ "${#wrapper_pipeline_stages[@]}" -gt 1 ]]; then
+      for wrapper_pipeline_stage in "${wrapper_pipeline_stages[@]}"; do
+        if wrapper_pipeline_output=$(check_command_segments "$wrapper_pipeline_stage" $((depth + 1))); then
+          # JSON providers deny with exit 0. Forward that one decision and stop
+          # the parent too; continuing would append another deny or an allow.
+          if [[ -n "$wrapper_pipeline_output" ]]; then
+            printf '%s\n' "$wrapper_pipeline_output"
+            exit 0
+          fi
+        else
+          return $?
+        fi
+      done
+    fi
   fi
 
   local shell_c_re="(^|[[:space:]])(ba)?sh([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-[a-zA-Z]*c[a-zA-Z]*[[:space:]]+[\$]?(['\"])([^'\"]*)(['\"])"
