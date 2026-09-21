@@ -290,6 +290,7 @@ absolute_path() {
 # Map an edited file to the nearest ancestor config a monorepo user selected for it.
 analyzer_target_for_path() {
   local root="$1" rel_path="$2" binary="$3"
+  local owner_root="${4:-$root}"
   local candidate_rel_dir target_root target_rel_path yaml_config yml_config
   candidate_rel_dir="${rel_path%/*}"
   # A root-level file has no directory segment before its name.
@@ -322,7 +323,7 @@ analyzer_target_for_path() {
       return 0
     fi
     # Reaching the repository root means no analyzer was configured for this file.
-    if [[ "$candidate_rel_dir" == "." ]]; then
+    if [[ "$target_root" == "$owner_root" || "$candidate_rel_dir" == "." ]]; then
       return 1
     fi
     # Nested paths move one ancestor at a time; one-segment paths move to root.
@@ -1883,10 +1884,15 @@ process_file_contract() {
       return 0
     fi
     # An unreadable payload is a failed run after exit 2 and a malformed response otherwise.
-    if ! printf '%s' "$output" | jq -e '
+    if ! printf '%s' "$output" | jq -e --argjson status "$status" '
       type == "object"
       and .contractVersion == "gruff.hook.v2"
-      and ((.findings | type == "array") or (.config | type == "object"))
+      and (if $status == 2 then ((.findings | type == "array") or (.config | type == "object"))
+        else (.findings | type == "array")
+          and (.diagnostics | type == "array")
+          and (.config.schemaOk | type == "boolean")
+          and (.run.analysedFiles | type == "number" and . >= 0 and . == floor)
+        end)
     ' >/dev/null 2>&1; then
       if [[ "$status" -eq 2 ]]; then
         record_file_result 80 "unavailable" "hook-unavailable" "analyzer-failed" \
@@ -2308,7 +2314,7 @@ process_file_result() {
   fi
 
   set +e
-  target_details="$(analyzer_target_for_path "$root" "$rel_path" "$binary")"
+  target_details="$(analyzer_target_for_path "$root" "$rel_path" "$binary" "$owner_root")"
   target_status=$?
   set -e
   # Two config extensions at one package leave the user's intended analyzer ambiguous.

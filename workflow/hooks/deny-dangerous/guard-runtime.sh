@@ -891,6 +891,7 @@ split_shell_words_into() {
   local in_single=0
   local in_double=0
   local escaped=0
+  local word_started=0
   local i=0
 
   # Read each proposed argument without expanding it so paths and wrapper operands remain reviewable data.
@@ -900,6 +901,7 @@ split_shell_words_into() {
     # An escaped character stays literal so quotes or separators in an argument cannot change the inspected command boundary.
     if [[ "$escaped" -eq 1 ]]; then
       current+="$char"
+      word_started=1
       escaped=0
       continue
     fi
@@ -912,6 +914,7 @@ split_shell_words_into() {
 
     # Single-quoted text belongs to a literal operand, so its separators and substitution markers cannot become executable actions.
     if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      word_started=1
       # Closing a single-quoted operand returns inspection to the surrounding command context.
       if [[ "$in_single" -eq 1 ]]; then
         in_single=0
@@ -923,6 +926,7 @@ split_shell_words_into() {
 
     # Double quotes preserve an argument boundary while still allowing executable command substitutions to be inspected.
     if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      word_started=1
       # Closing double quotes restores the surrounding word boundaries for the proposed action.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
@@ -935,14 +939,16 @@ split_shell_words_into() {
     # Only unquoted whitespace separates arguments; spaces in a quoted user path stay within that path.
     if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$char" =~ [[:space:]] ]]; then
       # A complete nonempty word becomes one reviewed argument; repeated spaces add no synthetic operand.
-      if [[ -n "$current" ]]; then
+      if [[ "$word_started" -eq 1 ]]; then
         __goat_words_out__+=("$current")
         current=""
+        word_started=0
       fi
       continue
     fi
 
     current+="$char"
+    word_started=1
   done
 
   # A trailing escape remains part of the proposed word rather than disappearing from policy inspection.
@@ -950,7 +956,7 @@ split_shell_words_into() {
     current+="\\"
   fi
   # Retain the final nonempty argument so a command without trailing whitespace still receives complete inspection.
-  if [[ -n "$current" ]]; then
+  if [[ "$word_started" -eq 1 ]]; then
     __goat_words_out__+=("$current")
   fi
 }
@@ -2374,10 +2380,52 @@ prepare_segment_context() {
     fi
   fi
 
-  local shell_c_re="(^|[[:space:]])(ba)?sh([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-[a-zA-Z]*c[a-zA-Z]*[[:space:]]+[\$]?(['\"])([^'\"]*)(['\"])"
+  local -a inline_shell_words=()
+  local inner_c="" shell_index
+  case "$CMD_VERB" in
+    sh|bash|dash|ash|ksh|zsh)
+      split_shell_words_into inline_shell_words "$CMD_NORMALIZED"
+      for ((shell_index = 1; shell_index < ${#inline_shell_words[@]}; shell_index += 1)); do
+        case "${inline_shell_words[$shell_index]}" in
+          -o|+o) shell_index=$((shell_index + 1)) ;;
+          -[a-zA-Z]*c*|-c)
+            inner_c="${inline_shell_words[$((shell_index + 1))]:-}"
+            local raw_shell_body="$CMD_NORMALIZED" drop_index
+            for ((drop_index = 0; drop_index <= shell_index; drop_index += 1)); do
+              raw_shell_body=$(drop_first_shell_word "$raw_shell_body")
+            done
+            if [[ "$raw_shell_body" == \$\'* ]]; then
+              # The inert word parser retains the ANSI-C quote marker. Plain bodies
+              # are inspectable; escape decoding needs direct, ordinary shell quoting.
+              inner_c="${inner_c#\$}"
+              if [[ "$inner_c" == *\\* ]]; then
+                block "Cannot inspect ANSI-C escapes in shell code; use ordinary shell quoting." || return $?
+              fi
+            fi
+            # Inspect statically supplied argv for the standard exec "$@" forwarding idiom.
+            local inner_candidate
+            local -a inner_words=()
+            inner_candidate=$(normalize_command_candidate "$inner_c")
+            split_shell_words_into inner_words "$inner_candidate"
+            if [[ "${#inner_words[@]}" -eq 1 && ( "${inner_words[0]}" == "\$@" || "${inner_words[0]}" == "\${@}" ) ]]; then
+              inner_c=""
+              if (( shell_index + 3 < ${#inline_shell_words[@]} )); then
+                printf -v inner_c '%q ' "${inline_shell_words[@]:shell_index+3}"
+              fi
+            elif [[ "$inner_c" =~ \$\{?[@*0-9] ]]; then
+              # Data-only printing stays available; executable positional expansions require a directly inspectable command.
+              if [[ ! "$inner_candidate" =~ ^(echo|printf)[[:space:]] || "$inner_c" == *';'* || "$inner_c" == *'|'* || "$inner_c" == *'&'* || "$inner_c" == *$'\n'* ]]; then
+                block "Cannot inspect executable shell positional expansion; invoke the command directly." || return $?
+              fi
+            fi
+            break ;;
+          -*) ;;
+          *) break ;;
+        esac
+      done ;;
+  esac
   # Inline shell code executes inside the outer action, so its body must receive its own complete policy inspection.
-  if [[ "$policy_cmd" =~ $shell_c_re ]]; then
-    local inner_c="${BASH_REMATCH[5]}"
+  if [[ -n "$inner_c" ]]; then
     # An empty inline shell body contains no action; a nonempty body must pass the same checks as direct commands.
     if [[ -n "$inner_c" ]]; then
       saved_cmd_trimmed="$CMD_TRIMMED"
