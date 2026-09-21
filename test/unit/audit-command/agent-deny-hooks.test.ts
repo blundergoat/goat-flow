@@ -401,6 +401,76 @@ describe("agent deny hook template comparison", () => {
     );
   });
 
+  it(
+    "selects native Windows Bash for syntax checks even when WSL is first",
+    {
+      skip: process.platform !== "win32",
+    },
+    () => {
+      assert.ok(denyCheck);
+      const nativeBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+      const syntaxCommands: string[] = [];
+      childProcess.execFileSync = ((command, args) => {
+        if (String(command).toLowerCase().endsWith("where.exe")) {
+          return args?.[0] === "bash"
+            ? `C:\\Windows\\System32\\bash.exe\n${nativeBash}\n`
+            : "";
+        }
+        if (args?.[0] === "-n") syntaxCommands.push(String(command));
+        return Buffer.from("");
+      }) as typeof childProcess.execFileSync;
+      syncBuiltinESMExports();
+
+      denyCheck.run(
+        makeAuditContext({
+          agentFilter: "codex",
+          denyMechanismEvidenceLevel: "static",
+          projectPath: PROJECT_ROOT,
+          agents: [stubAgentFacts({ agent: PROFILES.codex })],
+          fs: stubFS({
+            readFile: installedGuardrailContent(guardrailTemplates()),
+            listDir: (path) =>
+              path === PROFILES.codex.hooksDir ? ["deny-dangerous.sh"] : [],
+          }),
+        }),
+      );
+      assert.deepEqual(syntaxCommands, [nativeBash]);
+    },
+  );
+
+  for (const status of [2, 127]) {
+    it(`distinguishes Bash parse errors from file access failures (exit ${status})`, () => {
+      assert.ok(denyCheck);
+      childProcess.execFileSync = ((_command, args) => {
+        if (args?.[0] === "-n")
+          throw Object.assign(new Error("bash failed"), { status });
+        return Buffer.from("");
+      }) as typeof childProcess.execFileSync;
+      syncBuiltinESMExports();
+      const result = denyCheck.run(
+        makeAuditContext({
+          agentFilter: "codex",
+          denyMechanismEvidenceLevel: "static",
+          projectPath: PROJECT_ROOT,
+          agents: [stubAgentFacts({ agent: PROFILES.codex })],
+          fs: stubFS({
+            listDir: (path) =>
+              path === PROFILES.codex.hooksDir ? ["deny-dangerous.sh"] : [],
+          }),
+        }),
+      );
+      assert.ok(result);
+      assert.match(
+        result.message,
+        status === 2 ? /bash -n failed/ : /could not inspect/,
+      );
+      assert.match(
+        result.howToFix ?? "",
+        status === 2 ? /syntax errors/ : /path is readable/,
+      );
+    });
+  }
+
   it("reports self-test spawn denial instead of a deny-dangerous failure", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();

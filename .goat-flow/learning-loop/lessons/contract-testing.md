@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-09-20
+last_reviewed: 2026-09-21
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -97,7 +97,7 @@ last_reviewed: 2026-09-20
 
 **Fix:** Keep source-regex tests focused on semantic tokens and tolerate formatter-owned whitespace. Evidence anchors: `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `warms xterm when the workspace or setup view opens`), `src/dashboard/dashboard-app-init.ts` (search: `view === "workspace" || view === "setup"`).
 
-**Recurrence (2026-08-14):** A new Gruff D6 assertion preserved the intended qualifier order but required a literal space between `non-obvious` and `contract`; Markdown wrapping inserted a newline and left correct prose RED. Allowing whitespace only at that gap kept the semantic boundary pinned without owning layout. Evidence anchor: `test/contract/comment-playbook-doctrine.test.ts` (search: `file\\/module\\/class boundary has a non-obvious\\s+contract`).
+**Recurrence (2026-08-14):** A new Gruff D6 assertion preserved the intended qualifier order but required a literal space between `non-obvious` and `contract`; Markdown wrapping inserted a newline and left correct prose RED. Allowing whitespace only at that gap kept the semantic boundary pinned without owning layout. Evidence anchor: `test/contract/comment-playbook-doctrine.test.ts` (search: `file\/module\/class boundary has a non-obvious\s+contract`).
 
 **Recurrence 2026-05-12:** While self-hosting xterm assets, `test/integration/dashboard-server.test.ts` fetched `/assets/xterm.js` successfully but failed because the assertion looked for `XTerm`, a string not present in the minified upstream bundle. The route was correct; the test anchor was wrong. For vendored/minified assets, assert route status/content type and stable feature strings observed in the actual bundle, such as `bracketedPasteMode`, not package names or branding text.
 
@@ -121,7 +121,7 @@ last_reviewed: 2026-09-20
 
 **Root cause:** I reused compact serialization for both semantic equality and the final file write, overlooking the installer's established two-space JSON output.
 
-**Fix:** Keep compact JSON only for before/after comparison and pretty-print the user file. Evidence anchors: `workflow/install-goat-flow.sh` (search: `JSON.stringify(currentConfig, null, 2)`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `timeout\": 90`).
+**Fix:** Keep compact JSON only for before/after comparison and pretty-print the user file. Evidence anchors: `workflow/install-goat-flow.sh` (search: `JSON.stringify(currentConfig, null, 2)`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `"timeout": 90`).
 
 **Recurrence 2026-08-27:** The first v2 bootstrap fixture rebuilt small v1 files in an order that happened to satisfy the new UTF-8 canonicalizer. The production v1 writer orders its complete path set with `localeCompare`; a direct writer-to-facade reproduction returned `malformed-blocking` for every agent shape checked. The correction preserves parsed v1 row order during byte normalization, then applies UTF-8 sorting only to the virtual v2 state. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `V1 predates UTF-8 canonical ordering`) and `test/unit/managed-setup-preview.test.ts` (search: `bootstraps a baseline written by the v1 state writer`).
 
@@ -233,7 +233,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Recurrence (2026-08-15):** Goat-clarity's first-use cardinality proof expected literal lowercase agent and selector IDs, while the receipt template allowed a free-form integration name and accepted invocation. Real agents emitted values such as `Codex`, `uncommitted files`, and Markdown-emphasized labels, so a complete receipt could never satisfy its consumer. The correction makes canonical IDs part of the producer contract and lets the scanner ignore optional emphasis without weakening the values. Evidence anchors: `workflow/skills/goat-clarity/SKILL.md` (search: `Agent: <claude | codex | antigravity | copilot>`) and `test/contract/skill-hardening-clarity.test.ts` (search: `Selector: <github-pr | uncommitted | paths>`; the selector kinds collapsed to `paths` on 2026-08-19 when path lists became one selector).
 
-**Recurrence (2026-08-17):** New goat-clarity disposition contracts first rejected correct Markdown wrapping at `uncertain identity` and `bound comparison baseline`, while an older literal assertion rejected the grammatical change from `keep` to `keeps`. The correction made whitespace flexible only inside the same bounded sentence and aligned the existing phrase pin with the producer without weakening the replacement-coverage requirement. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `rename-shaped pair with uncertain\\s+identity`) and `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the original until replacement coverage passes`).
+**Recurrence (2026-08-17):** New goat-clarity disposition contracts first rejected correct Markdown wrapping at `uncertain identity` and `bound comparison baseline`, while an older literal assertion rejected the grammatical change from `keep` to `keeps`. The correction made whitespace flexible only inside the same bounded sentence and aligned the existing phrase pin with the producer without weakening the replacement-coverage requirement. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `rename-shaped pair with uncertain\s+identity`) and `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the original until replacement coverage passes`).
 
 **Recurrence (2026-08-29):** A preflight contract used one greedy file-wide regex to require `instruction-files`, `new Set`, and `instruction_file`. Replacing the owned mode body with `process.exit(0)` still matched those tokens in later sibling modes, so the test could pass after deduplication was removed. The correction locates the exact `instruction-files` mode boundaries, slices only that owner, and asserts the deduplication tokens inside it. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `instruction-files must remain a bounded manifest mode`).
 

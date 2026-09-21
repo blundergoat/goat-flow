@@ -861,7 +861,10 @@ describe("selected review integrity relationships", () => {
     const paths = [
       "src/example.ts",
       ...Array.from({ length: 3 }, (_, index) => `src/selected-${index}.ts`),
-      'src/anchor=literal, "quoted".ts',
+      // Windows disallows double quotes in filenames; keep that extra escaping case on POSIX.
+      process.platform === "win32"
+        ? "src/anchor=literal, quoted.ts"
+        : 'src/anchor=literal, "quoted".ts',
     ];
     // Populate every selected path before capture so later undercoverage cannot be masked by source drift.
     for (const path of paths.slice(1))
@@ -881,7 +884,7 @@ describe("selected review integrity relationships", () => {
       "Files opened in Pass 2": opened,
     }).replace("5/5 files opened", "1/5 files opened");
     assertIntegrityFailure(compactPartial, root, /use full output/);
-    // Plain paths remain readable; quote the filename whose commas and quotes would otherwise look like prose separators.
+    // Plain paths remain readable; JSON-quote the filename containing prose separators.
     const missing = paths
       .slice(1)
       .map((path) => (path.includes("anchor=") ? JSON.stringify(path) : path))

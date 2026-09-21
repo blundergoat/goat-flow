@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import {
   captureReviewSnapshot,
   readReviewAnchor,
@@ -62,7 +62,7 @@ function fingerprintGitState(worktreePath: string): Record<string, string> {
     "--git-common-dir",
   ).trim();
   const objectsRoot = join(
-    commonGitDirectory.startsWith("/")
+    isAbsolute(commonGitDirectory)
       ? commonGitDirectory
       : join(worktreePath, commonGitDirectory),
     "objects",

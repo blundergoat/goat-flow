@@ -1129,6 +1129,7 @@ strip_parallel_payload_command() {
 
 # Read the Git command and retain the repository/config options needed to resolve the user's saved aliases.
 # The lookup runs only Git's read-only config command; the proposed subcommand is never executed.
+# shellcheck disable=SC2329 # -- Called by patterns-paths.sh and patterns-writes.sh, sourced through GOAT_HOOK_LIB_DIR below.
 __goat_git_strip_globals() {
   reset_git_alias_flags
   __goat_git_rest=""
@@ -2399,6 +2400,7 @@ prepare_segment_context() {
 }
 
 # Recognize direct inspection that cannot redirect or pipe output; modifying sed forms still require policy checks.
+# shellcheck disable=SC2329 # -- Called by the policy modules sourced through GOAT_HOOK_LIB_DIR below.
 is_unredirected_unpiped_read_only() {
   local cmd="$1"
   [[ "$HAS_REDIRECT" -eq 0 && "$HAS_PIPE" -eq 0 ]] || return 1

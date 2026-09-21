@@ -443,6 +443,35 @@ describe("scanContentQuality: unresolved readiness markers", () => {
 });
 
 describe("semantic anchor path boundaries", () => {
+  it("preserves literal backslashes in backticks and decodes quoted needles", () => {
+    const needle = String.raw`Playwright\\s+MCP`;
+    const fs = stubFS({
+      exists: () => true,
+      readFile: () => needle,
+    });
+    const evaluations = evaluateSearchAnchors(
+      fs,
+      [
+        `\`src/present.ts\` (search: \`${needle}\`)`,
+        `(\`src/present.ts\`, search: \`${needle}\`)`,
+        `\`src/present.ts\` (search: ${JSON.stringify(needle)})`,
+        `(\`src/present.ts\`, search: ${JSON.stringify(needle)})`,
+        `\`src/present.ts\` (search: \`absent\\\\needle\`)`,
+      ].join("\n"),
+    );
+
+    assert.deepEqual(
+      evaluations.map(({ needle, status }) => ({ needle, status })),
+      [
+        { needle, status: "valid" },
+        { needle, status: "valid" },
+        { needle, status: "valid" },
+        { needle, status: "valid" },
+        { needle: String.raw`absent\\needle`, status: "stale" },
+      ],
+    );
+  });
+
   it("does not inspect absolute or parent-traversal citation paths", () => {
     const inspectedPaths: string[] = [];
     const fs = stubFS({
@@ -801,6 +830,8 @@ describe("runContentQualityChecks: target discovery", () => {
     const targetPath = "src/cli/current.ts";
     const localArtifacts = [
       localPlan,
+      ".goat-flow/tasks/1.6.1/M04-skill-evaluator-shape-detection.md",
+      ".goat-flow/tasks/README.md",
       customLogReadme,
       privateToolDoc,
       antigravitySessionDoc,

@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-21
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -91,6 +91,19 @@ last_reviewed: 2026-09-05
 **Why it happens:** `AUDIT_VERSION` is the running CLI's own version, so an older CLI treats itself as the reference; `version !== AUDIT_VERSION` cannot tell "behind" from "ahead", and the template comparison diffs the target against the older bundle. Following that advice is not advisory: `src/cli/server/hook-registrar.ts` (search: `export function syncHookStates`) rewrites installed hook files from the running CLI's bundle, a silent downgrade of the guardrail layer.
 
 **Evidence:** `src/cli/version-compare.ts` (search: `projectIsAheadOfCli`) is the shared direction test; `src/cli/audit/check-goat-flow.ts` (search: `is newer than this CLI`) branches before prescribing remediation; `src/cli/audit/check-agent-common.ts` (search: `targetUsesNewerGoatFlow`) suppresses older-template skill, guardrail, drift, and content checks; `src/cli/server/hook-managed-installation.ts` (search: `Refusing to overwrite`) makes `copyHookScripts` throw rather than downgrade a newer-stamped hook. Tests: `test/unit/version-compare.test.ts` (search: `flags the CLI as the stale side when the project is newer`), `test/integration/audit-quality.test.ts` (search: `reports version skew without older-template agent or drift findings`), `test/unit/hook-registrar.test.ts` (search: `refuses to overwrite a hook stamped newer than the running CLI`).
+
+---
+
+## Footgun: Windows Bash selection can turn unreadable paths into false syntax errors
+
+**Status:** active | **Created:** 2026-09-21 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Select native Bash for native Windows paths and distinguish shell launch or file-access failure from a Bash parse verdict.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Reuse native Bash discovery for Windows subprocesses instead of assuming the first `bash` on PATH is Git Bash. Keep an actual parse-error control beside any launch-failure regression test; neither a missing executable nor an unreadable script proves invalid shell syntax.
+
+**Evidence:** On 2026-09-21, Git Bash parsed the installed deny hook with exit 0 while `C:/Windows/System32/bash.exe` returned exit 127 and `No such file or directory` for the same Windows path. The audit had classified both nonzero exits as syntax errors. `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookFileSyntax`) now uses `src/cli/install-invocation.ts` (search: `pickWindowsBashPath`) and reports file-access failures separately. `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `selects native Windows Bash for syntax checks even when WSL is first`) reproduced bare-Bash selection before the fix; (search: `distinguishes Bash parse errors from file access failures`) retains the exit-2 syntax failure while separating exit 127.
 
 ---
 

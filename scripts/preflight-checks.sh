@@ -249,6 +249,7 @@ LEDGER="$LEDGER_DIR/ledger.tsv"
 # We override the exit code to FAIL when errors were recorded, since set -e may exit the script before the explicit exit statement runs.
 _render_done=0
 # Finish the captured report and preserve a failing exit when any check failed or the command was interrupted.
+# shellcheck disable=SC2329 # -- Called by the EXIT trap below.
 _on_exit() {
     # NB: variable name avoids `rc` because bash uses dynamic scoping for locals; sub-functions like _emit_section_row's `read -r ...` would otherwise
     # clobber it on every row and `exit "$rc"` ends up as `exit ""`.
@@ -748,6 +749,7 @@ _emit_section_row() {
 
 # Show the final verdict, warning and error totals, and elapsed time after the captured sections.
 
+# shellcheck disable=SC2329 # -- Called by _on_exit through the EXIT trap.
 _emit_footer() {
     _compute_widths
     local total_elapsed verdict verdict_color sep warning_label
@@ -788,7 +790,7 @@ if command -v shellcheck >/dev/null 2>&1; then
     if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh >/dev/null 2>&1; then
         pass "Shellcheck (scripts)"
     else
-        fail "Shellcheck (scripts) - run shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh for details"
+        fail "Shellcheck (scripts) - run shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh for details"
     fi
 
     # Also shellcheck installed hooks. SC2001 stays excluded (sed rewrites are deliberate); SC2016 no longer is,
@@ -800,7 +802,7 @@ if command -v shellcheck >/dev/null 2>&1; then
             if shellcheck --exclude=SC2001 "$hookdir"/*.sh >/dev/null 2>&1; then
                 pass "Shellcheck ($hookdir/)"
             else
-                fail "Shellcheck ($hookdir/) - run shellcheck $hookdir/*.sh for details"
+                fail "Shellcheck ($hookdir/) - run shellcheck --exclude=SC2001 $hookdir/*.sh for details"
             fi
         fi
     done < <(manifest_eval hook-dirs)

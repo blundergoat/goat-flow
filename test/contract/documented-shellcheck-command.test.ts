@@ -1,7 +1,7 @@
 /**
  * Verify the shell-lint command agents receive in the repository instructions.
  *
- * The tests check identical commands, installer coverage, and the absence of excluded ShellCheck rules.
+ * The tests check identical commands, installer coverage, and the CI-owned ShellCheck exclusion.
  * They execute the published command and fail if ShellCheck cannot be launched.
  */
 import { describe, it } from "node:test";
@@ -69,9 +69,59 @@ describe("documented shell-lint command", () => {
     }
   });
 
-  it("carries no exclusion, so the documented command is the strict one", () => {
-    // An exclusion here would let the instruction files promise a check the agent never actually runs.
-    assert.doesNotMatch(publishedShellcheckCommand("CLAUDE.md"), /--exclude/u);
+  it("uses only the existing CI exclusion across documented and automated commands", () => {
+    for (const surface of [
+      ...DOCUMENTING_SURFACES,
+      ...AUTOMATED_SHELL_VALIDATION_OWNERS,
+    ]) {
+      const content = readFileSync(resolve(PROJECT_ROOT, surface), "utf8");
+      const commands = content
+        .split("\n")
+        .filter((line) =>
+          /\bshellcheck\s+(?:--|scripts\/|\$hookdir\/)/u.test(line),
+        );
+      assert.ok(commands.length > 0, surface);
+      for (const command of commands) {
+        assert.deepEqual(
+          command.match(/--exclude(?:=|\s+)\S+/gu),
+          ["--exclude=SC2001"],
+          `${surface}: ${command}`,
+        );
+      }
+    }
+  });
+
+  it("uses user-scoped winget on Windows and explains a stale shell PATH", () => {
+    const setup = readFileSync(
+      resolve(PROJECT_ROOT, "scripts/setup-initial.sh"),
+      "utf8",
+    );
+    const installSection = setup.slice(
+      setup.indexOf("# 5. Install shellcheck"),
+      setup.indexOf("# 6. Ensure scripts"),
+    );
+    assert.ok(installSection.length > 0);
+    // Exercise only dependency setup; the package manager is a test double, so no software is installed.
+    const result = spawnSync("bash", ["-s"], {
+      cwd: PROJECT_ROOT,
+      encoding: "utf8",
+      input: [
+        "set -euo pipefail",
+        "OSTYPE=msys",
+        'info() { printf "%s\\n" "$1"; }',
+        'warn() { printf "%s\\n" "$1"; }',
+        'winget.exe() { printf "winget-arg:%s\\n" "$@"; }',
+        'command() { case "$*" in "-v shellcheck"|"-v apt-get"|"-v brew") return 1;; esac; builtin command "$@"; }',
+        installSection,
+      ].join("\n"),
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      result.stdout,
+      /winget-arg:--id\nwinget-arg:koalaman\.shellcheck/u,
+    );
+    assert.match(result.stdout, /winget-arg:--scope\nwinget-arg:user/u);
+    assert.match(result.stdout, /Open a new Git Bash session/u);
   });
 
   it("keeps the workflow installer in every shell lint and syntax owner", () => {

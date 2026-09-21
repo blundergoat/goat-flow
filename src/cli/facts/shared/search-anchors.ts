@@ -144,14 +144,16 @@ function maskMarkdownFencesPreservingLines(content: string): string {
 
 /**
  * Turn a raw citation needle into the single-line literal it points at.
- * Unescapes `\"`/`\\` and folds a prose line-wrap (a newline plus its indentation) back to one
+ * Unescapes quoted needles only, and folds a prose line-wrap (a newline plus its indentation) back to one
  * space, so a needle a user wrapped across two lines still matches its single-line target.
  *
  * @param rawNeedle - the needle exactly as captured between the citation's backticks or quotes
+ * @param isQuoted - whether double quotes, rather than literal Markdown backticks, delimit the needle
  * @returns the literal string to look for in the cited file
  */
-function normalizeCitationNeedle(rawNeedle: string): string {
-  return rawNeedle.replace(/\\(["\\])/g, "$1").replace(/\s*\r?\n\s*/g, " ");
+function normalizeCitationNeedle(rawNeedle: string, isQuoted: boolean): string {
+  const literal = isQuoted ? rawNeedle.replace(/\\(["\\])/g, "$1") : rawNeedle;
+  return literal.replace(/\s*\r?\n\s*/g, " ");
 }
 
 /** Return the one-based line containing a character offset. */
@@ -175,7 +177,7 @@ function combinedCitationAt(
   if (!isFileRef(combinedPath)) return null;
   return {
     filePath: combinedPath,
-    needle: normalizeCitationNeedle(rawNeedle),
+    needle: normalizeCitationNeedle(rawNeedle, match[3] !== undefined),
     line: lineNumberAtOffset(content, matchIndex),
   };
 }
@@ -235,7 +237,7 @@ function extractVisibleSearchAnchorCitations(
     if (activeFilePath !== null && rawNeedle !== undefined) {
       citations.push({
         filePath: activeFilePath,
-        needle: normalizeCitationNeedle(rawNeedle),
+        needle: normalizeCitationNeedle(rawNeedle, match[6] !== undefined),
         line: lineNumberAtOffset(content, matchIndex),
       });
     }

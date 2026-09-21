@@ -1,6 +1,6 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-09-16
+last_reviewed: 2026-09-21
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
@@ -61,14 +61,17 @@ last_reviewed: 2026-09-16
 
 ## Lesson: Dynamic hook helpers need explicit ShellCheck handling
 
-**Status:** active | **Created:** 2026-05-27
-**Incident count:** 3 | **Latest occurrence:** 2026-08-07
+**Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Trace SC2329 callers before suppression and run the exact published lint command with the analyzer version under test.
+**Incident count:** 4 | **Latest occurrence:** 2026-09-21
 
-**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. Verify the workflow and installed mirrors with the same no-`-x` ShellCheck command used by preflight. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
+**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. For SC2329, trace traps and sourced callers before adding a function-scoped directive naming the call path. Verify the workflow and installed mirrors with the same no-`-x` ShellCheck command used by preflight. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
 
 **What happened:** After extracting `deny-dangerous.sh`, I expected `# shellcheck source=deny-dangerous.sh` above the runtime-computed source line to satisfy linting. The repo's hook lint command does not run ShellCheck with `-x`, so ShellCheck failed or warned with SC1091/SC1090 on every mirrored policy hook before any behavior checks could matter.
 
 **Root cause:** I treated the source directive as enough without checking it against the exact lint invocation used by preflight and CI.
+
+**Recurrence 2026-09-21:** Native ShellCheck 0.11.0 reported six SC2329 findings in the published command: two EXIT-trap helpers in `scripts/preflight-checks.sh` (search: `_on_exit`) and (search: `_emit_footer`), plus two helpers in each `guard-runtime.sh` mirror. Their callers are in dynamically sourced `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `__goat_git_strip_globals`) and `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_unredirected_unpiped_read_only`). Local directives restored the published command without changing executable script bytes or its exclusion list. Verify with `test/contract/documented-shellcheck-command.test.ts` (search: `exits zero when run exactly as published`) and the native analyzer; the earlier WSL 0.9.0 result did not establish 0.11.0 compatibility.
 
 **Recurrence 2026-08-07:** Release ShellCheck caught SC2016 because gruff guidance put Markdown backticks inside a single-quoted `printf` in both hook mirrors. Escape command backticks in a double-quoted string, then lint the full workflow and installed hook sets before treating the mirrors as ready. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`) and `.goat-flow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`).
 

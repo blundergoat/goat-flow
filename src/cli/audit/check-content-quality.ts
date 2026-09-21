@@ -628,6 +628,7 @@ const LOCAL_MARKDOWN_PREFIXES = [
 const GOAT_LOCAL_STATE_PREFIXES = [
   ".goat-flow/logs/",
   ".goat-flow/plans/",
+  ".goat-flow/tasks/",
   ".goat-flow/scratchpad/",
 ] as const;
 

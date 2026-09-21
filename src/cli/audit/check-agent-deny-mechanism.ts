@@ -8,6 +8,11 @@ import * as childProcess from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AUDIT_VERSION } from "../constants.js";
+import {
+  discoverWindowsBashCandidates,
+  pickWindowsBashPath,
+  toBashPath,
+} from "../install-invocation.js";
 import { getTemplatePath } from "../paths.js";
 import type { AuditContext, AuditFailure, BuildCheck } from "./types.js";
 import {
@@ -114,7 +119,21 @@ function checkHookFileSyntax(
   // Bash reads the actual project file; an in-memory audit adapter alone cannot supply the shell's syntax evidence.
   const hookAbsolutePath = join(ctx.projectPath, hooksDir, hookFilename);
   try {
-    childProcess.execFileSync("bash", ["-n", hookAbsolutePath], {
+    const bashCommand =
+      process.platform === "win32"
+        ? pickWindowsBashPath(discoverWindowsBashCandidates())
+        : "bash";
+    if (bashCommand === null) {
+      throw Object.assign(
+        new Error("No native Windows Bash found; install Git for Windows."),
+        { code: "ENOENT" },
+      );
+    }
+    const shellPath =
+      process.platform === "win32"
+        ? toBashPath(hookAbsolutePath)
+        : hookAbsolutePath;
+    childProcess.execFileSync(bashCommand, ["-n", shellPath], {
       stdio: "pipe",
       timeout: 5000,
     });
@@ -136,6 +155,23 @@ function checkHookFileSyntax(
           message: spawnFailure.message,
           evidence: evidencePath(hookPath),
           howToFix: spawnFailure.howToFix,
+        },
+      };
+    }
+    // Bash reports an unreadable input as 126/127, not a parse error in that input.
+    const status =
+      typeof error === "object" && error !== null && "status" in error
+        ? error.status
+        : undefined;
+    if (status === 126 || status === 127) {
+      return {
+        status: "spawn-failure",
+        failure: {
+          check: "Agent deny mechanism",
+          message: `bash -n could not inspect ${hookPath} (exit ${status}).`,
+          evidence: evidencePath(hookPath),
+          howToFix:
+            "Check that the hook path is readable by the selected Bash. On native Windows, use Git Bash rather than the WSL launcher.",
         },
       };
     }
