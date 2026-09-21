@@ -1,6 +1,6 @@
 ---
 category: quality-reporting
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-21
 ---
 
 **Scope:** The quality prompt-to-report pipeline: prompt generation, the agent session that runs it, report persistence, and `quality diff` comparison. How audit checks score and temper concerns lives in [quality.md](quality.md).
@@ -87,6 +87,8 @@ last_reviewed: 2026-09-05
 **Latest occurrence:** 2026-08-28
 
 **Prevention:** Any persistence path that validates directories before writing must allocate an empty destination exclusively, recheck every trusted ancestor, compare descriptor and pathname device/inode identity, write through the descriptor, fsync, and check again. On rejection after allocation, truncate through the descriptor before closing so a raced rename cannot retain sensitive bytes.
+
+**Limit verified 2026-09-21:** These checks detect relocation at their checkpoints. They cannot prevent another process from reading bytes before rejection or renaming an accepted file afterwards. PR #61 feedback described a retained outside report, but `test/unit/quality-save-safety.test.ts` (search: `fails closed when the allocated report parent moves during writing`) measures an empty moved allocation after rejection. Preserve that distinction when judging the finding: descriptor cleanup limits retained content; it does not provide isolation from a hostile process that can rename project directories.
 
 **Symptoms:** The saver validated that its destination chain held only project-local directories, and a concurrent replacement still redirected the later pathname write outside the selected project. The command returned success because the resulting file was a regular single-link file.
 

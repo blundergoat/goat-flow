@@ -45,7 +45,7 @@ last_reviewed: 2026-09-21
 **Decision changed:** Treat every shell-quoted embedded program and its comments as part of the outer shell grammar; run syntax proof before mirror fanout.
 **Incident count:** 5 | **Latest occurrence:** 2026-08-29
 
-**Prevention:** In hook scripts, put EREs containing shell metacharacters or quote classes into named variables before matching. Run `bash -n` before mirror fanout, then run the central full self-test before treating behavior as restored. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `shell_c_re`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `redirect_append_re`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `bash -c chained rm`).
+**Prevention:** In hook scripts, put EREs containing shell metacharacters or quote classes into named variables before matching. Run `bash -n` before mirror fanout, then run the central full self-test before treating behavior as restored. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `prepare_segment_context`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `redirect_append_re`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `bash -c chained rm`).
 
 **What happened:** While regenerating the self-contained split hooks, inline Bash EREs lost escaping for `>`, `|`, `<<<`, and quote classes. `bash -n` caught parse failures, and the full deny-dangerous self-test caught `bash -c "echo ok; rm -rf /"` returning exit 0 because the inline quote regex captured only `r` instead of the inner command.
 
