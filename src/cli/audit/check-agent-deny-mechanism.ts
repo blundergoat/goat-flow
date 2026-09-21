@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AUDIT_VERSION } from "../constants.js";
 import {
+  buildInstallerSpawnSpec,
   discoverWindowsBashCandidates,
   pickWindowsBashPath,
   toBashPath,
@@ -119,64 +120,96 @@ function checkHookFileSyntax(
   // Bash reads the actual project file; an in-memory audit adapter alone cannot supply the shell's syntax evidence.
   const hookAbsolutePath = join(ctx.projectPath, hooksDir, hookFilename);
   try {
-    const bashCommand =
-      process.platform === "win32"
-        ? pickWindowsBashPath(discoverWindowsBashCandidates())
-        : "bash";
-    if (bashCommand === null) {
-      throw Object.assign(
-        new Error("No native Windows Bash found; install Git for Windows."),
-        { code: "ENOENT" },
-      );
-    }
-    const shellPath =
-      process.platform === "win32"
-        ? toBashPath(hookAbsolutePath)
-        : hookAbsolutePath;
-    childProcess.execFileSync(bashCommand, ["-n", shellPath], {
-      stdio: "pipe",
-      timeout: 5000,
-    });
+    runHookBash(["-n", hookAbsolutePath], 5000);
     return { status: "ok" };
   } catch (error) {
-    // An edited hook can fail parsing; a missing shell or sandbox restriction can instead prevent Bash from starting.
-    // A recorded zero exit still proves syntax acceptance even if the process API also returned an error object.
-    if (commandCompletedSuccessfully(error)) return { status: "ok" };
-    const spawnFailure = spawnFailureFor(
-      error,
-      `bash syntax check for ${hookPath}`,
-    );
-    // Launch restrictions need environment repair rather than edits to a hook that Bash could not inspect.
-    if (spawnFailure !== null) {
-      return {
-        status: "spawn-failure",
-        failure: {
-          check: "Agent deny mechanism",
-          message: spawnFailure.message,
-          evidence: evidencePath(hookPath),
-          howToFix: spawnFailure.howToFix,
-        },
-      };
-    }
-    // Bash reports an unreadable input as 126/127, not a parse error in that input.
-    const status =
-      typeof error === "object" && error !== null && "status" in error
-        ? error.status
-        : undefined;
-    if (status === 126 || status === 127) {
-      return {
-        status: "spawn-failure",
-        failure: {
-          check: "Agent deny mechanism",
-          message: `bash -n could not inspect ${hookPath} (exit ${status}).`,
-          evidence: evidencePath(hookPath),
-          howToFix:
-            "Check that the hook path is readable by the selected Bash. On native Windows, use Git Bash rather than the WSL launcher.",
-        },
-      };
-    }
-    return { status: "syntax-error", path: hookPath };
+    return classifyHookSyntaxFailure(error, hookPath);
   }
+}
+
+/**
+ * Run syntax checks or self-tests with native Bash and paths its children can read.
+ * Side effects: spawns Bash and, for self-tests, executes the installed policy.
+ * Throws launch, timeout, or nonzero-exit errors for the caller to classify as audit evidence.
+ */
+function runHookBash(
+  args: string[],
+  timeout: number,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const bashCommand =
+    process.platform === "win32"
+      ? pickWindowsBashPath(discoverWindowsBashCandidates())
+      : "bash";
+  if (bashCommand === null) {
+    throw Object.assign(
+      new Error("No native Windows Bash found; install Git for Windows."),
+      { code: "ENOENT" },
+    );
+  }
+  // The self-test launches the selected dispatcher itself; its environment path must use Bash separators too.
+  if (process.platform === "win32" && env.GOAT_DENY_DANGEROUS_HOOK) {
+    env = {
+      ...env,
+      GOAT_DENY_DANGEROUS_HOOK: toBashPath(env.GOAT_DENY_DANGEROUS_HOOK),
+    };
+  }
+  const invocation = buildInstallerSpawnSpec(
+    {
+      ok: true,
+      bashCommand,
+      args: process.platform === "win32" ? args.map(toBashPath) : args,
+    },
+    env,
+  );
+  childProcess.execFileSync(invocation.command, invocation.args, {
+    env: invocation.env,
+    stdio: "pipe",
+    timeout,
+  });
+}
+
+/** Distinguish a rejected hook from a shell that could not inspect it. */
+function classifyHookSyntaxFailure(
+  error: unknown,
+  hookPath: string,
+): HookSyntaxCheckResult {
+  // A recorded zero exit still proves syntax acceptance even if the process API also returned an error object.
+  if (commandCompletedSuccessfully(error)) return { status: "ok" };
+  const spawnFailure = spawnFailureFor(
+    error,
+    `bash syntax check for ${hookPath}`,
+  );
+  // Launch restrictions need environment repair rather than edits to a hook that Bash could not inspect.
+  if (spawnFailure !== null) {
+    return {
+      status: "spawn-failure",
+      failure: {
+        check: "Agent deny mechanism",
+        message: spawnFailure.message,
+        evidence: evidencePath(hookPath),
+        howToFix: spawnFailure.howToFix,
+      },
+    };
+  }
+  // Bash reports an unreadable input as 126/127, not a parse error in that input.
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? error.status
+      : undefined;
+  if (status === 126 || status === 127) {
+    return {
+      status: "spawn-failure",
+      failure: {
+        check: "Agent deny mechanism",
+        message: `bash -n could not inspect ${hookPath} (exit ${status}).`,
+        evidence: evidencePath(hookPath),
+        howToFix:
+          "Check that the hook path is readable by the selected Bash. On native Windows, use Git Bash rather than the WSL launcher.",
+      },
+    };
+  }
+  return { status: "syntax-error", path: hookPath };
 }
 
 /**
@@ -412,11 +445,7 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
           ? process.env
           : { ...process.env, GOAT_DENY_DANGEROUS_HOOK: dispatcherPath };
       try {
-        childProcess.execFileSync("bash", [denyPath, "--self-test=smoke"], {
-          env,
-          stdio: "pipe",
-          timeout: 30000,
-        });
+        runHookBash([denyPath, "--self-test=smoke"], 30000, env);
       } catch (error) {
         // A user-edited deny policy can fail its self-test; a missing shell or sandbox restriction may stop the test before it runs.
         // A recorded zero exit means the self-test completed successfully despite the process API's error object.

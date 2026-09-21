@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-09-20
+last_reviewed: 2026-09-21
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and the static gates a touched TypeScript file must pass before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -22,7 +22,7 @@ last_reviewed: 2026-09-20
 **Status:** active | **Created:** 2026-04-18
 **Decision changed:** Attribute each file a repo-wide gate rejects to the change set or to baseline debt before touching task code, and repair the real checkout rather than a temp clone.
 **Trigger phase:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-04-21
+**Incident count:** 6 | **Latest occurrence:** 2026-09-21
 **Merged:** 2026-09-05 - renamed from "Repo-wide preflight can be blocked by unrelated formatter drift"; absorbed "Temp-repo preflight harnesses inherit formatting debt from copied test files" (2026-04-19) and "New server helper files still count as repo-wide formatting debt" (2026-04-20); one root cause.
 
 **Prevention:** If preflight or the installer round-trip fixture fails on formatting, compare the failing files with `git status` for the task. A failing file outside the change set is baseline debt: report it in a separate "repo-wide checks still blocked" section and do not call preflight a task regression. A failing file inside the change set is a task gate: format it in the real checkout, rerun the exact failing check, then the focused test. Never format only the temp clone; the fixture copies the current checkout before its embedded preflight, so it heals when the checkout does. Evidence anchor: `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `checkDrift: installer round-trip fixture`).
@@ -34,6 +34,7 @@ last_reviewed: 2026-09-20
 **Recurrence 2026-04-19:** M14's round-trip test cloned the repo, patched the copy, and failed because the cloned `test/integration/audit-drift.test.ts` was unformatted in the source checkout; the formatter gate checks every `test/**/*.ts` in the clone, not only the patched files.
 **Recurrence 2026-04-20:** Extracting setup-detection helpers left `src/cli/server/dashboard.ts`, `src/cli/server/setup-detect.ts`, and `src/cli/server/dashboard-assets.ts` unformatted; preflight and the fixture failed together, and the next server split (`src/cli/server/dashboard-routes.ts` plus the rewritten `dashboard.ts`) repeated it.
 **Recurrence 2026-04-21:** A v1.2.2 version bump failed `npm test` only because the fixture's embedded preflight found committed drift in `src/dashboard/index.html`, outside the edit set; `npm run format:check` reproduced the single-file failure.
+**Recurrence 2026-09-21:** PR61 CI failed both `checks` and slow-test shard `2/5` on the same ESLint error: `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookFileSyntax`) had complexity 12 against a maximum of 10. The earlier review handoff identified the lint debt but left the PR gate blocked. When the user authorizes CI repair, fix the source checkout, then rerun both the direct lint command and `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `preflight should pass in temp round-trip repo`); a focused test result cannot close that known failure.
 
 ---
 

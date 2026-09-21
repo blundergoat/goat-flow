@@ -1,6 +1,6 @@
 ---
 category: refactor-fallout
-last_reviewed: 2026-09-19
+last_reviewed: 2026-09-21
 ---
 
 **Scope:** What breaks downstream when code is split, renamed, or extracted - browser script load graphs, source-shape tests that pinned the old layout, and shared scope a split test no longer imports. Using the Gruff analyzer is [gruff-cleanup.md](gruff-cleanup.md); stale built dashboard assets are [dashboard-testing.md](dashboard-testing.md).
@@ -18,7 +18,7 @@ last_reviewed: 2026-09-19
 
 **Recurrence 2026-09-13:** Adding the operational-state parent left two symlink fixtures without their new parent and claim inspection returning the former positional directory component. Typecheck passed, but the focused run reported seven failures. Create the full fixture ancestry and select the leaf by its explicit path before rerunning recovery. Evidence: `src/cli/path-write-claim.ts` (search: `existingClaimDirectory`), `test/unit/managed-setup-preview.test.ts` (search: `refuses a target-controlled symlink`), `test/integration/local-state-migration.test.ts` (search: `blocks legacy write admission`).
 
-**Recurrence 2026-09-19:** A milestone plan named `npm run typecheck` as proof that a changed test file satisfied both configured compilers. The command exited 0, but `npx tsc --listFilesOnly` showed the file was not in the compiled program. Compiling that file alone through a scratchpad config that extends `tsconfig.json` reported eight type errors, all on lines the change did not touch, so a clean separate compile is not the baseline to expect. For a change under `test/`, confirm the file is in the compiled program before citing typecheck, run the owning suite, and compare any separate compile against the untouched lines. A config outside the repository also needs `typeRoots` pointing at the repository's `node_modules/@types`; the next milestone's first separate compile omitted it and every `node:` import failed to resolve. Evidence: `package.json` (search: `"typecheck"`), `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `Both probes run non-login bash -c`).
+**Recurrence 2026-09-19:** A milestone plan named `npm run typecheck` as proof that a changed test file satisfied both configured compilers. The command exited 0, but `npx tsc --listFilesOnly` showed the file was not in the compiled program. Compiling that file alone through a scratchpad config that extends `tsconfig.json` reported eight type errors, all on lines the change did not touch, so a clean separate compile is not the baseline to expect. For a change under `test/`, confirm the file is in the compiled program before citing typecheck, run the owning suite, and compare any separate compile against the untouched lines. A config outside the repository also needs `typeRoots` pointing at the repository's `node_modules/@types`; the next milestone's first separate compile omitted it and every `node:` import failed to resolve. Evidence: `package.json` (search: `"typecheck"`), `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `allows quoted repository evidence while the registered hook still blocks repository writes`).
 
 ## Lesson: Check staged deletions after bulk gruff rewrites
 

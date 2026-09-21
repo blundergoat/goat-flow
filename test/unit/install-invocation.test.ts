@@ -67,6 +67,34 @@ describe("discoverWindowsBashCandidates", () => {
   });
 });
 
+describe("buildInstallerSpawnSpec", () => {
+  it("preserves Windows Path casing without adding a competing PATH entry", () => {
+    const inheritedEnvironment = {
+      Path: "C:\\Windows\\System32;C:\\Program Files\\Git\\cmd",
+      KEEP: "preserved",
+    };
+    const spawnSpec = buildInstallerSpawnSpec(
+      {
+        ok: true,
+        bashCommand: "C:\\Program Files\\Git\\bin\\bash.exe",
+        args: [],
+      },
+      inheritedEnvironment,
+    );
+    assert.ok(spawnSpec.env.Path?.endsWith(inheritedEnvironment.Path));
+    assert.ok(spawnSpec.env.Path?.startsWith("C:\\Program Files\\Git\\bin"));
+    assert.deepEqual(
+      Object.keys(spawnSpec.env).filter((key) => key.toLowerCase() === "path"),
+      ["Path"],
+    );
+    assert.equal(spawnSpec.env.KEEP, "preserved");
+    assert.equal(
+      inheritedEnvironment.Path,
+      "C:\\Windows\\System32;C:\\Program Files\\Git\\cmd",
+    );
+  });
+});
+
 describe("toBashPath", () => {
   it("leaves POSIX paths unchanged", () => {
     assert.equal(

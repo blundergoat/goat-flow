@@ -5,10 +5,16 @@
  * Runtime payload checks keep installed-hook behavior aligned with the audit result.
  */
 import {
+  agentHookSpawnDescriptor,
   buildAgentHookCommand,
   commandEntryReferencesSpec,
 } from "../../../src/cli/server/agent-hook-command.js";
 import { getHookSpec } from "../../../src/cli/server/hooks-registry.js";
+import { checkHookRuntimeSmoke } from "../../../src/cli/audit/check-agent-deny-runtime.js";
+import {
+  discoverWindowsBashCandidates,
+  pickWindowsBashPath,
+} from "../../../src/cli/install-invocation.js";
 import {
   AGENT_CHECKS,
   PROFILES,
@@ -256,21 +262,20 @@ describe("agent deny hook template comparison", () => {
       hooks: {
         PreToolUse: Array<{
           matcher: string;
-          hooks: Array<{ command: string }>;
+          hooks: Array<{ command: string; commandWindows?: string }>;
         }>;
       };
     };
 
-    // The Bash registration is what Codex users actually cross before their command can run.
+    // Replay the provider's current-platform registration, including its Windows override.
     const registeredCodexHook = registeredHookConfig.hooks.PreToolUse.flatMap(
       (registration) => registration.hooks,
     ).find((handler) => handler.command.includes("deny-git-mutations.sh"));
     assert.ok(registeredCodexHook, "expected the registered Codex Git policy");
-    const registeredCodexHookCommand = registeredCodexHook.command;
-    assert.ok(
-      registeredCodexHookCommand,
-      "expected the Codex Bash hook to expose its launcher command",
-    );
+    const registeredCodexHookCommand = agentHookSpawnDescriptor({
+      form: "shell",
+      ...registeredCodexHook,
+    });
 
     const quotedEvidencePayload = JSON.stringify({
       tool_name: "Bash",
@@ -279,11 +284,10 @@ describe("agent deny hook template comparison", () => {
           "rg -n 'git commit|git push' workflow/hooks/deny-dangerous | head -n 10",
       },
     });
-    // Both probes run non-login bash -c, like the production hook launcher. A login shell loads profile scripts such as nvm, which
-    // reject an inherited npm_config_prefix; node is then not found and the policy launcher never starts (exit 127).
+    // Use the exact provider argv without adding a login shell or changing payload delivery.
     const quotedEvidenceResult = originalSpawnSync(
-      "bash",
-      ["-c", registeredCodexHookCommand],
+      registeredCodexHookCommand.command,
+      registeredCodexHookCommand.args,
       {
         cwd: PROJECT_ROOT,
         input: quotedEvidencePayload,
@@ -306,8 +310,8 @@ describe("agent deny hook template comparison", () => {
       tool_input: { command: "printf message | git commit -F -" },
     });
     const blockedRepositoryWriteResult = originalSpawnSync(
-      "bash",
-      ["-c", registeredCodexHookCommand],
+      registeredCodexHookCommand.command,
+      registeredCodexHookCommand.args,
       {
         cwd: PROJECT_ROOT,
         input: blockedRepositoryWritePayload,
@@ -333,8 +337,8 @@ describe("agent deny hook template comparison", () => {
       },
     ]) {
       const result = originalSpawnSync(
-        "bash",
-        ["-c", registeredCodexHookCommand],
+        registeredCodexHookCommand.command,
+        registeredCodexHookCommand.args,
         {
           cwd: PROJECT_ROOT,
           input: JSON.stringify({
@@ -519,15 +523,21 @@ describe("agent deny hook template comparison", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
     const capturedDispatchers: string[] = [];
+    const capturedCommands: string[] = [];
+    const capturedScripts: string[] = [];
+    const nativeBash = "C:\\Program Files\\Git\\bin\\bash.exe";
     childProcess.execFileSync = ((command, args, options) => {
-      if (command === "bash" && Array.isArray(args) && args[0] === "-n") {
+      if (String(command).toLowerCase().endsWith("where.exe")) {
+        return args?.[0] === "bash"
+          ? `C:\\Windows\\System32\\bash.exe\n${nativeBash}\n`
+          : "";
+      }
+      if (Array.isArray(args) && args[0] === "-n") {
         return Buffer.from("");
       }
-      if (
-        command === "bash" &&
-        Array.isArray(args) &&
-        args[1] === "--self-test=smoke"
-      ) {
+      if (Array.isArray(args) && args[1] === "--self-test=smoke") {
+        capturedCommands.push(String(command));
+        capturedScripts.push(String(args[0]));
         const environment = (options as { env?: NodeJS.ProcessEnv }).env;
         if (environment?.GOAT_DENY_DANGEROUS_HOOK)
           capturedDispatchers.push(environment.GOAT_DENY_DANGEROUS_HOOK);
@@ -580,9 +590,23 @@ describe("agent deny hook template comparison", () => {
     });
 
     assert.equal(denyCheck.run(ctx), null);
+    const expectedBash = process.platform === "win32" ? nativeBash : "bash";
+    assert.deepEqual(capturedCommands, [expectedBash, expectedBash]);
+    // Windows self-test paths must be readable by native Bash, including UNC checkout roots.
+    const shellPath = (path: string) =>
+      process.platform === "win32" ? path.replaceAll("\\", "/") : path;
+    const selfTestPath = shellPath(
+      resolve(
+        PROJECT_ROOT,
+        ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
+      ),
+    );
+    assert.deepEqual(capturedScripts, [selfTestPath, selfTestPath]);
     assert.deepEqual(capturedDispatchers, [
-      resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-dangerous.sh"),
-      resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-git-mutations.sh"),
+      shellPath(resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-dangerous.sh")),
+      shellPath(
+        resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-git-mutations.sh"),
+      ),
     ]);
   });
 
@@ -728,12 +752,14 @@ describe("agent deny hook template comparison", () => {
     childProcess.spawnSync = ((
       _command: string,
       args: readonly string[],
-      options: { env?: NodeJS.ProcessEnv },
+      options: { env?: NodeJS.ProcessEnv; input?: string },
     ) => {
-      // Missing shell text cannot represent configured or direct user execution.
-      const shellProgram = args[1] ?? "";
       // A direct script replay belongs to the later agent and must remain a separate result.
-      if (shellProgram.includes("| { bash '")) {
+      if (args.length === 1 && args[0]?.endsWith("deny-dangerous.sh")) {
+        assert.ok(
+          options.input,
+          "direct replay must receive its provider payload on stdin",
+        );
         directRuntimeProbeCalls += 1;
         return completedDirectHookProbe();
       }
@@ -807,6 +833,14 @@ describe("agent deny hook template comparison", () => {
   it("fails when a direct configured command is replayed from nested cwd", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
+    const nativeBash =
+      process.platform === "win32"
+        ? pickWindowsBashPath(discoverWindowsBashCandidates())
+        : null;
+    // Preserve the same relative-script failure on Windows without accidentally testing the WSL launcher.
+    const commandWindows = nativeBash
+      ? `& '${nativeBash.replaceAll("'", "''")}' '.goat-flow/hooks/deny-dangerous.sh'; exit $LASTEXITCODE`
+      : undefined;
     const ctx = makeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
@@ -837,6 +871,7 @@ describe("agent deny hook template comparison", () => {
                     {
                       type: "command",
                       command: ".goat-flow/hooks/deny-dangerous.sh",
+                      commandWindows,
                     },
                   ],
                 },
@@ -849,7 +884,7 @@ describe("agent deny hook template comparison", () => {
       }),
     });
 
-    const result = denyCheck.run(ctx);
+    const result = checkHookRuntimeSmoke(ctx);
     assert.ok(result, "expected nested-cwd configured command failure");
     assert.match(
       result.message,
@@ -902,7 +937,7 @@ describe("agent deny hook template comparison", () => {
       }),
     });
 
-    const result = denyCheck.run(ctx);
+    const result = checkHookRuntimeSmoke(ctx);
     assert.ok(result, "expected configured command runtime failure");
     assert.match(
       result.message,

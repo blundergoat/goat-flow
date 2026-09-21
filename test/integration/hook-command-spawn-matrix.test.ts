@@ -910,20 +910,45 @@ describe("retained policy registrations", () => {
       assert.equal(noBash.status, 0, handlerDiagnostics(noBash));
     });
 
-    it(`${hookId} rejects unsafe config components even for explicit off`, () => {
+    it(`${hookId} rejects a symlinked config even for explicit off`, (testContext) => {
       const root = createRegisteredHostileProject();
       const saved = registeredHandler(root, "PreToolUse", hookId);
       const config = join(root, ".goat-flow/config.yaml");
       writeFileSync(config + ".target", `hooks: {${hookId}: {enabled: false}}`);
-      symlinkSync(config + ".target", config);
+      try {
+        symlinkSync(config + ".target", config);
+      } catch (error) {
+        // Only a refused link operation makes this fixture unavailable; policy failures still fail the test.
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "EPERM"
+        ) {
+          testContext.skip(
+            "Host blocks file symlinks; Linux CI and Windows with symlink privilege cover this case.",
+          );
+          return;
+        }
+        throw error;
+      }
       assert.equal(
         runRegisteredHandler(root, saved, denyPayload("git status")).status,
         2,
       );
-      rmSync(config);
+    });
+
+    it(`${hookId} rejects a linked config directory even for explicit off`, () => {
+      const root = createRegisteredHostileProject();
+      const saved = registeredHandler(root, "PreToolUse", hookId);
+      const config = join(root, ".goat-flow/config.yaml");
       writeFileSync(config, `hooks: {${hookId}: {enabled: false}}`);
       renameSync(join(root, ".goat-flow"), join(root, "moved-state"));
-      symlinkSync(join(root, "moved-state"), join(root, ".goat-flow"), "dir");
+      // Junctions preserve the linked-directory rejection on Windows without requiring symlink privilege.
+      symlinkSync(
+        join(root, "moved-state"),
+        join(root, ".goat-flow"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
       assert.equal(
         runRegisteredHandler(root, saved, denyPayload("git status")).status,
         2,

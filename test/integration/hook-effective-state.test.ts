@@ -988,7 +988,12 @@ describe("effective hook state", () => {
   it(
     "replays Codex deny scenarios through the Windows override",
     { skip: process.platform !== "win32" },
-    () => {
+    (testContext) => {
+      // Keep replay proof independent of today's date, then cross the provider's expiry.
+      testContext.mock.timers.enable({
+        apis: ["Date"],
+        now: new Date("2026-09-21T02:17:08.834Z"),
+      });
       const projectPath = createCodexProject();
       syncHookStates(projectPath);
 
@@ -1008,6 +1013,11 @@ describe("effective hook state", () => {
       assert.deepEqual(
         codexHookState(projectPath, "deny-dangerous").effectiveState,
         { status: "effective", severity: "success" },
+      );
+      testContext.mock.timers.tick(1);
+      assert.deepEqual(
+        codexHookState(projectPath, "deny-dangerous").effectiveState,
+        { status: "provider-capture-stale", severity: "warning" },
       );
     },
   );

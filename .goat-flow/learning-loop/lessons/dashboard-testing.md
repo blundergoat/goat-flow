@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-09-08
+last_reviewed: 2026-09-21
 ---
 
 **Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md); proving a provider actually delivers hook feedback is [hook-testing.md](hook-testing.md).
@@ -104,7 +104,7 @@ last_reviewed: 2026-09-08
 
 **Status:** active | **Created:** 2026-04-29
 
-**Prevention:** For shell-backed audit or hook performance work, capture timings in an environment that can actually run the shell command before updating docs or naming the bottleneck. Prefer a built `dist` dashboard probe plus a focused integration test, and compare fresh against cached requests explicitly when a new cache is involved. Evidence anchors: `src/cli/server/dashboard-audit-routes.ts` (search: `const fresh = url.searchParams.get("fresh") === "true";`), `src/cli/server/dashboard-quality-routes.ts` (search: `function readQualityAuditCache`), `src/cli/audit/check-agent-deny-mechanism.ts` (search: `execFileSync("bash", [denyPath, "--self-test=smoke"]`).
+**Prevention:** For shell-backed audit or hook performance work, capture timings in an environment that can actually run the shell command before updating docs or naming the bottleneck. Prefer a built `dist` dashboard probe plus a focused integration test, and compare fresh against cached requests explicitly when a new cache is involved. Evidence anchors: `src/cli/server/dashboard-audit-routes.ts` (search: `const fresh = url.searchParams.get("fresh") === "true";`), `src/cli/server/dashboard-quality-routes.ts` (search: `function readQualityAuditCache`), `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
 
 **What happened:** Optimizing `/api/quality`, localhost timing probes inside the sandbox made the route look subsecond, about 379 ms with `runAudit` near 160 ms, and led to a bad footgun draft. A later probe against the built dashboard outside the sandbox measured fresh `?fresh=true` requests at about 30,573 ms and 30,182 ms, with only the cached repeat near 5 ms.
 

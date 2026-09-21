@@ -7,6 +7,12 @@
 import * as childProcess from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
+import {
+  buildInstallerSpawnSpec,
+  discoverWindowsBashCandidates,
+  pickWindowsBashPath,
+  toBashPath,
+} from "../install-invocation.js";
 import type { AuditContext, AuditFailure } from "./types.js";
 
 /**
@@ -127,16 +133,6 @@ function spawnFailureFromResult(
   return result.error
     ? spawnFailureFor(result.error, action, executable)
     : null;
-}
-
-/**
- * Quote a hook path so Bash reads the user's selected location as one literal argument.
- *
- * @param argument - raw hook path; empty becomes one empty shell argument
- * @returns quoted argument with embedded single quotes escaped
- */
-function shellSingleQuote(argument: string): string {
-  return `'${argument.replace(/'/g, "'\\''")}'`;
 }
 
 /**
@@ -893,17 +889,36 @@ function verifyDirectHookRuntime(
     agentFacts.agent.id,
     posix.basename(denyRelPath.replaceAll("\\", "/")),
   );
-  const directHookCommand = pipeRuntimeProbeTo(
-    `bash ${shellSingleQuote(join(ctx.projectPath, denyRelPath))}`,
+  const bashCommand =
+    process.platform === "win32"
+      ? pickWindowsBashPath(discoverWindowsBashCandidates())
+      : "bash";
+  // A WSL launcher cannot verify a native Windows hook path.
+  if (bashCommand === null) {
+    return {
+      ok: false,
+      message:
+        "No native Windows Bash found for the direct hook runtime check.",
+      howToFix: "Install Git for Windows and rerun the hook audit.",
+    };
+  }
+  const hookPath = join(ctx.projectPath, denyRelPath);
+  const invocation = buildInstallerSpawnSpec(
+    {
+      ok: true,
+      bashCommand,
+      args: [process.platform === "win32" ? toBashPath(hookPath) : hookPath],
+    },
+    runtimeProbeEnvironment(blockedProbe.hookInput),
   );
   const probeResult = childProcess.spawnSync(
-    "bash",
-    ["-c", directHookCommand],
+    invocation.command,
+    invocation.args,
     {
       cwd: ctx.projectPath,
       encoding: "utf8",
-      env: runtimeProbeEnvironment(blockedProbe.hookInput),
-      input: "",
+      env: invocation.env,
+      input: blockedProbe.hookInput,
       timeout: 5000,
     },
   );

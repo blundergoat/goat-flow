@@ -489,7 +489,7 @@ describe("agent deny hook template comparison", () => {
       }),
     });
 
-    const result = denyCheck.run(ctx);
+    const result = checkHookRuntimeSmoke(ctx);
     assert.ok(result, "expected configured command runtime failure");
     assert.match(result.message, /configured hook command/);
     assert.equal(result.evidence, ".codex/hooks.json");
@@ -539,7 +539,7 @@ describe("agent deny hook template comparison", () => {
       }),
     });
 
-    const result = denyCheck.run(ctx);
+    const result = checkHookRuntimeSmoke(ctx);
     assert.ok(result, "expected configured launcher runtime failure");
     assert.match(
       result.message,
@@ -591,7 +591,7 @@ describe("agent deny hook template comparison", () => {
       }),
     });
 
-    const result = denyCheck.run(ctx);
+    const result = checkHookRuntimeSmoke(ctx);
     // The user's custom hook only contains the managed name as a substring,
     // so managed smoke discovery must skip it and validate the registered
     // hook directly instead of reporting the user's hook as broken.
@@ -645,7 +645,7 @@ describe("agent deny hook template comparison", () => {
       }),
     });
 
-    const result = denyCheck.run(ctx);
+    const result = checkHookRuntimeSmoke(ctx);
     assert.ok(result, "expected configured hook path mismatch failure");
     assert.match(
       result.message,
