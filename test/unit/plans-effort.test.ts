@@ -157,6 +157,41 @@ function remainingForecastFixture(): ReturnType<
 }
 
 describe("plans export: forecast context", () => {
+  it("rejects a whole-work forecast issued exactly when the first receipt starts", () => {
+    const document = remainingForecastFixture();
+    document.records[0]!.issuedAt = "2026-09-13T00:01:00Z";
+    const parsed = parseMilestoneMarkdown(
+      forecastBodyFixture(document, true),
+      "M01-context.md",
+    );
+    assert.equal(parsed.forecastContext?.method, null);
+    assert.match(
+      parsed.warnings.join("\n"),
+      /whole-work forecasts must be issued before/u,
+    );
+  });
+
+  it("checks completed additions and removed checklist items against remaining forecast identities", () => {
+    const valid = forecastBodyFixture(remainingForecastFixture(), true);
+    assert.equal(
+      parseMilestoneMarkdown(valid, "M01-context.md").forecastContext?.method,
+      "contextual-v1",
+    );
+    for (const body of [
+      valid.replace(
+        "## Tasks",
+        "## Tasks\n\n- [x] Unregistered extra work. (est: 2 min product)",
+      ),
+      valid.replace("- [ ] Export context. (est: 2 min product)", ""),
+    ]) {
+      const parsed = parseMilestoneMarkdown(body, "M01-context.md");
+      assert.equal(parsed.forecastContext?.method, null);
+      assert.match(
+        parsed.warnings.join("\n"),
+        /live work items|remain in the live checklist/u,
+      );
+    }
+  });
   /** Regression contract: stripping a selector must not expose a hidden heading or task.
    * Uses temporary plans and real checker/export processes; removes only those fixtures. */
   it("keeps multiline comments attached to forecast methods hidden", () => {

@@ -869,6 +869,27 @@ function writeOwnerGruffConfig(
 }
 
 describe("gruff-code-quality hook resolves ownership from the edited file", () => {
+  it("does not borrow a parent analyzer config across a nested installation boundary", () => {
+    const root = makeRoot();
+    writeAnalysablePackage(root);
+    const nested = join(root, "nested");
+    writeOwnerGruffConfig(nested, ["    enabled: true"]);
+    mkdirSync(join(nested, "src"));
+    writeFileSync(join(nested, "src/sample.ts"), "export const value = 1;\n");
+    const result = readMigratedGruffResult(
+      runMigratedHook(
+        root,
+        {
+          tool_name: "Edit",
+          tool_input: { file_path: "nested/src/sample.ts" },
+        },
+        "/usr/bin:/bin",
+      ),
+    );
+    assert.equal(result.outcome, "unavailable");
+    assert.match(JSON.stringify(result.findings), /analyzer-config-missing/u);
+    assert.equal(existsSync(join(root, "gruff-hook-args.log")), false);
+  });
   it("derives scope from each sibling repository under a parent that is not a repository", () => {
     const workspaceRoot = makeRoot();
     // Two child repositories under a non-git parent reproduce the measured consumer workspace.

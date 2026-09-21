@@ -116,6 +116,7 @@ function validReport(projectRoot: string): string {
     score_rationale: makeQualityScoreRationale(),
     findings: [],
     refuted_candidates: [],
+    improvements: [],
   });
 }
 

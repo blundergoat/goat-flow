@@ -60,6 +60,7 @@ function currentReport(scoreRationale: unknown = makeQualityScoreRationale()) {
     score_rationale: scoreRationale,
     findings: [],
     refuted_candidates: [],
+    improvements: [],
   };
 }
 
@@ -77,6 +78,82 @@ function promptInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
 }
 
 describe("quality score rationale schema", () => {
+  it("requires recommendations for current reports while preserving legacy omission", () => {
+    const { improvements: _improvements, ...report } = currentReport();
+    assert.deepEqual(parseQualityReport(report), {
+      ok: false,
+      error: "report.improvements is required for current reports",
+    });
+    assert.equal(
+      parseQualityReport(report, { requireCurrentFields: false }).ok,
+      true,
+    );
+  });
+
+  it("rejects terminal and bidirectional controls in persisted provenance", () => {
+    for (const control of [
+      "\n",
+      "\u001b",
+      "\u0085",
+      "\u061c",
+      "\u200e",
+      "\u202e",
+      "\u2066",
+      "\u2069",
+    ]) {
+      const rationale = makeQualityScoreRationale();
+      rationale.setup.accuracy.evidence = `Evidence${control}suffix`;
+      assert.equal(
+        parseQualityReport(currentReport(rationale)).ok,
+        false,
+        `rationale ${JSON.stringify(control)}`,
+      );
+      const report = currentReport();
+      report.assessment_context.grounding_status = "partial";
+      const withProbe = {
+        ...report,
+        assessment_context: {
+          ...report.assessment_context,
+          unverified_probes: [`Probe${control}suffix`],
+        },
+      };
+      assert.equal(
+        parseQualityReport(withProbe).ok,
+        false,
+        `probe ${JSON.stringify(control)}`,
+      );
+      const revisionReport = currentReport();
+      revisionReport.assessment_context.project_revision = `revision${control}suffix`;
+      assert.equal(
+        parseQualityReport(revisionReport, { requireCurrentFields: false }).ok,
+        false,
+        `revision ${JSON.stringify(control)}`,
+      );
+    }
+  });
+
+  it("accepts full Git IDs and null, requiring valid IDs only for current reports", () => {
+    for (const revision of ["a".repeat(40), "b".repeat(64), null]) {
+      const report = currentReport();
+      const context = {
+        ...report.assessment_context,
+        project_revision: revision,
+      };
+      assert.equal(
+        parseQualityReport({ ...report, assessment_context: context }).ok,
+        true,
+        String(revision),
+      );
+    }
+    const report = currentReport();
+    report.assessment_context.project_revision = "not-a-commit";
+    assert.equal(parseQualityReport(report).ok, false);
+    assert.equal(
+      parseQualityReport(report, { requireCurrentFields: false }).ok,
+      true,
+    );
+  });
+
   it("accepts a complete rationale ledger on current reports", () => {
     const report = currentReport();
 

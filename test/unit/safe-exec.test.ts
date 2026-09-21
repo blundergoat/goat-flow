@@ -2,6 +2,8 @@
  * Unit tests for safe process execution and project-bounded atomic file writes.
  */
 import { strict as assert } from "node:assert";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { describe, it } from "node:test";
 import { tmpdir } from "node:os";
 import {
@@ -27,6 +29,38 @@ import {
 } from "../../src/cli/server/safe-exec.js";
 
 describe("safe-exec/writeFileAtomic", () => {
+  it("refuses a temporary symlink collision without touching its target or deleting the collision", async (t) => {
+    if (process.platform === "win32") return;
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-collision-"));
+    const victim = join(root, "victim.txt");
+    await writeFile(victim, "keep");
+    const originalOpen = fs.openSync;
+    let collision = "";
+    t.mock.method(
+      fs,
+      "openSync",
+      (path: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode) => {
+        if (String(path).endsWith(".tmp")) {
+          collision = String(path);
+          fs.symlinkSync(victim, path);
+        }
+        return originalOpen(path, flags, mode);
+      },
+    );
+    syncBuiltinESMExports();
+    try {
+      assert.throws(
+        () => writeFileAtomic(join(root, "state.json"), "overwrite", root),
+        /EEXIST/,
+      );
+      assert.equal(await readFile(victim, "utf8"), "keep");
+      assert.equal(fs.lstatSync(collision).isSymbolicLink(), true);
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it("replaces the complete destination", async () => {
     const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-write-"));
     const targetPath = join(root, "state.json");

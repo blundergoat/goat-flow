@@ -25,11 +25,30 @@ import { dispatchCommand } from "../../src/cli/cli-handlers.js";
 import {
   renderLearnEntrySkeleton,
   runLearnScaffold,
+  writeLearnReport,
   type LearnScaffoldRequest,
 } from "../../src/cli/learn-scaffold.js";
 import { BUCKET_SIZE_WARN_BYTES } from "../../src/cli/stats/stats.js";
 
 const FIXED_DATE = new Date("2026-08-24T00:00:00.000Z");
+it("rechecks the report destination after scaffold creation instead of following a replaced report link", (t) => {
+  if (process.platform === "win32") return;
+  const root = createLearningProject();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const output = join(root, "report.md");
+  const result = runLearnScaffold(
+    lessonRequest(root, { reportOutputPath: output }),
+    fixedClock(),
+  );
+  const bucket = join(root, result.targetPath);
+  const before = readFileSync(bucket, "utf8");
+  symlinkSync(bucket, output);
+  assert.throws(
+    () => writeLearnReport(root, output, result.output),
+    /Cannot use --output/,
+  );
+  assert.equal(readFileSync(bucket, "utf8"), before);
+});
 const LEARNING_ROOT = ".goat-flow/learning-loop";
 const BUCKET_DIRECTORIES = [
   `${LEARNING_ROOT}/footguns`,

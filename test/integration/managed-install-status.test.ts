@@ -59,7 +59,7 @@ interface StatusJson {
 }
 
 /** Side effect: spawns status through the public TypeScript CLI entry point and captures its process result. */
-function runStatus(projectPath: string, format: "json" | "text") {
+function runStatus(projectPath: string, format: "json" | "text" | "markdown") {
   return spawnSync(
     process.execPath,
     ["--import", "tsx", CLI_ENTRY, "status", projectPath, "--format", format],
@@ -213,6 +213,10 @@ describe("managed install status evidence", () => {
     const stale = evidenceEntry(report, "stale");
     assert.deepEqual(stale.subjects.agents, ["codex"]);
     assert.ok(stale.subjects.paths.includes(managedPath));
+    const markdown = runStatus(projectPath, "markdown");
+    assert.equal(markdown.status, 0, markdown.stderr);
+    assert.match(markdown.stdout, /Managed install evidence:/u);
+    assert.match(markdown.stdout, /stale.*agent=codex/iu);
     assert.equal(stale.canSelectInstalledAgent, false);
     assert.match(stale.reason, /target bytes|cutover marker/iu);
     assert.match(stale.recovery ?? "", /goat-flow install .* --agent codex/u);

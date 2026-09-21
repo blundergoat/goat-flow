@@ -67,6 +67,7 @@ function currentQualityReport(projectRoot: string) {
     score_rationale: makeQualityScoreRationale(),
     findings: [],
     refuted_candidates: [],
+    improvements: [],
   };
 }
 

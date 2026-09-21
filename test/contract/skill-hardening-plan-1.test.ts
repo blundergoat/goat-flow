@@ -452,7 +452,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const pathOnlyIndex = intake.indexOf("**0: Path-Only Intake");
-      const readOnlyIndex = intake.indexOf("**No-file guard: Mode 2**");
+      const readOnlyIndex = intake.indexOf("**No-file guard: Mode R or 2**");
       const namedFileIndex = intake.indexOf("**1: Named-File Update**");
 
       assert.notEqual(
@@ -473,7 +473,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       );
       assert.match(
         intake,
-        /reporting-only\/no-file constraints forbid writes; no-implementation alone does not/u,
+        /reporting-only\/no-file constraints forbid writes: reconcile\/audit requests select read-only Mode R; other requests select Mode 2\. No-implementation alone does not forbid plan edits/u,
         `${skillPath}: plan-file and implementation permissions are conflated`,
       );
       assert.match(

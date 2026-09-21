@@ -331,6 +331,7 @@ function consumerQualityReport(consumerTargetPath: string): object {
     score_rationale: makeQualityScoreRationale(),
     findings: [],
     refuted_candidates: [],
+    improvements: [],
   };
 }
 

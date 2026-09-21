@@ -212,6 +212,70 @@ function remainingHistoryFixture(start: number, isComplete = true) {
 }
 
 describe("plans check: registered history selection", () => {
+  it("requires registration before the first work second, even when the snapshot was issued earlier", (t) => {
+    const root = mkdtempSync(join(tmpdir(), "goat-history-equal-start-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const fixture = registeredHistoryFixture(100);
+    fixture.registration.forecasts[0]!.registeredAt =
+      receiptStamp(100).split(" / ")[0]!;
+    writeRegisteredHistory(join(root, ".goat-flow/plans/equal-start"), fixture);
+    const selected = selectedHistory(
+      root,
+      registeredHistoryFixture(1000, 23, false),
+    );
+    assert.equal(selected.samples.length, 0);
+    assert.match(
+      selected.exclusions.map((entry) => entry.reason).join("\n"),
+      /registration/u,
+    );
+  });
+
+  it("preserves whole-work samples after completion but excludes cancelled scope", (t) => {
+    const root = mkdtempSync(join(tmpdir(), "goat-history-removed-scope-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    for (const [name, start] of [
+      ["completed", 100],
+      ["cancelled", 200],
+    ] as const) {
+      const fixture = remainingHistoryFixture(start);
+      const document = {
+        schemaVersion: 1,
+        records: fixture.registration.forecasts.map((entry) => entry.forecast),
+      };
+      const revision = structuredClone(document.records[1]!);
+      revision.items = revision.items.filter((item) => item.id !== "T1");
+      revision.scopeDelta = { added: [], removed: ["T1"] };
+      revision.basis.agentWorkUnits = 2;
+      revision.range = { lowMinutes: 1, likelyMinutes: 6, highMinutes: 20 };
+      fixture.body = fixture.body.replace(
+        JSON.stringify(document),
+        JSON.stringify({ ...document, records: [fixture.forecast, revision] }),
+      );
+      fixture.registration.forecasts[1] = historyRegistration(revision);
+      if (name === "cancelled")
+        fixture.body = fixture.body.replace(
+          /^- \[x\] Build the thing.*\n/mu,
+          "",
+        );
+      const parsed = parseMilestoneMarkdown(fixture.body, "M01-work.md");
+      assert.equal(
+        parsed.forecastContext?.method,
+        "contextual-v1",
+        parsed.warnings.join("\n"),
+      );
+      writeRegisteredHistory(join(root, ".goat-flow/plans", name), fixture);
+    }
+    const selected = selectedHistory(
+      root,
+      registeredHistoryFixture(1000, 23, false),
+    );
+    assert.equal(selected.samples.length, 1);
+    assert.match(
+      selected.exclusions.find((entry) => entry.id.includes("cancelled"))
+        ?.reason ?? "",
+      /whole-work scope was removed/u,
+    );
+  });
   /** Whole and remaining forecasts share files but never share outcome denominators or the consumed receipt prefix. */
   it("matches remaining scope to registered revisions and counts only seconds after their closed cutoff", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-history-remaining-"));

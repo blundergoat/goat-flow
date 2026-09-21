@@ -939,6 +939,30 @@ describe("gruff-code-quality hook", () => {
 });
 
 describe("gruff-code-quality hook (gruff.hook.v2 contract)", () => {
+  it("rejects incomplete successful envelopes instead of counting clean coverage", () => {
+    for (const envelope of [
+      JSON.stringify({
+        contractVersion: "gruff.hook.v2",
+        config: { schemaOk: true },
+      }),
+      v2GruffEnvelope({ findings: null }),
+      v2GruffEnvelope({ run: {} }),
+      v2GruffEnvelope({ diagnostics: null }),
+    ]) {
+      const root = makeEditedGruffContractProject(envelope, {
+        capabilities: V2_GRUFF_CAPABILITIES,
+      });
+      const result = readMigratedGruffResult(
+        runMigratedHook(root, sampleGruffEditPayload(), "/usr/bin:/bin"),
+      );
+      assert.equal(result.outcome, "incomplete");
+      assert.equal(result.reasonCode, "output-invalid");
+      assert.equal(
+        (result.coverage as { completedUnits: number }).completedUnits,
+        0,
+      );
+    }
+  });
   for (const v2Case of V2_OUTCOME_CASES) {
     it(`${v2Case.name}, and requests the whole file without failure gates`, () => {
       const projectRoot = makeEditedGruffContractProject(v2Case.envelope, {

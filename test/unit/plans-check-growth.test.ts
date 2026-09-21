@@ -53,6 +53,26 @@ function growthLines(records: ParsedMilestone[]): string[] {
 }
 
 describe("plans check: work added after forecasts", () => {
+  it("excludes semantically invalid revisions through the real Markdown parser", () => {
+    const fixture = registeredHistoryFixture(100, 540);
+    const revision = {
+      ...structuredClone(fixture.forecast),
+      id: "F2",
+      predecessorId: "F1",
+      scopeDelta: { added: ["phantom"], removed: [] },
+    };
+    const body = fixture.body.replace(
+      JSON.stringify({ schemaVersion: 1, records: [fixture.forecast] }),
+      JSON.stringify({
+        schemaVersion: 1,
+        records: [fixture.forecast, revision],
+      }),
+    );
+    const parsed = parseMilestoneMarkdown(body, "M01-work.md");
+    assert.equal(parsed.forecastContext?.method, null);
+    assert.match(parsed.warnings.join("\n"), /scopeDelta must match/u);
+    assert.deepEqual(growthLines([parsed]), []);
+  });
   it("counts each registered added item once per finished milestone", () => {
     const grown = withRegisteredAdditions(parseRegistered("M01-work.md"), [
       ["T2"],

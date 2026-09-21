@@ -237,6 +237,7 @@ function makePriorQualityReport(
       },
       score_rationale: makeQualityScoreRationale(),
       findings: [],
+      improvements: [],
       refuted_candidates: [
         {
           claim: "The schema accepts an inferred refutation",
@@ -980,6 +981,7 @@ describe("quality report contract: rejected persistence", () => {
       },
       findings: [],
       refuted_candidates: [],
+      improvements: [],
     };
 
     try {
