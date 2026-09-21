@@ -6,7 +6,8 @@
  * Agent-written reports are non-blocking: malformed files become warnings while valid history stays visible.
  * Finding ids are attached at load time so users can compare runs without trusting agent-written ids.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
+import { readProjectTextFile } from "../project-file.js";
 import { join } from "node:path";
 import type { AgentId } from "../types.js";
 import type {
@@ -259,6 +260,7 @@ function appendMatchingHistoryEntry(
   entries: QualityHistoryEntry[],
   warnings: string[],
   options: {
+    projectPath: string;
     dir: string;
     filename: string;
     agent: AgentId;
@@ -270,6 +272,7 @@ function appendMatchingHistoryEntry(
   if (!parsedName) return false;
 
   const { entry, warning } = tryParseHistoryFile(
+    options.projectPath,
     options.dir,
     options.filename,
     parsedName,
@@ -315,7 +318,9 @@ export function loadQualityHistory(projectPath: string): {
     const fullPath = join(dir, filename);
     let raw: unknown;
     try {
-      raw = JSON.parse(readFileSync(fullPath, "utf-8"));
+      raw = JSON.parse(
+        readProjectTextFile(projectPath, fullPath, 2 * 1024 * 1024),
+      );
     } catch (error) {
       // A hand-edited JSON file or a report removed during loading produces a warning while other saved runs remain visible.
       warnings.push(
@@ -398,6 +403,7 @@ export function loadQualityHistoryWindow(
   // Parse newest matching files until the visible rows plus one delta baseline are loaded.
   for (const filename of filenames) {
     const appended = appendMatchingHistoryEntry(entries, warnings, {
+      projectPath,
       dir,
       filename,
       agent: options.agent,
@@ -420,6 +426,7 @@ export function loadQualityHistoryWindow(
  * @returns parsed entry plus optional warning; `null` entry means the row is skipped
  */
 function tryParseHistoryFile(
+  projectPath: string,
   dir: string,
   filename: string,
   parsedName: { date: string; time: string; agent: AgentId; randomId: string },
@@ -427,7 +434,9 @@ function tryParseHistoryFile(
   const fullPath = join(dir, filename);
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(fullPath, "utf-8"));
+    raw = JSON.parse(
+      readProjectTextFile(projectPath, fullPath, 2 * 1024 * 1024),
+    );
   } catch (error) {
     // A report deleted between listing and reading, or damaged JSON, skips this row and returns a visible warning.
     return {
@@ -494,7 +503,12 @@ export function findLatestQualityReport(
     // Wrong-agent or malformed filenames are skipped before opening the file.
     if (!parsedName) continue;
 
-    const { entry, warning } = tryParseHistoryFile(dir, filename, parsedName);
+    const { entry, warning } = tryParseHistoryFile(
+      projectPath,
+      dir,
+      filename,
+      parsedName,
+    );
     // Malformed matching files are reported while the search continues.
     if (warning) warnings.push(warning);
     // The first valid mode-matching entry is the latest run the user asked for.

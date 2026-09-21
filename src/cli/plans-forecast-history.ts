@@ -400,7 +400,7 @@ function registrationMatches(
   if (
     firstWork === undefined ||
     registered < Date.parse(snapshot.issuedAt) ||
-    registered > firstWork * 1000
+    registered >= firstWork * 1000
   )
     return false;
   if (
@@ -549,8 +549,16 @@ function compatibilityExclusion(
     return "work state is unknown or incompatible";
   if (snapshot.unitRubric !== target.unitRubric)
     return "unit rubric is incompatible";
+  return wholeScopeExclusion(snapshot, record);
+}
+
+/** Retain completed work in whole-work history, but exclude added or cancelled scope. */
+function wholeScopeExclusion(
+  snapshot: PlanForecastRecord,
+  record: PlanExportRecord,
+): string | null {
+  if (snapshot.scopeKind !== "whole") return null;
   if (
-    snapshot.scopeKind === "whole" &&
     record.forecastContext?.document?.records.some(
       (revision) =>
         revision.scopeKind === "remaining" &&
@@ -558,6 +566,39 @@ function compatibilityExclusion(
     )
   )
     return "whole-work scope changed after issue";
+  // Residual snapshots also remove completed work. Only an item absent from the live
+  // checklist represents cancelled whole-work scope rather than recorded completion.
+  const live = [
+    ...record.tasks,
+    ...record.testingGateItems,
+    ...record.midProofItems,
+  ];
+  if (record.planAdminEstimate)
+    live.push({
+      ...record.planAdminEstimate,
+      text: "Plan/admin overhead",
+      isChecked: false,
+    });
+  const normalize = (text: string): string =>
+    text
+      .replace(
+        /\(est:\s*\d+\s*min(?:ute)?s?\s+[a-z]+\)(?=\s+(?:[-*+]|\d+[.)])\s|$)/iu,
+        "",
+      )
+      .replace(/\s+/gu, " ")
+      .trim();
+  if (
+    snapshot.items.some(
+      (item) =>
+        !live.some(
+          (work) =>
+            work.estimateCategory === item.category &&
+            normalize(work.text) === normalize(item.description),
+        ),
+    )
+  ) {
+    return "whole-work scope was removed after issue";
+  }
   return null;
 }
 

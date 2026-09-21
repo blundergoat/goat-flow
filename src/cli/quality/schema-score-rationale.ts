@@ -10,7 +10,7 @@ import {
   type QualityScoreRationale,
 } from "./schema-types.js";
 import {
-  expectNonEmptyString,
+  expectSingleLineString,
   isRecord,
   rejectUnknownKeys,
 } from "./schema-expectations.js";
@@ -19,15 +19,8 @@ type FieldResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /** Parse one bounded rationale string before it reaches terminal or dashboard output. */
 function parseRationaleText(raw: unknown, path: string): FieldResult<string> {
-  const parsed = expectNonEmptyString(raw, path);
+  const parsed = expectSingleLineString(raw, path);
   if (!parsed.ok) return parsed;
-  if (
-    /\r|\n|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u2028\u2029]/u.test(
-      parsed.value,
-    )
-  ) {
-    return { ok: false, error: `${path} must be a single-line string` };
-  }
   if (parsed.value.length > QUALITY_SCORE_RATIONALE_MAX_CHARACTERS) {
     return {
       ok: false,

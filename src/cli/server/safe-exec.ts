@@ -10,11 +10,16 @@
  * - Atomic writes flush and close a neighboring temporary file before replacing the requested destination.
  */
 import { spawn, spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import type { Stats } from "node:fs";
 import {
   closeSync,
+  fstatSync,
   fsyncSync,
+  lstatSync,
   mkdirSync,
   openSync,
+  realpathSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -222,9 +227,11 @@ export function writeFileAtomic(
   }
   const destinationDirectory = dirname(targetPath);
   mkdirSync(destinationDirectory, { recursive: true });
+  const parentPath = realpathSync(destinationDirectory);
+  const parentIdentity = lstatSync(destinationDirectory);
   const tempPath = resolve(
     destinationDirectory,
-    `.${pathBasename(targetPath)}.${process.pid}.${Date.now()}.tmp`,
+    `.${pathBasename(targetPath)}.${process.pid}.${randomBytes(16).toString("hex")}.tmp`,
   );
   // The temporary copy must obey the same project boundary before any replacement bytes are written.
   if (!isWithinProject(projectRoot, tempPath)) {
@@ -232,25 +239,71 @@ export function writeFileAtomic(
   }
   // No descriptor exists until opening succeeds, so an early failure has nothing to close.
   let fileDescriptor: number | null = null;
+  let allocatedIdentity: Stats | null = null;
   try {
-    fileDescriptor = openSync(tempPath, "w", fileMode);
+    fileDescriptor = openSync(tempPath, "wx", fileMode);
+    allocatedIdentity = fstatSync(fileDescriptor);
     writeFileSync(fileDescriptor, content, "utf-8");
     fsyncSync(fileDescriptor);
     closeSync(fileDescriptor);
     // The descriptor is already closed; a later rename failure only needs temporary-path cleanup.
     fileDescriptor = null;
+    assertAtomicTemporaryFile(tempPath, allocatedIdentity, {
+      directory: destinationDirectory,
+      identity: parentIdentity,
+      resolvedPath: parentPath,
+    });
     renameSync(tempPath, targetPath);
   } catch (err) {
     // A write or rename failure, such as a read-only destination, reaches the caller after temporary-file cleanup is attempted.
     // A descriptor left open by the failed write must be closed before the temporary path is removed.
     if (fileDescriptor !== null) closeSync(fileDescriptor);
     try {
-      unlinkSync(tempPath);
+      discardAtomicTemporaryFile(tempPath, allocatedIdentity);
     } catch {
-      // A failed open may leave no temporary file; best-effort cleanup must not hide the write failure already being returned.
+      // Cleanup can fail independently; callers still receive the original publication failure.
+      throw err;
     }
     throw err;
   }
+}
+
+/** Reject publication if the allocated file or its parent no longer has the inspected identity. */
+function assertAtomicTemporaryFile(
+  path: string,
+  identity: Stats,
+  parent: {
+    directory: string;
+    identity: Stats;
+    resolvedPath: string;
+  },
+): void {
+  const current = lstatSync(path);
+  const currentParent = lstatSync(parent.directory);
+  if (
+    !current.isFile() ||
+    current.dev !== identity.dev ||
+    current.ino !== identity.ino ||
+    currentParent.dev !== parent.identity.dev ||
+    currentParent.ino !== parent.identity.ino ||
+    realpathSync(parent.directory) !== parent.resolvedPath
+  ) {
+    throw new Error("Atomic write temporary file changed before publication.");
+  }
+}
+
+/** Remove only this writer's temporary allocation; filesystem errors propagate to the publication-error handler. */
+function discardAtomicTemporaryFile(
+  path: string,
+  allocatedIdentity: Stats | null,
+): void {
+  if (allocatedIdentity === null) return;
+  const current = lstatSync(path);
+  if (
+    current.dev === allocatedIdentity.dev &&
+    current.ino === allocatedIdentity.ino
+  )
+    unlinkSync(path);
 }
 
 // Copy only launch and temporary-directory settings so child commands do not inherit the rest of the server environment.

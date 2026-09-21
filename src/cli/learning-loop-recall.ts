@@ -290,7 +290,7 @@ export function handleLearningLoopRecallCommand(options: ParsedCLI): void {
   if (options.format !== "text" && options.format !== "json") {
     throw new CLIError("recall supports only text or json output.", 2);
   }
-  const fs = createFS(options.projectPath);
+  const fs = createFS(options.projectPath, { boundedReads: true });
   const configState = loadConfig(options.projectPath, fs);
   // Invalid config may contain the user's real bucket paths, so falling back to defaults could hide relevant entries.
   if (!configState.valid) {

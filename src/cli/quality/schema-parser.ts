@@ -884,7 +884,10 @@ function parseReportCollections(
   const refutedCandidates = parseReportRefutedCandidates(rawReport, options);
   // Invalid exclusions stop the report before its refutation ledger reaches the user.
   if (!refutedCandidates.ok) return refutedCandidates;
-  const improvements = parseQualityImprovements(rawReport.improvements);
+  const improvements = parseQualityImprovements(
+    rawReport.improvements,
+    options.requireCurrentFields,
+  );
   // Reject malformed recommendations before save can silently lose a maintainer's next steps.
   if (!improvements.ok) return improvements;
   return {

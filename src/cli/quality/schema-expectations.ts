@@ -93,6 +93,23 @@ export function expectNonEmptyString(
   return { ok: true, value: parsed.value };
 }
 
+/** Reject terminal and bidirectional controls before persisted text reaches history output. */
+export function expectSingleLineString(
+  candidate: unknown,
+  path: string,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const parsed = expectNonEmptyString(candidate, path);
+  if (!parsed.ok) return parsed;
+  if (
+    /[\u0000-\u0008\u000a-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/u.test(
+      parsed.value,
+    )
+  ) {
+    return { ok: false, error: `${path} must be a single-line string` };
+  }
+  return parsed;
+}
+
 /**
  * Read a field whose value must match the quality UI vocabulary.
  * Use for statuses, severities, modes, and evidence labels that drive badges and filters.

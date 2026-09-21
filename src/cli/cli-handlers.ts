@@ -263,17 +263,6 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
   const fs = createFS(options.projectPath);
   const result = classifyProjectState(fs, options.agent ?? undefined);
 
-  if (options.format === "markdown") {
-    const lines = [
-      `**Path:** ${options.projectPath}`,
-      `**State:** ${result.state}`,
-      `**Action:** ${result.action}`,
-      `**Details:** ${result.details}`,
-    ];
-    writeOutput(options, lines.join("\n"));
-    return;
-  }
-
   const {
     buildManagedInstallEvidenceReport,
     renderManagedInstallEvidenceText,
@@ -281,6 +270,19 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
   const managedInstallEvidence = buildManagedInstallEvidenceReport(
     options.projectPath,
   );
+
+  if (options.format === "markdown") {
+    const lines = [
+      `**Path:** ${options.projectPath}`,
+      `**State:** ${result.state}`,
+      `**Action:** ${result.action}`,
+      `**Details:** ${result.details}`,
+      "",
+      renderManagedInstallEvidenceText(managedInstallEvidence),
+    ];
+    writeOutput(options, lines.join("\n"));
+    return;
+  }
 
   if (options.format === "json") {
     writeOutput(
@@ -601,7 +603,8 @@ async function handleLearnCommand(options: ParsedCLI): Promise<void> {
       2,
     );
   }
-  const { runLearnScaffold } = await import("./learn-scaffold.js");
+  const { runLearnScaffold, writeLearnReport } =
+    await import("./learn-scaffold.js");
   const result = runLearnScaffold({
     projectRoot: options.projectPath,
     entryType: options.learnEntryType,
@@ -628,7 +631,9 @@ async function handleLearnCommand(options: ParsedCLI): Promise<void> {
           2,
         )
       : result.output;
-  writeOutput(options, output);
+  if (options.output)
+    writeLearnReport(options.projectPath, options.output, output);
+  else writeOutput(options, output);
 }
 
 /** Route `skill new` authoring or read-only `skill doctor` diagnosis. */

@@ -12,6 +12,7 @@ import {
   fchmodSync,
   fsyncSync,
   lstatSync,
+  mkdirSync,
   openSync,
   readFileSync,
   realpathSync,
@@ -34,6 +35,7 @@ import { pathWriteClaimInspectCommand } from "./claims-command.js";
 import type { LearnEntryType, LearnEvidenceKind } from "./cli-types.js";
 import { loadConfig } from "./config/reader.js";
 import { createFS } from "./facts/fs.js";
+import { writeFileAtomic } from "./server/safe-exec.js";
 import {
   findResolvedEntriesHeadingIndex,
   parseFrontmatterFields,
@@ -424,19 +426,19 @@ function isOutsideDirectory(relativePath: string): boolean {
 }
 
 /**
- * Keep a saved command report separate from the project's learning content before publishing an entry.
- * Use for previews and real writes; a linked file or a destination inside learning storage is rejected without changing the project.
+ * Keep a saved command report separate from the project's learning content.
+ * Used before scaffold publication and again before report output; inspection itself changes no files.
  *
  * @param projectRoot - inspected project with an existing learning-loop directory
  * @param reportOutputPath - caller-selected report file; absent or empty means print the result without saving a report
- * @returns nothing; throws a usage error when the report destination cannot safely be distinguished from learning content
+ * @returns the resolved destination, or null for stdout; throws a usage error when the destination cannot safely be distinguished from learning content
  */
 function validateLearnReportDestination(
   projectRoot: string,
   reportOutputPath: string | null | undefined,
-): void {
+): string | null {
   // Without a saved report, there is no second file write that could replace the user's learning content.
-  if (!reportOutputPath) return;
+  if (!reportOutputPath) return null;
   try {
     let existingAncestor = resolve(reportOutputPath);
     const missingPathParts: string[] = [];
@@ -475,6 +477,7 @@ function validateLearnReportDestination(
         "Choose a report destination outside the learning-loop directory.",
       );
     }
+    return resolvedReportPath;
   } catch (error) {
     // A removed report folder or dangling directory alias prevents inspection; the caller gets a usage error before any learning-loop write.
     throw new CLIError(
@@ -482,6 +485,29 @@ function validateLearnReportDestination(
       2,
     );
   }
+}
+
+/**
+ * Revalidate and atomically write a learn report outside learning storage, creating missing parent directories.
+ * Throws on unsafe or changed destinations and filesystem errors; an already published scaffold remains in place.
+ *
+ * @param projectRoot - selected project whose learning-loop content must remain separate
+ * @param outputPath - caller-selected report destination, including destinations outside the project
+ * @param rendered - complete report body; one trailing newline is appended
+ */
+export function writeLearnReport(
+  projectRoot: string,
+  outputPath: string,
+  rendered: string,
+): void {
+  const target = validateLearnReportDestination(projectRoot, outputPath);
+  if (target === null) return;
+  mkdirSync(dirname(target), { recursive: true });
+  if (validateLearnReportDestination(projectRoot, outputPath) !== target) {
+    throw new CLIError("Learn report destination changed before writing.", 2);
+  }
+  writeFileAtomic(target, rendered + "\n", dirname(target));
+  console.error(`Written to ${outputPath}`);
 }
 
 // Resolve and snapshot one category bucket; throws a usage error when containment, link identity, or readable-file checks fail.
@@ -711,9 +737,13 @@ function validateCitations(
   skeleton: string,
   citations: readonly EvidenceCitation[],
 ): void {
-  const evaluations = evaluateSearchAnchors(createFS(projectRoot), skeleton, {
-    sourcePath: targetPath,
-  });
+  const evaluations = evaluateSearchAnchors(
+    createFS(projectRoot, { boundedReads: true }),
+    skeleton,
+    {
+      sourcePath: targetPath,
+    },
+  );
   // A citation omitted by the extractor is unsafe or uncheckable, so an empty result is not treated as success.
   if (evaluations.length !== citations.length) {
     throw new CLIError(

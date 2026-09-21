@@ -777,14 +777,17 @@ function collectCurrentWorkProblems(
   snapshot: PlanForecastRecord,
   record: PlanExportRecord,
 ): string[] {
-  const items = [
+  const liveItems = [
     ...record.tasks,
     ...record.testingGateItems,
     ...record.midProofItems,
-  ].filter((workItem) => snapshot.scopeKind === "whole" || !workItem.isChecked);
+  ];
+  const items = liveItems.filter(
+    (workItem) => snapshot.scopeKind === "whole" || !workItem.isChecked,
+  );
   // Omitted administrative work adds no estimate or unit to the author's current checklist.
   const work = [...items, record.planAdminEstimate ?? {}];
-  const problems = collectLiveItemProblems(snapshot, record, items);
+  const problems = collectLiveItemProblems(snapshot, record, liveItems);
   // Newly added unchecked work needs a revision; checking off work after issue can reduce the remaining count.
   if (
     hasCurrentForecastMismatch(
@@ -856,7 +859,7 @@ function collectLiveItemProblems(
       identities.size !== 1 ||
       id === undefined ||
       usedIds.has(id) ||
-      !snapshot.items.filter(matchesItem).some((saved) => saved.id === id)
+      !coversLiveForecastItem(snapshot, matchesItem, workItem.isChecked)
     ) {
       return [
         "live work items must uniquely match the current forecast snapshot by description and category; append a revision for changed scope (admin description: Plan/admin overhead)",
@@ -864,7 +867,24 @@ function collectLiveItemProblems(
     }
     usedIds.add(id);
   }
+  if (snapshot.items.some((saved) => !usedIds.has(saved.id))) {
+    return [
+      "current forecast items must remain in the live checklist; append a revision before removing scope",
+    ];
+  }
   return [];
+}
+
+/** A residual forecast may omit completed historical work, while every other live item needs current coverage. */
+function coversLiveForecastItem(
+  snapshot: PlanForecastRecord,
+  matchesItem: (saved: PlanForecastItem) => boolean,
+  isChecked: boolean,
+): boolean {
+  return (
+    snapshot.items.some(matchesItem) ||
+    (snapshot.scopeKind === "remaining" && isChecked)
+  );
 }
 
 /** Checking off work reduces a remaining budget without rewriting the prediction issued at its receipt cutoff. */
@@ -953,7 +973,7 @@ function collectIssueTimeProblems(
   const firstStart = record.timingReceipt?.segments.at(0)?.startEpochSeconds;
   return snapshot.scopeKind === "whole" &&
     firstStart !== undefined &&
-    Date.parse(snapshot.issuedAt) / 1000 > firstStart
+    Date.parse(snapshot.issuedAt) / 1000 >= firstStart
     ? ["whole-work forecasts must be issued before work starts"]
     : [];
 }

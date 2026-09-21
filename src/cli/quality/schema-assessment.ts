@@ -15,7 +15,7 @@ import {
 } from "./schema-types.js";
 import {
   expectEnumValue,
-  expectNonEmptyString,
+  expectSingleLineString,
   expectNullableString,
   isRecord,
   rejectUnknownKeys,
@@ -93,7 +93,7 @@ function parseImprovementText(
   path: string,
   limit: number,
 ): FieldResult<string> {
-  const text = expectNonEmptyString(raw, path);
+  const text = expectSingleLineString(raw, path);
   // Missing or blank text leaves the recommendation unexplained when the maintainer revisits it.
   if (!text.ok) return text;
   // Overlong or multi-line text would make the saved recommendation difficult to scan.
@@ -163,11 +163,19 @@ function parseImprovement(
  * Use during report ingestion; legacy omission stays distinct from an explicitly empty recommendation list.
  *
  * @param raw - authored list; undefined means not recorded, and an empty array means none were proposed
+ * @param requireCurrentFields - reject omission when accepting a new report; false retains historical readability
  * @returns validated recommendations in the author's order, legacy absence, or an error that blocks saving
  */
 export function parseQualityImprovements(
   raw: unknown,
+  requireCurrentFields = false,
 ): FieldResult<QualityImprovement[] | undefined> {
+  if (raw === undefined && requireCurrentFields) {
+    return {
+      ok: false,
+      error: "report.improvements is required for current reports",
+    };
+  }
   // Legacy omission means recommendations were not recorded, not that the assessor proposed none.
   if (raw === undefined) return { ok: true, value: undefined };
   // The saved list follows the prompt's Top 5 limit so later readers receive a prioritized set.
@@ -207,7 +215,7 @@ function parseUnverifiedProbes(
   const probes: string[] = [];
   // Keep every named gap in report order so maintainers can follow up on the missing checks.
   for (const [index, probe] of raw.entries()) {
-    const parsedProbe = expectNonEmptyString(probe, `${path}[${index}]`);
+    const parsedProbe = expectSingleLineString(probe, `${path}[${index}]`);
     // A blank gap cannot explain what remains unverified and must be corrected before save.
     if (!parsedProbe.ok) return parsedProbe;
     probes.push(parsedProbe.value);
@@ -351,9 +359,10 @@ export function parseAssessmentContext(
   // Unknown context fields could hide a limitation the author expected future readers to see.
   if (unknownKeyError) return { ok: false, error: unknownKeyError };
 
-  const projectRevision = expectNullableString(
+  const projectRevision = parseProjectRevision(
     raw.project_revision,
     `${path}.project_revision`,
+    requireCurrentFields,
   );
   // Revision evidence must identify the assessed commit, or explicitly admit it was unavailable.
   if (!projectRevision.ok) return projectRevision;
@@ -412,4 +421,23 @@ export function parseAssessmentContext(
       score_confidence: scoreConfidence.value,
     },
   };
+}
+
+/** Validate revision text for display, requiring a full Git identity only for current reports. */
+function parseProjectRevision(
+  raw: unknown,
+  path: string,
+  requireCurrentFields = false,
+): FieldResult<string | null> {
+  const revision = expectNullableString(raw, path);
+  if (!revision.ok || revision.value === null) return revision;
+  const text = expectSingleLineString(revision.value, path);
+  if (!text.ok) return text;
+  if (
+    requireCurrentFields &&
+    !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(revision.value)
+  ) {
+    return { ok: false, error: `${path} must be a full Git object ID or null` };
+  }
+  return revision;
 }
