@@ -549,10 +549,8 @@ describe("preflight Tests-phase progress", () => {
     },
   );
 
-  it("pins one bounded coverage run to interactive ten-second heartbeats", () => {
+  it("pins one test run to configurable timeouts and interactive ten-second heartbeats", () => {
     const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
-    const fastSelectionIndex = preflightSource.indexOf('"test:fast"');
-    const coverageSelectionIndex = preflightSource.indexOf('"test:coverage"');
 
     assert.match(preflightSource, /preflight_heartbeat_seconds=10/u);
     assert.match(preflightSource, /\[\[ "\$_is_tty" -eq 1 \]\]/u);
@@ -561,20 +559,13 @@ describe("preflight Tests-phase progress", () => {
       preflightSource,
       /GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-600/u,
     );
-    assert.ok(fastSelectionIndex >= 0);
-    assert.ok(coverageSelectionIndex < fastSelectionIndex);
-    assert.doesNotMatch(preflightSource, /Tests retry/u);
+    assert.match(preflightSource, /selected package test command/u);
+    assert.doesNotMatch(preflightSource, /stable suite · bounded to 600s/u);
     assert.match(
       preflightSource,
       /fail "\$test_label unavailable: command failed to start"/u,
     );
     assert.doesNotMatch(preflightSource, /GOAT_FLOW_PREFLIGHT_TEST_COMMAND/u);
-    assert.equal(
-      [...preflightSource.matchAll(/run_command_capture_with_timeout/gu)]
-        .length,
-      3,
-      "expected one helper definition plus bounded Tests and Dependency Audit call sites",
-    );
   });
 
   it("bounds dependency audit without exposing a release-gate bypass", () => {
@@ -729,61 +720,27 @@ describe("preflight Tests-phase progress", () => {
 });
 
 describe("preflight Tests failure details", () => {
-  // Real TAP from a registered-hook test that failed under an inherited npm prefix; only the user home directory is replaced.
+  // Minimized recorded TAP retains the inherited npm-prefix error and one stack frame that the user-facing summary must omit.
   const capturedPrefixFailureLines = [
     "TAP version 13",
-    "# Subtest: agent deny hook template comparison",
-    "    # Subtest: allows quoted repository evidence while the registered hook still blocks repository writes",
     "    not ok 1 - allows quoted repository evidence while the registered hook still blocks repository writes",
     "      ---",
-    "      duration_ms: 94.109826",
-    "      type: 'test'",
-    "      location: '/home/user/projects/goat-flow/test/unit/audit-command/agent-deny-hooks.test.ts:1:5326'",
-    "      failureType: 'testCodeFailure'",
     "      error: |-",
     '        nvm is not compatible with the "npm_config_prefix" environment variable: currently set to "/home/user/.cursor-server/bin"',
     "        Run `unset npm_config_prefix` to unset it.",
     "        bash: line 1: node: command not found",
-    "        ",
-    "        ",
     "        127 !== 0",
-    "        ",
-    "      code: 'ERR_ASSERTION'",
-    "      name: 'AssertionError'",
-    "      expected: 0",
-    "      actual: 127",
-    "      operator: 'strictEqual'",
     "      stack: |-",
-    "        TestContext.<anonymous> (/home/user/projects/goat-flow/test/unit/audit-command/agent-deny-hooks.test.ts:293:12)",
     "        Test.runInAsyncScope (node:async_hooks:214:14)",
-    "        Test.run (node:internal/test_runner/test:1047:25)",
-    "        Test.start (node:internal/test_runner/test:944:17)",
-    "        node:internal/test_runner/test:1440:71",
-    "        node:internal/per_context/primordials:466:82",
-    "        new Promise (<anonymous>)",
-    "        new SafePromise (node:internal/per_context/primordials:435:3)",
-    "        node:internal/per_context/primordials:466:9",
-    "        Array.map (<anonymous>)",
     "      ...",
-    "    1..1",
     "not ok 1 - agent deny hook template comparison",
     "  ---",
-    "  duration_ms: 94.731027",
-    "  type: 'suite'",
-    "  location: '/home/user/projects/goat-flow/test/unit/audit-command/agent-deny-hooks.test.ts:1:2602'",
-    "  failureType: 'subtestsFailed'",
     "  error: '1 subtest failed'",
-    "  code: 'ERR_TEST_FAILURE'",
     "  ...",
     "1..1",
     "# tests 1",
-    "# suites 1",
     "# pass 0",
     "# fail 1",
-    "# cancelled 0",
-    "# skipped 0",
-    "# todo 0",
-    "# duration_ms 302.462432",
   ];
   const capturedPrefixFailure = capturedPrefixFailureLines.join("\n");
   // Must match the caps in preflight's Tests failure branch; change both together.
@@ -794,10 +751,16 @@ describe("preflight Tests failure details", () => {
    * Writes a temporary project registered for cleanup, then spawns Bash on the production details writer and Tests section.
    * Only the suite launch, verdict rows and report ledger location are replaced; captured output stands in for the suite.
    *
-   * @param suiteOutput - captured test-runner output returned in place of a real suite run with exit 1
-   * @returns shell status, recorded verdict rows and the detail lines a maintainer would see under Tests
+   * @param suiteOutput - captured runner output; empty output supplies no test-count evidence
+   * @param scripts - declared package commands; defaults exercise the coverage fallback
+   * @param exitCode - runner outcome; defaults to failure for diagnostic checks
+   * @returns shell status, selected command, verdict rows and the details a maintainer would see under Tests
    */
-  function runTestsFailureSection(suiteOutput: string) {
+  function runTestsSection(
+    suiteOutput: string,
+    scripts: Record<string, string> = { test: "", "test:coverage": "" },
+    exitCode = 1,
+  ) {
     const source = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf8");
     const detailsStart = source.indexOf("details_pipe() {");
     const detailsEnd = source.indexOf("\n}\n", detailsStart);
@@ -807,10 +770,7 @@ describe("preflight Tests failure details", () => {
     assert.ok(start >= 0 && end > start);
     const directory = mkdtempSync(join(tmpdir(), "goat-flow-tests-failure-"));
     fixtureTemporaryDirectories.add(directory);
-    writeFileSync(
-      join(directory, "package.json"),
-      '{"scripts":{"test":"","test:coverage":""}}\n',
-    );
+    writeFileSync(join(directory, "package.json"), JSON.stringify({ scripts }));
     writeFileSync(join(directory, "suite-output.tap"), suiteOutput);
     const result = spawnSync(
       "bash",
@@ -825,13 +785,24 @@ describe("preflight Tests failure details", () => {
       pass() { printf 'ROW\\tPASS\\t%s\\n' "$1" >> "$LEDGER"; }
       warn() { printf 'ROW\\tWARN\\t%s\\n' "$1" >> "$LEDGER"; }
       fail() { errors=$((errors + 1)); printf 'ROW\\tFAIL\\t%s\\n' "$1" >> "$LEDGER"; }
-      run_command_capture_with_timeout() { printf -v "$1" '%s' "$(cat suite-output.tap)"; printf -v "$2" '%s' 1; }
+      run_command_capture_with_timeout() {
+        printf '%s\\n' "\${@:3}" >> invocation.txt
+        printf -v "$1" '%s' "$(cat suite-output.tap)"
+        printf -v "$2" '%s' ${exitCode}
+      }
       ${source.slice(detailsStart, detailsEnd + 2)}
       ${source.slice(start, end)}
       [[ "$errors" -eq 0 ]]
     `,
       ],
-      { cwd: directory, encoding: "utf8" },
+      {
+        cwd: directory,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS: "0",
+        },
+      },
     );
     const ledger = readFileSync(join(directory, "ledger.tsv"), "utf8").split(
       "\n",
@@ -839,11 +810,40 @@ describe("preflight Tests failure details", () => {
     return {
       status: result.status,
       stderr: result.stderr,
+      invocation: readFileSync(join(directory, "invocation.txt"), "utf8")
+        .trim()
+        .split("\n"),
       rows: ledger.filter((line) => line.startsWith("ROW\t")),
       details: ledger
         .filter((line) => line.startsWith("DETAIL\tTests\t"))
         .map((line) => line.slice("DETAIL\tTests\t".length)),
     };
+  }
+
+  // These illustrative package declarations exercise the real selection branch without launching another complete suite.
+  for (const [scripts, command, label] of [
+    [
+      { test: "", "test:fast": "", "test:coverage": "" },
+      ["npm", "run", "test:fast"],
+      "Fast suite",
+    ],
+    [
+      { test: "", "test:coverage": "" },
+      ["npm", "run", "test:coverage"],
+      "Tests + coverage",
+    ],
+    [{ test: "" }, ["npm", "test"], "All"],
+  ] as const) {
+    it(`selects only ${command.join(" ")} and preserves a disabled timeout`, () => {
+      const captured = runTestsSection(
+        "# tests 1\n# pass 1\n# fail 0\n",
+        scripts,
+        0,
+      );
+      assert.equal(captured.status, 0, captured.stderr);
+      assert.deepEqual(captured.invocation, ["0", "Tests", ...command]);
+      assert.deepEqual(captured.rows, [`ROW\tPASS\t${label} passing (1/1)`]);
+    });
   }
 
   // Minimized TAP counts retain the recorded coverage diagnostic and a runner-failure control.
@@ -855,7 +855,7 @@ describe("preflight Tests failure details", () => {
     ["Test runner failed", "runner teardown failed"],
   ]) {
     it(`keeps ${label} failing despite zero assertion failures`, () => {
-      const captured = runTestsFailureSection(
+      const captured = runTestsSection(
         `# tests 1\n# pass 1\n# fail 0\n${cause}\n`,
       );
       assert.equal(captured.status, 1);
@@ -867,7 +867,7 @@ describe("preflight Tests failure details", () => {
   }
 
   it("shows the first failure's assertion within a fixed bound and keeps Tests failing", () => {
-    const captured = runTestsFailureSection(capturedPrefixFailure);
+    const captured = runTestsSection(capturedPrefixFailure);
     assert.equal(captured.status, 1, captured.stderr);
     assert.deepEqual(captured.rows, ["ROW\tFAIL\tTests failed (1/1 failures)"]);
     assert.match(
@@ -888,7 +888,7 @@ describe("preflight Tests failure details", () => {
       line.includes("nvm is not compatible"),
     );
     assert.ok(nvmWarning);
-    const flooded = runTestsFailureSection(
+    const flooded = runTestsSection(
       capturedPrefixFailure.replace(
         nvmWarning,
         Array(40).fill(nvmWarning.repeat(3)).join("\n"),

@@ -33,6 +33,10 @@ import {
   decodeHookResultOutput,
 } from "../../workflow/hooks/hook-provider-adapters.mjs";
 import {
+  currentHookProviderSupportGate,
+  getHookSpec,
+} from "../../src/cli/server/hooks-registry.js";
+import {
   CLEAN_GRUFF_CONTRACT_ENVELOPE,
   cleanupHookTestDirs,
   FINDING_GRUFF_CONTRACT_ENVELOPE,
@@ -194,7 +198,136 @@ function effectiveStateFacts(
   };
 }
 
+/** Check the current Stop paragraph so an unrelated hook's date or gate cannot satisfy the reader-facing claim. */
+function assertCurrentCodexStopEvidence(
+  documentation: string,
+  source: string,
+): void {
+  const stopParagraphs = documentation
+    .split(/\n\s*\n/u)
+    .filter((paragraph) => /^On 2026-09-18,/u.test(paragraph));
+  assert.equal(
+    stopParagraphs.length,
+    1,
+    `${source}: one current Stop capture paragraph is required`,
+  );
+  const stopParagraph = stopParagraphs[0]!;
+  assert.match(stopParagraph, /Codex CLI 0\.154\.0/iu, source);
+  assert.match(stopParagraph, /registered Stop/iu, source);
+  assert.match(stopParagraph, /2026-10-17/iu, source);
+  assert.match(stopParagraph, /scenario-unverified/iu, source);
+  assert.doesNotMatch(
+    documentation,
+    /Stop remains `provider-capture-stale`/iu,
+    source,
+  );
+}
+
+/** Check the current deny paragraph so historical captures cannot satisfy the guide's live-support claim. */
+function assertCurrentCodexDenyEvidence(
+  documentation: string,
+  source: string,
+): void {
+  const denyParagraphs = documentation
+    .split(/\n\s*\n/u)
+    .filter((paragraph) => /^On 2026-09-21,/u.test(paragraph));
+  assert.equal(
+    denyParagraphs.length,
+    1,
+    `${source}: one current deny capture paragraph is required`,
+  );
+  const denyParagraph = denyParagraphs[0]!;
+  assert.match(
+    denyParagraph,
+    /interactive Linux Codex CLI 0\.155\.1/iu,
+    source,
+  );
+  assert.match(denyParagraph, /PreToolUse/iu, source);
+  assert.match(denyParagraph, /both deny hooks/iu, source);
+  assert.match(denyParagraph, /2026-10-21T00:00:00Z/iu, source);
+  assert.match(denyParagraph, /scenario-unverified/iu, source);
+}
+
 describe("hook provider contracts", () => {
+  it("keeps Codex documentation aligned with current Stop and deny evidence gates", () => {
+    const stopEvidence =
+      getHookSpec("post-turn-safety")?.providerEvidence.codex;
+    const hookReadme = readFileSync(
+      join(process.cwd(), "workflow", "hooks", "README.md"),
+      "utf8",
+    );
+    const cliGuide = readFileSync(
+      join(process.cwd(), "docs", "cli.md"),
+      "utf8",
+    );
+    assert.equal(stopEvidence?.effectiveSupportGate, "scenario-unverified");
+    assert.equal(stopEvidence?.expiresAt, "2026-10-17T00:00:00Z");
+    // Both policies delivered denials in the same live session; neither may skip its separate local scenario proof.
+    for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+      const denyEvidence = getHookSpec(hookId)?.providerEvidence.codex;
+      assert.ok(denyEvidence, hookId);
+      assert.equal(denyEvidence.expiresAt, "2026-10-21T00:00:00Z", hookId);
+      assert.equal(
+        currentHookProviderSupportGate(
+          denyEvidence,
+          new Date("2026-09-22T00:00:00Z"),
+        ),
+        "scenario-unverified",
+        hookId,
+      );
+      assert.equal(
+        currentHookProviderSupportGate(
+          denyEvidence,
+          new Date("2026-10-21T00:00:00.001Z"),
+        ),
+        "provider-capture-stale",
+        hookId,
+      );
+    }
+    assertCurrentCodexStopEvidence(hookReadme, "workflow/hooks/README.md");
+    assertCurrentCodexStopEvidence(cliGuide, "docs/cli.md");
+    // Simulate the reported drift while leaving Gruff's valid gate elsewhere in the guide.
+    const staleStopGuide = cliGuide
+      .split(/\n\s*\n/u)
+      .map((paragraph) =>
+        paragraph.startsWith("On 2026-09-18,")
+          ? paragraph.replace("scenario-unverified", "provider-capture-stale")
+          : paragraph,
+      )
+      .join("\n\n");
+    assert.throws(() =>
+      assertCurrentCodexStopEvidence(staleStopGuide, "stale Stop control"),
+    );
+    assertCurrentCodexDenyEvidence(hookReadme, "workflow/hooks/README.md");
+    assertCurrentCodexDenyEvidence(cliGuide, "docs/cli.md");
+    // A current Stop gate elsewhere must not hide a stale denial claim in either guide.
+    for (const [source, guide] of [
+      ["workflow/hooks/README.md", hookReadme],
+      ["docs/cli.md", cliGuide],
+    ] as const) {
+      const staleDenyGuide = guide
+        .split(/\n\s*\n/u)
+        .map((paragraph) =>
+          paragraph.startsWith("On 2026-09-21,")
+            ? paragraph.replace("scenario-unverified", "provider-capture-stale")
+            : paragraph,
+        )
+        .join("\n\n");
+      assert.throws(
+        () => assertCurrentCodexDenyEvidence(staleDenyGuide, source),
+        `${source}: stale denial claim must fail`,
+      );
+    }
+    assert.doesNotMatch(
+      hookReadme,
+      /current Codex registration has no fresh live-provider delivery evidence/iu,
+    );
+    assert.match(
+      hookReadme,
+      /To renew a dated Codex provider row[\s\S]+hooks verify[\s\S]+cannot renew live delivery by itself/iu,
+    );
+  });
+
   // Current documentation informs the user but cannot impersonate live delivery.
   it("keeps documented support separate from absent capture", () => {
     const assessment = assessHookProviderEvidence(

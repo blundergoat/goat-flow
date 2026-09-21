@@ -748,7 +748,7 @@ run_smoke() {
   expect_block paths "cat .env" ".env read"
   expect_block git "git push origin main" "git push"
   expect_block_message shell "rm -rf /" "rm -rf copy" "destructive" "rm -r without safe scoping"
-  expect_block_message paths "cat .env" ".env read copy" "secret" "Secret-file access"
+  expect_block_message paths "cat .env" ".env read copy" "secret" "Use a checked-in example or ask the user for sanitized fields"
   expect_block_message git "git push origin main" "git publication copy" "repository" "Git publication is not allowed"
   expect_block git "git -C /tmp push origin main" "git -C push"
   expect_block paths "cat .envrc" ".envrc read"

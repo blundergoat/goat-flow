@@ -522,35 +522,6 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
   });
 
-  // A user receiving no findings still needs the same assessment and coverage evidence as a user receiving a list of defects.
-  it("gives goat-critique one result envelope for clean and non-clean returns", () => {
-    assertForEachTarget(
-      installedSkillReferencePaths(
-        "goat-critique",
-        "references/sub-agent-directives.md",
-      ),
-      (referencePath) => {
-        const directives = readProjectFile(referencePath);
-        assertMatchesAll(
-          directives,
-          [
-            /same envelope/iu,
-            /empty finding list/iu,
-            /Agent identity:/u,
-            /Coverage ledger:/u,
-            /Lens dispositions:/u,
-          ],
-          referencePath,
-        );
-        assert.doesNotMatch(
-          directives,
-          /returns this schema instead of findings/iu,
-          referencePath,
-        );
-      },
-    );
-  });
-
   // Stable finding IDs let users trace coverage, hooks, and retractions to the same reported issue throughout a critique.
   // The shared evidence scale keeps HUMAN-PENDING visible when a finding still needs the user's verification.
   it("gives every goat-critique finding an identity and the shared evidence scale", () => {

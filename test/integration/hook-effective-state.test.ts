@@ -332,14 +332,14 @@ describe("effective hook state", () => {
     assert.equal(
       currentHookProviderSupportGate(
         denyCodexEvidence,
-        new Date("2026-09-21T02:17:08.834Z"),
+        new Date("2026-10-21T00:00:00.000Z"),
       ),
       "scenario-unverified",
     );
     assert.equal(
       currentHookProviderSupportGate(
         denyCodexEvidence,
-        new Date("2026-09-21T02:17:08.835Z"),
+        new Date("2026-10-21T00:00:00.001Z"),
       ),
       "provider-capture-stale",
     );
@@ -992,7 +992,7 @@ describe("effective hook state", () => {
       // Keep replay proof independent of today's date, then cross the provider's expiry.
       testContext.mock.timers.enable({
         apis: ["Date"],
-        now: new Date("2026-09-21T02:17:08.834Z"),
+        now: new Date("2026-10-21T00:00:00.000Z"),
       });
       const projectPath = createCodexProject();
       syncHookStates(projectPath);

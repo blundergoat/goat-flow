@@ -76,6 +76,15 @@ Every sub-agent returns the same envelope whether or not it found a defect. A cl
 - **Alternatives (Agent B only):** at least one ranked, meaningfully different approach and why the artifact's choice wins. The mandate is unconditional and a clean result does not waive it. Ranked alternatives are informational comparisons, never a recommendation to change an artifact that has no finding against it. A and C omit this field.
 - **Findings:** zero or more, each carrying every field in the next section
 
+Overall-assessment bands rate the reviewed artifact, not the critic or quality of the critique. Apply the first supported band from FLAWED to STRONG:
+
+- **FLAWED:** a supported defect invalidates the artifact's intended outcome or central premise.
+- **WEAK:** supported defects require substantial rework before the artifact can serve its intended purpose.
+- **ADEQUATE:** the artifact is usable after bounded corrections that preserve its central approach.
+- **STRONG:** the inspected artifact supports its intended purpose with no supported material defect.
+
+Critic coverage gaps limit confidence and must be disclosed; they never become artifact defects. An assessment with incomplete coverage applies only to inspected scope, never clearance. Criterion ratings below grade critic returns separately.
+
 ### Coverage ledger
 
 One row per selected dimension, none omitted. Each row names the full declared scope and one overall disposition:

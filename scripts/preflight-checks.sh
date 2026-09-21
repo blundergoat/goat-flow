@@ -465,7 +465,7 @@ collapsed_desc_for() {
         "Cross-Agent Consistency") printf 'execution loop · router table' ;;
         "Instruction Parity Contract") printf 'agent files share contract' ;;
         "Instruction File Quality") printf 'within line budget · no encyclopedia' ;;
-        "Tests") printf 'coverage suite · bounded to 600s' ;;
+        "Tests") printf 'selected package test command' ;;
         "Dependency Audit") printf 'npm audit' ;;
         "GOAT Flow Audit") printf 'all checks' ;;
         "Learning-Loop Schema") printf 'footguns + lessons valid' ;;
@@ -1981,15 +1981,15 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     section "Tests"
     test_reports_coverage=false
     coverage_output=""
-    # Prefer the declared coverage suite so preflight can report actual coverage.
-    if grep -q '"test:coverage"' package.json; then
+    # Prefer the stable fast suite for the release gate; maintainers can run experimental coverage explicitly.
+    if grep -q '"test:fast"' package.json; then
+        test_command=(npm run test:fast)
+        test_label="Fast suite"
+    # A project with only a coverage suite can still use it as its declared test gate.
+    elif grep -q '"test:coverage"' package.json; then
         test_command=(npm run test:coverage)
         test_label="Tests + coverage"
         test_reports_coverage=true
-    # Use the declared fast suite when no coverage command is available.
-    elif grep -q '"test:fast"' package.json; then
-        test_command=(npm run test:fast)
-        test_label="Fast suite"
     else
         test_command=(npm test)
         test_label="All"

@@ -63,7 +63,7 @@ Run this pass immediately before every gated or final output. Re-read the eviden
 - `kill as false positive` - current evidence disproves the candidate, so exclude it from gaps and recommendations.
 - `keep with named missing evidence` - the available evidence cannot settle the candidate; keep it `UNRESOLVED` and name the next check.
 
-Preserve every killed candidate under `Refuted Candidates`: claim, why excluded, evidence quality, evidence method, and evidence summary, plus nullable file/line and any command, exit code, or excerpt. Static evidence cites a file and semantic anchor; runtime or mixed evidence names the command and exit code. Write `None` when no candidate was killed. Never promote a killed candidate into a gap or recommendation.
+Preserve every killed candidate under `Refuted Candidates`: claim, exclusion reason, evidence quality/method/summary, nullable file/line, and any command, exit, or excerpt. Static evidence cites file and semantic anchor; runtime/mixed evidence names command and exit. Write `None` when empty. Never promote killed candidates into gaps or recommendations.
 
 ## Step 0 - Intake
 
@@ -131,7 +131,7 @@ For CRITICAL items with no coverage, annotate why: new path / missed coverage on
 
 Map each stated expectation to the code path that implements it. Gaps between intent and code are undertested-risk candidates.
 
-**BLOCKING GATE (auto-released on explicit test-plan intent):** Run the Candidate Disproval Pass, then present gap analysis, Refuted Candidates, and Verification Integrity. Stop and ask "Continue to Phase 3, or adjust first?" - unless the invocation already gave explicit "what should I test" / "test plan" intent, in which case treat it as a CHECKPOINT and continue through Phase 3 without pausing. Reserve diagrams for Phase 3; then suggest `/goat-plan`.
+**BLOCKING GATE (auto-released on explicit test-plan intent):** Run the Candidate Disproval Pass, then present gap analysis, Refuted Candidates, and Verification Integrity. Ask "Continue to Phase 3, or adjust first?" unless the invocation explicitly requested what to test or a test plan; then treat it as a CHECKPOINT and continue. Reserve diagrams for Phase 3, then suggest `/goat-plan`.
 
 **Illustrative scenario - input/output shape only; never evidence.**
 

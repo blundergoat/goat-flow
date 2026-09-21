@@ -11,13 +11,13 @@ Read `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-
 
 ## When to Use
 
-Use for multi-perspective critique of a concrete plan, security assessment, debug hypothesis set, review, test strategy, architecture proposal, or refactor approach.
+Use for multi-perspective critique of a plan, security assessment, debug hypotheses, review, test strategy, architecture, or refactor.
 
 ## Boundary Commands
 
 - **NEVER:** Replace delegation with inline role-play, skip phases, or auto-apply recommendations.
 - **ALWAYS:** Treat explicit invocation as consent for the full delegated protocol on a concrete artifact.
-- **DEFER TO:** Before invocation, create a missing artifact, answer simple facts, or use `/goat-review` for a trivial artifact; explicit `/goat-critique` still runs fully.
+- **DEFER TO:** Before invocation, create missing artifacts, answer simple facts, or use `/goat-review` for trivial work; explicit `/goat-critique` runs fully.
 
 | Excuse | Reality |
 |--------|---------|
@@ -26,18 +26,18 @@ Use for multi-perspective critique of a concrete plan, security assessment, debu
 | "Inline role-play is faster than spawning agents" | Inline lenses correlate; isolated contexts create independent findings. |
 | "Closing checks happen after the main answer - skip them" | Phase 5.5 and outcome capture exist because agents skip closing work. |
 
-**Direct invocation is binding.** `$goat-critique` or `/goat-critique` runs Phases 1-5 plus 5.5/5.6. Dispatcher ambiguity does not override it; raise scope concerns after synthesis.
+**Direct invocation is binding.** `$goat-critique` or `/goat-critique` runs Phases 1-5 plus 5.5/5.6. Raise scope concerns after synthesis.
 
-**Report-only by default.** `$goat-critique make X shorter` critiques only; `then apply it` permits application after the gate. Constraints own mutation rules.
+**Report-only by default.** `$goat-critique make X shorter` critiques; `then apply it` permits application after the gate. Constraints own mutation.
 
 ## Step 0 - Intake
 
 goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 outcome capture, three critique sub-agents, one meta-agent.
 
 **Intake checklist:**
-- Require a concrete artifact (file, plan, or findings), not a vague idea.
+- Require a concrete artifact, not a vague idea.
 - Select its Critique Rubric; ask if unclear.
-- Run preamble learning-loop retrieval for artifact/risk terms; record misses without broad-loading buckets.
+- Run preamble retrieval for artifact/risk terms; record misses without broad-loading buckets.
 - **Host ownership:** The host/root context owns Phases 1-5.6. A forked sub-agent returns control before Phase 1 and does not apply the shared sub-agent gate conversion. The host spawns agents, presents gates, and resumes Phase 5.6 after the response. Direct/chained host entry needs no delegation prompt; chained entry skips only intake confirmation.
 - **Resume:** For saved work, apply **Saved records and recovery** in `references/rubric-examples.md` before generating critics.
 - **Differential mode detection:** For matching artifact identity within 30 days, apply **Differential baselines** in `references/rubric-examples.md`: offer prior findings and available diff to A/B; C stays cold. Phase 5 links the baseline record and reports deltas.
@@ -47,7 +47,7 @@ goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 out
 
 Spawn all three sub-agents in parallel using the host's real delegation mechanism.
 
-Before spawning C, assemble its inline payload and initialize run state using **Fresh-eyes boundary and recovery** in `references/sub-agent-directives.md`.
+Before spawning C, build its payload and initialize state using **Fresh-eyes boundary and recovery** in `references/sub-agent-directives.md`.
 
 ### The Core Trio Lens
 
@@ -57,7 +57,7 @@ Agents A and B each use the combined SKEPTIC/ANALYST/STRATEGIST lens; never spli
 - **ANALYST** - "What does the evidence actually say? What's the cost/benefit? What do the numbers and code paths tell us?"
 - **STRATEGIST** - "What's the fastest path to shipping? What can we defer? What's the highest-leverage change?"
 
-C provides a fresh-eyes comparison with no lens quota; use `N/A - fresh-eyes scope` when a lens adds nothing.
+C has no lens quota; use `N/A - fresh-eyes scope` when a lens adds nothing.
 
 **Context split:**
 
@@ -77,13 +77,13 @@ Full directives: `references/sub-agent-directives.md`.
 
 Each sub-agent normally returns the reference pack's Result envelope and Per-finding output spec, including Proof class. Three to seven findings is the normal range; zero uses the same envelope with an empty finding list after one documented second pass.
 
-**Lens coverage:** A/B analyse every lens; C probes assumptions/readability. See the reference pack Lens-finding floor.
+**Lens coverage:** A/B analyse every lens; C probes assumptions/readability. See Lens-finding floor.
 
 ## Phase 2 - Rank and Compare
 
 Execute in this order:
 
-**1. Context leak scan.** Apply **Fresh-eyes boundary and recovery** first: scan C's response through stdin, trace candidate matches to its artifact/rubric payload, and inspect available activity. Textual absence never proves isolation; the host discards leaks and owns the shared replacement allowance.
+**1. Context leak scan.** Apply **Fresh-eyes boundary and recovery** first: scan C through stdin, trace matches to its permitted payload, and inspect available activity. Textual absence never proves isolation; discard leaks and use the shared replacement allowance.
 
 **1b. Completeness gate.** Verify every applicable Result-envelope field (`Evidence reviewed:` through `Residual uncertainty:`, strength, coverage ledger and B's ranked alternative). A/B each get one completeness replacement; C uses the same run-wide allowance as leaks. Unresolved omissions produce `sub-agent completeness limited`; honest unassessed rows are complete.
 
@@ -115,7 +115,7 @@ Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED (false positive c
 
 **Persist before gate:** Keep the Phase 1-3 draft in memory; save a fresh `pre-clarification` record through **Saved records and recovery** in `references/rubric-examples.md`. Do this after Phase 3 early exit too; save failures continue to the human gate.
 
-Present unresolved items conversationally. Open with decision count and titles. Ask each as `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [one sentence]`. For 3+, use `| # | Decision | Option A (default) | Option B | Why |`, then ask for numbered overrides or default approval. Cover Phase-3 disputes, valid trade-offs, and whether context drift is intentional. End by requesting picks or pushback.
+Present unresolved items with decision count/titles. Ask each as `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [one sentence]`. For 3+, use `| # | Decision | Option A (default) | Option B | Why |`, then request numbered overrides or default approval. Cover disputes, trade-offs, and intentional context drift.
 
 **Questions:** BLOCKING GATE - STOP for the human.
 **None:** CHECKPOINT - record "no disputes - proceeding to synthesis" and continue.
@@ -124,12 +124,12 @@ Present unresolved items conversationally. Open with decision count and titles. 
 
 Before drafting, apply Final-finding schema and Audit payload identity from `references/rubric-examples.md`. Lead with a **Verdict** block:
 - **Gate: BLOCK | CONCERNS | CLEAN** - derived from surviving findings: any CRITICAL → BLOCK, any HIGH (no CRITICAL) → CONCERNS, else CLEAN. CLEAN coexists with lower-severity findings and with limited coverage; show coverage status beside it.
-- Assessment: STRONG / ADEQUATE / WEAK / FLAWED (synthesised from sub-agent assessments and cross-examination outcomes)
+- Assessment: STRONG / ADEQUATE / WEAK / FLAWED, using the reference pack's overall-assessment bands and synthesising sub-agent assessments with cross-examination outcomes
 - Risk level: the highest surviving evidenced artifact severity, floored at LOW and labelled `no evidenced defect` when none survives - a floor, not a clearance
 - Top 1-3 blockers (if any) - one line each, linked to findings below
 - If differential mode: append the **Differential baselines** delta block, including unassessed/unmapped prior findings.
 
-**Explain once:** Validated Findings holds each surviving finding once, grouped consensus, resolved splits, Phase 4 human-directed, verified unique, with its Final-finding schema fields. Later sections cite the finding ID and add only what they own (see Output Format); the Comparison Matrix owns comparison and Rankings own order and criterion scores.
+**Explain once:** Validated Findings holds each surviving finding once, grouped consensus, resolved splits, Phase 4 human-directed, verified unique, with its Final-finding schema fields. Later sections cite the finding ID and add only what they own; the Comparison Matrix owns comparison and Rankings own order and criterion scores.
 
 **Open questions:** Items with INFERRED-only evidence, inconclusive single-agent findings, or unvalidated assumptions go here - not as recommendations. Each open question states: confidence, evidence needed to resolve, revisit trigger.
 
@@ -137,7 +137,7 @@ Before drafting, apply Final-finding schema and Audit payload identity from `ref
 
 **Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion.
 
-**Phase 5.5 - Meta-audit.** Assemble a self-contained packet for the 2-call meta-agent: the frozen draft with its `report_revision`, selected dimensions, and the reference pack's complete Meta-audit rubric (read now; including Packet vocabulary), Final-finding schema and Audit payload identity. It grades that packet alone. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict. Corrections edit the report, never the artifact.
+**Phase 5.5 - Meta-audit.** Give the 2-call meta-agent a self-contained packet: frozen draft with `report_revision`, selected dimensions, and the reference pack's complete Meta-audit rubric (including Packet vocabulary), Final-finding schema, and Audit payload identity. It grades only that packet. Score each 0 or 10; their sum is `Meta-score`; no partial credit. `## Auto-Detected Issues` contains failures; at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict; corrections edit the report only.
 
 **Persist final:** Before this gate, save the audited report as a fresh `finalized` record through **Saved records and recovery**.
 
@@ -169,7 +169,7 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 - MUST Check sub-agent completeness against `references/sub-agent-directives.md`, including a clean-result attestation after one documented second pass. Phase 2 owns the bounded repair; never reset C's allowance.
 - MUST enforce cross-examination budget: Max 3 cross-examination agents total, max 3 tool calls per agent.
 - Recommendations are never auto-applied. After synthesis, stop. Do not enter implementation mode unless the user explicitly asks to apply changes.
-- MUST apply the Proof Gate from `skill-preamble.md` to every synthesised finding and preserve one proof class tag (`RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`) on each. Sub-agent reports are inputs to verify, not evidence to launder. Re-read applies to findings surviving to Phase 5 (typically 3-7 after Phase 3/4 filtering), not to all findings raised in Phase 1.
+- MUST apply the preamble Proof Gate to every synthesised finding and keep one proof class (`RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`). Sub-agent reports are inputs, not laundered evidence. Re-read Phase 5 survivors (typically 3-7), not every Phase 1 lead.
 - MUST NOT fabricate findings. The 3-7 range is a normal target, never a quota; accept a complete clean-result attestation after the required second pass.
 - Universal constraints from skill-preamble.md apply.
 

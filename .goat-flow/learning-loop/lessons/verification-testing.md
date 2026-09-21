@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-09-19
+last_reviewed: 2026-09-22
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md); process-lifecycle and delegated-run tests are [verification-testing-process.md](verification-testing-process.md).
@@ -136,7 +136,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 **Status:** active | **Created:** 2026-04-26
 
-**Prevention:** When preflight fails in the test phase after an unrelated gate fix, rerun the named failing test area and then the exact suite command directly before changing task files again. Preflight runs the coverage suite exactly once and fails on any `not ok`; there is no retry or warning downgrade; anchors `scripts/preflight-checks.sh` (search: `test_reports_coverage=true`) and `test/integration/preflight-progress.test.ts` (search: `pins one bounded coverage run`). If release-scale TAP can exceed the caller's output limit, capture the first run to a fresh disposable path so the failing case survives beside the summary. Report the split explicitly: which gate was fixed, which direct suite passed, and whether the preflight failure reproduced.
+**Prevention:** When preflight fails in the test phase after an unrelated gate fix, rerun the named failing test area and then the exact suite command directly before changing task files again. Preflight selects `test:fast` when available and runs the selected command once; a nonzero exit still fails. Coverage remains an explicit release check. Anchors: `scripts/preflight-checks.sh` (search: `test:fast`) and `test/integration/preflight-progress.test.ts` (search: `selects only`). If release-scale TAP can exceed the caller's output limit, capture the first run to a fresh disposable path so the failing case survives beside the summary. Report the split explicitly: which gate was fixed, which direct suite passed, and whether the preflight failure reproduced.
 
 **What happened:** After a quality-report fix cleared the ESLint error blocking preflight, two further preflight runs reached the fast test phase and failed on different tests, `agent deny hook template comparison` and then `harness does not affect build-only result`, while a direct `npm run test:fast` immediately afterwards reported `# pass 373` and `# fail 0`.
 
@@ -144,6 +144,21 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 **Recurrence 2026-08-17:** After an ESLint fix cleared preflight's TypeScript stage, the fast suite observed a changelog mirror mismatch while playbook edits were in progress; the isolated sync suite passed `26/26` and a direct diff between `.goat-flow/skill-docs/playbooks/changelog.md` and `workflow/skills/playbooks/changelog.md` was empty, so no task file changed. Rerun the full gate only after mirrored writes are quiescent. `test/integration/preamble-sync.test.ts` (search: `template and installed changelog.md match`).
 **Recurrence 2026-09-04:** A release repair's first `npm run test:full` stopped after the fast phase with `tests 2650`, `pass 2644`, `fail 1`, `skipped 5`, but truncated output no longer held the failing case. An immediate `npm run test:fast` captured to a fresh path exited 0 with `pass 2645`, and the exact full retry passed that plus the slow suite's `tests 474`, `pass 472`, `fail 0`, `skipped 2`. `package.json` (search: `"test:full": "npm run test:fast && npm run test:slow"`).
+
+---
+
+## Lesson: Dated provider evidence must be resolved at publication time
+
+**Status:** active | **Created:** 2026-09-21
+**Decision changed:** Before publishing a provider-support claim, resolve the dated registry record through the same current-state function the product uses; never describe only its raw pre-expiry gate.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** For every dated provider row, compare the documentation with `currentHookProviderSupportGate` at release time and test both the stored gate and the post-expiry result. A structural audit or a contract that asserts only `effectiveSupportGate` cannot establish the current user-visible state. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `Expire live provider proof before a hook screen presents it as current`) and `test/integration/hook-provider-contracts.test.ts` (search: `assertCurrentCodexDenyEvidence`).
+
+**What happened:** The v1.17.0 documentation alignment correctly restored fresh Codex Stop evidence but described all three dated captures as `scenario-unverified`. During final release verification, the current resolver reported both deny hooks as `provider-capture-stale` because their shared PreToolUse capture had expired earlier that day. The docs and contract were corrected without extending the evidence date.
+
+**Root cause:** The first contract compared prose with the registry's stored gate and expiry fields. It did not execute the resolver that turns an elapsed date into the current support state.
 
 ---
 

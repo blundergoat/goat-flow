@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertForEachTarget,
+  assertMatchesAll,
   installedSkillPaths,
   installedSkillReferencePaths,
   readMarkdownSection,
@@ -733,5 +734,39 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         `${skillPath}: recent-change routing must precede no-diff area routing`,
       );
     });
+  });
+  // A user receiving no findings still needs the same assessment and coverage evidence as a user receiving a list of defects.
+  it("gives goat-critique one result envelope for clean and non-clean returns", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/sub-agent-directives.md",
+      ),
+      (referencePath) => {
+        const directives = readProjectFile(referencePath);
+        assertMatchesAll(
+          directives,
+          [
+            /same envelope/iu,
+            /empty finding list/iu,
+            /Agent identity:/u,
+            /Coverage ledger:/u,
+            /Lens dispositions:/u,
+            /bands rate the reviewed artifact, not the critic/iu,
+            /STRONG:\*\*[^\n]*no supported material defect/iu,
+            /ADEQUATE:\*\*[^\n]*bounded corrections/iu,
+            /WEAK:\*\*[^\n]*substantial rework/iu,
+            /FLAWED:\*\*[^\n]*invalidates[^\n]*intended outcome/iu,
+            /Critic coverage gaps[^\n]*never become artifact defects/iu,
+          ],
+          referencePath,
+        );
+        assert.doesNotMatch(
+          directives,
+          /returns this schema instead of findings/iu,
+          referencePath,
+        );
+      },
+    );
   });
 });

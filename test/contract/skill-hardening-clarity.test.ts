@@ -150,6 +150,12 @@ describe("skill hardening contracts: goat-clarity", () => {
           .replace(/\s+/gu, " ")
           .toLowerCase();
         assertRulePrecedence(skillPath, guidance);
+        // Selecting only source code must not prompt the user to authorize unrelated documentation edits.
+        assert.match(
+          guidance,
+          /otherwise, for eligible inventoried human-documentation units, ask once before the snapshot/u,
+          skillPath,
+        );
         assert.ok(
           guidance.includes("write authority resolves by first match"),
           `${skillPath}: authority resolution does not declare first-match precedence`,

@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-09-21
+last_reviewed: 2026-09-22
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -58,18 +58,22 @@ last_reviewed: 2026-09-21
 
 **Status:** active | **Created:** 2026-07-12
 
-**Decision changed:** Preserve or update indexed and contract anchors during compaction; run focused contracts and `stats --check`.
+**Decision changed:** Preserve skill decision rules before optimizing word-count headroom; retain semantic anchors and verify meaning as well as contracts.
 
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Incident count:** 13
+**Incident count:** 15
 
-**Latest occurrence:** 2026-09-13
+**Latest occurrence:** 2026-09-22
 
 **Prevention:** Search indexes, contracts, and tracked semantic-anchor references before changing headings or compacting prose; run focused contracts and `stats --check`; repair anchors together. Before moving entries, search the source bucket path as well as each heading; citations can target text inside an entry. Never head-cap or single-line that sweep: the pinned citation listed thirteenth, or split across a line break, is the one that breaks.
 
-**What happened:** Eleven prose edits removed or changed durable or contract-pinned anchors:
+Treat the word cap as a validation constraint, not a target for spare headroom. Near-limit guidance is acceptable when its words improve agent decisions.
+Remove repetition only after checking what it enforces; preserve prerequisites, exceptions, authority boundaries, evidence rules, and useful examples.
+When a cut changes a decision or makes a rule ambiguous, restore it and remove lower-value text instead; never weaken the rule to satisfy the count.
+
+**What happened:** Repeated prose edits removed or changed durable or contract-pinned anchors:
 
 - **2026-07-12–19:** Four compactions removed anchors; stats/contracts restored them. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`).
 - **2026-08-01:** A review-contract rollout changed pinned wording, split one code span, and removed “with R-ID”; contracts restored all. Evidence: `test/contract/skill-hardening-review-2.test.ts` (search: `gives goat-review findings stable IDs, harm, and distinct evidence axes`).
@@ -81,7 +85,21 @@ last_reviewed: 2026-09-21
 
 **Recurrence 2026-09-13 (M71 bucket split):** Searching only the four moved lesson headings missed two citations to text inside an entry. The first `stats --check` reported two `stale-ref` findings after the split. Before moving entries, inventory references to the source bucket and validate every cited needle against its destination; heading preservation alone does not preserve citation paths. Evidence: `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `go-live M15 activation`) and `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `go-live M15 activation`).
 
-**Root cause:** Edited prose carried durable external anchors.
+**Recurrence 2026-09-21 (v1.17.0 release headroom):** Compaction across functional skill roots and the shared preamble paraphrased exact phrases used by contract consumers. The broad hardening suite rejected the first pass; restoring pinned phrases recovered structural acceptance, but did not prove that all meaning survived. Inventory exact assertions before compaction, then run the whole hardening suite after each canonical-to-installed mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`) and `test/contract/skill-hardening-review-2.test.ts` (search: `pins one severity vocabulary and canonical integrity field shapes`).
+
+**Recurrence 2026-09-22 (release recheck):** Passing phrase contracts missed two semantic mistakes. The new critique bands rated the critic's return, so an isolated application check returned `BLOCK / STRONG` for a plan with a confirmed fatal defect. Clarity compaction also dropped the eligible-documentation qualifier from its fallback question, exposing source-only selections to an irrelevant prompt. Restoring the qualifier and making bands rate the artifact produced `BLOCK / FLAWED`; clean and incomplete-coverage controls stayed separate. Use isolated application checks for changed meanings, not just token presence. The same recheck renamed a preflight test without updating its lesson citation; preflight caught the stale reference. Search callers and durable anchors before renaming test titles as well as code symbols. Evidence: `workflow/skills/goat-critique/references/sub-agent-directives.md` (search: `bands rate the reviewed artifact`), `test/contract/skill-hardening-skills-1.test.ts` (search: `gives goat-critique one result envelope`), and `test/contract/skill-hardening-clarity.test.ts` (search: `intent before keyword`).
+
+The follow-up meaning review found further losses that the passing contracts had missed:
+
+- Review lost mutation/default checks and the requirement for visible success: `workflow/skills/goat-review/SKILL.md` (search: `without visible success`).
+- Clarity broadened semantic authority drift to any drift: `workflow/skills/goat-clarity/SKILL.md` (search: `Semantic authority drift`).
+- Security shortened unavailable tools to tools: `workflow/skills/goat-security/SKILL.md` (search: `unavailable tools are not evidence`).
+- Proof wording lost its explicit freshness rule: `workflow/skills/reference/skill-preamble.md` (search: `never from recall or a prior turn`).
+
+Restoring these qualifiers and their installed mirrors passed 280 focused checks; this proves contract acceptance, not full runtime skill qualification.
+Compare the decisions a reader would make before and after compression, including qualifiers that no assertion pins.
+
+**Root cause:** Edited prose carried both durable anchors and conditions that token checks did not fully protect.
 
 ---
 

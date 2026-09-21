@@ -733,7 +733,7 @@ check_secret_segment() {
   # variants reach the secret block below.
 
   if [[ "$touches_secret" -eq 1 ]]; then
-    block "Secret-file access ($CMD_VERB). Reading or editing .env / SSH/AWS/GCP keys / credentials through the agent is an exfil risk." || return $?
+    block "Secret-file access ($CMD_VERB). Reading or editing .env / SSH/AWS/GCP keys / credentials through the agent is an exfil risk. Use a checked-in example or ask the user for sanitized fields." || return $?
   fi
 
   if is_unredirected_unpiped_read_only "$cmd"; then

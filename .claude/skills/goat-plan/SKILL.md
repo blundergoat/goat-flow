@@ -13,7 +13,7 @@ Mode selection discharges the shared Quick/Full depth choice; ceremony follows t
 
 ## When to Use
 
-Use for milestones, replans, rescope, or resume-from-plan in `.goat-flow/plans/<active>/`.
+Use for milestones, replans, rescope, or plan resume in `.goat-flow/plans/<active>/`.
 
 ## Boundary Commands
 
@@ -71,7 +71,7 @@ Plans are local workflow state, not a setup invariant. Mode R is read-only: repo
 
 ## Phase 1 - Milestone Breakdown
 
-Budget determines must-deliver scope, ranked stretch work, and cut order. Risk determines proof; split for uncertainty reduction, independent value, or a decision gate.
+Budget determines must-deliver scope, ranked stretch work, and cut order. Risk sets proof; split for uncertainty, independent value, or a decision gate.
 
 ### Milestone Archetypes
 
@@ -79,7 +79,7 @@ Archetypes are optional lenses: **Prove It Works**, **Make It Real**, **Make It 
 
 **Spike-first rule:** If uncertain about a library, API, performance characteristic, or integration point - that uncertainty goes in Milestone 1 as a spike, not Milestone 3 as a risk.
 
-Never drop a spike, intake, or kill criteria for milestone count, deadline, or less-ceremony pressure.
+Never drop a spike, intake, or kill criteria for milestone count, deadline, or reduced ceremony.
 
 ### For each milestone, produce:
 
@@ -101,11 +101,11 @@ Start task text with the operation; prefer about 25 words excluding tags and est
 
 Verify existing paths, symbols and behavior against the target revision before naming them. Label proposed paths as new and unresolved anchors `(confirm: what)`; schedule the investigation before dependent implementation.
 
-For issue, PR or handoff exports, read `references/issue-format.md` → Human-facing exports. Before delivery, compare the saved first and final drafts: claim only corrections visible in that diff; an unchanged valid draft is a valid second pass. Run commands against the actual saved artifact, and distinguish structural acceptance from task coverage and forecast evidence.
+For issue, PR, or handoff exports, read `references/issue-format.md` → Human-facing exports. Compare saved first/final drafts and claim only visible corrections; an unchanged valid draft is a valid second pass. Run commands on the saved artifact, separating structural acceptance, task coverage, and forecast evidence.
 
-Treat every ISSUE as requester-facing, including a local draft. Before delivery, read its tasks, tables and prose without the milestone open. Replace references to private task or proof owners with the acceptance facts readers need. A plain phrase such as “the work plan owns the commands” still sends readers to unavailable material; removing IDs alone is insufficient.
+Treat every ISSUE, including local drafts, as requester-facing. Before delivery, read it without the milestone open. Replace private task/proof references with needed acceptance facts; removing IDs while sending readers to unavailable material is insufficient.
 
-**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof and one admin; exclude `[HUMAN]`/zero-minute items. `Forecast basis:` records agent work units, rates, historical `source:` quantiles. Use `1.0-2.5-6 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Execution uses `references/milestone-examples.md` → Timing receipts. `Forecast range:` is required with a basis; legacy points and range-only estimates remain valid.
+**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin; exclude `[HUMAN]` and zero-minute items. `Forecast basis:` records agent work units, rates, and historical `source:` quantiles. Use `1.0-2.5-6 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Execution uses `references/milestone-examples.md` → Timing receipts. `Forecast range:` is required with a basis; legacy points and range-only estimates remain valid.
 
 Before authoring or revising forecasts, read `references/milestone-examples.md` → Effort Estimates for work counting, history selection, fast-case evidence and immutable revisions. Read `references/issue-format.md` → Forecast presentation when summarizing delivery.
 

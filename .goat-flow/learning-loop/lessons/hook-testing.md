@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-09-20
+last_reviewed: 2026-09-22
 ---
 
 **Scope:** Hook test coverage strategy and provider evidence - what a self-test actually exercises, which support layer a capture proves, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -150,12 +150,15 @@ last_reviewed: 2026-09-20
 **Decision changed:** Before writing a fixture for an analyzer error or refusal branch, capture that branch from a real executable; a measured clean envelope does not measure its error fields.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-09-22
 
 **Prevention:** When tests model an external protocol, take each branch's payload from a real run of that branch: clean, finding, config refusal, fatal diagnostic, ignored operand. A scratch project with a broken config or an ignore pattern produces the refusal and ignored shapes without touching the real project. Run the finished consumer against the real executables before calling the protocol covered. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `shows the analyzer's own message`), `workflow/hooks/gruff-code-quality.sh` (search: `if type == "object" then (.message // tostring)`).
 
 **What happened:** A milestone taught the Gruff hook the v2 analyzer protocol. Its clean fixture envelope came from a real gruff-ts run, but the refused-config case wrote `config.error` as a string. All protocol tests passed. The real-binary check then ran the hook against all five ports with a config missing `schemaVersion`: every port sent `config.error` as an object with `message` and `remediation`, and the hook showed users raw JSON. The hook now reads the message, and the fixture uses the measured object shape.
 
 **Root cause:** One measured payload was treated as proof of the whole envelope's shape, so the unmeasured error branch was modelled from the field name.
+
+**Recurrence 2026-09-22:** A Codex renewal control used the tool API fields `exec_command` and `cmd` as hook-event input; the Git policy returned zero because that was not its shell-event contract. Reading the configured probe and extractor corrected the fixture to `Bash` and `tool_input.command`. Six local controls then preserved production bytes and exits, and a live CLI 0.155.1 capture independently observed `tool_input.command` and both denials. Derive local inputs from the provider hook contract, not the calling tool API; qualify delivery separately. Evidence: `src/cli/hooks-runtime-evidence.ts` (search: `tool_name: "Bash"`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `tool_is_shell_command`, `.tool_input.command`), and `workflow/hooks/README.md` (search: `On 2026-09-21,`).
 
 ---
 
