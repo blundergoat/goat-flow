@@ -51,7 +51,17 @@ is_git_publication_alias_config() {
 is_git_commit_target() {
   local candidate="$1"
   candidate="${candidate#"${candidate%%[![:space:]]*}"}"
-  [[ "$candidate" =~ ^commit([[:space:]]|$) ]]
+  local verb="${candidate%%[[:space:]]*}"
+  case "$verb" in
+    commit|commit-tree|update-ref) return 0 ;;
+    cherry-pick|revert)
+      [[ "$candidate" =~ (^|[[:space:]])(--abort|--quit|--no-commit|-n)([[:space:]]|$) ]] && return 1
+      return 0 ;;
+    am)
+      [[ "$candidate" =~ (^|[[:space:]])(--abort|--quit|--show-current-patch)([[:space:]]|$) ]] && return 1
+      return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # Decide whether a direct subcommand or alias expansion carries a guarded destructive flag.
@@ -128,7 +138,15 @@ record_git_persistent_alias() {
   [[ "$word" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || return 0
   is_git_builtin_word "$word" && return 0
   local expansion=""
-  expansion="$(GIT_TERMINAL_PROMPT=0 git "$@" config --get "alias.$word" 2>/dev/null </dev/null)" || return 0
+  if ! expansion="$(GIT_TERMINAL_PROMPT=0 git "$@" config --get "alias.$word" 2>/dev/null </dev/null)"; then
+    # Inline environment assignments are not executed by this inspector. An unresolved
+    # environment-backed alias cannot count as evidence that the command is read-only.
+    local option
+    for option in "$@"; do
+      case "$option" in --config-env|--config-env=*) __goat_git_aliased_commit=1 ;; esac
+    done
+    return 0
+  fi
   # No saved expansion means there is no alias action to add to the user's policy check.
   [[ -n "$expansion" ]] || return 0
   record_git_alias_expansion "$expansion"
@@ -331,9 +349,11 @@ is_gh_write_operation() {
   case "$topic:$subcommand" in
     issue:create|issue:close|issue:reopen|issue:edit|issue:delete|issue:lock|issue:unlock|issue:pin|issue:unpin|issue:transfer|issue:develop)
       return 0 ;;
-    pr:create|pr:review|pr:merge|pr:close|pr:reopen|pr:edit|pr:ready|pr:update-branch)
+    pr:create|pr:review|pr:merge|pr:close|pr:reopen|pr:edit|pr:ready|pr:update-branch|pr:lock|pr:unlock|pr:revert)
       return 0 ;;
-    release:create|release:upload|release:delete|release:edit)
+    release:create|release:upload|release:delete|release:edit|release:delete-asset)
+      return 0 ;;
+    discussion:create|discussion:edit)
       return 0 ;;
     repo:create|repo:delete|repo:edit|repo:fork|repo:rename|repo:archive|repo:unarchive|repo:sync|repo:set-default)
       return 0 ;;
