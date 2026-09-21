@@ -49,7 +49,7 @@ Plans are local workflow state, not a setup invariant. Mode R is read-only: repo
 
 **0: Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
 
-**No-file guard: Mode 2** - reporting-only/no-file constraints forbid writes; no-implementation alone does not. Conflicting write/no-write instructions preserve bytes and require clarification.
+**No-file guard: Mode R or 2** - reporting-only/no-file constraints forbid writes: reconcile/audit requests select read-only Mode R; other requests select Mode 2. No-implementation alone does not forbid plan edits. Conflicting write/no-write instructions preserve bytes and require clarification.
 
 **1: Named-File Update** - explicit plan edits, including reconcile-and-fix with implementation prohibited. A path alone is not write approval; use Phase 2 § Mode 1, never implement code.
 
@@ -161,7 +161,7 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 ### File Artifact Rules (Modes 3 and 4)
 
-Fresh plan: create a slugged directory and write one zero-padded `M*.md` per milestone. Only explicit active-plan selection updates `.active`; a creation destination or unrelated existing-plan edit leaves a valid marker unchanged. Existing plan: identify its prior terminal milestone. Append: new `Depends on` prior. Insert before prior: prior `Depends on` new. Re-derive `ISSUE.md` bands and totals.
+Fresh plan: create a slugged directory and write one zero-padded `M*.md` per milestone. Only explicit active-plan selection updates `.active`; a creation destination or unrelated existing-plan edit leaves a valid marker unchanged. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` bands and totals.
 
 **Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty sections; retain Phase 1 core, claim-based Proof, and one command source.
 
