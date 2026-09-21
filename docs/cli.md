@@ -91,10 +91,14 @@ With `--agent`, skills install to that manifest profile's skill directory: Codex
 For a skill, `--red-log` must name a regular file under
 `.goat-flow/logs/sessions/` whose filename matches
 `YYYY-MM-DD-<name>-tdd.md`. Its first RED iteration must contain a concrete
-`Scenario:`, at least three distinct pressure types from the authoring
-methodology, an `Agent behaviour:` value that starts with an explicit failure
-outcome, and at least one non-placeholder quoted rationalisation. Fields from a
-later GREEN section do not satisfy RED. Until that receipt validates, no skill
+`Scenario:` and an `Agent behaviour:` value starting with an explicit failure.
+Within that iteration, `Skill type:` selects `discipline-enforcing` (the default
+when omitted), `technique`, `pattern`, or `reference`; unknown types are rejected.
+Discipline receipts require three distinct documented pressure types and a
+non-placeholder quoted rationalisation. Other types require a concrete
+`Control:` naming an already-correct case and its expected unchanged outcome.
+Use discipline evidence for rule compliance. Fields from a later GREEN section
+do not satisfy RED. Until that receipt validates, no skill
 file or draft is written. Fresh scaffolds defer their numeric score until GREEN,
 REFACTOR, and STAY GREEN have run. Draft mode remains read-only and scores the
 exact selected-agent draft.

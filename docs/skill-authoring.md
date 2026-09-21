@@ -51,11 +51,18 @@ Once the artifact is chosen, `.goat-flow/skill-docs/playbooks/writing-agent-faci
 ## Scaffold from a description
 
 For a skill, run the failing scenario before scaffolding and capture the RED
-receipt at `.goat-flow/logs/sessions/YYYY-MM-DD-<name>-tdd.md`. The receipt must
-record a concrete scenario, three distinct documented pressure types, an
-explicit failing agent outcome, and one non-placeholder quoted rationalisation
-inside its first RED iteration. Pure playbook/reference scaffolds do not use
-this pressure gate.
+receipt at `.goat-flow/logs/sessions/YYYY-MM-DD-<name>-tdd.md`. Its first RED
+iteration must record a concrete `Scenario:` and an `Agent behaviour:` starting
+with an explicit failure outcome. Evidence requirements depend on `Skill type:`:
+
+| Skill type | Additional RED evidence |
+|---|---|
+| `discipline-enforcing` (default when omitted) | Three distinct documented pressure types and a non-placeholder quoted rationalisation. |
+| `technique`, `pattern`, or `reference` | A concrete `Control:` naming an already-correct case and its expected unchanged outcome; pressure and rationalisation are not required. |
+
+Use `discipline-enforcing` when testing rule compliance. Unknown types are
+rejected. These fields record evidence, not proof of an unobserved trial.
+Pure playbook/reference scaffolds remain exempt from the RED gate.
 
 Replace the angle-bracket placeholders before running the command:
 

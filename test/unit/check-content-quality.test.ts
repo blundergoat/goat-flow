@@ -897,6 +897,30 @@ describe("runContentQualityChecks: target discovery", () => {
     assert.equal(staleAnchors.length, 0);
   });
 
+  it("checks a direct citation after sentence punctuation without borrowing across prose", () => {
+    const targetPath = "src/cli/current.ts";
+    const fs = stubFS({
+      exists: (path) => path === targetPath,
+      readFile: () => "export const currentSymbol = true;\n",
+    });
+
+    const directGaps = [" ", "\n", ". ", ".\n"];
+    const unrelatedGaps = [". Other claim ", ".\n\n", ". See elsewhere "];
+    for (const gap of [...directGaps, ...unrelatedGaps]) {
+      const results = ["currentSymbol", "retiredSymbol"].flatMap((needle) =>
+        evaluateSearchAnchors(
+          fs,
+          `\`${targetPath}\`${gap}(search: \`${needle}\`)`,
+        ),
+      );
+      assert.deepEqual(
+        results.map((result) => result.status),
+        directGaps.includes(gap) ? ["valid", "stale"] : [],
+        JSON.stringify(gap),
+      );
+    }
+  });
+
   it("validates root dotfile search anchors", () => {
     const glossaryPath = ".goat-flow/glossary.md";
     const targetPath = ".gitignore";

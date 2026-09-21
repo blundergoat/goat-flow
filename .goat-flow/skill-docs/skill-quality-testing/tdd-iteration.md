@@ -45,6 +45,8 @@ Different skill types need different tests. Don't pressure-test a reference skil
 
 Do not add pressure to pure references or skills with no rule or incentive to bypass.
 
+For `skill new`, put `Skill type: discipline-enforcing | technique | pattern | reference` inside the first RED iteration. Omission retains the discipline gate: three distinct documented pressures and a quoted rationalisation. Technique, pattern, and reference receipts instead require `Control:` naming an already-correct case and its expected unchanged outcome. Every type still requires a concrete `Scenario:` and an explicit failure in `Agent behaviour:`. Choose discipline-enforcing whenever the tested behavior is rule compliance; unknown types are rejected. These fields record evidence, not proof of an unobserved trial.
+
 ## Capability-aware evaluation fixtures
 
 Before RED, classify what the skill can do. Every fixture names at least one already-correct control and its expected no-op. For mutation-capable skills, score all five:
