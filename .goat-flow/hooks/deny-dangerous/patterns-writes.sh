@@ -47,21 +47,71 @@ is_git_publication_alias_config() {
   return 1
 }
 
+# Git verbs that create, rewrite or move branch history reserved for the developer, before any non-committing exemption.
+__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull "
+
+# Decide whether a verb's arguments are exactly one of the listed words.
+# Use for recovery modes such as `--abort`, which Git accepts only without other arguments.
+git_arguments_are_one_of() {
+  local arguments="$1"
+  [[ -n "$arguments" && "$arguments" != *[[:space:]]* && " $2 " == *" $arguments "* ]]
+}
+
+# Decide whether every flag in a verb's arguments uses one of the listed exact spellings; other words are operands.
+# Git accepts abbreviations and negations such as `--commit` for `--no-commit`, so any unlisted flag keeps the command guarded.
+git_flags_within() {
+  local -a argument_words=()
+  local argument_word
+  # Reading to NUL keeps words after an embedded newline in view instead of stopping at the first line.
+  read -r -d '' -a argument_words <<< "$1" || true
+  for argument_word in "${argument_words[@]}"; do
+    [[ "$argument_word" == -* && " $2 " != *" $argument_word "* ]] && return 1
+  done
+  return 0
+}
+
+# Decide whether one exact flag appears among a verb's arguments.
+git_arguments_include() {
+  [[ " $1 " == *" $2 "* ]]
+}
+
 # Decide whether a direct subcommand or alias expansion creates history reserved for the developer.
+# Pass `strict` for alias expansions: Git appends the visible arguments to an alias, and those can undo an exempt form.
 is_git_commit_target() {
   local candidate="$1"
+  local mode="${2:-}"
   candidate="${candidate#"${candidate%%[![:space:]]*}"}"
   local verb="${candidate%%[[:space:]]*}"
+  local arguments=""
+  [[ "$candidate" == *[[:space:]]* ]] && arguments="${candidate#*[[:space:]]}"
+  [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
+  [[ "$mode" == "strict" ]] && return 0
+  # Exemptions allow only exact spellings, so an abbreviation, negation or unknown flag stays with the developer.
   case "$verb" in
-    commit|commit-tree|update-ref) return 0 ;;
     cherry-pick|revert)
-      [[ "$candidate" =~ (^|[[:space:]])(--abort|--quit|--no-commit|-n)([[:space:]]|$) ]] && return 1
-      return 0 ;;
+      git_arguments_are_one_of "$arguments" "--abort --quit" && return 1
+      if git_flags_within "$arguments" "-n --no-commit" &&
+        { git_arguments_include "$arguments" "-n" || git_arguments_include "$arguments" "--no-commit"; }; then
+        return 1
+      fi
+      ;;
     am)
-      [[ "$candidate" =~ (^|[[:space:]])(--abort|--quit|--show-current-patch)([[:space:]]|$) ]] && return 1
-      return 0 ;;
-    *) return 1 ;;
+      git_arguments_are_one_of "$arguments" "--abort --quit --show-current-patch --show-current-patch=diff --show-current-patch=raw" && return 1
+      ;;
+    merge)
+      git_arguments_are_one_of "$arguments" "--abort --quit" && return 1
+      # A fast-forward moves the branch even with --no-commit; only --squash or --no-ff --no-commit leaves HEAD in place.
+      if git_flags_within "$arguments" "--squash --no-ff --no-commit --stat --no-stat -q --quiet"; then
+        git_arguments_include "$arguments" "--squash" && return 1
+        git_arguments_include "$arguments" "--no-ff" && git_arguments_include "$arguments" "--no-commit" && return 1
+      fi
+      ;;
+    rebase)
+      git_arguments_are_one_of "$arguments" "--abort --quit --show-current-patch" && return 1
+      ;;
   esac
+  # Pull always fetches and then merges or rebases, so it has no non-committing exemption.
+  return 0
 }
 
 # Decide whether a direct subcommand or alias expansion carries a guarded destructive flag.
@@ -102,7 +152,7 @@ record_git_alias_expansion() {
     __goat_git_aliased_push=1
   fi
   # History creation remains reserved for the developer even when an alias conceals the commit subcommand.
-  if is_git_commit_target "$alias_expansion"; then
+  if is_git_commit_target "$alias_expansion" strict; then
     __goat_git_aliased_commit=1
   fi
   # Destructive flags in an alias retain the same manual-review boundary as a visible destructive Git command.
