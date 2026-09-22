@@ -105,7 +105,7 @@ The dispatcher forwards the complete brief and any user-requested depth. Destina
 | Simple implementation (single-file, obvious) | Direct execution loop with a Route Snapshot; no skill |
 | Simple question | Direct answer; no GATHER or Route Snapshot |
 
-**Planning Route:** Hotfixes use direct execution. A plan/design verb routes to planning-only `/goat-plan`; a non-trivial build/change verb routes through `/goat-plan` with `return-to-implement`. After Phase 2, that handoff starts ordinary ACT implementation without repeating the build authorization; new Ask First boundaries still gate. Bare or ambiguous task paths remain read-only context. `/goat-plan` owns `.goat-flow/plans/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection; analysis signals ("break this down for me", "how would you approach") select Read-Only Analysis.
+**Planning Route:** Hotfixes use direct execution. A plan/design verb routes to planning-only `/goat-plan`; a non-trivial build/change verb routes through `/goat-plan` with `return-to-implement`, which writes any needed plan files without a separate request. After Phase 2, that handoff starts ordinary ACT implementation without repeating the build authorization; new Ask First boundaries still gate. Bare or ambiguous task paths remain read-only context. `/goat-plan` owns `.goat-flow/plans/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection; analysis signals ("break this down for me", "how would you approach") select Read-Only Analysis.
 
 **Task path classifier examples:**
 

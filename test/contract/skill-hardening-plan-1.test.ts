@@ -504,6 +504,42 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
     });
   });
 
+  it("routes dispatcher build handoffs to File-Write with milestone gates", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const noFileIndex = intake.indexOf("**No-file guard: Mode R or 2**");
+      const handoffIndex = intake.indexOf("**Build handoff: Mode 3 or 4**");
+      const inlineIndex = intake.indexOf("**2: Read-Only Analysis**");
+
+      // A reporting-only request must still win before carried build authority is considered.
+      assert.ok(
+        noFileIndex !== -1 &&
+          noFileIndex < handoffIndex &&
+          handoffIndex < inlineIndex,
+        `${skillPath}: build handoff must follow the no-file guard and precede the inline fallback`,
+      );
+      assert.match(
+        intake,
+        /`return-to-implement` build\/change brief authorizes gitignored planning artifacts, never Mode 2 or Ask First boundaries: Hotfix\/Small Feature selects Mode 3; Standard\+ selects Mode 4/u,
+        `${skillPath}: a carried build loses its plan-file authority or its complexity split`,
+      );
+      assert.match(
+        intake,
+        /Post-plan return then continues to ACT; Phase 3 gates each milestone/u,
+        `${skillPath}: a carried build can reach implementation without milestone gates`,
+      );
+      const delivery = readMarkdownSection(
+        skillPath,
+        "Phase 2 - Deliver Milestones",
+      );
+      assert.match(
+        delivery,
+        /^### Mode 4: File-Write \(Standard\+\)$/mu,
+        `${skillPath}: the Mode 4 heading admits a second file-write trigger`,
+      );
+    });
+  });
+
   it("orders goat-plan path-only classification before bounded retrieval and plan reads", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
