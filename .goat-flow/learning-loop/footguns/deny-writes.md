@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-09-20
+last_reviewed: 2026-09-23
 ---
 
 External-write traps: pushes, GitHub mutations, and other side effects that leave the machine. They bypass local file guards, so the deny surface is the only control.
@@ -103,3 +103,23 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **What happened:** With current trusted policy files, `deny-dangerous: {enabled: false}` and no Git choice, reads reported Git protection on. An unrelated toggle and Sync saved `deny-git-mutations: {enabled: false}` and disabled protection without a policy review. The preparation code inherited the sibling's off choice; unchanged ownership bytes bypassed upgrade review.
 
 **Evidence:** `src/cli/config/writer.ts` (search: `setHookEnabled`, `prepareHookConfig`, `migrateGitHookChoice`), `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`, `insertHookEntry`) and `test/integration/hook-effective-state.test.ts` (search: `preserves a missing Git choice during current-installed`). The five fresh persistence regressions failed before inheritance was removed from generic actions and passed afterward; explicit migration and later independent toggles remain covered in `test/unit/config-writer.test.ts` (search: `inherits the Git choice once`).
+
+## Footgun: The Git commit guard lists verbs by name, so an unlisted history writer passes
+
+**Status:** active | **Created:** 2026-09-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** History-writing Git verbs live in one set; each non-committing exemption accepts exact spellings only, and alias expansions get no exemption.
+**Trigger phase:** ACT
+**hallucination-risk:** high
+**Incident count:** 2 | **Latest occurrence:** 2026-09-23
+
+**Prevention:**
+1. When a Git command can create, rewrite or move branch history, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
+2. Write exemptions as exact allowlists (search: `git_arguments_are_one_of`, `git_flags_within`), never "flag appears anywhere". Git accepts abbreviated and negated long options (`git merge -h` lists `--[no-]squash`, `--[no-]commit`, `--[no-]ff`), and a quoted value such as `-m 'x --abort'` reaches the classifier as separate words.
+3. `merge --no-commit` alone still fast-forwards; only `--squash` or `--no-ff --no-commit` leaves HEAD in place.
+4. `git reset --soft HEAD~3` and `git branch -f main HEAD~3` also move a branch and still exit 0 (measured 2026-09-23). Treat them as known gaps, not covered cases.
+
+**Symptoms:** `804d98d8` (2026-09-21) added `commit-tree`, `update-ref`, `cherry-pick`, `revert` and `am`. A PR #61 review on 2026-09-22 showed `git merge topic`, `git rebase main` and `git pull --no-rebase origin main` still exited 0 under `deny-git-mutations.sh --check`; reproduced on 2026-09-23 at `86f211d0`.
+
+**Why it happens:** The commit class is a list of verbs, so coverage ends at the verbs someone remembered. The old exemptions matched `-n`, `--abort` or `--quit` anywhere in the joined arguments, so they could not rule out an abbreviation, negation or message value.
+
+**Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_history_verbs`, `git_flags_within`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `merge creates history`, `exempt merge alias with appended negation`).
