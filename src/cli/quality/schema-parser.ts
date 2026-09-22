@@ -35,9 +35,11 @@ import {
 } from "./schema-types.js";
 import {
   expectAxisScore,
+  expectControlFreeString,
   expectEnumValue,
   expectNonEmptyString,
   expectNullablePositiveInteger,
+  expectNullableSingleLineString,
   expectNullableString,
   expectOptionalNonEmptyString,
   expectOptionalNonNegativeInteger,
@@ -315,8 +317,8 @@ function parseFindingLocation(
   raw: Record<string, unknown>,
   path: string,
 ): FieldResult<{ file: string | null; line: number | null }> {
-  const file = expectNullableString(raw.file ?? null, `${path}.file`);
-  // Invalid file text would point the user at a bogus source location.
+  const file = expectNullableSingleLineString(raw.file ?? null, `${path}.file`);
+  // Invalid or multi-line file text would point the user at a bogus source location.
   if (!file.ok) return file;
   const line = expectNullablePositiveInteger(raw.line ?? null, `${path}.line`);
   // Invalid line numbers would make source evidence misleading.
@@ -350,8 +352,8 @@ function parseFindingCore(
   const location = parseFindingLocation(raw, path);
   // An invalid location would send the maintainer to unusable finding evidence.
   if (!location.ok) return location;
-  const summary = expectNonEmptyString(raw.summary, `${path}.summary`);
-  // A finding without summary text leaves the issue list unreadable.
+  const summary = expectControlFreeString(raw.summary, `${path}.summary`);
+  // A finding without summary text leaves the issue list unreadable, and a control character would disguise `quality diff` rows.
   if (!summary.ok) return summary;
   // Long summaries overflow the compact issue row, so force detail into the detail field.
   if (summary.value.length > 200) {

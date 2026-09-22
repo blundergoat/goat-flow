@@ -51,6 +51,11 @@ import {
   type ReviewAnchorAuthority,
 } from "./review-validate-common.js";
 
+/** Rationale: 128 MiB, because metadata reads (refs, trees, index, blob sizes) stay far smaller even in large repositories. */
+const GIT_METADATA_OUTPUT_LIMIT_BYTES = 128 * 1024 * 1024;
+/** Rationale: 64 MiB per blob read, because each response is buffered whole and a large tree then needs only a few Git calls. */
+const BLOB_BATCH_BYTES = 64 * 1024 * 1024;
+
 /**
  * Return whether a resolved path remains under the reviewed project's real path.
  *
@@ -414,6 +419,7 @@ export function validateFindingLine(
  *
  * @param args - fixed read command and literal arguments chosen by the authority reader
  * @param input - transient command input; absent means no stdin payload
+ * @param outputLimitBytes - largest buffered stdout accepted; blob reads pass their measured response size instead of the metadata default
  *
  * @returns raw Git output, including NUL-delimited paths where requested
  * @throws ReviewAuthorityError when local metadata or objects are unavailable; Git diagnostics are not exposed
@@ -422,6 +428,7 @@ export function readGit(
   root: string,
   args: string[],
   input?: Buffer | string,
+  outputLimitBytes = GIT_METADATA_OUTPUT_LIMIT_BYTES,
 ): Buffer {
   // A caller's alternate index or Git directory must not substitute another project for the selected root.
   const environment = Object.fromEntries(
@@ -449,7 +456,7 @@ export function readGit(
       ],
       {
         input,
-        maxBuffer: 128 * 1024 * 1024,
+        maxBuffer: outputLimitBytes,
         stdio: ["pipe", "pipe", "pipe"],
         env: {
           ...environment,
@@ -619,7 +626,8 @@ export function baseCommit(
 }
 
 /**
- * Load raw blobs in one local read and cache them for this capture.
+ * Load raw blobs in size-bounded local reads and cache them for this capture.
+ * A whole-tree review of a large repository would otherwise exceed one buffered read and fail as unavailable metadata.
  *
  * @param context - selected repository; only its transient blob cache is changed
  *
@@ -632,14 +640,117 @@ export function loadBlobs(context: GitContext, identifiers: string[]): void {
   );
   // Reused old/new blobs already have the same immutable bytes in this capture.
   if (missing.length === 0) return;
-  const output = readGit(
+  const sizes = blobSizes(context, missing);
+  for (const batch of blobBatches(missing, sizes)) {
+    // Each response holds a header, the blob bytes and a newline per object; the limit admits exactly that output.
+    const responseBytes = batch.reduce(
+      (total, identifier) =>
+        total +
+        `${identifier} blob ${sizes.get(identifier)}\n`.length +
+        (sizes.get(identifier) ?? 0) +
+        1,
+      0,
+    );
+    const output = readGit(
+      context.root,
+      ["cat-file", "--batch"],
+      `${batch.join("\n")}\n`,
+      responseBytes,
+    );
+    cacheBlobResponse(context, batch, output);
+  }
+}
+
+/**
+ * Read each blob's size before any content is buffered, so reads can be grouped under the batch budget.
+ *
+ * @param context - selected repository whose object store is read
+ * @param identifiers - uncached blob IDs; each must resolve to a blob
+ * @returns byte size per blob ID
+ * @throws ReviewAuthorityError when an object is missing, is not a blob, or reports an invalid size
+ */
+function blobSizes(
+  context: GitContext,
+  identifiers: string[],
+): Map<string, number> {
+  const lines = readGit(
     context.root,
-    ["cat-file", "--batch"],
-    `${missing.join("\n")}\n`,
+    ["cat-file", "--batch-check"],
+    `${identifiers.join("\n")}\n`,
+  )
+    .toString()
+    .split("\n");
+  // One header per requested object plus the final newline's empty remainder.
+  requireAuthority(
+    lines.length === identifiers.length + 1 && lines.at(-1) === "",
+    "unexpected Git blob response",
+    "authority-object",
   );
+  const sizes = new Map<string, number>();
+  identifiers.forEach((identifier, index) => {
+    const header = lines[index]?.match(/^([0-9a-f]+) blob (\d+)$/u);
+    requireAuthority(
+      header?.[1] === identifier,
+      "selected Git blob is unavailable",
+      "authority-object",
+    );
+    const size = Number(header[2]);
+    requireAuthority(
+      Number.isSafeInteger(size),
+      "invalid Git blob length",
+      "authority-object",
+    );
+    sizes.set(identifier, size);
+  });
+  return sizes;
+}
+
+/**
+ * Group blob IDs so each buffered read stays within the batch budget; a blob larger than the budget is read alone.
+ *
+ * @param identifiers - blob IDs in request order
+ * @param sizes - byte size per blob ID from {@link blobSizes}
+ * @returns non-empty batches in request order
+ */
+function blobBatches(
+  identifiers: string[],
+  sizes: Map<string, number>,
+): string[][] {
+  const batches: string[][] = [];
+  let current: string[] = [];
+  let currentBytes = 0;
+  for (const identifier of identifiers) {
+    const size = sizes.get(identifier) ?? 0;
+    // Close the batch before this blob would push the buffered response past the budget.
+    if (current.length > 0 && currentBytes + size > BLOB_BATCH_BYTES) {
+      batches.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(identifier);
+    currentBytes += size;
+  }
+  // The final partial batch still holds requested blobs.
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+/**
+ * Parse one `cat-file --batch` response and cache each blob's exact bytes.
+ *
+ * @param context - selected repository whose transient blob cache receives the bytes
+ * @param batch - blob IDs in the order they were requested
+ * @param output - raw Git response for that request
+ * @throws ReviewAuthorityError when a header, length or trailing byte does not match the request
+ */
+function cacheBlobResponse(
+  context: GitContext,
+  batch: string[],
+  output: Buffer,
+): void {
   let offset = 0;
   // Each length-delimited blob keeps embedded newlines and NUL bytes out of Git's response grammar.
-  for (const identifier of missing) {
+  for (const identifier of batch) {
     const end = output.indexOf(10, offset);
     const header = output
       .subarray(offset, end)

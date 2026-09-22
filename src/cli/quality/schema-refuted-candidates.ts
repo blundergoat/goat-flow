@@ -13,10 +13,11 @@ import {
   type QualityReportParseOptions,
 } from "./schema-types.js";
 import {
+  expectControlFreeString,
   expectEnumValue,
   expectNonEmptyString,
   expectNullablePositiveInteger,
-  expectNullableString,
+  expectNullableSingleLineString,
   expectOptionalNonEmptyString,
   expectOptionalNonNegativeInteger,
   isRecord,
@@ -60,8 +61,11 @@ function parseRefutedCandidateLocation(
   rawCandidate: Record<string, unknown>,
   candidatePath: string,
 ): FieldResult<{ file: string | null; line: number | null }> {
-  const file = expectNullableString(rawCandidate.file, `${candidatePath}.file`);
-  // Invalid or missing file text would make the candidate's evidence location ambiguous.
+  const file = expectNullableSingleLineString(
+    rawCandidate.file,
+    `${candidatePath}.file`,
+  );
+  // Invalid, missing or multi-line file text would make the candidate's evidence location ambiguous.
   if (!file.ok) return file;
   const line = expectNullablePositiveInteger(
     rawCandidate.line,
@@ -84,13 +88,14 @@ function parseRefutedCandidateCore(
   rawCandidate: Record<string, unknown>,
   candidatePath: string,
 ): FieldResult<RefutedCandidateCoreFields> {
-  const claim = expectNonEmptyString(
+  // Both texts reach the next `quality prompt`, where an escape sequence or direction override could disguise prior context.
+  const claim = expectControlFreeString(
     rawCandidate.claim,
     `${candidatePath}.claim`,
   );
   // A blank claim would not tell the user which suspected problem was disproved.
   if (!claim.ok) return claim;
-  const exclusionReason = expectNonEmptyString(
+  const exclusionReason = expectControlFreeString(
     rawCandidate.why_excluded,
     `${candidatePath}.why_excluded`,
   );

@@ -111,6 +111,51 @@ export function expectSingleLineString(
 }
 
 /**
+ * Reject terminal and bidirectional controls in prose whose line breaks the schema permits.
+ * Use for text that later reaches a terminal or generated prompt; renderers flatten ordinary whitespace, but an escape sequence or
+ * direction override would still hide or reorder the surrounding output.
+ *
+ * @param candidate - raw report value; blank text or an unsafe control is rejected
+ * @param path - schema path shown in validation output; empty makes the rejected field hard to find
+ * @returns the unchanged text, or a path-specific error naming the unsafe character class
+ */
+export function expectControlFreeString(
+  candidate: unknown,
+  path: string,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const parsed = expectNonEmptyString(candidate, path);
+  if (!parsed.ok) return parsed;
+  // Tab, line feed, carriage return and the Unicode line separators stay allowed because renderers flatten them to spaces.
+  if (
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(
+      parsed.value,
+    )
+  ) {
+    return {
+      ok: false,
+      error: `${path} must not contain terminal or bidirectional control characters`,
+    };
+  }
+  return parsed;
+}
+
+/**
+ * Read an optional one-line value such as a file path, where `null` means the row applies project-wide.
+ *
+ * @param candidate - raw field value; `null` is the explicit project-wide state
+ * @param path - schema path shown in validation output; empty makes the rejected field hard to find
+ * @returns single-line text or `null`, or an error when the text could split or disguise terminal output
+ */
+export function expectNullableSingleLineString(
+  candidate: unknown,
+  path: string,
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  // Null is the report's explicit "applies project-wide" state.
+  if (candidate === null) return { ok: true, value: null };
+  return expectSingleLineString(candidate, path);
+}
+
+/**
  * Read a field whose value must match the quality UI vocabulary.
  * Use for statuses, severities, modes, and evidence labels that drive badges and filters.
  *

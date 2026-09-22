@@ -16,6 +16,7 @@ import {
 import {
   expectEnumValue,
   expectSingleLineString,
+  expectNullableSingleLineString,
   expectNullableString,
   isRecord,
   rejectUnknownKeys,
@@ -143,8 +144,8 @@ function parseImprovement(
   const evidence = parseImprovementText(raw.evidence, `${path}.evidence`, 1000);
   // Without valid evidence, a later reader cannot judge why this improvement was proposed.
   if (!evidence.ok) return evidence;
-  const file = expectNullableString(raw.file, `${path}.file`);
-  // A file must name the affected surface, or be null for work that applies across the project.
+  const file = expectNullableSingleLineString(raw.file, `${path}.file`);
+  // A file must name the affected surface on one line, or be null for work that applies across the project.
   if (!file.ok) return file;
   return {
     ok: true,
