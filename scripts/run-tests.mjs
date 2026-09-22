@@ -57,6 +57,7 @@ function isSlowTest(path) {
     "test/integration/quality-constraint-isolation.test.ts",
     "test/integration/hook-effective-state.test.ts",
     "test/integration/setup-quality-lifecycle.test.ts",
+    "test/integration/review-validate-large-tree.test.ts",
     "test/unit/audit-harness/check-evidence-before-claims.test.ts",
   ];
   const patterns = [
