@@ -47,12 +47,15 @@
 - **Preflight uses stable tests and bounded audits** - Default to `test:fast` when available; run experimental coverage separately with `npm run test:coverage`. Failures remain blocking; failed Tests rows show the first assertion/error (30 lines, 200 bytes each). Dependency audits time out after 120 seconds; `GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N` changes this, `0` disables only the timeout.
 - **Secret-access denials offer recovery** - Use checked-in examples or sanitized fields.
 - **Browser guidance matches installed interfaces** - Check `browser-use --help` before Python-stdin/legacy commands; guidance covers `browser-use skill`, bounded waits, fixture-login safeguards and tab recovery.
+- **Large repositories support commit reviews** - `review snapshot` for a commit, PR, branch or range no longer fails with `cannot read local Git cat-file metadata` once the tree exceeds 128 MiB.
 
 ### Security
 
 - **Learning reports cannot overwrite learning content** - `learn new --output` rejects learning-storage destinations and linked report files, including dry runs.
 - **Shell and interpreter guards inspect executable syntax** - Check shell `eval` in every pipeline stage; block background commands, direct lockfile redirects, Perl, Ruby, Python, PHP and Deno paren-less process calls, `qx`/`%x`, pipe-open, `passthru`, `proc_open`, `pty.spawn` and `Deno.Command`. `yq eval`, quoted evidence and operators, arrows, escapes and JavaScript regex `.exec()` remain allowed.
 - **Git guards deny aliased writes and destructive flags** - Temporary/saved aliases to `commit`, `reset --hard`, `clean -f` or `--no-verify` deny through quoting/escapes; read-only aliases remain allowed.
+- **Git guards deny merge, rebase and pull** - They create or rewrite history like `commit`; exactly spelled `--abort`, `--quit`, `merge --squash` and `merge --no-ff --no-commit` stay allowed.
+- **Quality reports reject terminal controls** - `quality save` refuses escape and text-direction characters in finding summaries, refuted claims and reasons, and multi-line file paths, so `history`, `diff` and prompts cannot be disguised.
 
 ## v1.16.0 - 2026-08-20
 
