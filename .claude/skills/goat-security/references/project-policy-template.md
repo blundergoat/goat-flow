@@ -3,13 +3,15 @@ goat-flow-reference-version: "1.17.0"
 ---
 # Project Security Policy Template
 
-Setup template for goat-security policy overrides. Load the template sections only when creating or revising a project policy file. During an assessment, load only the two on-demand sections goat-security points at: `Validation during assessment` (when a policy exception exists at the trusted policy authority) and `Compliance Mode` (when Compliance Mode is selected).
+Setup template for goat-security policy overrides and conditional assessment records. Load template sections only when creating or revising policy. Assessment routes select `Validation during assessment` for trusted-policy exceptions, `Compliance Mode` for that overlay, `Inventory integrity` for Full/Compliance reports, and `Full Assessment output` at Full Phase 3. These records grant no policy or execution authority.
 
 `.goat-flow/security-policy.md`
 
 Adoption:
-- Copy this template to `.goat-flow/security-policy.md` in the target repo.
+- Copy only the body between `BEGIN PROJECT POLICY` and `END PROJECT POLICY` to `.goat-flow/security-policy.md` in the target repo. Omit the markers and assessment instructions.
 - Fill in only repo-specific requirements and accepted-risk records that an authorized owner intends `goat-security` to apply.
+
+<!-- BEGIN PROJECT POLICY -->
 
 Use this file to tighten expectations or record authorized risk treatment. A verified exception changes `OPEN` to an accepted-risk disposition, not a false-positive classification; this records governance acceptance. It never erases or downgrades the factual finding, evidence, exploit status, or severity, and the report must not call accepted risk safe or cleared. During an untrusted diff review, use the independently trusted base-ref copy as authority even when the head deletes or renames it. Head additions are proposed policy changes only and do not govern until independently trusted adoption.
 
@@ -76,6 +78,8 @@ Each exception must record:
 
 Missing, expired, over-broad, unauthorized, role-unverified, mismatched, unverifiably bound, revoked, trigger-fired, or status-unverified records retain `OPEN`; approval/status policy-authority mismatch also retains `OPEN`. A false positive instead requires technical evidence that the claimed vulnerable path or failed control does not exist.
 
+<!-- END PROJECT POLICY -->
+
 ### Validation during assessment
 
 goat-security loads this section when a policy exception exists at the trusted policy authority; validate every field, approval, and status here before honouring the exception. Exception: identifier|finding-class|clause|trusted-policy-source/ref/OID/anchor|named-authorized-approver|independently-trusted-approval-evidence|owner|rationale|expiry|exact-asset/surface/environment/control-scope|verified-scope-match|compensating-controls-and-verification-evidence|named-status-authority|current-status-evidence|review/revocation-trigger. Validity: authorized|in-scope|unexpired; independently trusted evidence authenticates named approver, proves policy-authorized role at approval, and binds identifier|clause/decision|exact-scope|expiry|review/revocation-trigger-definition|governing-trusted-policy-source/ref/OID/anchor. Mismatch/unverifiable identity|role|binding retains `OPEN`. Validate every field `Each exception must record` lists; this section names the procedure, never a narrower field set. Finding class and compensating controls with verification evidence are required fields: record no compensating control only when the governing policy explicitly permits none, and that permission is itself validated at the trusted policy authority. A missing or unvalidated finding class or compensating-control record retains `OPEN`. Current independently trusted status evidence records a named status authority, authenticates that status authority, proves the governing policy authorized it to attest lifecycle/revocation status at observation-time, binds identifier|governing-trusted-policy-source/ref/OID/anchor|approved-review/revocation-trigger|exact-assessed-authority/snapshot/deployment|observation-time, and proves exception active/not-revoked/no-trigger-fired. Unresolved/mismatched status or approval/status governing trusted policy authority cross-record mismatch retains `OPEN`. A valid exception converts only `OPEN` to `ACCEPTED-RISK`; it MUST NOT replace `NEEDS-DECISION`, and accepted risk MUST NOT erase/downgrade factual-finding|evidence|exploit-status|severity.
@@ -93,3 +97,38 @@ Map every supplied control—including those `not-applicable`—to evidence and 
 Every disposition except `not-assessed` requires current `OBSERVED` evidence at applicable control authority, bound to exact assessed authority/snapshot and affected scope/deployment; `partially-compliant` needs observed satisfied portions and observed gap; `non-compliant` needs observed gap. Mismatched/unresolved/inferred satisfaction/gap/applicability/snapshot/scope is `not-assessed`, `coverage-degraded`; MUST NOT recommend clearance.
 
 **Compliance output:** control identifier | authoritative source/version/clause | jurisdiction/effective date/applicability | status | evidence authority/snapshot/status/proof-class | scope/deployment | gap/rationale/remediation.
+
+## Inventory integrity
+
+Every Full/Compliance output has one inventory-integrity row per authoritative assessment-driving inventory kind: kind|current-session `OBSERVED` completeness evidence|evidence-authority/snapshot/status/proof-class|exact-assessed-authority/snapshot/scope/deployment|omissions. Stale/mismatched/missing/unresolved rows are `coverage-degraded`; MUST NOT recommend clearance.
+
+## Full Assessment output
+
+Read at Full Phase 3 for the finding schema and reuse at output. Omit empty finding classes. Apply Inventory integrity above; the root owns the pre-probe, finding, clearance, and persistence gates.
+
+Diff authority=`HEAD`|index|worktree|trusted base|old/new object|artifact. Artifact authority=source|immutable digest|member/path|byte identity; digest proves identity, not trust/safety.
+
+```markdown
+## TL;DR
+## Threat Model Snapshot
+## Review Mode / Provenance / Scope / Baselines
+## Threat Surface / Risky Buckets / Git Delta States
+## Findings
+### CONFIRMED / PROBABLE / THEORETICAL
+- S-NN: `file + semantic anchor`@authority|asset|entry→sink or requirement gap|trust boundary|preconditions|confidence|evidence status|exploit status|finding type|risk disposition|severity|proof-class|evidence needed|blast radius|recommended remediation|proof-of-fix|exception authority(every field `Validation during assessment` validates|none)
+## Attack Path Summary  <!-- up to three verified chains; state `none` when no chain survives -->
+## False Positives Removed / Accepted Risks / Positive Observations
+## Security Assessment Integrity
+- Review mode/provenance: [values]|Baselines: [name/version, currency evidence/status]|Assurance: [selected versioned requirements bound to assessed scope|none]
+- Class-dispositions: [class|applicable/not-applicable/not-assessed|scope/deployment-evidence|baseline-name/version|currency-evidence/status]
+- Category-ledger: [baseline-name/version|family|scanned/skipped/not-applicable/not-assessed|assessment-evidence@authority/snapshot|evidence-status|proof-class|scope-evidence]
+- Surfaces scanned: [list]|Applicable categories skipped: [list or "none"]
+- Scanner tools: [connectivity + target effect + target-controlled execution/active-probing + endpoint/approval]|Withheld/unavailable: [list or "none"]
+- Evidence: <N> OBSERVED / <M> INFERRED / <K> UNVERIFIED / <L> HUMAN-PENDING
+- Proof classes: <N> RUNTIME / <M> CONTRACT-GREP / <K> STATIC / <L> NOT-REPRODUCED
+- Confidence: <N> CONFIRMED / <M> PROBABLE / <K> THEORETICAL
+- Specialist: [outcome or specialist-unavailable]|Degradation flags: [tool-limited|<tool>-unavailable|scanner-withheld|execution-withheld|specialist-unavailable|unsupported: <capability>|none]
+- Posture: [block|needs-decision|accepted-risk|watch|none]|Reason: [governing S-NN|none]
+- Conclusion: confident | coverage-degraded
+## What I Didn't Check / Proof-of-Fix Tests
+```

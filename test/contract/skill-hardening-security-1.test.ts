@@ -111,7 +111,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   it("admits an early target read only for trusted explicit-component Quick scans", () => {
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
-      const earlyRead = intake.indexOf("Trusted explicit-component Quick");
+      const earlyRead = intake.indexOf("**Proportional Quick:**");
       const exhaustiveInventory = intake.indexOf(
         "Inventory every project/runtime class",
       );
@@ -127,7 +127,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       assertMatchesAll(
         intake,
         [
-          /trusted explicit-component Quick.*bounded, non-executing, non-rendering, no-follow.*target and adjacent-boundary read.*before exhaustive inventory/isu,
+          /Proportional Quick.*repository-contained explicit component path with trusted provenance.*bounded, non-executing, non-rendering, no-follow.*target and adjacent-boundary read.*before exhaustive inventory/isu,
           /MUST NOT use Git, import code, load plugins, execute configuration, or run a scanner/iu,
           /unknown or untrusted provenance.*repo-wide.*unresolved path containment.*ambiguous applicability.*fail.*exhaustive/isu,
           /Finding retention is independent of coverage.*retain, calibrate, and report every lead whose own binding, mitigation re-check, and severity evidence are sufficient/isu,
@@ -166,7 +166,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       assertMatchesAll(
         intake,
         [
-          /Proportional Quick finding gate.*trusted explicit-component Quick.*retain and calibrate only.*current-session `OBSERVED`.*component risk.*before exhaustive Full inventories/isu,
+          /Proportional Quick finding gate.*Proportional Quick read.*retain and calibrate only.*current-session `OBSERVED`.*component risk.*before exhaustive Full inventories/isu,
           /exact target.*deployment.*provenance.*authority\/snapshot.*entry→sink or requirement gap.*mitigation re-check.*execution-safety receipt/isu,
           /`INFERRED`.*`UNVERIFIED`.*`HUMAN-PENDING`.*missing binding stays withheld with evidence needed/isu,
           /no supported component finding survives.*report.*no supported component finding.*MUST NOT.*zero-findings.*complete coverage.*clearance/isu,
@@ -188,11 +188,11 @@ describe("skill hardening contracts: security (1/2)", () => {
         assertMatchesAll(
           applicationBaseline,
           [
-            /Full and exhaustive-path Quick.*baseline-family inventory.*one row per family/isu,
+            /Full and Exhaustive Quick.*baseline-family inventory.*one row per family/isu,
             /A family is one category identifier within one selected baseline version.*one row per category and never credits one row twice.*requirement rows stay separate/isu,
             /Risk coverage is not assurance.*awareness lists.*never that a control was verified.*ASVS 5\.0\.0 or an equivalent named in the project's own security policy.*partial selection.*MUST NOT claim a whole level.*never withhold a supported finding/isu,
             /an absent web surface is `not-applicable` only on current observed applicability evidence at scope authority, never on the requester's assertion/isu,
-            /proportional trusted-component Quick.*compact coverage-gap ledger.*replaces per-family rows.*unassessed families.*coverage-degraded.*MUST NOT recommend clearance/isu,
+            /Proportional Quick.*compact coverage-gap ledger.*replaces per-family rows.*unassessed families.*coverage-degraded.*MUST NOT recommend clearance/isu,
           ],
           referencePath,
         );
@@ -271,7 +271,6 @@ describe("skill hardening contracts: security (1/2)", () => {
           /policy lookup.*confirmed present.*confirmed absent.*unreadable/iu,
           /unreadable.*policy authority.*`UNVERIFIED`.*MUST NOT recommend clearance/iu,
           /accepted risk.*MUST NOT erase\/downgrade factual[- ]finding.*evidence.*exploit[- ]status.*severity/iu,
-          /exception authority\(every field `Validation during assessment` validates\|none\)/iu,
           /mismatch.*unverifiable.*identity.*role.*binding.*retains.*`OPEN`/iu,
           /exception.*only.*`OPEN`.*`ACCEPTED-RISK`.*MUST NOT replace `NEEDS-DECISION`/iu,
           /connectivity.*`offline-only`.*`networked`.*target effect.*`read-only`.*`mutating`/iu,
@@ -304,6 +303,11 @@ describe("skill hardening contracts: security (1/2)", () => {
       ),
       (referencePath) => {
         const policyTemplate = readProjectFile(referencePath);
+        assert.match(
+          readMarkdownSection(referencePath, "Full Assessment output"),
+          /exception authority\(every field `Validation during assessment` validates\|none\)/iu,
+          referencePath,
+        );
         const acceptedRiskRecords = readMarkdownSection(
           referencePath,
           "Accepted-risk records",
@@ -543,7 +547,10 @@ describe("skill hardening contracts: security (1/2)", () => {
         `${skillPath}: Phase 5 must rank an unresolved finding above a decided one`,
       );
 
-      const outputFormat = readMarkdownSection(skillPath, "Output Format");
+      const outputFormat = readMarkdownSection(
+        skillPath.replace("SKILL.md", "references/project-policy-template.md"),
+        "Full Assessment output",
+      );
       const postureField = /^- Posture: \[([^\]]+)\]/mu.exec(outputFormat);
       assert.ok(postureField, `${skillPath}: missing Posture report field`);
       assert.deepEqual(
@@ -637,7 +644,32 @@ describe("skill hardening contracts: security (1/2)", () => {
 
   it("covers versioned application and agentic threats plus every Git delta state", () => {
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
-      const skillGuidance = readProjectFile(skillPath);
+      const rootGuidance = readProjectFile(skillPath);
+      // The root keeps the gates and loads each record owner at its consuming phase.
+      assert.match(
+        readMarkdownSection(skillPath, "Step 0 - Intake"),
+        /For every selected baseline.*schema and evidence bindings.*`references\/common-threats\.md` → Application baseline/u,
+        skillPath,
+      );
+      assert.match(
+        rootGuidance,
+        /Before recording findings, read `references\/project-policy-template\.md` → Full Assessment output.*MUST record every S-NN field/u,
+        skillPath,
+      );
+      const skillGuidance = [
+        rootGuidance,
+        readMarkdownSection(
+          skillPath.replace("SKILL.md", "references/common-threats.md"),
+          "Application baseline",
+        ),
+        readMarkdownSection(
+          skillPath.replace(
+            "SKILL.md",
+            "references/project-policy-template.md",
+          ),
+          "Full Assessment output",
+        ),
+      ].join("\n");
       assertMatchesAll(
         skillGuidance,
         [

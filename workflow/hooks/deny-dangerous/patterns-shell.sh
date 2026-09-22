@@ -890,17 +890,17 @@ check_destructive_segment() {
   local bare_redirect_re='^[[:space:]]*>[[:space:]]'
   # A redirect with no producing command empties the destination file.
   if [[ "$cmd" =~ $bare_redirect_re ]]; then
-    block "Redirect to empty file. This truncates the target. Use a safer approach." || return $?
+    block "Redirect to empty file. This truncates the target. Preserve the file; ask the user to truncate or overwrite it manually." || return $?
   fi
   local null_redirect_re='^[[:space:]]*(:|true)[[:space:]]+>{1,2}\|?[[:space:]]*[^[:space:]<>]'
   # A null command followed by redirection truncates a file even though the command itself does nothing.
   if [[ "$CMD_NORMALIZED" =~ $null_redirect_re ]]; then
-    block "Null-command (: / true) followed by redirect truncates the target. Use a safer approach." || return $?
+    block "Null-command (: / true) followed by redirect truncates the target. Preserve the file; ask the user to truncate or overwrite it manually." || return $?
   fi
   local cat_null_redirect_re='(^|[[:space:]])cat[[:space:]]+/dev/null[[:space:]]*>{1,2}\|?[[:space:]]*[^[:space:]<>]'
   # Redirecting /dev/null into a project file erases its current content.
   if [[ "$CMD_NORMALIZED" =~ $cat_null_redirect_re ]]; then
-    block "cat /dev/null redirected to a file truncates the target. Use a safer approach." || return $?
+    block "cat /dev/null redirected to a file truncates the target. Preserve the file; ask the user to truncate or overwrite it manually." || return $?
   fi
   local empty_printf_single_re="printf[[:space:]]+''[[:space:]]*>\\|?[[:space:]]+[^[:space:]]"
   local empty_printf_double_re='printf[[:space:]]+""[[:space:]]*>\|?[[:space:]]+[^[:space:]]'
@@ -908,15 +908,15 @@ check_destructive_segment() {
   local empty_echo_double_re='echo[[:space:]]+(-n[[:space:]]+)?""[[:space:]]*>\|?[[:space:]]+[^[:space:]]'
   # Empty command output still truncates the destination, so harmless-looking output is not a safe write.
   if [[ "$cmd" =~ $empty_printf_single_re ]] || [[ "$cmd" =~ $empty_printf_double_re ]] || [[ "$cmd" =~ $empty_echo_single_re ]] || [[ "$cmd" =~ $empty_echo_double_re ]]; then
-    block "Empty-output redirect truncates the target file. Use a safer approach." || return $?
+    block "Empty-output redirect truncates the target file. Preserve the file; ask the user to truncate or overwrite it manually." || return $?
   fi
   # The clobber operator overrides shell protection against overwriting an existing file.
   if [[ "$CMD_UNQUOTED" == *">|"* ]]; then
-    block "Clobber redirect (>|) overrides noclobber and truncates the target. Use a safer approach." || return $?
+    block "Clobber redirect (>|) overrides noclobber and truncates the target. Preserve the file; ask the user to truncate or overwrite it manually." || return $?
   fi
   # Truncating a file can discard user data and requires a deliberate manual decision.
   if [[ "$cmd" =~ truncate[[:space:]] ]]; then
-    block "truncate can destroy file contents. Verify intent before proceeding." || return $?
+    block "truncate can destroy file contents. Preserve the file; ask the user to truncate or overwrite it manually." || return $?
   fi
 
   local cmd_db_scan="$CMD_LOWER"

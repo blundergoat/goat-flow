@@ -48,7 +48,7 @@ If vague, ask about: goal, symptom/error message, area involved, and what was al
 
 **Browser evidence detection:** URL, local page, screenshot, rendering, or browser console/network symptoms require `.goat-flow/skill-docs/playbooks/browser-use.md`; it owns availability, installation approval, and manual fallback.
 
-Read `references/diagnostic-techniques.md` only for ranking-matrix detail, mutation classification, reduction-method selection, causal-distinction detail, worked diagnosis, or existing-fix reporting.
+For Diagnose/existing-fix modes, read `references/diagnostic-techniques.md` only for ranking-matrix detail, mutation classification, reduction-method selection, causal-distinction detail, worked diagnosis, or existing-fix reporting.
 
 ## Diagnose Mode
 
@@ -114,15 +114,15 @@ First complete approved diagnostic cleanup, confirm each marker, retain user-own
 
 Missing or unsafe original proof: UNVERIFIED; human-owned: HUMAN-PENDING with owner. Remaining symptom: return to D1; no new patch authority. Passing verification does not prove root cause.
 
+Cite the literal reproduction output for any fixed claim.
+
 **3-fix abort rule:** If three independent fixes have failed to resolve the symptom, STOP and reconsider whether the architecture or the root-cause hypothesis is wrong. Do not attempt a fourth patch without first re-entering D1 with a fresh hypothesis set.
 
 **UI bugs:** Rerun the original browser reproduction post-fix. Capture screenshot/state showing the symptom is gone. Follow `.goat-flow/skill-docs/playbooks/browser-use.md`.
 
-**Proof Gate:** Apply the Proof Gate from `skill-preamble.md` to the "fixed" claim - rerun the original repro, cite the literal output, and downgrade to **UNVERIFIED** if the session cannot execute the proof.
-
 ## Debug Integrity
 
-Every diagnose-mode report ends with this section. It tells the reader how much of the investigation is grounded.
+Every diagnose-mode report ends with this section.
 
 - **Files read:** count
 - **Hypotheses assessed:** count (CONFIRMED + ADJUSTED + ELIMINATED + UNRESOLVED); UNRESOLVED means insufficient distinguishing evidence, including untested hypotheses and tested but inconclusive hypotheses
@@ -153,6 +153,7 @@ For each file log: role, connections, evidence tag (OBSERVED / INFERRED).
 ### I3 - Report
 
 Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expected State**, **Evidence tags** (OBSERVED/INFERRED).
+Read `references/diagnostic-techniques.md` → Investigate Report for the layout.
 
 **BLOCKING GATE:** Present report, pause. Human decides: go deeper, switch to diagnose, or close.
 
@@ -160,15 +161,9 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 
 - Diagnose mode MUST write hypotheses AFTER initial read of the primary file
 - Diagnose mode MUST include at least 2 hypothesis categories
-- MUST NOT propose fixes until human reviews diagnosis (D2 to D3 gate)
-- MUST declare scope before deep reading (investigate mode)
-- MUST tag diagnose evidence as OBSERVED, INFERRED, UNVERIFIED, or HUMAN-PENDING
-- MUST include "What I Didn't Read" in every investigation report
-- Universal constraints from skill-preamble.md apply.
 - MUST verify fix doesn't violate architecture constraints
 - Diagnose mode MUST run D1.5 reduction before D2 or evidence a minimal, not-applicable, or unsafe disposition
 - MUST NOT run `git bisect` in reporting-only or no-write mode, or without explicit approval, a clean worktree, validated refs and predicate, and a reset plan
-- MUST include Debug Integrity section in every diagnose-mode report
 
 ## Output Format
 
@@ -202,17 +197,4 @@ Keep Quick output compact. Omit D3, D4, UI, and diagnostic-mutation fields when 
 
 ### Investigate mode (I1–I3)
 
-```markdown
-## TL;DR  <!-- purpose + top signal -->
-## Scope
-- **In scope:** [files / dirs]
-- **Out of scope:** [what was deliberately skipped]
-- **Read estimate vs actual:** [N planned / M actually read]
-## Reading  <!-- one row per file read -->
-| File | Role | Connections | Evidence |
-| --- | --- | --- | --- |
-| `file + semantic anchor` | [role] | [what calls / is called by this] | OBSERVED/INFERRED |
-## Current vs Expected State
-## What I Didn't Read  <!-- skipped files + reasons -->
-## Open Questions
-```
+Use the I3 reference layout; diagnosis-only fields do not apply.

@@ -378,13 +378,24 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, proofClassContract, skillPath);
-      assert.match(skillGuidance, /S-NN:[^\n]+proof-class/, skillPath);
-      assert.match(skillGuidance, /Proof classes:/, skillPath);
+      const outputPath = skillPath.replace(
+        "SKILL.md",
+        "references/project-policy-template.md",
+      );
+      const output = readMarkdownSection(outputPath, "Full Assessment output");
+      assert.match(output, /S-NN:[^\n]+proof-class/, outputPath);
+      assert.match(output, /Proof classes:/, outputPath);
     });
 
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
-      assert.match(skillGuidance, proofClassContract, skillPath);
+      assert.match(skillGuidance, /skill-preamble\.md/u, skillPath);
+      // Shared proof classes apply to all claims; QA additionally extends the Proof Gate beyond completion claims.
+      assert.match(
+        readMarkdownSection(skillPath, "Constraints"),
+        /Proof Gate to every claim made in the gap analysis or testing plan/u,
+        skillPath,
+      );
     });
     assertForEachTarget(
       installedSkillReferencePaths("goat-qa", "references/output-templates.md"),

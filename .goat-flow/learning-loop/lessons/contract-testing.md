@@ -63,7 +63,7 @@ last_reviewed: 2026-09-22
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Incident count:** 15
+**Incident count:** 16
 
 **Latest occurrence:** 2026-09-22
 
@@ -98,6 +98,15 @@ The follow-up meaning review found further losses that the passing contracts had
 
 Restoring these qualifiers and their installed mirrors passed 280 focused checks; this proves contract acceptance, not full runtime skill qualification.
 Compare the decisions a reader would make before and after compression, including qualifiers that no assertion pins.
+
+**Recurrence 2026-09-22 (skill-root reserve):** Static meaning checks found:
+
+- QA's local Proof Gate covers every coverage claim; the shared gate covers completion, fix, and passing claims. Restore the extension: `workflow/skills/goat-qa/SKILL.md` (search: `every claim made in the gap analysis or testing plan`), `test/contract/skill-hardening-shared-2.test.ts` (search: `QA additionally extends the Proof Gate beyond completion claims`).
+- Area audits lost Footgun Cross-Check and Systemic Patterns when the both-mode directive was removed; all 241 contracts still passed. Restore and pin both routes: `test/contract/skill-hardening-review-1.test.ts` (search: `keeps area audits independent of diff-only metadata and verdicts`).
+- The umbrella check caught clarity's removed `Accept one target form:`, which its quality prompt uses to count forms. Restore it: `test/unit/quality-report-contract.test.ts` (search: `goat-clarity target forms must stay parseable`).
+- Restore critique's three named brevity-rule sections: `workflow/skills/goat-critique/SKILL.md` (search: `Terse-first directive`).
+
+Preserve applicability when consolidating procedures; test relocated fields through their actual owners. These checks do not qualify runtime skill behaviour.
 
 **Root cause:** Edited prose carried both durable anchors and conditions that token checks did not fully protect.
 
@@ -251,7 +260,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Recurrence (2026-08-15):** Goat-clarity's first-use cardinality proof expected literal lowercase agent and selector IDs, while the receipt template allowed a free-form integration name and accepted invocation. Real agents emitted values such as `Codex`, `uncommitted files`, and Markdown-emphasized labels, so a complete receipt could never satisfy its consumer. The correction makes canonical IDs part of the producer contract and lets the scanner ignore optional emphasis without weakening the values. Evidence anchors: `workflow/skills/goat-clarity/SKILL.md` (search: `Agent: <claude | codex | antigravity | copilot>`) and `test/contract/skill-hardening-clarity.test.ts` (search: `Selector: <github-pr | uncommitted | paths>`; the selector kinds collapsed to `paths` on 2026-08-19 when path lists became one selector).
 
-**Recurrence (2026-08-17):** New goat-clarity disposition contracts first rejected correct Markdown wrapping at `uncertain identity` and `bound comparison baseline`, while an older literal assertion rejected the grammatical change from `keep` to `keeps`. The correction made whitespace flexible only inside the same bounded sentence and aligned the existing phrase pin with the producer without weakening the replacement-coverage requirement. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `rename-shaped pair with uncertain\s+identity`) and `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the original until replacement coverage passes`).
+**Recurrence (2026-08-17):** New goat-clarity disposition contracts first rejected correct Markdown wrapping at `uncertain identity` and `bound comparison baseline`, while an older literal assertion rejected the grammatical change from `keep` to `keeps`. The correction made whitespace flexible only inside the same bounded sentence and aligned the existing phrase pin with the producer without weakening the replacement-coverage requirement. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `rename-shaped pair with uncertain\s+identity`) and `test/contract/skill-hardening-clarity.test.ts` (search: `reports test-value dispositions without mutating test meaning`).
 
 **Recurrence (2026-08-29):** A preflight contract used one greedy file-wide regex to require `instruction-files`, `new Set`, and `instruction_file`. Replacing the owned mode body with `process.exit(0)` still matched those tokens in later sibling modes, so the test could pass after deduplication was removed. The correction locates the exact `instruction-files` mode boundaries, slices only that owner, and asserts the deduplication tokens inside it. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `instruction-files must remain a bounded manifest mode`).
 

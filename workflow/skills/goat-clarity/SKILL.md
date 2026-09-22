@@ -156,9 +156,7 @@ reference's selector-driven non-semantic lane proves comment/private-name-only e
 waives only per-case value and disposition rows; otherwise the full case-level manifest and four-part
 value gate apply.
 
-Each assessed test gets one row. Apply the four-part value gate: plausible regression, user or business
-impact, current overlap, and stable observable contract. `PRUNE CANDIDATE` needs proof no replacement
-is required; `CONSOLIDATE` or `MOVE LEVEL` keeps the original until replacement coverage passes.
+Each assessed test gets one row under `test-selection.md`'s four-part value gate and replacement safeguards.
 
 Before assessing cases, load `.goat-flow/skill-docs/playbooks/test-selection.md` (`Decision Record and Handoff`).
 Added-test dispositions and the other disposition meanings and equations apply to every existing, added, removed, relocated, and materially changed row.
@@ -261,35 +259,32 @@ verification results, command status, and separate claim verdicts. Failure/unava
 
 ## Clarity Remediation Receipt
 
-Use the reference's selected-unit, changed-span, and command-evidence ledgers. Give every selected unit one class and one outcome;
-map every changed span to its finding or formatter reflow.
+Use the reference's selected-unit, changed-span, and command-evidence ledgers: every selected unit gets one class/outcome;
+every changed span maps to its finding or formatter reflow.
 
-Presentation may vary; meanings remain stable. Use lowercase agent ID and selector kind.
+Lowercase agent ID/selector kind.
 
 ```text
 Agent: <claude | codex | antigravity | copilot>
 Selector: <github-pr | uncommitted | paths> — <accepted target>
 Snapshot: <frozen identity/authority>
 Documentation writes: <granted | withheld>
-Write paths: <authorized repository-relative paths>
-Unit totals: <classification and outcome counts separately reconcile inventory>
-Modified: <units changed and diagnosed reason>
-Compliant unchanged: <clarity assessed; no finding>
-Preserved protected: <byte evidence only; clarity NOT_CHECKED>
-Deferred: <valid findings requiring Scope v2 or another workflow>
-Excluded: <units outside selector eligibility>
-Inaccessible: <units that could not be read>
-NOT_CHECKED: <claims or proof not completed>
-Test-selection record: <disposition counts and evidence-backed drop, deletion, restore, or replacement candidates, or not applicable>
-Formatter proof: <capability/discovery; exact commands/flags; baseline/final statuses and literal results, or omission reason>
-Verification: <literal commands and results>
+Write paths: <paths>
+Unit totals: <classification totals; outcome totals; each reconciles inventory>
+Modified: <units; diagnosed reasons>
+Compliant unchanged: <units>
+Preserved protected: <units>
+Deferred: <findings; required route>
+Excluded: <units>
+Inaccessible: <units>
+NOT_CHECKED: <claims; missing proof>
+Test-selection record: <dispositions and evidence per test-selection.md; or not applicable>
+Formatter proof: <capability/discovery; baseline/final command records; or omission reason>
+Verification: <command-evidence ledger>
 Summary: <paste-ready pull-request summary when requested or needed for headless/sub-agent handoff; otherwise not requested>
 ```
 
-A receipt is complete when formatter capability is classified, or deliberately omitted with a reason at the no-eligible-unit exit
-or an established read-only lane.
-`READY` needs baseline and final
-results, `NOT_FOUND` needs its discovery evidence, and `AMBIGUOUS` blocks mutation.
+Complete the reference's formatter-capability record: `READY` requires baseline and final results; `NOT_FOUND` requires discovery evidence; `AMBIGUOUS` blocks mutation. Only the no-eligible-unit exit or an established read-only lane may omit it, with a reason.
 
 With no diagnosed findings, keep labels in a compact summary. Never combine unlike units.
 

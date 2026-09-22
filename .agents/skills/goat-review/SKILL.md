@@ -17,14 +17,14 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth read `.goat-flow/s
 
 ## Step 0 - Scope, Size, Spec
 
-> "Review [X]: diff (quick), PR review against a base branch (quick by default), or area audit + DoD cross-checks (full)?"
+Select diff (Quick), PR (Quick default), or area audit (Full).
 
 - If user already says "quick", "PR", or "full", or the dispatcher set depth, follow unless material risk forces Full; clarify vague scope.
 - Use explicit input, then combined dirty worktree; else measure diff. Above 20 files or 3000 changed lines, propose chunks and stop before Pass 1; review accepted chunks only. Declined chunking emits the scope snapshot and `Review stopped: chunking-declined`, then stops without findings. Request PR/base/head, commit/range, worktree, or area; never guess commit windows.
 
 **PR/base, clean worktree:** without checkout, resolve explicit → configured (`.goat-flow/config.yaml` → `skills.goat-review.local_pr_base`) → remote HEAD → prompt → `main`; fetch only with network approval. Record URL/baseRefName/source/SHA/failures. Automated-review conclusions stay unread until both local passes finish.
 
-**Scope sizing:** `references/examples.md` (search: `Depth Signals`). A material-risk override → Full; else 3+ → full, 2 → offer, 0–1 → quick. Refused Full: `risk-depth-declined`, Conclusion `partial`, verdict max `PARTIAL`.
+**Scope sizing:** Apply `references/examples.md` (search: `Depth Signals`) and its Material-Risk Override. Refused Full: `risk-depth-declined`, Conclusion `partial`, verdict max `PARTIAL`.
 
 **Pass 0 gates:** with explicit current-session consent, run non-fixing instruction/CI gates once; never fix/rerun. Use `references/examples.md` → `Pass 0 Automated Gates`; only host-proven changed-code is a defect. Emit `Gates: run | skipped (<reason>) | unavailable`; non-run adds `gates-not-run`; tracked mutation stops.
 
@@ -100,13 +100,13 @@ Fetch `gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=
 
 ### Severity + Action Tagging
 
-Assign stable `R-001…` IDs in report order; reuse in risks/refuter output. `MUST` blocks; `SHOULD` fixes before merge unless disputed; `MAY` is optional. SEVERITY is exactly `MUST`, `SHOULD`, or `MAY`; a reviewed project's own severity ordering ranks findings but never fills that slot. Actions: `patch`, `needs-decision`, `intent-mismatch`, `needs-signal`; `pre-existing` is area-audit-only.
+Assign stable `R-001…` IDs in report order; reuse throughout. `MUST` blocks; `SHOULD` fixes before merge unless disputed; `MAY` is optional. SEVERITY is exactly `MUST`, `SHOULD`, or `MAY`; a reviewed project's own severity ordering ranks findings but never fills that slot. Actions: `patch`, `needs-decision`, `intent-mismatch`, `needs-signal`; `pre-existing` is area-audit-only.
 
 **Evidence before severity:** resolve reachability, attacker control, preconditions, authentication, and blast radius. When axes disagree, use the lower tier; cap threat-model boosts at one tier.
 
 Prefix: `R-NNN [SEVERITY:ACTION]`.
 
-**Proof Capsule:** use `RUNTIME` | `CONTRACT-GREP` | `STATIC` | `NOT-REPRODUCED`. Evidence tags measure certainty, proof classes method, verdicts disposition; `UNVERIFIED` ≠ `NOT-REPRODUCED`. MUST/correctness-SHOULD prefer runtime/grep; NOT-REPRODUCED adds `not-reproduced-findings`.
+**Proof Capsule:** use the preamble's proof class. Evidence tags measure certainty, proof classes method, verdicts disposition; `UNVERIFIED` ≠ `NOT-REPRODUCED`. MUST/correctness-SHOULD prefer runtime/grep; NOT-REPRODUCED adds `not-reproduced-findings`.
 
 **Self-consistency check:** extract `{R-id, file, anchor, action}`. Same-file findings sharing a semantic location with opposite prescriptions demote both one rung and add `Tension with R-0NN`.
 
@@ -121,7 +121,7 @@ Group 3+ findings with one root under `## Systemic Patterns` at highest severity
 
 ### Footgun Cross-Check
 
-Check INDEX-first footguns and `references/review-traps.md`; include matches, reword once before omitting. A confirmed review-reasoning miss follows learning-loop VERIFY.
+Use preamble retrieval for footguns; read `references/review-traps.md`.
 
 **BLOCKING GATE:** Present Findings, risks, and Review Integrity; pause. Pending Pass 3 may use `PENDING REFUTER/HUMAN` only without an active MUST/intent-mismatch; final output requires a terminal verdict.
 
@@ -182,7 +182,6 @@ Offer Pass 3 for opt-in, `coverage-degraded`/`high-inference`, or MUST-needs-dec
 - **Refutations logged:** `<N>` | `<N> (persist-skipped)`.
 - **Review validator:** `validated` | `validator-unavailable`.
 - **Gate evidence:** pass/changed-code/pre-existing/infrastructure/unresolved counts.
-
 - **Degradation flags:** `persist-skipped: redactor-unavailable`, `chunked-partial`, `gates-not-run`, `gate-evidence-incomplete`, `risk-depth-declined`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `callsite-completeness-grep-only`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`, `refuter-citation-unverified`.
 
 - **Conclusion:** `partial` for `chunked-partial` or `risk-depth-declined`; `high-inference` for inference-only limits; else `coverage-degraded`; disclosures alone `confident`.
@@ -199,16 +198,14 @@ Never emit a whole field for `n/a` except failed PR ingestion; subvalues may.
 ## Constraints
 
 **Both modes:**
-- MUST apply Blast Radius, severity/action tags, Footgun Cross-Check, systemic grouping, and Review Integrity
-- MUST NOT surface Pass 2-refuted suspicions
+- MUST apply Footgun Cross-Check and Systemic Patterns.
 - MUST chunk per Step 0; oversized scopes never enter Pass 1 unchunked, and a decline ends at the terminal Step 0 receipt
-- After each accepted chunk, host-redact `.goat-flow/logs/review/goat-review-chunks.<random>.md` with the scope snapshot, bound authority, chunks completed, chunks remaining, findings with R-IDs, and refutation ledger. Resume by re-binding the same authority, verify no drift, continue at the next chunk, and emit one consolidated verdict. Drift stops.
+- After each accepted chunk, apply `references/examples.md` → Frozen Bundle for the redacted receipt and resumption. Re-bind authority before continuing; drift stops.
 - If skipped, record `Spec drift: skipped` without a degradation flag
 - MUST NOT edit files unless user separately says to apply, edit, update, fix, or implement; MUST NOT frame Pass 1/Pass 2 as doer/verifier
-- **Consequence Gate:** every MUST/SHOULD finding MUST state concrete harm (breakage, leaks, regressions, silent failure, corruption, or blockage). Without named harm, downgrade to MAY.
+- **Consequence Gate:** every MUST/SHOULD finding MUST state concrete harm. Without named harm, downgrade to MAY.
 - **Ship Verdict (diff/PR or release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. Ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` lowers one rung.
 - **Zero-findings HALT:** Name checked surfaces and why none surfaced.
-- Universal constraints from `skill-preamble.md` apply.
 
 ## Output Format
 

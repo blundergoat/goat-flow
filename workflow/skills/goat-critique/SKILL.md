@@ -26,7 +26,7 @@ Use for multi-perspective critique of a plan, security assessment, debug hypothe
 | "Inline role-play is faster than spawning agents" | Inline lenses correlate; isolated contexts create independent findings. |
 | "Closing checks happen after the main answer - skip them" | Phase 5.5 and outcome capture exist because agents skip closing work. |
 
-**Direct invocation is binding.** `$goat-critique` or `/goat-critique` runs Phases 1-5 plus 5.5/5.6. Raise scope concerns after synthesis.
+**Direct invocation is binding.** Raise scope concerns after synthesis.
 
 **Report-only by default.** `$goat-critique make X shorter` critiques; `then apply it` permits application after the gate. Constraints own mutation.
 
@@ -71,11 +71,11 @@ C has no lens quota; use `N/A - fresh-eyes scope` when a lens adds nothing.
 
 Full directives: `references/sub-agent-directives.md`.
 
-- **A (Risk):** SKEPTIC/ANALYST/STRATEGIST on risks, 2nd-order impacts, fastest safe path. Must cite downstream files by name.
-- **B (Alternatives):** SKEPTIC/ANALYST/STRATEGIST on alternatives, ranked by implementation friction. Must surface at least one alternative.
-- **C (Fresh Eyes):** Flags unstated assumptions and readability gaps using the permitted payload; follow the reference's ISOLATION RULE.
+- **A (Risk):** Risks, 2nd-order impacts, fastest safe path; cite downstream files by name.
+- **B (Alternatives):** At least one alternative, ranked by implementation friction.
+- **C (Fresh Eyes):** Assumptions/readability within the reference's ISOLATION RULE.
 
-Each sub-agent normally returns the reference pack's Result envelope and Per-finding output spec, including Proof class. Three to seven findings is the normal range; zero uses the same envelope with an empty finding list after one documented second pass.
+Each sub-agent normally returns the reference's Result envelope and Per-finding output spec, including Proof class. Constraints govern clean returns; Phase 2 checks completeness.
 
 **Lens coverage:** A/B analyse every lens; C probes assumptions/readability. See Lens-finding floor.
 
@@ -135,8 +135,6 @@ Before drafting, apply Final-finding schema and Audit payload identity from `ref
 
 **Blind spot check:** List unaddressed artifact sections, unmapped rubric aspects, and unread referenced files as "What Wasn't Critiqued." Name actual limits, or a supported `none identified` statement within a declared scope; never invent one.
 
-**Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion.
-
 **Phase 5.5 - Meta-audit.** Give the 2-call meta-agent a self-contained packet: frozen draft with `report_revision`, selected dimensions, and the reference pack's complete Meta-audit rubric (including Packet vocabulary), Final-finding schema, and Audit payload identity. It grades only that packet. Score each 0 or 10; their sum is `Meta-score`; no partial credit. `## Auto-Detected Issues` contains failures; at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict; corrections edit the report only.
 
 **Persist final:** Before this gate, save the audited report as a fresh `finalized` record through **Saved records and recovery**.
@@ -159,7 +157,7 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 
 ## Constraints
 
-- MUST run in one mode: full delegated, Phases 1-5 plus 5.5/5.6, three critique sub-agents plus one meta-agent. 5.5 runs before the human gate; 5.6 after the human responds. Quick/lite modes were removed: single-context lenses are self-talk, not multi-perspective critique.
+- MUST run in one mode: full delegated, Phases 1-5 plus 5.5/5.6, three critique sub-agents plus one meta-agent.
 - Explicit `$goat-critique` or `/goat-critique` invocation IS consent to spawn sub-agents and the full protocol. Do NOT ask again.
 - Report-only by default. Do not mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement. If interrupted, freeze writes.
 - MUST Spawn all three sub-agents in a single parallel batch. Preserve separate input payloads and no result sharing; timing alone does not prove independence.
@@ -175,7 +173,7 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 
 ## Output Format
 
-**Terse-first directive:** Informational sections (Sub-Agent Comparison Matrix, Retracted Findings, What Wasn't Critiqued) default to terse: one sentence per bullet, no qualifiers, no closing offers. Gate prompts and evidence-tagged findings retain full detail.
+**Terse-first directive:** Sub-Agent Comparison Matrix, Retracted Findings, and What Wasn't Critiqued default to one sentence per bullet, no qualifiers or closing offers. Gates and evidence-tagged findings retain full detail.
 
 Use this for the Phase 5 gate response. Omit `## Outcomes` until Phase 5.6. Empty sections collapse to `none`.
 

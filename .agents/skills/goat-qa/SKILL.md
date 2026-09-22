@@ -197,9 +197,9 @@ Misaligned effort is an observed test-to-risk mismatch. Evidence must show dupli
 
 Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; NONE=1.0, STRUCTURAL=0.66, PARTIAL-BEHAVIOURAL=0.33, BEHAVIOURAL=0. Output:
 
-- **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per behaviour/invariant: file + code anchor, missing assertion, value-gated disposition, and intended owning surface or next evidence check.
-- **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path and value-gated disposition.
-- **Defer** - every matrix Defer pair: LOW-risk rows or a named behaviour with BEHAVIOURAL coverage. Record `SKIP`, `KEEP`, or another evidence-backed disposition as applicable. A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file.
+- **Blocking gaps** - every matrix Blocking pair. One line per behaviour/invariant: file + code anchor, missing assertion, value-gated disposition, and intended owning surface or next evidence check.
+- **High-value additions** - every matrix High-value pair; describe the untested path and value-gated disposition.
+- **Defer** - every matrix Defer pair; record an evidence-backed disposition. A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file.
 - **Misaligned effort** - evidence-backed test-to-risk mismatches with an existing-test disposition, or `none found` with named comparison.
 
 **Illustrative scenario - input/output shape only; never evidence.**
@@ -220,11 +220,9 @@ After a verified fix, cite its source; define the human-readable invariants; com
 - MUST use the declared mode's priority tiers: Standard uses "must test / should test / safe to skip"; Audit uses "Blocking / High-value / Defer"
 - MUST include Verification Integrity section
 - MUST run the Candidate Disproval Pass before every gated or final output and preserve killed candidates under Refuted Candidates
-- MUST apply the Proof Gate from `skill-preamble.md` to every claim made in the gap analysis or testing plan
-- MUST tag every finding/claim row with proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
+- MUST apply the preamble's Proof Gate to every claim made in the gap analysis or testing plan.
 - MUST apply `test-selection.md` before recommending an addition or an existing-test change; priority never substitutes for disposition
 - MUST NOT generate test code - hand off to the coding agent
-- Universal constraints from skill-preamble.md apply; per-mode MUSTs live in the phase bodies (Phase 1 diff/risk/blast-radius; Audit A2/A4), not restated here.
 - If flow diagrams are requested, use Mermaid flowcharts (8-15 nodes, happy path first, annotate gap status per node).
 - Regression guard: MUST state invariants as human-readable sentences; MUST cite prior fix-verification source; MUST NOT verify the fix itself
 - MUST defend zero-gap results explicitly: state what was checked and why no gaps surfaced. Zero gaps without justification is an error condition, not a clean bill.

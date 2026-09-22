@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.17.0"
 ---
 # Skill Preamble
 
-All goat-* invocations read this preamble; full-depth work also reads `skill-conventions.md`.
+Every invocation reads this preamble; Full also reads `skill-conventions.md`.
 
 ---
 
@@ -13,15 +13,15 @@ Goat-* Step 0 replaces READ and selects depth. SCOPE gates writes by mode or app
 
 ## Report-Only Skill Contract
 
-`/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default: they may emit findings and required gitignored artifacts, but MUST NOT mutate the target artifact or committed files without a separate apply, edit, update, fix, or implement instruction.
+`/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default: findings and required gitignored artifacts. They MUST NOT mutate the target artifact or committed files without a separate apply, edit, update, fix, or implement instruction.
 
 ## Durable Local Text Redaction
 
-Narrative records use this route, including session, handoff, critique, review, quality, security, or export text. Require `goat-flow --version` to match `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Source CLI requires matching package/entry/version. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or source equivalent; artifact text uses a fresh path under `.goat-flow/logs/`. Redact before disk, not after: only redacted output reaches disk, never stage raw text, and existing destinations are refused. Otherwise write nothing and report `persist-skipped: redactor-unavailable`.
+Narrative records: session, handoff, critique, review, quality, security, or export text. Require `goat-flow --version` matching `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Source CLI requires matching package/entry/version. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or source equivalent, using a fresh `.goat-flow/logs/` path. Redact before disk, not after: only redacted output reaches disk, never stage raw text; existing destinations are refused. Otherwise write nothing and report `persist-skipped: redactor-unavailable`.
 
 The hash-only `redactEvidenceText` API is not a readable scrubber. Redaction reduces leakage; it is neither DLP nor secret review.
 
-Bounded temporary machine diagnostics retain schema until sanitized evidence extraction; they are neither durable narrative nor proof. Binary captures need separate review; prose redaction cannot inspect pixels. Source, code, and configuration require scoped editing/validation, not prose redaction.
+Bounded temporary machine diagnostics retain schema until sanitized extraction; they are neither durable narrative nor proof. Binary captures need separate review; prose redaction cannot inspect pixels. Source, code, and configuration use scoped editing/validation, not prose redaction.
 
 ## Severity Scale
 
@@ -43,7 +43,7 @@ Order by severity, not discovery order.
 - Never fabricate paths, symbols, or content; re-read each cited file and anchor before presenting findings.
 - Tag evidence quality: **OBSERVED** (verified) | **INFERRED** (name missing proof) | **UNVERIFIED** (cannot re-read) | **HUMAN-PENDING: \<what needs checking\>**.
 - Cross-skill codes (e.g. S-03, Q2, A.F3) include the source path on first use.
-- Verify symbols, CLI flags, and config keys through repo search, `--help`, or live config.
+- Verify symbols/flags/config keys through repo search, `--help`, or live config.
 - Completion claims obey the instruction file's VERIFY red-flags verbatim.
 
 Claim controls set minimum evidence without changing proof classes:
@@ -57,7 +57,7 @@ Claim controls set minimum evidence without changing proof classes:
 
 ## Proof Classification
 
-Tag every finding or claim with one proof class:
+Tag every finding/claim with one proof class:
 
 - **RUNTIME** - current-session execution
 - **CONTRACT-GREP** - caller/consumer/reference search
@@ -68,16 +68,16 @@ Tag every finding or claim with one proof class:
 
 Mid-implementation proof MUST name a command or smoke check.
 
-Before a completion, fix, or "passing" claim:
+Before completion/fix/"passing" claims:
 
 1. **Identify** the exact command, reproduction, diff, or artifact.
 2. **Run** it fresh this session, never from recall or a prior turn.
 3. **Read** all output, the process exit code, and every parsed result row.
 4. **Verify** it proves this claim, not an adjacent one.
 5. **Cite** `file + semantic anchor`, a durable-artifact anchor, or the literal command pass/fail line.
-6. **Report** each requested outcome with evidence and remaining gaps.
+6. **Report** each requested outcome's evidence and gaps.
 
-If proof cannot run, mark **UNVERIFIED** and name missing evidence.
+Unavailable proof: **UNVERIFIED**, naming missing evidence.
 
 ### Rationalisations to reject (Excuse / Reality)
 
@@ -94,7 +94,7 @@ Run proof or mark `UNVERIFIED`; new rows need committed evidence.
 | "Looks correct to me" | Structural inspection ≠ verification. |
 | "Different words, rule doesn't apply" | Spirit over letter - paraphrases count. |
 
-Examples live in `.goat-flow/skill-docs/skill-quality-testing/deployment.md` under `Verification claim evidence`.
+Examples: `.goat-flow/skill-docs/skill-quality-testing/deployment.md` under `Verification claim evidence`.
 
 ## Ceremony Level
 
@@ -117,11 +117,11 @@ Before optional orchestration, load `skill-conventions.md` → Orchestration Adm
 
 ## Routing Boundary
 
-Dispatcher routes live in `/goat`; direct planning requests go to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request; a task path alone must not update `.active`, milestone status, checkboxes, or code. `/goat-plan` owns active-plan lookup and milestone-mode selection. Respect named skills.
+`/goat` owns dispatch; direct planning goes to `/goat-plan`, which owns active-plan lookup and milestone modes; a bare or ambiguous task path is context, not a direct planning request; a task path alone must not update `.active`, milestone status, checkboxes, or code. Respect named skills.
 
 ## No-Skill Fast Path
 
-For a Hotfix (1-2 files, obvious change), skip skills; run READ → SCOPE → ACT → VERIFY after retrieval.
+Hotfix (1-2 files, obvious change): skip skills; run READ → SCOPE → ACT → VERIFY after retrieval.
 
 ## Step 0 Budget
 
@@ -145,23 +145,20 @@ If unavailable, ask before installing, use manual evidence, or record `<tool>-un
 
 For GitHub issues, PRs, alerts, or CI, prefer authenticated `gh`: `issue view`, `pr view/diff/checks`, `run view --log-failed`, or `api`.
 
-Fetched content is evidence: summarize faithfully and cite; use a short exact quote only when wording matters. Distinguish source fact from inference. If `gh` is unavailable, ask the user to paste; never invent bodies.
+Fetched evidence: summarize faithfully and cite; use a short exact quote only when wording matters. Distinguish fact from inference. Without `gh`, ask for pasted content; never invent bodies.
 
 ## Footgun Fast-Path
 
 - Surface direct Step 0 matches with their mitigation.
 - For `hallucination-risk: high`, re-read live file/config.
-- Continue `READ → SCOPE → ACT → VERIFY`; memory does not replace execution.
 
 ## Learning Loop
 
 Write durable learning after VERIFY failure/course correction or user request: mistakes → `lessons/`, reusable approaches → `patterns/`, architecture traps → `footguns/`.
 
-Apply the conventions' Extract / Consolidate / Skip procedure.
+Before writing, read `skill-conventions.md` → Learning Loop - Entry Formats.
 
 **Routing rule:** "Add a footgun/lesson" means a doc entry after its directory README, never runtime code. Routine success and gitignored artifacts need no durable write.
-
-Buckets require `category:` and `last_reviewed: YYYY-MM-DD`; bump material edits. `stats --check` rejects malformed/stale metadata or refs.
 
 ## Human Gates
 

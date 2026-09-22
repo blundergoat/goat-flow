@@ -101,15 +101,13 @@ Start task text with the operation; prefer about 25 words excluding tags and est
 
 Verify existing paths, symbols and behavior against the target revision before naming them. Label proposed paths as new and unresolved anchors `(confirm: what)`; schedule the investigation before dependent implementation.
 
-For issue, PR, or handoff exports, read `references/issue-format.md` → Human-facing exports. Compare saved first/final drafts and claim only visible corrections; an unchanged valid draft is a valid second pass. Run commands on the saved artifact, separating structural acceptance, task coverage, and forecast evidence.
-
-Treat every ISSUE, including local drafts, as requester-facing. Before delivery, read it without the milestone open. Replace private task/proof references with needed acceptance facts; removing IDs while sending readers to unavailable material is insufficient.
+For every ISSUE draft, PR, or handoff export, read `references/issue-format.md` → Human-facing exports before drafting and delivery; it owns audience checks and saved-draft proof.
 
 **Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin; exclude `[HUMAN]` and zero-minute items. `Forecast basis:` records agent work units, rates, and historical `source:` quantiles. Use `1.0-2.5-6 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Execution uses `references/milestone-examples.md` → Timing receipts. `Forecast range:` is required with a basis; legacy points and range-only estimates remain valid.
 
 Before authoring or revising forecasts, read `references/milestone-examples.md` → Effort Estimates for work counting, history selection, fast-case evidence and immutable revisions. Read `references/issue-format.md` → Forecast presentation when summarizing delivery.
 
-**Readable narrative, specific tasks:** Apply `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` to non-checkbox ISSUE and milestone prose. Keep necessary facts and shorten explanation. Checkbox tasks name a concrete action, technical target and checkable result; task criteria, commands and fixed fields retain their exact meaning. Use the reference's audience-specific task guidance.
+**Readable narrative, specific tasks:** Apply the preamble's human-prose route and exemptions; `references/issue-format.md` owns audience-specific task guidance.
 
 **Cold-start bar:** Identify files, conventions, scope, commands, and recovery.
 

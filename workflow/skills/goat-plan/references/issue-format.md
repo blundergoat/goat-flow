@@ -72,6 +72,10 @@ Apply these rules when copying milestone content into an issue, PR or handoff. P
 
 These export rules also govern ISSUE drafts stored beside milestones. Local storage does not make the requester an executor with access to private files. Replace “the work plan owns detailed tasks” or “requirements map to the milestone checks” with the actual acceptance facts needed here.
 
+Before delivery, read every ISSUE without the milestone open. Replace private task/proof references with needed acceptance facts; removing IDs while sending readers to unavailable material is insufficient.
+
+Compare saved first/final drafts and claim only visible corrections; an unchanged valid draft is a valid second pass. Run commands on the saved artifact, separating structural acceptance, task coverage, and forecast evidence.
+
 For one milestone with several deliverables, allocate shares of its recorded low, likely and high totals across the required delivery phases. Sum the shares back to the original forecast and label them delivery allocations, not independently calibrated forecasts. Avoid counting the milestone twice or collapsing distinct deliverables merely to avoid allocating its total.
 
 Before export, inspect every prose section, table and checklist for unexplained IDs, private pointers and stale alternatives. Check task coverage separately from length: a compact sentence can still hide several deliverables. Use verified technical anchors; the other project's examples describe its incident, not facts about this repository.

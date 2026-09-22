@@ -303,6 +303,12 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         /\*\*Both modes:\*\*[\s\S]*MUST chunk per Step 0/u,
         skillPath,
       );
+      // These procedures live under the diff path, so area audits need an explicit import.
+      assert.match(
+        constraints,
+        /\*\*Both modes:\*\*[\s\S]*MUST apply Footgun Cross-Check and Systemic Patterns/u,
+        skillPath,
+      );
       assert.match(
         outputFormat,
         /Source coverage: <canonical JSON>/u,
@@ -401,7 +407,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       );
       assert.match(
         scope,
-        /PR review against a base branch \(quick by default\)/u,
+        /Select diff \(Quick\), PR \(Quick default\), or area audit \(Full\)/u,
         skillPath,
       );
       assert.match(
@@ -419,7 +425,11 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         "Step 0 - Scope, Size, Spec",
       );
       assert.match(scope, /search: `Depth Signals`/u, skillPath);
-      assert.match(scope, /3\+ → full, 2 → offer, 0–1 → quick/u, skillPath);
+      assert.match(
+        scope,
+        /Apply.*Depth Signals.*Material-Risk Override/u,
+        skillPath,
+      );
       assert.match(scope, /Refused Full/u, skillPath);
       const modes = readMarkdownSection(
         skillPath,

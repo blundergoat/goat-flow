@@ -114,6 +114,8 @@ Ordinary anchors default to new content, or old content for a deletion. For old-
    `chunked-partial`, never `n/a` or complete.
 6. List unique completed files in `Source coverage`; Size and opened-file totals retain the full selected inventory. A partial path earns no completed entry. Sampled areas name roots, selected paths, and excluded surroundings in full output.
 
+After each accepted chunk, host-redact `.goat-flow/logs/review/goat-review-chunks.<random>.md` with the scope snapshot, bound authority, chunks completed, chunks remaining, findings with R-IDs, and refutation ledger. Resume by re-binding the same authority, verify no drift, continue at the next chunk, and emit one consolidated verdict. Drift stops.
+
 ### Pre-persistence Proof Envelope
 
 Keep every report and any refutation ledger in memory through this ordered gate:

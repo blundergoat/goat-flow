@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.17.0"
 ---
 # Skill Conventions
 
-Read on **full-depth** invocations only; `skill-preamble.md` always loads first.
+Read on **full-depth** invocations or when the preamble routes here; `skill-preamble.md` always loads first.
 
 ---
 
@@ -14,6 +14,8 @@ Use project-specific buckets such as `verification.md` or `runtime.md`.
 Route entries to `.goat-flow/learning-loop/lessons/`, `patterns/`, or `footguns/`; never to a monolithic log or README.
 
 Before adding, Extract / Consolidate / Skip: search the relevant INDEX and bucket; update one root cause across symptoms; create only distinct causes; skip non-decision-changing material.
+
+Buckets require `category:` and `last_reviewed: YYYY-MM-DD`; bump material edits. `stats --check` rejects malformed/stale metadata or refs.
 
 Each bucket's `README.md` owns its full entry shape, metadata order, evidence labels, and optional fields; read the one you are writing to. The footgun shape is repeated here because it carries the evidence choice every bucket shares:
 
@@ -86,7 +88,7 @@ Artifact text follows `skill-preamble.md` → Durable Local Text Redaction, whic
 
 ## Presenting Findings
 
-For user-facing tasks, findings, or recommendations, use:
+Use the active skill's output contract. Otherwise, present user-facing tasks, findings, or recommendations as:
 
 - **Summary:** what's affected (one line)
 - **Problem:** what's wrong (one line)

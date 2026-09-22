@@ -375,10 +375,68 @@ describe("skill hardening contracts: security (2/2)", () => {
     );
   });
 
+  it("separates copyable project policy from assessment instructions", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/project-policy-template.md",
+      ),
+      (referencePath) => {
+        const template = readProjectFile(referencePath);
+        const bodies = [
+          ...template.matchAll(
+            /^<!-- BEGIN PROJECT POLICY -->\n([\s\S]*?)\n<!-- END PROJECT POLICY -->$/gmu,
+          ),
+        ];
+        assert.equal(
+          bodies.length,
+          1,
+          `${referencePath}: one copyable policy body`,
+        );
+        const policy = bodies[0]?.[1] ?? "";
+        assertMatchesAll(
+          policy,
+          [
+            /^## Policy authority$/mu,
+            /^## Accepted-risk records$/mu,
+            /independently trusted approval evidence/u,
+            /current independently trusted status evidence/u,
+            /records retain `OPEN`/u,
+          ],
+          referencePath,
+        );
+        assert.doesNotMatch(
+          policy,
+          /goat-flow-reference-version|^#{1,3} (?:Validation during assessment|Compliance Mode|Inventory integrity|Full Assessment output)$/mu,
+          `${referencePath}: adopted policy must exclude framework assessment guidance`,
+        );
+      },
+    );
+  });
+
   it("gives goat-security distinct quick and full reporting contracts", () => {
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const output = readMarkdownSection(skillPath, "Output Format");
+      assert.match(
+        output,
+        /For Full\/Compliance reporting, read `references\/project-policy-template\.md` → Inventory integrity.*`coverage-degraded`.*MUST NOT recommend clearance/u,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /Full Assessment output.*Phase 3 reference layout.*Quick retains its own layout/u,
+        skillPath,
+      );
+      const recordsPath = skillPath.replace(
+        "SKILL.md",
+        "references/project-policy-template.md",
+      );
       assertMatchesAll(
-        readMarkdownSection(skillPath, "Output Format"),
+        [
+          output,
+          readMarkdownSection(recordsPath, "Inventory integrity"),
+          readMarkdownSection(recordsPath, "Full Assessment output"),
+        ].join("\n"),
         [
           /Quick Scan output/u,
           /Full Assessment output/u,

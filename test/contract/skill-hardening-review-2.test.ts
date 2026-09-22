@@ -25,7 +25,14 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         "Diff Review - Quick and Full",
       );
       assert.match(crossCheck, /references\/review-traps\.md/u, skillPath);
-      assert.match(crossCheck, /confirmed review-reasoning miss/u, skillPath);
+      // A confirmed reasoning miss is a VERIFY correction, covered by the shared learning owner.
+      assert.match(
+        readMarkdownSection(
+          "workflow/skills/reference/skill-preamble.md",
+          "Learning Loop",
+        ),
+        /Write durable learning after VERIFY failure\/course correction/u,
+      );
       assert.match(skill, /Evidence before severity/u, skillPath);
       // Severity guidance must consider each reachability and impact factor before labeling a user-facing risk.
       for (const axis of [
@@ -346,8 +353,8 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   it("keeps goat-review bound to the universal skill constraints", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       assert.match(
-        readMarkdownSection(skillPath, "Constraints"),
-        /Universal constraints from `?skill-preamble\.md`? apply/u,
+        readMarkdownSection(skillPath, "Shared Conventions"),
+        /Read `\.goat-flow\/skill-docs\/skill-preamble\.md`/u,
         skillPath,
       );
     });
@@ -701,8 +708,21 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       assert.match(skill, /Pre-persistence Proof Envelope/u, skillPath);
       assert.match(
         constraints,
-        /\.goat-flow\/logs\/review\/goat-review-chunks\.<random>\.md/u,
+        /After each accepted chunk.*`references\/examples\.md` → Frozen Bundle.*receipt and resumption.*Re-bind authority.*drift stops/u,
         skillPath,
+      );
+      const receiptPath = skillPath.replace(
+        "SKILL.md",
+        "references/examples.md",
+      );
+      const chunkReceipt = readMarkdownSection(
+        receiptPath,
+        "Scope, Gates, and Frozen Bundle Procedure",
+      );
+      assert.match(
+        chunkReceipt,
+        /\.goat-flow\/logs\/review\/goat-review-chunks\.<random>\.md/u,
+        receiptPath,
       );
       // A resumed review needs each saved state item to continue the same scope and produce one consolidated verdict.
       for (const requiredState of [
@@ -717,9 +737,9 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         "one consolidated verdict",
       ]) {
         assert.match(
-          constraints,
+          chunkReceipt,
           new RegExp(requiredState, "iu"),
-          `${skillPath}: missing resumable chunk state ${requiredState}`,
+          `${receiptPath}: missing resumable chunk state ${requiredState}`,
         );
       }
     });

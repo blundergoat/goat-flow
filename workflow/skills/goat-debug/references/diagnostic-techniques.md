@@ -5,7 +5,26 @@ goat-flow-reference-version: "1.17.0"
 ---
 # Diagnostic Techniques
 
-Load this reference only when the root skill routes here. The root owns mode selection, approval gates, mandatory causal confidence, and output. This file expands conditional techniques; it never authorizes a mutation.
+Load this reference only when the root skill routes here. The root owns mode selection, approval gates, mandatory causal confidence, and required output; this file supplies conditional techniques and report layouts, never mutation authority.
+
+## Investigate Report
+
+Read at I3; preserve its reporting gate and scope. This layout requires no diagnosis or fix history.
+
+```markdown
+## TL;DR  <!-- purpose + top signal -->
+## Scope
+- **In scope:** [files / dirs]
+- **Out of scope:** [what was deliberately skipped]
+- **Read estimate vs actual:** [N planned / M actually read]
+## Reading  <!-- one row per file read -->
+| File | Role | Connections | Evidence |
+| --- | --- | --- | --- |
+| `file + semantic anchor` | [role] | [what calls / is called by this] | OBSERVED/INFERRED |
+## Current vs Expected State
+## What I Didn't Read  <!-- skipped files + reasons -->
+## Open Questions
+```
 
 ## Existing-Fix Verification Report
 
