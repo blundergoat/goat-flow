@@ -2732,7 +2732,7 @@ source "$GOAT_HOOK_LIB_DIR/patterns-writes.sh" || deny_dangerous_unavailable "fa
 
 # During an interrupted upgrade the old policy file can still be present. It
 # must not reach main without the split API and accidentally allow on return 127.
-for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias split_curl_form_parts_into curl_form_files_touch_secret; do
+for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias git_arguments_are_one_of git_flags_within git_arguments_include split_curl_form_parts_into curl_form_files_touch_secret; do
   declare -F "$required_policy_function" >/dev/null ||
     deny_dangerous_unavailable "policy store lacks required function $required_policy_function"
 done
