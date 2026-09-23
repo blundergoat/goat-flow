@@ -1,6 +1,6 @@
 ---
 category: deny-shell
-last_reviewed: 2026-09-18
+last_reviewed: 2026-09-24
 ---
 
 Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
@@ -10,18 +10,22 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 ## Footgun: Command-segment splitter must track substitution depth, not just quotes
 
 **Status:** active | **Created:** 2026-06-06 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 4 | **Latest occurrence:** 2026-09-24
 
 **Prevention:**
 1. A tokenizer splitting shell control operators respects `$(`/`<(`/`>(` boundaries; quotes alone are insufficient, and plain `(...)` subshells stay splittable so `(cmd && rm -rf /)` cannot hide.
 2. "Write to X" detection checks the redirect target; `2>&1` and `2>/dev/null` are not writes.
 3. When a finding blames a downstream catch-all, trace its input token to the tokenizer before relaxing it, and hold chain-count caps at every recursion depth.
 4. Parser refactors grep learning-loop anchors before renaming comments, even when runtime behaviour is unchanged.
+5. Splitting a plain subshell leaves its `(` on the first command and its `)` on the last word, so strip both before any policy reads the segment (search: `strip_subshell_parentheses`). Redirections can follow the closer; remove unmatched closers wherever they occur, preserving quoted and escaped parentheses. Otherwise `push)` and `.env)` miss every exact-word rule.
 
 **Symptoms:** Benign reads denied as `Policy destructive: Complex command substitution` when an unquoted `$(...)` holds a control operator (`echo $(date; whoami)`, `$(grep x f || echo MISS)`) or arithmetic `$((1 + 2))`. Quoting it or dropping the operator passed, so it looked intermittent.
 
 **Why it happens:** `split_command_segments_into` split on `&&`, `||`, `;`, and newlines while tracking quotes but not parenthesis depth, so an operator inside `$( ... )` split it across segments and left an orphan `$(` for the residual catch-all in `check_command_substitutions`. The catch-all was correct; the orphan was manufactured upstream, so the "catch-all too broad" lead was a symptom. Arithmetic was unrecognised by the `$( )`-only scanner.
 
-**Evidence:** `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command/process substitution openers`) tracks `subst_depth` and enforces the cap at (search: `chain-count cap at nested depths`); `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` covers (search: `arithmetic expansion`), (search: `unquoted subst with || fallback`), and (search: `rm behind || inside subst`). Two sibling findings from the same 2026-06-06 release gate: path-prefixed `.env.example` redirect targets such as `> ./.env.example` and `> $HOME/proj/.env.example` exited 0 while the bare form blocked, fixed in the then-current `is_env_example_redirect_write` (removed 2026-07-18 with the whole `.env.example` read-only restriction, so those writes are now allowed); and a nesting-depth cap on `$( )` was added and then reverted after three release-gate agents found false positives on `echo $(dirname $(dirname $(dirname $(pwd))))` for zero security benefit, because dangerous content at any depth already blocks at its own segment. Revert guards: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `count_substitution_openers`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `deep benign path nesting allowed`) and (search: `deeply nested arithmetic allowed`). **Recurrence 2026-07-12:** M31 rewrote the operator comment and removed the `Command/process substitution openers` anchor; runtime and tests passed, and `stats --check` failed `stale-ref` until the phrase was restored.
+**Evidence:** `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command/process substitution openers`) tracks `subst_depth` and enforces the cap at (search: `chain-count cap at nested depths`); `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` covers (search: `arithmetic expansion`), (search: `unquoted subst with || fallback`), and (search: `rm behind || inside subst`). Two sibling findings from the same 2026-06-06 release gate: path-prefixed `.env.example` redirect targets such as `> ./.env.example` and `> $HOME/proj/.env.example` exited 0 while the bare form blocked, fixed in the then-current `is_env_example_redirect_write` (removed 2026-07-18 with the whole `.env.example` read-only restriction, so those writes are now allowed); and a nesting-depth cap on `$( )` was added and then reverted after three release-gate agents found false positives on `echo $(dirname $(dirname $(dirname $(pwd))))` for zero security benefit, because dangerous content at any depth already blocks at its own segment. Revert guards: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `count_substitution_openers`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `deep benign path nesting allowed`) and (search: `deeply nested arithmetic allowed`). **Recurrence 2026-07-12:** M31 rewrote the operator comment and removed the `Command/process substitution openers` anchor; runtime and tests passed, and `stats --check` failed `stale-ref` until the phrase was restored. **Recurrence 2026-09-23:** an adversarial review found `(git push)`, `(cd /tmp && git push)`, `(git reset --hard)` and `(cat .env)` exiting 0 on both hooks while the spaced `( git push )` blocked; `deny-dangerous-self-test.sh` now covers (search: `unspaced subshell publication`) and (search: `subshell secret read with a closer on the last command`).
+
+**Recurrence 2026-09-24:** `(git push) >/dev/null`, `(git restore .) >/dev/null` and `(cat .env) >/dev/null` exited 0 because the closing-parenthesis scan ran only when `)` ended the segment. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `has_unmatched_closing_parenthesis`) now returns the closer's position so normalization can remove it before redirections. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` covers (search: `redirected subshell publication`), (search: `redirected subshell secret read`) and their harmless controls.
 
 ---
 
@@ -98,7 +102,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 **Decision changed:** Reports must use sibling-aware hook facts; a split hook's dispatcher can hide shipped denies.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-08-11
+**Incident count:** 6 | **Latest occurrence:** 2026-09-23
 
 **Prevention:**
 1. Treat a guardrail split as a parser migration: port the old normalization and false-positive corpus before deleting the monolith, and read a large drop in line or self-test count as a review smell until removed coverage maps to new tests.
@@ -119,6 +123,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 - **Recurrence 2026-06-07 startup hang:** `deny_dangerous_unavailable` read stdin before checking invocation mode, so a broken policy store plus `--self-test=full` could block on a TTY. Self-test, `--check`, and TTY invocations now skip the payload read: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `self-test startup should not read stdin`).
 - **Recurrence 2026-07-14 report drift:** M25 labelled Codex push `permissive` while the live audit found the block, because `src/cli/facts/agent/settings.ts` (`checkDenyPatterns`) saw only the dispatcher and `src/cli/facts/agent/hooks.ts` (`siblingGuardrailPaths`) saw the split policy; the report now uses `AgentFacts.hooks.denyBlocksGitPush`.
 - **Recurrence 2026-08-11 option-table abandonment:** `strip_watch_payload_command` and `strip_parallel_payload_command` end their option loops with `-*) return 1`, and both tables carry short forms without long equivalents. At `9adf06be`, `watch git push origin main` and `parallel git push ::: a` exit 2 while `watch --beep git push origin main`, `watch --color git push origin main`, and `parallel --verbose git push ::: a` exit 0; the same commands also exit 0 at base `3db06657`, so the wrapper support narrows the gap rather than opening it. On Codex, Copilot, and Antigravity this hook is the only push block: `workflow/hooks/agent-config/codex.toml` (search: `Command deny policy still lives in those PreToolUse hooks`) records that permission profiles cover filesystem and network access, not command patterns, while Claude also keeps the settings glob `Bash(*git push*)`.
+- **Recurrence 2026-09-23 Git global options:** `__goat_git_strip_globals` skipped `--attr-source` and `--shallow-file` as flags, so their value posed as the Git command and `git --attr-source HEAD push`, `... commit -m x` and `... reset --hard` exited 0 for every agent; the Claude settings glob misses that spelling too. Both options now take values, and an option the table does not list denies as unresolved: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `attr-source value hides publication`) and (search: `unlisted global option`).
 
 ---
 

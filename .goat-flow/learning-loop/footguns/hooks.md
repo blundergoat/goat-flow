@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-09-18
+last_reviewed: 2026-09-23
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. Scanner blind spots live in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -128,6 +128,23 @@ last_reviewed: 2026-09-18
 **Why it happens:** GitHub's [hook-locations contract](https://docs.github.com/en/copilot/reference/hooks-reference#hooks-locations) says Copilot combines repository `.github/hooks/*.json` with the inline `hooks` block in `.claude/settings.json`, and Goat Flow owns both surfaces: `workflow/manifest.json` (search: `"hook_config_file": ".claude/settings.json"`) and (search: `"hook_config_file": ".github/hooks/hooks.json"`). A hook added to both can run twice under Copilot, and a hook added only to Claude can still run under Copilot and bypass a manifest claim that Copilot is unsupported.
 
 **Evidence:** **Recurrence 2026-08-25:** Copilot selected `command: "node"` from the structured Claude row without its `args`, so a safe `pwd` failed before policy startup with a Node syntax error. The accepted descriptor keeps Claude's `command` plus `args` and adds `bash: "exit 0"` and `powershell: "exit 0"`, making the cross-loaded copy inert while `.github/hooks/hooks.json` stays the sole managed Copilot policy source: `src/cli/server/agent-hook-command.ts` (search: `bash: "exit 0"`), `src/cli/server/agent-hook-writer.ts` (search: `handlerDescriptor.bash`), `test/unit/hooks-runtime-evidence.test.ts` (search: `requires Copilot native registration`). **Recurrence 2026-08-26:** the generic hook fact reader returned the top-level `bash: "exit 0"` before the structured `command` plus `args`, so the full harness audit reported both managed Claude hooks unregistered; `src/cli/facts/agent/hook-registration.ts` (search: `function readHookCommand`) now selects exec operands first, pinned by `test/unit/audit-command/hook-facts.test.ts` (search: `reads managed Claude exec operands before inert shell routes`).
+
+## Footgun: Claude policy denials echo the whole launcher command into agent context
+
+**Status:** active | **Created:** 2026-09-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Count each Claude policy denial as roughly 1.5K tokens of context, and keep Claude policy rows on exit-2 denials until a JSON deny is proven to block on malformed output.
+**Trigger phase:** ACT
+**Incident count:** 2 | **Latest occurrence:** 2026-09-23
+
+**Prevention:**
+1. When probing policy shapes the hook will deny, keep them out of Bash command text: write the payload to a file and pass it on stdin, as `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `Write the provider event to a gitignored JSON payload file`) describes, and keep chained commands under the 50-segment cap.
+2. Claude policy rows exit `2` with a stderr reason, so a crashed or silent hook still blocks. A JSON `permissionDecision` of `deny` on exit `0` would return only the reason, but missing or malformed JSON could then read as an allow. Before switching the response mode, capture a live denial and prove malformed output still blocks.
+
+**Symptoms:** Claude Code reports an exit-2 denial as `PreToolUse:Bash hook error: [<command> <args>]: <stderr>`. Both PreToolUse rows in `.claude/settings.json` pass a 6,190-character inline bootstrap as `args[1]`, so each denial puts the whole bootstrap ahead of the one-line `BLOCKED:` reason. The two 2026-09-23 quality assessments hit it four times: a pipe-to-shell probe in the first, then a pipe-to-shell probe, a 50-segment chain and a scratch truncation in the second.
+
+**Why it happens:** ADR-053 moved Claude registrations to exec-form `args` so no shell retokenizes the bootstrap, and its failure-mode comparison weighs transport only. The echo format for exit-2 denials is not in Claude Code's hooks documentation, which states only that a JSON deny feeds `permissionDecisionReason` back to Claude.
+
+**Evidence:** `src/cli/server/agent-hook-command.ts` (search: `structuredHookLaunchBootstrap`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `BLOCKED: Policy %s`), and the unused Claude deny shape in `workflow/hooks/hook-provider-adapters.mjs` (search: `Claude and Codex share the current hookSpecificOutput permission shape`).
 
 ---
 

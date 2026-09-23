@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-09-23
+last_reviewed: 2026-09-24
 ---
 
 External-write traps: pushes, GitHub mutations, and other side effects that leave the machine. They bypass local file guards, so the deny surface is the only control.
@@ -110,16 +110,21 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Decision changed:** History-writing Git verbs live in one set; each non-committing exemption accepts exact spellings only, and alias expansions get no exemption.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 2 | **Latest occurrence:** 2026-09-23
+**Incident count:** 4 | **Latest occurrence:** 2026-09-24
 
 **Prevention:**
 1. When a Git command can create, rewrite or move branch history, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
 2. Write exemptions as exact allowlists (search: `git_arguments_are_one_of`, `git_flags_within`), never "flag appears anywhere". Git accepts abbreviated and negated long options (`git merge -h` lists `--[no-]squash`, `--[no-]commit`, `--[no-]ff`), and a quoted value such as `-m 'x --abort'` reaches the classifier as separate words.
 3. `merge --no-commit` alone still fast-forwards; only `--squash` or `--no-ff --no-commit` leaves HEAD in place.
-4. `git reset --soft HEAD~3` and `git branch -f main HEAD~3` also move a branch and still exit 0 (measured 2026-09-23). Treat them as known gaps, not covered cases.
+4. `git reset --soft HEAD~3`, `git branch -f main HEAD~3`, `git checkout -B main HEAD~2` and `git switch -C main HEAD~2` also move a branch and still exit 0 (measured 2026-09-23). Treat them as known gaps, not covered cases.
+5. Name the blocked verb in the denial (search: `git_history_block_reason`) so the agent asks the developer for that operation, not for a commit. A lone `-h` or `--help` is exempt because it only prints usage.
+6. Match a flag the way Git parses it, inside a short bundle or as a unique long prefix (search: `git_option_present`), including `--pathspec-fr` for `--pathspec-from-file`. Treat a whole-tree, exclusion or glob magic, `*` or `?` glob, parent, pathspec-file or command-substitution argument as bulk (search: `git_pathspecs_name_bulk`). Normalize internal `.` and `..` components before classifying scope: `src/..` covers the current tree, while `src/../README.md` stays targeted. A `[` class alone stays targeted, because it names dynamic-route files such as `app/[id]/page.tsx`. Classify an alias invocation as its expansion plus the arguments Git appends (search: `resolve_git_invoked_alias_command`).
+7. Treat these as known gaps (measured 2026-09-23): arguments supplied through `xargs` or `find` stdin, a quoted pathspec that contains a flag spelling, a variable pathspec other than `$PWD` or `$HOME`, a command substitution before `--` in `checkout`, and environment-backed alias overrides. `reflog expire -n` and `filter-repo --analyze` deny conservatively.
 
-**Symptoms:** `804d98d8` (2026-09-21) added `commit-tree`, `update-ref`, `cherry-pick`, `revert` and `am`. A PR #61 review on 2026-09-22 showed `git merge topic`, `git rebase main` and `git pull --no-rebase origin main` still exited 0 under `deny-git-mutations.sh --check`; reproduced on 2026-09-23 at `86f211d0`.
+**Symptoms:** `804d98d8` (2026-09-21) added `commit-tree`, `update-ref`, `cherry-pick`, `revert` and `am`. A PR #61 review on 2026-09-22 showed `git merge topic`, `git rebase main` and `git pull --no-rebase origin main` still exited 0 under `deny-git-mutations.sh --check`; reproduced on 2026-09-23 at `86f211d0`. Later on 2026-09-23, a quality-assessment payload replay at `53641821` found `filter-branch`, `filter-repo` and `fast-import` exiting 0 on both deny hooks, and every history denial telling the agent to ask for a commit, including `pull` and `rebase`. An adversarial review of that fix then found exact-word matching missing `checkout -fq`, `switch --discard`, `restore ':(top)'` and alias arguments such as `git -c alias.x=stash x clear`. A false-positive replay of 575 shapes against the HEAD policy then showed the widened glob rule denying single route files such as `git restore "app/[id]/page.tsx"`, and a blanket `:` rule denying `:(literal)` and root-anchored single files.
 
 **Why it happens:** The commit class is a list of verbs, so coverage ends at the verbs someone remembered. The old exemptions matched `-n`, `--abort` or `--quit` anywhere in the joined arguments, so they could not rule out an abbreviation, negation or message value.
 
-**Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_history_verbs`, `git_flags_within`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `merge creates history`, `exempt merge alias with appended negation`).
+**Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_history_verbs`, `git_flags_within`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `merge creates history`, `exempt merge alias with appended negation`, `filter-branch rewrites history`, `rebase reason`).
+
+**Recurrence 2026-09-24:** `git restore src/..`, `git checkout -- src/..` and `git restore --pathspec-from-f=paths.txt` exited 0. Git's read-only `ls-files` selected the same tracked paths for `src/..` and `.`. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_pathspecs_name_bulk`) now folds internal parent components and reuses the option-prefix matcher. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` covers (search: `restore of an internal parent path`), (search: `abbreviated attached pathspec file restore`), single-file restores and index-only controls.

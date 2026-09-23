@@ -86,13 +86,13 @@ last_reviewed: 2026-09-16
 
 **Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
 
-**Prevention:** When changing Essential Commands or Router Table rows in one instruction file, grep `CLAUDE.md`, `AGENTS.md`, and `.github/copilot-instructions.md` for the same concept and update them together. Add preflight coverage when the row affects release validation or canonical reference discovery.
+**Prevention:** When changing Essential Commands or Router Table rows in one instruction file, grep `CLAUDE.md`, `AGENTS.md`, and `.github/copilot-instructions.md` for the same concept and update them together. Add preflight coverage when the row affects release validation or canonical reference discovery. `scripts/check-instruction-parity.mjs` (search: `MAX_INSTRUCTION_LINE_CHARACTERS`) caps every instruction line at 800 characters, and the Ask First `Boundaries:` line sits near that cap: measure it before adding a boundary, then compress or split it identically in all three files.
 
 **Symptoms:** One agent receives weaker release or routing guidance than the others although the three hot-path files are meant to express one core contract.
 
 **Why it happens:** Claude, Codex, Antigravity, and Copilot read three separate files at different compression levels, with Codex and Antigravity sharing `AGENTS.md`. Cross-agent checks cover a few structural sections, not every command line or router row.
 
-**Evidence:** A 2026-04-27 quality review found `.github/copilot-instructions.md` still told Copilot to run only the slow suite while the other files used the full release gate; the release command now sits at `.github/copilot-instructions.md` (search: `test:full`). The same pass found `AGENTS.md` skill-reference rows omitting topical files; they are now split at `AGENTS.md` (search: `Skill reference (meta)`).
+**Evidence:** A 2026-04-27 quality review found `.github/copilot-instructions.md` still told Copilot to run only the slow suite while the other files used the full release gate; the release command now sits at `.github/copilot-instructions.md` (search: `test:full`). The same pass found `AGENTS.md` skill-reference rows omitting topical files; they are now split at `AGENTS.md` (search: `Skill reference (meta)`). On 2026-09-23 adding a hook-policy boundary took the `Boundaries:` line to 803 characters in all three files and failed preflight's Instruction parity row; dropping one word brought it to 795.
 
 ## Footgun: An ordered decision vocabulary republished on several surfaces can disagree while every gate stays green
 
