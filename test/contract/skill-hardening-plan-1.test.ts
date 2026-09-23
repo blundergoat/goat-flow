@@ -508,6 +508,9 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const noFileIndex = intake.indexOf("**No-file guard: Mode R or 2**");
+      const existingPlanIndex = intake.indexOf(
+        "**Existing plan: resume to ACT**",
+      );
       const handoffIndex = intake.indexOf("**Build handoff: Mode 3 or 4**");
       const inlineIndex = intake.indexOf("**2: Read-Only Analysis**");
 
@@ -517,6 +520,16 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
           noFileIndex < handoffIndex &&
           handoffIndex < inlineIndex,
         `${skillPath}: build handoff must follow the no-file guard and precede the inline fallback`,
+      );
+      // Starting an existing milestone must win before a carried build brief writes a second plan for the same work.
+      assert.ok(
+        noFileIndex < existingPlanIndex && existingPlanIndex < handoffIndex,
+        `${skillPath}: existing-plan resume must follow the no-file guard and precede the build handoff`,
+      );
+      assert.match(
+        intake,
+        /start, resume or implement the current or a named milestone of an existing plan \(its path, or the valid `\.active` plan\) writes no new milestones: confirm the milestone \(ask when the plan records none\), apply Phase 3 lane eligibility, then continue to ACT; Phase 3 gates it\. A new build brief is never a resume\./u,
+        `${skillPath}: resuming an existing plan can re-plan its milestones, skip milestone gates, or capture a new build brief`,
       );
       assert.match(
         intake,

@@ -1041,8 +1041,8 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
     assert.match(
       dispatcherDocumentation,
-      /Simple implementation \(single-file, obvious\)[^\n]+Direct execution loop with a Route Snapshot; no skill/u,
-      "simple implementation must terminate in direct execution",
+      /Hotfix or simple implementation \(1-2 files, obvious change\)[^\n]+Direct execution loop with a Route Snapshot; no skill/u,
+      "a hotfix or simple implementation must terminate in direct execution",
     );
     assert.match(
       dispatcherDocumentation,

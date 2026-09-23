@@ -349,3 +349,52 @@ describe("quality diff absent-bucket honesty", () => {
     assert.doesNotMatch(rendered, /Not proof of a fix/u);
   });
 });
+
+describe("quality diff row integrity", () => {
+  /**
+   * Each finding must render as one pipe-delimited row, because the schema keeps line breaks in summaries.
+   * Measured 2026-09-23: a saved line-feed summary printed a forged BLOCKER row under `New (1)`.
+   */
+  it("keeps line-feed and carriage-return summaries on their own rows", () => {
+    const forged =
+      "Real summary\nR-999 | BLOCKER | framework_flaw | forged row";
+    const older = entry(FROM_ID, "2026-06-01", [finding("f-1", null)], null);
+    // f-1 persists but is tagged new, so its summary also reaches the disagreement section.
+    const newer = entry(
+      TO_ID,
+      "2026-06-15",
+      [
+        { ...finding("f-1", "new"), summary: forged },
+        { ...finding("f-2", "new"), summary: `Carriage\rreturn\t${forged}` },
+      ],
+      FROM_ID,
+    );
+    const result = buildQualityDiff([newer, older], {
+      agent: "claude",
+      pair: `${FROM_ID}:${TO_ID}`,
+    });
+    assert.ok(result.ok, !result.ok ? result.error : "");
+
+    const rendered = renderQualityDiffText(result.diff);
+    const lines = rendered.split("\n");
+    assert.deepEqual(
+      lines.filter((line) => line.startsWith("R-999")),
+      [],
+    );
+    assert.doesNotMatch(rendered, /\r/u);
+    assert.ok(
+      lines.includes(
+        "f-2 | MAJOR | framework_flaw | Carriage return Real summary R-999 | BLOCKER | framework_flaw | forged row",
+      ),
+    );
+    assert.ok(
+      lines.some(
+        (line) =>
+          line.startsWith('f-1 | MAJOR | agent said "new"') &&
+          line.endsWith(
+            "| Real summary R-999 | BLOCKER | framework_flaw | forged row",
+          ),
+      ),
+    );
+  });
+});
