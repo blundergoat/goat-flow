@@ -11,6 +11,8 @@ __goat_git_rest=""
 __goat_git_aliased_push=0
 __goat_git_aliased_commit=0
 __goat_git_aliased_destructive=0
+# Alias name (lowercased, as Git matches it) to its normalized expansion, for the command being inspected.
+declare -gA __goat_git_alias_expansions=()
 
 # Decide whether a direct subcommand or alias expansion publishes Git objects.
 # Use for both visible Git commands and alias config so their deny set cannot drift.
@@ -48,7 +50,8 @@ is_git_publication_alias_config() {
 }
 
 # Git verbs that create, rewrite or move branch history reserved for the developer, before any non-committing exemption.
-__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull "
+# filter-branch, filter-repo and fast-import write commits and move branches directly, so they sit beside commit.
+__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import "
 
 # Decide whether a verb's arguments are exactly one of the listed words.
 # Use for recovery modes such as `--abort`, which Git accepts only without other arguments.
@@ -86,6 +89,8 @@ is_git_commit_target() {
   [[ "$candidate" == *[[:space:]]* ]] && arguments="${candidate#*[[:space:]]}"
   [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
   [[ "$mode" == "strict" ]] && return 0
+  # A lone help flag prints usage and changes nothing, so an agent can still check a verb's option spellings.
+  git_arguments_are_one_of "$arguments" "-h --help" && return 1
   # Exemptions allow only exact spellings, so an abbreviation, negation or unknown flag stays with the developer.
   case "$verb" in
     cherry-pick|revert)
@@ -133,6 +138,181 @@ is_git_destructive_target() {
        [[ "$rest" =~ (^|[[:space:]])-[^-[:space:]]*f[^[:space:]]*([[:space:]]|$) ]]; }; then
     return 0
   fi
+  local git_verb="${rest%%[[:space:]]*}"
+  local git_arguments=""
+  [[ "$rest" == *[[:space:]]* ]] && git_arguments="${rest#*[[:space:]]}"
+  # A usage request such as `stash drop -h` prints help and changes nothing.
+  git_arguments_request_usage_only "$git_arguments" && return 1
+  case "$git_verb" in
+    restore)
+      # A bulk restore discards every matching uncommitted edit, like a hard reset; an index-only restore keeps them.
+      if git_pathspecs_name_bulk restore "$git_arguments"; then
+        git_option_present "$git_arguments" W worktree 1 s && return 0
+        git_option_present "$git_arguments" S staged 2 s && return 1
+        return 0
+      fi
+      ;;
+    checkout)
+      # A forced or bulk checkout overwrites uncommitted edits the user has not saved anywhere else.
+      git_option_present "$git_arguments" f force 1 bB && return 0
+      git_pathspecs_name_bulk checkout "$git_arguments" && return 0
+      ;;
+    switch)
+      # A forced switch discards uncommitted edits; `-f` and `--force` are Git's aliases for `--discard-changes`.
+      git_option_present "$git_arguments" f force 1 cC && return 0
+      git_option_present "$git_arguments" "" discard-changes 2 cC && return 0
+      ;;
+    stash)
+      # Dropping or clearing a stash deletes saved work that nothing else references.
+      [[ "$git_arguments" =~ ^(drop|clear)([[:space:]]|$) ]] && return 0
+      ;;
+    reflog)
+      # Expiring or deleting reflog entries removes the only recovery path for reset or rewritten commits.
+      [[ "$git_arguments" =~ ^(expire|delete)([[:space:]]|$) ]] && return 0
+      ;;
+  esac
+  return 1
+}
+
+# Decide whether a verb's arguments only ask for usage, optionally after one subcommand such as `drop`.
+git_arguments_request_usage_only() {
+  local -a usage_words=()
+  read -r -d '' -a usage_words <<< "$1" || true
+  # Stash and reflog name their subcommand before its options, so `drop -h` is still only a usage request.
+  if [[ "${#usage_words[@]}" -eq 2 && "${usage_words[0]}" != -* ]]; then
+    usage_words=("${usage_words[1]}")
+  fi
+  [[ "${#usage_words[@]}" -eq 1 && ( "${usage_words[0]}" == "-h" || "${usage_words[0]}" == "--help" ) ]]
+}
+
+# Decide whether Git would parse one option from the words before `--`.
+# Git accepts a short flag inside a bundle (`-fq`) and a unique long prefix (`--forc`), so exact-word matching misses
+# real spellings. A value-taking short flag ends its bundle: `-bfix` names branch `fix` rather than setting `-f`.
+#   $1 arguments; $2 short letter, or empty for a long-only option; $3 long name without dashes;
+#   $4 shortest prefix Git accepts for that name; $5 short letters that take a value
+git_option_present() {
+  local -a option_words=()
+  local option_word long_name bundle letter
+  local index
+  read -r -d '' -a option_words <<< "$1" || true
+  for option_word in "${option_words[@]}"; do
+    [[ "$option_word" == "--" ]] && return 1
+    if [[ "$option_word" == --?* ]]; then
+      long_name="${option_word#--}"
+      long_name="${long_name%%=*}"
+      [[ "${#long_name}" -ge "$4" && "$3" == "$long_name"* ]] && return 0
+      continue
+    fi
+    [[ -n "$2" && "$option_word" == -?* ]] || continue
+    bundle="${option_word#-}"
+    for ((index = 0; index < ${#bundle}; index++)); do
+      letter="${bundle:index:1}"
+      [[ "$letter" == "$2" ]] && return 0
+      [[ "$5" == *"$letter"* ]] && break
+    done
+  done
+  return 1
+}
+
+# Decide whether restore or checkout names a bulk pathspec: the whole tree in a spelling this hook can resolve, exclusion
+# or glob magic, a `*` or `?` glob, the parent directory, a pathspec file, a command substitution or an absolute
+# repository root. A plain relative path such as `src/app.ts` or `app/[id]/page.tsx` stays a targeted restore.
+#   $1 verb: `restore` reads every operand as a path, `checkout` only after `--`; $2 arguments
+git_pathspecs_name_bulk() {
+  local verb="$1"
+  # `pathspec-fr` is the shortest prefix distinct from `pathspec-file-nul`; honor Git's option separator.
+  git_option_present "$2" "" pathspec-from-file 11 s && return 0
+  local -a pathspec_words=()
+  local pathspec_word normalized
+  local after_separator=0
+  local skip_value=0
+  local parent_pattern='^\.\.(/\.\.)*$'
+  local long_magic_pattern='^:\(([a-z,]*)\)(.*)$'
+  local short_magic_pattern='^:([/!^]*):?(.*)$'
+  read -r -d '' -a pathspec_words <<< "$2" || true
+  for pathspec_word in "${pathspec_words[@]}"; do
+    # A separate `--source` value names a tree, not a path.
+    if [[ "$skip_value" -eq 1 ]]; then
+      skip_value=0
+      continue
+    fi
+    if [[ "$after_separator" -eq 0 ]]; then
+      case "$pathspec_word" in
+        --) after_separator=1; continue ;;
+        -s | --source) skip_value=1; continue ;;
+        -*) continue ;;
+      esac
+    fi
+    # A command substitution expands to a path list, often every changed file. Before `--`, a checkout operand may
+    # name a branch instead, so only restore operands and checkout operands after `--` count.
+    if [[ "$pathspec_word" == *"\$("* || "$pathspec_word" == *"\`"* ]]; then
+      [[ "$verb" == "restore" || "$after_separator" -eq 1 ]] && return 0
+      continue
+    fi
+    # Resolve the home and working-directory spellings the hook can see; quote removal leaves ANSI-C `$'.'` as `$.`.
+    case "$pathspec_word" in
+      \~ | \~/*) normalized="$HOME${pathspec_word:1}" ;;
+      "\$HOME" | "\$HOME/"*) normalized="$HOME${pathspec_word:5}" ;;
+      "\${HOME}" | "\${HOME}/"*) normalized="$HOME${pathspec_word:7}" ;;
+      "\$PWD" | "\$PWD/"*) normalized="$PWD${pathspec_word:4}" ;;
+      "\${PWD}" | "\${PWD}/"*) normalized="$PWD${pathspec_word:6}" ;;
+      *) normalized="${pathspec_word#\$}" ;;
+    esac
+    # Pathspec magic: `:/` and `:(top)` anchor at the repository root, `:(literal)` turns globbing off and `:(icase)` only
+    # relaxes case. Exclusion (`:!x`, `:^x`, `:(exclude)`), `:(glob)` and attribute magic select many files at once.
+    local literal_pathspec=0
+    if [[ "$normalized" == :\(* ]]; then
+      [[ "$normalized" =~ $long_magic_pattern ]] || return 0
+      local -a magic_words=()
+      local magic_word
+      IFS=, read -r -a magic_words <<< "${BASH_REMATCH[1]}"
+      normalized="${BASH_REMATCH[2]}"
+      for magic_word in "${magic_words[@]}"; do
+        case "$magic_word" in
+          top | icase) ;;
+          literal) literal_pathspec=1 ;;
+          *) return 0 ;;
+        esac
+      done
+    elif [[ "$normalized" == :* ]]; then
+      [[ "$normalized" =~ $short_magic_pattern ]] || return 0
+      [[ "${BASH_REMATCH[1]}" == *'!'* || "${BASH_REMATCH[1]}" == *'^'* ]] && return 0
+      normalized="${BASH_REMATCH[2]}"
+    fi
+    # `*` and `?` expand to many files. A `[` class matches one character and names dynamic-route files such as
+    # `app/[id]/page.tsx`, which Git matches exactly before trying the class, so brackets alone stay targeted.
+    [[ "$literal_pathspec" -eq 0 && "$normalized" == *[\*\?]* ]] && return 0
+    # Git folds internal dot and parent components before matching, so `src/..` is as broad as `.`.
+    local -a path_components=() normalized_components=()
+    local component absolute_path=0
+    [[ "$normalized" == /* ]] && absolute_path=1
+    IFS=/ read -r -a path_components <<< "$normalized"
+    for component in "${path_components[@]}"; do
+      case "$component" in
+        "" | .) ;;
+        ..)
+          if [[ "${#normalized_components[@]}" -gt 0 && "${normalized_components[-1]}" != ".." ]]; then
+            unset 'normalized_components[-1]'
+          elif [[ "$absolute_path" -eq 0 ]]; then
+            normalized_components+=("..")
+          fi
+          ;;
+        *) normalized_components+=("$component") ;;
+      esac
+    done
+    printf -v normalized '%s/' "${normalized_components[@]}"
+    normalized="${normalized%/}"
+    [[ "$absolute_path" -eq 1 ]] && normalized="/$normalized"
+    # An absolute repository root, or a directory above the current one, covers the whole tree.
+    if [[ "$normalized" == /* ]]; then
+      normalized="${normalized%/}"
+      if [[ -d "${normalized:-/}" ]] && { [[ -e "$normalized/.git" ]] || [[ "$PWD/" == "$normalized/"* ]]; }; then
+        return 0
+      fi
+      continue
+    fi
+    [[ -z "$normalized" || "$normalized" == "." || "$normalized" =~ $parent_pattern ]] && return 0
+  done
   return 1
 }
 
@@ -141,6 +321,7 @@ reset_git_alias_flags() {
   __goat_git_aliased_push=0
   __goat_git_aliased_commit=0
   __goat_git_aliased_destructive=0
+  __goat_git_alias_expansions=()
 }
 
 # Record all guarded actions in an alias so another visible command word cannot hide a developer-only write.
@@ -165,8 +346,11 @@ record_git_alias_expansion() {
 record_git_alias_config() {
   local config_operand="$1"
   # Alias definitions contribute executable expansion text; unrelated config settings cannot add an alias action.
-  if [[ "$config_operand" =~ ^alias\.[a-zA-Z0-9_-]+=(.*)$ ]]; then
-    record_git_alias_expansion "${BASH_REMATCH[1]}"
+  if [[ "$config_operand" =~ ^alias\.([a-zA-Z0-9_-]+)=(.*)$ ]]; then
+    local alias_name="${BASH_REMATCH[1]}"
+    local alias_expansion="${BASH_REMATCH[2]}"
+    record_git_alias_expansion "$alias_expansion"
+    __goat_git_alias_expansions["${alias_name,,}"]="$(normalize_git_alias_expansion "$alias_expansion")"
   fi
 }
 
@@ -200,6 +384,7 @@ record_git_persistent_alias() {
   # No saved expansion means there is no alias action to add to the user's policy check.
   [[ -n "$expansion" ]] || return 0
   record_git_alias_expansion "$expansion"
+  __goat_git_alias_expansions["${word,,}"]="$(normalize_git_alias_expansion "$expansion")"
 }
 
 # Decide whether a proposed Git command would publish work to a remote.
@@ -219,8 +404,29 @@ is_git_push() {
 is_git_destructive() {
   __goat_git_strip_globals "$1" || return 1
   is_git_destructive_target "$__goat_git_rest" && return 0
+  # Git appends the visible arguments to an alias, so an alias to `stash` invoked as `st clear` still clears stashes.
+  if resolve_git_invoked_alias_command && is_git_destructive_target "$__goat_git_invoked_alias_command"; then
+    return 0
+  fi
   # A configured Git alias can carry the guarded flag even when the visible word looks harmless.
   [[ "$__goat_git_aliased_destructive" -eq 1 ]]
+}
+
+# Resolve the command Git runs when the visible first word is a recorded alias: its expansion plus the visible arguments.
+# Sets __goat_git_invoked_alias_command and succeeds only for a recorded alias; it avoids a subshell on every Git command.
+resolve_git_invoked_alias_command() {
+  __goat_git_invoked_alias_command=""
+  local invoked_word="${__goat_git_rest%%[[:space:]]*}"
+  # Only a valid alias name can select a recorded expansion.
+  [[ "$invoked_word" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || return 1
+  local alias_expansion="${__goat_git_alias_expansions["${invoked_word,,}"]-}"
+  [[ -n "$alias_expansion" ]] || return 1
+  __goat_git_invoked_alias_command="$alias_expansion"
+  # Visible arguments follow the expansion exactly as Git appends them.
+  if [[ "$__goat_git_rest" == *[[:space:]]* ]]; then
+    __goat_git_invoked_alias_command+=" ${__goat_git_rest#*[[:space:]]}"
+  fi
+  return 0
 }
 
 # Reveal a direct Git-push candidate after common shell wrappers.
@@ -462,22 +668,58 @@ check_git_segment() {
 
     # Remote publication is always left to the developer, regardless of wrappers or pipeline position.
     if is_git_push "$repository_write_candidate"; then
-      block "Git publication is not allowed. Ask the user to push manually." || return $?
+      # A visible push names publication; an alias can hide a push or a shell command, so its reason says both.
+      if is_git_publication_target "$__goat_git_rest"; then
+        block "Git publication is not allowed. Ask the user to push manually." || return $?
+      else
+        block "This Git alias can publish or run shell commands, so it is not allowed. Ask the user to run it manually." ||
+          return $?
+      fi
+    fi
+
+    # An unlisted global option might take the next word as its value, so the hook cannot tell which command runs.
+    if [[ -n "${__goat_git_unknown_global_option-}" ]]; then
+      block "Unrecognised Git global option ${__goat_git_unknown_global_option}: the hook cannot tell which Git command runs. Drop the option or ask the user to run the command manually." ||
+        return $?
     fi
 
     # History creation is always left to the developer, even when an agent was asked to prepare it.
     if is_git_commit "$repository_write_candidate"; then
-      block "git commit is not allowed. Ask the user to commit manually." || return $?
+      block "$(git_history_block_reason)" || return $?
     fi
 
     # Destructive history or cleanup flags require a manual developer decision and recovery plan.
     if is_git_destructive "$repository_write_candidate"; then
       block \
-        "Destructive git operation (--no-verify / reset --hard / clean -f). Remove the flag, stash first, or run manually." ||
+        "Destructive git operation (--no-verify, reset --hard, clean -f, bulk restore or checkout, forced checkout or switch, stash drop or clear, reflog expire or delete) can skip checks or discard work. Drop --no-verify if it is not needed; otherwise ask the user to run it manually." ||
         return $?
     fi
   done
 
+}
+
+# Name the blocked history operation so the agent asks the developer for the right action.
+# Commit keeps its established wording; an alias whose expansion could not be read gets a neutral reason.
+git_history_block_reason() {
+  local verb="${__goat_git_rest%%[[:space:]]*}"
+  # When the visible command is not the history write, name the invoked alias's verb or give a neutral reason.
+  if ! is_git_commit_target "$__goat_git_rest"; then
+    verb=""
+    if resolve_git_invoked_alias_command && is_git_commit_target "$__goat_git_invoked_alias_command" strict; then
+      verb="${__goat_git_invoked_alias_command%%[[:space:]]*}"
+    fi
+  fi
+  case "$verb" in
+    commit)
+      printf '%s' "git commit is not allowed. Ask the user to commit manually."
+      ;;
+    "")
+      printf '%s' "A Git alias in this command can write Git history, so it is not allowed. Ask the user to run it manually."
+      ;;
+    *)
+      printf 'git %s is not allowed: it writes Git history. Ask the user to run it manually.' "$verb"
+      ;;
+  esac
 }
 
 # Apply GitHub CLI policy beside native Git checks under the same repository-write switch.

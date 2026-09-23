@@ -1137,6 +1137,7 @@ strip_parallel_payload_command() {
 # The lookup runs only Git's read-only config command; the proposed subcommand is never executed.
 # shellcheck disable=SC2329 # -- Called by patterns-paths.sh and patterns-writes.sh, sourced through GOAT_HOOK_LIB_DIR below.
 __goat_git_strip_globals() {
+  __goat_git_unknown_global_option=""
   reset_git_alias_flags
   __goat_git_rest=""
   local c="$1"
@@ -1162,7 +1163,8 @@ __goat_git_strip_globals() {
         i=$((i + 1))
         break
         ;;
-      -c|-C|--git-dir|--work-tree|--namespace|--exec-path|--config-env)
+      # Each option here takes the next word as its value; a missing entry would let that value pose as the Git command.
+      -c|-C|--git-dir|--work-tree|--namespace|--exec-path|--config-env|--attr-source|--shallow-file|--super-prefix)
         val="${words[$((i + 1))]:-}"
         # Repository selection and temporary config must affect alias lookup exactly as they affect the proposed command.
         case "$opt" in
@@ -1182,7 +1184,7 @@ __goat_git_strip_globals() {
         i=$((i + 1))
         continue
         ;;
-      -C?*|--git-dir=*|--work-tree=*|--namespace=*|--exec-path=*|--config-env=*)
+      -C?*|--git-dir=*|--work-tree=*|--namespace=*|--exec-path=*|--config-env=*|--attr-source=*|--shallow-file=*|--super-prefix=*|--list-cmds=*)
         # Preserve attached values so Git itself decides which option spellings its config reader accepts.
         case "$opt" in
           -C?*|--git-dir=*|--work-tree=*|--config-env=*) alias_config_options+=("$opt") ;;
@@ -1195,11 +1197,13 @@ __goat_git_strip_globals() {
         i=$((i + 1))
         continue
         ;;
-      --no-pager|--paginate|--literal-pathspecs|--glob-pathspecs|--noglob-pathspecs|--icase-pathspecs|--help|--version|--html-path|--man-path|--info-path)
+      -p|-P|-h|-v|--no-pager|--paginate|--literal-pathspecs|--glob-pathspecs|--noglob-pathspecs|--icase-pathspecs|--help|--version|--html-path|--man-path|--info-path|--no-replace-objects|--no-lazy-fetch|--no-optional-locks|--no-advice)
         i=$((i + 1))
         continue
         ;;
       -*)
+        # An unlisted option might take a value that would then pose as the command, so Git policy treats it as unresolved.
+        [[ -n "$__goat_git_unknown_global_option" ]] || __goat_git_unknown_global_option="$opt"
         i=$((i + 1))
         continue
         ;;
@@ -2314,6 +2318,66 @@ strip_unquoted_shell_comments() {
   printf '%s' "$out"
 }
 
+# Remove subshell parentheses from one segment so `(git push)` and `(cd x && cat .env)` reach policy as plain commands.
+# Segment splitting leaves the opener on the first command and the closer on the last; the result is in __goat_subshell_stripped.
+strip_subshell_parentheses() {
+  local text="$1"
+  text="${text#"${text%%[![:space:]]*}"}"
+  # A leading opener only groups the command; a `$(` substitution starts with `$` and keeps its parentheses.
+  while [[ "$text" == \(* ]]; do
+    text="${text#\(}"
+    text="${text#"${text%%[![:space:]]*}"}"
+  done
+  # An unmatched closer belongs to an enclosing subshell, even when redirections follow it.
+  while has_unmatched_closing_parenthesis "$text"; do
+    text="${text:0:__goat_subshell_closer_index} ${text:__goat_subshell_closer_index+1}"
+  done
+  __goat_subshell_stripped="${text%"${text##*[![:space:]]}"}"
+}
+
+# Find an unmatched closer outside quotes and escapes; return its position in __goat_subshell_closer_index.
+has_unmatched_closing_parenthesis() {
+  local text="$1"
+  __goat_subshell_closer_index=-1
+  local depth=0
+  local in_single=0
+  local in_double=0
+  local escaped=0
+  local i char
+  for ((i = 0; i < ${#text}; i++)); do
+    char="${text:i:1}"
+    # An escaped character is literal text, never a grouping parenthesis.
+    if [[ "$escaped" -eq 1 ]]; then
+      escaped=0
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
+      escaped=1
+      continue
+    fi
+    # Quoted parentheses are argument data, such as a commit message or search pattern.
+    if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      in_single=$((1 - in_single))
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      in_double=$((1 - in_double))
+      continue
+    fi
+    [[ "$in_single" -eq 1 || "$in_double" -eq 1 ]] && continue
+    if [[ "$char" == "(" ]]; then
+      depth=$((depth + 1))
+    elif [[ "$char" == ")" ]]; then
+      depth=$((depth - 1))
+      if [[ "$depth" -lt 0 ]]; then
+        __goat_subshell_closer_index="$i"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
 # Prepare one shared view of a user-visible command segment for every policy module.
 # Use once per segment so shell, secret, and repository checks classify identical text.
 prepare_segment_context() {
@@ -2329,6 +2393,11 @@ prepare_segment_context() {
   else
     # Match the comment parser's trailing trim without spawning its character scan.
     policy_cmd="${cmd%"${cmd##*[![:space:]]}"}"
+  fi
+  # Subshell parentheses stay attached to the first and last commands after segment splitting, so remove them first.
+  if [[ "$policy_cmd" == *[\(\)]* ]]; then
+    strip_subshell_parentheses "$policy_cmd"
+    policy_cmd="$__goat_subshell_stripped"
   fi
   check_command_substitutions "$policy_cmd" "$depth" || return $?
 
