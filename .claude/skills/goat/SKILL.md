@@ -60,7 +60,7 @@ Only user-requested depth is forwarded; otherwise destination Step 0 selects. Ma
 | Testing gaps, coverage, verification planning | `/goat-qa` |
 | Bare task path (no action verb) | Bare or ambiguous task paths are read-only context. Do not update `.active`, milestone status, or code from a path alone |
 | Plan/design or non-trivial build/change | `/goat-plan`; build/change carries `return-to-implement`, plan/design stops after planning |
-| Simple implementation (single-file, obvious) | No skill; use execution loop directly |
+| Hotfix or simple implementation (1-2 files, obvious change) | No skill; use execution loop directly |
 | Simple question | Answer directly |
 
 ## Constraints

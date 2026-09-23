@@ -51,6 +51,8 @@ Plans are local workflow state, not a setup invariant. Mode R is read-only: repo
 
 **No-file guard: Mode R or 2** - reporting-only/no-file constraints forbid writes: reconcile/audit requests select read-only Mode R; other requests select Mode 2. No-implementation alone does not forbid plan edits. Conflicting write/no-write instructions preserve bytes and require clarification.
 
+**Existing plan: resume to ACT** - start, resume or implement the current or a named milestone of an existing plan (its path, or the valid `.active` plan) writes no new milestones: confirm the milestone (ask when the plan records none), apply Phase 3 lane eligibility, then continue to ACT; Phase 3 gates it. A new build brief is never a resume.
+
 **Build handoff: Mode 3 or 4** - a `/goat` `return-to-implement` build/change brief authorizes gitignored planning artifacts, never Mode 2 or Ask First boundaries: Hotfix/Small Feature selects Mode 3; Standard+ selects Mode 4. Post-plan return then continues to ACT; Phase 3 gates each milestone.
 
 **1: Named-File Update** - explicit plan edits, including reconcile-and-fix with implementation prohibited. A path alone is not write approval; use Phase 2 § Mode 1, never implement code.
