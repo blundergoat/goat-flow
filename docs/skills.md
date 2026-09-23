@@ -102,7 +102,7 @@ The dispatcher forwards the complete brief and any user-requested depth. Destina
 | Testing gaps, coverage, verification planning | `/goat-qa` |
 | Bare task path (no action verb) | Read-only context; do not update `.active`, milestone status, or code |
 | Plan/design or non-trivial build/change | `/goat-plan`; build/change carries `return-to-implement`, while plan/design stops after planning |
-| Simple implementation (single-file, obvious) | Direct execution loop with a Route Snapshot; no skill |
+| Hotfix or simple implementation (1-2 files, obvious change) | Direct execution loop with a Route Snapshot; no skill |
 | Simple question | Direct answer; no GATHER or Route Snapshot |
 
 **Planning Route:** Hotfixes use direct execution. A plan/design verb routes to planning-only `/goat-plan`; a non-trivial build/change verb routes through `/goat-plan` with `return-to-implement`, which writes any needed plan files without a separate request. After Phase 2, that handoff starts ordinary ACT implementation without repeating the build authorization; new Ask First boundaries still gate. Bare or ambiguous task paths remain read-only context. `/goat-plan` owns `.goat-flow/plans/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection; analysis signals ("break this down for me", "how would you approach") select Read-Only Analysis.
@@ -113,7 +113,7 @@ The dispatcher forwards the complete brief and any user-requested depth. Destina
 |-------|---------------|
 | Bare task directory path | Read-only orientation; no writes |
 | Task directory path plus `start current milestone` | Implementation may start after normal gates |
-| `resume` plus a task directory path | Confirm current milestone unless the plan clearly records one |
+| `resume` plus a task directory path | Confirm current milestone unless the plan clearly records one; implementation may then start after normal gates |
 | `update current milestone` plus a task directory path | Update the named milestone file only |
 | `implement current milestone` plus a task directory path | Code implementation may proceed after reading gates |
 
