@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Changed
+
+- **Git denials name the blocked command** - Blocked `rebase`, `merge`, `pull` and other history commands tell the agent to ask the user to run that command, not to commit.
+- **`/goat` runs obvious 1-2 file hotfixes directly** - They skip planning, matching the shared no-skill fast path; larger or unclear changes still route through `/goat-plan`.
+- **`/goat-plan` resumes existing plans** - `start`, `resume` or `implement` with an existing plan confirms the current milestone and continues to implementation without writing new milestones.
+
+### Fixed
+
+- **`quality diff` keeps each finding on one row** - A saved summary containing a line break no longer prints as an extra, forged finding row.
+
+### Security
+
+- **Git guards deny history rewriters** - `filter-branch`, `filter-repo` and `fast-import` deny like `commit`; a lone `-h` or `--help` on a guarded command now passes.
+- **Git guards deny commands that discard work** - Bulk `restore` or `checkout` (the whole tree, a `*` or `?` glob, exclusion or glob pathspec magic, the parent directory, a pathspec file or a command substitution), forced `checkout` or `switch` including bundled and abbreviated flags, `stash drop`/`clear` and `reflog expire`/`delete` deny like `reset --hard`, also through aliases; single files, including route files such as `app/[id]/page.tsx`, and `restore --staged` stay allowed.
+- **Policy hooks see through subshells and Git option values** - `(git push)`, `(cd src && git push)`, `(cat .env)` and `git --attr-source HEAD push` now deny like their plain forms; a Git global option the hook does not recognise denies, because its value could pose as the command.
+
 ## v1.17.0 - 2026-09-23
 
 ### Changed
