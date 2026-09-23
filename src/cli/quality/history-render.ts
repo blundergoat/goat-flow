@@ -191,6 +191,17 @@ export function renderQualityHistoryText(
 }
 
 /**
+ * Collapse a saved finding summary onto one line before it joins a pipe-delimited diff row.
+ * The schema keeps line breaks in summaries, so without this one summary could print a forged row beneath its own.
+ *
+ * @param summary - saved finding summary; tabs and line breaks become single spaces
+ * @returns single-line summary text for the diff row
+ */
+function flattenSummary(summary: string): string {
+  return summary.replace(/\s+/gu, " ").trim();
+}
+
+/**
  * Render the score evidence and finding changes between two saved runs in terminal text.
  * Use for quality diff; comparison limits and absent-finding caveats explain what the result can support.
  *
@@ -219,7 +230,9 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
     if (rows.length > 0 && caveat !== undefined) lines.push(caveat);
     // Render every finding in the selected lifecycle bucket without changing its classification.
     for (const row of rows) {
-      lines.push(`${row.id} | ${row.severity} | ${row.type} | ${row.summary}`);
+      lines.push(
+        `${row.id} | ${row.severity} | ${row.type} | ${flattenSummary(row.summary)}`,
+      );
     }
     // An empty bucket explicitly says none, so omission is not mistaken for missing output.
     if (rows.length === 0) lines.push("(none)");
@@ -244,7 +257,7 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
     // Show each mismatch so the maintainer can recheck the assessor's continuity claim.
     for (const row of diff.deltaTagDisagreements) {
       lines.push(
-        `${row.id} | ${row.severity} | agent said "${row.agentTag}", deterministic diff says "${row.deterministic}" | ${row.summary}`,
+        `${row.id} | ${row.severity} | agent said "${row.agentTag}", deterministic diff says "${row.deterministic}" | ${flattenSummary(row.summary)}`,
       );
     }
     lines.push(
