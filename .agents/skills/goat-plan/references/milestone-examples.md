@@ -280,7 +280,7 @@ Each milestone owns its receipt; separate valid lanes can hold simultaneous span
 
 Positive raw receipts remain valid when minutes round to zero; eligibility does not establish comparability.
 
-A goat-debug milestone estimated two hours, self-reporting 256 active seconds: retrospective, ineligible for calibration. One ratio cannot size later milestones.
+Retrospective self-reports cannot calibrate. One ratio cannot size later milestones.
 
 ## Deferred and Backlog Routing
 

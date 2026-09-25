@@ -71,6 +71,8 @@ Plans are local workflow state, not a setup invariant. Mode R is read-only: repo
 
 **CHECKPOINT (Named-File Update):** "Mode 1. Edit [file] in place for [delta]. Boundary: [scope]."
 
+**CHECKPOINT (Resume):** "Resume [milestone]. Lane eligibility: [state]. Next item: [bounded task or proof]. Continue authorized ACT; Phase 3 gates remain."
+
 **CHECKPOINT (planning modes):** "Mode: [selected mode]. Milestones: [feature]. Risk: [risk]. Kill criteria: [criteria]."
 
 ## Phase 1 - Milestone Breakdown
@@ -222,6 +224,6 @@ Verify every implementation task and, when `ISSUE.md` exists, every ISSUE Tasks 
 
 ## Output Format
 
-Emit the selected mode's result: 0 orientation; R reconciliation; 1 delta; 2 inline milestones; 3/4 paths, milestone names/objectives, task/exit/test counts, risks, and stop condition. Modes 0/R/2 never write.
+Emit the selected mode's result: resume checkpoint then authorized ACT; 0 orientation; R reconciliation; 1 delta; 2 inline milestones; 3/4 paths, milestone names/objectives, task/exit/test counts, risks, and stop condition. Modes 0/R/2 never write.
 
 **Terse-first:** Lead directly; one sentence per bullet; strip qualifiers and closing offers. Gates retain required prompts and evidence.
