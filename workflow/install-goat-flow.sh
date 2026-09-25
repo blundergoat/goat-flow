@@ -1832,7 +1832,21 @@ if (!changed) {
   console.log("unchanged");
   process.exit(0);
 }
-fs.writeFileSync(configPath, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
+const updatedConfig = `${lines.join(eol)}${hadFinalNewline ? eol : ""}`;
+try {
+  const expectedConfig = structuredClone(parsedConfig);
+  expectedConfig.hooks["gruff-code-quality"].binaries = { py: relativeBinaryPath };
+  // Unusual multiline YAML stays unchanged if the insertion would alter another setting or break parsing.
+  if (!require("node:util").isDeepStrictEqual(yaml.load(updatedConfig), expectedConfig)) {
+    console.log("unchanged");
+    process.exit(0);
+  }
+} catch {
+  // A valid multiline value can become invalid under a text insertion; retain the user's working config.
+  console.log("unchanged");
+  process.exit(0);
+}
+fs.writeFileSync(configPath, updatedConfig);
 console.log("changed");
 NODE
   )"; then
@@ -2599,10 +2613,18 @@ const supportedHookEntries = hookEntries.filter(
   ([, hookContract]) => hookContract.supported,
 );
 const currentConfig = readJsonObject(userHookConfigPath);
+const managedScriptNames = managedHookEntries(agentContract).flatMap(([, hookContract]) => hookContract.cleanup.commandScriptNames);
 // Invalid user JSON remains untouched so setup never replaces settings the user needs to repair.
 if (!currentConfig) {
   // A targeted Git-protection repair needs valid provider JSON; preserve the runtime and report the problem otherwise.
-  if (selectedHookId) throw new Error("Cannot establish Git protection in invalid provider JSON; existing runtime preserved");
+  if (selectedHookId && managedScriptNames.some((scriptName) => fs.readFileSync(userHookConfigPath, "utf8").includes(scriptName))) {
+    throw new Error("Cannot establish Git protection in invalid provider JSON; existing runtime preserved");
+  }
+  console.log("unchanged");
+  process.exit(0);
+}
+// A settings file alone does not enroll another provider in Goat Flow during a shared-policy upgrade.
+if (selectedHookId && !valueReferencesManagedScript(currentConfig, managedScriptNames)) {
   console.log("unchanged");
   process.exit(0);
 }
@@ -3250,8 +3272,8 @@ const RETIRED_DENY_RULES = new Set([
   "Read(**/credentials*)",
   "Edit(**/credentials*)",
 ]);
-// Home credential stores need ~/ rules; a bare **/ pattern only protects paths inside the current project.
-// Migrate to home paths and protect the whole .docker and .kube directories so installed Codex permissions match the shipped template.
+// Each credential-store rule protects both the developer's home and copies inside the project.
+// Pair only a store the user already denies; absent pairs remain a deliberate project choice.
 const HOME_ANCHOR_REWRITES = new Map([
   ["Read(**/.ssh/**)", "Read(~/.ssh/**)"],
   ["Read(**/.aws/**)", "Read(~/.aws/**)"],
@@ -3268,6 +3290,17 @@ const HOME_ANCHOR_REWRITES = new Map([
   ["Edit(**/.npmrc)", "Edit(~/.npmrc)"],
   ["Edit(**/.pypirc)", "Edit(~/.pypirc)"],
 ]);
+const credentialStorePaths = [".ssh/**", ".aws/**", ".gnupg/**", ".config/gcloud/**", ".docker/**", ".kube/**", ".npmrc", ".pypirc", ".netrc", ".git-credentials", ".config/gh/hosts.yml", ".pgpass"];
+const credentialStoreRulePairs = new Map();
+// Both tools bypass the shell guard, so a saved restriction must protect either way of accessing each store.
+for (const tool of ["Read", "Edit"]) {
+  for (const storePath of credentialStorePaths) {
+    const homeRule = `${tool}(~/${storePath})`;
+    const projectRule = `${tool}(**/${storePath})`;
+    credentialStoreRulePairs.set(homeRule, [homeRule, projectRule]);
+    credentialStoreRulePairs.set(projectRule, [projectRule, homeRule]);
+  }
+}
 
 let raw;
 try {
@@ -3299,14 +3332,19 @@ const parseRule = (entry) =>
   typeof entry === "string" ? entry.match(/^([A-Za-z]+)\((.*)\)$/u) : null;
 
 // Replace a stale permission rule; an empty list retires it, while null keeps the user's existing rule.
-// Only deny rules receive retirement, environment expansion and home anchoring; matching allow or ask choices remain as saved.
-const replacementsFor = (entry, isDenyList) => {
+// Only deny rules receive retirement, environment expansion and paired store protection; allow or ask choices remain as saved.
+const replacementsFor = (entry, isDenyList, savedRules) => {
   // A retired deny rule has no replacement; the user's allow and ask rules do not enter this retirement.
   if (isDenyList && RETIRED_DENY_RULES.has(entry)) return [];
-  // A retired home-path deny rule receives the current anchored form.
+  const credentialPair = credentialStoreRulePairs.get(entry);
+  // Complete pairs already protect both locations; preserve their positions so reinstalling stays byte-stable.
+  if (isDenyList && credentialPair && credentialPair.every((rule) => savedRules.has(rule))) return null;
+  // Legacy Docker and Kubernetes file rules receive the current store pair without losing project coverage.
   if (isDenyList && HOME_ANCHOR_REWRITES.has(entry)) {
-    return [HOME_ANCHOR_REWRITES.get(entry)];
+    return credentialStoreRulePairs.get(HOME_ANCHOR_REWRITES.get(entry));
   }
+  // A home-only upgrade or a project-only rule receives its missing partner.
+  if (isDenyList && credentialStoreRulePairs.has(entry)) return credentialStoreRulePairs.get(entry);
   // A broad retired environment deny expands into the current explicit sensitive-file rules.
   if (isDenyList && ENV_DENY_EXPANSIONS.has(entry)) {
     return ENV_DENY_EXPANSIONS.get(entry);
@@ -3328,13 +3366,14 @@ const repairRules = (rules, isDenyList) => {
     const rule = parseRule(entry);
     return !(rule && REMOVED_CLAUDE_TOOLS.has(rule[1]));
   });
+  const savedRules = new Set(survivors);
   const present = new Set(
-    survivors.filter((entry) => replacementsFor(entry, isDenyList) === null),
+    survivors.filter((entry) => replacementsFor(entry, isDenyList, savedRules) === null),
   );
   const kept = [];
   // Repair surviving rules in order so unrelated user permissions keep their positions.
   for (const entry of survivors) {
-    const replacements = replacementsFor(entry, isDenyList);
+    const replacements = replacementsFor(entry, isDenyList, savedRules);
     // A rule needing no replacement is retained exactly as the user saved it.
     if (replacements === null) {
       kept.push(entry);
@@ -3348,6 +3387,10 @@ const repairRules = (rules, isDenyList) => {
     for (const replacement of replacements) {
       // An existing equivalent rule already expresses this permission choice.
       if (present.has(replacement)) continue;
+      // New credential coverage is visible in the upgrade output so the developer can review the added restriction.
+      if (isDenyList && credentialStoreRulePairs.has(replacement) && !rules.includes(replacement)) {
+        console.error(`  + paired Claude credential deny rule added: ${replacement}`);
+      }
       present.add(replacement);
       kept.push(replacement);
     }
@@ -3359,7 +3402,7 @@ const repairRules = (rules, isDenyList) => {
 };
 
 let migrated = false;
-// Only denies receive environment expansion and home anchoring; applying these to allows would revoke the user's .env.example read choice.
+// Only denies receive environment expansion and paired store protection; applying these to allows would revoke the user's .env.example read choice.
 for (const [arrayName, isDenyList] of [
   ["deny", true],
   ["allow", false],
@@ -3847,16 +3890,9 @@ else
 fi
 echo ""
 
-# Establish requested Git protection in every existing provider before shared policy bytes change.
-# The selected provider may be new; seed its ordinary config before registration, preserving existing settings.
+# Establish Git protection in already managed providers before shared policy bytes change.
+# New provider registrations are seeded below, after their hook runtime has been installed.
 if $HOOKS_ENABLED; then
-  # A provider with a separate hook file establishes Git protection in that dedicated destination.
-  if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
-    copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
-  # A provider with embedded hooks establishes Git protection in its settings destination.
-  elif [[ -n "${SETTINGS_DST:-}" && -n "${SETTINGS_SRC:-}" ]]; then
-    copy_if_missing "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST"
-  fi
   policy_providers="$(node - "$GOAT_FLOW_ROOT/workflow/hooks/agent-config/managed-hook-desired-state.json" <<'NODE'
 const contract = require(process.argv[2]);
 // An incomplete generated Git-protection contract stops setup before reconciling provider files.
@@ -3869,7 +3905,7 @@ for (const [agent, definition] of Object.entries(contract.agents)) {
 }
 NODE
   )" || exit 1
-  # Reconcile Git protection only in provider files the user already has installed.
+  # Existing registrations prove enrollment; unrelated provider settings remain unchanged.
   while IFS=$'\t' read -r policy_agent policy_config_path; do
     [[ -f "$policy_config_path" ]] || continue
     migrate_agent_hook_config "$policy_config_path" "$policy_agent" "deny-git-mutations"
