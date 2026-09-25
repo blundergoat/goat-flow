@@ -793,6 +793,11 @@ normalize_leading_command_word() {
     fi
 
     # Only unquoted whitespace ends the executable word; quoted spaces remain part of the program name.
+    # Unquoted IFS expansion can turn this apparent word into a different executable and arguments.
+    if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && ! "$current" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= &&
+      ( "${c:i}" == "\${IFS}"* || "${c:i}" =~ ^\$IFS([^a-zA-Z0-9_]|$) ) ]]; then
+      return 2
+    fi
     if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$char" =~ [[:space:]] ]]; then
       rest="${c:i+1}"
       rest="${rest#"${rest%%[![:space:]]*}"}"
@@ -1140,6 +1145,8 @@ __goat_git_strip_globals() {
   __goat_git_unknown_global_option=""
   reset_git_alias_flags
   __goat_git_rest=""
+  __goat_git_command_words=()
+  __goat_git_inline_commands=()
   __goat_git_selected_directory="${__goat_git_command_directory:-$PWD}"
   __goat_git_selected_directory_unknown="${__goat_git_directory_unknown:-0}"
   local c="$1"
@@ -1184,6 +1191,9 @@ __goat_git_strip_globals() {
         # An inline guarded alias still denies even when the command invokes another word.
         if [[ "$opt" == "-c" ]]; then
           record_git_alias_config "$val"
+          if git_config_key_runs_command "${val%%=*}" && [[ "$val" == *=* ]]; then
+            __goat_git_inline_commands+=("${val#*=}")
+          fi
         fi
         i=$((i + 2))
         continue
@@ -1192,6 +1202,9 @@ __goat_git_strip_globals() {
         val="${opt#-c}"
         alias_config_options+=("$opt")
         record_git_alias_config "$val"
+        if git_config_key_runs_command "${val%%=*}" && [[ "$val" == *=* ]]; then
+          __goat_git_inline_commands+=("${val#*=}")
+        fi
         i=$((i + 1))
         continue
         ;;
@@ -1235,6 +1248,8 @@ __goat_git_strip_globals() {
   done
 
   local rest=""
+  __goat_git_global_words=("${words[@]:0:i}")
+  __goat_git_command_words=("${words[@]:i}")
   # Keep the proposed action and arguments together for each repository-policy check.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     rest+="${words[$i]} "
@@ -1243,6 +1258,109 @@ __goat_git_strip_globals() {
   __goat_git_rest="${rest% }"
   # A saved alias can hide a guarded command behind an unrecognised first word.
   record_git_persistent_alias "$__goat_git_rest" "${alias_config_options[@]}"
+  return 0
+}
+
+# These settings can contain command text, unlike ordinary Git configuration values.
+git_config_key_runs_command() {
+  case "${1,,}" in
+    core.pager|core.fsmonitor|core.editor|core.sshcommand) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Apply the selected policy to explicit commands Git will execute now or from saved configuration.
+# Inspection uses a subshell so nested parser state cannot replace the enclosing command's state.
+check_git_hosted_commands() {
+  local cmd="$1" depth="$2"
+  __goat_git_strip_globals "$cmd" || return 0
+  local -a hosted_commands=("${__goat_git_inline_commands[@]}")
+  local -a git_words=("${__goat_git_command_words[@]}")
+  local -a alias_words=()
+  local alias_name="${git_words[0]:-}"
+  local expanded_alias
+  # Git splits the alias value, then appends the caller's original arguments without splitting them again.
+  if [[ "$alias_name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] && ! is_git_builtin_word "$alias_name" &&
+    [[ -n "${__goat_git_raw_alias_expansions[${alias_name,,}]:-}" ]]; then
+    split_shell_words_into alias_words "${__goat_git_raw_alias_expansions[${alias_name,,}]}"
+    printf -v expanded_alias '%q ' "${__goat_git_global_words[@]}" "${alias_words[@]}" "${git_words[@]:1}"
+    hosted_commands+=("$expanded_alias")
+    git_words=()
+  fi
+  local verb="${git_words[0]:-}" word payload output hosted_status key=""
+  local index=1 start=0 skip_value=0
+  case "$verb" in
+    bisect)
+      [[ "${git_words[1]:-}" == run ]] && start=2
+      ;;
+    submodule)
+      while [[ "${git_words[index]:-}" == --quiet || "${git_words[index]:-}" == -q ]]; do
+        index=$((index + 1))
+      done
+      if [[ "${git_words[index]:-}" == foreach ]]; then
+        index=$((index + 1))
+        while [[ "${git_words[index]:-}" == --recursive || "${git_words[index]:-}" == --quiet || "${git_words[index]:-}" == -- ]]; do
+          index=$((index + 1))
+        done
+        start="$index"
+      fi
+      ;;
+    difftool)
+      for ((index = 1; index < ${#git_words[@]}; index++)); do
+        word="${git_words[index]}"
+        case "$word" in
+          --) break ;;
+          -x|--extcmd) hosted_commands+=("${git_words[index+1]:-}"); index=$((index + 1)) ;;
+          --extcmd=*) hosted_commands+=("${word#*=}") ;;
+          -x?*) hosted_commands+=("${word#-x}") ;;
+        esac
+      done
+      ;;
+    config)
+      # Queries and removals do not install executable values. File/type options consume their next word.
+      for ((index = 1; index < ${#git_words[@]}; index++)); do
+        word="${git_words[index]}"
+        if [[ "$skip_value" -eq 1 ]]; then skip_value=0; continue; fi
+        case "$word" in
+          --get*|--list|-l|--unset*|--remove-section|--rename-section|--edit|-e|get|list|unset|remove-section|rename-section|edit) break ;;
+          -f|--file|--blob|--type) skip_value=1; continue ;;
+          set|--add|--replace-all|--local|--global|--system|--worktree|--includes|--no-includes|--) continue ;;
+          -*) continue ;;
+        esac
+        key="$word"
+        if git_config_key_runs_command "$key"; then
+          hosted_commands+=("${git_words[index+1]:-}")
+        fi
+        break
+      done
+      ;;
+  esac
+  if [[ "$start" -gt 0 && "$start" -lt "${#git_words[@]}" ]]; then
+    if [[ $((${#git_words[@]} - start)) -eq 1 ]]; then
+      hosted_commands+=("${git_words[start]}")
+    else
+      printf -v payload '%q ' "${git_words[@]:start}"
+      hosted_commands+=("$payload")
+    fi
+  fi
+  # A submodule or a deferred helper may execute in a different directory.
+  local __goat_git_command_directory="$__goat_git_selected_directory"
+  local __goat_git_directory_unknown=1
+  for payload in "${hosted_commands[@]}"; do
+    [[ -n "$payload" ]] || continue
+    if [[ "$depth" -ge 8 ]]; then
+      block "Git-hosted command nesting exceeds inspection depth; invoke the command directly." || return $?
+    fi
+    if output=$(check_command_segments "$payload" $((depth + 1))); then
+      # Structured providers deliver a denial with exit zero; preserve that decision unchanged.
+      if [[ -n "$output" ]]; then printf '%s\n' "$output"; exit 0; fi
+    else
+      hosted_status=$?
+      # A delivered stderr denial must end the parent, not become a second unavailable-result message.
+      [[ "$hosted_status" -eq 2 ]] && exit 2
+      return "$hosted_status"
+    fi
+  done
   return 0
 }
 
@@ -1821,6 +1939,49 @@ normalize_flock_prefix() {
   join_shell_words_from words "$i"
 }
 
+# Keep shell redirections out of the API request so developers can save read-only GitHub evidence to a file.
+# Use before decoding gh arguments; unresolved redirect syntax returns failure instead of guessing the request.
+strip_shell_redirections() {
+  local command_text="$1" request_words="" character quote="" escaped=0 cursor=0 word_start=0 descriptor_prefix remaining_command
+  # Preserve quoted request data while separating where the developer sends command output.
+  while [[ "$cursor" -lt "${#command_text}" ]]; do
+    character="${command_text:cursor:1}"
+    # Quoted or escaped operators belong to the developer's argument, such as a search for the literal greater-than sign.
+    if [[ "$escaped" -eq 1 ]]; then
+      request_words+="$character"; escaped=0
+    elif [[ "$quote" != "'" && "$character" == "\\" ]]; then
+      request_words+="$character"; escaped=1
+    elif [[ -n "$quote" ]]; then
+      request_words+="$character"
+      [[ "$character" == "$quote" ]] && quote=""
+    elif [[ "$character" == "'" || "$character" == '"' ]]; then
+      quote="$character"; request_words+="$character"
+    elif [[ "$character" == '<' || "$character" == '>' || "${command_text:cursor:2}" == '&>' ]]; then
+      descriptor_prefix="${request_words:word_start}"
+      # A descriptor such as 2 belongs to stderr redirection; a quoted number remains an API argument.
+      if [[ "$descriptor_prefix" =~ ^[0-9]+$ ]]; then request_words="${request_words:0:word_start}"; fi
+      remaining_command="${command_text:cursor}"
+      # Here-documents and process substitutions need their owning parser, not a filename guess.
+      [[ "$remaining_command" != '<<'* && "$remaining_command" != '<('* && "$remaining_command" != '>('* ]] || return 2
+      # Consume the complete redirect operator before skipping the developer's filename or descriptor target.
+      if [[ "$remaining_command" == '&>>'* ]]; then remaining_command="${remaining_command:3}"
+      elif [[ "$remaining_command" == '>>'* || "$remaining_command" == '>&'* || "$remaining_command" == '<&'* || "$remaining_command" == '<>'* || "$remaining_command" == '>|'* || "$remaining_command" == '&>'* ]]; then remaining_command="${remaining_command:2}"
+      else remaining_command="${remaining_command:1}"; fi
+      remaining_command="${remaining_command#"${remaining_command%%[![:space:]]*}"}"
+      [[ -n "$remaining_command" ]] || return 2
+      remaining_command=$(drop_first_shell_word "$remaining_command")
+      command_text="$remaining_command"; cursor=0; request_words+=' '; word_start=${#request_words}
+      continue
+    else
+      request_words+="$character"
+      [[ "$character" =~ [[:space:]] ]] && word_start=${#request_words}
+    fi
+    cursor=$((cursor + 1))
+  done
+  [[ -z "$quote" && "$escaped" -eq 0 ]] || return 2
+  printf '%s' "$request_words"
+}
+
 # Reveal the command a user would actually run after supported wrappers and dispatchers.
 # Use before every policy module so equivalent command shapes receive the same verdict.
 normalize_command_candidate() {
@@ -1844,10 +2005,9 @@ normalize_command_candidate() {
     fi
 
     word="${c%%[[:space:]]*}"
-    # Plain command words are already normalized. Quotes and backslashes are
-    # the only syntax this helper removes, so keep ordinary commands in-process.
-    if [[ "$word" == *\'* || "$word" == *\"* || "$word" == *\\* ]]; then
-      c=$(normalize_leading_command_word "$c")
+    # Plain command words are already normalized; inspect quotes, escapes, and IFS expansion to reveal the executable.
+    if [[ "$word" == *\'* || "$word" == *\"* || "$word" == *\\* || "$word" == *"\$IFS"* || "$word" == *"\${IFS}"* ]]; then
+      c=$(normalize_leading_command_word "$c") || return $?
     fi
 
     # `!` changes only the pipeline's exit status; reveal the command it negates.
@@ -2431,7 +2591,7 @@ prepare_segment_context() {
 
   CMD_TRIMMED="${policy_cmd#"${policy_cmd%%[![:space:]]*}"}"
   if ! CMD_NORMALIZED=$(normalize_command_candidate "$CMD_TRIMMED"); then
-    block "Cannot inspect wrapper options; use supported options or invoke the command directly." || return $?
+    block "Cannot inspect command syntax; use a literal executable and supported wrapper options." || return $?
   fi
   CMD_VERB="${CMD_NORMALIZED%%[[:space:]]*}"
   CMD_VERB="${CMD_VERB##*/}"
@@ -2908,7 +3068,7 @@ source "$GOAT_HOOK_LIB_DIR/patterns-writes.sh" || deny_dangerous_unavailable "fa
 
 # During an interrupted upgrade the old policy file can still be present. It
 # must not reach main without the split API and accidentally allow on return 127.
-for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias git_arguments_are_one_of git_flags_within git_arguments_include split_curl_form_parts_into curl_form_files_touch_secret; do
+for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias git_arguments_are_one_of git_flags_within git_arguments_include split_curl_form_parts_into curl_form_files_touch_secret git_symbolic_ref_is_read_only; do
   declare -F "$required_policy_function" >/dev/null ||
     deny_dangerous_unavailable "policy store lacks required function $required_policy_function"
 done
@@ -2938,6 +3098,10 @@ check_segment() {
     check_destructive_segment "$cmd" "$depth" || return $?
     GOAT_ACTIVE_GUARD_SCOPE="secret"
     check_secret_segment "$cmd" "$depth" || return $?
+  fi
+
+  if [[ "$CMD_VERB" == git ]]; then
+    check_git_hosted_commands "$CMD_NORMALIZED" "$depth" || return $?
   fi
 
   # Nested inspection restores its enclosing policy label so any later denial names the correct user-visible protection.

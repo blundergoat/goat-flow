@@ -781,7 +781,10 @@ function renderHookExecutionResult(
   );
 }
 
-/** Return off/unavailable status before Bash discovery; null leaves enabled and unrelated hooks on the normal path. */
+/**
+ * Honor the user's saved policy switch before looking for Bash; enabled and unrelated hooks return null to continue normal launch.
+ * Reports invalid settings as a provider repair refusal; an explicit off choice returns its successful allow response.
+ */
 async function policyChoiceBeforeBash(
   projectRoot,
   hookIdentifier,
@@ -804,8 +807,13 @@ async function policyChoiceBeforeBash(
     try {
       const { default: policyState } = await import("./hook-policy-state.cjs");
       // Only the user's explicit verified false skips this policy's enforcement before Bash launches.
-      if (policyState.readPolicyChoices(projectRoot)[hookIdentifier] === false)
+      if (policyState.readPolicyChoices(projectRoot)[hookIdentifier] === false) {
+        // Antigravity waits for an explicit decision even when the user has turned enforcement off.
+        if (hookResponseMode === "antigravity") {
+          process.stdout.write(`${JSON.stringify({ decision: "allow" })}\n`);
+        }
         return 0;
+      }
     } catch {
       // A missing reader or malformed saved YAML leaves protection unknown; return the provider's setup-repair refusal.
       return reportUnavailable(

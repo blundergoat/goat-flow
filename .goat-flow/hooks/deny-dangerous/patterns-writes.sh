@@ -14,6 +14,8 @@ __goat_git_aliased_commit=0
 __goat_git_aliased_destructive=0
 # Alias name (lowercased, as Git matches it) to its normalized expansion, for the command being inspected.
 declare -gA __goat_git_alias_expansions=()
+# Preserve alias argument boundaries for Git commands that execute a nested shell command.
+declare -gA __goat_git_raw_alias_expansions=()
 
 # Decide whether a direct subcommand or alias expansion publishes Git objects.
 # Use for both visible Git commands and alias config so their deny set cannot drift.
@@ -52,7 +54,7 @@ is_git_publication_alias_config() {
 
 # Git verbs that create, rewrite or move branch history reserved for the developer, before any non-committing exemption.
 # filter-branch, filter-repo and fast-import write commits and move branches directly, so they sit beside commit.
-__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch "
+__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace "
 
 # Decide whether a verb's arguments are exactly one of the listed words.
 # Use for recovery modes such as `--abort`, which Git accepts only without other arguments.
@@ -136,12 +138,16 @@ git_fetch_moves_local_ref() {
 # Git reset with a pathspec or the current HEAD only changes the index. Other revisions can move the branch.
 git_reset_is_index_only() {
   local -a reset_words=()
-  local reset_word first_operand="" has_path_operand=0 has_index_mode=0
+  local reset_word first_operand="" has_path_operand=0 has_index_mode=0 after_separator=0
   read -r -d '' -a reset_words <<< "$1" || true
   for reset_word in "${reset_words[@]}"; do
+    if [[ "$after_separator" -eq 1 ]]; then
+      has_path_operand=1
+      continue
+    fi
     case "$reset_word" in
       --hard|--soft|--merge|--keep) return 1 ;;
-      --) return 0 ;;
+      --) after_separator=1; continue ;;
       -p|--patch|--pathspec-from-file|--pathspec-from-file=*) has_index_mode=1; continue ;;
       -q|--quiet|--mixed|--no-refresh|--refresh|--pathspec-file-nul) continue ;;
       -*) return 1 ;;
@@ -155,6 +161,24 @@ git_reset_is_index_only() {
   [[ "$has_index_mode" -eq 1 || "$has_path_operand" -eq 1 || -z "$first_operand" || "$first_operand" == HEAD ]]
 }
 
+# One symbolic-ref operand reads a ref; a second operand or a deletion flag writes it.
+git_symbolic_ref_is_read_only() {
+  local -a ref_words=()
+  local ref_word operands=0 after_separator=0
+  read -r -d '' -a ref_words <<< "$1" || true
+  for ref_word in "${ref_words[@]}"; do
+    if [[ "$after_separator" -eq 0 ]]; then
+      case "$ref_word" in
+        --) after_separator=1; continue ;;
+        -q|--quiet|--short|--recurse|--no-recurse) continue ;;
+        -*) return 1 ;;
+      esac
+    fi
+    operands=$((operands + 1))
+  done
+  [[ "$operands" -eq 1 ]]
+}
+
 # Decide whether a direct subcommand or alias expansion creates history reserved for the developer.
 # Pass `strict` for alias expansions: Git appends the visible arguments to an alias, and those can undo an exempt form.
 is_git_commit_target() {
@@ -166,7 +190,7 @@ is_git_commit_target() {
   [[ "$candidate" == *[[:space:]]* ]] && arguments="${candidate#*[[:space:]]}"
   [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
   # Aliases to a conditional verb are safe until their own or appended arguments select the history-writing form.
-  if [[ "$mode" == "strict" && " reset branch checkout switch fetch " != *" $verb "* ]]; then
+  if [[ "$mode" == "strict" && " reset branch checkout switch fetch symbolic-ref replace " != *" $verb "* ]]; then
     return 0
   fi
   # A lone help flag prints usage and changes nothing, so an agent can still check a verb's option spellings.
@@ -182,7 +206,18 @@ is_git_commit_target() {
       git_option_present "$arguments" f force 1 cC && return 0
       git_option_present "$arguments" D "" 0 cC && return 0
       git_option_present "$arguments" M "" 0 cC && return 0
+      git_option_present "$arguments" C "" 0 c && return 0
       return 1
+      ;;
+    symbolic-ref)
+      git_symbolic_ref_is_read_only "$arguments" && return 1
+      ;;
+    replace)
+      [[ -z "$arguments" ]] && return 1
+      if git_flags_within "$arguments" "-l --list --format=short --format=medium --format=long" &&
+        { git_arguments_include "$arguments" "-l" || git_arguments_include "$arguments" "--list"; }; then
+        return 1
+      fi
       ;;
     checkout)
       git_option_present "$arguments" B force-create 7 b && return 0
@@ -247,6 +282,20 @@ is_git_destructive_target() {
   # A usage request such as `stash drop -h` prints help and changes nothing.
   git_arguments_request_usage_only "$git_arguments" && return 1
   case "$git_verb" in
+    submodule)
+      # Forced checkout/deinitialization can discard edits inside a submodule's worktree.
+      if [[ "$git_arguments" =~ ^((--quiet|-q)[[:space:]]+)*(deinit|update)([[:space:]]|$) ]]; then
+        git_option_present "$git_arguments" f force 1 "" && return 0
+      fi
+      ;;
+    tag)
+      git_option_present "$git_arguments" d delete 1 mF && return 0
+      git_option_present "$git_arguments" f force 1 mF && return 0
+      ;;
+    remote)
+      # Removing a remote drops its configuration and remote-tracking refs.
+      [[ "$git_arguments" =~ ^((-v|--verbose)[[:space:]]+)*(remove|rm)([[:space:]]|$) ]] && return 0
+      ;;
     rm)
       # Force removes tracked work even when Git's up-to-date check would otherwise protect it.
       git_option_present "$git_arguments" n dry-run 3 "" && return 1
@@ -453,6 +502,7 @@ reset_git_alias_flags() {
   __goat_git_aliased_commit=0
   __goat_git_aliased_destructive=0
   __goat_git_alias_expansions=()
+  __goat_git_raw_alias_expansions=()
 }
 
 # Record all guarded actions in an alias so another visible command word cannot hide a developer-only write.
@@ -482,6 +532,7 @@ record_git_alias_config() {
     local alias_expansion="${BASH_REMATCH[2]}"
     record_git_alias_expansion "$alias_expansion"
     __goat_git_alias_expansions["${alias_name,,}"]="$(normalize_git_alias_expansion "$alias_expansion")"
+    __goat_git_raw_alias_expansions["${alias_name,,}"]="$alias_expansion"
   fi
 }
 
@@ -516,6 +567,7 @@ record_git_persistent_alias() {
   [[ -n "$expansion" ]] || return 0
   record_git_alias_expansion "$expansion"
   __goat_git_alias_expansions["${word,,}"]="$(normalize_git_alias_expansion "$expansion")"
+  __goat_git_raw_alias_expansions["${word,,}"]="$expansion"
 }
 
 # Decide whether a proposed Git command would publish work to a remote.
@@ -716,6 +768,10 @@ is_gh_write_operation() {
   # Only the GitHub CLI owns this command grammar.
   [[ "$gh_word" == "gh" ]] || return 1
 
+  # Output filenames and descriptors are shell syntax, not gh API arguments.
+  github_candidate=$(strip_shell_redirections "$github_candidate") || return 0
+  split_shell_words_into words "$github_candidate"
+
   local i
   i=$(gh_skip_options_index words 1)
 
@@ -726,7 +782,7 @@ is_gh_write_operation() {
 
   # API writes use method and field semantics instead of named subcommands.
   if [[ "$topic" == "api" ]]; then
-    is_gh_api_write words $((i + 1)) "$1"
+    is_gh_api_write words $((i + 1)) "$github_candidate"
     return $?
   fi
 
@@ -745,7 +801,7 @@ is_gh_write_operation() {
       return 0 ;;
     release:create|release:upload|release:delete|release:edit|release:delete-asset)
       return 0 ;;
-    discussion:create|discussion:edit)
+    discussion:create|discussion:edit|discussion:comment|agent-task:create|agent:create|agents:create)
       return 0 ;;
     repo:create|repo:delete|repo:edit|repo:fork|repo:rename|repo:archive|repo:unarchive|repo:sync|repo:set-default)
       return 0 ;;
