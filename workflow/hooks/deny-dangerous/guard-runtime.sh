@@ -1272,7 +1272,14 @@ __goat_git_strip_globals() {
   done
   __goat_git_rest="${rest% }"
   # A saved alias can hide a guarded command behind an unrecognised first word.
-  record_git_persistent_alias "$__goat_git_rest" "${alias_config_options[@]}"
+  local alias_word="${__goat_git_rest%%[[:space:]]*}"
+  if [[ "${__goat_git_selected_directory_unknown:-0}" -eq 1 &&
+        "${__goat_git_hosted_directory_unknown:-0}" -eq 0 &&
+        "$alias_word" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] && ! is_git_builtin_word "$alias_word"; then
+    block "Cannot inspect a saved Git alias after a dynamic directory change. Use a literal directory or ask the user to run the command manually." || return $?
+  fi
+  # A preceding shell cd changes Git's config lookup base; later Git -C options still apply in their original order.
+  record_git_persistent_alias "$__goat_git_rest" -C "${__goat_git_command_directory:-$PWD}" "${alias_config_options[@]}"
   return 0
 }
 
@@ -1342,7 +1349,7 @@ check_git_hosted_commands() {
   local -a git_words=("${__goat_git_command_words[@]}")
   local -a alias_words=()
   local alias_name="${git_words[0]:-}"
-  local expanded_alias appended_args=""
+  local expanded_alias appended_args="" alias_hosted_index=-1 payload_index=0
   # Git splits the alias value, then appends the caller's original arguments without splitting them again.
   if [[ "$alias_name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] && ! is_git_builtin_word "$alias_name" &&
     [[ -n "${__goat_git_raw_alias_expansions[${alias_name,,}]:-}" ]]; then
@@ -1356,6 +1363,7 @@ check_git_hosted_commands() {
       split_shell_words_into alias_words "${__goat_git_raw_alias_expansions[${alias_name,,}]}"
       printf -v expanded_alias '%q ' "${__goat_git_global_words[@]}" "${alias_words[@]}" "${git_words[@]:1}"
     fi
+    alias_hosted_index="${#hosted_commands[@]}"
     hosted_commands+=("$expanded_alias")
     git_words=()
   fi
@@ -1461,7 +1469,16 @@ check_git_hosted_commands() {
   # A submodule or a deferred helper may execute in a different directory.
   local __goat_git_command_directory="$__goat_git_selected_directory"
   local __goat_git_directory_unknown=1
+  local __goat_git_hosted_directory_unknown=1
   for payload in "${hosted_commands[@]}"; do
+    # Git expands its own alias in the selected repository; other hosted commands may change directory.
+    __goat_git_directory_unknown=1
+    __goat_git_hosted_directory_unknown=1
+    if [[ "$payload_index" -eq "$alias_hosted_index" ]]; then
+      __goat_git_directory_unknown="$__goat_git_selected_directory_unknown"
+      __goat_git_hosted_directory_unknown=0
+    fi
+    payload_index=$((payload_index + 1))
     [[ -n "$payload" ]] || continue
     if [[ "$payload" == ext::* ]]; then
       # git-remote-ext decodes "% " inside an argument; that boundary is not shell syntax.
@@ -1638,21 +1655,44 @@ normalize_env_prefix() {
 visible_git_config_environment_is_unresolved() {
   local raw="$1" verb="$2"
   local -a words=()
-  local word name value
+  local word name value saw_declaration=0 declaration_exports=0 scan_after_verb=0
   split_shell_words_into words "$raw"
+  # Bash's declare/typeset -x exports assignments just like export; a plain declaration stays local to the shell.
+  if [[ "$verb" == declare || "$verb" == typeset ]]; then
+    for word in "${words[@]}"; do
+      if [[ "$saw_declaration" -eq 0 ]]; then
+        [[ "${word##*/}" == "$verb" ]] && saw_declaration=1
+        continue
+      fi
+      case "$word" in
+        --) ;;
+        -*) [[ "$word" == -*x* ]] && declaration_exports=1 ;;
+        +*) ;;
+        *) break ;;
+      esac
+    done
+  fi
+  [[ "$verb" == export || "$declaration_exports" -eq 1 ]] && scan_after_verb=1
   for word in "${words[@]}"; do
     # A command argument can quote the same text as inert data; only prefixes affect the process environment.
-    if [[ -n "$verb" && "$verb" != export && "${word##*/}" == "$verb" ]]; then
+    if [[ -n "$verb" && "$scan_after_verb" -eq 0 && "${word##*/}" == "$verb" ]]; then
       break
     fi
-    [[ "$word" =~ ^(GIT_CONFIG_(COUNT|PARAMETERS|KEY_[0-9]+|VALUE_[0-9]+|GLOBAL|SYSTEM))=(.*)$ ]] || continue
-    name="${BASH_REMATCH[1]}"
-    value="${BASH_REMATCH[3]}"
-    case "$name" in
-      GIT_CONFIG_COUNT) [[ "$value" == 0 ]] || return 0 ;;
-      GIT_CONFIG_PARAMETERS|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM) [[ -z "$value" ]] || return 0 ;;
-      *) return 0 ;;
-    esac
+    if [[ "$word" =~ ^(GIT_CONFIG_(COUNT|PARAMETERS|KEY_[0-9]+|VALUE_[0-9]+|GLOBAL|SYSTEM))=(.*)$ ]]; then
+      name="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[3]}"
+      case "$name" in
+        GIT_CONFIG_COUNT) [[ "$value" == 0 ]] || return 0 ;;
+        GIT_CONFIG_PARAMETERS|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM) [[ -z "$value" ]] || return 0 ;;
+        *) return 0 ;;
+      esac
+    elif [[ "$word" =~ ^(HOME|XDG_CONFIG_HOME|GIT_DIR)= &&
+            ( "$scan_after_verb" -eq 1 || "$verb" == git || "$verb" == git-* ||
+              "$verb" == bash || "$verb" == sh || "$verb" == zsh || "$verb" == dash ||
+              "$verb" == find || "$verb" == xargs || "$verb" == parallel ) ]]; then
+      # The hook cannot use its own environment to prove which aliases or executable settings Git will load.
+      return 0
+    fi
   done
   return 1
 }
@@ -3215,7 +3255,7 @@ source "$GOAT_HOOK_LIB_DIR/patterns-writes.sh" || deny_dangerous_unavailable "fa
 
 # During an interrupted upgrade the old policy file can still be present. It
 # must not reach main without the split API and accidentally allow on return 127.
-for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias git_arguments_are_one_of git_flags_within git_arguments_include split_curl_form_parts_into curl_form_files_touch_secret git_symbolic_ref_is_read_only; do
+for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias is_git_builtin_word git_arguments_are_one_of git_flags_within git_arguments_include split_curl_form_parts_into curl_form_files_touch_secret git_symbolic_ref_is_read_only; do
   declare -F "$required_policy_function" >/dev/null ||
     deny_dangerous_unavailable "policy store lacks required function $required_policy_function"
 done

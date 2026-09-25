@@ -1,6 +1,6 @@
 ---
 category: deny-shell
-last_reviewed: 2026-09-25
+last_reviewed: 2026-09-26
 ---
 
 Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
@@ -102,7 +102,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 **Decision changed:** Reports must use sibling-aware hook facts; a split hook's dispatcher can hide shipped denies.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 15 | **Latest occurrence:** 2026-09-25
+**Incident count:** 16 | **Latest occurrence:** 2026-09-26
 
 **Prevention:**
 1. Treat a guardrail split as a parser migration: port the old normalization and false-positive corpus before deleting the monolith, and read a large drop in line or self-test count as a review smell until removed coverage maps to new tests.
@@ -114,7 +114,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 7. Enumerate command-bearing keys from the local `git-config` and `git-submodule` manuals when changing Git config inspection, including IMAP tunnel and identity-qualified send-email commands. Apply Git's `!` rules for custom submodule updates and credential-helper prefix rules before scanning values. Pair destructive probes with harmless values; check temporary `-c` values and saved `git config` writes.
 8. Inspect explicit `ext::` remote URLs and upload-pack command options on Git operations that use them. Skip option values such as branch names and sort keys, and pair each denial with a read-only or harmless control. Treat remote-ext's escaped argument spaces as unresolved unless their boundaries can be proved.
 9. Check Git `!` shell aliases against the destructive policy independently of the repository policy. Strip the shell-alias marker before recursive inspection, preserve caller argument boundaries, and test temporary and saved aliases with harmless controls.
-10. Refuse visible `GIT_CONFIG_*` prefixes and exports that the hook's alias lookup cannot inherit; check command-bearing `--config-env` keys even when their values come from an inherited variable.
+10. Refuse visible `GIT_CONFIG_*` prefixes and exported assignments, including `declare -x` and `typeset -x`; treat visible `HOME`, `XDG_CONFIG_HOME`, and `GIT_DIR` changes before Git as unresolved config sources. Check command-bearing `--config-env` keys even when their values come from an inherited variable.
 11. Treat `git grep -O<pager>` and `--open-files-in-pager=<pager>` as hosted commands, and retain a matched-file operand when classifying their deletion risk.
 
 **Symptoms:** `patterns-shell.sh`, `patterns-paths.sh`, and `patterns-writes.sh` each block `rm -rf /`, `cat .env`, and `git push`, while the pre-M10 monolith's parser coverage is gone. Pre-restoration probes wrongly allowed `git -C /tmp push`, `git -c core.sshCommand=foo push`, `/usr/bin/git push`, `gh --repo owner/repo issue comment`, `gh workflow run deploy.yml`, `rm -r src`, `cat .envrc`, `cat '.'env`, and `python3 -c 'print(open(".env").read())'`, and wrongly blocked `rm -rf ./node_modules`, `rg "&& rm -rf /" src/`, `bash -c "echo hello"`, and `python -c 'print(1)'`.
@@ -144,6 +144,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 
 - **Recurrence 2026-09-25 IFS command words:** Unquoted `${IFS}` inside the executable word concealed `eval` carrying Git writes and recursive deletion. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `normalize_leading_command_word`) now refuses that unresolved executable before dispatch. The corpus (search: `IFS`) keeps quoted evidence allowed beside the blocked payloads.
 - **Recurrence 2026-09-25 visible Git config environment:** `GIT_CONFIG_COUNT` alias and `core.fsmonitor` prefixes passed both hooks while the matching `git -c` forms denied. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `visible_git_config_environment_is_unresolved`) now refuses unresolved visible config prefixes, exports, and shell wrappers; (search: `git_config_key_may_host_command`) refuses command-bearing `--config-env` values. The corpus (search: `visible Git config alias publication`) includes zero-count and quoted-literal controls.
+- **Recurrence 2026-09-26 exported declarations:** Both installed hooks allowed `declare -x` and `typeset -x` to export a Git publication alias, and the destructive hook allowed the same syntax for `core.fsmonitor`. The scanner stopped at either builtin before reading its assignments. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `declaration_exports`) now checks those exported assignments; the corpus (search: `declared Git config alias publication`, `unexported declared Git config is local data`) keeps an unexported control.
 - **Recurrence 2026-09-25 Git grep pager:** `git grep -O'rm -rf docs' needle` and its long-option form passed the destructive hook. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Git passes each matching path to this explicit pager command`) now scans the pager value with a matched-file operand. The corpus (search: `Git grep pager hosts destructive shell`) retains a harmless `-Ocat` control.
 
 ---

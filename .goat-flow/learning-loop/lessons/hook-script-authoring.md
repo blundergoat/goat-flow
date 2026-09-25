@@ -1,6 +1,6 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-09-21
+last_reviewed: 2026-09-26
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
@@ -43,7 +43,7 @@ last_reviewed: 2026-09-21
 
 **Status:** active | **Created:** 2026-05-27
 **Decision changed:** Treat every shell-quoted embedded program and its comments as part of the outer shell grammar; run syntax proof before mirror fanout.
-**Incident count:** 5 | **Latest occurrence:** 2026-08-29
+**Incident count:** 6 | **Latest occurrence:** 2026-09-26
 
 **Prevention:** In hook scripts, put EREs containing shell metacharacters or quote classes into named variables before matching. Run `bash -n` before mirror fanout, then run the central full self-test before treating behavior as restored. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `prepare_segment_context`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `redirect_append_re`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `bash -c chained rm`).
 
@@ -58,6 +58,8 @@ last_reviewed: 2026-09-21
 **Recurrence 2026-08-16:** While making the Gruff contract filter span-aware, comments inside its Bash-single-quoted jq program used apostrophes. The edit hook immediately failed with `adapter-delivery-failed`, and `bash -n` located the prematurely terminated jq string before `.findings`. Rewriting those comments without single quotes restored syntax, after which the focused span regression passed. Embedded-program comments must remain neutral to the outer quote delimiter, and `bash -n` must run before treating a mirror edit as executable. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `def attributable_line_or_span`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `surfaces a symbol finding when its span overlaps`).
 
 **Recurrence 2026-08-29:** The deny hook's substitution-opener test matches the literal openers `$(`, `<(` and `>(` inside `[[ ... ]]`, so its single quotes are load-bearing. ShellCheck read them as a failed expansion and raised SC2016 in both byte-identical mirrors, which made the aggregate shell-lint command in the instruction files exit 1 as published - the documented command was untrue for every agent that ran it. A narrow directive beside the test (`workflow/hooks/deny-dangerous/guard-runtime.sh`, search: `_goat_subst_n=0`) restored exit 0 with no exclusions. The wider lesson is about the gate, not the literal: the `SC2016` exclusion that had been hiding this lived in CI and preflight, and preflight's hook scope comes from `manifest_eval hook-dirs`, which resolves to `.goat-flow/hooks` alone - one of the documented command's four hook globs. A regression in a `workflow/hooks/` mirror was invisible to preflight entirely, so the recurrence guard is now a contract that executes the published command (`test/contract/documented-shellcheck-command.test.ts`), not the exclusion list.
+
+**Recurrence 2026-09-26:** I mirrored a new `[[ ... =~ ... ]]` condition with a mismatched closing bracket before running `bash -n`. The installed PreToolUse guard failed closed and blocked Bash until the syntax was corrected. ShellCheck then found a `--` case arm hidden behind `-*`; putting the specific arm first restored lint. Run syntax and ShellCheck on the canonical edit before touching the installed mirror. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `HOME|XDG_CONFIG_HOME|GIT_DIR`) and the full policy cases in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `HOME-selected saved publication alias`).
 
 ## Lesson: Dynamic hook helpers need explicit ShellCheck handling
 

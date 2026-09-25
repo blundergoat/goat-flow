@@ -1,6 +1,6 @@
 ---
 category: hook-probe-testing
-last_reviewed: 2026-09-18
+last_reviewed: 2026-09-26
 ---
 
 **Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md).
@@ -86,7 +86,7 @@ last_reviewed: 2026-09-18
 ## Lesson: Hook parser regressions need false-positive grammar probes
 
 **Status:** active | **Created:** 2026-05-27
-**Incident count:** 4 | **Latest occurrence:** 2026-09-18
+**Incident count:** 5 | **Latest occurrence:** 2026-09-26
 
 **Prevention:** For shell hooks, build regression matrices from valid per-command grammar and common inert syntax, not only incident strings. Record whether every short or long option is standalone, consumes one or more values, accepts an equals or attached value, supplies the primary expression, or reads a file. Include CLI subcommands that collide with shell keywords, unquoted comments, quoted `#`, jq/yq dotted queries, and filename controls such as `private.key`, `deploy.pem`, and `prod.pfx`. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `powershell double-dash command remove-item`), (search: `git --git-dir push`), (search: `jq bundled raw filter file`), and (search: `yq eval subcommand key query`).
 
@@ -99,6 +99,8 @@ last_reviewed: 2026-09-18
 **Recurrence 2026-09-18:** Follow-up review found quoted alias flags allowed and printed `qx`/`%x` text denied after the obvious forms had been repaired. The missing neighbours were Git's second quoting layer, operator-looking data, quote-delimited execution and executable string interpolation. The initial focused regressions failed 17 assertions; the corrected classifier corpus passed with those controls and retained raw process-module denials. Evidence: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git alias quoted hard-reset argument`, `Perl printed qx operator text`, `Ruby percent-x in executable string interpolation`). A separate current-installed Sync fixture exposed default-on Git protection becoming off during persistence; it must run with current ownership bytes so upgrade review cannot conceal the defect. Evidence: `test/integration/hook-effective-state.test.ts` (search: `preserves a missing Git choice during current-installed`).
 
 **Recurrence 2026-09-18:** The next recheck extended valid YAML shapes across Sync, prepared toggles and direct saves. An anchored hook block passed Sync, but both toggle paths removed the anchor while another setting still referenced it; the direct writer saved invalid YAML. Test every supported config shape at each write boundary, then parse the saved result and check unrelated settings and repeated preparation. Both new toggle regressions failed before `src/cli/config/writer.ts` (search: `replaceTopLevelHooksBlock`) retained the anchor. Full verification then caught the replacement function exceeding its complexity limit; extracting `retainHooksAnchor` preserved the behavior within that budget. The same gate read a stale index after lesson edits continued during verification. Finish source, lesson and index edits before starting the final gate. Evidence: `test/unit/config-writer.test.ts` (search: `keeps hook anchors usable during an ordinary`).
+
+**Recurrence 2026-09-26:** The first dynamic-directory alias deny also blocked an ordinary `credential.helper` value because Git's helper command runs with an unknown directory in the parser. The Git suite passed while the dangerous-hook full suite failed its existing credential-helper allow control. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_hosted_directory_unknown`) now distinguishes a visible dynamic shell directory from a deferred Git-hosted command; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `ordinary Git credential helper receives a Git prefix`) retains the control.
 
 ## Lesson: Normalize agent hook payload variants before field access
 

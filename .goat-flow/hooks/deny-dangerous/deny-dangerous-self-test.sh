@@ -773,6 +773,9 @@ run_smoke() {
   expect_allow git 'ALIAS=commit git --config-env=alias.c=ALIAS status' "environment alias does not shadow builtin"
   expect_block git 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.ship GIT_CONFIG_VALUE_0=push git ship origin main' "visible Git config alias publication"
   expect_block git "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.ship GIT_CONFIG_VALUE_0=push bash -lc 'git ship origin main'" "Git config alias through shell wrapper"
+  expect_block git 'declare -x GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.ship GIT_CONFIG_VALUE_0=push; git ship origin main' "declared Git config alias publication"
+  expect_block git 'typeset -x GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.ship GIT_CONFIG_VALUE_0=push; git ship origin main' "typeset Git config alias publication"
+  expect_allow git 'declare GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.ship GIT_CONFIG_VALUE_0=push; git ship origin main' "unexported declared Git config is local data"
   expect_allow git 'GIT_CONFIG_COUNT=0 git status' "zero inline Git config entries"
   expect_allow git "echo GIT_CONFIG_COUNT=1" "Git config assignment as literal output"
   expect_block shell "git grep -O'rm -rf docs' needle" "Git grep pager hosts destructive shell"
@@ -1321,6 +1324,8 @@ run_full() {
   expect_allow shell "git grep -O needle" "Git grep default pager with separated pattern"
   expect_allow shell "git grep -- '-Orm -rf docs'" "Git grep literal after option terminator"
   expect_block shell "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0='rm -rf docs' git status" "Git environment monitor hides destructive shell"
+  expect_block shell "declare -x GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0='rm -rf docs'; git status" "declared Git environment monitor"
+  expect_block shell "typeset -x GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0='rm -rf docs'; git status" "typeset Git environment monitor"
   expect_block shell "env GIT_CONFIG_PARAMETERS=\"'core.fsmonitor=rm -rf docs'\" git status" "Git config parameters hide destructive shell"
   expect_block shell "export GIT_CONFIG_PARAMETERS=\"'core.fsmonitor=rm -rf docs'\"; git status" "exported Git config parameters"
   expect_block shell "GIT_CONFIG_GLOBAL=./config bash -lc 'git status'" "Git config file through shell wrapper"
@@ -1712,6 +1717,35 @@ run_full() {
   git init -q "$alias_project_root/other repository"
   git -C "$alias_project_root/other repository" config alias.gfselectedrecord commit
   git -C "$alias_project_root/other repository" config alias.gfselectedinspect 'status --short'
+  git -C "$alias_project_root/other repository" config alias.gfselectedwipe '!rm -rf .'
+  git -C "$alias_project_root/other repository" config alias.gfselectedprint '!printf ok'
+  local redirected_home="$alias_project_root/config home"
+  local redirected_xdg="$alias_project_root/config xdg"
+  mkdir -p "$redirected_home" "$redirected_xdg/git"
+  git config --file "$redirected_home/.gitconfig" alias.gfredirectpush push
+  git config --file "$redirected_home/.gitconfig" core.fsmonitor 'rm -rf docs'
+  git config --file "$redirected_xdg/git/config" alias.gfredirectpush push
+  git config --file "$redirected_xdg/git/config" core.fsmonitor 'rm -rf docs'
+  git -C "$alias_project_root/other repository" config core.fsmonitor 'rm -rf docs'
+  # These visible selectors change the config Git will read, while the hook's own alias lookup keeps its original environment.
+  expect_block git "HOME='$redirected_home' git gfredirectpush origin main" "HOME-selected saved publication alias"
+  expect_block git "HOME='$redirected_home' bash -lc 'git gfredirectpush origin main'" "HOME-selected alias through shell wrapper"
+  expect_block shell "HOME='$redirected_home' git status" "HOME-selected executable Git config"
+  expect_block git "XDG_CONFIG_HOME='$redirected_xdg' git gfredirectpush origin main" "XDG-selected saved publication alias"
+  expect_block git "env XDG_CONFIG_HOME='$redirected_xdg' git gfredirectpush origin main" "XDG-selected alias through env wrapper"
+  expect_block shell "XDG_CONFIG_HOME='$redirected_xdg' git status" "XDG-selected executable Git config"
+  expect_block git "GIT_DIR='$alias_project_root/other repository/.git' git gfselectedrecord -m inspection" "GIT_DIR-selected saved commit alias"
+  expect_block shell "GIT_DIR='$alias_project_root/other repository/.git' git status" "GIT_DIR-selected executable Git config"
+  expect_block git "export HOME='$redirected_home'; git gfredirectpush origin main" "exported HOME-selected saved alias"
+  expect_block git "declare -x GIT_DIR='$alias_project_root/other repository/.git'; git gfselectedrecord -m inspection" "declared GIT_DIR-selected saved alias"
+  expect_allow git "HOME='$redirected_home' printf safe" "HOME selector with non-Git command"
+  expect_allow shell "XDG_CONFIG_HOME='$redirected_xdg' printf safe" "XDG selector with non-Git command"
+  expect_allow git "echo HOME='$redirected_home'" "quoted HOME selector as literal output"
+  expect_block git "cd '$alias_project_root/other repository' && git gfselectedrecord -m inspection" "saved commit alias after shell cd"
+  expect_allow git "cd '$alias_project_root/other repository' && git gfselectedinspect" "saved read alias after shell cd"
+  expect_block shell "cd '$alias_project_root/other repository' && git gfselectedwipe" "saved destructive shell alias after shell cd"
+  expect_allow shell "cd '$alias_project_root/other repository' && git gfselectedprint" "saved harmless shell alias after shell cd"
+  expect_block git "TARGET='$alias_project_root/other repository'; cd \"\$TARGET\" && git gfselectedrecord -m inspection" "saved alias after dynamic shell cd"
   # Quoted paths, repeated -C and both Git-directory forms must preserve alias denial and read-only controls.
   for alias_project_options in \
     "-C '$alias_project_root/other repository'" \

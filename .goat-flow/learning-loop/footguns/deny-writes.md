@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-09-25
+last_reviewed: 2026-09-26
 ---
 
 External-write traps: pushes, GitHub mutations, and other side effects that leave the machine. They bypass local file guards, so the deny surface is the only control.
@@ -125,7 +125,7 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 **Decision changed:** Every guarded Git class reads the recorded alias expansions as well as the visible subcommand, and an unrecognised first word resolves through one bounded `git config --get alias.<word>` lookup before classification.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 4 | **Latest occurrence:** 2026-09-25
+**Incident count:** 5 | **Latest occurrence:** 2026-09-26
 
 **Prevention:**
 1. Classify the complete decoded alias expansion, never the invoked word alone: route every `-c alias.<name>=<expansion>` operand through `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `record_git_alias_config`, `normalize_git_alias_expansion`) so publication, commit and destructive expansions each set their own flag, and let `record_git_persistent_alias` resolve a saved alias when the first word is not a Git builtin. Decode quoting in flags as well as the command word.
@@ -145,6 +145,7 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 
 **Recurrence 2026-09-18:** `git -c 'alias.nuke=reset "--hard"' nuke` and `clean "-fdx"` aliases returned 0 while their unquoted controls returned 2. The helper stripped quotes only from the first word. Complete inert word decoding now denies both forms and retains quoted `status "--short"` inspection. Evidence: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `normalize_git_alias_expansion`) and the corpus (search: `git alias quoted hard-reset argument`, `saved alias quoted forced-clean argument`).
 **Recurrence 2026-09-25:** An alias that expands to another Git global-option sequence concealed commit and push aliases. Replay each expansion as a complete Git command, retaining the selected repository, temporary config and arguments, with the existing recursion bound. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_global_words`, `expanded_alias`) owns the reconstruction; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `nested alias commits`, `nested alias reads`) pairs the denied writes with a status control.
+**Recurrence 2026-09-26:** Both installed hooks allowed a saved publication alias selected by visible `HOME`, `XDG_CONFIG_HOME`, or `GIT_DIR` assignments; the Git hook also allowed it after `cd` into the alias-owning repository. The lookup used the hook's environment and cwd instead of the proposed command's. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `record_git_persistent_alias "$__goat_git_rest" -C`) now uses the tracked literal shell directory, refuses an unresolved dynamic directory for an unknown Git word, and refuses the tested config-source selectors; the corpus (search: `HOME-selected saved publication alias`, `saved read alias after shell cd`) pairs denials with ordinary commands and a read alias.
 
 
 ## Footgun: Ordinary hook persistence can inherit an off choice from a different policy
