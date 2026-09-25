@@ -323,7 +323,7 @@ category: recall-controls
 last_reviewed: 2026-08-30
 ---
 
-## Lesson: ${escape}[31mPainted${escape}[0m heading
+## Lesson: ${escape}[31mPainted${escape}[0m heading\u202eTXT\u2066
 
 **Status:** active | **Created:** 2026-08-30
 **Decision changed:** ${escape}]8;;https://example.invalid${bell}linked${escape}]8;;${bell}
@@ -347,6 +347,11 @@ last_reviewed: 2026-08-30
       assert.doesNotMatch(text, /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/u);
       assert.match(text, /\\u001b\[31mPainted\\u001b\[0m/u);
       assert.match(text, /\\u0007linked/u);
+      assert.doesNotMatch(
+        text,
+        /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u,
+      );
+      assert.match(text, /\\u202eTXT\\u2066/u);
       assert.equal(
         (
           JSON.parse(json) as { matches: Array<{ heading: string }> }

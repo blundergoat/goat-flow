@@ -1003,7 +1003,7 @@ describe("setup --apply permission upgrade migrations", () => {
       [],
       "retired shipped denies should be gone",
     );
-    // The in-project store rules become home-anchored, and the rewrite dedupes against a home rule already present.
+    // Upgrades retain project protection and add the home partner without duplicates.
     assert.ok(deny.includes("Read(~/.ssh/**)"), "ssh rule anchored at home");
     assert.ok(
       deny.includes("Read(~/.docker/**)"),
@@ -1015,12 +1015,12 @@ describe("setup --apply permission upgrade migrations", () => {
       "kube rewrite deduped into the existing home rule",
     );
     assert.ok(
-      !deny.includes("Read(**/.ssh/**)"),
-      "in-project ssh rule removed",
+      deny.includes("Read(**/.ssh/**)"),
+      "in-project ssh rule preserved",
     );
     assert.ok(
-      !deny.includes("Edit(**/.kube/config)"),
-      "in-project kube rule removed",
+      deny.includes("Edit(**/.kube/**)"),
+      "in-project kube store protected",
     );
     // Rules the project wrote and the ADR-025 pair are untouched, in their original relative order.
     assert.deepEqual(

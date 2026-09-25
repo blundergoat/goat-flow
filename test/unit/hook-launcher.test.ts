@@ -469,7 +469,37 @@ describe("hook launcher script validation", () => {
     });
   });
 
-  // ADD INTEGRATION: split guards share a launcher; startup and deadline failures must name the selected policy.
+  // A saved off choice must reach the provider without launching the deliberately failing script or requiring Bash.
+  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    for (const responseMode of ["policy", "antigravity", "copilot"]) {
+      it(`returns the provider allow response when ${hookId} is off in ${responseMode}`, () => {
+        withTempProject((root) => {
+          const hookDirectory = createManagedHookDirectory(root);
+          writeFileSync(
+            join(hookDirectory, `${hookId}.sh`),
+            "#!/usr/bin/env bash\nexit 99\n",
+          );
+          writeFileSync(
+            join(root, ".goat-flow/config.yaml"),
+            `hooks: {${hookId}: {enabled: false}}\n`,
+          );
+          const result = runLauncherProcess(
+            root,
+            `.goat-flow/hooks/${hookId}.sh`,
+            responseMode,
+            { ...process.env, PATH: "" },
+          );
+          assert.equal(result.status, 0, launcherDiagnostics(result));
+          assert.equal(result.stderr, "");
+          assert.equal(
+            result.stdout,
+            responseMode === "antigravity" ? '{"decision":"allow"}\n' : "",
+          );
+        });
+      });
+    }
+  }
+
   for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
     for (const responseMode of ["policy", "antigravity", "copilot"]) {
       for (const failure of ["missing script", "deadline"]) {

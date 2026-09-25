@@ -35,6 +35,12 @@ const allowed = [
   "gh api repos/{owner}/{repo}/issues --method GET",
   "gh issue list",
   "gh issue comment 42 --body ready",
+  "gh api --method GET repos/o/r/pulls/61/comments > out.json",
+  "gh api --method GET repos/o/r/pulls/61/comments 2>&1",
+  "gh api repos/o/r/pulls/1 2>/dev/null",
+  "gh api repos/o/r/pulls/61/comments --jq '.[].body' > bodies.txt",
+  "gh api graphql -f 'query={ viewer { login } }' > 'query result.json'",
+  "gh api graphql -f 'query={ search(query: \">\", type: ISSUE) { issueCount } }' >> result.json",
 ];
 const denied = [
   "gh api graphql -f 'query=mutation { deleteIssue(input: {issueId: \"inert\"}) { clientMutationId } }'",
@@ -68,6 +74,10 @@ const denied = [
   "gh api $ENDPOINT -X GET -f 'query=mutation { x }'",
   "gh api graphq? -X GET -f 'query=mutation { x }'",
   "gh api repos/blundergoat/goat-flow -X POST -f body=inert",
+  "gh api repos/o/r -X POST > out.json",
+  "gh api graphql -f 'query=mutation { x }' 2>/dev/null",
+  "gh api graphql > out.json -f 'query=mutation { x }'",
+  "gh api graphql -f 'query={ viewer { login } }' '>' out.json",
 ];
 
 describe("GraphQL read-only policy", () => {

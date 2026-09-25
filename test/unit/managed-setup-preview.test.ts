@@ -965,6 +965,22 @@ function writeInvalidStateFixture(
 
 describe("invalid managed install state", () => {
   const invalidStateFixtures = [
+    ...[
+      "docs/a\u001b[31m.md",
+      "docs/a\n.md",
+      "docs/a\u202e.md",
+      "docs/a\u2066.md",
+    ].map((path, index) => ({
+      name: `terminal path control ${index}`,
+      body: JSON.stringify({
+        schemaVersion: "goat-flow.install-state.v1",
+        agent: "codex",
+        goatFlowVersion: "1.13.1",
+        files: [{ path, expectedSha256: OLD_EXPECTED_HASH }],
+      }),
+      expectedLimit:
+        "Install state paths must be safe repository-relative paths.",
+    })),
     {
       name: "malformed JSON",
       body: "super-secret-invalid-json",

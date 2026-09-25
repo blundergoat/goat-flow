@@ -175,10 +175,8 @@ describe("agent config template parity", () => {
     });
   }
 
-  // Bare **/ patterns resolve under the working directory, so an in-project rule for a
-  // credential store never protects the real one in the home directory. Every store is
-  // anchored at ~/ on Claude; Codex workspace-root grammar cannot express home paths.
-  it("anchors every Claude credential-store rule at the home directory", () => {
+  // Home anchors and project patterns protect different copies of the same credential stores.
+  it("protects Claude credential stores at home and inside the project", () => {
     const storeNames = [
       ".ssh",
       ".aws",
@@ -193,14 +191,18 @@ describe("agent config template parity", () => {
       ".config/gh/hosts.yml",
       ".pgpass",
     ];
-    const inProjectStoreRules = claudeDeny.filter((entry) =>
-      storeNames.some((store) => entry.includes(`(**/${store}`)),
-    );
-    assert.deepEqual(
-      inProjectStoreRules,
-      [],
-      `credential-store rules must use ~/ anchors; got ${inProjectStoreRules.join(", ")}`,
-    );
+    for (const store of storeNames) {
+      for (const tool of ["Read", "Edit"]) {
+        const homeRule = claudeDeny.find((entry) =>
+          entry.startsWith(`${tool}(~/${store}`),
+        );
+        assert.ok(homeRule, `${tool} must protect the home ${store}`);
+        assert.ok(
+          claudeDeny.includes(homeRule.replace("(~/", "(**/")),
+          `${tool} must also protect the project ${store}`,
+        );
+      }
+    }
   });
 
   // The Bash deny hook owns shell command policy with a tokenizing parser; the only
