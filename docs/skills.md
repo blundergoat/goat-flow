@@ -202,7 +202,7 @@ flowchart TD
     P4 -->|"BLOCKING GATE"| Close["Complete"]
 ```
 
-**Modes:** Path-Only Intake, Read-Only Analysis and reconciliation without an edit request never write. Named-File Update changes only the named plan file, including reconcile-and-fix requests with implementation prohibited. Actual no-file or reporting-only constraints forbid plan edits; contradictory write/no-write requests require clarification. Small File-Write creates one compact file; Standard File-Write creates a one-screen `ISSUE.md` overview plus executable milestones. High-risk work adds only the assumptions, rollback, compatibility, security, or layered proof its named risks require.
+**Modes:** Path-Only Intake, Read-Only Analysis and reconciliation without an edit request never write. Named-File Update changes only the named plan file, including reconcile-and-fix requests with implementation prohibited. Actual no-file or reporting-only constraints forbid plan edits; contradictory write/no-write requests require clarification. Small File-Write creates one or two compact milestone files, adding `ISSUE.md` only for a requested GitHub brief, multiple milestones, or shared requirements; Standard File-Write creates a one-screen `ISSUE.md` overview plus executable milestones. High-risk work adds only the assumptions, rollback, compatibility, security, or layered proof its named risks require.
 
 **Planning lenses:** Prove It Works, Make It Real, Make It Solid, and Make It Shine are optional planning lenses, not required phases. A spike exists only for a named uncertainty. Lenses merge or disappear when they do not reduce uncertainty, deliver independent value, or create a real decision gate.
 
