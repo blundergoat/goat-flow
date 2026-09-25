@@ -11,7 +11,7 @@ last_reviewed: 2026-09-05
 **Prevention:**
 1. Keep guarded phrases out of the Bash command string when investigating deny or push content: use file-read and search tools instead of shell `grep`, `echo`, or `sed`, or grep a fragment that omits the guarded token. Prefer footgun and lesson titles that avoid guarded literals so future title-greps do not trip the globs.
 2. Do not weaken the settings globs (ADR-025), and do not probe with split-variable reconstructions of guarded phrases; the guard rightly refuses evasion-shaped commands.
-3. To test native Git classification, pass a JSON payload file to `.goat-flow/hooks/deny-git-mutations.sh` or use its `--self-test` modes. Use `deny-dangerous.sh` for shell, secret-path, and GitHub policy.
+3. To test native Git or GitHub CLI classification, pass a JSON payload file to `.goat-flow/hooks/deny-git-mutations.sh` or use its `--self-test` modes. Use `deny-dangerous.sh` for shell and secret-path policy.
 
 **Symptoms:** A read-only Bash call is denied with `Permission to use Bash with command ... has been denied` and no `BLOCKED:` output. On 2026-07-03 a `sed` whose address quoted a footgun title containing a push phrase and a `grep` whose pattern quoted a push example were both denied before `deny-dangerous.sh` ran, so the block is easy to misattribute to the hook.
 
