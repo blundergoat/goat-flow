@@ -1276,6 +1276,8 @@ __goat_git_strip_globals() {
   if [[ "${__goat_git_selected_directory_unknown:-0}" -eq 1 &&
         "${__goat_git_hosted_directory_unknown:-0}" -eq 0 &&
         "$alias_word" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] && ! is_git_builtin_word "$alias_word"; then
+    # This Git-alias denial belongs to the repository or destructive policy, not the secret-file scope left active by an earlier check.
+    [[ "$GOAT_GUARD_SCOPE" == deny-git-mutations ]] || GOAT_ACTIVE_GUARD_SCOPE="destructive"
     block "Cannot inspect a saved Git alias after a dynamic directory change. Use a literal directory or ask the user to run the command manually." || return $?
   fi
   # A preceding shell cd changes Git's config lookup base; later Git -C options still apply in their original order.
@@ -1489,6 +1491,8 @@ check_git_hosted_commands() {
       payload="${payload#ext::}"
     fi
     if [[ "$depth" -ge 8 ]]; then
+      # Keep the repository or destructive scope; a nesting-depth denial is not a secret-file access.
+      [[ "$GOAT_GUARD_SCOPE" == deny-git-mutations ]] || GOAT_ACTIVE_GUARD_SCOPE="destructive"
       block "Git-hosted command nesting exceeds inspection depth; invoke the command directly." || return $?
     fi
     if output=$(check_command_segments "$payload" $((depth + 1))); then
@@ -1650,15 +1654,33 @@ normalize_env_prefix() {
   printf '%s' "$c"
 }
 
+# Variable names whose value chooses which Git configuration, aliases or hooks a later git process loads.
+git_config_source_variable_name() {
+  case "$1" in
+    HOME|XDG_CONFIG_HOME|GIT_DIR|GIT_COMMON_DIR|GIT_CONFIG|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM|GIT_CONFIG_COUNT|GIT_CONFIG_PARAMETERS)
+      return 0 ;;
+    GIT_CONFIG_KEY_*|GIT_CONFIG_VALUE_*)
+      return 0 ;;
+  esac
+  return 1
+}
+
 # Visible Git config environment assignments are not inherited by the hook's read-only alias lookup.
 # Refuse the unresolved configuration before normalizing away the assignments or export command.
 visible_git_config_environment_is_unresolved() {
   local raw="$1" verb="$2"
   local -a words=()
   local word name value saw_declaration=0 declaration_exports=0 scan_after_verb=0
+  # An earlier chained segment relocated Git's configuration source, so this Git action is also unresolved.
+  if [[ "${__goat_git_config_env_unresolved:-0}" -eq 1 &&
+        ( "$verb" == git || "$verb" == git-* ||
+          "$verb" == bash || "$verb" == sh || "$verb" == zsh || "$verb" == dash ||
+          "$verb" == find || "$verb" == xargs || "$verb" == parallel ) ]]; then
+    return 0
+  fi
   split_shell_words_into words "$raw"
-  # Bash's declare/typeset -x exports assignments just like export; a plain declaration stays local to the shell.
-  if [[ "$verb" == declare || "$verb" == typeset ]]; then
+  # Bash's declare/typeset/local -x exports assignments just like export; a plain declaration stays local to the shell.
+  if [[ "$verb" == declare || "$verb" == typeset || "$verb" == local ]]; then
     for word in "${words[@]}"; do
       if [[ "$saw_declaration" -eq 0 ]]; then
         [[ "${word##*/}" == "$verb" ]] && saw_declaration=1
@@ -1686,7 +1708,7 @@ visible_git_config_environment_is_unresolved() {
         GIT_CONFIG_PARAMETERS|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM) [[ -z "$value" ]] || return 0 ;;
         *) return 0 ;;
       esac
-    elif [[ "$word" =~ ^(HOME|XDG_CONFIG_HOME|GIT_DIR)= &&
+    elif [[ "$word" =~ ^(HOME|XDG_CONFIG_HOME|GIT_DIR|GIT_COMMON_DIR)= &&
             ( "$scan_after_verb" -eq 1 || "$verb" == git || "$verb" == git-* ||
               "$verb" == bash || "$verb" == sh || "$verb" == zsh || "$verb" == dash ||
               "$verb" == find || "$verb" == xargs || "$verb" == parallel ) ]]; then
@@ -2957,6 +2979,76 @@ track_git_shell_directory() {
   fi
 }
 
+# A chained segment can relocate Git's configuration source for every later command in the same shell.
+# Record that so a following Git action is treated as unresolved even when the assignment and the command are separate segments.
+track_git_config_environment() {
+  local segment="$1"
+  # Strip leading subshell and brace-group openers so an assignment inside a group is inspected like a top-level one.
+  # A later git in the same group then sees the relocated config; an isolated group followed by git fails safe (denied).
+  while [[ "$segment" == \(* || "$segment" == \{[[:space:]]* || "$segment" == \{ ]]; do
+    segment="${segment#[\({]}"
+    segment="${segment#"${segment%%[![:space:]]*}"}"
+  done
+  # Skip word-splitting unless a configuration-source variable name could appear.
+  case "$segment" in
+    *HOME*|*GIT_DIR*|*GIT_COMMON_DIR*|*GIT_CONFIG*) ;;
+    *) return 0 ;;
+  esac
+  local -a words=()
+  split_shell_words_into words "$segment"
+  local index=0 base word prev saw_config_assignment=0
+  # Consume every leading NAME=value assignment, remembering whether any names a configuration source.
+  while [[ "${words[$index]:-}" =~ ^([A-Za-z_][A-Za-z0-9_]*)= ]]; do
+    git_config_source_variable_name "${BASH_REMATCH[1]}" && saw_config_assignment=1
+    index=$((index + 1))
+  done
+  # A bare assignment with no following command persists to later chained commands; a prefix assignment is scoped to its command.
+  if [[ "$saw_config_assignment" -eq 1 && -z "${words[$index]:-}" ]]; then
+    __goat_git_config_env_unresolved=1
+    return 0
+  fi
+  base="${words[$index]:-}"
+  base="${base##*/}"
+  case "$base" in
+    export)
+      # export always sends its variables to child processes; an exported -x declaration is caught in the same segment instead.
+      for word in "${words[@]:$((index + 1))}"; do
+        [[ "$word" == -* || "$word" == +* ]] && continue
+        if [[ "$word" =~ ^([A-Za-z_][A-Za-z0-9_]*)(=|$) ]] && git_config_source_variable_name "${BASH_REMATCH[1]}"; then
+          __goat_git_config_env_unresolved=1
+          return 0
+        fi
+      done
+      ;;
+    read|mapfile|readarray)
+      # These builtins assign shell variables from input; a configuration-source target relocates Git config.
+      for word in "${words[@]:$((index + 1))}"; do
+        [[ "$word" == -* ]] && continue
+        if git_config_source_variable_name "$word"; then
+          __goat_git_config_env_unresolved=1
+          return 0
+        fi
+      done
+      ;;
+    printf)
+      # printf -v NAME (separate or attached, e.g. -vNAME) writes into a shell variable; a config-source target relocates Git config.
+      prev=""
+      for word in "${words[@]:$((index + 1))}"; do
+        if [[ "$word" == -v?* ]] && git_config_source_variable_name "${word#-v}"; then
+          __goat_git_config_env_unresolved=1
+          return 0
+        fi
+        if [[ "$prev" == -v ]] && git_config_source_variable_name "$word"; then
+          __goat_git_config_env_unresolved=1
+          return 0
+        fi
+        prev="$word"
+      done
+      ;;
+  esac
+  return 0
+}
+
 # Inspect each executable action and its nested commands while preserving the selected policy and bounded parser work.
 check_command_segments() {
   local input="$1"
@@ -2965,9 +3057,11 @@ check_command_segments() {
   local nested_segment directory_segment closing_segment
   local __goat_git_command_directory="${__goat_git_command_directory:-$PWD}"
   local __goat_git_directory_unknown="${__goat_git_directory_unknown:-0}"
+  local __goat_git_config_env_unresolved="${__goat_git_config_env_unresolved:-0}"
   local __goat_git_chain_directory_ambiguous=0
   local -a git_directory_stack=()
   local -a git_directory_unknown_stack=()
+  local -a git_config_unresolved_stack=()
 
   # Only the destructive-shell policy owns download-then-execute chain checks; Git policy retains its separate scope.
   if [[ "$GOAT_GUARD_SCOPE" == "deny-dangerous" ]] && declare -F check_command_chain_policy >/dev/null 2>&1; then
@@ -2992,6 +3086,8 @@ check_command_segments() {
     while [[ "$directory_segment" == \(* ]]; do
       git_directory_stack+=("$__goat_git_command_directory")
       git_directory_unknown_stack+=("$__goat_git_directory_unknown")
+      # A subshell discards config-source assignments on close, so remember the pre-subshell state to restore.
+      git_config_unresolved_stack+=("$__goat_git_config_env_unresolved")
       directory_segment="${directory_segment#\(}"
       directory_segment="${directory_segment#"${directory_segment%%[![:space:]]*}"}"
     done
@@ -3002,6 +3098,7 @@ check_command_segments() {
     fi
     check_segment "$nested_segment" "$depth" || return $?
     track_git_shell_directory "$directory_segment"
+    track_git_config_environment "$directory_segment"
     if [[ "$closing_segment" == *\)* ]]; then
       while has_unmatched_closing_parenthesis "$closing_segment"; do
         if [[ "${#git_directory_stack[@]}" -gt 0 ]]; then
@@ -3009,6 +3106,11 @@ check_command_segments() {
           __goat_git_directory_unknown="${git_directory_unknown_stack[-1]}"
           unset 'git_directory_stack[-1]'
           unset 'git_directory_unknown_stack[-1]'
+        fi
+        # Leaving the subshell restores the config-source state it could not persist to the enclosing shell.
+        if [[ "${#git_config_unresolved_stack[@]}" -gt 0 ]]; then
+          __goat_git_config_env_unresolved="${git_config_unresolved_stack[-1]}"
+          unset 'git_config_unresolved_stack[-1]'
         fi
         closing_segment="${closing_segment:0:__goat_subshell_closer_index} ${closing_segment:__goat_subshell_closer_index+1}"
       done
