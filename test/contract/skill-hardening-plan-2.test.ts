@@ -271,7 +271,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     assert.match(publicPlanGuidance, /delivery budget controls scope/u);
     assert.match(publicPlanGuidance, /coding-agent time/u);
     assert.match(publicPlanGuidance, /optional planning lenses/u);
-    assert.match(publicPlanGuidance, /one compact file/u);
+    assert.match(publicPlanGuidance, /compact milestone files/u);
     assert.match(publicPlanGuidance, /claim → evidence/u);
 
     const exporterLesson = readMarkdownSection(

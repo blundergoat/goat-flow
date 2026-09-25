@@ -414,6 +414,9 @@ describe("runLearnScaffold", () => {
         "terminal\u009bcontrol",
         "unicode\u2028line separator",
         "unicode\u2029paragraph separator",
+        `right-to-left${String.fromCodePoint(0x202e)}override`,
+        `first-strong${String.fromCodePoint(0x2068)}isolate`,
+        `arabic${String.fromCodePoint(0x061c)}letter mark`,
       ]) {
         assert.throws(
           () =>
@@ -431,6 +434,40 @@ describe("runLearnScaffold", () => {
             fixedClock(),
           ),
         /title/iu,
+      );
+      assert.deepEqual(
+        readdirSync(join(projectRoot, LEARNING_ROOT, "lessons")),
+        [],
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects direction controls in evidence citations before creating a bucket", () => {
+    const projectRoot = createLearningProject();
+    try {
+      assert.throws(
+        () =>
+          runLearnScaffold(
+            lessonRequest(projectRoot, {
+              evidencePaths: [`src/${String.fromCodePoint(0x202e)}evidence.ts`],
+              searchLiterals: ["marker"],
+            }),
+            fixedClock(),
+          ),
+        /Unsafe evidence path/u,
+      );
+      assert.throws(
+        () =>
+          runLearnScaffold(
+            lessonRequest(projectRoot, {
+              evidencePaths: ["src/evidence.ts"],
+              searchLiterals: [`marker${String.fromCodePoint(0x2066)}`],
+            }),
+            fixedClock(),
+          ),
+        /Invalid search literal/u,
       );
       assert.deepEqual(
         readdirSync(join(projectRoot, LEARNING_ROOT, "lessons")),
