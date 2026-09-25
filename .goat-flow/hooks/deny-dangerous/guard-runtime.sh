@@ -1140,6 +1140,8 @@ __goat_git_strip_globals() {
   __goat_git_unknown_global_option=""
   reset_git_alias_flags
   __goat_git_rest=""
+  __goat_git_selected_directory="${__goat_git_command_directory:-$PWD}"
+  __goat_git_selected_directory_unknown="${__goat_git_directory_unknown:-0}"
   local c="$1"
   c=$(normalize_leading_command_word "$c")
 
@@ -1166,6 +1168,15 @@ __goat_git_strip_globals() {
       # Each option here takes the next word as its value; a missing entry would let that value pose as the Git command.
       -c|-C|--git-dir|--work-tree|--namespace|--exec-path|--config-env|--attr-source|--shallow-file|--super-prefix)
         val="${words[$((i + 1))]:-}"
+        if [[ "$opt" == "-C" ]]; then
+          if [[ "$val" == /* && "$val" != *'$'* && "$val" != *'`'* ]]; then
+            __goat_git_selected_directory="$val"
+            __goat_git_selected_directory_unknown=0
+          else
+            __goat_git_selected_directory+="/$val"
+            [[ "$val" == *'$'* || "$val" == *'`'* ]] && __goat_git_selected_directory_unknown=1
+          fi
+        fi
         # Repository selection and temporary config must affect alias lookup exactly as they affect the proposed command.
         case "$opt" in
           -c|-C|--git-dir|--work-tree|--config-env) alias_config_options+=("$opt" "$val") ;;
@@ -1186,6 +1197,18 @@ __goat_git_strip_globals() {
         ;;
       -C?*|--git-dir=*|--work-tree=*|--namespace=*|--exec-path=*|--config-env=*|--attr-source=*|--shallow-file=*|--super-prefix=*|--list-cmds=*)
         # Preserve attached values so Git itself decides which option spellings its config reader accepts.
+        case "$opt" in
+          -C?*)
+            val="${opt#-C}"
+            if [[ "$val" == /* && "$val" != *'$'* && "$val" != *'`'* ]]; then
+              __goat_git_selected_directory="$val"
+              __goat_git_selected_directory_unknown=0
+            else
+              __goat_git_selected_directory+="/$val"
+              [[ "$val" == *'$'* || "$val" == *'`'* ]] && __goat_git_selected_directory_unknown=1
+            fi
+            ;;
+        esac
         case "$opt" in
           -C?*|--git-dir=*|--work-tree=*|--config-env=*) alias_config_options+=("$opt") ;;
         esac
@@ -2075,6 +2098,7 @@ split_command_segments_into() {
   local -n __goat_split_out__="$1"
   local developer_command="$2"
   local split_pipeline_stages="${3:-0}"
+  local background_output_name="${4:-}"
   __goat_split_out__=()
   local current_policy_stage=""
   local command_character=""
@@ -2187,6 +2211,10 @@ split_command_segments_into() {
         if [[ "$previous_command_character" != ">" &&
               "$previous_command_character" != "<" &&
               "$previous_command_character" != "|" ]]; then
+          # The directory tracker needs the same quote-aware decision as this splitter.
+          if [[ -n "$background_output_name" ]]; then
+            printf -v "$background_output_name" '%s' 1
+          fi
           __goat_split_out__+=("$current_policy_stage")
           current_policy_stage=""
           continue
@@ -2533,19 +2561,74 @@ is_unredirected_unpiped_read_only() {
   return 1
 }
 
+# Carry a literal shell cd into later Git segments without executing the proposed command.
+# Dynamic cd and directory-stack commands leave pathspec location uncertain until an absolute cd resolves it.
+track_git_shell_directory() {
+  local segment="$1"
+  [[ "$segment" == *cd* || "$segment" == *pushd* || "$segment" == *popd* ]] || return 0
+  local -a cd_words=()
+  local word_index=0 target candidate inline_cdpath=0
+  split_shell_words_into cd_words "$segment"
+  while [[ "${cd_words[$word_index]:-}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
+    [[ "${cd_words[$word_index]}" == CDPATH=?* ]] && inline_cdpath=1
+    word_index=$((word_index + 1))
+  done
+  case "${cd_words[$word_index]:-}" in
+    pushd|popd) __goat_git_directory_unknown=1; return 0 ;;
+    cd) word_index=$((word_index + 1)) ;;
+    *) return 0 ;;
+  esac
+  if [[ "${__goat_git_chain_directory_ambiguous:-0}" -eq 1 ]]; then
+    __goat_git_directory_unknown=1
+    return 0
+  fi
+  while [[ "${cd_words[$word_index]:-}" == -L || "${cd_words[$word_index]:-}" == -P || "${cd_words[$word_index]:-}" == -- ]]; do
+    word_index=$((word_index + 1))
+  done
+  if [[ "${#cd_words[@]}" -ne $((word_index + 1)) ]]; then
+    __goat_git_directory_unknown=1
+    return 0
+  fi
+  target="${cd_words[$word_index]}"
+  if [[ -z "$target" || "$target" == "-" || "$target" == \~* || "$target" == *'$'* || "$target" == *'`'* ]]; then
+    __goat_git_directory_unknown=1
+    return 0
+  fi
+  if [[ "$target" == /* ]]; then
+    candidate="$target"
+    __goat_git_directory_unknown=0
+  elif [[ "${__goat_git_directory_unknown:-0}" -eq 0 && "$inline_cdpath" -eq 0 && -z "${CDPATH-}" ]]; then
+    candidate="$__goat_git_command_directory/$target"
+  else
+    __goat_git_directory_unknown=1
+    return 0
+  fi
+  if [[ -d "$candidate" ]]; then
+    __goat_git_command_directory="$candidate"
+  else
+    __goat_git_directory_unknown=1
+  fi
+}
+
 # Inspect each executable action and its nested commands while preserving the selected policy and bounded parser work.
 check_command_segments() {
   local input="$1"
   local depth="${2:-0}"
   local -a nested_segments=()
-  local nested_segment
+  local nested_segment directory_segment closing_segment
+  local __goat_git_command_directory="${__goat_git_command_directory:-$PWD}"
+  local __goat_git_directory_unknown="${__goat_git_directory_unknown:-0}"
+  local __goat_git_chain_directory_ambiguous=0
+  local -a git_directory_stack=()
+  local -a git_directory_unknown_stack=()
 
   # Only the destructive-shell policy owns download-then-execute chain checks; Git policy retains its separate scope.
   if [[ "$GOAT_GUARD_SCOPE" == "deny-dangerous" ]] && declare -F check_command_chain_policy >/dev/null 2>&1; then
     check_command_chain_policy "$input" "$depth" || return $?
   fi
 
-  split_command_segments_into nested_segments "$input"
+  # A backgrounded cd runs in a child shell. The splitter identifies real '&' operators without treating quoted data as one.
+  split_command_segments_into nested_segments "$input" 0 __goat_git_chain_directory_ambiguous
 
   # Enforce the chain-count cap at nested depths too; splitting preserves substitution contents for this recursive inspection.
   # The main entry point already caps top-level commands, while this branch protects nested commands the user could execute.
@@ -2558,7 +2641,31 @@ check_command_segments() {
     nested_segment="${nested_segment#"${nested_segment%%[![:space:]]*}"}"
     nested_segment="${nested_segment%"${nested_segment##*[![:space:]]}"}"
     [[ -z "$nested_segment" ]] && continue
+    directory_segment="$nested_segment"
+    while [[ "$directory_segment" == \(* ]]; do
+      git_directory_stack+=("$__goat_git_command_directory")
+      git_directory_unknown_stack+=("$__goat_git_directory_unknown")
+      directory_segment="${directory_segment#\(}"
+      directory_segment="${directory_segment#"${directory_segment%%[![:space:]]*}"}"
+    done
+    closing_segment="$directory_segment"
+    if [[ "$directory_segment" == *\)* ]]; then
+      strip_subshell_parentheses "$nested_segment"
+      directory_segment="$__goat_subshell_stripped"
+    fi
     check_segment "$nested_segment" "$depth" || return $?
+    track_git_shell_directory "$directory_segment"
+    if [[ "$closing_segment" == *\)* ]]; then
+      while has_unmatched_closing_parenthesis "$closing_segment"; do
+        if [[ "${#git_directory_stack[@]}" -gt 0 ]]; then
+          __goat_git_command_directory="${git_directory_stack[-1]}"
+          __goat_git_directory_unknown="${git_directory_unknown_stack[-1]}"
+          unset 'git_directory_stack[-1]'
+          unset 'git_directory_unknown_stack[-1]'
+        fi
+        closing_segment="${closing_segment:0:__goat_subshell_closer_index} ${closing_segment:__goat_subshell_closer_index+1}"
+      done
+    fi
   done
 }
 

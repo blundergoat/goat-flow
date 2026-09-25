@@ -521,6 +521,107 @@ describe("hook launcher script validation", () => {
     }
   }
 
+  for (const childStatus of [1, 127]) {
+    it(`denies an incomplete policy result with exit ${childStatus}`, () => {
+      withTempProject((root) => {
+        const hookDirectory = createManagedHookDirectory(root);
+        writeFileSync(
+          join(hookDirectory, "deny-git-mutations.sh"),
+          `#!/usr/bin/env bash\nprintf 'partial policy output\\n'\nprintf 'runtime fault\\n' >&2\nexit ${childStatus}\n`,
+        );
+        for (const responseMode of ["policy", "antigravity", "copilot"]) {
+          const result = runLauncherProcess(
+            root,
+            ".goat-flow/hooks/deny-git-mutations.sh",
+            responseMode,
+          );
+          assert.equal(
+            result.status,
+            responseMode === "policy" ? 2 : 0,
+            launcherDiagnostics(result),
+          );
+          const reason =
+            responseMode === "policy"
+              ? result.stderr
+              : responseMode === "antigravity"
+                ? JSON.parse(result.stdout).reason
+                : JSON.parse(result.stdout).permissionDecisionReason;
+          assert.match(
+            reason,
+            /policy exited with status (1|127) without a decision/u,
+          );
+          assert.doesNotMatch(result.stdout, /partial policy output/u);
+          assert.doesNotMatch(result.stderr, /runtime fault/u);
+          if (responseMode !== "policy") {
+            const response = JSON.parse(result.stdout);
+            assert.equal(
+              response.decision ?? response.permissionDecision,
+              "deny",
+            );
+          }
+        }
+      });
+    });
+  }
+
+  /**
+   * A policy-only install includes the launch runtime but not the provider adapter.
+   * Side effects: writes disposable hook files that withTempProject removes after the assertion.
+   */
+  it("keeps legacy policy decisions available without the provider adapter", () => {
+    withTempProject((root) => {
+      const hookDirectory = createManagedHookDirectory(root);
+      writeFileSync(
+        join(hookDirectory, "run-with-bash.mjs"),
+        readFileSync(HOOK_LAUNCHER_PATH),
+      );
+      writeFileSync(
+        join(hookDirectory, "hook-launch-runtime.mjs"),
+        readFileSync(
+          resolve(
+            import.meta.dirname,
+            "../../workflow/hooks/hook-launch-runtime.mjs",
+          ),
+        ),
+      );
+      writeFileSync(
+        join(hookDirectory, "hook-policy-state.cjs"),
+        readFileSync(
+          resolve(
+            import.meta.dirname,
+            "../../workflow/hooks/hook-policy-state.cjs",
+          ),
+        ),
+      );
+      mkdirSync(join(hookDirectory, "vendor"));
+      writeFileSync(
+        join(hookDirectory, "vendor", "js-yaml.cjs"),
+        readFileSync(
+          resolve(
+            import.meta.dirname,
+            "../../workflow/hooks/vendor/js-yaml.cjs",
+          ),
+        ),
+      );
+      writeFileSync(
+        join(hookDirectory, "deny-git-mutations.sh"),
+        "#!/usr/bin/env bash\nprintf 'unsafe allow marker\\n'\nexit 0\n",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(hookDirectory, "run-with-bash.mjs"),
+          ".goat-flow/hooks/deny-git-mutations.sh",
+          "policy",
+        ],
+        { cwd: root, encoding: "utf8" as const },
+      );
+      assert.equal(result.status, 0, launcherDiagnostics(result));
+      assert.match(result.stdout, /unsafe allow marker/u);
+      assert.equal(result.stderr, "");
+    });
+  });
+
   const invalidPolicyTimeoutValues = ["0", "1.5", "+1", " 1", "invalid"];
   // Separate names show exactly which mistyped user setting stopped being rejected.
   for (const invalidTimeoutMilliseconds of invalidPolicyTimeoutValues) {

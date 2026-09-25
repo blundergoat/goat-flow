@@ -3,7 +3,7 @@
  * Cross-platform launcher for goat-flow's Bash hook scripts.
  *
  * Agent hook commands use Node so native Windows avoids the System32 WSL shim.
- * The launcher preserves the user's stdin, output, cwd, deadline, and hook status.
+ * The launcher preserves stdin and cwd, bounds execution, and delivers a complete provider response.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
@@ -18,6 +18,7 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  appendBoundedHookOutput,
   captureHookProcessUntilDeadline,
   describeInvalidHookLaunchTimeout,
   prepareProviderLauncherUnavailableDelivery,
@@ -33,6 +34,7 @@ const LEGACY_HOOK_DEADLINES_MS = new Map([
   ["gruff", LEGACY_FEEDBACK_DEADLINE_MS],
   ["post-turn", LEGACY_FEEDBACK_DEADLINE_MS],
 ]);
+const LEGACY_POLICY_MODES = new Set(["policy", "antigravity", "copilot"]);
 
 /**
  * Resolve a fixed hook-owned Windows utility without searching the project or PATH.
@@ -514,7 +516,7 @@ export function relayLegacyHookOutput(hookOutputStream, hostOutputStream) {
  * @param {number} launchTimeout - Positive deadline in milliseconds; zero would time out immediately.
  * @param {NodeJS.Platform} hostPlatform - Active host used for process-tree cleanup.
  *
- * @param {Function | null} appendCapturedHookOutput - adapter writer; null relays legacy streams without exposing provider handles to descendants.
+ * @param {Function | null} appendCapturedHookOutput - bounded policy or provider writer; null relays feedback streams.
  * @returns {ReturnType<typeof captureHookProcessUntilDeadline>} Result for the user; empty streams mean legacy relay or no child output.
  */
 function runHookProcessUntilDeadline(
@@ -526,7 +528,7 @@ function runHookProcessUntilDeadline(
   hostPlatform,
   appendCapturedHookOutput,
 ) {
-  // A null adapter keeps the user's legacy hook output attached directly to the host.
+  // A null writer keeps feedback hook output attached directly to the host.
   const shouldCaptureResult = appendCapturedHookOutput !== null;
   const validatedBashExecutable =
     bashExecutable === "bash" ? "bash" : bashExecutable;
@@ -575,7 +577,7 @@ async function prepareHookLaunchRuntime(
 ) {
   const legacyHookDeadline =
     LEGACY_HOOK_DEADLINES_MS.get(hookResponseMode) ?? null;
-  // Legacy hooks keep direct streams and do not load the migrated provider adapter.
+  // Legacy modes use fixed deadlines; policy output capture is selected after startup checks.
   if (legacyHookDeadline !== null) {
     const launchTimeout = resolveHookLaunchTimeoutMs(
       legacyHookDeadline,
@@ -645,6 +647,37 @@ async function prepareHookLaunchRuntime(
     providerAdapterRuntime,
     launchTimeout,
   };
+}
+
+/** Render a legacy policy only after its captured child result has a valid status. */
+function renderLegacyPolicyExecution(
+  hookResponseMode,
+  hookExecution,
+  hookIdentifier,
+) {
+  if (hookExecution.hasExceededOutputLimit) {
+    return reportUnavailable(
+      hookResponseMode,
+      "policy output exceeded the result limit",
+      hookIdentifier,
+    );
+  }
+  const policyStatus = hookExecution.status;
+  if (
+    policyStatus !== 0 &&
+    !(hookResponseMode === "policy" && policyStatus === 2)
+  ) {
+    return reportUnavailable(
+      hookResponseMode,
+      `policy exited with status ${policyStatus} without a decision`,
+      hookIdentifier,
+    );
+  }
+  if (hookExecution.stdout.length > 0)
+    process.stdout.write(hookExecution.stdout);
+  if (hookExecution.stderr.length > 0)
+    process.stderr.write(hookExecution.stderr);
+  return policyStatus;
 }
 
 /**
@@ -729,7 +762,15 @@ function renderHookExecutionResult(
     }
     return providerHookDelivery.exitCode;
   }
-  // A numeric status is the hook's real allow, deny, or advisory result for the user.
+  // Hold policy output until the child has returned a trustworthy provider decision.
+  if (LEGACY_POLICY_MODES.has(hookResponseMode)) {
+    return renderLegacyPolicyExecution(
+      hookResponseMode,
+      hookExecution,
+      hookIdentifier,
+    );
+  }
+  // Feedback hooks preserve their real allow, deny, or advisory status.
   if (Number.isInteger(hookExecution.status)) {
     return hookExecution.status;
   }
@@ -922,9 +963,12 @@ export async function runHookWithBash(
   hookEnvironment = launchRuntime.hookEnvironment;
   const { launchContract, providerAdapterRuntime, launchTimeout } =
     launchRuntime;
-  // A null writer preserves direct legacy streams; migrated hooks capture bounded output.
+  // Policy and migrated hooks capture bounded output; feedback hooks keep live streams.
   const appendCapturedHookOutput =
-    providerAdapterRuntime?.appendBoundedHookOutput ?? null;
+    providerAdapterRuntime?.appendBoundedHookOutput ??
+    (LEGACY_POLICY_MODES.has(hookResponseMode)
+      ? appendBoundedHookOutput
+      : null);
   const hookExecution = await runHookProcessUntilDeadline(
     bashExecutable,
     hookScriptPath,

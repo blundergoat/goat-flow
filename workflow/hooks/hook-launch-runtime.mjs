@@ -13,7 +13,7 @@
  * @property {number | null} status - child exit code; null means no trustworthy status arrived
  * @property {boolean} timedOut - true when the user's configured deadline ended the hook
  * @property {Error | null} launchError - startup failure; null means the child started or no startup error was reported
- * @property {string} stdout - bounded captured output; empty means legacy relay or no child output
+ * @property {string} stdout - bounded captured output; empty means feedback relay or no child output
  * @property {string} stderr - bounded captured diagnostic; empty means the child reported no error text
  * @property {boolean} hasExceededOutputLimit - true when feedback was stopped before it could flood the coding agent
  */
@@ -28,6 +28,34 @@
  * @property {string} stdout - bounded provider output; empty when delivery is unavailable or intentionally silent
  * @property {string} stderr - bounded diagnostic; empty when no human-only detail exists
  */
+
+export const HOOK_RESULT_OUTPUT_LIMIT_BYTES = 10_000; // Cap: fits Copilot's smallest feedback channel.
+
+/**
+ * Retain one legacy policy or migrated-result chunk within the shared provider limit.
+ * Side effects: appends to capturedHookOutput only when the combined bytes remain bounded.
+ * @param {object} capturedHookOutput - retained stdout and stderr strings
+ * @param {"stdout" | "stderr"} outputStreamName - channel receiving the next chunk
+ * @param {Buffer | string} outputChunk - next child bytes
+ * @returns {boolean} false when the next chunk would exceed the limit; the caller stops the hook.
+ */
+export function appendBoundedHookOutput(
+  capturedHookOutput,
+  outputStreamName,
+  outputChunk,
+) {
+  const nextStreamOutput =
+    capturedHookOutput[outputStreamName] + String(outputChunk);
+  const nextCombinedOutputBytes = Buffer.byteLength(
+    outputStreamName === "stdout"
+      ? nextStreamOutput + capturedHookOutput.stderr
+      : capturedHookOutput.stdout + nextStreamOutput,
+    "utf8",
+  );
+  if (nextCombinedOutputBytes > HOOK_RESULT_OUTPUT_LIMIT_BYTES) return false;
+  capturedHookOutput[outputStreamName] = nextStreamOutput;
+  return true;
+}
 
 const MANAGED_HOOK_IDENTIFIERS_BY_RESPONSE_KIND = new Map([
   ["policy", "deny-dangerous"],
@@ -103,9 +131,9 @@ function unavailableLauncherDelivery(userFacingReason, childStandardError) {
  * @param {NodeJS.ProcessEnv} hookEnvironment - hook environment; missing Windows roots allow direct-process cleanup only
  * @param {number} launchTimeout - positive deadline in milliseconds; zero would time out immediately
  * @param {NodeJS.Platform} hostPlatform - active host; empty text cannot select safe tree cleanup
- * @param {Function | null} appendCapturedHookOutput - bounded adapter writer; null preserves relayed legacy streams
+ * @param {Function | null} appendCapturedHookOutput - bounded output writer; null preserves relayed feedback streams
  * @param {Function} stopHookProcessTree - required cleanup callback; missing behavior could strand timed-out user work
- * @returns {Promise<CapturedHookProcessResult>} first terminal result; empty captured streams mean legacy relay or no child output
+ * @returns {Promise<CapturedHookProcessResult>} first terminal result; empty captured streams mean feedback relay or no child output
  */
 export function captureHookProcessUntilDeadline(
   hookProcess,
@@ -116,7 +144,7 @@ export function captureHookProcessUntilDeadline(
   stopHookProcessTree,
 ) {
   return new Promise((resolveHookResult) => {
-    // A null adapter keeps the user's legacy hook output attached directly to the host.
+    // A null writer keeps feedback output attached directly to the host.
     const shouldCaptureResult = appendCapturedHookOutput !== null;
     let hasDeliveredHookResult = false;
     let hasHookReachedDeadline = false;
@@ -199,7 +227,7 @@ export function captureHookProcessUntilDeadline(
       deliverHookResult(null, null);
     }
 
-    // Envelope mode captures both child streams; legacy relay listeners are attached by the launcher.
+    // Captured modes retain both child streams; feedback relay listeners are attached by the launcher.
     if (shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
       hookProcess.stdout.on("data", (outputChunk) => {
         captureHookOutputChunk("stdout", outputChunk);
@@ -241,9 +269,13 @@ export function prepareProviderLauncherUnavailableDelivery(
   registeredHookIdentifier,
 ) {
   const managedHookIdentifier =
-    (launchContract.responseKind === "policy" ? registeredHookIdentifier : undefined) ?? MANAGED_HOOK_IDENTIFIERS_BY_RESPONSE_KIND.get(
+    (launchContract.responseKind === "policy"
+      ? registeredHookIdentifier
+      : undefined) ??
+    MANAGED_HOOK_IDENTIFIERS_BY_RESPONSE_KIND.get(
       launchContract.responseKind,
-    ) ?? "managed-hook";
+    ) ??
+    "managed-hook";
   const launcherUnavailableResult = {
     schema: providerAdapterRuntime.HOOK_RESULT_SCHEMA,
     hookId: managedHookIdentifier,

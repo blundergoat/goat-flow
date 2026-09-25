@@ -77,6 +77,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 ## Lesson: Retrieval terms must name the concrete failure class
 
 **Created:** 2026-04-18
+**Incident count:** 2 | **Latest occurrence:** 2026-09-25
 
 **Prevention:** Build the first retrieval query from target area + symptom + named file/tool, not from milestone names or architecture abstractions. If the first pass is abstract, reword toward the concrete failure class before concluding a miss.
 
@@ -87,6 +88,8 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 **Why this matters:** Search-first retrieval only works if the first query overlaps with recorded evidence. Weak cues do not just miss a result; they create false confidence that "nothing relevant exists" unless the protocol forces a reword or explicit miss.
 
 **Updated 2026-05-27:** The same failure class applies to learning-loop retrieval generally: roadmap phrases such as "support matrix" and "registry canonicality" miss entries because buckets store concrete incident language. Use the concrete symptom, platform, or file/tool name first, reword once, then record a miss instead of broad-loading the bucket.
+
+**Recurrence 2026-09-25:** While checking goat-plan's word limits, the INDEX query `word budget|word cap|words cap|budget tier` returned three word-cap entries and missed the goat-plan footgun, whose title names `goat-plan` and writes `word-budget` with a hyphen. The three hits made retrieval look complete, so plan guidance written from them told agents to pair each addition with a same-file cut, against that footgun's rule to compact new wording and keep existing rules. A later grep of bucket bodies for guidance removed to fit a cap found it. Put the target skill or file name in the first query and allow hyphenated variants; partial hits do not prove coverage. Evidence: `.goat-flow/learning-loop/footguns/skill-guidance.md` (search: `goat-plan surface additions collide with near-full word-budget contract caps`).
 
 ## Lesson: Recurring terminal bugs must start with learning-loop retrieval
 

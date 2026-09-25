@@ -8,6 +8,7 @@
 # shellcheck shell=bash disable=SC2034,SC2154,SC2317,SC2319
 
 __goat_git_rest=""
+__goat_git_selected_directory="$PWD"
 __goat_git_aliased_push=0
 __goat_git_aliased_commit=0
 __goat_git_aliased_destructive=0
@@ -51,7 +52,7 @@ is_git_publication_alias_config() {
 
 # Git verbs that create, rewrite or move branch history reserved for the developer, before any non-committing exemption.
 # filter-branch, filter-repo and fast-import write commits and move branches directly, so they sit beside commit.
-__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import "
+__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch "
 
 # Decide whether a verb's arguments are exactly one of the listed words.
 # Use for recovery modes such as `--abort`, which Git accepts only without other arguments.
@@ -78,6 +79,82 @@ git_arguments_include() {
   [[ " $1 " == *" $2 "* ]]
 }
 
+# An explicit fetch destination can update a local branch instead of only a remote-tracking ref.
+git_fetch_refspec_moves_local_ref() {
+  local refspec="$1"
+  [[ "$refspec" == *:* ]] || return 1
+  local destination="${refspec#*:}"
+  [[ -n "$destination" && "$destination" != refs/remotes/* && "$destination" != FETCH_HEAD ]]
+}
+
+# Skip option values before locating the remote; an SSH remote also contains a colon.
+# Refmaps and stdin-supplied refspecs need their own decision because neither is a positional destination.
+git_fetch_moves_local_ref() {
+  local -a fetch_words=()
+  local fetch_word expected_value=""
+  local remote_seen=0 multiple_remotes=0
+  read -r -d '' -a fetch_words <<< "$1" || true
+  for fetch_word in "${fetch_words[@]}"; do
+    if [[ "$expected_value" == "refmap" ]]; then
+      expected_value=""
+      git_fetch_refspec_moves_local_ref "$fetch_word" && return 0
+      continue
+    fi
+    if [[ "$expected_value" == "other" ]]; then
+      expected_value=""
+      continue
+    fi
+    git_option_present "$fetch_word" "" stdin 3 "" && return 0
+    if git_option_present "$fetch_word" "" refmap 4 ""; then
+      if [[ "$fetch_word" == *=* ]]; then
+        git_fetch_refspec_moves_local_ref "${fetch_word#*=}" && return 0
+      else
+        expected_value="refmap"
+      fi
+      continue
+    fi
+    if git_option_present "$fetch_word" m multiple 4 ""; then
+      multiple_remotes=1
+      continue
+    fi
+    case "$fetch_word" in
+      --upload-pack|--jobs|-j|--depth|--deepen|--shallow-since|--shallow-exclude|--server-option|-o|--negotiation-tip|--filter)
+        expected_value="other"
+        continue
+        ;;
+      --|-*) continue ;;
+    esac
+    if [[ "$remote_seen" -eq 0 ]]; then
+      remote_seen=1
+    elif [[ "$multiple_remotes" -eq 0 ]]; then
+      git_fetch_refspec_moves_local_ref "$fetch_word" && return 0
+    fi
+  done
+  return 1
+}
+
+# Git reset with a pathspec or the current HEAD only changes the index. Other revisions can move the branch.
+git_reset_is_index_only() {
+  local -a reset_words=()
+  local reset_word first_operand="" has_path_operand=0 has_index_mode=0
+  read -r -d '' -a reset_words <<< "$1" || true
+  for reset_word in "${reset_words[@]}"; do
+    case "$reset_word" in
+      --hard|--soft|--merge|--keep) return 1 ;;
+      --) return 0 ;;
+      -p|--patch|--pathspec-from-file|--pathspec-from-file=*) has_index_mode=1; continue ;;
+      -q|--quiet|--mixed|--no-refresh|--refresh|--pathspec-file-nul) continue ;;
+      -*) return 1 ;;
+    esac
+    if [[ -z "$first_operand" ]]; then
+      first_operand="$reset_word"
+    else
+      has_path_operand=1
+    fi
+  done
+  [[ "$has_index_mode" -eq 1 || "$has_path_operand" -eq 1 || -z "$first_operand" || "$first_operand" == HEAD ]]
+}
+
 # Decide whether a direct subcommand or alias expansion creates history reserved for the developer.
 # Pass `strict` for alias expansions: Git appends the visible arguments to an alias, and those can undo an exempt form.
 is_git_commit_target() {
@@ -88,11 +165,37 @@ is_git_commit_target() {
   local arguments=""
   [[ "$candidate" == *[[:space:]]* ]] && arguments="${candidate#*[[:space:]]}"
   [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
-  [[ "$mode" == "strict" ]] && return 0
+  # Aliases to a conditional verb are safe until their own or appended arguments select the history-writing form.
+  if [[ "$mode" == "strict" && " reset branch checkout switch fetch " != *" $verb "* ]]; then
+    return 0
+  fi
   # A lone help flag prints usage and changes nothing, so an agent can still check a verb's option spellings.
   git_arguments_are_one_of "$arguments" "-h --help" && return 1
   # Exemptions allow only exact spellings, so an abbreviation, negation or unknown flag stays with the developer.
   case "$verb" in
+    reset)
+      # The existing destructive gate gives a hard reset its specific recovery reason.
+      [[ "$arguments" =~ (^|[[:space:]])--hard([[:space:]]|$) ]] && return 1
+      git_reset_is_index_only "$arguments" && return 1
+      ;;
+    branch)
+      git_option_present "$arguments" f force 1 cC && return 0
+      git_option_present "$arguments" D "" 0 cC && return 0
+      git_option_present "$arguments" M "" 0 cC && return 0
+      return 1
+      ;;
+    checkout)
+      git_option_present "$arguments" B force-create 7 b && return 0
+      return 1
+      ;;
+    switch)
+      git_option_present "$arguments" C force-create 7 c && return 0
+      return 1
+      ;;
+    fetch)
+      git_fetch_moves_local_ref "$arguments" && return 0
+      return 1
+      ;;
     cherry-pick|revert)
       git_arguments_are_one_of "$arguments" "--abort --quit" && return 1
       if git_flags_within "$arguments" "-n --no-commit" &&
@@ -144,6 +247,25 @@ is_git_destructive_target() {
   # A usage request such as `stash drop -h` prints help and changes nothing.
   git_arguments_request_usage_only "$git_arguments" && return 1
   case "$git_verb" in
+    rm)
+      # Force removes tracked work even when Git's up-to-date check would otherwise protect it.
+      git_option_present "$git_arguments" n dry-run 3 "" && return 1
+      git_option_present "$git_arguments" "" cached 3 "" && return 1
+      git_option_present "$git_arguments" f force 1 "" && return 0
+      ;;
+    checkout-index)
+      git_option_present "$git_arguments" n "" 0 "" && return 1
+      git_option_present "$git_arguments" f force 1 "" && return 0
+      ;;
+    read-tree)
+      git_option_present "$git_arguments" u "" 0 "" &&
+        git_option_present "$git_arguments" "" reset 2 "" && return 0
+      ;;
+    worktree)
+      if [[ "$git_arguments" =~ ^remove([[:space:]]|$) ]]; then
+        git_option_present "$git_arguments" f force 1 "" && return 0
+      fi
+      ;;
     restore)
       # A bulk restore discards every matching uncommitted edit, like a hard reset; an index-only restore keeps them.
       if git_pathspecs_name_bulk restore "$git_arguments"; then
@@ -215,8 +337,8 @@ git_option_present() {
 }
 
 # Decide whether restore or checkout names a bulk pathspec: the whole tree in a spelling this hook can resolve, exclusion
-# or glob magic, a `*` or `?` glob, the parent directory, a pathspec file, a command substitution or an absolute
-# repository root. A plain relative path such as `src/app.ts` or `app/[id]/page.tsx` stays a targeted restore.
+# or glob magic, a `*` or `?` glob, a directory, a pathspec file, or a command substitution.
+# A plain relative file such as `src/app.ts` or `app/[id]/page.tsx` stays a targeted restore.
 #   $1 verb: `restore` reads every operand as a path, `checkout` only after `--`; $2 arguments
 git_pathspecs_name_bulk() {
   local verb="$1"
@@ -250,12 +372,16 @@ git_pathspecs_name_bulk() {
       continue
     fi
     # Resolve the home and working-directory spellings the hook can see; quote removal leaves ANSI-C `$'.'` as `$.`.
+    if [[ "${__goat_git_directory_unknown:-0}" -eq 1 && ( "$pathspec_word" == \$PWD* || "$pathspec_word" == \$\{PWD\}* ) ]]; then
+      __goat_git_pathspec_unknown_directory=1
+      return 0
+    fi
     case "$pathspec_word" in
       \~ | \~/*) normalized="$HOME${pathspec_word:1}" ;;
       "\$HOME" | "\$HOME/"*) normalized="$HOME${pathspec_word:5}" ;;
       "\${HOME}" | "\${HOME}/"*) normalized="$HOME${pathspec_word:7}" ;;
-      "\$PWD" | "\$PWD/"*) normalized="$PWD${pathspec_word:4}" ;;
-      "\${PWD}" | "\${PWD}/"*) normalized="$PWD${pathspec_word:6}" ;;
+      "\$PWD" | "\$PWD/"*) normalized="${__goat_git_command_directory:-$PWD}${pathspec_word:4}" ;;
+      "\${PWD}" | "\${PWD}/"*) normalized="${__goat_git_command_directory:-$PWD}${pathspec_word:6}" ;;
       *) normalized="${pathspec_word#\$}" ;;
     esac
     # Pathspec magic: `:/` and `:(top)` anchor at the repository root, `:(literal)` turns globbing off and `:(icase)` only
@@ -303,15 +429,20 @@ git_pathspecs_name_bulk() {
     printf -v normalized '%s/' "${normalized_components[@]}"
     normalized="${normalized%/}"
     [[ "$absolute_path" -eq 1 ]] && normalized="/$normalized"
-    # An absolute repository root, or a directory above the current one, covers the whole tree.
+    # An absolute directory pathspec can select multiple tracked files even after `git -C`.
     if [[ "$normalized" == /* ]]; then
       normalized="${normalized%/}"
-      if [[ -d "${normalized:-/}" ]] && { [[ -e "$normalized/.git" ]] || [[ "$PWD/" == "$normalized/"* ]]; }; then
-        return 0
-      fi
+      [[ -d "${normalized:-/}" ]] && return 0
       continue
     fi
     [[ -z "$normalized" || "$normalized" == "." || "$normalized" =~ $parent_pattern ]] && return 0
+    # A dynamic cd or Git -C leaves relative pathspec scope unknown; restore and `checkout --` can discard many files.
+    if [[ "${__goat_git_selected_directory_unknown:-0}" -eq 1 && ( "$verb" == "restore" || "$after_separator" -eq 1 ) ]]; then
+      __goat_git_pathspec_unknown_directory=1
+      return 0
+    fi
+    # A plain relative directory is a bulk pathspec even without glob or top magic.
+    [[ -d "$__goat_git_selected_directory/$normalized" ]] && return 0
   done
   return 1
 }
@@ -402,6 +533,7 @@ is_git_push() {
 # Decide whether an existing guarded Git flag can discard work or bypass checks.
 # Use before execution so the developer retains the manual recovery decision.
 is_git_destructive() {
+  __goat_git_pathspec_unknown_directory=0
   __goat_git_strip_globals "$1" || return 1
   is_git_destructive_target "$__goat_git_rest" && return 0
   # Git appends the visible arguments to an alias, so an alias to `stash` invoked as `st clear` still clears stashes.
@@ -453,6 +585,10 @@ normalize_git_policy_candidate() {
 is_git_commit() {
   __goat_git_strip_globals "$1" || return 1
   is_git_commit_target "$__goat_git_rest" && return 0
+  # Git appends visible arguments to an alias; a safe checkout or fetch alias can become a ref rewrite.
+  if resolve_git_invoked_alias_command && is_git_commit_target "$__goat_git_invoked_alias_command"; then
+    return 0
+  fi
   # A configured Git alias can commit even when the visible subcommand is different.
   [[ "$__goat_git_aliased_commit" -eq 1 ]]
 }
@@ -690,8 +826,11 @@ check_git_segment() {
 
     # Destructive history or cleanup flags require a manual developer decision and recovery plan.
     if is_git_destructive "$repository_write_candidate"; then
+      if [[ "${__goat_git_pathspec_unknown_directory:-0}" -eq 1 ]]; then
+        block "Cannot inspect Git pathspec after a dynamic directory change. Use a literal directory or ask the user to run this command manually." || return $?
+      fi
       block \
-        "Destructive git operation (--no-verify, reset --hard, clean -f, bulk restore or checkout, forced checkout or switch, stash drop or clear, reflog expire or delete) can skip checks or discard work. Drop --no-verify if it is not needed; otherwise ask the user to run it manually." ||
+        "Destructive git operation (--no-verify, reset --hard, clean -f, forced rm or checkout-index, read-tree reset, worktree remove, bulk restore or checkout, forced checkout or switch, stash drop or clear, reflog expire or delete) can skip checks or discard work. Drop --no-verify if it is not needed; otherwise ask the user to run it manually." ||
         return $?
     fi
   done

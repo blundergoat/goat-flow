@@ -5,10 +5,14 @@
  * receive the response shape their agent understands without detector code
  * learning provider protocols or presenting incomplete work as a clean pass.
  */
+import {
+  appendBoundedHookOutput,
+  HOOK_RESULT_OUTPUT_LIMIT_BYTES,
+} from "./hook-launch-runtime.mjs";
+export { appendBoundedHookOutput, HOOK_RESULT_OUTPUT_LIMIT_BYTES };
 
 export const HOOK_RESULT_SCHEMA = "goat-flow.hook-result.v1";
 export const HOOK_RESULT_FINDING_LIMIT = 20; // Cap: matches both shipped hook finding limits.
-export const HOOK_RESULT_OUTPUT_LIMIT_BYTES = 10_000; // Cap: fits Copilot's smallest feedback channel.
 export const HOOK_RESULT_ADAPTER_VERSION = "1";
 const HOOK_EVENTS = new Set(["pre-tool", "post-tool", "turn-stop"]);
 const HOOK_OUTCOMES = new Set([
@@ -113,34 +117,6 @@ export function decodeHookLaunchContract(hookResponseMode) {
     adapterVersion,
     launcherDeadlineMs,
   };
-}
-
-/**
- * Retain one child-output chunk without exceeding the shared provider limit.
- * Use only for migrated results; false tells the launcher to stop the hook.
- *
- * @param {object} capturedHookOutput - retained stdout/stderr; empty fields mean no child output yet
- * @param {"stdout" | "stderr"} outputStreamName - child channel; empty text cannot select a safe destination
- * @param {Buffer | string} outputChunk - next bytes; an empty chunk leaves retained output unchanged
- * @returns {boolean} true while combined output remains within the limit
- */
-export function appendBoundedHookOutput(
-  capturedHookOutput,
-  outputStreamName,
-  outputChunk,
-) {
-  const nextStreamOutput =
-    capturedHookOutput[outputStreamName] + String(outputChunk);
-  const nextCombinedOutputBytes = Buffer.byteLength(
-    outputStreamName === "stdout"
-      ? nextStreamOutput + capturedHookOutput.stderr
-      : capturedHookOutput.stdout + nextStreamOutput,
-    "utf8",
-  );
-  // More output could overflow the host channel, so the over-limit chunk is discarded.
-  if (nextCombinedOutputBytes > HOOK_RESULT_OUTPUT_LIMIT_BYTES) return false;
-  capturedHookOutput[outputStreamName] = nextStreamOutput;
-  return true;
 }
 
 /**

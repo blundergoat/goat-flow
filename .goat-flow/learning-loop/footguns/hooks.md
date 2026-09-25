@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-09-23
+last_reviewed: 2026-09-25
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. Scanner blind spots live in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -138,13 +138,32 @@ last_reviewed: 2026-09-23
 
 **Prevention:**
 1. When probing policy shapes the hook will deny, keep them out of Bash command text: write the payload to a file and pass it on stdin, as `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `Write the provider event to a gitignored JSON payload file`) describes, and keep chained commands under the 50-segment cap.
-2. Claude policy rows exit `2` with a stderr reason, so a crashed or silent hook still blocks. A JSON `permissionDecision` of `deny` on exit `0` would return only the reason, but missing or malformed JSON could then read as an allow. Before switching the response mode, capture a live denial and prove malformed output still blocks.
+2. Claude policy rows use exit `2` with a stderr reason. The launcher now converts unexpected nonzero child exits to a denial; a child reporting success still means allow. A JSON `permissionDecision` of `deny` on exit `0` would return only the reason, but missing or malformed JSON could then read as an allow. Before switching the response mode, capture a live denial and prove malformed output still blocks.
 
 **Symptoms:** Claude Code reports an exit-2 denial as `PreToolUse:Bash hook error: [<command> <args>]: <stderr>`. Both PreToolUse rows in `.claude/settings.json` pass a 6,190-character inline bootstrap as `args[1]`, so each denial puts the whole bootstrap ahead of the one-line `BLOCKED:` reason. The two 2026-09-23 quality assessments hit it four times: a pipe-to-shell probe in the first, then a pipe-to-shell probe, a 50-segment chain and a scratch truncation in the second.
 
 **Why it happens:** ADR-053 moved Claude registrations to exec-form `args` so no shell retokenizes the bootstrap, and its failure-mode comparison weighs transport only. The echo format for exit-2 denials is not in Claude Code's hooks documentation, which states only that a JSON deny feeds `permissionDecisionReason` back to Claude.
 
 **Evidence:** `src/cli/server/agent-hook-command.ts` (search: `structuredHookLaunchBootstrap`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `BLOCKED: Policy %s`), and the unused Claude deny shape in `workflow/hooks/hook-provider-adapters.mjs` (search: `Claude and Codex share the current hookSpecificOutput permission shape`).
+
+## Footgun: Legacy policy child errors can become provider allows
+
+**Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Buffer legacy policy output, accept only complete child decision statuses, and keep the writer in the launch runtime required by policy-only installs.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**hallucination-risk:** high
+**Incident count:** 2 | **Latest occurrence:** 2026-09-25
+
+**Prevention:** When changing the launcher or a policy hook, test an unexpected child exit with partial stdout and stderr in Claude, Antigravity and Copilot modes. Keep only exit `0` and Claude policy exit `2` as delivered decisions; convert other statuses to the provider's denial shape. Policy-only installs require the launch runtime but not the provider adapter, so put shared output capture in that runtime and test a missing adapter through the configured handler. Do not use this policy rule for advisory feedback or post-turn hooks.
+
+**Symptoms:** A temporary policy script that wrote partial output and exited `1` or `127` made the launcher return the same status. Claude's PreToolUse exit-1 path is nonblocking, so a broken check could release the command. Antigravity and Copilot also received incomplete policy output instead of a bounded denial.
+
+**Why it happens:** The legacy launcher relayed child output and returned the raw exit code, assuming every nonzero status blocked the host. The provider contracts differ, and stderr from a crashed child is not a complete policy decision.
+
+**Evidence:** `workflow/hooks/run-with-bash.mjs` (search: `renderLegacyPolicyExecution`) buffers policy output and maps unexpected exits through `reportUnavailable`; `test/unit/hook-launcher.test.ts` (search: `denies an incomplete policy result`) reproduces exit `1` and `127` and checks that partial output is withheld. The new tests failed on the old launcher and passed after the repair. Live provider delivery remains separate from this local launcher proof.
+
+**Recurrence 2026-09-25 (adapter dependency):** The first repair statically imported the output adapter. A missing or corrupt adapter then failed module linking before the launcher could render a policy refusal or Gruff's soft-skip response; preflight reported nine test failures. A caught dynamic import restored Gruff but still blocked policy-only installs, whose registry does not include the adapter. `workflow/hooks/hook-launch-runtime.mjs` (search: `appendBoundedHookOutput`) now owns the writer; `workflow/hooks/hook-provider-adapters.mjs` re-exports it for migrated hooks. `test/unit/hook-launcher.test.ts` (search: `keeps legacy policy decisions available without the provider adapter`) and `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `replays literal non-Git launchers`) failed before that move and passed afterward. The existing missing/corrupt Gruff adapter cases in `test/integration/hook-command-spawn-matrix.test.ts` also pass.
 
 ---
 

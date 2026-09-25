@@ -61,6 +61,8 @@ if [[ -z "$DISPATCHER" || ! -f "$DISPATCHER" ]]; then
   printf 'FAIL: deny-dangerous.sh dispatcher not found\n' >&2
   exit 1
 fi
+# Directory fixtures change cwd; keep the selected entrypoint reachable for every assertion.
+DISPATCHER="$(CDPATH='' cd -- "$(dirname -- "$DISPATCHER")" && pwd)/${DISPATCHER##*/}"
 POLICY_ENTRYPOINT="${DISPATCHER##*/}"
 POLICY_FILTER="${POLICY_FILTER:-${POLICY_ENTRYPOINT%.sh}}"
 case "$POLICY_FILTER" in
@@ -799,6 +801,57 @@ run_smoke() {
 
 # Run the complete policy corpus before a maintainer accepts a hook release.
 # It protects users from both blocked safe commands and newly allowed unsafe commands.
+expect_git_directory_pathspecs() {
+  if ! selected_hook git; then
+    local skipped_case
+    for ((skipped_case = 0; skipped_case < 6; skipped_case++)); do record_skip; done
+    return
+  fi
+  local fixture_root original_cwd
+  fixture_root="$(mktemp -d)"
+  mkdir -p "$fixture_root/src/cli/server"
+  copy_policy_fixture git "$fixture_root"
+  printf 'fixture\n' > "$fixture_root/src/cli/cli.ts"
+  printf 'fixture\n' > "$fixture_root/src/cli/server/app.ts"
+  git -C "$fixture_root" init -q
+  git -C "$fixture_root" add -- src/cli/cli.ts src/cli/server/app.ts
+  original_cwd="$PWD"
+  cd "$fixture_root"
+  expect_block git "git restore src" "directory restore discards multiple files"
+  expect_block git "git checkout -- src" "directory checkout discards multiple files"
+  expect_block git "git -C src restore cli" "directory restore after Git changes directory"
+  expect_block git "git -C src checkout -- cli" "directory checkout after Git changes directory"
+  expect_block git "git -C src -C cli restore server" "directory restore after repeated Git directory changes"
+  expect_allow git "git -C src restore cli/cli.ts" "single-file restore after Git changes directory"
+  expect_block git "cd src && git restore cli" "directory restore after shell cd"
+  expect_block git "cd src && git checkout -- cli" "directory checkout after shell cd"
+  expect_block git "cd src && git -C cli restore server" "directory restore after shell cd and Git directory change"
+  expect_allow git "cd src && git restore cli/cli.ts" "single-file restore after shell cd"
+  expect_block git "(cd src && git restore cli)" "directory restore inside a shell subshell"
+  expect_block git "(cd src && git status); git restore src" "subshell cd does not change the following Git directory"
+  expect_allow git "(cd src); git restore src/cli/cli.ts" "single-file restore after closed subshell"
+  expect_block git "cd src & git restore src" "background cd does not change the following Git directory"
+  expect_allow git "echo cd & git restore src/cli/cli.ts" "literal cd text does not change Git directory"
+  expect_allow git "cd src && git restore cli/cli.ts; printf '%s' '&'" "quoted ampersand after shell cd does not obscure a single-file restore"
+  expect_allow git 'cd src && git restore cli/cli.ts; printf "%s" "\&"' "escaped ampersand data after shell cd does not obscure a single-file restore"
+  expect_block git 'cd src && git restore "$PWD/cli"' "working directory variable after shell cd names a directory"
+  expect_block git 'cd src && git restore "${PWD}/cli"' "braced working directory variable after shell cd names a directory"
+  expect_block git "git -C src restore $fixture_root/src/cli" "absolute directory pathspec after Git changes directory"
+  expect_allow git "git -C src restore $fixture_root/src/cli/cli.ts" "absolute single-file pathspec after Git changes directory"
+  expect_block_message git 'TARGET=src; cd "$TARGET" && git restore cli' "dynamic shell cd before restore" "repository" "Cannot inspect Git pathspec after a dynamic directory change"
+  expect_block git 'pushd src >/dev/null && git restore cli' "pushd before directory restore"
+  expect_block git 'CDPATH=src cd cli && git restore server' "inline CDPATH before directory restore"
+  expect_block git 'TARGET=src; git -C "$TARGET" restore cli' "dynamic Git directory before restore"
+  expect_block git 'TARGET=src; cd "$TARGET" && git checkout -- cli/cli.ts' "checkout path after dynamic shell cd"
+  expect_allow git 'TARGET=src; cd "$TARGET" && git status' "read-only Git after dynamic shell cd"
+  expect_allow git 'TARGET=src; cd "$TARGET" && git checkout main' "branch checkout after dynamic shell cd"
+  expect_allow git 'TARGET=src; cd "$TARGET" && git restore --staged cli/cli.ts' "index-only restore after dynamic shell cd"
+  expect_allow git "TARGET=src; cd \"\$TARGET\" && git -C $fixture_root/src restore cli/cli.ts" "absolute Git directory resolves dynamic shell cd"
+  expect_allow git 'TARGET=src; (cd "$TARGET" && git status); git restore src/cli/cli.ts' "dynamic subshell cd does not affect later single-file restore"
+  cd "$original_cwd"
+  rm -rf "$fixture_root"
+}
+
 run_full() {
   run_smoke
   expect_real_linked_worktree_uses_worktree_policy_store
@@ -1104,6 +1157,31 @@ run_full() {
   expect_allow git "xargs -a commands.txt echo git push origin main" "xargs arg-file echo literal"
   expect_block git "git -C . commit --no-verify -m fix" "git -C commit no-verify"
   expect_block git "git reset --hard HEAD~1" "git reset hard"
+  expect_block git "git reset --soft HEAD~3" "soft reset moves branch history"
+  expect_block git "git reset --mixed HEAD~1" "mixed reset to an older commit moves branch history"
+  expect_allow git "git reset HEAD" "resetting the index to the current HEAD"
+  expect_allow git "git reset --mixed HEAD" "explicit mixed reset to the current HEAD"
+  expect_allow git "git reset -q HEAD" "quiet reset of the index to the current HEAD"
+  expect_allow git "git reset HEAD src/app.ts" "path-limited reset without an option separator"
+  expect_allow git "git reset HEAD~1 -- src/app.ts" "path-limited reset from an older tree"
+  expect_block git "git branch -f main HEAD~3" "forced branch update moves a ref"
+  expect_block git "git checkout -B main HEAD~2" "forced checkout branch creation moves a ref"
+  expect_block git "git switch -C main HEAD~2" "forced switch branch creation moves a ref"
+  expect_block git "git fetch origin +main:main" "fetch refspec moves a local branch"
+  expect_block git "git fetch --refmap +refs/heads/main:refs/heads/probe-branch origin main" "separated fetch refmap moves a local branch"
+  expect_block git "git fetch --refm +refs/heads/main:refs/heads/probe-branch origin main" "abbreviated separated fetch refmap moves a local branch"
+  expect_block git "git fetch --stdin origin" "stdin fetch refspecs cannot be inspected"
+  expect_block git "git fetch --std origin" "abbreviated stdin fetch refspecs cannot be inspected"
+  expect_allow git "git reset HEAD -- src/app.ts" "index-only reset keeps branch history"
+  expect_allow git "git branch --list" "branch listing"
+  expect_allow git "git checkout -b feature" "new checkout branch"
+  expect_allow git "git fetch origin main" "fetch to remote-tracking ref"
+  expect_allow git "git fetch git@example.invalid:team/repo.git main" "SSH remote colon is not a ref destination"
+  expect_allow git "git fetch --refmap +refs/heads/main:refs/remotes/origin/main git@example.invalid:team/repo.git main" "separated fetch refmap to remote tracking stays allowed"
+  expect_allow git "git fetch --depth 1 git@example.invalid:team/repo.git main" "fetch option value does not hide an SSH remote"
+  expect_allow git "git fetch --multiple origin git@example.invalid:team/repo.git" "multiple fetch remotes are not refspecs"
+  expect_block git "git -c alias.co=checkout co -B main HEAD~2" "checkout alias with appended forced branch update"
+  expect_block git "git -c alias.f=fetch f origin +main:main" "fetch alias with appended local ref destination"
   expect_block git "echo x | git reset --hard HEAD" "piped git reset hard"
   expect_block git "git -C . reset --hard" "git -C reset hard"
   expect_block git "git clean -fd" "git clean force"
@@ -1135,6 +1213,15 @@ run_full() {
   expect_block git "git merge -h topic" "help flag beside an operand stays guarded"
   # Whole-tree discards, forced switches, stash deletion and reflog expiry lose work like a hard reset.
   expect_block git "git restore ." "whole-tree restore"
+  expect_git_directory_pathspecs
+  expect_block git "git rm -rf ." "forced recursive removal"
+  expect_block git "git checkout-index -a -f" "forced index checkout overwrites worktree"
+  expect_block git "git read-tree -u --reset HEAD" "read-tree reset overwrites worktree"
+  expect_block git "git worktree remove --force ../other" "forced worktree removal"
+  expect_allow git "git rm -n -rf ." "dry-run removal"
+  expect_allow git "git rm --cached src/app.ts" "index-only removal"
+  expect_allow git "git checkout-index -n -a" "dry-run index checkout"
+  expect_allow git "git worktree list" "worktree listing"
   expect_block git "git restore --source=HEAD -- :/" "whole-tree restore from the top"
   expect_block git "git restore --staged --worktree ." "whole-tree restore of index and worktree"
   expect_allow git "git restore --staged ." "index-only restore keeps worktree edits"
