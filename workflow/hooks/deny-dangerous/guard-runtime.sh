@@ -1159,6 +1159,11 @@ __goat_git_strip_globals() {
   [[ "${#words[@]}" -gt 0 ]] || return 1
 
   local command_base="${words[0]##*/}"
+  # Git subcommands can also run as git-<verb> executables, including absolute paths in Git's exec directory.
+  if [[ "$command_base" == git-* ]]; then
+    words=(git "${command_base#git-}" "${words[@]:1}")
+    command_base=git
+  fi
   [[ "$command_base" == "git" ]] || return 1
 
   local i=1
@@ -1269,6 +1274,8 @@ git_config_key_runs_command() {
     diff.external|diff.*.command|diff.*.textconv|difftool.*.cmd|\
     filter.*.clean|filter.*.smudge|filter.*.process|merge.*.driver|mergetool.*.cmd|\
     pager.*|interactive.difffilter|sequence.editor|gpg.program|gpg.*.program|gpg.ssh.defaultkeycommand|\
+    imap.tunnel|sendemail.sendmailcmd|sendemail.tocmd|sendemail.cccmd|sendemail.headercmd|\
+    sendemail.*.sendmailcmd|sendemail.*.tocmd|sendemail.*.cccmd|sendemail.*.headercmd|\
     browser.*.cmd|guitool.*.cmd|man.*.cmd|instaweb.httpd|gc.recentobjectshook|uploadpack.packobjectshook|\
     remote.*.uploadpack|remote.*.receivepack) return 0 ;;
     *) return 1 ;;
@@ -3182,7 +3189,8 @@ check_segment() {
     check_secret_segment "$cmd" "$depth" || return $?
   fi
 
-  if [[ "$CMD_VERB" == git ]]; then
+  # Direct git-<verb> helpers can install executable config values just like the git dispatcher.
+  if [[ "$CMD_VERB" == git || "$CMD_VERB" == git-* ]]; then
     check_git_hosted_commands "$CMD_NORMALIZED" "$depth" || return $?
   fi
 

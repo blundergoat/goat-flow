@@ -23,7 +23,7 @@ is_git_publication_target() {
   local candidate="$1"
   candidate="${candidate#"${candidate%%[![:space:]]*}"}"
   case "$candidate" in
-    push | push\ * | send-pack | send-pack\ * | \!*) return 0 ;;
+    push | push\ * | send-pack | send-pack\ * | http-push | http-push\ * | \!*) return 0 ;;
     *) return 1 ;;
   esac
 }

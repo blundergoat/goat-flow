@@ -31,6 +31,42 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 
 ---
 
+## Footgun: Git publication policy omitted the http-push verb
+
+**Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check lower-level remote-ref writers against `is_git_publication_target` when changing the publication guard; test direct and alias forms beside a read-only Git control.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-09-25
+
+**Prevention:** Keep the publication verb set aligned with Git commands that update remote refs. For each newly covered verb, classify a direct write, an alias expansion and an adjacent read-only control with both the canonical and installed hook suites.
+
+**Symptoms:** Both installed hooks returned exit 0 for `git http-push --force https://example.invalid/repo.git main`, and the Git policy also allowed an alias expanding to that command. The same policy denied `git send-pack origin main` with exit 2. Git 2.43's `git-http-push` manual says the command updates a remote branch and `--force` disables its fast-forward check; the executable is installed in this workspace. No remote command was executed during classification.
+
+**Why it happens:** `is_git_publication_target` listed `push`, `send-pack` and shell aliases as publication targets, so a third installed Git ref publisher missed the hook's developer-only publication rule.
+
+**Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_publication_target`) now includes `http-push`; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git http-push publication`) pins the direct write beside alias and read-only controls. The [Git 2.43 manual](https://git-scm.com/docs/git-http-push/2.43.0.html) describes the remote-ref write.
+
+---
+
+## Footgun: Direct Git helper executables bypassed the shared Git parser
+
+**Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Treat `git-<verb>` executable names as Git commands in both repository policy and hosted-command inspection.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-09-25
+
+**Prevention:** Normalize an executable's basename before parsing Git globals and apply the same helper predicate when selecting hosted-command inspection. Keep direct, absolute-path and read-only helper cases next to the ordinary `git <verb>` policy assertions. A direct `git-config` setting with an executable value must reach its owning policy. Re-run both policies because they share the parser.
+
+**Symptoms:** The installed Git policy returned exit 0 for direct `git-push`, `git-send-pack`, `git-http-push`, `git-commit` and `git-clean -fd` command text, including an absolute path to the installed HTTP push executable. Equivalent `git <verb>` forms were denied. After normalizing those helpers, direct `git-config imap.tunnel 'rm -rf .'` still passed the destructive policy because hosted-command inspection checked only `CMD_VERB=git`. The direct `git-status` and absolute `git-log` read controls remained allowed. No publishing, committing or cleanup command was executed.
+
+**Why it happens:** `__goat_git_strip_globals` accepted only a first word whose basename was exactly `git`, and `check_git_hosted_commands` was called only when `CMD_VERB` was exactly `git`. Git's installed `git-<verb>` entrypoints therefore missed repository classification or nested command inspection.
+
+**Evidence:** `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Direct git-<verb> helpers can install executable config values`) now calls hosted-command inspection for helpers as well as `git`; the same file's `__goat_git_strip_globals` normalizes helper names before classification. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `direct Git config helper saves destructive IMAP tunnel`) pins the saved-setting denial beside publication, history, cleanup and read controls. The local Git exec directory contained the tested helper names.
+
+---
+
 ## Footgun: GitHub CLI comments bypassed shared-system write guardrails
 
 **Status:** active | **Created:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
