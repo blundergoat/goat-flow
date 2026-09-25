@@ -1,6 +1,6 @@
 ---
 category: deny-secrets
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-25
 ---
 
 Secret-path read traps: what counts as a secret path, and which read channels the deny surface actually binds.
@@ -23,7 +23,7 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 
 **Why it happens:** The generic matcher sees a protected substring anywhere and cannot tell a history search value from a path operand. Git-global options may carry paths before `log`, and `--` makes every following token a pathspec, so only recognised search values between those boundaries are data.
 
-**Evidence:** Before the exemption the focused corpus failed only the three history allow cases with `FAIL: paths should allow git log ... secret-rule search literal`; after the parser change `git log --oneline -S 'Write(**/.ssh/**)' -- .claude/settings.json` exited 0. A focused RED then showed `git -C ~/.ssh` and `git --git-dir=~/.ssh/repo` wrongly exiting 0; preserving word boundaries and Git-global operands made all 92 path assertions pass. `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `git_log_candidate_without_search_values`) removes only recognised search values before `--`; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git log protected separated global path`) pairs the allows with global-path, pathspec, write, and upload blocks. **Recurrence 2026-09-02:** an ad hoc Node verification embedded protected GCP permission rules while parsing `.claude/settings.json`; the hook correctly blocked it, and the check moved to `test/unit/agent-config-template-parity.test.ts` (search: `anchors every Claude credential-store rule at the home directory`) and `scripts/preflight-checks.sh` (search: `Agent Config Parity`).
+**Evidence:** Before the exemption the focused corpus failed only the three history allow cases with `FAIL: paths should allow git log ... secret-rule search literal`; after the parser change `git log --oneline -S 'Write(**/.ssh/**)' -- .claude/settings.json` exited 0. A focused RED then showed `git -C ~/.ssh` and `git --git-dir=~/.ssh/repo` wrongly exiting 0; preserving word boundaries and Git-global operands made all 92 path assertions pass. `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `git_log_candidate_without_search_values`) removes only recognised search values before `--`; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git log protected separated global path`) pairs the allows with global-path, pathspec, write, and upload blocks. **Recurrence 2026-09-02:** an ad hoc Node verification embedded protected GCP permission rules while parsing `.claude/settings.json`; the hook correctly blocked it, and the check moved to `test/unit/agent-config-template-parity.test.ts` (search: `protects Claude credential stores at home and inside the project`) and `scripts/preflight-checks.sh` (search: `Agent Config Parity`).
 
 ---
 

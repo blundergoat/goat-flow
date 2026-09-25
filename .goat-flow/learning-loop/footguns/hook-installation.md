@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-09-17
+last_reviewed: 2026-09-25
 ---
 
 **Scope:** Hook install, launch, registration, and config-drift plumbing. The `deny-dangerous` policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md); runtime delivery and provider adapters live in [hooks.md](hooks.md).
@@ -8,7 +8,7 @@ last_reviewed: 2026-09-17
 ## Footgun: Hook toggles can scaffold uninstalled agent surfaces
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 3 | **Latest occurrence:** 2026-09-06
+**Incident count:** 4 | **Latest occurrence:** 2026-09-25
 
 **Prevention:**
 1. Treat hook support and agent installation as different facts: support comes from the manifest, installation from target-project surfaces.
@@ -27,6 +27,8 @@ last_reviewed: 2026-09-17
 The migration fixtures reproduced unwanted Claude, Codex, Antigravity and Copilot configs before the fix.
 Keep legacy detection provider-specific and cleanup separate: `src/cli/server/hook-managed-installation.ts` (search: `hookScriptResidueExists`),
 `test/integration/hook-sync-recovery.test.ts` (search: `provider with legacy hook residue`).
+**Recurrence 2026-09-25:** Installing Codex enrolled unrelated Claude settings, and an invalid managed Claude file could abort after a new Codex registration already pointed at missing runtime. Existing managed registrations now prove enrollment before shared-policy repair; new registrations are seeded after runtime installation. `workflow/install-goat-flow.sh` (search: `valueReferencesManagedScript`, `New provider registrations are seeded below`) and `test/integration/setup-install-safety-regressions.test.ts` (search: `preserves unmanaged foreign provider settings`, `keeps new agent registrations absent`) pin both boundaries. Invalid unmanaged JSON stays untouched; invalid managed JSON still stops the policy upgrade. The first repair preserved bytes but left a false sibling migration row in the CLI preview. `src/cli/install-command.ts` (search: `hasManagedProviderRegistration`) now applies the enrollment boundary before claiming a sibling write; the same regression file checks both the excluded sibling and an enrolled repair control.
+
 
 ## Footgun: Hook recovery guidance can drift from the public CLI
 
@@ -226,3 +228,5 @@ Evidence: `test/integration/hook-sync-recovery.test.ts` (search: `recovers a ful
 **Evidence:** `workflow/install-goat-flow.sh` (search: `function insertHookEntry`) and `src/cli/config/writer.ts` (search: `hookChildIndent`) now infer sibling indentation. The original reproduction in `test/integration/setup-install.test.ts` (search: `repairs a missing gruff-py override for an enabled existing hook`) and the independent writer case in `test/unit/config-writer.test.ts` (search: `preserves four-space hook siblings`) each failed before the repair; the combined replay reported `# tests 2`, `# pass 2`, `# fail 0` (exit 0).
 
 **Recurrence 2026-09-06:** The Git split's standalone migration reported success after inserting block entries beneath an anchored flow mapping or whole-map alias, producing invalid YAML. A trailing comma also became invalid, while a multiline flow map silently missed the new choice. Four real installer regressions failed before the repair. `workflow/install-goat-flow.sh` (search: `hooksNodeValue`, `insertFlowHookEntry`) now preserves those forms and validates an originally parsed mapping before publishing it. `test/integration/setup-install-agent-matrix.test.ts` (search: `hook choices during the Git split and repeated installation`) covers the four failures plus the existing plain-flow case; the replay recorded `# pass 5`, `# fail 0`, and repeated-install byte equality.
+
+**Recurrence 2026-09-25:** Gruff binary-path insertion broke valid multiline flow mappings and scalar values. Reparse the proposed text and compare its complete meaning with the intended single-field change before saving; preserve the original when the text insertion cannot represent it safely. `workflow/install-goat-flow.sh` (search: `expectedConfig`, `isDeepStrictEqual`) and `test/integration/setup-install-safety-regressions.test.ts` (search: `preserves valid Gruff YAML`) cover both reproduced forms.

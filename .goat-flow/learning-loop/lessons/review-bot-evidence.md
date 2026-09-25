@@ -1,6 +1,6 @@
 ---
 category: review-bot-evidence
-last_reviewed: 2026-09-21
+last_reviewed: 2026-09-25
 ---
 
 **Scope:** Weighing an automated reviewer's output - sandbox reruns that reach different conclusions, position-independent ordering findings, an "addressed" marker that proves nothing, and a bot finding that contradicts a passing test. Human and multi-agent critique is [review-feedback.md](review-feedback.md).
@@ -10,12 +10,15 @@ last_reviewed: 2026-09-21
 **Status:** active | **Created:** 2026-09-21 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Serialize suspect input and run the production parser before testing a downstream consumer's response to it.
 **Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-09-25
 
 **Prevention:** Trace validation before accepting an automated finding. A fixture changed after parsing can construct a state the application rejects and cannot deliver to the consumer. Test malformed source through the real parser and assert its acceptance status before interpreting downstream output.
 
 **What happened:** During PR #61 triage, an in-memory forecast mutation appeared to show invalid revisions inflating growth. Double-checking the authored Markdown through `src/cli/plans-export.ts` (search: `forecastContext.method = null`) showed that semantic validation disables the forecast first. The proposed runtime change was unnecessary and was removed. `test/unit/plans-check-growth.test.ts` (search: `invalid revisions`) retains the production-parser regression.
 
 **Verification correction:** The same response pass replaced shell-body extraction and initially lost ANSI-C quote handling. Full self-tests reported `FAIL: shell should block ansi-c bash-c recursive rm (exit=0)` and the equivalent Git publication failure. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `raw_shell_body`) now preserves that handling, while `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `shell forwarding with empty argv zero`) covers the adjacent positional-argument case. Run the full parser corpus after an extraction change; a passing incident-only probe is insufficient.
+
+**Recurrence 2026-09-25:** A PR #61 goat-review confirmed a Codex claim that `learn new` could publish an entry into an unindexed bucket after a mid-run config edit. The confirmation rested on `src/cli/learn-scaffold.ts` (search: `function regenerateLearningLoopIndexes`) alone. A double-check traced the paths through `src/cli/config/reader.ts` (search: `old path overrides are ignored`), which always keeps the canonical learning-loop paths, and the re-issued report withdrew the finding. Trace how a consumer's input is produced before confirming a bot claim about that consumer.
 
 ## Lesson: External code-review bots that re-run verification commands in their own sandbox produce false-positive Critical findings
 

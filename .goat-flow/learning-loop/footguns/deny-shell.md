@@ -1,6 +1,6 @@
 ---
 category: deny-shell
-last_reviewed: 2026-09-24
+last_reviewed: 2026-09-25
 ---
 
 Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
@@ -102,7 +102,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 **Decision changed:** Reports must use sibling-aware hook facts; a split hook's dispatcher can hide shipped denies.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-09-23
+**Incident count:** 8 | **Latest occurrence:** 2026-09-25
 
 **Prevention:**
 1. Treat a guardrail split as a parser migration: port the old normalization and false-positive corpus before deleting the monolith, and read a large drop in line or self-test count as a review smell until removed coverage maps to new tests.
@@ -124,6 +124,10 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 - **Recurrence 2026-07-14 report drift:** M25 labelled Codex push `permissive` while the live audit found the block, because `src/cli/facts/agent/settings.ts` (`checkDenyPatterns`) saw only the dispatcher and `src/cli/facts/agent/hooks.ts` (`siblingGuardrailPaths`) saw the split policy; the report now uses `AgentFacts.hooks.denyBlocksGitPush`.
 - **Recurrence 2026-08-11 option-table abandonment:** `strip_watch_payload_command` and `strip_parallel_payload_command` end their option loops with `-*) return 1`, and both tables carry short forms without long equivalents. At `9adf06be`, `watch git push origin main` and `parallel git push ::: a` exit 2 while `watch --beep git push origin main`, `watch --color git push origin main`, and `parallel --verbose git push ::: a` exit 0; the same commands also exit 0 at base `3db06657`, so the wrapper support narrows the gap rather than opening it. On Codex, Copilot, and Antigravity this hook is the only push block: `workflow/hooks/agent-config/codex.toml` (search: `Command deny policy still lives in those PreToolUse hooks`) records that permission profiles cover filesystem and network access, not command patterns, while Claude also keeps the settings glob `Bash(*git push*)`.
 - **Recurrence 2026-09-23 Git global options:** `__goat_git_strip_globals` skipped `--attr-source` and `--shallow-file` as flags, so their value posed as the Git command and `git --attr-source HEAD push`, `... commit -m x` and `... reset --hard` exited 0 for every agent; the Claude settings glob misses that spelling too. Both options now take values, and an option the table does not list denies as unresolved: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `attr-source value hides publication`) and (search: `unlisted global option`).
+
+- **Recurrence 2026-09-25 Git-hosted commands:** Both policies allowed a blocked destructive payload under `git bisect run`, `submodule foreach`, `difftool --extcmd` and explicit pager/fsmonitor configuration. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `check_git_hosted_commands`) now sends that command text through the selected policy, preserving caller arguments and using bounded nested inspection. Temporary and saved Git aliases retain raw argument boundaries (search: `__goat_git_raw_alias_expansions` in `workflow/hooks/deny-dangerous/patterns-writes.sh`); the first direct-form repair missed hosted aliases and the paired replay caught it. Regression cases (search: `Git alias retains quoted hosted body`, `Git submodule retains nested Git policy`, `ordinary Git config value is data`) pair denials with harmless hosted commands and inert configuration values. Existing trusted helpers and environment-provided command bodies remain outside this explicit-command proof. Provider-shaped replay also caught the first nested runner appending a false unavailable message after an exit-2 denial. The runner now propagates that completed denial; corpus checks (search: `Git-hosted denial remains a policy decision`, `Git-hosted denial remains one JSON decision`) require one truthful provider response.
+
+- **Recurrence 2026-09-25 IFS command words:** Unquoted `${IFS}` inside the executable word concealed `eval` carrying Git writes and recursive deletion. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `normalize_leading_command_word`) now refuses that unresolved executable before dispatch. The corpus (search: `IFS`) keeps quoted evidence allowed beside the blocked payloads.
 
 ---
 

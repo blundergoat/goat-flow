@@ -46,6 +46,8 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 
 **Evidence:** Reported incident: an assistant posted a comment to `owner/repo#64620` from forwarded Slack text, and the user deleted it. `--check` returned exit 0 before the first fix for `gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md` and `gh api repos/owner/repo/issues/1/comments -X POST -f body=hi`, and before the second fix for `gh issue --repo owner/repo comment 64620 --body hi` and `printf '%s\n' body | xargs -I{} gh issue comment 64620 --body {}`. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`) classifies the mutating subcommands and `gh api` write forms; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment`) locks the carve-out allow cases beside the write blocks. ADR-028 was narrowed on 2026-06-02 because conversation comments are low-blast-radius and reversible; `gh api` comment writes stay blocked.
 
+**Recurrence 2026-09-25:** Local classifier probes allowed `gh discussion comment` and `gh agent-task create`, including `agent` and `agents` aliases. These are outside ADR-028's issue/PR comment exception. The write table now covers them while their view/list controls remain allowed: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `discussion:comment`, `agent-task:create`) and the shared corpus (search: `gh agent-task create`). No remote mutation was executed.
+
 ---
 
 ## Footgun: HTTP method alone cannot classify GraphQL reads and writes
@@ -63,6 +65,8 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 
 **Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_api_write`) delegates GraphQL classification before its REST rules; `workflow/hooks/gh-graphql-read.cjs` (search: `isReadDocument`) proves the query. `test/integration/deny-git-graphql.test.ts` and `test/unit/gh-graphql-read.test.ts` pin the operation boundary. `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `allows quoted repository evidence while the registered hook still blocks repository writes`) replays the saved Codex launcher without sending the mutation to GitHub. `.goat-flow/learning-loop/decisions/ADR-028-github-cli-mostly-read-only-except-comments.md` owns the policy exception.
 
+**Recurrence 2026-09-25:** Saving an allowed API read with shell redirection made the filename look like a request operand and caused a deny. Separate unquoted redirections before classifying the request; retain quoted operators as data and refuse unresolved redirect syntax. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `strip_shell_redirections`) and `test/integration/deny-git-graphql.test.ts` (search: `bodies.txt`). REST and GraphQL read controls stay allowed, while redirected mutations remain denied.
+
 ---
 
 ## Footgun: Git alias expansions bypass every guarded form the parser does not record
@@ -71,7 +75,7 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 **Decision changed:** Every guarded Git class reads the recorded alias expansions as well as the visible subcommand, and an unrecognised first word resolves through one bounded `git config --get alias.<word>` lookup before classification.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 3 | **Latest occurrence:** 2026-09-18
+**Incident count:** 4 | **Latest occurrence:** 2026-09-25
 
 **Prevention:**
 1. Classify the complete decoded alias expansion, never the invoked word alone: route every `-c alias.<name>=<expansion>` operand through `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `record_git_alias_config`, `normalize_git_alias_expansion`) so publication, commit and destructive expansions each set their own flag, and let `record_git_persistent_alias` resolve a saved alias when the first word is not a Git builtin. Decode quoting in flags as well as the command word.
@@ -90,6 +94,8 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `selected repository commit alias`, `temporary config overrides saved alias`).
 
 **Recurrence 2026-09-18:** `git -c 'alias.nuke=reset "--hard"' nuke` and `clean "-fdx"` aliases returned 0 while their unquoted controls returned 2. The helper stripped quotes only from the first word. Complete inert word decoding now denies both forms and retains quoted `status "--short"` inspection. Evidence: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `normalize_git_alias_expansion`) and the corpus (search: `git alias quoted hard-reset argument`, `saved alias quoted forced-clean argument`).
+**Recurrence 2026-09-25:** An alias that expands to another Git global-option sequence concealed commit and push aliases. Replay each expansion as a complete Git command, retaining the selected repository, temporary config and arguments, with the existing recursion bound. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_global_words`, `expanded_alias`) owns the reconstruction; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `nested alias commits`, `nested alias reads`) pairs the denied writes with a status control.
+
 
 ## Footgun: Ordinary hook persistence can inherit an off choice from a different policy
 
@@ -110,7 +116,7 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Decision changed:** History-writing Git verbs live in one set; each non-committing exemption accepts exact spellings only, and alias expansions get no exemption.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 7 | **Latest occurrence:** 2026-09-25
+**Incident count:** 8 | **Latest occurrence:** 2026-09-25
 
 **Prevention:**
 1. When a Git command can create, rewrite or move branch history, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
@@ -134,3 +140,5 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Recurrence 2026-09-25:** Review of that repair found `git fetch --refmap +refs/heads/main:refs/heads/probe-branch origin main` and `git fetch --stdin origin` exiting 0, while `git fetch --depth 1` with an SSH remote and `git fetch --multiple` with two remotes were falsely denied. Git's `fetch --dry-run` printed `[new branch] main -> probe-branch` for the separated refmap. Five paired assertions failed before `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_fetch_moves_local_ref`, `git_fetch_refspec_moves_local_ref`) began consuming separated option values and refusing uninspectable stdin refspecs. Abbreviated `--refm` and `--std` forms joined the corpus after Git accepted them locally.
 
 **Recurrence 2026-09-25:** The directory guard also allowed `cd workflow && git restore hooks`, an absolute directory pathspec after `git -C workflow`, and `TARGET=workflow; cd "$TARGET" && git restore hooks`; a backgrounded `cd` made the first tracking repair incorrectly allow a later root-level directory restore. Its raw ampersand check then falsely denied a single-file restore followed by quoted `&`. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `track_git_shell_directory`, `__goat_git_chain_directory_ambiguous`) now carries literal directory changes and uses the quote-aware splitter to mark real background operators. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_pathspec_unknown_directory`) refuses uncertain restore and `checkout --` pathspecs with a specific reason. The same review found `git reset HEAD`, `git reset --mixed HEAD` and `git reset HEAD src/app.ts` falsely denied; the reset branch now uses (search: `git_reset_is_index_only`). `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` pairs the denials with single-file, index-only and read-only controls (search: `quoted ampersand after shell cd`, `resetting the index to the current HEAD`); the Git corpus passed 452 executed checks afterward.
+
+**Recurrence 2026-09-25 (quality report recheck):** The installed guard allowed `git branch -C previous main`, `git reset HEAD~3 --`, symbolic-ref writes, replacement refs, forced tag changes, forced submodule update/deinit and remote removal. Paired controls showed the long forced-copy spelling and reset without an empty separator already denied. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_reset_is_index_only`, `git_symbolic_ref_is_read_only`, `is_git_destructive_target`) now requires an actual pathspec for that reset exemption and classifies the measured ref/worktree writers. The corpus (search: `empty reset pathspec still moves branch history`, `forced branch copy overwrites a ref`, `replacement graph rewrites visible history`) preserves read-only forms, index-only resets, new tags and non-forced branch copies/renames. A non-forced branch rename preserves history and remains allowed.

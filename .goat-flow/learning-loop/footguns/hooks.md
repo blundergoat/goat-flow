@@ -43,11 +43,13 @@ last_reviewed: 2026-09-25
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Exercise launcher-owned timeout and invalid-output branches through source and packed consumers before registering model-visible feedback.
 **Trigger phase:** VERIFY
-**Incident count:** 1 | **Latest occurrence:** 2026-08-10
+**Incident count:** 2 | **Latest occurrence:** 2026-09-25
 
 **Prevention:** Route every launcher-owned failure through the neutral unavailable envelope and provider adapter, and keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
 
 **Symptoms:** A migrated child result used the provider adapter, but the timeout and adapter-failure branches returned through the legacy unavailable reporter, so the terminal showed human stderr while Codex received empty stdout and a stopped analyzer looked silent to the model.
+**Recurrence 2026-09-25:** The disabled-policy shortcut exited before the provider adapter and returned empty stdout to Antigravity, which requires an explicit allow object. `workflow/hooks/run-with-bash.mjs` (search: `policyChoiceBeforeBash`) now emits that object without launching Bash; `test/unit/hook-launcher.test.ts` (search: `returns the provider allow response`) checks both policies and the Codex/Claude empty-success controls.
+
 
 ## Footgun: Bash SECONDS can inherit a parent offset and invalidate hook result timing
 
@@ -146,16 +148,25 @@ last_reviewed: 2026-09-25
 
 **Evidence:** `src/cli/server/agent-hook-command.ts` (search: `structuredHookLaunchBootstrap`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `BLOCKED: Policy %s`), and the unused Claude deny shape in `workflow/hooks/hook-provider-adapters.mjs` (search: `Claude and Codex share the current hookSpecificOutput permission shape`).
 
+
+---
+
+## Resolved Entries
+
+> Historical record. These entries are no longer active traps.
+
 ## Footgun: Legacy policy child errors can become provider allows
 
-**Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-09-25 | **Resolved:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Buffer legacy policy output, accept only complete child decision statuses, and keep the writer in the launch runtime required by policy-only installs.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **hallucination-risk:** high
 **Incident count:** 2 | **Latest occurrence:** 2026-09-25
 
-**Prevention:** When changing the launcher or a policy hook, test an unexpected child exit with partial stdout and stderr in Claude, Antigravity and Copilot modes. Keep only exit `0` and Claude policy exit `2` as delivered decisions; convert other statuses to the provider's denial shape. Policy-only installs require the launch runtime but not the provider adapter, so put shared output capture in that runtime and test a missing adapter through the configured handler. Do not use this policy rule for advisory feedback or post-turn hooks.
+**Resolution:** The launcher validates buffered policy results before delivery, and the launch runtime owns output capture independently of the optional provider adapter. Both cited local failure paths have regression coverage; live provider delivery remains a separate qualification.
+
+**Prevention retained:** When changing the launcher or a policy hook, test an unexpected child exit with partial stdout and stderr in Claude, Antigravity and Copilot modes. Keep only exit `0` and Claude policy exit `2` as delivered decisions; convert other statuses to the provider's denial shape. Policy-only installs require the launch runtime but not the provider adapter, so put shared output capture in that runtime and test a missing adapter through the configured handler. Do not use this policy rule for advisory feedback or post-turn hooks.
 
 **Symptoms:** A temporary policy script that wrote partial output and exited `1` or `127` made the launcher return the same status. Claude's PreToolUse exit-1 path is nonblocking, so a broken check could release the command. Antigravity and Copilot also received incomplete policy output instead of a bounded denial.
 
@@ -165,11 +176,6 @@ last_reviewed: 2026-09-25
 
 **Recurrence 2026-09-25 (adapter dependency):** The first repair statically imported the output adapter. A missing or corrupt adapter then failed module linking before the launcher could render a policy refusal or Gruff's soft-skip response; preflight reported nine test failures. A caught dynamic import restored Gruff but still blocked policy-only installs, whose registry does not include the adapter. `workflow/hooks/hook-launch-runtime.mjs` (search: `appendBoundedHookOutput`) now owns the writer; `workflow/hooks/hook-provider-adapters.mjs` re-exports it for migrated hooks. `test/unit/hook-launcher.test.ts` (search: `keeps legacy policy decisions available without the provider adapter`) and `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `replays literal non-Git launchers`) failed before that move and passed afterward. The existing missing/corrupt Gruff adapter cases in `test/integration/hook-command-spawn-matrix.test.ts` also pass.
 
----
-
-## Resolved Entries
-
-> Historical record. These entries are no longer active traps.
 
 ## Footgun: Rejecting invalid hook configuration instead of clamping it wedges every tool call
 

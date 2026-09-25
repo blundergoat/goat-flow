@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-25
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -22,7 +22,7 @@ last_reviewed: 2026-09-07
 
 ## Lesson: Input/output alias guards must compare resolved filesystem paths
 
-**Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
+**Status:** active | **Created:** 2026-08-05 | **Incident count:** 3 | **Latest occurrence:** 2026-09-25
 **Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** ACT
 **Caught at:** VERIFY
 
@@ -31,6 +31,8 @@ last_reviewed: 2026-09-07
 **What happened:** Full branch review reproduced `plans export --format json --output <source milestone> --force` exiting 0 and replacing the milestone with generated JSON. The first guard compared `resolve()` strings and blocked that direct spelling.
 
 **Recurrence 2026-08-05:** A follow-up reproduction selected the plan through a directory symlink while naming the same source through its real path. The lexical guard again exited 0 and changed the source. The correction compares `realpathSync` results for existing sources and destinations before any export write.
+
+**Recurrence 2026-09-25:** Review validation also overwrote its input through the same path, a symlink or a hardlink. Compare device/inode identity before writing, including the open descriptor when the user redirects stdin. `src/cli/cli-output.ts` (search: `assertOutputPreservesInput`) and `test/integration/review-validation-output.test.ts` (search: `redirected stdin`, `separate file`) pin preservation and a valid separate-output control. The first ledger fixture supplied an unsupported `--project` flag and proved only argument rejection; replaying without that flag demonstrated the original overwrite before accepting the test.
 
 **Root cause:** I treated normalized path strings as filesystem identity. A symlink gives one file multiple normalized absolute names, so lexical equality cannot prove that input and output are distinct.
 
@@ -188,3 +190,16 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 **Recurrence 2026-07-17:** The first `skill new --red-log` gate counted any three comma-separated tokens as pressures, accepted `fail` inside `did not fail`, accepted `- none` as a verbatim rationalisation, and searched later GREEN sections for fields missing from RED. In the same review, the shipped-scenario contract checked only that an illustrative label existed, so moving it below `## Assumption Tracking` still satisfied the test. The focused suite and full preflight both passed before adversarial probes reproduced the two semantic bypasses. Evidence anchors: `src/cli/skill-author-red-log.ts` (search: `documentedPressureCount`) now validates the isolated RED section; `test/integration/skill-author.test.ts` (search: `rejects RED receipts whose fields describe success instead of failure`) locks the near-miss; `test/contract/skill-hardening-shared-3.test.ts` (search: `scenario label must immediately precede the assumption block`) locks the required ordering relation.
 
 **Recurrence 2026-07-17 (quality recheck):** A follow-up RED-log probe used every canonical token only inside explicit negations: `no time pressure`, `failed? no`, and `none observed because it complied`. The gate still accepted the receipt and wrote a discoverable skill because each field validator recognized tokens without validating the field's asserted meaning. The first literal fix blocked that receipt, but an immediate boundary probe reproduced the same bypass with label-prefixed absence claims: `time: no pressure`, `failed: false`, and `No rationalisation occurred`. The pressure validator now rejects a directly negated detail after a canonical label, the outcome validator rejects directly negated failure classifications, and the rationalisation validator rejects prose that explicitly reports absence. Evidence anchors: `src/cli/skill-author.ts` (search: `startsWithNegatedAssertion` and `isAbsentRationalisation`), `test/integration/skill-author.test.ts` (search: `rejects negated RED evidence that includes canonical tokens` and `rejects alternate absence claims after canonical RED labels`), and the paired acceptance control (search: `accepts positive pressure details and a substantive no-prefixed rationalisation`).
+
+## Lesson: Permission migrations must recognize already complete pairs
+
+**Status:** active | **Created:** 2026-09-25
+**Decision changed:** Test fresh installation, an incomplete permission upgrade, and repeat installation before accepting a permission expansion.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Return no replacement for an already complete permission pair so its saved order stays byte-stable. A semantic-equivalence assertion does not replace the installer's existing repeated-install byte check.
+
+**What happened:** The paired home/project credential migration inserted each project rule beside its home rule even when both were already present. The full release gate caught a second Claude install changing the template's rule order. `workflow/install-goat-flow.sh` (search: `credentialPair.every`) now preserves complete pairs; `test/integration/setup-install-write-set.test.ts` (search: `keeps disabled hooks installed and inert`) reproduces the required byte stability, and `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`) retains the incomplete-upgrade control.
+
+**Root cause:** I checked the new deny coverage but missed the already-complete input branch. Existing regression coverage exposed the omission, so the repair changes the migration rather than weakening its assertion. The preview still classified the former home-only migration, hiding an incomplete pair and announcing a rewrite for a complete pair. `src/cli/install-command.ts` (search: `CLAUDE_PAIRED_CREDENTIAL_STORES`) and `test/integration/setup-install-safety-regressions.test.ts` (search: `previews credential-pair migration`) now compare home-only, project-only, complete and absent pairs against the same policy.
