@@ -1143,6 +1143,7 @@ strip_parallel_payload_command() {
 # shellcheck disable=SC2329 # -- Called by patterns-paths.sh and patterns-writes.sh, sourced through GOAT_HOOK_LIB_DIR below.
 __goat_git_strip_globals() {
   __goat_git_unknown_global_option=""
+  __goat_git_unresolved_config_env_key=""
   reset_git_alias_flags
   __goat_git_rest=""
   __goat_git_command_words=()
@@ -1200,6 +1201,8 @@ __goat_git_strip_globals() {
           if [[ "$val" == *=* ]] && config_payload=$(git_config_command_payload "${val%%=*}" "${val#*=}"); then
             __goat_git_inline_commands+=("$config_payload")
           fi
+        elif [[ "$opt" == "--config-env" ]] && git_config_key_may_host_command "${val%%=*}"; then
+          __goat_git_unresolved_config_env_key="${val%%=*}"
         fi
         i=$((i + 2))
         continue
@@ -1231,6 +1234,12 @@ __goat_git_strip_globals() {
         case "$opt" in
           -C?*|--git-dir=*|--work-tree=*|--config-env=*) alias_config_options+=("$opt") ;;
         esac
+        if [[ "$opt" == --config-env=* ]]; then
+          val="${opt#--config-env=}"
+          if git_config_key_may_host_command "${val%%=*}"; then
+            __goat_git_unresolved_config_env_key="${val%%=*}"
+          fi
+        fi
         i=$((i + 1))
         continue
         ;;
@@ -1282,6 +1291,16 @@ git_config_key_runs_command() {
   esac
 }
 
+# A --config-env value lives outside the command text, so command-bearing keys cannot be proved safe.
+git_config_key_may_host_command() {
+  local key="${1,,}"
+  git_config_key_runs_command "$key" && return 0
+  case "$key" in
+    credential.helper|credential.*.helper|remote.*.url|remote.*.pushurl|submodule.*.url|submodule.*.update) return 0 ;;
+  esac
+  return 1
+}
+
 # Apply Git's command transformations for custom submodule updates and credential helpers.
 git_config_command_payload() {
   local key="${1,,}" value="$2"
@@ -1315,6 +1334,10 @@ git_config_command_payload() {
 check_git_hosted_commands() {
   local cmd="$1" depth="$2"
   __goat_git_strip_globals "$cmd" || return 0
+  if [[ -n "$__goat_git_unresolved_config_env_key" ]]; then
+    [[ "$GOAT_GUARD_SCOPE" == deny-git-mutations ]] || GOAT_ACTIVE_GUARD_SCOPE="destructive"
+    block "Git --config-env may supply a command through $__goat_git_unresolved_config_env_key; use a literal inspected value or ask the user to run it manually." || return $?
+  fi
   local -a hosted_commands=("${__goat_git_inline_commands[@]}")
   local -a git_words=("${__goat_git_command_words[@]}")
   local -a alias_words=()
@@ -1375,6 +1398,17 @@ check_git_hosted_commands() {
           -x|--extcmd) hosted_commands+=("${git_words[index+1]:-}"); index=$((index + 1)) ;;
           --extcmd=*) hosted_commands+=("${word#*=}") ;;
           -x?*) hosted_commands+=("${word#-x}") ;;
+        esac
+      done
+      ;;
+    grep)
+      # Git passes each matching path to this explicit pager command.
+      for ((index = 1; index < ${#git_words[@]}; index++)); do
+        word="${git_words[index]}"
+        case "$word" in
+          --) break ;;
+          -O?*) hosted_commands+=("${word#-O} ./__goat_git_grep_match__") ;;
+          --open-files-in-pager=?*) hosted_commands+=("${word#*=} ./__goat_git_grep_match__") ;;
         esac
       done
       ;;
@@ -1597,6 +1631,30 @@ normalize_env_prefix() {
   done
 
   printf '%s' "$c"
+}
+
+# Visible Git config environment assignments are not inherited by the hook's read-only alias lookup.
+# Refuse the unresolved configuration before normalizing away the assignments or export command.
+visible_git_config_environment_is_unresolved() {
+  local raw="$1" verb="$2"
+  local -a words=()
+  local word name value
+  split_shell_words_into words "$raw"
+  for word in "${words[@]}"; do
+    # A command argument can quote the same text as inert data; only prefixes affect the process environment.
+    if [[ -n "$verb" && "$verb" != export && "${word##*/}" == "$verb" ]]; then
+      break
+    fi
+    [[ "$word" =~ ^(GIT_CONFIG_(COUNT|PARAMETERS|KEY_[0-9]+|VALUE_[0-9]+|GLOBAL|SYSTEM))=(.*)$ ]] || continue
+    name="${BASH_REMATCH[1]}"
+    value="${BASH_REMATCH[3]}"
+    case "$name" in
+      GIT_CONFIG_COUNT) [[ "$value" == 0 ]] || return 0 ;;
+      GIT_CONFIG_PARAMETERS|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM) [[ -z "$value" ]] || return 0 ;;
+      *) return 0 ;;
+    esac
+  done
+  return 1
 }
 
 # Reveal the executable after timing and output options so measured commands receive ordinary policy checks.
@@ -3176,6 +3234,9 @@ check_segment() {
     GOAT_ACTIVE_GUARD_SCOPE="repository"
   fi
   prepare_segment_context "$cmd" "$depth" || return $?
+  if visible_git_config_environment_is_unresolved "$CMD_TRIMMED" "$CMD_VERB"; then
+    block "Visible Git configuration environment can change aliases or executable commands without hook inspection; use literal git -c values or ask the user to run it manually." || return $?
+  fi
   # Git policy checks native Git and GitHub actions; the alternate branch checks destructive shell and secret-file actions.
   if [[ "$GOAT_GUARD_SCOPE" == "deny-git-mutations" ]]; then
     # The existing find walker recursively checks executable payloads. Its

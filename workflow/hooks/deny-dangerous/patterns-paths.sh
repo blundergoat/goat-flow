@@ -724,8 +724,34 @@ is_gh_token_disclosure() {
         esac
       done
       ;;
+    git-credential)
+      [[ "${words[subcommand_index + 1]:-}" == get ]] && return 0
+      ;;
   esac
   return 1
+}
+
+# Git's credential fill and helper get operations print stored passwords or tokens to stdout.
+is_git_credential_disclosure() {
+  local candidate
+  candidate=$(normalize_command_candidate "$1")
+  local xargs_payload=""
+  if xargs_payload=$(strip_xargs_payload_command "$candidate"); then
+    candidate="$xargs_payload"
+  fi
+  __goat_git_strip_globals "$candidate" || return 1
+  local -a git_words=("${__goat_git_command_words[@]}")
+  local word
+  case "${git_words[0]:-}" in
+    credential) [[ "${git_words[1]:-}" == fill ]] ;;
+    credential-*)
+      for word in "${git_words[@]:1}"; do
+        [[ "$word" == get ]] && return 0
+      done
+      return 1
+      ;;
+    *) return 1 ;;
+  esac
 }
 
 # Apply secret-path policy to one user-visible command segment.
@@ -743,6 +769,9 @@ check_secret_segment() {
 
   if is_gh_token_disclosure "$cmd"; then
     block "GitHub authentication token output exposes a stored credential to the agent. Use gh auth status without token display." || return $?
+  fi
+  if is_git_credential_disclosure "$cmd"; then
+    block "Git credential output exposes stored passwords or tokens to the agent. Use git config --get credential.helper or request sanitized status." || return $?
   fi
 
   local touches_secret=0

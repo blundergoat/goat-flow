@@ -23,7 +23,7 @@ is_git_publication_target() {
   local candidate="$1"
   candidate="${candidate#"${candidate%%[![:space:]]*}"}"
   case "$candidate" in
-    push | push\ * | send-pack | send-pack\ * | http-push | http-push\ * | \!*) return 0 ;;
+    push | push\ * | send-pack | send-pack\ * | http-push | http-push\ * | svn\ dcommit | svn\ dcommit\ * | p4\ submit | p4\ submit\ * | \!*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -1018,7 +1018,12 @@ check_git_segment() {
     if is_git_push "$repository_write_candidate"; then
       # A visible push names publication; an alias can hide a push or a shell command, so its reason says both.
       if is_git_publication_target "$__goat_git_rest"; then
-        block "Git publication is not allowed. Ask the user to push manually." || return $?
+        case "$__goat_git_rest" in
+          svn\ dcommit|svn\ dcommit\ *|p4\ submit|p4\ submit\ *)
+            block "Git bridge publication is not allowed. Ask the user to publish manually." || return $?
+            ;;
+          *) block "Git publication is not allowed. Ask the user to push manually." || return $? ;;
+        esac
       else
         block "This Git alias can publish or run shell commands, so it is not allowed. Ask the user to run it manually." ||
           return $?

@@ -37,7 +37,7 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 **Decision changed:** Check lower-level remote-ref writers against `is_git_publication_target` when changing the publication guard; test direct and alias forms beside a read-only Git control.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 1 | **Latest occurrence:** 2026-09-25
+**Incident count:** 2 | **Latest occurrence:** 2026-09-25
 
 **Prevention:** Keep the publication verb set aligned with Git commands that update remote refs. For each newly covered verb, classify a direct write, an alias expansion and an adjacent read-only control with both the canonical and installed hook suites.
 
@@ -46,6 +46,8 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 **Why it happens:** `is_git_publication_target` listed `push`, `send-pack` and shell aliases as publication targets, so a third installed Git ref publisher missed the hook's developer-only publication rule.
 
 **Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_publication_target`) now includes `http-push`; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git http-push publication`) pins the direct write beside alias and read-only controls. The [Git 2.43 manual](https://git-scm.com/docs/git-http-push/2.43.0.html) describes the remote-ref write.
+
+**Recurrence 2026-09-25:** The same classifier still allowed `git svn dcommit` and `git p4 submit`, which publish through optional Git bridges. `is_git_publication_target` now names both, and the corpus (search: `Git SVN publication`) tests direct and alias forms beside `svn fetch` and `p4 sync` controls. The local hook verdict was measured; bridge execution was not available in this workspace.
 
 ---
 

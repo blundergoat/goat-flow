@@ -13,6 +13,7 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 **Decision changed:** Check commands that print stored credentials before treating a path-free CLI invocation as a safe read.
 **Trigger phase:** ACT
 **hallucination-risk:** high
+**Incident count:** 2 | **Latest occurrence:** 2026-09-25
 
 **Prevention:** When adding a CLI that can print a credential, check its output modes in the secret guard and pair a denial with a non-secret status or help control. A protected credential-store path does not cover a CLI that reads that store internally.
 
@@ -21,6 +22,8 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 **Why it happens:** `check_secret_segment` inspected visible file paths, and neither GitHub command names the stored credential file. Classifying them as GitHub reads left their output visible to an agent.
 
 **Evidence:** `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_gh_token_disclosure`) now classifies the GitHub output modes before the path scanner. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `GitHub authentication token output`) pairs denials with status and usage controls. This proves local command classification, not provider-side hook delivery.
+
+**Recurrence 2026-09-25:** The same hook allowed `git credential fill`, `git credential-store get`, and `gh auth git-credential get` even though those commands print stored credentials without naming a protected path. The new `is_git_credential_disclosure` gate and the `git-credential` branch in `is_gh_token_disclosure` deny those output modes. The shared corpus (search: `Git credential fill output`) pairs them with `git credential --help` and `git config --get credential.helper`. No real credential was retrieved.
 
 ---
 
