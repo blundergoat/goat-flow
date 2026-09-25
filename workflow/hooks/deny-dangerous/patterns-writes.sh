@@ -891,9 +891,25 @@ gh_codespace_ssh_is_config_only() {
   [[ "$config_seen" -eq 1 ]]
 }
 
+# Built-in command names and help topics always run gh's own command; a saved alias or an extension cannot replace them.
+# Names follow the GitHub CLI manual, so a newly released built-in stays blocked for agents until it is added here.
+is_gh_builtin_topic() {
+  case "$1" in
+    agent-task|alias|api|attestation|auth|browse|cache|codespace|completion|config|copilot|discussion|extension|gist|gpg-key|help)
+      return 0 ;;
+    issue|label|licenses|org|pr|preview|project|release|repo|ruleset|run|search|secret|skill|ssh-key|status|variable|version|workflow)
+      return 0 ;;
+    actions|environment|exit-codes|formatting|mintty|reference)
+      return 0 ;;
+  esac
+  return 1
+}
+
 # Decide whether a GitHub CLI command mutates shared project state or protected local GitHub settings and skill files.
 # The only write exceptions remain issue and pull-request conversation comments.
 is_gh_write_operation() {
+  # The caller explains an uninspectable alias or extension differently from a named write.
+  __goat_gh_uninspectable_command=0
   local github_candidate
   github_candidate=$(normalize_command_candidate "$1")
 
@@ -922,9 +938,21 @@ is_gh_write_operation() {
   local topic="${words[$i]:-}"
   # Missing command topics and option-only invocations do not mutate GitHub.
   [[ -z "$topic" || "$topic" == -* ]] && return 1
-  topic="${topic,,}"
-  # GitHub's built-in `cs` shorthand must protect the same codespace actions as the full command name.
-  [[ "$topic" == "cs" ]] && topic="codespace"
+  # GitHub's built-in shorthands must protect the same actions as the full command names.
+  case "$topic" in
+    cs) topic="codespace" ;;
+    ext|extensions) topic="extension" ;;
+    agent|agents|agent-tasks) topic="agent-task" ;;
+    skills) topic="skill" ;;
+    at) topic="attestation" ;;
+    rs) topic="ruleset" ;;
+  esac
+  # gh matches command names case-sensitively and runs a saved alias or an installed extension for any other first word.
+  # The hook cannot see what that alias or extension runs, so it cannot allow it.
+  if ! is_gh_builtin_topic "$topic"; then
+    __goat_gh_uninspectable_command=1
+    return 0
+  fi
 
   # API writes use method and field semantics instead of named subcommands.
   if [[ "$topic" == "api" ]]; then
@@ -941,15 +969,15 @@ is_gh_write_operation() {
   local nested_subcommand="${words[$nested_subcommand_index]:-}"
   nested_subcommand="${nested_subcommand,,}"
   case "$topic:$subcommand" in
-    issue:create|issue:close|issue:reopen|issue:edit|issue:delete|issue:lock|issue:unlock|issue:pin|issue:unpin|issue:transfer|issue:develop)
+    issue:create|issue:new|issue:close|issue:reopen|issue:edit|issue:delete|issue:lock|issue:unlock|issue:pin|issue:unpin|issue:transfer|issue:develop)
       return 0 ;;
-    pr:create|pr:review|pr:merge|pr:close|pr:reopen|pr:edit|pr:ready|pr:update-branch|pr:lock|pr:unlock|pr:revert)
+    pr:create|pr:new|pr:review|pr:merge|pr:close|pr:reopen|pr:edit|pr:ready|pr:update-branch|pr:lock|pr:unlock|pr:revert)
       return 0 ;;
-    release:create|release:upload|release:delete|release:edit|release:delete-asset)
+    release:create|release:new|release:upload|release:delete|release:edit|release:delete-asset)
       return 0 ;;
-    discussion:create|discussion:edit|discussion:comment|agent-task:create|agent:create|agents:create)
+    discussion:create|discussion:edit|discussion:comment|agent-task:create)
       return 0 ;;
-    repo:create|repo:delete|repo:edit|repo:fork|repo:rename|repo:archive|repo:unarchive|repo:sync|repo:set-default)
+    repo:create|repo:new|repo:delete|repo:edit|repo:fork|repo:rename|repo:archive|repo:unarchive|repo:sync|repo:set-default)
       return 0 ;;
     label:create|label:delete|label:edit|label:clone)
       return 0 ;;
@@ -957,15 +985,18 @@ is_gh_write_operation() {
       return 0 ;;
     run:rerun|run:cancel|run:delete)
       return 0 ;;
-    gist:create|gist:edit|gist:delete|gist:rename)
+    gist:create|gist:new|gist:edit|gist:delete|gist:rename)
       return 0 ;;
     secret:set|secret:remove|secret:delete)
       return 0 ;;
-    variable:set|variable:delete)
+    variable:set|variable:delete|variable:remove)
       return 0 ;;
     ssh-key:add|ssh-key:delete|gpg-key:add|gpg-key:delete)
       return 0 ;;
-    auth:login|auth:logout|auth:refresh|auth:setup-git)
+    auth:login|auth:logout|auth:refresh|auth:setup-git|auth:switch)
+      return 0 ;;
+    # Saved aliases and configured pager, editor or browser programs change what later gh commands run.
+    alias:set|alias:import|alias:delete|config:set)
       return 0 ;;
     codespace:create|codespace:delete|codespace:edit|codespace:stop|codespace:rebuild)
       return 0 ;;
@@ -981,6 +1012,9 @@ is_gh_write_operation() {
       return 0 ;;
     extension:install|extension:remove|extension:upgrade)
       return 0 ;;
+    extension:exec)
+      __goat_gh_uninspectable_command=1
+      return 0 ;;
     project:create|project:delete|project:edit|project:close|project:copy|project:link|project:unlink|project:mark-template|project:field-create|project:field-delete|project:field-update|project:item-add|project:item-archive|project:item-create|project:item-delete|project:item-edit)
       return 0 ;;
     cache:delete)
@@ -988,7 +1022,7 @@ is_gh_write_operation() {
   esac
 
   case "$topic:$subcommand:$nested_subcommand" in
-    repo:deploy-key:add|repo:deploy-key:delete|codespace:ports:visibility)
+    repo:deploy-key:add|repo:deploy-key:delete|repo:autolink:create|repo:autolink:delete|codespace:ports:visibility)
       return 0 ;;
   esac
 
@@ -1089,6 +1123,12 @@ check_repository_segment() {
   for repository_pipeline_stage in "${repository_pipeline_stages[@]}"; do
     # The runtime blocks this write; conversational approval does not release the hook.
     if is_gh_write_operation "$repository_pipeline_stage"; then
+      # An alias or extension can hide any gh command, so the reason asks for the visible built-in form.
+      if [[ "${__goat_gh_uninspectable_command:-0}" -eq 1 ]]; then
+        block \
+          "Cannot inspect a gh alias or extension. Run the built-in gh command instead, or ask the user to run it manually." ||
+          return $?
+      fi
       block \
         "GitHub write via gh is blocked by Deny Git and GitHub writes. Draft the change for the user to perform; conversational approval does not bypass this hook." ||
         return $?
