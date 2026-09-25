@@ -125,7 +125,7 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Decision changed:** Classify history writers in one set; grant exact non-writing modes only after checking the alias expansion and appended arguments.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 9 | **Latest occurrence:** 2026-09-25
+**Incident count:** 10 | **Latest occurrence:** 2026-09-25
 
 **Prevention:**
 1. When a Git command can create, rewrite or move history, including notes refs, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
@@ -157,3 +157,5 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 - `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_notes_preserves_history`) distinguishes notes reads, previews and merge recovery.
 - `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_notes_and_github_write_modes`) covers writes and appended negations.
 - The new denial cases failed before repair and passed afterward. Probes classified command text; no notes commits were created.
+
+**Recurrence 2026-09-25 (worktree reset):** The installed `--check` classifier returned exit 0 for `git worktree add -B main ../other HEAD~3`, its bundled `-qBmain` spelling, and an alias to `worktree`; `git worktree add -h` defines `-B` as creating or resetting a branch. A first matcher also denied a quoted `--reason 'branch -B'` value; a disposable worktree confirmed Git treats `-B` after `--reason` as lock text. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_worktree_add_resets_branch`) now reads argument boundaries before classifying the branch reset. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `worktree add resets an existing branch`) pairs the denial with `-b`, lock-reason, `list`, and help controls. Classifier probes never ran the branch reset; the disposable worktree did not change this project's branches.

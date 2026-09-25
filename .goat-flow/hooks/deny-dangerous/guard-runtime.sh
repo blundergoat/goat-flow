@@ -1164,6 +1164,7 @@ __goat_git_strip_globals() {
   local i=1
   local opt=""
   local val=""
+  local config_payload=""
   # Global options select the project and config before the proposed Git action.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     opt="${words[$i]}"
@@ -1191,8 +1192,8 @@ __goat_git_strip_globals() {
         # An inline guarded alias still denies even when the command invokes another word.
         if [[ "$opt" == "-c" ]]; then
           record_git_alias_config "$val"
-          if git_config_key_runs_command "${val%%=*}" && [[ "$val" == *=* ]]; then
-            __goat_git_inline_commands+=("${val#*=}")
+          if [[ "$val" == *=* ]] && config_payload=$(git_config_command_payload "${val%%=*}" "${val#*=}"); then
+            __goat_git_inline_commands+=("$config_payload")
           fi
         fi
         i=$((i + 2))
@@ -1202,8 +1203,8 @@ __goat_git_strip_globals() {
         val="${opt#-c}"
         alias_config_options+=("$opt")
         record_git_alias_config "$val"
-        if git_config_key_runs_command "${val%%=*}" && [[ "$val" == *=* ]]; then
-          __goat_git_inline_commands+=("${val#*=}")
+        if [[ "$val" == *=* ]] && config_payload=$(git_config_command_payload "${val%%=*}" "${val#*=}"); then
+          __goat_git_inline_commands+=("$config_payload")
         fi
         i=$((i + 1))
         continue
@@ -1264,9 +1265,42 @@ __goat_git_strip_globals() {
 # These settings can contain command text, unlike ordinary Git configuration values.
 git_config_key_runs_command() {
   case "${1,,}" in
-    core.pager|core.fsmonitor|core.editor|core.sshcommand) return 0 ;;
+    core.pager|core.fsmonitor|core.editor|core.sshcommand|core.askpass|core.gitproxy|core.alternaterefscommand|\
+    diff.external|diff.*.command|diff.*.textconv|difftool.*.cmd|\
+    filter.*.clean|filter.*.smudge|filter.*.process|merge.*.driver|mergetool.*.cmd|\
+    pager.*|interactive.difffilter|sequence.editor|gpg.program|gpg.*.program|gpg.ssh.defaultkeycommand|\
+    browser.*.cmd|guitool.*.cmd|man.*.cmd|instaweb.httpd|gc.recentobjectshook|uploadpack.packobjectshook|\
+    remote.*.uploadpack|remote.*.receivepack) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Apply Git's command transformations for custom submodule updates and credential helpers.
+git_config_command_payload() {
+  local key="${1,,}" value="$2"
+  case "$key" in
+    remote.*.url|remote.*.pushurl|submodule.*.url)
+      [[ "$value" == ext::* ]] || return 1
+      printf '%s' "$value"
+      return 0
+      ;;
+    submodule.*.update)
+      [[ "$value" == '!'* ]] || return 1
+      printf '%s' "${value#!}"
+      return 0
+      ;;
+    credential.helper|credential.*.helper)
+      [[ -n "$value" ]] || return 1
+      case "$value" in
+        '!'*) printf '%s' "${value#!}" ;;
+        /*) printf '%s' "$value" ;;
+        *) printf 'git credential-%s' "$value" ;;
+      esac
+      return 0
+      ;;
+  esac
+  git_config_key_runs_command "$key" || return 1
+  printf '%s' "$value"
 }
 
 # Apply the selected policy to explicit commands Git will execute now or from saved configuration.
@@ -1278,18 +1312,38 @@ check_git_hosted_commands() {
   local -a git_words=("${__goat_git_command_words[@]}")
   local -a alias_words=()
   local alias_name="${git_words[0]:-}"
-  local expanded_alias
+  local expanded_alias appended_args=""
   # Git splits the alias value, then appends the caller's original arguments without splitting them again.
   if [[ "$alias_name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] && ! is_git_builtin_word "$alias_name" &&
     [[ -n "${__goat_git_raw_alias_expansions[${alias_name,,}]:-}" ]]; then
-    split_shell_words_into alias_words "${__goat_git_raw_alias_expansions[${alias_name,,}]}"
-    printf -v expanded_alias '%q ' "${__goat_git_global_words[@]}" "${alias_words[@]}" "${git_words[@]:1}"
+    if [[ "${__goat_git_raw_alias_expansions[${alias_name,,}]}" == '!'* ]]; then
+      # Git passes the caller's remaining arguments to its shell alias command.
+      if [[ "${#git_words[@]}" -gt 1 ]]; then
+        printf -v appended_args '%q ' "${git_words[@]:1}"
+      fi
+      expanded_alias="${__goat_git_raw_alias_expansions[${alias_name,,}]#!} $appended_args"
+    else
+      split_shell_words_into alias_words "${__goat_git_raw_alias_expansions[${alias_name,,}]}"
+      printf -v expanded_alias '%q ' "${__goat_git_global_words[@]}" "${alias_words[@]}" "${git_words[@]:1}"
+    fi
     hosted_commands+=("$expanded_alias")
     git_words=()
   fi
   local verb="${git_words[0]:-}" word payload output hosted_status key=""
-  local index=1 start=0 skip_value=0
+  local index=1 start=0 skip_value=0 scan_ext_transport=0
   case "$verb" in
+    clone|fetch|pull|push|archive)
+      scan_ext_transport=1
+      ;;
+    ls-remote)
+      scan_ext_transport=1
+      for word in "${git_words[@]:1}"; do
+        [[ "$word" == --get-url ]] && scan_ext_transport=0
+      done
+      ;;
+    remote)
+      [[ "${git_words[1]:-}" == add || "${git_words[1]:-}" == set-url ]] && scan_ext_transport=1
+      ;;
     bisect)
       [[ "${git_words[1]:-}" == run ]] && start=2
       ;;
@@ -1297,6 +1351,7 @@ check_git_hosted_commands() {
       while [[ "${git_words[index]:-}" == --quiet || "${git_words[index]:-}" == -q ]]; do
         index=$((index + 1))
       done
+      [[ "${git_words[index]:-}" == add || "${git_words[index]:-}" == set-url ]] && scan_ext_transport=1
       if [[ "${git_words[index]:-}" == foreach ]]; then
         index=$((index + 1))
         while [[ "${git_words[index]:-}" == --recursive || "${git_words[index]:-}" == --quiet || "${git_words[index]:-}" == -- ]]; do
@@ -1328,13 +1383,32 @@ check_git_hosted_commands() {
           -*) continue ;;
         esac
         key="$word"
-        if git_config_key_runs_command "$key"; then
-          hosted_commands+=("${git_words[index+1]:-}")
+        if payload=$(git_config_command_payload "$key" "${git_words[index+1]:-}"); then
+          hosted_commands+=("$payload")
         fi
         break
       done
       ;;
   esac
+  if [[ "$scan_ext_transport" -eq 1 ]]; then
+    for ((index = 1; index < ${#git_words[@]}; index++)); do
+      word="${git_words[index]}"
+      case "$word" in
+        # These option values are data, even when they resemble an ext remote URL.
+        --branch|-b|--depth|--sort|-t|--track|--origin|-o)
+          index=$((index + 1))
+          ;;
+        --branch=*|--depth=*|--sort=*|--track=*|--origin=*|-b?*|-t?*|-o?*) ;;
+        -u|--upload-pack|--exec)
+          hosted_commands+=("${git_words[index+1]:-}")
+          index=$((index + 1))
+          ;;
+        -u?*) hosted_commands+=("${word#-u}") ;;
+        --upload-pack=*|--exec=*) hosted_commands+=("${word#*=}") ;;
+        ext::*|--remote=ext::*) hosted_commands+=("${word#--remote=}") ;;
+      esac
+    done
+  fi
   if [[ "$start" -gt 0 && "$start" -lt "${#git_words[@]}" ]]; then
     if [[ $((${#git_words[@]} - start)) -eq 1 ]]; then
       hosted_commands+=("${git_words[start]}")
@@ -1348,6 +1422,14 @@ check_git_hosted_commands() {
   local __goat_git_directory_unknown=1
   for payload in "${hosted_commands[@]}"; do
     [[ -n "$payload" ]] || continue
+    if [[ "$payload" == ext::* ]]; then
+      # git-remote-ext decodes "% " inside an argument; that boundary is not shell syntax.
+      if [[ "$payload" == *'% '* ]]; then
+        [[ "$GOAT_GUARD_SCOPE" == "deny-git-mutations" ]] || GOAT_ACTIVE_GUARD_SCOPE="destructive"
+        block "Git ext transport with escaped spaces cannot be inspected; invoke the command directly." || return $?
+      fi
+      payload="${payload#ext::}"
+    fi
     if [[ "$depth" -ge 8 ]]; then
       block "Git-hosted command nesting exceeds inspection depth; invoke the command directly." || return $?
     fi

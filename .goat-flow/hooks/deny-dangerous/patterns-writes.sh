@@ -54,7 +54,7 @@ is_git_publication_alias_config() {
 
 # Git verbs that create, rewrite or move history reserved for the developer, before any non-committing exemption.
 # Notes changes create commits under a notes ref even when the developer's current branch stays unchanged.
-__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes "
+__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes worktree "
 
 # Decide whether a verb's arguments are exactly one of the listed words.
 # Use for recovery modes such as `--abort`, which Git accepts only without other arguments.
@@ -161,6 +161,30 @@ git_reset_is_index_only() {
   [[ "$has_index_mode" -eq 1 || "$has_path_operand" -eq 1 || -z "$first_operand" || "$first_operand" == HEAD ]]
 }
 
+# `worktree add -B` resets a branch, while `-b` and `--reason` consume their following word as data.
+git_worktree_add_resets_branch() {
+  local -n worktree_words_ref="$1"
+  [[ "${worktree_words_ref[0]:-}" == worktree && "${worktree_words_ref[1]:-}" == add ]] || return 1
+  local index word bundle letter
+  for ((index = 2; index < ${#worktree_words_ref[@]}; index++)); do
+    word="${worktree_words_ref[index]}"
+    case "$word" in
+      --) return 1 ;;
+      --reason|-b) index=$((index + 1)); continue ;;
+      --reason=*|-b?*) continue ;;
+      -B|-B?*) return 0 ;;
+      -?*)
+        bundle="${word#-}"
+        for ((letter = 0; letter < ${#bundle}; letter++)); do
+          [[ "${bundle:letter:1}" == B ]] && return 0
+          [[ "${bundle:letter:1}" == b ]] && break
+        done
+        ;;
+    esac
+  done
+  return 1
+}
+
 # One symbolic-ref operand reads a ref; a second operand or a deletion flag writes it.
 git_symbolic_ref_is_read_only() {
   local -a ref_words=()
@@ -233,7 +257,7 @@ is_git_commit_target() {
   [[ "$candidate" == *[[:space:]]* ]] && arguments="${candidate#*[[:space:]]}"
   [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
   # Aliases to a conditional verb are safe until their own or appended arguments select the history-writing form.
-  if [[ "$mode" == "strict" && " reset branch checkout switch fetch symbolic-ref replace notes " != *" $verb "* ]]; then
+  if [[ "$mode" == "strict" && " reset branch checkout switch fetch symbolic-ref replace notes worktree " != *" $verb "* ]]; then
     return 0
   fi
   # A lone help flag prints usage and changes nothing, so an agent can still check a verb's option spellings.
@@ -275,6 +299,16 @@ is_git_commit_target() {
       ;;
     fetch)
       git_fetch_moves_local_ref "$arguments" && return 0
+      return 1
+      ;;
+    worktree)
+      if [[ "$mode" == direct ]]; then
+        git_worktree_add_resets_branch __goat_git_command_words && return 0
+      else
+        local -a worktree_words=()
+        split_shell_words_into worktree_words "$candidate"
+        git_worktree_add_resets_branch worktree_words && return 0
+      fi
       return 1
       ;;
     cherry-pick|revert)
@@ -682,7 +716,7 @@ normalize_git_policy_candidate() {
 # Decide whether a Git command creates history reserved for the developer.
 is_git_commit() {
   __goat_git_strip_globals "$1" || return 1
-  is_git_commit_target "$__goat_git_rest" && return 0
+  is_git_commit_target "$__goat_git_rest" direct && return 0
   # Git appends visible arguments to an alias; a safe checkout or fetch alias can become a ref rewrite.
   if resolve_git_invoked_alias_command && is_git_commit_target "$__goat_git_invoked_alias_command"; then
     return 0
