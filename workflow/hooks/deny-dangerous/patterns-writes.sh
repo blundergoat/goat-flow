@@ -52,9 +52,9 @@ is_git_publication_alias_config() {
   return 1
 }
 
-# Git verbs that create, rewrite or move branch history reserved for the developer, before any non-committing exemption.
-# filter-branch, filter-repo and fast-import write commits and move branches directly, so they sit beside commit.
-__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace "
+# Git verbs that create, rewrite or move history reserved for the developer, before any non-committing exemption.
+# Notes changes create commits under a notes ref even when the developer's current branch stays unchanged.
+__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes "
 
 # Decide whether a verb's arguments are exactly one of the listed words.
 # Use for recovery modes such as `--abort`, which Git accepts only without other arguments.
@@ -179,6 +179,49 @@ git_symbolic_ref_is_read_only() {
   [[ "$operands" -eq 1 ]]
 }
 
+# Keep notes inspection, prune previews and merge recovery available without allowing notes history writes.
+# The optional ref selector precedes the mode; for example, `--ref review show HEAD` reads the user's review notes.
+git_notes_preserves_history() {
+  local -a notes_words=()
+  local notes_index=0 notes_mode notes_arguments
+  read -r -d '' -a notes_words <<< "$1" || true
+  # Consume each ref selector so a ref named `list` cannot disguise a following write mode.
+  while [[ "$notes_index" -lt "${#notes_words[@]}" ]]; do
+    case "${notes_words[$notes_index]}" in
+      --ref) notes_index=$((notes_index + 2)) ;;
+      --ref=*|--no-ref) notes_index=$((notes_index + 1)) ;;
+      --) notes_index=$((notes_index + 1)); break ;;
+      -h|--help) break ;;
+      -*) return 1 ;;
+      *) break ;;
+    esac
+  done
+  # No mode means Git lists notes; an alias is checked again after its visible arguments are appended.
+  [[ "$notes_index" -ge "${#notes_words[@]}" ]] && return 0
+  notes_mode="${notes_words[$notes_index]}"
+  notes_arguments="${notes_words[*]:notes_index+1}"
+  git_arguments_are_one_of "$notes_arguments" "-h --help" && return 0
+  case "$notes_mode" in
+    -h|--help) [[ -z "$notes_arguments" ]] && return 0 ;;
+    list|show|get-ref) return 0 ;;
+    prune)
+      # Only an explicit preview with known flags can avoid deleting notes and writing a new notes commit.
+      if git_flags_within "$notes_arguments" "-n --dry-run -v --verbose" &&
+        { git_arguments_include "$notes_arguments" "-n" || git_arguments_include "$notes_arguments" "--dry-run"; }; then
+        return 0
+      fi
+      ;;
+    merge)
+      # Aborting an unfinished notes merge is recovery; committing or starting that merge still needs the developer.
+      if git_flags_within "$notes_arguments" "--abort -v --verbose -q --quiet" &&
+        git_arguments_include "$notes_arguments" "--abort"; then
+        return 0
+      fi
+      ;;
+  esac
+  return 1
+}
+
 # Decide whether a direct subcommand or alias expansion creates history reserved for the developer.
 # Pass `strict` for alias expansions: Git appends the visible arguments to an alias, and those can undo an exempt form.
 is_git_commit_target() {
@@ -190,13 +233,16 @@ is_git_commit_target() {
   [[ "$candidate" == *[[:space:]]* ]] && arguments="${candidate#*[[:space:]]}"
   [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
   # Aliases to a conditional verb are safe until their own or appended arguments select the history-writing form.
-  if [[ "$mode" == "strict" && " reset branch checkout switch fetch symbolic-ref replace " != *" $verb "* ]]; then
+  if [[ "$mode" == "strict" && " reset branch checkout switch fetch symbolic-ref replace notes " != *" $verb "* ]]; then
     return 0
   fi
   # A lone help flag prints usage and changes nothing, so an agent can still check a verb's option spellings.
   git_arguments_are_one_of "$arguments" "-h --help" && return 1
   # Exemptions allow only exact spellings, so an abbreviation, negation or unknown flag stays with the developer.
   case "$verb" in
+    notes)
+      git_notes_preserves_history "$arguments" && return 1
+      ;;
     reset)
       # The existing destructive gate gives a hard reset its specific recovery reason.
       [[ "$arguments" =~ (^|[[:space:]])--hard([[:space:]]|$) ]] && return 1
@@ -724,11 +770,11 @@ gh_skip_options_index() {
         i=$((i + 1))
         break
         ;;
-      --repo|--hostname|--cwd|--config-dir|--jq|--template|--cache|-R|-H|-q)
+      --repo|--hostname|--cwd|--config-dir|--jq|--template|--cache|--codespace|-R|-H|-q|-c)
         i=$((i + 2))
         continue
         ;;
-      --repo=*|--hostname=*|--cwd=*|--config-dir=*|--jq=*|--template=*|--cache=*|-R?*|-H?*|-q?*)
+      --repo=*|--hostname=*|--cwd=*|--config-dir=*|--jq=*|--template=*|--cache=*|--codespace=*|-R?*|-H?*|-q?*|-c?*)
         i=$((i + 1))
         continue
         ;;
@@ -747,7 +793,34 @@ gh_skip_options_index() {
   printf '%s' "$i"
 }
 
-# Decide whether a GitHub CLI command mutates shared project state.
+# Prove skill publishing is validation only before allowing the agent to run it.
+# Inspect flags across command levels, keeping tag values and directory operands out of the dry-run decision.
+gh_skill_publish_is_dry_run() {
+  local -n publish_words="$1"
+  local topic_index="$2" command_index="$3"
+  local publish_index publish_word dry_run=0 fix_files=0
+  # Repeated Boolean flags use the last value, just as GitHub CLI does when a user changes a command's mode.
+  for ((publish_index = 1; publish_index < ${#publish_words[@]}; publish_index++)); do
+    # The command names are already identified; only their options and operands select preview versus publishing.
+    [[ "$publish_index" -eq "$topic_index" || "$publish_index" -eq "$command_index" ]] && continue
+    publish_word="${publish_words[$publish_index]}"
+    case "$publish_word" in
+      --) break ;;
+      --dry-run|--dry-run=1|--dry-run=t|--dry-run=T|--dry-run=true|--dry-run=TRUE|--dry-run=True) dry_run=1 ;;
+      --dry-run=0|--dry-run=f|--dry-run=F|--dry-run=false|--dry-run=FALSE|--dry-run=False) dry_run=0 ;;
+      --fix|--fix=1|--fix=t|--fix=T|--fix=true|--fix=TRUE|--fix=True) fix_files=1 ;;
+      --fix=0|--fix=f|--fix=F|--fix=false|--fix=FALSE|--fix=False) fix_files=0 ;;
+      --tag|--repo|--hostname|--cwd|--config-dir|-R|-H)
+        publish_index=$((publish_index + 1)) ;;
+      --tag=*|--repo=*|--hostname=*|--cwd=*|--config-dir=*|-R?*|-H?*|--no-pager) ;;
+      -*) return 1 ;;
+    esac
+  done
+  # --fix rewrites the user's local skill files, so disabling publication alone does not qualify as a read.
+  [[ "$dry_run" -eq 1 && "$fix_files" -eq 0 ]]
+}
+
+# Decide whether a GitHub CLI command mutates shared project state or protected local GitHub settings and skill files.
 # The only write exceptions remain issue and pull-request conversation comments.
 is_gh_write_operation() {
   local github_candidate
@@ -779,6 +852,8 @@ is_gh_write_operation() {
   # Missing command topics and option-only invocations do not mutate GitHub.
   [[ -z "$topic" || "$topic" == -* ]] && return 1
   topic="${topic,,}"
+  # GitHub's built-in `cs` shorthand must protect the same codespace actions as the full command name.
+  [[ "$topic" == "cs" ]] && topic="codespace"
 
   # API writes use method and field semantics instead of named subcommands.
   if [[ "$topic" == "api" ]]; then
@@ -811,7 +886,7 @@ is_gh_write_operation() {
       return 0 ;;
     run:rerun|run:cancel|run:delete)
       return 0 ;;
-    gist:create|gist:edit|gist:delete)
+    gist:create|gist:edit|gist:delete|gist:rename)
       return 0 ;;
     secret:set|secret:remove|secret:delete)
       return 0 ;;
@@ -821,7 +896,10 @@ is_gh_write_operation() {
       return 0 ;;
     auth:login|auth:logout|auth:refresh|auth:setup-git)
       return 0 ;;
-    codespace:create|codespace:delete|codespace:edit|codespace:stop)
+    codespace:create|codespace:delete|codespace:edit|codespace:stop|codespace:rebuild)
+      return 0 ;;
+    skill:publish)
+      gh_skill_publish_is_dry_run words "$i" "$subcommand_index" && return 1
       return 0 ;;
     extension:install|extension:remove|extension:upgrade)
       return 0 ;;
@@ -832,7 +910,7 @@ is_gh_write_operation() {
   esac
 
   case "$topic:$subcommand:$nested_subcommand" in
-    repo:deploy-key:add|repo:deploy-key:delete)
+    repo:deploy-key:add|repo:deploy-key:delete|codespace:ports:visibility)
       return 0 ;;
   esac
 

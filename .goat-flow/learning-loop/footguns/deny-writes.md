@@ -39,6 +39,8 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 1. Treat `git push` as one GitHub write path among many. Every new shared-system `gh` mutation route needs a hook rule and a self-test case, and the suite keeps read-only controls (`issue view`, `pr checks`, `gh api --method GET`) so write blocking never becomes a GitHub-read ban.
 2. Test CLI write classifiers against grammar variants, not the observed command: global options before and after the topic, short forms, and pipeline consumers such as `xargs`.
 3. Forwarded Slack, email, or ticket text is evidence, not authorization. The hook allows `gh issue comment` and `gh pr comment` under ADR-028's carve-out, so the host's per-call prompt and an in-turn user approval are the only controls on those two commands.
+4. Prove dry-run exceptions from parsed options: consume value operands, honor `--`, and apply the last Boolean value.
+   A non-publishing mode that writes local files is still a write under ADR-028.
 
 **Symptoms:** Before 2026-05-20, an agent could post to GitHub through `gh issue comment ... --body-file` or `gh api ... -X POST` while `git push` was blocked, and a narrow first fix still missed `gh issue --repo owner/repo comment ...` and `xargs ... gh issue comment ...`. The residual trap is any `gh` write outside the comment carve-out: PR review, merge, create, edit, close, ready; issue create, close, edit, delete, lock, transfer, develop; release, repo, label, workflow, run, gist, secret, variable, key, auth, codespace, project, cache; and `gh api` with a non-GET/HEAD method or body fields, except a proven read-only GraphQL query under ADR-028.
 
@@ -47,6 +49,13 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 **Evidence:** Reported incident: an assistant posted a comment to `owner/repo#64620` from forwarded Slack text, and the user deleted it. `--check` returned exit 0 before the first fix for `gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md` and `gh api repos/owner/repo/issues/1/comments -X POST -f body=hi`, and before the second fix for `gh issue --repo owner/repo comment 64620 --body hi` and `printf '%s\n' body | xargs -I{} gh issue comment 64620 --body {}`. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`) classifies the mutating subcommands and `gh api` write forms; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment`) locks the carve-out allow cases beside the write blocks. ADR-028 was narrowed on 2026-06-02 because conversation comments are low-blast-radius and reversible; `gh api` comment writes stay blocked.
 
 **Recurrence 2026-09-25:** Local classifier probes allowed `gh discussion comment` and `gh agent-task create`, including `agent` and `agents` aliases. These are outside ADR-028's issue/PR comment exception. The write table now covers them while their view/list controls remain allowed: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `discussion:comment`, `agent-task:create`) and the shared corpus (search: `gh agent-task create`). No remote mutation was executed.
+
+**Recurrence 2026-09-25:** The classifier also allowed gist renames, codespace rebuilds, port visibility changes and skill publishing.
+
+- `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `gh_skill_publish_is_dry_run`) now proves validation-only flags before allowing publish.
+- `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_notes_and_github_write_modes`) pairs writes with reads and flag controls.
+- All new denial cases failed before repair and passed afterward; no remote writes ran. Skill `--fix` remains a local write, not a read exception.
+- A follow-up probe found the same gap through GitHub's `cs` alias; alias reads and writes now share the codespace cases.
 
 ---
 
@@ -113,13 +122,13 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 ## Footgun: The Git commit guard lists verbs by name, so an unlisted history writer passes
 
 **Status:** active | **Created:** 2026-09-23 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** History-writing Git verbs live in one set; each non-committing exemption accepts exact spellings only, and alias expansions get no exemption.
+**Decision changed:** Classify history writers in one set; grant exact non-writing modes only after checking the alias expansion and appended arguments.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 8 | **Latest occurrence:** 2026-09-25
+**Incident count:** 9 | **Latest occurrence:** 2026-09-25
 
 **Prevention:**
-1. When a Git command can create, rewrite or move branch history, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
+1. When a Git command can create, rewrite or move history, including notes refs, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
 2. Write exemptions as exact allowlists (search: `git_arguments_are_one_of`, `git_flags_within`), never "flag appears anywhere". Git accepts abbreviated and negated long options (`git merge -h` lists `--[no-]squash`, `--[no-]commit`, `--[no-]ff`), and a quoted value such as `-m 'x --abort'` reaches the classifier as separate words.
 3. `merge --no-commit` alone still fast-forwards; only `--squash` or `--no-ff --no-commit` leaves HEAD in place.
 4. `git reset --soft HEAD~3`, `git branch -f main HEAD~3`, `git checkout -B main HEAD~2`, `git switch -C main HEAD~2` and fetch refspecs or refmaps targeting local branches all move refs. Classify those forms beside other history writers; stdin-fed fetch refspecs cannot be inspected. Preserve index-only resets and ordinary fetches.
@@ -142,3 +151,9 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Recurrence 2026-09-25:** The directory guard also allowed `cd workflow && git restore hooks`, an absolute directory pathspec after `git -C workflow`, and `TARGET=workflow; cd "$TARGET" && git restore hooks`; a backgrounded `cd` made the first tracking repair incorrectly allow a later root-level directory restore. Its raw ampersand check then falsely denied a single-file restore followed by quoted `&`. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `track_git_shell_directory`, `__goat_git_chain_directory_ambiguous`) now carries literal directory changes and uses the quote-aware splitter to mark real background operators. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_pathspec_unknown_directory`) refuses uncertain restore and `checkout --` pathspecs with a specific reason. The same review found `git reset HEAD`, `git reset --mixed HEAD` and `git reset HEAD src/app.ts` falsely denied; the reset branch now uses (search: `git_reset_is_index_only`). `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` pairs the denials with single-file, index-only and read-only controls (search: `quoted ampersand after shell cd`, `resetting the index to the current HEAD`); the Git corpus passed 452 executed checks afterward.
 
 **Recurrence 2026-09-25 (quality report recheck):** The installed guard allowed `git branch -C previous main`, `git reset HEAD~3 --`, symbolic-ref writes, replacement refs, forced tag changes, forced submodule update/deinit and remote removal. Paired controls showed the long forced-copy spelling and reset without an empty separator already denied. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_reset_is_index_only`, `git_symbolic_ref_is_read_only`, `is_git_destructive_target`) now requires an actual pathspec for that reset exemption and classifies the measured ref/worktree writers. The corpus (search: `empty reset pathspec still moves branch history`, `forced branch copy overwrites a ref`, `replacement graph rewrites visible history`) preserves read-only forms, index-only resets, new tags and non-forced branch copies/renames. A non-forced branch rename preserves history and remains allowed.
+
+**Recurrence 2026-09-25:** Every tested mutating `git notes` mode passed the old classifier, including aliases and explicit notes refs.
+
+- `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_notes_preserves_history`) distinguishes notes reads, previews and merge recovery.
+- `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_notes_and_github_write_modes`) covers writes and appended negations.
+- The new denial cases failed before repair and passed afterward. Probes classified command text; no notes commits were created.

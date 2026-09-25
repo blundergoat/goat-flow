@@ -796,6 +796,10 @@ run_smoke() {
   expect_block writes 'gh agents create x' "agent task plural alias"
   expect_allow writes 'gh discussion view 61' "discussion read control"
   expect_allow writes 'gh agent-task list' "agent task read control"
+  expect_block git 'git notes add -m x HEAD' "notes add creates history"
+  expect_allow git 'git notes list' "notes list reads history"
+  expect_block writes 'gh skill publish --tag v1.2.3' "skill publishing changes GitHub"
+  expect_allow writes 'gh skill publish --dry-run' "skill validation without publishing"
   expect_block git "git -c alias.c='-c alias.d=commit d' c -m x" "nested alias commits"
   expect_block git "git -c alias.c=d -c alias.d=push c" "alias chain publishes"
   expect_allow git "git -c alias.c='-c alias.d=status d' c" "nested alias reads"
@@ -870,8 +874,61 @@ expect_git_directory_pathspecs() {
   rm -rf "$fixture_root"
 }
 
+# Keep notes inspection and skill validation available while their write modes stay with the developer.
+# Exercise the public hook result so aliases and option parsing cannot bypass the same protection.
+expect_notes_and_github_write_modes() {
+  local notes_mode
+  # Each mutating notes mode can install history under the user's selected notes ref.
+  for notes_mode in 'append -m x HEAD' 'remove HEAD' 'copy HEAD HEAD~1' 'edit HEAD' 'merge review' 'merge --commit' 'prune'; do
+    expect_block git "git notes $notes_mode" "notes write mode: $notes_mode"
+  done
+  expect_block git 'git notes --ref=review add -m checked HEAD' "notes attached ref before write"
+  expect_block git 'git notes --ref review add -m checked HEAD' "notes separate ref before write"
+  expect_block git 'git notes --ref list add -m checked HEAD' "read-mode word used as notes ref still writes"
+  expect_block git 'git -c alias.n=notes n add -m checked HEAD' "notes alias with appended write mode"
+  expect_block git "git -c alias.n='notes prune -n' n --no-dry-run" "notes alias cannot cancel its dry run"
+  expect_block git 'git notes prune --dry-run --no-dry-run' "notes prune negation cancels dry run"
+  expect_block git 'git notes merge --abort --commit' "notes recovery cannot exempt commit mode"
+  expect_allow git 'git notes' "default notes listing"
+  expect_allow git 'git notes --ref review' "default listing of selected notes ref"
+  expect_allow git 'git notes --ref=review show HEAD' "notes show reads selected ref"
+  expect_allow git 'git notes get-ref' "notes ref inspection"
+  expect_allow git 'git notes --help' "notes usage"
+  expect_allow git 'git notes --ref review --help' "notes usage after ref selector"
+  expect_allow git 'git notes --ref=review add -h' "notes write-mode usage without writing"
+  expect_allow git 'git notes prune --dry-run --verbose' "notes prune preview"
+  expect_allow git 'git notes merge --abort' "notes merge recovery"
+  expect_allow git 'git -c alias.n=notes n list' "notes alias read control"
+  expect_allow git "git -c alias.n='notes prune -n' n -v" "notes alias preview control"
+  expect_block writes 'gh gist rename abc old.md new.md' "gist file rename"
+  expect_allow writes 'gh gist view abc' "gist read control"
+  expect_block writes 'gh codespace rebuild -c example' "codespace rebuild"
+  expect_block writes 'gh codespace ports visibility 3000:public -c example' "codespace port visibility change"
+  expect_block writes 'gh codespace -c example ports visibility 3000:public' "codespace selector before nested write"
+  expect_block writes 'gh cs rebuild -c example' "codespace rebuild through built-in alias"
+  expect_block writes 'gh cs ports visibility 3000:public -c example' "codespace port visibility through built-in alias"
+  expect_allow writes 'gh cs list' "codespace alias read control"
+  expect_allow writes 'gh cs ports -c example' "codespace alias port list"
+  expect_allow writes 'gh codespace ports -c example' "codespace port list"
+  expect_allow writes 'gh codespace list' "codespace read control after write expansion"
+  expect_block writes 'gh --repo owner/project skill publish --tag v1.2.3' "skill publish after global repository"
+  expect_block writes 'gh skill publish --fix' "skill metadata fixes write local files"
+  expect_block writes 'gh skill publish --dry-run=false' "false dry run still publishes"
+  expect_block writes 'gh skill publish --dry-run --dry-run=false' "later dry-run flag restores publishing"
+  expect_block writes 'gh skill publish --fix=false' "false fix still publishes"
+  expect_block writes 'gh skill publish --tag --dry-run' "tag value cannot grant dry run"
+  expect_block writes 'gh skill publish -- --dry-run' "directory operand cannot grant dry run"
+  expect_block writes 'gh skill publish --dry-run --fix' "dry run does not authorize local fixes"
+  expect_allow writes 'gh skill publish ./skills --dry-run=true --tag v1.2.3' "skill directory validation with tag"
+  expect_allow writes 'gh skill publish --dry-run=false --dry-run' "last dry-run flag disables publishing"
+  expect_allow writes 'gh --repo owner/project skill publish --dry-run' "skill validation with global repository"
+  expect_allow writes 'gh skill --dry-run publish' "skill validation flag before command"
+  expect_allow writes 'gh skill publish --dry-run --fix=false' "disabled fixes preserve validation"
+}
+
 run_full() {
   run_smoke
+  expect_notes_and_github_write_modes
   expect_real_linked_worktree_uses_worktree_policy_store
   expect_block shell "sudo apt-get install x" "sudo package install"
   expect_block shell "chmod 777 file" "chmod 777"
