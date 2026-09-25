@@ -9,7 +9,7 @@ import { readFileSync, realpathSync, statSync } from "node:fs";
 import { getPackageVersion } from "./paths.js";
 import { CLIError } from "./cli-error.js";
 import type { ParsedCLI } from "./cli-types.js";
-import { writeOutput } from "./cli-output.js";
+import { assertOutputPreservesInput, writeOutput } from "./cli-output.js";
 import { maskNonRenderedMarkdown } from "./rendered-markdown.js";
 import {
   canonicalReviewJson,
@@ -711,6 +711,7 @@ export function handleReviewCommand(options: ParsedCLI): void {
     options.reviewSubcommand === "validate-ledger"
       ? options.projectPath
       : resolveReviewedProject(options.projectPath);
+  assertOutputPreservesInput(options.output, options.reviewValidatePath ?? 0);
   const input = readReviewInput(options.reviewValidatePath);
   dispatchReviewInput(options, projectRoot, input);
 }

@@ -234,6 +234,25 @@ const HOOK_REGISTRATION_EDIT_PREFIX: Record<HookRegistrationEdit, string> = {
   remove: "remove inactive managed hook registrations",
 };
 
+/** Keep another provider outside the upgrade preview unless its saved hooks show that the developer enrolled it. */
+function hasManagedProviderRegistration(
+  projectPath: string,
+  agent: AgentId,
+): boolean {
+  const profile = getAgentProfile(agent);
+  // Any supported managed hook establishes enrollment, including a stale registration that setup will repair.
+  return listHookSpecs().some((spec) => {
+    // Unsupported hooks have no expected entries and cannot prove that this provider was installed.
+    if (spec.unsupportedAgents?.[agent] !== undefined) return false;
+    const current = readAgentHookState(projectPath, profile, spec);
+    return (
+      current.installed ||
+      (current.registrationIssue !== undefined &&
+        current.registrationIssue !== "registration-missing")
+    );
+  });
+}
+
 /** Classify one hook's pending registration edit for the selected provider. */
 function pendingHookRegistrationEdit(
   projectPath: string,
@@ -275,6 +294,13 @@ function pendingHookConfigEdits(
   ) {
     return [];
   }
+
+  // A targeted sibling repair must match the installer's enrollment check; unrelated settings do not authorize hook restoration.
+  if (
+    selectedHookId !== undefined &&
+    !hasManagedProviderRegistration(projectPath, agent)
+  )
+    return [];
 
   const hookStates = new Map(
     readAllHookStates(projectPath).map((hookState) => [
@@ -436,24 +462,30 @@ const CLAUDE_RETIRED_DENY_RULES = new Set([
 ]);
 
 /**
- * In-project credential-store rules rewritten to their home-directory form on upgrade.
- * A bare `**` pattern resolves under the working directory, so the old rules never protected the real `~/.ssh` or `~/.aws`.
+ * Legacy file-only rules expand to paired home/project directory protection during upgrade.
+ * Current credential-store rules are inspected separately so a complete pair keeps its saved order.
  */
-const CLAUDE_HOME_ANCHOR_REWRITE_SOURCES = new Set([
-  "Read(**/.ssh/**)",
-  "Read(**/.aws/**)",
-  "Read(**/.gnupg/**)",
+const CLAUDE_LEGACY_CREDENTIAL_FILE_RULES = new Set([
   "Read(**/.docker/config.json)",
   "Read(**/.kube/config)",
-  "Read(**/.npmrc)",
-  "Read(**/.pypirc)",
-  "Edit(**/.ssh/**)",
-  "Edit(**/.aws/**)",
-  "Edit(**/.gnupg/**)",
   "Edit(**/.docker/config.json)",
   "Edit(**/.kube/config)",
-  "Edit(**/.npmrc)",
-  "Edit(**/.pypirc)",
+]);
+
+/** Credential stores whose existing Claude deny receives a missing home or project partner during setup. */
+const CLAUDE_PAIRED_CREDENTIAL_STORES = new Set([
+  ".ssh/**",
+  ".aws/**",
+  ".gnupg/**",
+  ".config/gcloud/**",
+  ".docker/**",
+  ".kube/**",
+  ".npmrc",
+  ".pypirc",
+  ".netrc",
+  ".git-credentials",
+  ".config/gh/hosts.yml",
+  ".pgpass",
 ]);
 
 /** Escape literal text before matching one TOML key. */
@@ -638,22 +670,49 @@ function claudePermissionsNeedMigration(settingsText: string): boolean {
     const rules = permissionRecord[arrayName];
     // A missing or malformed rule list has no saved permission entries to preview.
     if (!Array.isArray(rules)) return false;
-    return rules.some((rule) => installRewritesClaudeRule(arrayName, rule));
+    return rules.some((rule) =>
+      installRewritesClaudeRule(arrayName, rule, rules),
+    );
   });
+}
+
+/** Check whether the preview needs a missing home or project deny for a credential store the developer already protects. */
+function isIncompleteClaudeCredentialPair(
+  rule: string,
+  savedRules: readonly unknown[],
+): boolean {
+  const credentialRule = /^(Read|Edit)\((~\/|\*\*\/)(.+)\)$/u.exec(rule);
+  const credentialStore = credentialRule?.[3];
+  // An ordinary application path is outside the credential-store policy and receives no additional deny.
+  if (
+    !credentialRule ||
+    credentialStore === undefined ||
+    !CLAUDE_PAIRED_CREDENTIAL_STORES.has(credentialStore)
+  )
+    return false;
+  const otherLocation = credentialRule[2] === "~/" ? "**/" : "~/";
+  return !savedRules.includes(
+    `${credentialRule[1]}(${otherLocation}${credentialStore})`,
+  );
 }
 
 /**
  * Decide whether install would change one Claude permission rule during an upgrade.
  *
- * Unmatched tool forms are repaired in every list; only deny rules are retired, expanded, or re-anchored,
- * because an allow or ask rule with the same text is the user's own choice.
+ * Unmatched tool forms are repaired in every list; only deny rules are retired, expanded, or paired across credential locations.
+ * An allow or ask rule with the same text remains the user's own choice.
  *
  * @param arrayName - permission list the rule came from: `deny`, `allow`, or `ask`
  *
  * @param rule - one raw list entry; a non-string entry is left untouched and reports false
+ * @param savedRules - entries in the same saved list; a missing partner requires migration, while a complete pair stays unchanged
  * @returns true when the standalone installer would remove or rewrite this entry
  */
-function installRewritesClaudeRule(arrayName: string, rule: unknown): boolean {
+function installRewritesClaudeRule(
+  arrayName: string,
+  rule: unknown,
+  savedRules: readonly unknown[],
+): boolean {
   // A non-string permission entry cannot identify a tool rule that setup rewrites.
   if (typeof rule !== "string") return false;
   // These retired tool spellings need repair before Claude can enforce the user's file rules.
@@ -664,7 +723,8 @@ function installRewritesClaudeRule(arrayName: string, rule: unknown): boolean {
     rule === "Read(**/.env*)" ||
     rule === "Edit(**/.env*)" ||
     CLAUDE_RETIRED_DENY_RULES.has(rule) ||
-    CLAUDE_HOME_ANCHOR_REWRITE_SOURCES.has(rule)
+    CLAUDE_LEGACY_CREDENTIAL_FILE_RULES.has(rule) ||
+    isIncompleteClaudeCredentialPair(rule, savedRules)
   );
 }
 

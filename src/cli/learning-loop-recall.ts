@@ -52,10 +52,10 @@ function compareStable(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-/** Render C0, DEL, and C1 controls as visible Unicode escapes before text reaches a terminal. */
+/** Render terminal and bidirectional controls visibly so repository text cannot reorder its citations. */
 function escapeTerminalControlCharacters(terminalField: string): string {
   return terminalField.replace(
-    /[\u0000-\u001f\u007f-\u009f]/gu,
+    /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/gu,
     (character) => {
       const codePoint = character.codePointAt(0) ?? 0;
       return `\\u${codePoint.toString(16).padStart(4, "0")}`;

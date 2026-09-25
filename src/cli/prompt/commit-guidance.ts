@@ -9,12 +9,14 @@ import {
   constants,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   unlinkSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { getAgentProfile, getAgentProfiles } from "../agents/registry.js";
 import { getTemplatePath } from "../paths.js";
@@ -187,10 +189,37 @@ export function pendingCommitGuidanceMigrationInstructionPath(
 }
 
 /**
- * Copy first, update the selected bridge atomically, then remove the former guide.
+ * Check the former guide before setup copies it into the developer's current documentation path.
+ * Throws when a link or redirected parent would import a file from outside the selected project.
+ */
+function assertLegacyGuideIsContained(
+  projectRoot: string,
+  legacyPath: string,
+): void {
+  const legacyFile = lstatSync(legacyPath);
+  const relativeGuidePath = relative(
+    realpathSync(projectRoot),
+    realpathSync(legacyPath),
+  );
+  // An outside guide could contain unrelated private text; preserve the link and let the developer choose a regular local source.
+  if (
+    !legacyFile.isFile() ||
+    relativeGuidePath === ".." ||
+    relativeGuidePath.startsWith("../") ||
+    relativeGuidePath.startsWith("..\\") ||
+    isAbsolute(relativeGuidePath)
+  ) {
+    throw new Error(
+      "Legacy commit guide must be a regular file inside the selected project.",
+    );
+  }
+}
+
+/**
+ * Move the developer's guide after setup confirms that no other agent still links to its old name.
  *
- * Use after setup proves no other agent still needs the old path; null bridge input means only the guide filename changes.
- * Error behavior: restores user instruction bytes and removes the new guide before rethrowing; incomplete rollback throws a replacement error.
+ * Copy before removing so a failed instruction rewrite can restore the original guide and links.
+ * Throws on unsafe paths or failed writes; rollback restores instructions and removes the new copy, or reports its own failure.
  *
  * @param instructionBridge - selected Commit Messages rewrite, or null when the user's instructions contain no former-path reference
  */
@@ -200,6 +229,7 @@ function renameLegacyGuide(
   outputPath: string,
   instructionBridge: InstructionBridgeUpdate | null,
 ): void {
+  assertLegacyGuideIsContained(projectRoot, legacyPath);
   copyFileSync(legacyPath, outputPath, constants.COPYFILE_EXCL);
   let didWriteInstructionBridge = false;
   try {

@@ -31,7 +31,7 @@ const MANAGED_INSTALL_STATE_V2_SCHEMA = "goat-flow.install-state.v2" as const;
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const UNSAFE_SINGLE_LINE_CHARACTER =
-  /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
+  /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/u;
 
 /** One managed destination and the package hash supplied by the last successful install. */
 interface ManagedInstallStateEntry {
@@ -84,7 +84,7 @@ function isSafeRelativePath(candidatePath: string): boolean {
     isAbsolute(candidatePath) ||
     win32.isAbsolute(candidatePath) ||
     candidatePath.includes("\\") ||
-    candidatePath.includes("\0") ||
+    UNSAFE_SINGLE_LINE_CHARACTER.test(candidatePath) ||
     pathSegments.some(
       (pathSegment) =>
         pathSegment.length === 0 || pathSegment === "." || pathSegment === "..",
