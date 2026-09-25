@@ -185,7 +185,7 @@ Fresh plan: create a slugged directory and write one zero-padded `M*.md` per mil
 
 **Final join:** Exclude `abandoned`, `superseded`, and `deferred`; `blocked` still participates. Require one participating dependency sink whose transitive dependency closure covers every other participating milestone. Authors join every participating lane tip. A clean checker result cannot prove this join. Multiple sinks or uncovered work requires a plan amendment before source work or timing; never guess.
 
-Completed implementation enters `testing-gate`. Apply the preamble's Proof Gate; audit tasks and exit, rerun only stale/failed checks or when risk requires it.
+Completed implementation enters `testing-gate`. If the milestone changed source, run `goat-clarity` on the paths it wrote before proof, so remediation renames cannot stale it. Apply the preamble's Proof Gate; audit tasks and exit, rerun only stale/failed checks or when risk requires it.
 
 Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items stay open. Each milestone retains its own receipt and blocking human gate; unrelated active lanes keep their state and receipts. Follow `references/milestone-examples.md` → Timing receipts: finalize before Actual or declare retrospective/unavailable/incomplete instead of inventing minutes. Calibration eligibility starts at `complete`.
 
