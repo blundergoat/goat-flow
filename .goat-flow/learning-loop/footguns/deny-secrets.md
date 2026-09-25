@@ -7,6 +7,23 @@ Secret-path read traps: what counts as a secret path, and which read channels th
 
 Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 
+## Footgun: Credential output needs a command gate even when no secret path appears
+
+**Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check commands that print stored credentials before treating a path-free CLI invocation as a safe read.
+**Trigger phase:** ACT
+**hallucination-risk:** high
+
+**Prevention:** When adding a CLI that can print a credential, check its output modes in the secret guard and pair a denial with a non-secret status or help control. A protected credential-store path does not cover a CLI that reads that store internally.
+
+**Symptoms:** The installed dangerous hook returned exit 0 for `gh auth token`, `gh auth status --show-token` and the status `-t` form, while ordinary `gh auth status` was allowed. The local GitHub CLI help identifies `token` and `--show-token` as credential-output modes. The new full-corpus denial cases failed before repair; no credential-output command was executed.
+
+**Why it happens:** `check_secret_segment` inspected visible file paths, and neither GitHub command names the stored credential file. Classifying them as GitHub reads left their output visible to an agent.
+
+**Evidence:** `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_gh_token_disclosure`) now classifies the GitHub output modes before the path scanner. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `GitHub authentication token output`) pairs denials with status and usage controls. This proves local command classification, not provider-side hook delivery.
+
+---
+
 ## Footgun: Secret-path matching must distinguish search data from file operands
 
 **Status:** active | **Created:** 2026-08-17 | **Evidence:** ACTUAL_MEASURED

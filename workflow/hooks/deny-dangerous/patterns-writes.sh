@@ -54,7 +54,7 @@ is_git_publication_alias_config() {
 
 # Git verbs that create, rewrite or move history reserved for the developer, before any non-committing exemption.
 # Notes changes create commits under a notes ref even when the developer's current branch stays unchanged.
-__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes worktree "
+__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes worktree stash "
 
 # Decide whether a verb's arguments are exactly one of the listed words.
 # Use for recovery modes such as `--abort`, which Git accepts only without other arguments.
@@ -246,6 +246,22 @@ git_notes_preserves_history() {
   return 1
 }
 
+# Stash inspection and apply do not create a stash commit or move its ref.
+# Drop and clear retain the destructive gate's more specific recovery message.
+git_stash_preserves_history() {
+  local -a stash_words=()
+  read -r -d '' -a stash_words <<< "$1" || true
+  case "${stash_words[0]:-}" in
+    list|show|apply|drop|clear) return 0 ;;
+    push|save|create|store|pop|branch)
+      if [[ "${#stash_words[@]}" -eq 2 ]]; then
+        case "${stash_words[1]}" in -h|--help) return 0 ;; esac
+      fi
+      ;;
+  esac
+  return 1
+}
+
 # Decide whether a direct subcommand or alias expansion creates history reserved for the developer.
 # Pass `strict` for alias expansions: Git appends the visible arguments to an alias, and those can undo an exempt form.
 is_git_commit_target() {
@@ -257,13 +273,16 @@ is_git_commit_target() {
   [[ "$candidate" == *[[:space:]]* ]] && arguments="${candidate#*[[:space:]]}"
   [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
   # Aliases to a conditional verb are safe until their own or appended arguments select the history-writing form.
-  if [[ "$mode" == "strict" && " reset branch checkout switch fetch symbolic-ref replace notes worktree " != *" $verb "* ]]; then
+  if [[ "$mode" == "strict" && " reset branch checkout switch fetch symbolic-ref replace notes worktree stash " != *" $verb "* ]]; then
     return 0
   fi
   # A lone help flag prints usage and changes nothing, so an agent can still check a verb's option spellings.
   git_arguments_are_one_of "$arguments" "-h --help" && return 1
   # Exemptions allow only exact spellings, so an abbreviation, negation or unknown flag stays with the developer.
   case "$verb" in
+    stash)
+      git_stash_preserves_history "$arguments" && return 1
+      ;;
     notes)
       git_notes_preserves_history "$arguments" && return 1
       ;;
@@ -854,6 +873,24 @@ gh_skill_publish_is_dry_run() {
   [[ "$dry_run" -eq 1 && "$fix_files" -eq 0 ]]
 }
 
+# Only configuration output is an SSH inspection; an interactive session or
+# command-bearing SSH can write the remote Codespace filesystem.
+gh_codespace_ssh_is_config_only() {
+  local -n ssh_words="$1"
+  local ssh_index="$2" config_seen=0
+  for ((; ssh_index < ${#ssh_words[@]}; ssh_index++)); do
+    case "${ssh_words[ssh_index]}" in
+      --config) config_seen=1 ;;
+      -c|--codespace|-R|--repo|--repo-owner|-p|--profile|--server-port)
+        ssh_index=$((ssh_index + 1))
+        [[ "$ssh_index" -lt "${#ssh_words[@]}" ]] || return 1 ;;
+      -c?*|-R?*|-p?*|--codespace=*|--repo=*|--repo-owner=*|--profile=*|--server-port=*) ;;
+      *) return 1 ;;
+    esac
+  done
+  [[ "$config_seen" -eq 1 ]]
+}
+
 # Decide whether a GitHub CLI command mutates shared project state or protected local GitHub settings and skill files.
 # The only write exceptions remain issue and pull-request conversation comments.
 is_gh_write_operation() {
@@ -931,6 +968,13 @@ is_gh_write_operation() {
     auth:login|auth:logout|auth:refresh|auth:setup-git)
       return 0 ;;
     codespace:create|codespace:delete|codespace:edit|codespace:stop|codespace:rebuild)
+      return 0 ;;
+    codespace:cp)
+      [[ "${#words[@]}" -eq $((subcommand_index + 2)) && "${words[subcommand_index + 1]}" == --help ]] && return 1
+      return 0 ;;
+    codespace:ssh)
+      [[ "${#words[@]}" -eq $((subcommand_index + 2)) && "${words[subcommand_index + 1]}" == --help ]] && return 1
+      gh_codespace_ssh_is_config_only words $((subcommand_index + 1)) && return 1
       return 0 ;;
     skill:publish)
       gh_skill_publish_is_dry_run words "$i" "$subcommand_index" && return 1

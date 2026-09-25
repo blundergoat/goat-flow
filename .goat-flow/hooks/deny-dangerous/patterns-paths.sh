@@ -690,6 +690,44 @@ search_file_operands_touch_secret() {
   return 1
 }
 
+# GitHub CLI can print a stored credential without naming its backing file.
+# Keep ordinary auth status available while rejecting its explicit token mode.
+is_gh_token_disclosure() {
+  local candidate
+  candidate=$(normalize_command_candidate "$1")
+  local xargs_payload=""
+  if xargs_payload=$(strip_xargs_payload_command "$candidate"); then
+    candidate="$xargs_payload"
+  fi
+  local -a words=()
+  split_shell_words_into words "$candidate"
+  [[ "${#words[@]}" -gt 0 ]] || return 1
+  [[ "${words[0]##*/}" == gh ]] || return 1
+  candidate=$(strip_shell_redirections "$candidate") || return 0
+  split_shell_words_into words "$candidate"
+  local topic_index subcommand_index topic subcommand index
+  topic_index=$(gh_skip_options_index words 1)
+  topic="${words[topic_index]:-}"
+  [[ "${topic,,}" == auth ]] || return 1
+  subcommand_index=$(gh_skip_options_index words $((topic_index + 1)))
+  subcommand="${words[subcommand_index]:-}"
+  case "${subcommand,,}" in
+    token)
+      [[ "${#words[@]}" -eq $((subcommand_index + 2)) && "${words[subcommand_index + 1]}" == --help ]] && return 1
+      return 0 ;;
+    status)
+      for ((index = topic_index + 1; index < ${#words[@]}; index++)); do
+        [[ "$index" -eq "$subcommand_index" ]] && continue
+        case "${words[index]}" in
+          -h|--hostname|-u|--user) index=$((index + 1)) ;;
+          -t|-t=*|--show-token|--show-token=*) return 0 ;;
+        esac
+      done
+      ;;
+  esac
+  return 1
+}
+
 # Apply secret-path policy to one user-visible command segment.
 # This gate blocks protected reads and uploads while preserving searches for quoted examples.
 check_secret_segment() {
@@ -701,6 +739,10 @@ check_secret_segment() {
       echo|printf)
         return 0 ;;
     esac
+  fi
+
+  if is_gh_token_disclosure "$cmd"; then
+    block "GitHub authentication token output exposes a stored credential to the agent. Use gh auth status without token display." || return $?
   fi
 
   local touches_secret=0

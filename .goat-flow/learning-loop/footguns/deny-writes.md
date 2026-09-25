@@ -70,6 +70,7 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: GitHub CLI comments bypassed shared-system write guardrails
 
 **Status:** active | **Created:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 4 | **Latest occurrence:** 2026-09-25
 
 **Prevention:**
 1. Treat `git push` as one GitHub write path among many. Every new shared-system `gh` mutation route needs a hook rule and a self-test case, and the suite keeps read-only controls (`issue view`, `pr checks`, `gh api --method GET`) so write blocking never becomes a GitHub-read ban.
@@ -92,6 +93,8 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 - `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_notes_and_github_write_modes`) pairs writes with reads and flag controls.
 - All new denial cases failed before repair and passed afterward; no remote writes ran. Skill `--fix` remains a local write, not a read exception.
 - A follow-up probe found the same gap through GitHub's `cs` alias; alias reads and writes now share the codespace cases.
+
+**Recurrence 2026-09-25 (Codespace filesystem):** `gh codespace cp README.md remote:/tmp/review-write` and `gh codespace ssh -- touch /tmp/review-write`, including the `cs` alias, passed both installed hooks. Local `gh codespace cp --help` says copies can target the remote filesystem, and `ssh --help` accepts a remote command. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `gh_codespace_ssh_is_config_only`) now blocks copies and interactive or command-bearing SSH. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `codespace remote shell command`) keeps configuration output and usage available. No Codespace command was executed.
 
 ---
 
@@ -161,7 +164,7 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Decision changed:** Classify history writers in one set; grant exact non-writing modes only after checking the alias expansion and appended arguments.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 10 | **Latest occurrence:** 2026-09-25
+**Incident count:** 11 | **Latest occurrence:** 2026-09-25
 
 **Prevention:**
 1. When a Git command can create, rewrite or move history, including notes refs, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
@@ -195,3 +198,5 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 - The new denial cases failed before repair and passed afterward. Probes classified command text; no notes commits were created.
 
 **Recurrence 2026-09-25 (worktree reset):** The installed `--check` classifier returned exit 0 for `git worktree add -B main ../other HEAD~3`, its bundled `-qBmain` spelling, and an alias to `worktree`; `git worktree add -h` defines `-B` as creating or resetting a branch. A first matcher also denied a quoted `--reason 'branch -B'` value; a disposable worktree confirmed Git treats `-B` after `--reason` as lock text. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_worktree_add_resets_branch`) now reads argument boundaries before classifying the branch reset. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `worktree add resets an existing branch`) pairs the denial with `-b`, lock-reason, `list`, and help controls. Classifier probes never ran the branch reset; the disposable worktree did not change this project's branches.
+
+**Recurrence 2026-09-25 (stash history):** `git stash push`, `save`, `create`, `store`, `pop` and `branch` all passed the installed classifier. `git stash -h` identifies their commit, ref or branch effects; `pop` also removes a stash entry. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_stash_preserves_history`) now guards those modes, including the default push and aliases, while retaining `list`, `show`, `apply` and usage. The shared corpus (search: `stash history mode`) failed on the write forms before repair and passed afterward. No stash command was executed.
