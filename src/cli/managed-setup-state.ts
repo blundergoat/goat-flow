@@ -23,6 +23,7 @@ import { compareVersions, isReleaseVersion } from "./version-compare.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
 import { installStateRelativeDirectory } from "./local-state-migration.js";
 import { readProjectTextFile } from "./project-file.js";
+import { UNSAFE_SINGLE_LINE_CHARACTER } from "./terminal-safe-text.js";
 
 const MANAGED_INSTALL_STATE_SCHEMA = "goat-flow.install-state.v1" as const;
 
@@ -30,8 +31,6 @@ const MANAGED_INSTALL_STATE_SCHEMA = "goat-flow.install-state.v1" as const;
 const MANAGED_INSTALL_STATE_V2_SCHEMA = "goat-flow.install-state.v2" as const;
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
-const UNSAFE_SINGLE_LINE_CHARACTER =
-  /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/u;
 
 /** One managed destination and the package hash supplied by the last successful install. */
 interface ManagedInstallStateEntry {

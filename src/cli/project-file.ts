@@ -1,4 +1,5 @@
-/** Bounded reads for project-controlled evidence and saved reports. */
+/** Bounded reads and constant-memory hashing for project-controlled evidence, managed targets, and saved reports. */
+import { createHash } from "node:crypto";
 import {
   closeSync,
   constants,
@@ -12,6 +13,24 @@ import {
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const MAX_EVIDENCE_FILE_BYTES = 8 * 1024 * 1024;
+const HASH_READ_CHUNK_BYTES = 64 * 1024;
+
+/**
+ * Hash the rest of an open file through one fixed buffer, so a target-controlled file of any size cannot exhaust memory.
+ *
+ * @param descriptor - open readable descriptor positioned at the first byte to hash; the caller owns closing it
+ * @returns lowercase SHA-256 hex digest of the bytes read until end of file
+ * @throws the underlying read error when the descriptor cannot be read
+ */
+export function hashDescriptorSha256(descriptor: number): string {
+  const hash = createHash("sha256");
+  const chunk = Buffer.alloc(HASH_READ_CHUNK_BYTES);
+  for (;;) {
+    const count = readSync(descriptor, chunk, 0, chunk.length, null);
+    if (count === 0) return hash.digest("hex");
+    hash.update(chunk.subarray(0, count));
+  }
+}
 
 /** Compare the physical file identity independently of its pathname and contents. */
 function hasSameFileIdentity(left: Stats, right: Stats): boolean {

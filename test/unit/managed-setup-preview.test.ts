@@ -664,6 +664,28 @@ describe("managed install state v2 facade", () => {
     }
   });
 
+  it("leaves already matching cutover markers untouched on a repeated cutover", () => {
+    const projectPath = mkdtempSync(
+      join(tmpdir(), "goat-flow-v2-cutover-repeat-"),
+    );
+    try {
+      writeLegacyStateFixture(projectPath, "codex", "1.16.0", [
+        { path: "AGENTS.md", expectedSha256: OLD_EXPECTED_HASH },
+      ]);
+      prepareManagedInstallStateForApply(projectPath);
+      const markerPath = managedInstallStatePath(projectPath, "claude");
+      const markerInode = lstatSync(markerPath).ino;
+      // Any rewrite needs this private temp path, so success proves the matching marker was skipped.
+      mkdirSync(`${markerPath}.tmp-${process.pid}`);
+
+      prepareManagedInstallStateForApply(projectPath);
+
+      assert.equal(lstatSync(markerPath).ino, markerInode);
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
   for (const conflict of [
     {
       name: "equal ranked versions disagree",

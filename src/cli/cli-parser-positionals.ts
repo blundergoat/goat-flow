@@ -23,10 +23,7 @@ import {
   type QualitySubcommand,
 } from "./cli-types.js";
 import { QUALITY_MODES, type QualityMode } from "./quality/schema.js";
-
-/** Same single-line policy as managed install state and learning entries: C0, DEL, C1, line separators, and bidirectional controls. */
-const TERMINAL_UNSAFE_CHARACTER =
-  /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/u;
+import { UNSAFE_SINGLE_LINE_CHARACTER } from "./terminal-safe-text.js";
 
 /**
  * Read the `--mode` filter used to narrow quality history and diff output.
@@ -321,7 +318,7 @@ export function assertTerminalSafeClaimArgument(
   label: "project path" | "target path",
   argumentValue: string,
 ): void {
-  if (TERMINAL_UNSAFE_CHARACTER.test(argumentValue)) {
+  if (UNSAFE_SINGLE_LINE_CHARACTER.test(argumentValue)) {
     throw new CLIError(
       `claims ${label} must not contain terminal control characters.`,
       2,

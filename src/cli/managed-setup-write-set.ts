@@ -7,8 +7,7 @@
  *
  * Removals and legacy path migrations are deliberately absent: they are cleanup, not writes, and the preview declares that boundary in its limits.
  */
-import { createHash } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
+import { closeSync, lstatSync, openSync } from "node:fs";
 import { join, posix } from "node:path";
 
 import { loadConfig } from "./config/reader.js";
@@ -17,6 +16,7 @@ import {
   resolveIndexBucketPaths,
 } from "./learning-loop-index/parse-bucket.js";
 import { loadManifest } from "./manifest/manifest.js";
+import { hashDescriptorSha256 } from "./project-file.js";
 import { pendingCommitGuidanceMigrationInstructionPath } from "./prompt/commit-guidance.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
 
@@ -66,13 +66,20 @@ const MANIFEST_USER_OWNED_REASONS: Record<string, string> = {
 
 /**
  * Hash one package or target file for the managed comparison.
- * Use when users need byte-level evidence without storing or displaying file contents.
+ * Use when users need byte-level evidence without storing or displaying file contents; bytes stream through a fixed buffer,
+ * so an oversized target cannot exhaust memory during `status` or `install`.
  *
  * @param filePath - package or target file to hash; empty is invalid upstream and cannot be read
  * @returns lowercase SHA-256 text; never null or empty after a successful read
+ * @throws the filesystem error when the file cannot be opened or read
  */
 export function hashFile(filePath: string): string {
-  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+  const descriptor = openSync(filePath, "r");
+  try {
+    return hashDescriptorSha256(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 /**

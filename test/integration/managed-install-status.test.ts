@@ -317,7 +317,8 @@ describe("managed install status evidence", () => {
     mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
       recursive: true,
     });
-    // Valid but padded JSON: an unbounded read would load and parse it, failing schema checks instead of stopping at the size ceiling.
+    // Valid but padded JSON past the 8 MiB ceiling (src/cli/project-file.ts, search: MAX_EVIDENCE_FILE_BYTES): an unbounded
+    // read would load and parse it, failing schema checks instead of stopping at the size ceiling.
     writeFileSync(
       managedInstallStateV2Path(projectPath),
       `{}${" ".repeat(9 * 1024 * 1024)}\n`,

@@ -12,12 +12,12 @@ import {
   claimInspectionDirectory,
   hasLegacyLocalState,
 } from "./local-state-migration.js";
+import { hashDescriptorSha256 } from "./project-file.js";
 
 const CLAIM_DIRECTORY = ".goat-flow/state/locks";
 const CLAIM_SCHEMA = "goat-flow.path-write-claim.v1";
 const CLAIM_KEY_DOMAIN = `${CLAIM_SCHEMA}\0`;
 const MAX_CLAIM_BYTES = 4096;
-const IDENTITY_READ_CHUNK_BYTES = 64 * 1024;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const UNSUPPORTED_EXCLUSIVE_CREATE_CODES = new Set([
   "ENOSYS",
@@ -355,17 +355,6 @@ function openTargetWithoutFollowing(
   }
 }
 
-/** Stream one descriptor into SHA-256 through a fixed buffer, so memory stays constant for any target size. */
-function hashDescriptor(descriptor: number): string {
-  const hash = createHash("sha256");
-  const chunk = Buffer.alloc(IDENTITY_READ_CHUNK_BYTES);
-  for (;;) {
-    const count = fs.readSync(descriptor, chunk, 0, chunk.length, null);
-    if (count === 0) return hash.digest("hex");
-    hash.update(chunk.subarray(0, count));
-  }
-}
-
 /**
  * Hash a target only when the same regular file remains at that path for the whole read.
  * Use while capturing admission identity so a concurrent editor cannot make the command approve stale user content.
@@ -385,7 +374,7 @@ function readStableTargetDigest(
     if (!isSameInspectedFile(fs.fstatSync(descriptor), before)) {
       throw new PathWriteClaimError("target-changed", targetPath);
     }
-    digest = hashDescriptor(descriptor);
+    digest = hashDescriptorSha256(descriptor);
   } catch (error) {
     if (error instanceof PathWriteClaimError) throw error;
     // The user's editor or another command may make the target unreadable after metadata was captured.

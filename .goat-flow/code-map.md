@@ -55,6 +55,7 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 ├── claims-command.ts            = `claims inspect|recover`: one abandoned claim, recovered only with its inspected digest and confirmation
 ├── local-state-migration.ts     = link-safe relocation of legacy operational state during a quiescent install
 ├── rendered-markdown.ts         = bounded rendered-text handling for prompt and report surfaces
+├── terminal-safe-text.ts        = shared single-line character policy (control, line-separator, bidi) for displayed paths and fields
 ├── version-compare.ts           = semantic release-version comparison shared by setup and compatibility decisions
 │
 ├── agents/                      = manifest-backed agent registry
@@ -272,7 +273,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── start-dev.sh                 = local dashboard dev wrapper
 ├── warn-node-pty.mjs            = postinstall node-pty warning helper
 ├── wsl-compact.sh               = Git Bash (Windows, admin) helper that compacts one selected WSL 2 VHDX via DiskPart
-├── wsl-disk-cleanup.sh          = in-distro WSL disk report, dry-run, and confirmed cleanup of stale caches and temp files
+├── wsl-disk-cleanup.sh          = in-distro WSL disk report, dry-run, and confirmed cleanup of stale temp/cache files, apt downloads, and old journals
 ├── installers/                  = installer-related helper scripts
 └── maintenance/                 = cleanup, secret scanning, Zone.Identifier removal
 ```

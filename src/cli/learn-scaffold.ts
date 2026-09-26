@@ -70,12 +70,11 @@ import {
   buildStatsReport,
   checkStats,
 } from "./stats/stats.js";
+import { UNSAFE_SINGLE_LINE_CHARACTER } from "./terminal-safe-text.js";
 import type { ReadonlyFS } from "./types.js";
 
 const RECOVERY_COMMAND = "goat-flow index && goat-flow stats --check";
 const SAFE_CATEGORY = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-const UNSAFE_SINGLE_LINE_CHARACTER =
-  /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/u;
 const RESOLVED_ENTRIES_HEADING = "## Resolved Entries";
 
 const ENTRY_BUCKET: Record<

@@ -16,6 +16,7 @@ import {
   resolveIndexBucketPaths,
   type IndexBucket,
 } from "./learning-loop-index/parse-bucket.js";
+import { UNSAFE_SINGLE_LINE_CHARACTER } from "./terminal-safe-text.js";
 import type { ReadonlyFS } from "./types.js";
 
 /** Default terminal/JSON listing bound; overflow remains visible in the result metadata. */
@@ -55,7 +56,7 @@ function compareStable(left: string, right: string): number {
 /** Render terminal and bidirectional controls visibly so repository text cannot reorder its citations. */
 function escapeTerminalControlCharacters(terminalField: string): string {
   return terminalField.replace(
-    /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/gu,
+    new RegExp(UNSAFE_SINGLE_LINE_CHARACTER.source, "gu"),
     (character) => {
       const codePoint = character.codePointAt(0) ?? 0;
       return `\\u${codePoint.toString(16).padStart(4, "0")}`;

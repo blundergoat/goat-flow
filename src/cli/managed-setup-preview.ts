@@ -4,12 +4,12 @@
  * Compare prior, installed and bundled hashes for managed files; describe seeding or preservation for other destinations.
  * Install and guarded hook operations reuse this owner to verify files and publish their permitted history.
  */
+import { createHash } from "node:crypto";
 import {
   closeSync,
   fsyncSync,
   mkdirSync,
   openSync,
-  readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -233,15 +233,13 @@ function writeManagedInstallCutoverMarker(
   const markerPath = managedInstallStatePath(projectPath, agent);
   const markerBytes = managedInstallCutoverMarkerBytes(agent, legacyEvidence);
   const currentTarget = readManagedTargetEvidence(projectPath, relativePath);
-  // Read a safe existing marker so a repeated install can avoid rewriting completed migration evidence.
+  // Compare the streamed hash of a safe existing marker, so a repeated install skips completed evidence without loading an oversized file.
   if (currentTarget.status === "regular") {
-    try {
-      // An already matching marker needs no write during the user's retry.
-      if (readFileSync(markerPath, "utf-8") === markerBytes) return;
-    } catch {
-      // A marker may become unreadable after selection; refuse cutover instead of replacing evidence that could not be read.
-      throw new Error(`Could not read ${relativePath} before cutover.`);
-    }
+    const expectedSha256 = createHash("sha256")
+      .update(markerBytes)
+      .digest("hex");
+    // An already matching marker needs no write during the user's retry.
+    if (currentTarget.sha256 === expectedSha256) return;
   }
   // A directory or unsafe link at the marker path requires repair before installation can proceed.
   else if (currentTarget.status !== "missing") {

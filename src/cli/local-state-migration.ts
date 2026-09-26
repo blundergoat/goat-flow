@@ -135,7 +135,6 @@ export function migrateLegacyLocalState(projectPath: string): boolean {
     mode: 0o700,
   });
   for (const { from, to } of moves) {
-    inspectParents(projectPath);
     // Recheck after creating the parent: no occupied destination is admitted for replacement.
     directoryStats(projectPath, from);
     if (directoryStats(projectPath, to) !== null) {
@@ -145,6 +144,9 @@ export function migrateLegacyLocalState(projectPath: string): boolean {
     }
     assertEmptyLocks(projectPath, LEGACY_LOCKS);
     assertEmptyLocks(projectPath, LOCK_DIRECTORY);
+    // Validate the unlinked parents last so no other check widens the gap before the rename. Node has no renameat,
+    // so a parent swapped inside that gap stays out of reach; the quiescent-writer precondition above covers it.
+    inspectParents(projectPath);
     renameSync(join(projectPath, from), join(projectPath, to));
   }
   return true;
