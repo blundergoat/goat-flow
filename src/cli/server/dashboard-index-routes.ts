@@ -7,7 +7,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { loadConfig } from "../config/reader.js";
 import { createFS } from "../facts/fs.js";
-import { generateIndexes } from "../learning-loop-index/generate.js";
+import { generateIndexesWithClaims } from "../learning-loop-index/generate.js";
 import { resolveIndexBucketPaths } from "../learning-loop-index/parse-bucket.js";
 import { collectIndexFreshness } from "../stats/index-freshness.js";
 import type { DashboardRouteContext } from "./dashboard-route-types.js";
@@ -44,7 +44,7 @@ async function regenerateLearningLoopIndexes(
     const fs = createFS(projectPath);
     const configState = loadConfig(projectPath, fs);
     const bucketPaths = resolveIndexBucketPaths(configState.config);
-    const results = generateIndexes(projectPath, fs, bucketPaths);
+    const results = generateIndexesWithClaims(projectPath, fs, bucketPaths);
     const indexes = collectIndexFreshness(createFS(projectPath), bucketPaths);
     ctx.recordDashboardEvent(projectPath, "index.regenerate", {
       bucket_count: results.filter((result) => result.entryCount !== null)

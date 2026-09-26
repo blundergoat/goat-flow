@@ -430,6 +430,7 @@ export function validateFindingLine(
  * @param outputLimitBytes - largest buffered stdout accepted; blob reads pass their measured response size instead of the metadata default
  *
  * @returns process status and bounded raw output for the caller to classify
+ * @throws ReviewAuthorityError when temporary Git input would be written inside the selected project
  */
 function runGit(
   root: string,
@@ -437,13 +438,10 @@ function runGit(
   input?: Buffer | string,
   outputLimitBytes = GIT_METADATA_OUTPUT_LIMIT_BYTES,
 ): SpawnSyncReturns<Buffer> {
-  // A caller's alternate index or Git directory must not substitute another project for the selected root.
+  // Ignore Git settings regardless of case: Windows accepts mixed-case names that can write trace files or redirect the selected repository.
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(
-      ([key]) =>
-        !/^GIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|NAMESPACE|CONFIG|CONFIG_PARAMETERS|CONFIG_COUNT|CONFIG_KEY_\d+|CONFIG_VALUE_\d+)$/u.test(
-          key,
-        ),
+      ([key]) => !key.toUpperCase().startsWith("GIT_"),
     ),
   );
   const commandArgs = [
@@ -468,6 +466,7 @@ function runGit(
       GIT_TERMINAL_PROMPT: "0",
     },
   };
+  // A read with no stdin payload needs no temporary input file in the reviewer's project or elsewhere.
   if (input === undefined) {
     return spawnSync("git", commandArgs, {
       ...options,
@@ -476,6 +475,7 @@ function runGit(
   }
 
   const temporaryRoot = realpathSync(tmpdir());
+  // If the system temp directory sits inside the reviewed project, reject the input instead of creating review-owned files there.
   if (isWithinProject(root, temporaryRoot)) {
     throw new ReviewAuthorityError(
       "authority-object",

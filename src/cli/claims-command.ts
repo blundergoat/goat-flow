@@ -1,5 +1,7 @@
 /**
  * Exposes explicit inspection and identity-bound recovery for one abandoned path-write claim.
+ * Use when install, hook changes, learning entries, or index regeneration report that another writer owns a target.
+ *
  * The command never infers abandonment: the operator supplies the inspected digest and a separate confirmation flag.
  */
 import { CLIError } from "./cli-error.js";
@@ -16,7 +18,12 @@ import {
 
 const CLAIM_RECOVERY_SCHEMA = "goat-flow.path-write-claim-recovery.v1" as const;
 
-/** Stable terminal/JSON result for one successful inspection or removal. */
+/**
+ * Describe the stable result contract for a successful inspection or removal in CLI text and JSON.
+ * An absent claim has no marker path or digest; an inspected or removed claim retains both as evidence.
+ *
+ * Refused recovery is reported as a CLI error rather than a successful result in this envelope.
+ */
 interface PathWriteClaimRecoveryReport {
   schemaVersion: typeof CLAIM_RECOVERY_SCHEMA;
   command: "claims";
@@ -55,7 +62,10 @@ function pathWriteClaimRecoveryCommand(
   return `goat-flow claims recover ${quoteManagedInstallProjectArgument(evidence.projectRoot)} --target ${quoteManagedInstallProjectArgument(evidence.targetPath)} --marker-sha256 ${evidence.markerSha256} --confirm-abandoned`;
 }
 
-/** Convert inspected evidence into the stable public output envelope. */
+/**
+ * Build the stable CLI result; null inspection evidence reports the requested target without marker fields.
+ * The caller supplies absent status only when inspection found no claim.
+ */
 function claimReport(
   options: ValidatedClaimsOptions,
   evidence: AbandonedPathWriteClaimEvidence | null,
@@ -83,6 +93,7 @@ function renderClaimReport(
     `Project root: ${report.projectRoot}`,
     `Target: ${report.targetPath}`,
   ];
+  // An unclaimed target has no recovery command to offer because there is no marker to remove.
   if (report.status === "absent") {
     return [...lines, "No marker exists; nothing was removed."].join("\n");
   }
@@ -90,12 +101,14 @@ function renderClaimReport(
     `Marker: ${report.markerPath ?? ""}`,
     `Marker SHA-256: ${report.markerSha256 ?? ""}`,
   );
+  // Successful recovery retains the inspected marker identity so the operator can see exactly what was removed.
   if (report.status === "removed") {
     return [
       ...lines,
       "Removed only the unchanged marker identified by the inspected SHA-256.",
     ].join("\n");
   }
+  // Without inspected evidence, never offer a removal command based only on displayed result fields.
   if (evidence === null) return lines.join("\n");
   return [
     ...lines,
@@ -126,18 +139,21 @@ function claimInspectionError(
 function validateClaimsOptions(
   options: ParsedCLI,
 ): asserts options is ValidatedClaimsOptions {
+  // Programmatic callers must choose both the action and target before the CLI can inspect local coordination state.
   if (options.claimsSubcommand === null || options.claimsTargetPath === null) {
     throw new CLIError(
       "Usage: goat-flow claims <inspect|recover> [project-path] --target <project-relative-path> [flags]",
       2,
     );
   }
+  // Recovery reports stay in the terminal so inspecting a claim cannot overwrite a selected output file.
   if (options.output !== null) {
     throw new CLIError(
       "claims is terminal-only and does not support --output.",
       2,
     );
   }
+  // The operator can request readable text or the stable JSON envelope; other renderers have no claim-recovery contract.
   if (options.format !== "text" && options.format !== "json") {
     throw new CLIError("claims supports only text or json output.", 2);
   }
@@ -155,6 +171,7 @@ function inspectClaim(
   try {
     return inspectPathWriteClaim(options.projectPath, options.claimsTargetPath);
   } catch (error) {
+    // An unsafe marker or unavailable claim directory needs an actionable refusal while preserving every file.
     if (error instanceof PathWriteClaimError) {
       throw claimInspectionError(
         error,
@@ -183,12 +200,13 @@ function writeClaimReport(
 
 /**
  * Require matching inspected evidence and remove only that unchanged abandoned marker.
- * Error behavior: throws CLIError without removal for absent, mismatched, changed, or unconfirmed evidence; unexpected helper errors propagate.
+ * Error behavior: throws CLIError without removal for invalid evidence or a busy recovery guard; unexpected helper errors propagate.
  */
 function recoverClaim(
   options: ValidatedClaimsOptions,
   evidence: AbandonedPathWriteClaimEvidence | null,
 ): AbandonedPathWriteClaimEvidence {
+  // Even a fresh inspection cannot authorize removal until the operator supplies its digest and confirms abandonment.
   if (options.claimsMarkerSha256 === null || !options.shouldConfirmAbandoned) {
     throw new CLIError(
       "claims recover requires --marker-sha256 and --confirm-abandoned after you verify that no writer still owns the target.",
@@ -199,12 +217,14 @@ function recoverClaim(
     options.projectPath,
     options.claimsTargetPath,
   );
+  // A writer may already have released the claim; an absent marker gives this command nothing to remove.
   if (evidence === null) {
     throw new CLIError(
       `No path-write claim exists for ${options.claimsTargetPath}. Nothing was removed. Run ${inspectAgain} again before recovery.`,
       1,
     );
   }
+  // A pasted digest from an older inspection cannot authorize deleting the current writer's marker.
   if (evidence.markerSha256 !== options.claimsMarkerSha256) {
     throw new CLIError(
       `The path-write claim for ${evidence.targetPath} does not match --marker-sha256. Nothing was removed. Run ${inspectAgain} again before recovery.`,
@@ -213,6 +233,23 @@ function recoverClaim(
   }
 
   const removal = removeConfirmedAbandonedPathWriteClaim(evidence);
+  // A recovery may still be running or have stopped with its guard in place; the operator must resolve that before retrying.
+  if (removal === "recovery-busy") {
+    const recoveryGuardPath = evidence.markerPath.replace(
+      /\.claim$/u,
+      ".recovery",
+    );
+    throw new CLIError(
+      [
+        `Recovery is blocked by the guard at ${JSON.stringify(recoveryGuardPath)}. Nothing was removed.`,
+        "Wait for an active recovery to finish.",
+        "If recovery was interrupted, stop all writers and recoveries, inspect the claim directory and marker, and remove only the abandoned guard.",
+        `Then run ${inspectAgain} before retrying.`,
+      ].join(" "),
+      1,
+    );
+  }
+  // A missing or changed claim needs fresh evidence before the operator can authorize removal again.
   if (removal !== "removed") {
     throw new CLIError(
       `The path-write claim for ${evidence.targetPath} ${removal === "missing" ? "disappeared" : "changed"} after inspection. Nothing was removed. Run ${inspectAgain} again before recovery.`,
@@ -233,6 +270,7 @@ export function handleClaimsCommand(options: ParsedCLI): void {
   validateClaimsOptions(options);
   const evidence = inspectClaim(options);
 
+  // Inspection shows evidence and a suggested recovery command without attempting removal.
   if (options.claimsSubcommand === "inspect") {
     writeClaimReport(
       options,

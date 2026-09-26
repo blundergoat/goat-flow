@@ -1,9 +1,8 @@
 /**
- * Coordinates `install`, hook changes and `learn new` with path-keyed exclusive claims.
- * Use before these operations replace shared files, so a concurrent writer is refused instead of overwriting newer user work.
+ * Keep install, hook changes, learning entries, and index regeneration from overwriting a target claimed by another writer.
+ * Callers capture file identity, hold claims through the write, then release only the markers they own.
  *
- * Callers capture target identities before admission, hold the returned batch through the complete write transaction, and release it in `finally`.
- * Claims never expire; an abandoned marker needs explicit operator-confirmed recovery.
+ * A blocked command names the busy target; an abandoned marker needs operator-confirmed recovery after all writers stop.
  */
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -75,8 +74,9 @@ export interface AbandonedPathWriteClaimEvidence {
   readonly markerSha256: string;
 }
 
-/** Exact recovery outcome; changed evidence always remains in place. */
-export type AbandonedPathWriteClaimRemoval = "removed" | "missing" | "changed";
+/** Recovery outcome; changed evidence or a busy recovery guard leaves the claim untouched. */
+export type AbandonedPathWriteClaimRemoval =
+  "removed" | "missing" | "changed" | "recovery-busy";
 
 const FAILURE_MESSAGES = {
   // Explain that another writer owns this project target before the caller can change it.
@@ -158,6 +158,18 @@ interface OwnedPathWriteClaim {
   markerPath: string;
   snapshot: ClaimSnapshot;
   descriptor: number;
+}
+
+/**
+ * Track the temporary guard for one confirmed abandoned-claim recovery.
+ * Its descriptor and exact file identity let cleanup leave a substituted guard untouched.
+ *
+ * Another recovery gets a busy result while this guard exists, including after an interrupted recovery.
+ */
+interface RecoveryGuard {
+  markerPath: string;
+  descriptor: number;
+  identity: fs.BigIntStats;
 }
 
 /** Physical directory identity retained across claim-directory creation and marker allocation. */
@@ -612,6 +624,122 @@ function claimMarkerPath(claimDirectory: string, targetPath: string): string {
     .update(targetPath, "utf8")
     .digest("hex");
   return join(claimDirectory, `${key}.claim`);
+}
+
+/** Name the guard beside its claim so an operator's confirmed recovery excludes another recovery for that target. */
+function recoveryMarkerPath(
+  claimDirectory: string,
+  targetPath: string,
+): string {
+  return claimMarkerPath(claimDirectory, targetPath).replace(
+    /\.claim$/u,
+    ".recovery",
+  );
+}
+
+/**
+ * Reserve a guard after the operator confirms an abandoned claim.
+ * An existing guard returns null, so the caller can explain an active or interrupted recovery.
+ *
+ * @returns the held guard, or null when an active or interrupted recovery left a guard at this target
+ * @throws PathWriteClaimError when allocation or identity cannot be verified
+ */
+function acquireRecoveryGuard(
+  claimDirectory: string,
+  targetPath: string,
+): RecoveryGuard | null {
+  const guardPath = recoveryMarkerPath(claimDirectory, targetPath);
+  let guardDescriptor: number;
+  try {
+    guardDescriptor = fs.openSync(guardPath, "wx", 0o600);
+  } catch (error) {
+    // An active or interrupted recovery may have left this guard; other I/O errors leave the claim in place.
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return null;
+    throw new PathWriteClaimError("coordination-unavailable", targetPath);
+  }
+  try {
+    return {
+      markerPath: guardPath,
+      descriptor: guardDescriptor,
+      identity: fs.fstatSync(guardDescriptor, { bigint: true }),
+    };
+  } catch {
+    // If the filesystem cannot describe the new guard, leave it for operator inspection rather than deleting by path alone.
+    fs.closeSync(guardDescriptor);
+    throw new PathWriteClaimError("claim-integrity", targetPath);
+  }
+}
+
+/** Confirm the guard and its directory still name this recovery's file before touching the operator's confirmed claim. */
+function recoveryGuardStillOwnsPath(
+  guard: RecoveryGuard,
+  claimDirectory: string,
+  evidence: AbandonedPathWriteClaimEvidence,
+): boolean {
+  const guardAtPath = readClaimStats(guard.markerPath);
+  return (
+    guardAtPath.status === "present" &&
+    isSafeClaimEntry(guardAtPath.stats) &&
+    guardAtPath.stats.dev === guard.identity.dev &&
+    guardAtPath.stats.ino === guard.identity.ino &&
+    existingClaimDirectory(evidence.projectRoot, evidence.targetPath) ===
+      claimDirectory
+  );
+}
+
+/**
+ * Close and remove only the guard this recovery created after it handles the claim.
+ * A changed or inaccessible guard needs operator inspection.
+ *
+ * @throws PathWriteClaimError when guard ownership or removal cannot be confirmed
+ */
+function releaseRecoveryGuard(guard: RecoveryGuard, targetPath: string): void {
+  fs.closeSync(guard.descriptor);
+  const guardAtPath = readClaimStats(guard.markerPath);
+  // A substituted guard cannot be removed using this recovery's authority.
+  if (
+    guardAtPath.status !== "present" ||
+    !isSafeClaimEntry(guardAtPath.stats) ||
+    guardAtPath.stats.dev !== guard.identity.dev ||
+    guardAtPath.stats.ino !== guard.identity.ino
+  )
+    throw new PathWriteClaimError("claim-integrity", targetPath);
+  try {
+    fs.unlinkSync(guard.markerPath);
+  } catch {
+    // A permission change or directory failure leaves guard cleanup unconfirmed for the operator.
+    throw new PathWriteClaimError("claim-integrity", targetPath);
+  }
+}
+
+/**
+ * Remove the inspected claim only while it still matches and this recovery holds its guard.
+ * Swallows unlink errors into missing or changed results so the operator can inspect again.
+ *
+ * @returns removed, missing when the marker disappeared, or changed when fresh inspection is needed
+ */
+function removeMatchingClaimMarker(
+  evidence: AbandonedPathWriteClaimEvidence,
+  expected: ClaimSnapshot,
+): AbandonedPathWriteClaimRemoval {
+  const current = readClaimSnapshot(evidence.markerPath);
+  // The original owner may have released the marker already, leaving no operator deletion to perform.
+  if (current.status === "missing") return "missing";
+  // Unsafe or changed marker bytes cancel deletion so the operator can inspect current evidence.
+  if (
+    current.status !== "present" ||
+    !claimSnapshotsMatch(current.snapshot, expected)
+  )
+    return "changed";
+  try {
+    fs.unlinkSync(evidence.markerPath);
+    return "removed";
+  } catch (error) {
+    // A concurrent removal finishes recovery; permission or I/O failures require fresh inspection.
+    return (error as NodeJS.ErrnoException).code === "ENOENT"
+      ? "missing"
+      : "changed";
+  }
 }
 
 /**
@@ -1223,7 +1351,7 @@ export function inspectPathWriteClaim(
  *
  * @param evidence - exact opaque snapshot returned by `inspectPathWriteClaim`
  *
- * @returns whether that same marker was removed, had disappeared, or changed
+ * @returns removed, missing, changed, or recovery-busy when another recovery's guard needs operator attention
  * @throws Error when this process did not issue the supplied evidence
  */
 export function removeConfirmedAbandonedPathWriteClaim(
@@ -1237,23 +1365,27 @@ export function removeConfirmedAbandonedPathWriteClaim(
     );
   }
   RECOVERY_SNAPSHOTS.delete(evidence);
-  const current = readClaimSnapshot(evidence.markerPath);
-  // Another actor may already have removed the confirmed marker, leaving no recovery work.
-  if (current.status === "missing") return "missing";
-  // Any change since inspection cancels deletion so the operator can review fresh evidence.
+  const claimDirectory = existingClaimDirectory(
+    evidence.projectRoot,
+    evidence.targetPath,
+  );
+  // A moved claim directory or changed marker path invalidates the operator's earlier inspection.
   if (
-    current.status !== "present" ||
-    !claimSnapshotsMatch(current.snapshot, expected)
-  ) {
+    claimDirectory === null ||
+    claimMarkerPath(claimDirectory, evidence.targetPath) !== evidence.markerPath
+  )
     return "changed";
-  }
+  const guard = acquireRecoveryGuard(claimDirectory, evidence.targetPath);
+  // An existing guard needs recovery-specific guidance; inspecting the same claim again cannot clear an abandoned guard.
+  if (guard === null) return "recovery-busy";
   try {
-    fs.unlinkSync(evidence.markerPath);
-    return "removed";
-  } catch (error) {
-    // A concurrent removal is complete; permission or I/O failures leave the marker classified as changed for fresh inspection.
-    return (error as NodeJS.ErrnoException).code === "ENOENT"
-      ? "missing"
-      : "changed";
+    // A replaced guard or directory cannot authorize deletion of the inspected claim.
+    if (!recoveryGuardStillOwnsPath(guard, claimDirectory, evidence))
+      return "changed";
+    // A second recovery must re-read after obtaining the exclusive guard.
+    return removeMatchingClaimMarker(evidence, expected);
+  } finally {
+    // Normal completion removes this guard; a crash leaves it for operator inspection.
+    releaseRecoveryGuard(guard, evidence.targetPath);
   }
 }

@@ -1,17 +1,13 @@
 /**
- * Run checked subprocesses and replace complete local files for dashboard routes and CLI workflows.
+ * Run approved subprocesses and publish complete local files for dashboard and CLI actions.
+ * Callers validate paths and permitted commands before invoking these helpers.
  *
- * Callers authorize actions and validate filesystem paths before invoking these helpers.
- * execSafely bounds captured output and runtime; spawnInheritedSync keeps interactive commands attached to the caller's terminal.
- *
- * - Each call site supplies the commands it permits; command discovery alone never grants permission to spawn.
- * - Arguments remain positional with shell expansion disabled, and additional separator and substitution checks reject unsafe inputs.
- * - Captured execution uses a minimal default environment; callers supplying an environment must scrub it first.
- * - Atomic writes flush and close a neighboring temporary file before replacing the requested destination.
+ * Arguments stay literal, unsafe shell syntax is rejected, and captured processes have bounded output, time, and environment.
+ * Interactive processes keep the caller's terminal; atomic writes flush a neighboring temporary file before replacement.
  */
 import { spawn, spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import type { Stats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import {
   closeSync,
   fstatSync,
@@ -228,7 +224,8 @@ export function writeFileAtomic(
   const destinationDirectory = dirname(targetPath);
   mkdirSync(destinationDirectory, { recursive: true });
   const parentPath = realpathSync(destinationDirectory);
-  const parentIdentity = lstatSync(destinationDirectory);
+  // Exact file IDs keep a swapped parent or stage visible even when a large Windows ID would round as a Number.
+  const parentIdentity = lstatSync(destinationDirectory, { bigint: true });
   const tempPath = resolve(
     destinationDirectory,
     `.${pathBasename(targetPath)}.${process.pid}.${randomBytes(16).toString("hex")}.tmp`,
@@ -239,10 +236,10 @@ export function writeFileAtomic(
   }
   // No descriptor exists until opening succeeds, so an early failure has nothing to close.
   let fileDescriptor: number | null = null;
-  let allocatedIdentity: Stats | null = null;
+  let allocatedIdentity: BigIntStats | null = null;
   try {
     fileDescriptor = openSync(tempPath, "wx", fileMode);
-    allocatedIdentity = fstatSync(fileDescriptor);
+    allocatedIdentity = fstatSync(fileDescriptor, { bigint: true });
     writeFileSync(fileDescriptor, content, "utf-8");
     fsyncSync(fileDescriptor);
     closeSync(fileDescriptor);
@@ -268,18 +265,24 @@ export function writeFileAtomic(
   }
 }
 
-/** Reject publication if the allocated file or its parent no longer has the inspected identity. */
+/**
+ * Refuse publication when the staged file or its parent changes after allocation.
+ * Exact file IDs keep large Windows identities from rounding before the caller sees a refusal.
+ *
+ * @throws Error when the temporary file or parent no longer matches this writer's allocation
+ */
 function assertAtomicTemporaryFile(
   path: string,
-  identity: Stats,
+  identity: BigIntStats,
   parent: {
     directory: string;
-    identity: Stats;
+    identity: BigIntStats;
     resolvedPath: string;
   },
 ): void {
-  const current = lstatSync(path);
-  const currentParent = lstatSync(parent.directory);
+  const current = lstatSync(path, { bigint: true });
+  const currentParent = lstatSync(parent.directory, { bigint: true });
+  // A substituted stage or parent must stop the requested write before it replaces the user's destination.
   if (
     !current.isFile() ||
     current.dev !== identity.dev ||
@@ -292,13 +295,18 @@ function assertAtomicTemporaryFile(
   }
 }
 
-/** Remove only this writer's temporary allocation; filesystem errors propagate to the publication-error handler. */
+/**
+ * Remove only the temporary file this writer allocated after a requested atomic write fails.
+ * A foreign replacement stays in place, and cleanup errors do not replace the original write failure.
+ */
 function discardAtomicTemporaryFile(
   path: string,
-  allocatedIdentity: Stats | null,
+  allocatedIdentity: BigIntStats | null,
 ): void {
+  // A failure before temporary-file allocation leaves no stage to remove.
   if (allocatedIdentity === null) return;
-  const current = lstatSync(path);
+  const current = lstatSync(path, { bigint: true });
+  // Only the writer's own stage can be removed; a foreign replacement stays for inspection.
   if (
     current.dev === allocatedIdentity.dev &&
     current.ino === allocatedIdentity.ino
