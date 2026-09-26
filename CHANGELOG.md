@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **`/goat-clarity` replies in plain language** - Interactive runs end with what changed, what was left alone and why, each check's result and what remains unverified; ask to see the full receipt, which sub-agent and headless runs still return.
+
 ## v1.17.0 - 2026-09-26
 
 ### Added

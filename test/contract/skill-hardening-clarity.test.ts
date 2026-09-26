@@ -928,6 +928,17 @@ describe("skill hardening contracts: goat-clarity", () => {
       "`AMBIGUOUS` blocks mutation",
       "Only the no-eligible-unit exit or an established read-only lane may omit it, with a reason",
     ]);
+
+    // A person reads a plain summary in the terminal; only a parent agent or headless run gets the receipt without asking.
+    assertIncludesAll([
+      "Build the receipt on every run",
+      "reply with a plain-language summary in this order: what changed, one line per change with its reason; what stayed unchanged on purpose and why; each check run with its literal pass/fail line; what remains unverified",
+      "Name findings in plain words, not report codes",
+      "Print the receipt after the summary only when the person asks for it",
+      "headless run where no person can ask a follow-up",
+      "return the full receipt",
+      "never wrap the summary or receipt in HTML such as `<details>`",
+    ]);
   });
 
   it("keeps the skill, reference, manifest, and public documentation aligned", () => {
@@ -990,6 +1001,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "omitted discovery is not a no-owner result",
       "an unavailable owned command remains `UNAVAILABLE`",
       "PR and uncommitted work",
+      "the full receipt follows only when you ask for it",
     ]);
   });
 

@@ -439,6 +439,9 @@ Naming and placement diagnosis runs before comment work so prose does not compen
 Every run ends with separate selected-unit, changed-span, and command-evidence ledgers. Classification and outcome totals each reconcile to the inventory;
 protected and context-only units are counted apart from excluded units. `Documentation writes: granted | withheld` states permission separately from authority.
 
+In an interactive session, the reply is a plain-language summary: what changed and why, what was left alone on purpose, each check with its literal result, and what remains unverified.
+The full receipt follows only when you ask for it; a parent agent or a headless run receives the receipt itself.
+
 Protected preservation does not claim clarity assessment. `Compliant unchanged` requires an applicable assessment with no finding;
 `Preserved protected` records checked bytes while leaving clarity unassessed. Missing access or evidence remains explicit.
 
