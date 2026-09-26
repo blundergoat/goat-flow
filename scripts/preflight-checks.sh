@@ -1961,8 +1961,8 @@ if [[ -f tsconfig.json ]]; then
         if [[ "$prettier_exit" -eq 0 ]]; then
             pass "Prettier (all formatted)"
         else
-            unformatted=$(echo "$prettier_output" | grep -c '^\[warn\] [^C]' || echo "?")
-            fail "Prettier ($unformatted unformatted files) - run npm run format"
+            fail "Prettier check failed (exit $prettier_exit) - run bash scripts/prettier-check.sh for details"
+            printf '%s\n' "$prettier_output" | sed -n '1,20p' | details_pipe
         fi
     else
         skip "Prettier (not installed)"
