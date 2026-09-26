@@ -250,10 +250,10 @@ jobs:
         run: node --import tsx --test test/unit/path-write-claim.test.ts test/integration/local-state-migration.test.ts
       - name: Descriptor spawn matrix and focused hook contracts
         run: node --import tsx --test test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-effective-state.test.ts
-      - name: Windows audit and packaged install contracts
-        run: |
-          node --import tsx --test test/unit/audit-command/agent-deny-hooks-drift.test.ts
-          node --import tsx --test --test-name-pattern="runs fresh install through the archived CLI bin" test/integration/packaged-hook-install.test.ts
+      - name: Windows audit contract
+        run: node --import tsx --test test/unit/audit-command/agent-deny-hooks-drift.test.ts
+      - name: Windows packaged install contract
+        run: node --import tsx --test --test-name-pattern="runs fresh install through the archived CLI bin" test/integration/packaged-hook-install.test.ts
 
   # Reviewed Gruff warning-debt ratchet (scripts/check-gruff-warning-ratchet.mjs
   # against scripts/gruff-warning-baseline.json). Runs in a dedicated job
