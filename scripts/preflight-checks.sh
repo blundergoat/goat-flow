@@ -2371,6 +2371,28 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
             diff <(echo "$actual_scripts") <(echo "$listed_scripts") 2>&1 | head -10 | details_pipe
         fi
     fi
+
+    # B.8e: code-map.md hook inventories match the filesystem so every committed policy-store member stays discoverable.
+    if [[ -f .goat-flow/code-map.md ]]; then
+        for hook_dir in workflow/hooks .goat-flow/hooks; do
+            [[ -d "$hook_dir" ]] || continue
+            # Each child row under the section's hooks/ node names one member in its third whitespace-delimited field.
+            listed_hook_members=$(awk -v section="^## ${hook_dir%%/*}" '
+                /^## / { in_section = ($0 ~ section) }
+                in_section && /^├── hooks\// { in_block=1; next }
+                in_block && !/^│   / { in_block=0 }
+                in_block { print $3 }
+            ' .goat-flow/code-map.md | sort -u || true)
+            actual_hook_members=$(find "$hook_dir" -mindepth 1 -maxdepth 1 \( -type d -printf '%f/\n' \) -o \( -type f \( -name '*.sh' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.cts' \) -printf '%f\n' \) | sort -u)
+            # A member missing from the map hides a required runtime file from the next maintainer.
+            if [[ "$listed_hook_members" == "$actual_hook_members" ]]; then
+                pass "code-map.md $hook_dir/ inventory matches filesystem"
+            else
+                fail "code-map.md $hook_dir/ inventory drifts from filesystem"
+                diff <(echo "$actual_hook_members") <(echo "$listed_hook_members") 2>&1 | head -10 | details_pipe
+            fi
+        done
+    fi
 fi
 
 # Check template-refs.ts doesn't reference missing workflow docs

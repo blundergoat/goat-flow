@@ -2914,7 +2914,7 @@ prepare_segment_context() {
   # not just uncertain options, without replacing the outer command's shared state.
   if [[ "$HAS_PIPE" -eq 1 ]]; then
     local -a wrapper_pipeline_stages=()
-    local wrapper_pipeline_stage wrapper_pipeline_output
+    local wrapper_pipeline_stage wrapper_pipeline_output wrapper_pipeline_status
     split_top_level_pipeline_stages_into wrapper_pipeline_stages "$policy_cmd"
     # A pipe inside a nested construct is not another top-level stage.
     if [[ "${#wrapper_pipeline_stages[@]}" -gt 1 ]]; then
@@ -2927,7 +2927,10 @@ prepare_segment_context() {
             exit 0
           fi
         else
-          return $?
+          wrapper_pipeline_status=$?
+          # A delivered stderr denial ends the parent instead of becoming a second unavailable-result message.
+          [[ "$wrapper_pipeline_status" -eq 2 ]] && exit 2
+          return "$wrapper_pipeline_status"
         fi
       done
     fi

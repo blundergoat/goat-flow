@@ -6,6 +6,10 @@
 
 - **`/goat-clarity` replies in plain language** - Interactive runs end with what changed, what was left alone and why, each check's result and what remains unverified; ask to see the full receipt, which sub-agent and headless runs still return.
 
+### Fixed
+
+- **Pipeline-stage denials print one reason** - In Claude Code and Codex, a blocked command inside a pipeline no longer appends `Policy hook unavailable … Re-run goat-flow setup` to the real denial; the hook was healthy and no setup re-run is needed.
+
 ## v1.17.0 - 2026-09-26
 
 ### Added

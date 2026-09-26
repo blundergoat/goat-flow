@@ -231,8 +231,12 @@ workflow/                        = packaged template source copied into target p
 │   ├── deny-git-mutations.sh    = fixed Git commit, publication, destructive-operation and GitHub CLI write policy template
 │   ├── gruff-code-quality.sh    = canonical gruff code-quality hook template
 │   ├── post-turn-safety.sh      = canonical post-turn safety hook template
+│   ├── gh-graphql-read.cjs      = admits one literal GitHub GraphQL query for the Git policy without executing command text
+│   ├── hook-policy-state.cjs    = dependency-free reader of saved hook choices for launchers and installers
+│   ├── hook-policy-state.d.cts  = type declarations for the shared hook-choice reader
 │   ├── deny-dangerous/          = shared parser, response implementation, policy modules and routed self-test templates
-│   └── agent-config/            = claude, codex, antigravity, copilot hook config templates
+│   ├── agent-config/            = claude, codex, antigravity, copilot hook config templates
+│   └── vendor/                  = locked js-yaml and graphql parsers bundled for dependency-free installed hooks
 │
 └── evaluation/                  = quality-assessment prompt templates
 ```
@@ -325,7 +329,10 @@ docs/                            = user and maintainer documentation
 │   ├── deny-git-mutations.sh    = fixed Git commit, publication, destructive-operation and GitHub CLI write policy entrypoint
 │   ├── gruff-code-quality.sh    = central gruff quality dispatcher used by all agents
 │   ├── post-turn-safety.sh      = central post-turn safety hook used by supported Stop agents
-│   └── deny-dangerous/          = shared parser, response implementation, policy modules and routed self-test
+│   ├── gh-graphql-read.cjs      = admits one literal GitHub GraphQL query for the Git policy without executing command text
+│   ├── hook-policy-state.cjs    = dependency-free reader of saved hook choices for launchers and installers
+│   ├── deny-dangerous/          = shared parser, response implementation, policy modules and routed self-test
+│   └── vendor/                  = locked js-yaml and graphql parsers bundled for dependency-free installed hooks
 ├── skill-docs/                  = installed shared skill doctrine and playbooks
 │   ├── README.md                = index for shared skill doctrine and playbooks
 │   ├── skill-preamble.md        = shared proof/evidence/routing doctrine loaded by goat-* skills

@@ -1987,6 +1987,10 @@ run_full() {
   expect_block git "printf message | git push origin main" "top-level pipeline push remains blocked"
   expect_block git "printf message |& git push origin main" "stderr pipeline push remains blocked"
   expect_allow git "git status |& cat" "stderr pipeline with read-only git stays allowed"
+  # A denial raised inside a pipeline stage prints one reason; a second unavailable-result line once followed it.
+  expect_block_message git "printf message | git push origin main" "pipeline-stage publication copy" repository "Git publication is not allowed" "Policy hook unavailable"
+  expect_block_message git "echo start; printf message | git commit -F -" "pipeline-stage commit copy after a segment" repository "git commit is not allowed" "Policy hook unavailable"
+  expect_block_message shell "cat notes.txt | rm -rf ." "pipeline-stage destructive copy" destructive "rm -r without safe scoping" "Policy hook unavailable"
   expect_block git "true || git commit -m x" "command-list commit remains blocked"
   expect_block git 'echo "$(git push origin main)"' "nested push remains blocked"
   expect_block git \
