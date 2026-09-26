@@ -262,6 +262,13 @@ verification results, command status, and separate claim verdicts. Failure/unava
 Use the reference's selected-unit, changed-span, and command-evidence ledgers: every selected unit gets one class/outcome;
 every changed span maps to its finding or formatter reflow.
 
+Build the receipt on every run; the final reply's reader decides where it goes:
+
+- **A person in an interactive session:** reply with a plain-language summary in this order: what changed, one line per change with its reason; what stayed unchanged on purpose and why; each check run with its literal pass/fail line; what remains unverified. Name findings in plain words, not report codes such as `CLAIM` or `NOT_CHECKED`. Print the receipt after the summary only when the person asks for it.
+- **A parent agent, or a headless run where no person can ask a follow-up:** return the full receipt.
+
+Use plain Markdown; never wrap the summary or receipt in HTML such as `<details>`, which terminals print raw.
+
 Lowercase agent ID/selector kind.
 
 ```text
