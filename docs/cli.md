@@ -347,7 +347,7 @@ Capture the source selected for a review from a JSON request on stdin or in one 
 Use the controlling installation's CLI with `--project <reviewed-root> --expected-version <installed-skill-version>`.
 The optional project selects evidence; input and output filenames still resolve from the invoking directory.
 Omitting the project retains the current-directory default. The project must resolve to an existing directory.
-The command prints canonical metadata to stdout, reads only local files and Git objects, and rejects `--output`.
+The command prints canonical metadata to stdout, reads selected project files and local Git objects without fetching, and rejects `--output`. Git reads that need stdin create and remove a private temporary file outside the selected project; capture stops if the configured temporary directory is inside it.
 Retain the initial response through the review; a later capture is a comparison, never a replacement baseline.
 Usage errors and unsupported captures exit `2`; invalid report evidence exits `1` through the validation commands below.
 
