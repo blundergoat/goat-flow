@@ -2,6 +2,86 @@
 
 ## Unreleased
 
+### Changed
+
+- **`/goat-clarity` replies in plain language** - Interactive runs end with what changed, what was left alone and why, each check's result and what remains unverified; ask to see the full receipt, which sub-agent and headless runs still return.
+
+### Fixed
+
+- **Pipeline-stage denials print one reason** - In Claude Code and Codex, a blocked command inside a pipeline no longer appends `Policy hook unavailable … Re-run goat-flow setup` to the real denial; the hook was healthy and no setup re-run is needed.
+
+## v1.17.0 - 2026-09-26
+
+### Added
+
+- **Command-specific help** - Each command's `--help` shows its usage, subcommands, flags and examples without executing it.
+- **Learning commands** - `goat-flow recall <path> [path...]` finds active entries by evidence path; `goat-flow learn new` validates entries and refreshes indexes, with `--dry-run` for previews. Indexes show dates and token cost; `stats` proposes graduation after two incidents.
+- **Review snapshots and intermediate validation** - `review snapshot` captures review scope without creating Git tree objects for staged changes; `review validate-draft` and `review validate-ledger` check findings before the final report.
+- **Batch hook verification** - `goat-flow hooks verify <path> --agent <id> --scenario all --trusted-target` retains every verdict and exits `1` unless all pass; JSON uses `goat-flow.hook-runtime-batch.v1`.
+- **Separate Git and GitHub write protection** - The **Deny Git and GitHub writes** choice controls `deny-git-mutations` independently of dangerous-command protection; upgrades inherit the previous combined choice once. Proven GraphQL reads join REST reads and approved comment exceptions; mixed-policy upgrades require separate dashboard Hooks consent.
+- **Coordinated writes and abandoned-claim recovery** - Writers claim paths under `.goat-flow/state/locks/`; inspect a stale claim with `goat-flow claims inspect <project> --target <path>`, then confirm no writer remains before `goat-flow claims recover <project> --target <path> --marker-sha256 <digest> --confirm-abandoned`. Changed or unsafe markers remain untouched.
+- **Opt-in parallel plan lanes** - `plans check --max-active <n>` permits one active milestone per `Lane` within the chosen cap; the default stays one, and dependencies must still be complete.
+
+### Changed
+
+- **BREAKING: path audits require `audit`** - Replace `goat-flow <path>` with `goat-flow audit <path>`; unknown commands now exit `2`.
+- **BREAKING: shared installation state** - `.goat-flow/install-state/<agent>.json` baselines merge into `.goat-flow/state/install/managed.json`. Stop and upgrade every writer, then run `goat-flow install . --agent <id>`; conflicting baselines, unsafe state or occupied destinations stop migration. Use `goat-flow status . --format json` for repairs, or `goat-flow install . --agent <id> --migrate-state-only` before dashboard policy review to move bookkeeping alone. Never run older writers afterward; the legacy installer refuses managed projects.
+- **BREAKING: strict checks require exceptional-status reasons** - `plans check --strict` now requires one `Status reason:` for `blocked`, `abandoned`, `superseded` and `deferred`, and none for ordinary states; add or remove the field before resuming an in-flight plan.
+- **BREAKING: strict checks enforce plain plan summaries** - The existing 70–120-character sentence rule for `What problem are we solving` and `Who benefits and how` now fails `plans check --strict` when violated; rewrite summaries without milestone IDs, ADR numbers, versions, flags or internal paths. Legacy headings remain advisory.
+- **BREAKING: new quality reports require refutations and score evidence** - Supply `refuted_candidates` (use `[]` when empty) and per-axis `evidence`/`deduction` in `score_rationale`; shipped prompts include both. Historical reports remain readable by `validate`, `history` and `diff`.
+- **BREAKING: `redact --output` never overwrites** - Use a fresh project-local path; existing files, linked parents and outside-project paths are refused.
+- **BREAKING: critique reports use a coverage ledger** - Replace `## Rubric Coverage Gaps` with `## Rubric Coverage`, marking each dimension `finding`, `checked-clean` or `unassessed`; include stable finding IDs, source agent IDs, host verification and separate `HUMAN-PENDING` evidence. Recommendations cite surviving finding IDs; `CLEAN` never grants clearance. Leaks and missing fields share one replacement allowance before coverage is incomplete.
+- **BREAKING: critique meta-audits bind to report revisions** - Match `audited_revision` to `report_revision` and use current check names; one correction batch permits one recheck, and later edits need remaining allowance or an unaudited label. Host scores cannot substitute for the meta-audit.
+- **BREAKING: writing guidance splits by audience** - Replace 1.16.0 `writing-style.md` instruction references with `writing-human-facing-prose.md` or `writing-agent-facing-instructions.md`; install preserves the old copy for review before removal.
+- **Audits distinguish coverage warnings and check skill inventories** - `hookCoverage.status` adds `warning` alongside `pass` and `fail`; `audit --check-content` also checks explicit skill inventories in architecture, code-map and glossary against the manifest.
+- **`/goat` extends direct execution to two-file hotfixes** - Obvious changes spanning one or two files can skip planning; larger or unclear changes still route through `/goat-plan`.
+- **`/goat-plan` resumes existing plans explicitly** - `start`, `resume` or `implement` with an existing plan confirms the milestone and continues to authorized implementation without creating new milestones.
+- **Planning requests save files only when asked** - Direct plan and design requests stay inline until you request plan files; builds routed from `/goat` still save a plan, begin implementation and pause for sign-off after each milestone.
+- **Forecasts use narrower, measured ranges** - Before three eligible measured milestones, `/goat-plan` and `plans check` use `1.0-2.5-6 min/unit`, replacing `0.5-2.5-10`; faster measured histories use their low/high rates with a `1.00 min/unit` likely floor labelled `likely floored`. Saved forecasts retain their values; `unit growth:` distinguishes registered additions from unrecorded checklist growth.
+- **Plans track replaced and deferred scope** - New `superseded` and `deferred` states move estimates to `excluded:`, permit open checkboxes and paused receipts without `Actual`, and cannot satisfy dependencies of active or complete work; superseded reasons must identify resolvable successors. Added milestones link through the previous terminal milestone and recalculate `ISSUE.md` totals.
+- **Source milestones require a clarity pass** - Run `/goat-clarity` once on the source paths written by each milestone before completing it.
+- **Setup accepts frontmatter skill triggers** - A frontmatter `Use when` trigger can satisfy skill setup without a separate `When to Use` section.
+- **Skill retirement requires comparative evidence** - Qualification now requires repeated provider/model/config ablations and retained regression cases before retiring a skill.
+- **Gruff follows the selected project** - Claude resolves Gruff from the session project after directory changes; changed-line selection uses each file's repository, non-Git files receive whole-file analysis, and nested `hooks.gruff-code-quality.enabled: false` is honored. Setup also detects a project-local Python analyzer.
+- **Gruff accepts v2 results and checks older capabilities** - `gruff.hook.v2` findings, warnings and failures work directly; older analyzers receive `file` scope only when they advertise support. Run `goat-flow hooks sync .` to refresh installed launchers.
+- **Full reviews reach spec-drift and optional refuters** - Refuters require enforced execution boundaries and fall back to local-only review when unavailable; automated-review matching strips one trailing `[bot]`, uses semantic locations and preserves unknown authors.
+- **Clarity follows explicit documentation intent** - Update/edit/fix permits documentation edits and report/review/check withholds them before the `documentation` keyword is considered; approved private moves within one writable file need no repeat approval, and inventory and test-case accounting precede naming and comment changes.
+- **QA reports retain disproved candidates** - `/goat-qa` rechecks candidates before gated or final output and records excluded claims under `Refuted Candidates`.
+- **Security reports retain supported findings despite coverage gaps** - Bounded passive inspection is available for explicitly trusted components; Quick reports use eight sections and remain `coverage-degraded`. Posture is `block`, `needs-decision`, `accepted-risk`, `watch` or `none`; conclusion is `confident` or `coverage-degraded`, with `tool-limited` as a degradation flag.
+- **Security scans gather leads before verification** - Authorized dependency audits run before finding verification; execution-control gaps report `execution-withheld`, while approval-only gaps report `scanner-withheld`.
+- **Approved security reports save through the redactor** - Use fresh target-local `.goat-flow/logs/security/` paths; persistence reports written, skipped or cleanup-needed outcomes.
+
+### Fixed
+
+- **Quality prompts name the selected target** - Focused prompts use the target project's path for audit commands and omit targets the request did not select.
+- **`quality diff` keeps each finding on one row** - A saved summary containing a line break no longer prints as an extra, forged finding row.
+- **Install checks required dependencies before writing** - Missing `js-yaml` stops setup with the package root and `npm install`/reinstall instructions.
+- **Dashboard selections survive interrupted writes** - Project identity, registry and active-plan selections use atomic replacement.
+- **Copilot skips Claude hook registrations** - Cross-loaded Claude rows no longer execute alongside Copilot's native hooks.
+- **Codex hooks preserve the working directory on Windows** - Upgrade from 1.16.0 with `goat-flow hooks sync .`, then restart Codex.
+- **Preflight uses stable tests and bounded audits** - Default to `test:fast` when available; run experimental coverage separately with `npm run test:coverage`. Failed Tests rows show the first assertion/error; dependency audits time out after 120 seconds, adjustable with `GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N` (`0` disables only the timeout).
+- **Secret-access denials offer recovery** - Denials direct agents to checked-in examples or sanitized fields.
+- **Browser guidance detects the installed interface** - Read `browser-use --help` before choosing Python-stdin or legacy commands.
+
+### Security
+
+- **Review validation preserves its input** - `--output` refuses the same file, symbolic/hard links and aliased redirected stdin.
+- **Credential rules protect home and project copies** - Claude adds home-directory protection alongside existing project-local store denies; upgrades print and add each missing location partner.
+- **Managed setup paths reject terminal controls** - Installation state refuses control characters that could disguise a managed path in terminal output.
+- **Setup refuses linked legacy guides** - Commit-guide migration leaves symbolic links and outside-project sources untouched.
+- **Git guards deny more history writers** - `merge`, `rebase`, `pull`, `filter-branch`, `filter-repo`, `fast-import` and mutating `notes` modes deny like `commit`, with messages naming the blocked command; notes reads, prune previews, exact recovery flags, `merge --squash` and `merge --no-ff --no-commit` remain available.
+- **Git guards protect more branch and ref operations** - Deny soft resets, forced branch changes/copies, fetch mappings to local branches, stdin-fed fetch refspecs, revision resets with an empty pathspec, symbolic-ref writes, replacement refs, tag deletion/replacement, forced submodule operations and remote removal.
+- **Git guards cover more ways to discard work** - Deny bulk or directory `restore`/`checkout`, forced `checkout`/`switch`, `stash drop`/`clear`, `reflog expire`/`delete`, forced `rm`/`checkout-index`, `read-tree -u --reset` and forced worktree removal; single-file restores, including route paths such as `app/[id]/page.tsx`, and `restore --staged` remain allowed.
+- **Git-hosted commands and aliases receive policy checks** - Inspect `bisect run`, `submodule foreach`, `difftool --extcmd`, temporary/saved aliases and explicit pager, editor, SSH and filesystem-monitor commands; read-only controls stay allowed.
+- **Command-hosting Git environment variables are inspected** - A `GIT_EXTERNAL_DIFF`, `GIT_PAGER`/`PAGER`, `GIT_SSH_COMMAND`, `GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `GIT_PROXY_COMMAND` or `GIT_ASKPASS` value set for a git command is now classified the same as its `-c` config key, whether set as a prefix, through `env`, or exported, so it can no longer carry a commit or publication command past the hook; harmless values such as `GIT_PAGER=cat` stay allowed.
+- **GitHub guards cover more writes** - Deny `discussion comment`, `agent-task create`, `gist rename`, `codespace rebuild`, `codespace ports visibility`, `skill publish` and `repo autolink create`/`delete`, including built-in spellings such as `agent create`, `issue new` and `ext install`; explicit skill dry runs stay allowed, while `--fix` writes stay blocked.
+- **GitHub guards cover gh aliases, extensions and settings** - Deny `alias set`/`import`/`delete`, `config set`, `auth switch` and running a saved alias, extension or unrecognized gh command, because the hook cannot see what it runs; gh commands newer than this release stay denied until goat-flow lists them.
+- **Shell guards inspect more executable syntax** - Catch unquoted IFS expansion, pipeline `eval`, subshells, background commands, direct lockfile redirects and additional process-launch forms in Perl, Ruby, Python, PHP and Deno; quoted evidence, `yq eval` and JavaScript regex `.exec()` remain allowed.
+- **Git global options cannot conceal writes** - Policy checks consume option values before identifying the Git command and deny unrecognized global options.
+- **Relocating Git's configuration source is denied** - A chained or prefixed `HOME`, `XDG_CONFIG_HOME`, `GIT_DIR` or `GIT_COMMON_DIR` reassignment now blocks a following git across every form that reaches it — `export`, `read`/`printf -v`, `declare`/`typeset`/`readonly`/`local`, a `for` loop and a `+=` append; command-scoped prefix assignments on non-git commands and an unexported `declare` of a config source stay allowed. Git-alias denials after a dynamic `cd` now name the repository or destructive policy instead of the secret scope.
+- **Policy hook crashes deny execution** - Unexpected child exits, including `1` and `127`, return a denial in Claude, Antigravity and Copilot without leaking partial output.
+- **Quality reports reject terminal controls** - `quality save` refuses escape and text-direction characters in finding summaries, refuted claims and reasons, and multi-line file paths, preventing disguised `history`, `diff` and prompt output.
+
 ## v1.16.0 - 2026-08-20
 
 1.16.0 adds `/goat-clarity`, makes audits static by default, preserves local setup edits during upgrades, strengthens hooks across Windows and non-Git workspaces, and sharpens review, QA, planning, and security workflows.

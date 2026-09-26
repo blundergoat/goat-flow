@@ -1,6 +1,16 @@
 /**
- * Integration coverage for the dashboard endpoint that regenerates learning-loop indexes.
+ * Check the dashboard's public index regeneration route against temporary projects.
+ * A user clicks Regenerate on Home; the route must report fresh indexes or a busy claim.
+ *
+ * These tests use the real server and CLI so claim contention reaches the production writer.
  */
+import { spawnSync } from "node:child_process";
+import { join as joinPath } from "node:path";
+import {
+  acquirePathWriteClaims,
+  readPathWriteTargetIdentity,
+  releasePathWriteClaims,
+} from "../../src/cli/path-write-claim.js";
 import {
   assert,
   assertJsonResponse,
@@ -229,6 +239,50 @@ describe("dashboard index regenerate API", () => {
         ["fresh", "no-bucket", "no-bucket", "no-bucket"],
       );
     } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  // Fixture purpose: hold a real index claim while a user requests regeneration through both public routes.
+  // Filesystem side effects: write a sentinel in a disposable project and confirm both refusals leave it intact.
+  it("refuses CLI and dashboard index writes while another writer holds the index", async () => {
+    const fixture = await makeIndexFixture(["lessons"]);
+    const targetPath = ".goat-flow/learning-loop/lessons/INDEX.md";
+    const indexPath = join(fixture.root, targetPath);
+    await writeFile(indexPath, "CLAIM_OWNER_SENTINEL\n");
+    const claims = acquirePathWriteClaims(fixture.root, [
+      {
+        targetPath,
+        expectedIdentity: readPathWriteTargetIdentity(fixture.root, targetPath),
+      },
+    ]);
+    try {
+      const cli = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          joinPath(import.meta.dirname, "../../src/cli/cli.ts"),
+          "index",
+          fixture.root,
+        ],
+        { encoding: "utf8" },
+      );
+      assert.notEqual(cli.status, 0);
+      assert.match(cli.stderr, /Another cooperating writer owns/u);
+      const { res, body } = await fetchJson("/api/index/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: baseUrl },
+        body: JSON.stringify({ path: fixture.root }),
+      });
+      assert.notEqual(res.status, 200);
+      assert.match(
+        String(expectRecord(body, "busy index response").error),
+        /Another cooperating writer owns/u,
+      );
+      assert.equal(await readFile(indexPath, "utf8"), "CLAIM_OWNER_SENTINEL\n");
+    } finally {
+      releasePathWriteClaims(claims);
       await fixture.cleanup();
     }
   });

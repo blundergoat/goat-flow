@@ -1,7 +1,8 @@
 /**
- * Write-side wrapper around the learning-loop index generator: parses every bucket and writes the rendered INDEX.md files to disk.
- * Shared by the `goat-flow index` command and the post-install step so both produce identical files.
- * Buckets whose directory is absent are skipped (never created) so projects that adopted only part of the learning loop stay untouched.
+ * Generate learning-loop INDEX.md files from bucket content for CLI, dashboard, install, and learn flows.
+ * Existing buckets are regenerated; absent buckets stay untouched.
+ *
+ * Public regeneration claims every index path so another cooperating writer cannot overwrite newer entries.
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -11,6 +12,11 @@ import {
   parseMarkdownFrontmatter,
 } from "../facts/shared/learning-loop-common.js";
 import { formatIndex } from "./format-index.js";
+import {
+  acquirePathWriteClaims,
+  readPathWriteTargetIdentity,
+  releasePathWriteClaims,
+} from "../path-write-claim.js";
 import {
   INDEX_BUCKETS,
   parseBucket,
@@ -79,4 +85,59 @@ export function generateIndexes(
     );
     return { bucket, indexRelPath, entryCount: entries.length, diagnostics };
   });
+}
+
+/**
+ * Hold all four index claims when a user runs `index` or regenerates indexes from the dashboard.
+ * If every bucket is absent, return skipped results; a bucket appearing later needs a fresh run.
+ *
+ * @param projectPath - selected target project root
+ * @param fs - read-only adapter used to parse bucket content
+ * @param bucketPaths - configured project-relative bucket directories
+ * @returns results in bucket order; absent buckets have `entryCount: null`
+ * @throws PathWriteClaimError when an index is busy or changes before admission; generation and cleanup failures also propagate
+ */
+export function generateIndexesWithClaims(
+  projectPath: string,
+  fs: ReadonlyFS,
+  bucketPaths: Record<IndexBucket, string>,
+): GeneratedIndex[] {
+  // No bucket existed at admission, so leave a newly appearing bucket for the next run instead of writing without a claim.
+  if (!INDEX_BUCKETS.some((bucket) => fs.exists(bucketPaths[bucket]))) {
+    return INDEX_BUCKETS.map((bucket) => ({
+      bucket,
+      indexRelPath: `${bucketPaths[bucket].replace(/\/+$/u, "")}/INDEX.md`,
+      entryCount: null,
+      diagnostics: [],
+    }));
+  }
+  const targetPaths = INDEX_BUCKETS.map(
+    (bucket) => `${bucketPaths[bucket].replace(/\/+$/u, "")}/INDEX.md`,
+  );
+  const claims = acquirePathWriteClaims(
+    projectPath,
+    targetPaths.map((targetPath) => ({
+      targetPath,
+      expectedIdentity: readPathWriteTargetIdentity(projectPath, targetPath),
+    })),
+  );
+  let generationError: unknown = null;
+  try {
+    return generateIndexes(projectPath, fs, bucketPaths);
+  } catch (error) {
+    // A parse or write failure still releases claims before the caller reports it to the user.
+    generationError = error;
+    throw error;
+  } finally {
+    const unreleased = releasePathWriteClaims(claims).filter(
+      (result) => result.status !== "released",
+    );
+    // A completed write cannot report success while any index claim still needs operator attention.
+    if (unreleased.length > 0) {
+      const diagnostic = `Index generation could not confirm claim release for ${unreleased.map((result) => result.targetPath).join(", ")}. Inspect .goat-flow/state/locks before retrying.`;
+      // Keep the original generation error primary, while still reporting that claim cleanup was uncertain.
+      if (generationError !== null) console.error(diagnostic);
+      else throw new Error(diagnostic);
+    }
+  }
 }

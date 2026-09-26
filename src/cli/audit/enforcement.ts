@@ -362,21 +362,33 @@ function hookRegistrationCapability(
   }
   const preToolEvent = agentFacts.agent.hookEvents?.preTool ?? "pre-tool";
   // A registered pre-tool hook is mechanically wired before the user's command runs.
-  if (agentFacts.hooks.denyIsRegistered) {
+  if (
+    agentFacts.hooks.denyIsRegistered &&
+    agentFacts.hooks.gitDenyExists === true &&
+    agentFacts.hooks.gitDenyIsRegistered === true
+  ) {
     return capability(
       "hook-registration",
       "hard",
       ["local-hook"],
-      `Deny hook is registered as ${preToolEvent}`,
-      ["AgentFacts.hooks.denyIsRegistered"],
+      `Both policy hooks are registered as ${preToolEvent}`,
+      [
+        "AgentFacts.hooks.denyIsRegistered",
+        "AgentFacts.hooks.gitDenyExists",
+        "AgentFacts.hooks.gitDenyIsRegistered",
+      ],
     );
   }
   return capability(
     "hook-registration",
     "missing",
     ["local-hook"],
-    `Deny hook exists but is not registered as ${preToolEvent}`,
-    ["AgentFacts.hooks.denyIsRegistered"],
+    `Both policy hooks must exist and be registered as ${preToolEvent}`,
+    [
+      "AgentFacts.hooks.denyIsRegistered",
+      "AgentFacts.hooks.gitDenyExists",
+      "AgentFacts.hooks.gitDenyIsRegistered",
+    ],
   );
 }
 
@@ -518,6 +530,8 @@ export function buildAgentEnforcementCapability(
       "shell-dangerous",
       agentFacts.hooks.denyBlocksRmRf &&
         agentFacts.hooks.denyBlocksGitPush &&
+        agentFacts.hooks.gitDenyExists === true &&
+        agentFacts.hooks.gitDenyIsRegistered === true &&
         agentFacts.hooks.denyBlocksChmod,
       "Deny mechanism blocks broad recursive deletion, git push, and chmod 777 patterns",
       "Deny mechanism does not prove coverage for broad recursive deletion, git push, and chmod 777",

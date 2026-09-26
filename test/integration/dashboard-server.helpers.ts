@@ -62,6 +62,10 @@ export const CODEX_WORKSPACE_ROOT_ENTRIES = [
   '"**/credentials*" = "deny"',
   '"**/.npmrc" = "deny"',
   '"**/.pypirc" = "deny"',
+  '"**/.netrc" = "deny"',
+  '"**/.git-credentials" = "deny"',
+  '"**/.config/gh/hosts.yml" = "deny"',
+  '"**/.pgpass" = "deny"',
   '"**/*.pem" = "deny"',
   '"**/*.key" = "deny"',
   '"**/*.pfx" = "deny"',
@@ -251,7 +255,7 @@ export function assertDashboardReport(
     report.hookCoverage,
     "Dashboard report hookCoverage",
   );
-  assert.match(String(hookCoverage.status), /^(pass|fail)$/);
+  assert.match(String(hookCoverage.status), /^(pass|warning|fail)$/);
   assert.ok(
     Array.isArray(hookCoverage.hooks),
     "Dashboard report hookCoverage.hooks should be an array",

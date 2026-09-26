@@ -1,8 +1,8 @@
 /**
- * Fast smoke tests for dashboard modules.
- * Public HTTP behavior lives in the integration suite; this file checks
- * dashboard exports plus terminal WebSocket boundary behavior that does not
- * require launching a real PTY.
+ * Check dashboard exports and terminal behavior using fake sockets and PTYs.
+ *
+ * These smoke tests cover prompt timing, browser reconnection, input validation, and session limits.
+ * Use the integration suite for HTTP behavior; this file does not launch a real terminal.
  */
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
@@ -27,17 +27,20 @@ const childProcess =
 
 type TerminalWebSocket = Parameters<TerminalManager["attachWebSocket"]>[1];
 
-/** Minimal PTY surface TerminalManager needs for endpoint smoke tests. */
+// Record terminal input, resizing, and shutdown without launching a runner.
 interface TestPty {
-  /** Writes terminal input sent through the fake PTY. */
+  // Writes terminal input sent through the fake PTY.
   write(chunk: string): void;
-  /** Record terminal resize requests without opening a real PTY. */
+  // Record terminal resize requests without opening a real PTY.
   resize(cols: number, rows: number): void;
-  /** Terminate the fake PTY lifecycle used by shutdown assertions. */
+  // Terminate the fake PTY lifecycle used by shutdown assertions.
   kill(): void;
 }
 
-/** Mutable terminal session shape used to seed TerminalManager internals. */
+/**
+ * Seed the session state needed to check what a dashboard user sees or sends.
+ * Null PTY, socket, and timer values represent resources the scenario has not attached.
+ */
 interface TestTerminalSession {
   id: string;
   status: "active" | "terminated";
@@ -55,11 +58,14 @@ interface TestTerminalSession {
   idleTimer: ReturnType<typeof setTimeout> | null;
   detachBuffer: string[];
   detachBufferSize: number;
-  /** Capture stubs the test can close, standing in for the real quality-draft watchers. */
+  // Capture stubs the test can close, standing in for the real quality-draft watchers.
   qualityCaptures: Array<{ dispose(): void }>;
 }
 
-/** Private TerminalManager fields initialized directly for focused tests. */
+/**
+ * Expose test-owned session and runner state without adding a public production API.
+ * Null capability and timeout values leave those controls unset in the fixture.
+ */
 interface TestTerminalManagerInternals {
   sessions: Map<string, TestTerminalSession>;
   runnerPaths: Map<string, string>;
@@ -70,38 +76,46 @@ interface TestTerminalManagerInternals {
   traceSink?: (event: TerminalTraceEvent) => void;
 }
 
+/**
+ * Stand in for the browser connection while smoke tests drive terminal messages.
+ *
+ * Tests inspect sent messages and closure after calling TerminalManager.
+ * Listeners run synchronously; this fake does not model network timing.
+ */
 class FakeWebSocket {
   readyState = 1;
   sent: ServerMessage[] = [];
   closed = false;
   private handlers = new Map<string, Array<(raw: Buffer | string) => void>>();
 
-  /** Capture serialized server messages for WebSocket boundary assertions. */
+  // Capture serialized server messages for WebSocket boundary assertions.
   send(payload: string): void {
     this.sent.push(JSON.parse(payload) as ServerMessage);
   }
 
-  /** Move the fake socket to closed state and notify close listeners. */
+  // Move the fake socket to closed state and notify close listeners.
   close(): void {
     this.closed = true;
     this.emit("close", "");
   }
 
-  /** Register a fake socket listener using the server-facing callback shape. */
+  // Register a fake socket listener using the server-facing callback shape.
   on(event: string, handler: (raw: Buffer | string) => void): void {
+    // The first listener starts an empty list; later listeners share the same simulated browser event.
     const existing = this.handlers.get(event) ?? [];
     existing.push(handler);
     this.handlers.set(event, existing);
   }
 
-  /** Dispatch a fake socket event to registered terminal handlers. */
+  // Dispatch a fake socket event to registered terminal handlers.
   emit(event: string, raw: Buffer | string): void {
+    // Notify every listener for this browser event; an event with no listeners has no effect.
     for (const handler of this.handlers.get(event) ?? []) {
       handler(raw);
     }
   }
 
-  /** Cast this focused fake to the WebSocket subset TerminalManager consumes. */
+  // Cast this focused fake to the WebSocket subset TerminalManager consumes.
   asTerminalSocket(): TerminalWebSocket {
     return this as TerminalWebSocket;
   }
@@ -109,7 +123,7 @@ class FakeWebSocket {
 
 type TestTerminalManager = TerminalManager & TestTerminalManagerInternals;
 
-/** Expose test-seeded private fields without widening the production TerminalManager API. */
+// Expose test-seeded private fields without widening the production TerminalManager API.
 function managerInternals(manager: TerminalManager): TestTerminalManager {
   return manager as TestTerminalManager;
 }
@@ -127,7 +141,10 @@ function enableTerminalMockTimers(): typeof mock.timers {
   return mock.timers;
 }
 
-/** Build a TerminalManager instance with explicit test-owned internals. */
+/**
+ * Create an isolated manager with no sessions, runner paths, PTY module, or idle timeout.
+ * Tests supply only the launch resources required by their scenario.
+ */
 function makeManager(): TerminalManager {
   const manager = Object.create(TerminalManager.prototype) as TerminalManager;
   const internals = managerInternals(manager);
@@ -140,7 +157,10 @@ function makeManager(): TerminalManager {
   return manager;
 }
 
-/** Create an active session fixture plus arrays that record PTY calls. */
+/**
+ * Create an active session and record the terminal input and resize requests it receives.
+ * Omitted overrides keep the browser disconnected, timers unset, and quality capture disabled.
+ */
 function makeSession(overrides: Partial<TestTerminalSession> = {}): {
   session: TestTerminalSession;
   writes: string[];
@@ -149,11 +169,11 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
   const writes: string[] = [];
   const resizes: Array<{ cols: number; rows: number }> = [];
   const pty: TestPty = {
-    /** Capture input routed from decoded WebSocket messages. */
+    // Capture input routed from decoded WebSocket messages.
     write: (data) => writes.push(data),
-    /** Capture clamped resize dimensions routed from WebSocket messages. */
+    // Capture clamped resize dimensions routed from WebSocket messages.
     resize: (cols, rows) => resizes.push({ cols, rows }),
-    /** Keep shutdown paths synchronous for session-list tests. */
+    // Keep shutdown paths synchronous for session-list tests.
     kill: () => undefined,
   };
   const session: TestTerminalSession = {
@@ -179,20 +199,23 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
   return { session, writes, resizes };
 }
 
-/** Create the fake spawned PTY used by prompt-delivery timing tests. */
+/**
+ * Create a fake runner whose output and exit events tests can control.
+ * Recorded writes show when the dashboard's launch prompt reaches the runner.
+ */
 function makeSpawnedPty(): {
   pty: TestPty & {
-    /** Register the handler the fake PTY calls when it emits output. */
+    // Register the handler the fake PTY calls when it emits output.
     onData(handler: (data: string) => void): void;
-    /** Register the handler the fake PTY calls when the session ends. */
+    // Register the handler the fake PTY calls when the session ends.
     onExit(
       handler: (event: { exitCode: number; signal?: number | string }) => void,
     ): void;
   };
   writes: string[];
-  /** Emit fake runner output into TerminalManager's PTY data handler. */
+  // Emit fake runner output into TerminalManager's PTY data handler.
   emitData(chunk: string): void;
-  /** Emit runner exit independently from kill for teardown-order tests. */
+  // Emit runner exit independently from kill for teardown-order tests.
   emitExit(): void;
 } {
   const writes: string[] = [];
@@ -206,26 +229,26 @@ function makeSpawnedPty(): {
   return {
     writes,
     pty: {
-      /** Capture delayed prompt input written into the spawned PTY. */
+      // Capture delayed prompt input written into the spawned PTY.
       write: (data) => writes.push(data),
-      /** Ignore resize calls because prompt timing tests do not inspect them. */
+      // Ignore resize calls because prompt timing tests do not inspect them.
       resize: () => undefined,
-      /** Route termination through the registered exit handler. */
+      // Route termination through the registered exit handler.
       kill: () => exitHandler({ exitCode: 0 }),
-      /** Store the data handler so tests can emit runner output deterministically. */
+      // Store the data handler so tests can emit runner output deterministically.
       onData: (handler) => {
         dataHandler = handler;
       },
-      /** Store the exit handler so fake kill mirrors node-pty shutdown. */
+      // Store the exit handler so fake kill mirrors node-pty shutdown.
       onExit: (handler) => {
         exitHandler = handler;
       },
     },
-    /** Emit fake runner output into TerminalManager's PTY data handler. */
+    // Emit fake runner output into TerminalManager's PTY data handler.
     emitData(chunk: string): void {
       dataHandler(chunk);
     },
-    /** Emit one synthetic PTY exit so endpoint tests can observe terminal teardown. */
+    // Emit one synthetic PTY exit so endpoint tests can observe terminal teardown.
     emitExit(): void {
       exitHandler({ exitCode: 0 });
     },
@@ -234,15 +257,15 @@ function makeSpawnedPty(): {
 
 describe("dashboard server exports", () => {
   it("serveDashboard is exported as a function", async () => {
-    const mod = await import("../../src/cli/server/dashboard.js");
-    assert.equal(typeof mod.serveDashboard, "function");
+    const moduleExports = await import("../../src/cli/server/dashboard.js");
+    assert.equal(typeof moduleExports.serveDashboard, "function");
   });
 });
 
 describe("terminal exports", () => {
   it("TerminalManager is exported as a class", async () => {
-    const mod = await import("../../src/cli/server/terminal.js");
-    assert.equal(typeof mod.TerminalManager, "function");
+    const moduleExports = await import("../../src/cli/server/terminal.js");
+    assert.equal(typeof moduleExports.TerminalManager, "function");
   });
 
   it("rejects missing and file project paths before PTY launch", () => {
@@ -270,6 +293,7 @@ describe("terminal exports", () => {
 
   // Fixture purpose: covers PATH lookup without runner execution; the mock throws if anything but lookup runs.
   it("resolves POSIX runner paths without executing the runner binary", () => {
+    // Windows uses a different runner lookup; this scenario checks the POSIX command only.
     if (process.platform === "win32") return;
     const originalExecFileSync = childProcess.execFileSync;
     // The fake lookup command records `which` usage and fails on anything that would execute a runner.
@@ -279,6 +303,7 @@ describe("terminal exports", () => {
       args?: readonly string[],
     ) => {
       calls.push({ command, args: Array.from(args ?? []) });
+      // Return an installed runner path only for lookup; executing a runner fails this fixture.
       if (command === "which") return "/usr/local/bin/claude\n";
       throw new Error(`unexpected command: ${command}`);
     }) as typeof childProcess.execFileSync;
@@ -293,7 +318,7 @@ describe("terminal exports", () => {
   });
 
   it("builds a Windows PTY launch that keeps PowerShell open after the runner exits", () => {
-    const spec = buildTerminalSpawnSpec(
+    const launchSpec = buildTerminalSpawnSpec(
       "copilot",
       "C:\\Users\\thatm\\AppData\\Roaming\\npm\\copilot.cmd",
       "review this",
@@ -301,26 +326,26 @@ describe("terminal exports", () => {
       "win32",
     );
 
-    assert.equal(spec.shell, "powershell.exe");
-    assert.deepStrictEqual(spec.args.slice(0, 3), [
+    assert.equal(launchSpec.shell, "powershell.exe");
+    assert.deepStrictEqual(launchSpec.args.slice(0, 3), [
       "-NoLogo",
       "-NoExit",
       "-Command",
     ]);
-    assert.match(spec.args[3] ?? "", /GOAT_RUNNER/);
-    assert.match(spec.args[3] ?? "", /Remove-Item Env:GOAT_RUNNER/);
-    assert.doesNotMatch(spec.args[3] ?? "", /danger-full-access/);
-    assert.doesNotMatch(spec.args[3] ?? "", /review this/);
-    assert.equal(spec.env.GOAT_PROMPT, undefined);
+    assert.match(launchSpec.args[3] ?? "", /GOAT_RUNNER/);
+    assert.match(launchSpec.args[3] ?? "", /Remove-Item Env:GOAT_RUNNER/);
+    assert.doesNotMatch(launchSpec.args[3] ?? "", /danger-full-access/);
+    assert.doesNotMatch(launchSpec.args[3] ?? "", /review this/);
+    assert.equal(launchSpec.env.GOAT_PROMPT, undefined);
     assert.equal(
-      spec.env.GOAT_RUNNER,
+      launchSpec.env.GOAT_RUNNER,
       "C:\\Users\\thatm\\AppData\\Roaming\\npm\\copilot.cmd",
     );
-    assert.equal(spec.initialInput, "\x1b[200~review this\x1b[201~\r");
+    assert.equal(launchSpec.initialInput, "\x1b[200~review this\x1b[201~\r");
   });
 
   it("launches Codex on Windows with an explicit preflight-capable sandbox", () => {
-    const spec = buildTerminalSpawnSpec(
+    const launchSpec = buildTerminalSpawnSpec(
       "codex",
       "C:\\Users\\thatm\\AppData\\Roaming\\npm\\codex.cmd",
       "",
@@ -328,18 +353,18 @@ describe("terminal exports", () => {
       "win32",
     );
 
-    assert.equal(spec.shell, "powershell.exe");
-    assert.match(spec.args[3] ?? "", /& \$env:GOAT_RUNNER/);
-    assert.match(spec.args[3] ?? "", /--sandbox danger-full-access/);
+    assert.equal(launchSpec.shell, "powershell.exe");
+    assert.match(launchSpec.args[3] ?? "", /& \$env:GOAT_RUNNER/);
+    assert.match(launchSpec.args[3] ?? "", /--sandbox danger-full-access/);
     assert.equal(
-      spec.env.GOAT_RUNNER,
+      launchSpec.env.GOAT_RUNNER,
       "C:\\Users\\thatm\\AppData\\Roaming\\npm\\codex.cmd",
     );
-    assert.equal(spec.initialInput, null);
+    assert.equal(launchSpec.initialInput, null);
   });
 
   it("builds a POSIX PTY launch that returns to the interactive shell", () => {
-    const spec = buildTerminalSpawnSpec(
+    const launchSpec = buildTerminalSpawnSpec(
       "claude",
       "/usr/local/bin/claude",
       "",
@@ -347,18 +372,18 @@ describe("terminal exports", () => {
       "linux",
     );
 
-    assert.equal(spec.shell, "/bin/zsh");
-    assert.deepStrictEqual(spec.args, [
+    assert.equal(launchSpec.shell, "/bin/zsh");
+    assert.deepStrictEqual(launchSpec.args, [
       "-c",
       '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
     ]);
-    assert.equal(spec.env.GOAT_PROMPT, undefined);
-    assert.equal(spec.initialInput, null);
-    assert.equal(spec.env.SHELL, "/bin/zsh");
+    assert.equal(launchSpec.env.GOAT_PROMPT, undefined);
+    assert.equal(launchSpec.initialInput, null);
+    assert.equal(launchSpec.env.SHELL, "/bin/zsh");
   });
 
   it("launches Codex on POSIX with an explicit preflight-capable sandbox", () => {
-    const spec = buildTerminalSpawnSpec(
+    const launchSpec = buildTerminalSpawnSpec(
       "codex",
       "/usr/local/bin/codex",
       "",
@@ -366,17 +391,17 @@ describe("terminal exports", () => {
       "linux",
     );
 
-    assert.equal(spec.shell, "/bin/bash");
-    assert.deepStrictEqual(spec.args, [
+    assert.equal(launchSpec.shell, "/bin/bash");
+    assert.deepStrictEqual(launchSpec.args, [
       "-c",
       '"$GOAT_RUNNER" --sandbox danger-full-access; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
     ]);
-    assert.equal(spec.env.GOAT_RUNNER, "/usr/local/bin/codex");
-    assert.equal(spec.initialInput, null);
+    assert.equal(launchSpec.env.GOAT_RUNNER, "/usr/local/bin/codex");
+    assert.equal(launchSpec.initialInput, null);
   });
 
   it("injects POSIX launch prompts through PTY input instead of runner flags", () => {
-    const spec = buildTerminalSpawnSpec(
+    const launchSpec = buildTerminalSpawnSpec(
       "antigravity",
       "/usr/local/bin/agy",
       "audit target",
@@ -384,13 +409,13 @@ describe("terminal exports", () => {
       "darwin",
     );
 
-    assert.equal(spec.shell, "/bin/bash");
-    assert.deepStrictEqual(spec.args, [
+    assert.equal(launchSpec.shell, "/bin/bash");
+    assert.deepStrictEqual(launchSpec.args, [
       "-c",
       '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
     ]);
-    assert.equal(spec.env.GOAT_PROMPT, undefined);
-    assert.equal(spec.initialInput, "\x1b[200~audit target\x1b[201~\r");
+    assert.equal(launchSpec.env.GOAT_PROMPT, undefined);
+    assert.equal(launchSpec.initialInput, "\x1b[200~audit target\x1b[201~\r");
   });
 
   it("waits for runner output to settle before initial prompt delivery", async () => {
@@ -445,6 +470,7 @@ describe("terminal exports", () => {
         "\x1b[200~review this\x1b[201~\r",
       ]);
     } finally {
+      // Stop the simulated runner redraws if this test reached the repeating-output setup.
       if (interval) clearInterval(interval);
       manager.shutdown();
       timers.reset();
@@ -631,12 +657,10 @@ describe("terminal exports", () => {
 });
 
 /**
- * Confirm every create past the cap failed with the message the user actually sees.
- * Use after a concurrency burst: it separates "the cap held" from "something crashed",
- * which look identical in a plain rejected-count assertion.
+ * Confirm overflow launches fail with the session-limit message a dashboard user sees.
+ * Use after a concurrent launch burst to distinguish the intended refusal from an unrelated failure.
  *
- * @param rejections - creates the manager refused; an empty list means the cap never
- *   engaged, which the caller asserts separately
+ * @param rejections - refused launches; an empty list means no refusal occurred, which the caller checks separately
  */
 function assertRejectionsCarryCapMessage(
   rejections: PromiseRejectedResult[],
@@ -662,21 +686,21 @@ describe("terminal session concurrency cap", () => {
     internals.nodePtyAvailable = true;
 
     try {
-      // Fire more creates than the cap in one synchronous burst: every call
-      // runs its cap check before any of them awaits loadNodePty - the exact
-      // interleaving a check-then-act guard lets slip past MAX_SESSIONS.
+      // Start more launches than the cap before PTY loading resolves, reproducing concurrent requests for the remaining session slots.
       const attempts = MAX_SESSIONS + 3;
       const results = await Promise.allSettled(
         Array.from({ length: attempts }, () =>
-          // Empty prompt: no initial-input timer is armed, so no real timer
-          // outlives the assertions in this timer-free concurrency test.
+          // An empty prompt leaves the initial-input timer unset, keeping this concurrency test independent of prompt timing.
           manager.create("", PROJECT_ROOT, "claude"),
         ),
       );
 
-      const created = results.filter((r) => r.status === "fulfilled").length;
+      const created = results.filter(
+        (outcome) => outcome.status === "fulfilled",
+      ).length;
       const rejected = results.filter(
-        (r): r is PromiseRejectedResult => r.status === "rejected",
+        (outcome): outcome is PromiseRejectedResult =>
+          outcome.status === "rejected",
       );
 
       // The cap is a hard ceiling; concurrency must not admit extra sessions.
@@ -696,8 +720,7 @@ describe("terminal session concurrency cap", () => {
     internals.nodePtyModule = { spawn: () => makeSpawnedPty().pty };
     internals.nodePtyAvailable = true;
 
-    // A rejected launch (bad project path) must not leave a permanent
-    // "starting" session wedged in one of the MAX_SESSIONS slots.
+    // A rejected project path must release its reserved session slot so the user can start another terminal.
     await assert.rejects(
       manager.create("", "/definitely/missing/goat-flow/project", "claude"),
       /Local path validation failed/,
@@ -724,16 +747,14 @@ describe("terminal session concurrency cap", () => {
     };
     internals.nodePtyAvailable = true;
 
-    // create() registers the "starting" reservation synchronously, then parks
-    // on `await loadNodePty()` - so the session is deletable before its PTY exists.
+    // create() reserves a visible starting session before awaiting PTY loading, allowing the user to delete it during launch.
     const createPromise = manager.create("", PROJECT_ROOT, "claude");
     const startingId = manager.list()[0]?.id;
     assert.ok(startingId, "expected a starting reservation to be listed");
     // Simulate DELETE /api/terminal/<id> arriving mid-launch.
     assert.equal(manager.kill(startingId), true);
 
-    // The resumed launch must abort and tear down the PTY, not resurrect the
-    // deleted session as an untracked runner.
+    // Resuming a deleted launch must terminate its PTY and leave the session list empty.
     await assert.rejects(createPromise, /cancelled during startup/);
     assert.equal(manager.list().length, 0);
     assert.equal(wasSpawnedPtyKilled, true);

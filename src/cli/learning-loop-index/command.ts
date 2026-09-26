@@ -1,7 +1,7 @@
 /**
  * Backs `goat-flow index`, the command that regenerates the learning loop's generated bucket indexes.
  *
- * A user runs this after adding, editing, or removing a footgun or lesson, because `stats --check` fails while an index is stale.
+ * A user runs this after changing a learning-loop entry, because `stats --check` fails while an index is stale.
  *
  * Indexes are always regenerated from the bucket files rather than edited by hand, so retrieval reflects what is actually stored.
  */
@@ -9,7 +9,7 @@ import type { ParsedCLI } from "../cli-types.js";
 import { writeOutput } from "../cli-output.js";
 import { loadConfig } from "../config/reader.js";
 import { createFS } from "../facts/fs.js";
-import { generateIndexes } from "./generate.js";
+import { generateIndexes, generateIndexesWithClaims } from "./generate.js";
 import { resolveIndexBucketPaths } from "./parse-bucket.js";
 
 /**
@@ -48,7 +48,7 @@ export function emitIndexGenerationInstallResult(projectPath: string): void {
 export function handleIndexCommand(options: ParsedCLI): void {
   const fs = createFS(options.projectPath);
   const configState = loadConfig(options.projectPath, fs);
-  const results = generateIndexes(
+  const results = generateIndexesWithClaims(
     options.projectPath,
     fs,
     resolveIndexBucketPaths(configState.config),

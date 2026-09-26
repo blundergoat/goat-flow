@@ -2,13 +2,12 @@
  * The dashboard endpoints that regenerate a project's learning-loop indexes and report how stale they currently are.
  *
  * A user hits these from the Home memory card, after it warns that their footgun or lesson indexes no longer match the bucket files.
- *
  * Indexes are generated rather than hand-edited, so this is the supported way for a user to make retrieval trustworthy again.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { loadConfig } from "../config/reader.js";
 import { createFS } from "../facts/fs.js";
-import { generateIndexes } from "../learning-loop-index/generate.js";
+import { generateIndexesWithClaims } from "../learning-loop-index/generate.js";
 import { resolveIndexBucketPaths } from "../learning-loop-index/parse-bucket.js";
 import { collectIndexFreshness } from "../stats/index-freshness.js";
 import type { DashboardRouteContext } from "./dashboard-route-types.js";
@@ -45,15 +44,15 @@ async function regenerateLearningLoopIndexes(
     const fs = createFS(projectPath);
     const configState = loadConfig(projectPath, fs);
     const bucketPaths = resolveIndexBucketPaths(configState.config);
-    const results = generateIndexes(projectPath, fs, bucketPaths);
+    const results = generateIndexesWithClaims(projectPath, fs, bucketPaths);
     const indexes = collectIndexFreshness(createFS(projectPath), bucketPaths);
     ctx.recordDashboardEvent(projectPath, "index.regenerate", {
       bucket_count: results.filter((result) => result.entryCount !== null)
         .length,
     });
     ctx.jsonResponse(res, 200, { results, indexes });
-    // For example, the user picked a project whose `.goat-flow` directory is read-only, so index generation cannot write.
   } catch (err) {
+    // A read-only .goat-flow directory prevents index replacement; Home receives the failure instead of a regeneration success.
     ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -61,21 +60,23 @@ async function regenerateLearningLoopIndexes(
 }
 
 /**
- * Bind index-maintenance handlers to one dashboard route context.
- * This factory owns route matching because the aggregator probes every handler for every request; non-index paths must return false and method
- * rejection must happen here before any write-side handler runs.
+ * Bind the Home memory card's index-regeneration request to the selected project's validated write path.
+ * Route and method checks report unsupported requests before index generation can write files.
  *
  * @param ctx - per-server dashboard route context
- * @returns route handler bag consumed by the dashboard route aggregator
+ * @returns the index handler, which returns false for unrelated URLs and true after answering an index request
  */
 export function createIndexRouteHandlers(ctx: DashboardRouteContext) {
   return {
+    // Regenerate learning-loop indexes only when the caller submits the Home card's maintenance request.
     handleIndexRegenerateRequest: async (
       req: IncomingMessage,
       url: URL,
       res: ServerResponse,
     ): Promise<boolean> => {
+      // Other maintenance requests remain available to the next dashboard route group.
       if (url.pathname !== "/api/index/regenerate") return false;
+      // Merely opening this endpoint must not rewrite the selected project's indexes.
       if (req.method !== "POST") {
         ctx.jsonResponse(res, 405, { error: "Method not allowed" });
         return true;

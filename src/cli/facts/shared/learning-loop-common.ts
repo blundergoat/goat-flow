@@ -19,9 +19,22 @@ import {
   type ReferenceValidationOptions,
 } from "./reference-paths.js";
 import { evaluateSearchAnchors } from "./search-anchors.js";
+import { maskNonRenderedMarkdown } from "../../rendered-markdown.js";
 
 /** Strict YYYY-MM-DD format - rejects full ISO 8601 timestamps in `last_reviewed`. */
 export const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Locate the visible active/resolved boundary while ignoring prose, examples, and longer headings.
+ *
+ * @param content - complete bucket Markdown whose character offsets must remain stable
+ * @returns zero-based heading offset, or -1 when the bucket has no rendered boundary
+ */
+export function findResolvedEntriesHeadingIndex(content: string): number {
+  return maskNonRenderedMarkdown(content).search(
+    /^ {0,3}##[\t ]+Resolved Entries(?:[\t ]+#+)?[\t ]*$/mu,
+  );
+}
 
 /**
  * Matches file path evidence in multiple formats:
@@ -61,6 +74,7 @@ export interface FootgunRefSummary {
   invalidLineRefs: string[];
   totalRefs: number;
   validRefs: number;
+  validSearchAnchors: number;
 }
 
 /** Normalize a surface path so trailing slashes do not affect comparisons. */
@@ -268,6 +282,7 @@ export function summarizeFootgunRefs(
     invalidLineRefs: [],
     totalRefs: 0,
     validRefs: 0,
+    validSearchAnchors: 0,
   };
   const cleanedContent = stripStrikethrough(content);
   for (const line of cleanedContent.split("\n")) {
@@ -412,6 +427,7 @@ function scanSearchAnchors(
       continue;
     }
     summary.validRefs++;
+    summary.validSearchAnchors++;
   }
 }
 
@@ -437,6 +453,7 @@ export function summarizeLessonRefs(
     invalidLineRefs: [],
     totalRefs: 0,
     validRefs: 0,
+    validSearchAnchors: 0,
   };
   const pathPattern =
     /`((?:src|config|app|apps|lib|docs|scripts|setup|workflow|agents|\.goat-flow)\/[^`]+)`/g;

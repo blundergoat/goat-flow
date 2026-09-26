@@ -1,5 +1,8 @@
 /**
- * Unit tests for browser-local custom prompt helpers.
+ * Exercises the browser-local helpers users reach from the dashboard's Prompts screen.
+ * Use when prompt cards, editor validation, routing, persistence, or launch metadata changes.
+ *
+ * The VM loads the real classic scripts, so tests cover visible form state without opening a browser.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -33,10 +36,17 @@ const DIRECT_ROUTE_PRESET_CASES = [
     id: "walkthrough-with-testing",
     deliverableMarker: /exactly three sections/iu,
   },
-  { id: "browser-verify", deliverableMarker: /browser-use state/u },
+  {
+    id: "browser-verify",
+    deliverableMarker: /skill-docs\/playbooks\/browser-use\.md/u,
+  },
   { id: "page-capture", deliverableMarker: /one MD record per page/iu },
 ] as const;
 
+/**
+ * Browser helper API exposed to the VM fixture with the same names the dashboard calls.
+ * Use it to drive New, Edit, Duplicate, Save, Delete, validation, and launch-safety flows as a user would.
+ */
 type HelperContext = {
   /** Return a fresh browser-local custom prompt draft with default flags. */
   dashboardDefaultCustomPromptDraft(): Record<string, unknown>;
@@ -44,21 +54,21 @@ type HelperContext = {
   dashboardInferPromptRoute(prompt: string): string;
   /** Open a blank custom-prompt editor in the test context. */
   dashboardOpenNewCustomPrompt(ctx: TestContext): void;
-  /** Open the editor on an existing custom prompt, as the Edit button does. */
+  /** Open the selected custom prompt for editing; null leaves the editor unchanged, as no card was selected. */
   dashboardOpenEditCustomPrompt(
     ctx: TestContext,
     preset: TestPreset | null,
   ): void;
-  /** Open the editor on a copy of any preset, as the Duplicate button does. */
+  /** Open a copy of the selected preset; null leaves the editor unchanged, as no card was selected. */
   dashboardDuplicateCustomPrompt(
     ctx: TestContext,
     preset: TestPreset | null,
   ): void;
-  /** Save the current draft into the mocked custom prompt list. */
+  /** Save the current draft, or return null when validation keeps the user in the editor. */
   dashboardSaveCustomPrompt(ctx: TestContext): TestCustomPrompt | null;
   /** Delete the selected custom prompt from the mocked custom prompt list. */
   dashboardDeleteSelectedCustomPrompt(ctx: TestContext): void;
-  /** Load persisted custom prompts from the mocked localStorage. */
+  /** Load prompts from mocked browser storage; missing or invalid data leaves the user with an empty custom list. */
   dashboardLoadCustomPrompts(ctx: TestContext): void;
   /** Return route options rendered by the custom prompt editor. */
   dashboardCustomPromptRouteOptions(): Array<Record<string, unknown>>;
@@ -66,15 +76,15 @@ type HelperContext = {
   dashboardCustomPromptFlagGroups(): Array<Record<string, unknown>>;
   /** Build the preset-shaped preview for the current custom prompt draft. */
   dashboardPreviewCustomPromptPreset(ctx: TestContext): TestPreset;
-  /** Return normalized target-surface tags for the current draft. */
+  /** Return normalized target-surface tags for the current draft; empty means the editor shows no target chips. */
   dashboardCustomPromptSurfaceTags(ctx: TestContext): string[];
   /** Add one target-surface tag to the draft when it is not already present. */
   dashboardAddCustomPromptSurface(ctx: TestContext, surface: string): void;
   /** Remove one target-surface tag from the draft. */
   dashboardRemoveCustomPromptSurface(ctx: TestContext, surface: string): void;
-  /** Return user-facing validation messages for the current draft. */
+  /** Return user-facing validation messages for the current draft; empty means Save is available. */
   dashboardValidateCustomPromptDraft(ctx: TestContext): string[];
-  /** Return one entry per problem with the open draft, each tied to the field the user must fix. */
+  /** Return one field-linked problem for each invalid value; empty means no field needs correction. */
   dashboardValidateCustomPromptDraftDetails(
     ctx: TestContext,
   ): Array<Record<string, unknown>>;
@@ -97,6 +107,10 @@ type TestPreset = Record<string, unknown> & {
   source?: string;
 };
 
+/**
+ * Minimal Alpine state the real helpers mutate while a user works in the custom-prompt editor.
+ * Property names intentionally mirror dashboard state so this fixture detects integration drift rather than adapting around it.
+ */
 type TestContext = {
   customPrompts: TestCustomPrompt[];
   customPromptDraft: Record<string, unknown>;
@@ -108,11 +122,17 @@ type TestContext = {
   allPresets: TestPreset[];
   toast: string | null;
   toastError: boolean;
-  /** Capture toast text and error state for assertions. */
-  showToast(msg: string, isError?: boolean): void;
+  /** Capture the message a user sees; an absent error flag means the normal success style. */
+  showToast(message: string, isError?: boolean): void;
 };
 
-// Load the dashboard helper bundle in a VM, because these are classic browser scripts rather than importable modules.
+/**
+ * Load the dashboard's classic prompt scripts into an isolated browser-like VM.
+ * Use when a test needs the same helpers and local storage behavior a user gets from the Prompts screen.
+ *
+ * @param runnerIds - runners available to the editor; empty means no runner-specific hint is valid
+ * @returns callable dashboard helpers plus empty in-memory browser storage
+ */
 function loadHelpers(
   runnerIds = ["claude", "codex", "antigravity", "copilot"],
 ): {
@@ -130,6 +150,7 @@ function loadHelpers(
   const context = createContext({
     Date,
     localStorage: {
+      // A missing browser-storage key returns null, which makes the dashboard load an empty custom-prompt list.
       getItem: (key: string): string | null => storage.get(key) ?? null,
       setItem: (key: string, value: string): void => {
         storage.set(key, value);
@@ -139,10 +160,13 @@ function loadHelpers(
       confirm: () => true,
       __GOAT_FLOW_RUNNER_IDS__: runnerIds,
     },
+    // Null is not a browser record, so malformed saved values cannot be treated as prompt objects.
     isRecord: (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value),
+    // Non-string persisted values become the field's fallback; the default empty value renders a blank input.
     readString: (value: unknown, fallback = ""): string =>
       typeof value === "string" ? value : fallback,
+    // Invalid or absent tag collections become an empty list, so the editor displays no target chips.
     readStringArray: (value: unknown): string[] =>
       Array.isArray(value)
         ? value.filter((entry): entry is string => typeof entry === "string")
@@ -179,7 +203,13 @@ globalThis.__helpers = {
   };
 }
 
-/** Build the minimal dashboard context required by custom-prompt helpers. */
+/**
+ * Build the blank Alpine state a user gets before opening a custom-prompt editor.
+ * Use with the VM helpers so each test starts without saved prompts, a selected card, or a visible toast.
+ *
+ * @param helpers - loaded dashboard helpers used to create the default draft
+ * @returns isolated dashboard state; null selections and empty arrays mean the user has not acted yet
+ */
 function makeContext(helpers: HelperContext): TestContext {
   const ctx = {
     customPrompts: [],
@@ -192,9 +222,10 @@ function makeContext(helpers: HelperContext): TestContext {
     allPresets: [],
     toast: null,
     toastError: false,
-    /** Capture toast text and error state for assertions. */
-    showToast(msg: string, isError?: boolean): void {
-      ctx.toast = msg;
+    /** Capture the message a user sees; an absent error flag keeps the normal success style. */
+    showToast(message: string, isError?: boolean): void {
+      ctx.toast = message;
+      // Calls without an error flag represent ordinary success feedback in the dashboard.
       ctx.toastError = isError ?? false;
     },
   };
@@ -202,6 +233,22 @@ function makeContext(helpers: HelperContext): TestContext {
 }
 
 describe("custom prompt helpers", () => {
+  it("delegates Coverage Audit scope and output to goat-qa", () => {
+    const presets = JSON.parse(
+      readFileSync(PRESET_PROMPTS_PATH, "utf-8"),
+    ) as Array<Record<string, unknown>>;
+    const preset = presets.find((candidate) => candidate.id === "test-audit");
+
+    assert.ok(preset, "missing test-audit preset");
+    const prompt = String(preset.prompt);
+    assert.equal(preset.route, "goat-qa");
+    assert.match(prompt, /^\/goat-qa audit\b/u);
+    assert.match(prompt, /skill's Audit Mode scope/u);
+    assert.match(prompt, /blocking-gate contract/u);
+    assert.doesNotMatch(prompt, /most-changed|Output as a table|File \|/u);
+  });
+
+  // Each direct card must keep its promised deliverable without unexpectedly invoking a goat-qa workflow.
   for (const { id, deliverableMarker } of DIRECT_ROUTE_PRESET_CASES) {
     it(`keeps the ${id} catalog workflow on the direct route`, () => {
       const presets = JSON.parse(
@@ -215,6 +262,51 @@ describe("custom prompt helpers", () => {
       assert.match(prompt, deliverableMarker, `${id} deliverable`);
     });
   }
+
+  // Both browser cards must send users through the detected CLI interface instead of assuming one browser-use command shape.
+  for (const id of ["browser-verify", "browser-debug"] as const) {
+    it(`routes the ${id} preset through the detected CLI interface`, () => {
+      const presets = JSON.parse(
+        readFileSync(PRESET_PROMPTS_PATH, "utf-8"),
+      ) as Array<Record<string, unknown>>;
+      const preset = presets.find((candidate) => candidate.id === id);
+      assert.ok(preset, `missing ${id} preset`);
+      const prompt = String(preset.prompt);
+      assert.match(
+        prompt,
+        /\.goat-flow\/skill-docs\/playbooks\/browser-use\.md/u,
+        id,
+      );
+      assert.match(prompt, /browser-use --help/u, id);
+      assert.doesNotMatch(
+        prompt,
+        /browser-use (?:open|state|screenshot|close)\b/u,
+        id,
+      );
+    });
+  }
+
+  it("aligns browser preset fallbacks and write access with their workflows", () => {
+    const presets = JSON.parse(
+      readFileSync(PRESET_PROMPTS_PATH, "utf-8"),
+    ) as Array<Record<string, unknown>>;
+    const browserVerify = presets.find(
+      (candidate) => candidate.id === "browser-verify",
+    );
+    const pageCapture = presets.find(
+      (candidate) => candidate.id === "page-capture",
+    );
+
+    assert.ok(browserVerify, "missing browser-verify preset");
+    assert.ok(pageCapture, "missing page-capture preset");
+    assert.match(String(browserVerify.fallbackPrompt), /approval/u);
+    assert.doesNotMatch(
+      String(browserVerify.fallbackPrompt),
+      /Install it first/u,
+    );
+    assert.equal(pageCapture.mayWriteFiles, true);
+    assert.equal(pageCapture.artifactRequired, false);
+  });
 
   it("infers direct and goat-skill routes without forcing plain text", () => {
     const { helpers } = loadHelpers();
@@ -507,6 +599,7 @@ describe("custom prompt helpers", () => {
     assert.equal(ctx.customPrompts[0]!.globalSafe, false);
     assert.equal(ctx.selectedPreset?.requiresGoatFlowInstall, true);
     assert.equal(ctx.selectedPreset?.globalSafe, false);
+    // Saving normally selects the new card; the empty fallback forces this safety assertion to fail if selection regresses.
     assert.equal(
       helpers.dashboardGlobalSafeAllowed(ctx.selectedPreset ?? {}),
       false,

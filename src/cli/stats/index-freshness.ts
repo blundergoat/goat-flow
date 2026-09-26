@@ -26,6 +26,12 @@ export interface IndexFreshness {
   dirPath: string;
   indexPath: string;
   state: IndexFreshnessState;
+  /**
+   * On-disk size of the generated index, or 0 when no index file exists.
+   *
+   * Every functional skill reads these indexes during Step 0 retrieval, so their size is a recurring context cost rather than a per-hit one.
+   */
+  sizeBytes: number;
 }
 
 /** Build the INDEX.md path inside a bucket directory regardless of trailing-slash config style. */
@@ -48,16 +54,35 @@ export function collectIndexFreshness(
     const dirPath = paths[bucket];
     const indexPath = indexPathFor(dirPath);
     if (!fs.exists(dirPath)) {
-      return { bucket, dirPath, indexPath, state: "no-bucket" as const };
+      return {
+        bucket,
+        dirPath,
+        indexPath,
+        state: "no-bucket" as const,
+        sizeBytes: 0,
+      };
     }
     const onDisk = fs.readFile(indexPath);
     if (onDisk === null) {
-      return { bucket, dirPath, indexPath, state: "missing" as const };
+      // An absent index has no retrieval cost to report yet; generation comes first.
+      return {
+        bucket,
+        dirPath,
+        indexPath,
+        state: "missing" as const,
+        sizeBytes: 0,
+      };
     }
     const expected = formatIndex(bucket, parseBucket(fs, dirPath, bucket));
     // CRLF-normalize so a Windows autocrlf checkout does not read as permanent staleness.
     const state =
       onDisk.replace(/\r\n/g, "\n") === expected ? "fresh" : "stale";
-    return { bucket, dirPath, indexPath, state };
+    return {
+      bucket,
+      dirPath,
+      indexPath,
+      state,
+      sizeBytes: Buffer.byteLength(onDisk, "utf8"),
+    };
   });
 }

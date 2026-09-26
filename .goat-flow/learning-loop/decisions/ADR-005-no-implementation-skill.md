@@ -2,42 +2,32 @@
 
 **Status:** Accepted
 **Date:** 2026-04-03
-**Updated:** 2026-08-20 - status normalised to the README vocabulary; partial shipment recorded here: the core decision stands (no implementation skill was added), while Phase 5 (Execute) in goat-plan and the `persona` config field named in Consequences were never shipped. Implementation is handled in the ordinary ACT step per the execution loop; goat-plan remains planning-only and can deliver inline/read-only or file-based milestones without an execution phase. The 2026-07-18 dispatcher-to-plan carry-through remains unchanged (noted 2026-08-15).
+**Updated:** 2026-09-05 - condensed; the unshipped goat-plan Execute phase and `persona` field are recorded once below.
 
 ## Context
 
-Two independent Codex critiques (the-summit-chatroom, ambient-scribe) identified that "fix this bug" and "build this feature" have no routing destination. /goat-debug stops at diagnosis, /goat-plan stops at the plan. Six independent reviewers evaluated four options.
+Two Codex critiques of consumer projects found that "fix this bug" and "build this feature" had no routing destination: `/goat-debug` stopped at diagnosis and `/goat-plan` stopped at the plan. Six independent reviewers evaluated four options.
 
-## Options evaluated
-
-- **Option A: goat-doer + goat-verifier** - Two new skills. Rejected 6/6. Doer-verifier in single-agent context is theater; the verifier has full context of the doer's reasoning.
-- **Option B: goat-implement** - One new skill. Rejected 5/6. One reviewer favored it but for DoD enforcement (hooks), not code editing. Implementation is "the thing the agent does when it's not running a skill."
-- **Option C: Extend existing skills** - No new skills. Favored 5/6. Reviewers proposed adding a goat-plan execution phase, but the shipped resolution kept implementation in the ordinary execution loop instead. The gap is carry-through, not capability.
-- **Option D: Mode, not skill** - Codex's variant of C. The system spec already defines Implement as a core execution mode. The bug is no user-facing path into it. Fix the dispatcher routing, not the skill set.
+The execution loop already defines Implement as a core mode (`workflow/setup/reference/execution-loop.md`, search: `Mode must be Plan, Implement, Explain, Debug, or Review`). The gap was carry-through into that mode, not a missing capability.
 
 ## Decision
 
-**Option C/D combined. No new skills.**
+Implementation stays in the ordinary ACT step; no implementation skill exists and none will be added.
 
-Three changes:
-1. **Dispatcher learns intent → mode routing.** Investigation verbs (understand, diagnose, explain) stay read-only. Implementation verbs (fix, build, change) carry through to implementation after the diagnosis/planning phase completes.
-2. **goat-plan stays planning-only.** `/goat-plan` can create inline plans or file-based milestones, but it does not own implementation. Execution remains the ordinary ACT step after planning approval, or the D3/D4 path inside `/goat-debug` for bug fixes.
-3. **No persona config field shipped.** The proposed `persona: investigator` lockout was not implemented; local instruction boundaries and Ask First rules carry the safety contract instead.
+1. **The dispatcher routes by intent.** Investigation verbs (understand, diagnose, explain) stay read-only. Implementation verbs (fix, build, change) carry through to implementation after diagnosis or planning completes.
+2. **`/goat-plan` stays planning-only.** After Phase 2, `return-to-implement` hands authorized build/change work to ordinary ACT; plan-only routes stop, and new Ask First boundaries still gate. Bug fixes use `/goat-debug` D3/D4. The proposed Execute phase never shipped.
+3. **No `persona` config field ships.** Autonomy tiers and Ask First boundaries in the instruction files carry the safety contract without a machine-readable lockout.
 
-**Supersession note (M13):** The old gitignored local config surface was removed. `config.yaml` is now the only machine-readable config surface.
+## Failure Mode Comparison
 
-## Rationale
-
-- The execution loop (original evidence in retired `docs/system-spec.md`; current successor `workflow/setup/reference/execution-loop.md` (search: `Mode must be Plan, Implement, Explain, Debug, or Review`)) already defines Implement as a core execution mode
-- ADR-009 says implementation belongs in the normal ACT step, not inside a separate implementation skill
-- Skills must NOT jump into implementation early - investigation/diagnosis/planning must complete first
-- Real verification comes from /goat-review or /goat-qa in a fresh invocation, not from the same agent re-reading its own diff
-- Adding skills increases the count that critics already say is too many (see ADR-009 for the skill-consolidation doctrine)
+| Option | What fails | Verdict |
+| --- | --- | --- |
+| `goat-doer + goat-verifier`, two new skills | A verifier in the same context as the doer shares its reasoning; the split is theatre | Rejected 6/6 |
+| `goat-implement`, one new skill | Implementation is what the agent does when no skill is running; a skill adds count without a distinct artefact, gate, or failure mode (ADR-009) | Rejected 5/6 |
+| Extend existing skills, or treat Implement as a mode | Reviewers proposed a goat-plan execution phase; shipping kept implementation in ACT and fixed dispatcher routing instead | Accepted |
 
 ## Consequences
 
-- Supersedes the earlier dispatcher-counting split that now lives inside ADR-009. The canonical set is now 7 specialized skills plus the dispatcher (8 total: goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa, goat-clarity, and goat). `goat-clarity` is a bounded remediation workflow, not a general implementation destination.
-- Dispatcher routing table gains implementation-intent rows (shipped).
-- goat-plan **did not** gain Phase 5 (Execute). After Phase 2, `return-to-implement` hands authorized build/change work to ordinary ACT; plan-only routes stop, and new Ask First boundaries still gate. Bug fixes use `/goat-debug` D3/D4.
-- `.goat-flow/config.yaml` **did not** gain a `persona` field. Persona-based mode locking was scoped out; CLAUDE.md `Autonomy Tiers` plus `Ask First` boundaries cover the same ground without a machine-readable lockout.
-- Historical note: the old gitignored override surface was removed in M13.
+- Real verification comes from `/goat-review` or `/goat-qa` in a fresh invocation, not from the same agent re-reading its own diff.
+- Skills do not jump into implementation early; investigation, diagnosis, or planning completes first.
+- The canonical set is the 8 skills in ADR-009. `goat-clarity` is a bounded remediation workflow, not a general implementation destination.

@@ -1,6 +1,6 @@
 # Review Run Artifacts
 
-Temporary artifacts from `/goat-review` runs land here: refutation ledgers, cross-model refuter JSON, and other review-only evidence files.
+Temporary artifacts from `/goat-review` runs land here: refutation ledgers, cross-model refuter JSON, redacted diff bundles, chunk receipts, and other review-only evidence files.
 
 Committed:
 
@@ -10,6 +10,8 @@ Local-only (gitignored):
 
 - `goat-review-refutations.<random>.txt` - Pass 2 suspicions that were disproved, with evidence and rationale
 - `goat-review-refuter.<random>.json` - Pass 3 cross-model refuter output
+- `goat-review-bundle.<random>.diff` - redacted frozen bundle of the reviewed diff; a durable receipt of what was reviewed, never the byte authority
+- `goat-review-chunks.<random>.md` - cross-invocation chunk receipt for oversized reviews: scope snapshot, bound authority, chunks completed and remaining, findings, and ledger
 - `goat-review-<artifact>.<random>.txt` - other review-only temporary artifacts when the skill needs an audit trail
 
 Use:

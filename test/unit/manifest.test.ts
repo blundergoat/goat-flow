@@ -61,12 +61,34 @@ function fixtureJson(
         "Truth Order",
         "Autonomy Tiers",
         "Hard Rules",
+        "Commit Messages",
         "Key Resources",
         "Essential Commands",
         "Execution Loop",
         "Definition of Done",
         "Artifact Routing",
         "Router Table",
+      ],
+      shared_sections: [
+        "Truth Order",
+        "Hard Rules",
+        "Commit Messages",
+        "Key Resources",
+        "Essential Commands",
+        "Execution Loop",
+        "Definition of Done",
+        "Artifact Routing",
+      ],
+      provider_delta_sections: [
+        {
+          section: "Autonomy Tiers",
+          reason: "Provider-owned capabilities and boundary paths differ.",
+        },
+        {
+          section: "Router Table",
+          reason:
+            "Installed runtime paths and peer instruction identities differ.",
+        },
       ],
       parity_phrases: [],
       version_header_pattern: "# {FILE} - v{VERSION} ({DATE})",
@@ -544,7 +566,11 @@ describe("manifest snapshot coverage (real repo)", () => {
       } = JSON.parse(
         readFileSync(join(snapshotDirectory, `v${version}.json`), "utf8"),
       );
-      assert.equal(snapshot.version, version);
+      assert.equal(
+        snapshot.version,
+        version,
+        `v${version}.json records the wrong version`,
+      );
       assert.ok(
         typeof snapshot.snapshot_facts === "object" &&
           snapshot.snapshot_facts !== null &&
@@ -563,7 +589,7 @@ describe("getRequiredInstructionSections (real repo)", () => {
     resetManifestCache();
     const rules = loadManifest().instruction_file.parity_phrases;
 
-    assert.equal(rules.length, 8);
+    assert.equal(rules.length, 9);
     assert.deepEqual(
       rules.find((rule) => rule.label === "prose-surface READ routing"),
       {
@@ -571,10 +597,45 @@ describe("getRequiredInstructionSections (real repo)", () => {
         section: "Execution Loop",
         phrases: [
           "Prose surfaces route the same way before writing",
-          "need `writing-style.md`",
+          "ordinary README prose",
+          "need `writing-human-facing-prose.md`",
+          "README discovery rows",
+          "hook messages",
+          "need `writing-agent-facing-instructions.md`",
           "the trigger is touching the surface, not the request naming it",
         ],
       },
+    );
+  });
+
+  it("declares shared live sections, provider deltas, and Codex local discovery", () => {
+    resetManifestCache();
+    const manifest = loadManifest();
+
+    assert.deepEqual(manifest.instruction_file.shared_sections, [
+      "Truth Order",
+      "Hard Rules",
+      "Commit Messages",
+      "Key Resources",
+      "Essential Commands",
+      "Execution Loop",
+      "Definition of Done",
+      "Artifact Routing",
+    ]);
+    assert.deepEqual(manifest.instruction_file.provider_delta_sections, [
+      {
+        section: "Autonomy Tiers",
+        reason: "Provider-owned capabilities and boundary paths differ.",
+      },
+      {
+        section: "Router Table",
+        reason:
+          "Installed runtime paths and peer instruction identities differ.",
+      },
+    ]);
+    assert.equal(
+      manifest.agents.codex?.local_pattern,
+      "**/{AGENTS.override.md,AGENTS.md}",
     );
   });
 

@@ -1,5 +1,6 @@
 /**
  * Protects the explicit hook-runtime proof users request from terminals or CI.
+ *
  * Use these tests when verdicts, event metadata, or `hooks verify` grammar changes
  * so unavailable hooks never look successful and captured hook text never leaks.
  */
@@ -9,6 +10,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -17,11 +19,25 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { BATCH_HOOK_SCENARIOS } from "../../src/cli/cli-types.js";
+import { PROFILES } from "../../src/cli/detect/agents.js";
+import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.js";
+import {
+  managedHookEnvironment,
+  verifyManagedConfiguredHook,
+} from "../../src/cli/hooks-configured-runtime-evidence.js";
 import type { CreateEvidenceEnvelopeInput } from "../../src/cli/evidence/envelope.js";
+import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
+import { applyHookState } from "../../src/cli/server/hook-registrar.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
   executeManagedHookProbe,
+  BATCH_REPORT_SCHEMA,
+  renderHookRuntimeBatchReportJson,
   renderHookRuntimeReportJson,
   renderHookRuntimeReportText,
+  managedConfiguredProbeTransport,
+  summarizeHookRuntimeBatch,
   verifyManagedDenyHook,
   type HookProbeExecution,
   type HookProbeScenario,
@@ -29,15 +45,15 @@ import {
   type ManagedDenyHookState,
 } from "../../src/cli/hooks-runtime-evidence.js";
 
-// Three deny checks plus one allow control define the complete fixed scenario group.
-const DENY_HOOK_SCENARIO_COUNT = 4;
+// Two dangerous-command checks and one read-only control define this policy's complete fixed scenario group.
+const DENY_HOOK_SCENARIO_COUNT = 3;
 
 const CONFIGURED_HOOK_STATE: ManagedDenyHookState = {
   isSupported: true,
   enabled: true,
   installed: true,
   scriptPath: ".goat-flow/hooks/deny-dangerous.sh",
-  configuredCommand: null,
+  configuredHandler: null,
   reasonCode: null,
 };
 
@@ -64,9 +80,12 @@ function runtimeDependencies(
   overrides: Partial<HookRuntimeDependencies> = {},
 ): HookRuntimeDependencies {
   return {
+    // Model a configured policy hook so the fixture can exercise the caller's runtime verification request.
     readDenyHookState: () => CONFIGURED_HOOK_STATE,
+    // Return the declared fixed probe result without executing a command so this fixture can verify the caller's verdict.
     executeProbe: (_projectPath, _scriptPath, scenario) =>
       scenario.expected === "blocked" ? BLOCKED_EXECUTION : ALLOWED_EXECUTION,
+    // Return a successful fixture evidence receipt without writing a real event log.
     recordEvidence: () => ({ ok: true, path: "/fixture/events.jsonl" }),
     ...overrides,
   };
@@ -86,6 +105,84 @@ function configuredReport(dependencies: HookRuntimeDependencies) {
 }
 
 describe("hooks runtime evidence", () => {
+  it("preserves only Windows host paths needed by the managed launcher", () => {
+    const environment = managedHookEnvironment(
+      "C:\\fixture",
+      {
+        PATH: "C:\\Windows\\System32",
+        SystemRoot: "C:\\Windows",
+        ProgramFiles: "C:\\Program Files",
+        LOCALAPPDATA: "C:\\Users\\fixture\\AppData\\Local",
+        TEMP: "C:\\Users\\fixture\\AppData\\Local\\Temp",
+        TMP: "C:\\Users\\fixture\\AppData\\Local\\Temp",
+        SECRET_TOKEN: "must-not-leak",
+      },
+      "win32",
+    );
+
+    assert.equal(environment.SystemRoot, "C:\\Windows");
+    assert.equal(environment.ProgramFiles, "C:\\Program Files");
+    assert.equal(
+      environment.LOCALAPPDATA,
+      "C:\\Users\\fixture\\AppData\\Local",
+    );
+    assert.equal(environment.TMPDIR, environment.TEMP);
+    assert.equal(environment.SECRET_TOKEN, undefined);
+  });
+
+  it("selects file-backed Windows input while preserving the registered handler", () => {
+    const payload =
+      '{"tool_name":"Bash","tool_input":{"command":"git status"}}';
+    const commandWindows =
+      "Set-Location -LiteralPath 'C:\\goat''s flow'; & node.exe -e 'fixture'; exit $LASTEXITCODE";
+    const configuredHandler = {
+      form: "shell" as const,
+      command: 'node -e "fixture"',
+      commandWindows,
+    };
+    const hostEnvironment = {
+      PATH: "C:\\Windows\\System32",
+      SystemRoot: "C:\\Windows",
+      SECRET_TOKEN: "must-not-leak",
+    };
+
+    const windowsTransport = managedConfiguredProbeTransport(
+      "C:\\fixture",
+      configuredHandler,
+      payload,
+      hostEnvironment,
+      "win32",
+    );
+    assert.equal(windowsTransport.command, "powershell.exe");
+    assert.deepEqual(windowsTransport.args, [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      commandWindows,
+    ]);
+    assert.equal(windowsTransport.stdin, "file");
+    assert.equal(windowsTransport.input, payload);
+    assert.equal(
+      windowsTransport.environment.GOAT_HOOK_SMOKE_PAYLOAD,
+      undefined,
+    );
+    assert.equal(windowsTransport.environment.SECRET_TOKEN, undefined);
+
+    const posixTransport = managedConfiguredProbeTransport(
+      "/fixture",
+      configuredHandler,
+      payload,
+      { PATH: "/usr/bin:/bin" },
+      "linux",
+    );
+    assert.equal(posixTransport.command, "bash");
+    assert.deepEqual(posixTransport.args, ["-c", configuredHandler.command]);
+    assert.equal(posixTransport.stdin, "pipe");
+    assert.equal(posixTransport.input, payload);
+    assert.equal(posixTransport.environment.GOAT_HOOK_SMOKE_PAYLOAD, undefined);
+  });
+
+  // Global help and version flags must remain available without selecting or executing a hook probe.
   for (const [flag, field] of [
     ["--help", "showHelp"],
     ["--version", "showVersion"],
@@ -190,7 +287,11 @@ describe("hooks runtime evidence", () => {
   });
 
   // Each shared hook has its own explicit offline group so users never run another hook by accident.
-  for (const scenarioGroup of ["post-turn-hook", "gruff-hook"] as const) {
+  for (const scenarioGroup of [
+    "git-mutations-hook",
+    "post-turn-hook",
+    "gruff-hook",
+  ] as const) {
     it(`parses the ${scenarioGroup} configured-command group`, () => {
       const parsed = parseCLIArgs([
         "hooks",
@@ -214,6 +315,158 @@ describe("hooks runtime evidence", () => {
     );
   });
 
+  // One batch refreshes every supported group without six separate invocations.
+  it("parses the all-scenario batch selection for hooks verify", () => {
+    const parsed = parseCLIArgs([
+      "hooks",
+      "verify",
+      ".",
+      "--agent",
+      "claude",
+      "--scenario",
+      "all",
+      "--trusted-target",
+    ]);
+
+    assert.equal(parsed.hookSubcommand, "verify");
+    assert.equal(parsed.hookScenario, "all");
+    assert.equal(parsed.isTargetTrusted, true);
+  });
+
+  // Invariant: BATCH_HOOK_SCENARIOS and HOOK_VERIFICATION_CONTRACTS must list the same shipped proof groups.
+  // Compare both sets so adding a group to only one cannot silently omit its protection checks from the user's batch.
+  it("expands the all selection to the four fixed scenario groups", () => {
+    assert.deepEqual(BATCH_HOOK_SCENARIOS, [
+      "deny-hook",
+      "git-mutations-hook",
+      "post-turn-hook",
+      "gruff-hook",
+    ]);
+    // Membership must match the shipped contracts; execution order stays a deliberate user-facing choice.
+    assert.deepEqual(
+      [...BATCH_HOOK_SCENARIOS].sort(),
+      Object.keys(HOOK_VERIFICATION_CONTRACTS).sort(),
+    );
+  });
+
+  // M17 shipped a parser that returned a scenario when the flag was absent; the batch must not reintroduce a default.
+  it("keeps the batch selection opt-in when --scenario is omitted", () => {
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "hooks",
+          "verify",
+          ".",
+          "--agent",
+          "claude",
+          "--trusted-target",
+        ]),
+      /hooks verify requires --scenario "deny-hook"/iu,
+    );
+  });
+
+  // Only hooks verify runs scenarios, so a batch word must not leak into another hooks subcommand.
+  it("rejects the all selection on other hooks subcommands", () => {
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "hooks",
+          "list",
+          ".",
+          "--agent",
+          "claude",
+          "--scenario",
+          "all",
+        ]),
+      /--scenario is only valid for the hooks verify command/iu,
+    );
+  });
+
+  /**
+   * Build one completed group report with a chosen verdict, without running any hook.
+   * Use to exercise batch totalling; the aggregate must never reclassify a contained report.
+   *
+   * @param scenarioGroup - group the report belongs to, echoed in the batch's group list
+   *
+   * @param status - verdict the group reached; "fail" must keep the whole batch failing
+   * @returns a report shaped exactly like a real one, with a single counted scenario
+   */
+  function groupReport(
+    scenarioGroup:
+      "deny-hook" | "git-mutations-hook" | "post-turn-hook" | "gruff-hook",
+    status: "pass" | "fail",
+  ) {
+    return {
+      schema: "goat-flow.hook-runtime-report.v1",
+      status,
+      command: "hooks.verify",
+      projectPath: "/tmp/batch-fixture",
+      agent: "claude",
+      hookId: `${scenarioGroup}-hook-id`,
+      scenarioGroup,
+      evidenceLimit: "managed-hook-classifier",
+      summary: {
+        pass: status === "pass" ? 1 : 0,
+        fail: status === "pass" ? 0 : 1,
+        unsupported: 0,
+        notConfigured: 0,
+        error: 0,
+      },
+      scenarios: [],
+    } as Parameters<typeof summarizeHookRuntimeBatch>[2][number];
+  }
+
+  // The batch is a new document; single-scenario consumers must keep reading the untouched v1 reports.
+  it("wraps unchanged group reports in one versioned batch document", () => {
+    assert.equal(BATCH_REPORT_SCHEMA, "goat-flow.hook-runtime-batch.v1");
+
+    const batch = summarizeHookRuntimeBatch("/tmp/batch-fixture", "claude", [
+      groupReport("deny-hook", "pass"),
+      groupReport("git-mutations-hook", "pass"),
+      groupReport("post-turn-hook", "fail"),
+      groupReport("gruff-hook", "pass"),
+    ]);
+
+    assert.equal(batch.schema, BATCH_REPORT_SCHEMA);
+    // A failed group must not remove the groups either side of it from the report.
+    assert.equal(batch.status, "fail");
+    assert.deepEqual(batch.scenarioGroups, [
+      "deny-hook",
+      "git-mutations-hook",
+      "post-turn-hook",
+      "gruff-hook",
+    ]);
+    assert.deepEqual(batch.summary, {
+      pass: 3,
+      fail: 1,
+      unsupported: 0,
+      notConfigured: 0,
+      error: 0,
+    });
+    // Comparing every contained schema at once names all drifting reports, not just the first.
+    assert.deepEqual(
+      batch.reports.map((report) => report.schema),
+      Array(4).fill("goat-flow.hook-runtime-report.v1"),
+    );
+    assert.equal(
+      JSON.parse(renderHookRuntimeBatchReportJson(batch)).schema,
+      "goat-flow.hook-runtime-batch.v1",
+    );
+  });
+
+  // An all-passing batch is the only shape that may report success to CI.
+  it("passes a batch only when every group passed", () => {
+    const passing = summarizeHookRuntimeBatch("/tmp/batch-fixture", "claude", [
+      groupReport("deny-hook", "pass"),
+      groupReport("post-turn-hook", "pass"),
+    ]);
+    assert.equal(passing.status, "pass");
+
+    // An empty run has proven nothing, so it must not read as success.
+    const empty = summarizeHookRuntimeBatch("/tmp/batch-fixture", "claude", []);
+    assert.equal(empty.status, "fail");
+  });
+
   // Unknown scenario names must fail before a user believes an unimplemented proof ran.
   it("rejects unknown hook verification scenario groups", () => {
     assert.throws(
@@ -231,11 +484,12 @@ describe("hooks runtime evidence", () => {
     );
   });
 
-  // Four direct classifier results give users separate blocked and allowed controls.
+  // Three direct classifier results give users separate blocked and allowed controls.
   it("passes only when every fixed hook scenario matches its expected observation", () => {
     const recordedEvents: CreateEvidenceEnvelopeInput[] = [];
     const report = configuredReport(
       runtimeDependencies({
+        // Retain the submitted evidence event so the fixture can verify what the caller's report records.
         recordEvidence: (event) => {
           recordedEvents.push(event);
           return { ok: true, path: "/fixture/events.jsonl" };
@@ -254,7 +508,7 @@ describe("hooks runtime evidence", () => {
     });
     assert.deepEqual(
       recordedEvents.map((event) => event.eventType),
-      ["hook.verify", "hook.verify", "hook.verify", "hook.verify"],
+      ["hook.verify", "hook.verify", "hook.verify"],
     );
     assert.doesNotMatch(
       serializedEvents,
@@ -265,11 +519,12 @@ describe("hooks runtime evidence", () => {
   // A safe command being blocked or a risky command being allowed is a real failed proof.
   it("reports an expected-versus-observed mismatch as fail", () => {
     const report = configuredReport(
+      // Return an allowed request for every scenario so the fixture can detect missing protection in the caller's verdict.
       runtimeDependencies({ executeProbe: () => ALLOWED_EXECUTION }),
     );
 
     assert.equal(report.status, "fail");
-    assert.equal(report.summary.fail, 3);
+    assert.equal(report.summary.fail, 2);
     assert.equal(report.summary.pass, 1);
   });
 
@@ -278,6 +533,7 @@ describe("hooks runtime evidence", () => {
     let executionCount = 0;
     const report = configuredReport(
       runtimeDependencies({
+        // Model a provider lacking this hook so verification can explain unsupported protection without running a probe.
         readDenyHookState: () => ({
           ...CONFIGURED_HOOK_STATE,
           isSupported: false,
@@ -285,6 +541,7 @@ describe("hooks runtime evidence", () => {
           scriptPath: null,
           reasonCode: "agent-hook-unsupported",
         }),
+        // Count attempted probes so the fixture can verify that unsupported protection never executes.
         executeProbe: () => {
           executionCount += 1;
           return ALLOWED_EXECUTION;
@@ -302,6 +559,7 @@ describe("hooks runtime evidence", () => {
   it("does not treat self-test presence as configured runtime evidence", () => {
     const report = configuredReport(
       runtimeDependencies({
+        // Model an absent hook install so the caller receives setup guidance instead of verified protection.
         readDenyHookState: () => ({
           ...CONFIGURED_HOOK_STATE,
           installed: false,
@@ -316,6 +574,81 @@ describe("hooks runtime evidence", () => {
     assert.equal(report.summary.pass, 0);
   });
 
+  // Fixture side effects: writes managed files in a disposable project, replays fixed requests, damages the native row, then removes the tree.
+  it("requires Copilot native registration even when Claude no-op routes are present", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-copilot-proof-"));
+    try {
+      mkdirSync(join(projectRoot, ".claude"), { recursive: true });
+      writeFileSync(join(projectRoot, ".claude", "settings.json"), "{}\n");
+      applyHookState("deny-dangerous", true, projectRoot);
+      applyHookState("gruff-code-quality", true, projectRoot);
+      assert.equal(
+        existsSync(join(projectRoot, ".github", "hooks", "hooks.json")),
+        false,
+      );
+
+      const missingNativeDeny = verifyManagedDenyHook({
+        projectPath: projectRoot,
+        agent: "copilot",
+        scenarioGroup: "deny-hook",
+        isTargetUntrusted: false,
+      });
+      assert.equal(missingNativeDeny.status, "fail");
+      assert.equal(
+        missingNativeDeny.summary.notConfigured,
+        DENY_HOOK_SCENARIO_COUNT,
+      );
+      const missingNativeGruff = verifyManagedConfiguredHook({
+        projectPath: projectRoot,
+        agent: "copilot",
+        scenarioGroup: "gruff-hook",
+        isTargetUntrusted: false,
+      });
+      assert.equal(missingNativeGruff.status, "fail");
+      assert.equal(missingNativeGruff.summary.notConfigured, 3);
+
+      const denySpec = getHookSpec("deny-dangerous");
+      assert.ok(denySpec);
+      mkdirSync(join(projectRoot, ".github", "hooks"), { recursive: true });
+      writeAgentHookState(projectRoot, PROFILES.copilot, denySpec, true);
+      const exactNative = verifyManagedDenyHook({
+        projectPath: projectRoot,
+        agent: "copilot",
+        scenarioGroup: "deny-hook",
+        isTargetUntrusted: false,
+      });
+      assert.equal(exactNative.status, "pass");
+      assert.equal(exactNative.summary.pass, DENY_HOOK_SCENARIO_COUNT);
+
+      const nativeConfigPath = join(
+        projectRoot,
+        ".github",
+        "hooks",
+        "hooks.json",
+      );
+      const nativeConfig = JSON.parse(
+        readFileSync(nativeConfigPath, "utf8"),
+      ) as {
+        hooks: { preToolUse: Array<Record<string, unknown>> };
+      };
+      nativeConfig.hooks.preToolUse[0]!.powershell = "exit 0";
+      writeFileSync(
+        nativeConfigPath,
+        `${JSON.stringify(nativeConfig, null, 2)}\n`,
+      );
+      const staleNative = verifyManagedDenyHook({
+        projectPath: projectRoot,
+        agent: "copilot",
+        scenarioGroup: "deny-hook",
+        isTargetUntrusted: false,
+      });
+      assert.equal(staleNative.status, "fail");
+      assert.equal(staleNative.summary.notConfigured, DENY_HOOK_SCENARIO_COUNT);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   // Missing policy dependencies return exit 2 too, so the unavailable marker must outrank BLOCKED.
   it("classifies an unavailable hook as error instead of a blocked pass", () => {
     const unavailableExecution: HookProbeExecution = {
@@ -323,6 +656,7 @@ describe("hooks runtime evidence", () => {
       stderr: "Policy hook unavailable: required policy file is missing",
     };
     const report = configuredReport(
+      // Return the unavailable execution fixture so the caller receives a verification error rather than a protection pass.
       runtimeDependencies({ executeProbe: () => unavailableExecution }),
     );
 
@@ -331,6 +665,7 @@ describe("hooks runtime evidence", () => {
     assert.equal(report.summary.pass, 0);
   });
 
+  // Each execution failure must expose its stable reason instead of reporting verified protection.
   for (const { name, execution, reasonCode } of [
     {
       name: "reports a timed-out probe with the stable timeout reason",
@@ -359,6 +694,7 @@ describe("hooks runtime evidence", () => {
   ] as const) {
     it(name, () => {
       const report = configuredReport(
+        // Return this failure case's fixed execution so every reported scenario retains the caller's recovery reason.
         runtimeDependencies({ executeProbe: () => execution }),
       );
 
@@ -370,6 +706,7 @@ describe("hooks runtime evidence", () => {
         notConfigured: 0,
         error: DENY_HOOK_SCENARIO_COUNT,
       });
+      // Every scenario must retain the failure verdict and recovery reason shown to the caller.
       for (const scenario of report.scenarios) {
         assert.equal(scenario.observed, "error");
         assert.equal(scenario.verdict, "error");
@@ -390,10 +727,12 @@ describe("hooks runtime evidence", () => {
         isTargetUntrusted: true,
       },
       runtimeDependencies({
+        // Count any probe execution so this fixture can prove untrusted targets are not run.
         executeProbe: () => {
           executionCount += 1;
           return ALLOWED_EXECUTION;
         },
+        // Count any evidence write so this fixture can prove refused untrusted work is not recorded as verified.
         recordEvidence: () => {
           evidenceRecordCount += 1;
           return { ok: true, path: "/fixture/events.jsonl" };
@@ -411,6 +750,7 @@ describe("hooks runtime evidence", () => {
   it("reports event-write failure instead of returning an unrecorded pass", () => {
     const report = configuredReport(
       runtimeDependencies({
+        // Model a refused evidence write with no saved path so the caller receives a persistence error.
         recordEvidence: () => ({
           ok: false,
           path: null,

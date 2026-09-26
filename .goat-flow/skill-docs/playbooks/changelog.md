@@ -1,9 +1,11 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Changelog
 
 Use this when writing or editing `CHANGELOG.md`: the durable in-repo record of what shipped in each version. For user-facing release announcements, load [`release-notes.md`](./release-notes.md) instead.
+
+> **Illustrative examples below define shape only; they are not incident evidence.**
 
 ## Availability Check
 
@@ -22,7 +24,7 @@ Project-documented changelog style and policy govern categories, ordering, links
 
 ## Prose Routing
 
-This playbook owns audience, release state, version attribution, categories, and output shape. Set those here, then apply [`writing-style.md`](./writing-style.md) as the core prose pass.
+This playbook owns audience, release state, version attribution, categories, and output shape. Set those here, then apply [`writing-human-facing-prose.md`](./writing-human-facing-prose.md) as the core prose pass.
 
 Load [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) only when a document-level assembly defect remains, and [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) only when a sentence-level reader cost remains. If both apply, repair structure first. Diagnostics may refine admitted prose but never add or remove release facts, change version attribution, or expand the write scope.
 
@@ -195,7 +197,7 @@ Before merging or tagging:
 ## Related References
 
 - [`release-notes.md`](./release-notes.md) - user-facing announcement derived from the changelog.
-- [`writing-style.md`](./writing-style.md) - core correctness and routing after audience, category, and version are settled.
+- [`writing-human-facing-prose.md`](./writing-human-facing-prose.md) - core correctness and routing after audience, category, and version are settled.
 - [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) - optional document-level assembly diagnosis before sentence work.
 - [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) - optional sentence-level diagnosis after structure is sound.
 - [keepachangelog.com](https://keepachangelog.com)

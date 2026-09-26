@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot - setup audits, guardrails, structured skills, deny hooks, and persistent learning loops.",
   "author": "Matthew Hansen (https://www.blundergoat.com)",
   "license": "MIT",
@@ -49,7 +49,7 @@
     ]
   },
   "scripts": {
-    "build": "npm run check:managed-hook-contract && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
+    "build": "npm run check:hook-policy-parser && npm run check:hook-graphql-parser && npm run check:managed-hook-contract && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
     "build:dashboard": "tsc -p tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs",
     "test": "npm run test:fast",
     "test:fast": "node scripts/run-tests.mjs fast",
@@ -75,6 +75,8 @@
     "check-package-links": "node scripts/check-package-readme-links.mjs",
     "generate:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --write",
     "check:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --check",
+    "check:hook-policy-parser": "node scripts/generate-hook-policy-parser.mjs --check",
+    "check:hook-graphql-parser": "node scripts/generate-hook-graphql-parser.mjs --check",
     "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "prepublishOnly": "npm run publish:check",
@@ -128,7 +130,9 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "alpinejs": "^3.15.12",
+    "esbuild": "0.28.2",
     "eslint": "^10.1.0",
+    "graphql": "16.14.2",
     "knip": "^6.0.2",
     "prettier": "^3.8.1",
     "tsx": "^4.0.0",
@@ -138,7 +142,7 @@
   "main": "dist/cli/index.js",
   "overrides": {
     "typed-rest-client": {
-      "qs": "6.15.3"
+      "qs": "6.16.0"
     }
   }
 }

@@ -1,19 +1,49 @@
-<!-- ═══ Hooks View ═══ -->
-<div x-show="activeView === 'hooks'" x-cloak class="gf-hooks-view">
+<!--
+  Let users inspect their selected project's hook coverage and sync bundled official files.
+
+  Replacement lists disclose affected files and keep Cancel as the first focused action.
+  Shared loading and saving state keeps row controls consistent while requests finish.
+-->
+<div
+  x-show="activeView === 'hooks'"
+  x-cloak
+  class="gf-hooks-view"
+  @keydown.escape.window="cancelHookReplacement()"
+>
   <main class="gf-hooks-page">
     <header class="gf-page-head gf-hooks-head">
       <div>
         <h1>Hooks</h1>
         <p>Manage project hook state for the selected workspace.</p>
+        <p>
+          Sync uses official files bundled with Goat Flow
+          <span x-text="dashboardVersion"></span> and keeps your enabled
+          choices.
+        </p>
       </div>
-      <button
-        @click="loadHooks()"
-        :disabled="hooksLoading"
-        class="gf-btn gf-btn-md gf-btn-secondary"
-        title="Refresh hook state"
-      >
-        <span x-text="hooksLoading ? 'Refreshing...' : 'Refresh'"></span>
-      </button>
+      <div class="gf-hooks-filter-group">
+        <button
+          type="button"
+          @click="loadHooks()"
+          :disabled="hooksLoading || !!hookSavingId || !!hooksReplacement"
+          class="gf-btn gf-btn-md gf-btn-secondary"
+          title="Refresh hook state"
+        >
+          <span x-text="hooksLoading ? 'Refreshing...' : 'Refresh'"></span>
+        </button>
+        <button
+          type="button"
+          @click="syncOfficialHooks()"
+          :disabled="hooksLoading || !!hookSavingId || !!hooksReplacement"
+          :aria-busy="String(hookSavingId === 'sync')"
+          class="gf-btn gf-btn-md gf-btn-primary"
+          title="Sync files from this Goat Flow version; review differing local files before replacing them"
+        >
+          <span
+            x-text="hookSavingId === 'sync' ? 'Syncing...' : 'Sync official hooks'"
+          ></span>
+        </button>
+      </div>
     </header>
 
     <div
@@ -25,9 +55,136 @@
     </div>
 
     <div x-show="hooksError" x-cloak class="gf-hooks-alert" role="alert">
-      <div class="gf-text-primary">Hooks could not be loaded</div>
+      <div class="gf-text-primary">Hook action needs attention</div>
       <p x-text="hooksError"></p>
+      <ul
+        x-show="hooksChangedPaths.length > 0"
+        aria-label="Files changed before the error"
+      >
+        <template x-for="path in hooksChangedPaths" :key="path">
+          <li><code x-text="path"></code></li>
+        </template>
+      </ul>
     </div>
+
+    <section
+      x-show="hooksReplacement"
+      x-cloak
+      class="gf-hooks-panel"
+      role="region"
+      aria-labelledby="hook-replacement-title"
+    >
+      <h2 id="hook-replacement-title">Review hook changes</h2>
+      <p>
+        Selected project: <code x-text="hooksReplacement?.projectPath"></code>
+      </p>
+      <template x-if="hooksReplacement?.policyReview">
+        <div>
+          <p>
+            After this change, <strong>Deny Git and GitHub writes</strong>
+            controls GitHub write checks. Earlier versions used
+            <strong>Deny dangerous commands</strong>. The installed policy files
+            differ, so saved switches alone cannot confirm current protection.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Policy</th>
+                <th>Saved</th>
+                <th>Requested</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Deny dangerous commands</th>
+                <td
+                  x-text="hooksReplacement.policyReview.original['deny-dangerous'] ? 'On' : 'Off'"
+                ></td>
+                <td
+                  x-text="hooksReplacement.policyReview.requested['deny-dangerous'] ? 'On' : 'Off'"
+                ></td>
+              </tr>
+              <tr>
+                <th>Deny Git and GitHub writes</th>
+                <td
+                  x-text="hooksReplacement.policyReview.original['deny-git-mutations'] ? 'On' : 'Off'"
+                ></td>
+                <td
+                  x-text="hooksReplacement.policyReview.requested['deny-git-mutations'] ? 'On' : 'Off'"
+                ></td>
+              </tr>
+            </tbody>
+          </table>
+          <p
+            x-text="'GitHub write protection after this change: ' + (hooksReplacement.policyReview.requested['deny-git-mutations'] ? 'on' : 'off') + '. Allowed reads and issue/PR comments stay allowed.'"
+          ></p>
+          <ul aria-label="Policy files changing ownership">
+            <template
+              x-for="path in hooksReplacement.policyReview.paths"
+              :key="path"
+            >
+              <li><code x-text="path"></code></li>
+            </template>
+          </ul>
+          <label>
+            <input
+              type="checkbox"
+              x-model="hooksReplacement.hasAcceptedPolicyChange"
+              :disabled="!!hookSavingId"
+            />
+            I accept this change to GitHub protection.
+          </label>
+        </div>
+      </template>
+      <p x-show="hooksReplacement?.conflicts.length">
+        Save any changes you want to keep before continuing. Replacement
+        discards the current contents of these files.
+      </p>
+      <ul aria-label="Files requiring replacement">
+        <template
+          x-for="file in (hooksReplacement?.conflicts || [])"
+          :key="file.path"
+        >
+          <li>
+            <code x-text="file.path"></code>
+            <span
+              x-text="file.reason === 'diverged' ? ' — changed since the recorded install' : ' — no matching install history'"
+            ></span>
+            <span x-text="' (affects ' + file.hookIds.join(', ') + ')'"></span>
+          </li>
+        </template>
+      </ul>
+      <template x-if="hooksReplacement?.conflicts.length">
+        <label>
+          <input
+            type="checkbox"
+            x-model="hooksReplacement.hasAcceptedReplacement"
+            :disabled="!!hookSavingId"
+          />
+          I accept replacing the listed local files with official copies.
+        </label>
+      </template>
+      <div class="gf-hooks-filter-group">
+        <button
+          type="button"
+          x-ref="hookReplacementCancel"
+          @click="cancelHookReplacement()"
+          :disabled="!!hookSavingId"
+          class="gf-btn gf-btn-md gf-btn-secondary"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          @click="confirmHookReplacement()"
+          :disabled="!!hookSavingId || !hooksReplacement || (!!hooksReplacement.policyReview && !hooksReplacement.hasAcceptedPolicyChange) || (hooksReplacement.conflicts.length > 0 && !hooksReplacement.hasAcceptedReplacement)"
+          class="gf-btn gf-btn-md gf-btn-primary"
+          x-text="hooksReplacement?.action.kind === 'toggle'
+            ? (hooksReplacement.action.enabled ? 'Apply reviewed changes and enable' : 'Apply reviewed changes and disable')
+            : 'Apply reviewed changes and sync'"
+        ></button>
+      </div>
+    </section>
 
     <section
       x-show="hooksState.length > 0"
@@ -310,7 +467,7 @@
                   class="gf-hook-switch"
                   :class="hook.enabled && 'is-on'"
                   :aria-checked="String(hook.enabled)"
-                  :disabled="hookSavingId === hook.id"
+                  :disabled="hooksLoading || !!hookSavingId || !!hooksReplacement"
                   @click="toggleHook(hook, !hook.enabled)"
                 >
                   <span
@@ -325,7 +482,7 @@
                 <button
                   x-show="hook.togglable && hookHasDrift(hook)"
                   @click="resyncHook(hook)"
-                  :disabled="hookSavingId === hook.id"
+                  :disabled="hooksLoading || !!hookSavingId || !!hooksReplacement"
                   class="gf-btn gf-btn-sm gf-btn-secondary"
                 >
                   Re-sync

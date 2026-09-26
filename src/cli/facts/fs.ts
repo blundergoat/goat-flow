@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { resolve, relative, join } from "node:path";
 import type { ReadonlyFS } from "../types.js";
+import { readProjectTextFile } from "../project-file.js";
 
 type ResolvePath = (path: string) => string;
 
@@ -209,6 +210,7 @@ function createPathResolver(root: string): ResolvePath {
 /** Cache UTF-8 file reads; swallows read errors as null for missing or unreadable files. */
 function createCachedReadFile(
   resolvePath: ResolvePath,
+  boundedRoot?: string,
 ): ReadonlyFS["readFile"] {
   const contentCache = new Map<string, string | null>();
 
@@ -218,7 +220,10 @@ function createCachedReadFile(
     const cached = contentCache.get(resolved);
     if (cached !== undefined) return cached;
     try {
-      const content = readFileSync(resolved, "utf-8");
+      const content =
+        boundedRoot === undefined
+          ? readFileSync(resolved, "utf-8")
+          : readProjectTextFile(boundedRoot, resolved);
       contentCache.set(resolved, content);
       return content;
     } catch {
@@ -380,12 +385,19 @@ function createGlobHelpers(
  * platform-specific errno throws.
  *
  * @param rootPath Directory that relative fact reads resolve against.
+ * @param options boundedReads rejects linked, special, oversized or escaping evidence files as cached null reads.
  * @returns Cached, non-mutating filesystem helpers for audit and fact extraction.
  */
-export function createFS(rootPath: string): ReadonlyFS {
+export function createFS(
+  rootPath: string,
+  options: { boundedReads?: boolean } = {},
+): ReadonlyFS {
   const root = resolve(rootPath);
   const resolvePath = createPathResolver(root);
-  const readFile = createCachedReadFile(resolvePath);
+  const readFile = createCachedReadFile(
+    resolvePath,
+    options.boundedReads ? root : undefined,
+  );
   const exists = createExistsChecker(resolvePath);
   const directoryReader = createDirectoryReader(resolvePath);
   const globHelpers = createGlobHelpers(root, resolvePath);
@@ -404,6 +416,23 @@ export function createFS(rootPath: string): ReadonlyFS {
     /** Parse JSON defensively; missing or malformed files recover to null. */
     readJson(path: string): unknown {
       return readCachedJson(readFile, path);
+    },
+
+    /** Compare stable filesystem identities; stat errors recover to a false fallback, as do unavailable inode identities. */
+    samePathIdentity(leftPath: string, rightPath: string): boolean {
+      try {
+        const leftStats = statSync(resolvePath(leftPath), { bigint: true });
+        const rightStats = statSync(resolvePath(rightPath), { bigint: true });
+        return (
+          leftStats.ino !== 0n &&
+          rightStats.ino !== 0n &&
+          leftStats.dev === rightStats.dev &&
+          leftStats.ino === rightStats.ino
+        );
+      } catch {
+        // A path may disappear after operand detection; recall then treats it as a non-match instead of failing the caller's whole query.
+        return false;
+      }
     },
 
     ...directoryReader,

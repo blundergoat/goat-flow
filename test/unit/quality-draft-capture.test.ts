@@ -39,6 +39,7 @@ import {
 } from "../../src/cli/server/quality-draft-capture.js";
 import type { QualityDraftCapture } from "../../src/cli/server/quality-draft-capture.js";
 import { runConcurrentQualityWorkers } from "../helpers/concurrent-quality-workers.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 const PACKAGE_VERSION = (
   JSON.parse(readFileSync("package.json", "utf8")) as { version: string }
@@ -69,7 +70,13 @@ function skipOnWindows(testContext: TestContext, reason: string): boolean {
   return true;
 }
 
-/** Build one schema-valid minimal report owned by the given project root. */
+/**
+ * Build the smallest current report the dashboard can accept for one selected project.
+ * Use in capture scenarios where empty findings and refutations keep the fixture focused on persistence.
+ *
+ * @param projectRoot - selected project directory; empty or missing paths cannot own a saved report
+ * @returns serialized current report with empty findings and refutation ledgers
+ */
 function validReport(projectRoot: string): string {
   return JSON.stringify({
     report_kind: "goat-flow-quality-report",
@@ -88,6 +95,7 @@ function validReport(projectRoot: string): string {
       grounding_status: "blocked",
       unverified_probes: ["fixture does not run project grounding"],
       score_confidence: "low",
+      workspace_snapshot: { start: null, end: null },
     },
     scores: {
       setup: {
@@ -105,7 +113,10 @@ function validReport(projectRoot: string): string {
         learnability: 0,
       },
     },
+    score_rationale: makeQualityScoreRationale(),
     findings: [],
+    refuted_candidates: [],
+    improvements: [],
   });
 }
 

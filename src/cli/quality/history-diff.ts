@@ -1,14 +1,9 @@
 /**
- * Compares two saved quality runs so a user can see what actually changed between them.
+ * Compare saved quality runs so maintainers can inspect score changes, recurring findings, and missing evidence.
  *
- * Answering "did this get better" means more than two scores: it means naming the findings that appeared, the ones that went absent, the ones still
- * present, and how long the stubborn ones have been outstanding.
+ * Positional finding IDs group new, absent, persisted, and stuck issues; disappearance alone never proves a repair.
  *
- * Findings are matched by their attached ids rather than by wording, because an agent rephrasing the same problem between runs must not read as "one
- * fixed, one new".
- *
- * A finding that has survived several consecutive runs is counted and surfaced, since a persistent finding is the signal a user most needs and the
- * easiest one to lose in a diff.
+ * Recorded workspace and grounding differences explain the limits behind comparisons without changing the saved scores.
  */
 import type { AgentId } from "../types.js";
 import type {
@@ -146,16 +141,6 @@ function countConsecutivePresence(
   return count;
 }
 
-/**
- * Build the diff between two comparable quality-history runs.
- * Use when the user asks what went absent, was introduced, persisted, or stuck between runs.
- *
- * @param entries - sorted quality-history entries; empty entries cannot produce a diff
- * @param options - agent, explicit pair, and mode filters; missing pair uses latest two matching runs
- * @returns diff result, or a user-facing error explaining why comparison is not possible. It "absent" means a finding is missing from the newer
- *   report, which is not the same as fixed. An unexamined artifact, or a line-based id that shifted, lands there too, so the label deliberately
- *   claims disappearance and not repair.
- */
 /** The two runs a diff compares, oldest first. */
 interface DiffPair {
   sourceEntry: QualityHistoryEntry;
@@ -167,17 +152,121 @@ type DiffPairResult =
   { ok: true; pair: DiffPair } | { ok: false; error: string };
 
 /**
+ * Confirm that a report retained both snapshot identifiers before the diff tries to compare their bytes.
+ * Use for optional historical provenance; false means snapshot evidence is missing, not that the workspace changed.
+ *
+ * @param snapshot - assessor-copied start/end identifiers; missing or null values provide no comparison evidence
+ * @returns whether both identifiers are available for a comparison
+ */
+function hasCompleteWorkspaceSnapshot(
+  snapshot: NonNullable<
+    SavedQualityReport["assessment_context"]
+  >["workspace_snapshot"],
+): snapshot is { start: string; end: string } {
+  return (
+    typeof snapshot?.start === "string" && typeof snapshot.end === "string"
+  );
+}
+
+/**
+ * Explain whether two recorded workspace snapshots can support a byte-state comparison.
+ * Use for report diffs; null captures stay unknown and changing snapshots never imply a completed comparison.
+ *
+ * @param olderContext - previous report provenance; omitted snapshot means no byte-state evidence was retained
+ * @param newerContext - later report provenance; omitted snapshot has the same unknown meaning
+ * @returns one workspace caveat, or null when both reports record the same stable snapshot
+ */
+function workspaceComparisonWarning(
+  olderContext: NonNullable<SavedQualityReport["assessment_context"]>,
+  newerContext: NonNullable<SavedQualityReport["assessment_context"]>,
+): string | null {
+  const olderSnapshot = olderContext.workspace_snapshot;
+  const newerSnapshot = newerContext.workspace_snapshot;
+  // A HEAD revision and a dirty flag cannot distinguish edits made during or between two assessments.
+  if (
+    !hasCompleteWorkspaceSnapshot(olderSnapshot) ||
+    !hasCompleteWorkspaceSnapshot(newerSnapshot)
+  ) {
+    return "Workspace snapshot evidence is unavailable; matching revisions alone do not establish matching working-tree bytes.";
+    // Changes during one assessment can mix evidence from before and after a concurrent edit.
+  } else if (
+    olderSnapshot.start !== olderSnapshot.end ||
+    newerSnapshot.start !== newerSnapshot.end
+  ) {
+    return "Workspace bytes changed during an assessment; recheck affected findings before acting on this comparison.";
+    // Different stable captures describe a before/after project comparison, not identical input for two assessors.
+  } else if (olderSnapshot.end !== newerSnapshot.end) {
+    return "Workspace snapshots differ between reports; this is a comparison of different repository states.";
+  }
+  return null;
+}
+
+/**
+ * Explain evidence limits when a user compares two reports, while preserving the original scores and finding buckets.
+ * Use after selecting the same agent and mode; matching snapshots still do not prove identical assessor coverage.
+ *
+ * @param olderReport - previous assessment; missing context means its workspace and coverage were not recorded
+ * @param newerReport - subsequent assessment; empty findings never prove an earlier defect was repaired
+ * @returns visible comparison caveats; an empty array means no recorded provenance difference was found
+ */
+function assessmentComparisonWarnings(
+  olderReport: SavedQualityReport,
+  newerReport: SavedQualityReport,
+): string[] {
+  const warnings: string[] = [];
+  // A new rubric or project scope changes what a score means, even when both runs used the same agent.
+  const targetFields = ["rubric_version", "scope", "project_path"] as const;
+  // A changed rubric or project scope prevents the score delta from measuring the same target.
+  if (targetFields.some((field) => olderReport[field] !== newerReport[field])) {
+    warnings.push(
+      "Assessment rubric, scope, or project differs; score deltas do not measure the same assessment target.",
+    );
+  }
+  const olderContext = olderReport.assessment_context;
+  const newerContext = newerReport.assessment_context;
+  // Historical reports remain visible, but missing provenance cannot establish comparable evidence.
+  if (!olderContext || !newerContext) {
+    warnings.push(
+      "Assessment provenance is unavailable for at least one report; comparison confidence is unknown.",
+    );
+    return warnings;
+  }
+  // For example, a report before a repair and one after it describe different repository revisions.
+  if (olderContext.project_revision !== newerContext.project_revision) {
+    warnings.push(
+      "Repository revisions differ; score changes alone cannot identify which change affected quality.",
+    );
+  }
+  // Skipped checks can hide defects in either report, so a higher score is not proof of better coverage.
+  if (
+    olderContext.grounding_status !== "complete" ||
+    newerContext.grounding_status !== "complete"
+  ) {
+    warnings.push(
+      "At least one assessment has incomplete grounding; inspect its unverified probes before interpreting score changes.",
+    );
+  }
+  const workspaceWarning = workspaceComparisonWarning(
+    olderContext,
+    newerContext,
+  );
+  // Snapshot differences add context to the delta without changing its numeric value.
+  if (workspaceWarning) warnings.push(workspaceWarning);
+  return warnings;
+}
+
+/**
  * Explain why two named runs cannot be diffed, or confirm that they can.
  *
- * Two rejections protect the meaning of the diff itself: runs from different agents, or different quality modes,
- * measure different things, so comparing them would look informative while saying nothing.
+ * Two rejections protect the meaning of the diff itself: runs from different agents, or different quality modes, measure different things, so
+ * comparing them would look informative while saying nothing.
  *
  * @param sourceEntry - the older run
  * @param targetEntry - the newer run
  * @param agent - the `--agent` filter, when supplied
  * @param qualityMode - the `--mode` filter, or null when unscoped
- * @returns the reason the pair cannot be compared, or null when it can. The other two rejections protect the user's
- *   intent: a pair contradicting `--agent` or `--mode` is refused rather than silently honouring one input.
+ * @returns the reason the pair cannot be compared, or null when it can. The other two rejections protect the user's intent: a pair contradicting
+ *   `--agent` or `--mode` is refused rather than silently honouring one input.
  */
 function describeIncomparablePair(
   sourceEntry: QualityHistoryEntry,
@@ -211,15 +300,15 @@ function describeIncomparablePair(
 /**
  * Resolve the two runs named by an explicit `<from-id>:<to-id>` pair.
  *
- * Every rejection here protects a comparison the user would misread: runs from different agents or different
- * quality modes measure different things, so a diff between them would look meaningful while comparing nothing.
+ * Every rejection here protects a comparison the user would misread: runs from different agents or different quality modes measure different things,
+ * so a diff between them would look meaningful while comparing nothing.
  *
  * @param entries - all saved history entries
  * @param pair - the raw pair text as typed
  * @param agent - the `--agent` filter, when the user supplied one
  * @param qualityMode - the `--mode` filter, or null when the user did not scope by mode
- * @returns the resolved pair, or the reason it cannot be compared. A pair contradicting `--agent` or `--mode` is
- *   refused too, because silently honouring one over the other would show a diff the user did not ask for.
+ * @returns the resolved pair, or the reason it cannot be compared. A pair contradicting `--agent` or `--mode` is refused too, because silently
+ *   honouring one over the other would show a diff the user did not ask for.
  */
 function resolveExplicitDiffPair(
   entries: QualityHistoryEntry[],
@@ -250,6 +339,7 @@ function resolveExplicitDiffPair(
     agent,
     qualityMode,
   );
+  // A mismatched agent or mode explains why the requested pair cannot be compared.
   if (incomparable) return { ok: false, error: incomparable };
   return { ok: true, pair: { sourceEntry, targetEntry } };
 }
@@ -257,14 +347,14 @@ function resolveExplicitDiffPair(
 /**
  * Resolve the two most recent matching runs when the user named no explicit pair.
  *
- * An agent is required here, because "the latest two" is otherwise ambiguous across runners and comparing a Claude
- * run to a Codex one would be meaningless.
+ * An agent is required here, because "the latest two" is otherwise ambiguous across runners and comparing a Claude run to a Codex one would be
+ * meaningless.
  *
  * @param entries - all saved history entries, newest first
  * @param agent - the `--agent` filter; required for this path
  * @param qualityMode - the `--mode` filter, or null to accept any single mode
- * @returns the resolved pair, or the reason it cannot be compared. With no mode filter and two newest runs in
- *   different modes, the user is asked to scope rather than shown a cross-mode diff by accident.
+ * @returns the resolved pair, or the reason it cannot be compared. With no mode filter and two newest runs in different modes, the user is asked to
+ *   scope rather than shown a cross-mode diff by accident.
  */
 function resolveLatestDiffPair(
   entries: QualityHistoryEntry[],
@@ -312,10 +402,8 @@ function resolveLatestDiffPair(
 }
 
 /**
- * Build the diff between two comparable quality-history runs.
- *
- * Use when the user asks what went absent, was introduced, persisted, or stuck between runs.
- * Comparability is the contract behind every number here: only runs from the same agent and the same mode are ever paired.
+ * Compare two saved runs; the comparison contract requires the same agent and quality mode.
+ * Use to inspect score deltas and finding lifecycles; disappearance alone is not proof that a defect was repaired.
  *
  * @param entries - sorted quality-history entries; an empty list cannot produce a diff
  * @param options - agent, explicit pair, and mode filters; no pair means the latest two matching runs
@@ -333,6 +421,7 @@ export function buildQualityDiff(
   const resolved = options.pair
     ? resolveExplicitDiffPair(entries, options.pair, options.agent, qualityMode)
     : resolveLatestDiffPair(entries, options.agent, qualityMode);
+  // Without a valid pair of saved runs, there is no comparison to display.
   if (!resolved.ok) return resolved;
   const { sourceEntry, targetEntry } = resolved.pair;
 
@@ -420,6 +509,10 @@ export function buildQualityDiff(
     diff: {
       from: sourceEntry,
       to: targetEntry,
+      comparisonWarnings: assessmentComparisonWarnings(
+        sourceEntry.report,
+        targetEntry.report,
+      ),
       setupDelta:
         targetEntry.report.scores.setup.total -
         sourceEntry.report.scores.setup.total,

@@ -5,6 +5,17 @@
  * Runtime payload checks keep installed-hook behavior aligned with the audit result.
  */
 import {
+  agentHookSpawnDescriptor,
+  buildAgentHookCommand,
+  commandEntryReferencesSpec,
+} from "../../../src/cli/server/agent-hook-command.js";
+import { getHookSpec } from "../../../src/cli/server/hooks-registry.js";
+import { checkHookRuntimeSmoke } from "../../../src/cli/audit/check-agent-deny-runtime.js";
+import {
+  discoverWindowsBashCandidates,
+  pickWindowsBashPath,
+} from "../../../src/cli/install-invocation.js";
+import {
   AGENT_CHECKS,
   PROFILES,
   PROJECT_ROOT,
@@ -98,6 +109,43 @@ function completedDirectHookProbe(): ReturnType<typeof childProcess.spawnSync> {
   } as ReturnType<typeof childProcess.spawnSync>;
 }
 
+/** Add the Git sibling to an otherwise complete provider fixture without changing the command under test. */
+function withGitRegistration(
+  path: string,
+  content: string | null,
+): string | null {
+  if (
+    content === null ||
+    ![".codex/hooks.json", ".claude/settings.json"].includes(path)
+  )
+    return content;
+  const config = JSON.parse(content);
+  const dangerous = getHookSpec("deny-dangerous");
+  assert.ok(dangerous);
+  if (
+    !config.hooks?.PreToolUse?.some((group: { hooks?: unknown[] }) =>
+      group.hooks?.some((row) => commandEntryReferencesSpec(row, dangerous)),
+    )
+  )
+    return content;
+  const spec = getHookSpec("deny-git-mutations");
+  assert.ok(spec);
+  config.hooks.PreToolUse.push({
+    matcher: "Bash",
+    hooks: [
+      {
+        type: "command",
+        command: buildAgentHookCommand(
+          path.startsWith(".codex") ? "codex" : "claude",
+          ".goat-flow/hooks",
+          spec,
+        ),
+      },
+    ],
+  });
+  return JSON.stringify(config);
+}
+
 describe("agent deny hook template comparison", () => {
   const denyCheck = AGENT_CHECKS.find(
     (check) => check.id === "agent-guardrails",
@@ -105,6 +153,14 @@ describe("agent deny hook template comparison", () => {
   /** Read canonical deny-dangerous templates used for drift comparisons. */
   function guardrailTemplates() {
     return {
+      git: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-git-mutations.sh"),
+        "utf-8",
+      ),
+      runtime: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/guard-runtime.sh"),
+        "utf-8",
+      ),
       dispatcher: readFileSync(
         resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
         "utf-8",
@@ -147,6 +203,8 @@ describe("agent deny hook template comparison", () => {
   ) {
     const files: Record<string, string> = {
       [".goat-flow/hooks/deny-dangerous.sh"]: templates.dispatcher,
+      ".goat-flow/hooks/deny-git-mutations.sh": templates.git,
+      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": templates.runtime,
       ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
       ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
       ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
@@ -155,7 +213,8 @@ describe("agent deny hook template comparison", () => {
     };
     /** Resolve installed hook content from overrides before template defaults. */
     const readInstalledGuardrail = (path: string) => {
-      if (Object.hasOwn(overrides, path)) return overrides[path] ?? null;
+      if (Object.hasOwn(overrides, path))
+        return withGitRegistration(path, overrides[path] ?? null);
       return files[path] ?? null;
     };
     return readInstalledGuardrail;
@@ -170,6 +229,8 @@ describe("agent deny hook template comparison", () => {
     const templates = guardrailTemplates();
     const mirrorsByTemplate: Record<string, string> = {
       ".goat-flow/hooks/deny-dangerous.sh": templates.dispatcher,
+      ".goat-flow/hooks/deny-git-mutations.sh": templates.git,
+      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": templates.runtime,
       ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
       ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
       ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
@@ -191,10 +252,8 @@ describe("agent deny hook template comparison", () => {
   });
 
   /**
-   * Exercise the configured Codex launcher with quoted evidence and a real
-   * write-shaped payload. Both halves run in one case because the deny hook
-   * only earns its keep if it separates quoting repository content from
-   * writing to it - passing either half alone would hide a regression.
+   * Pair allowed reads with denied writes through the configured Codex launcher.
+   * Either outcome alone could hide a launcher that permits or rejects everything.
    */
   it("allows quoted repository evidence while the registered hook still blocks repository writes", () => {
     const registeredHookConfig = JSON.parse(
@@ -203,21 +262,20 @@ describe("agent deny hook template comparison", () => {
       hooks: {
         PreToolUse: Array<{
           matcher: string;
-          hooks: Array<{ command: string }>;
+          hooks: Array<{ command: string; commandWindows?: string }>;
         }>;
       };
     };
 
-    // The Bash registration is what Codex users actually cross before their command can run.
-    const registeredCodexHook = registeredHookConfig.hooks.PreToolUse.find(
-      (registration) => registration.matcher === "Bash",
-    );
-    assert.ok(registeredCodexHook, "expected a registered Codex Bash hook");
-    const registeredCodexHookCommand = registeredCodexHook.hooks[0]?.command;
-    assert.ok(
-      registeredCodexHookCommand,
-      "expected the Codex Bash hook to expose its launcher command",
-    );
+    // Replay the provider's current-platform registration, including its Windows override.
+    const registeredCodexHook = registeredHookConfig.hooks.PreToolUse.flatMap(
+      (registration) => registration.hooks,
+    ).find((handler) => handler.command.includes("deny-git-mutations.sh"));
+    assert.ok(registeredCodexHook, "expected the registered Codex Git policy");
+    const registeredCodexHookCommand = agentHookSpawnDescriptor({
+      form: "shell",
+      ...registeredCodexHook,
+    });
 
     const quotedEvidencePayload = JSON.stringify({
       tool_name: "Bash",
@@ -226,9 +284,10 @@ describe("agent deny hook template comparison", () => {
           "rg -n 'git commit|git push' workflow/hooks/deny-dangerous | head -n 10",
       },
     });
+    // Use the exact provider argv without adding a login shell or changing payload delivery.
     const quotedEvidenceResult = originalSpawnSync(
-      "bash",
-      ["-lc", registeredCodexHookCommand],
+      registeredCodexHookCommand.command,
+      registeredCodexHookCommand.args,
       {
         cwd: PROJECT_ROOT,
         input: quotedEvidencePayload,
@@ -240,7 +299,6 @@ describe("agent deny hook template comparison", () => {
       0,
       quotedEvidenceResult.stderr || "quoted evidence should be allowed",
     );
-    // This case has flaked under a loaded coverage run; keep the observed streams so a rerun can name the cause.
     assert.equal(
       quotedEvidenceResult.stderr,
       "",
@@ -252,8 +310,8 @@ describe("agent deny hook template comparison", () => {
       tool_input: { command: "printf message | git commit -F -" },
     });
     const blockedRepositoryWriteResult = originalSpawnSync(
-      "bash",
-      ["-lc", registeredCodexHookCommand],
+      registeredCodexHookCommand.command,
+      registeredCodexHookCommand.args,
       {
         cwd: PROJECT_ROOT,
         input: blockedRepositoryWritePayload,
@@ -266,6 +324,41 @@ describe("agent deny hook template comparison", () => {
       `repository write was not blocked; stdout=${JSON.stringify(blockedRepositoryWriteResult.stdout)} stderr=${JSON.stringify(blockedRepositoryWriteResult.stderr)}`,
     );
     assert.match(blockedRepositoryWriteResult.stderr, /Policy repository/);
+
+    // Replay inert input through the saved launcher; no GitHub request executes.
+    for (const { command, expectedStatus } of [
+      {
+        command: `gh api graphql -f query='{ repository(owner: "blundergoat", name: "goat-flow") { discussions(first: 1) { nodes { number title body url comments(first: 5) { nodes { body url } } } } } }'`,
+        expectedStatus: 0,
+      },
+      {
+        command: `gh api graphql -f query='mutation { __typename }'`,
+        expectedStatus: 2,
+      },
+    ]) {
+      const result = originalSpawnSync(
+        registeredCodexHookCommand.command,
+        registeredCodexHookCommand.args,
+        {
+          cwd: PROJECT_ROOT,
+          input: JSON.stringify({
+            tool_name: "Bash",
+            tool_input: { command },
+          }),
+          encoding: "utf-8",
+        },
+      );
+      assert.equal(
+        result.status,
+        expectedStatus,
+        `registered GraphQL policy: ${command}; stderr=${result.stderr}`,
+      );
+      if (expectedStatus === 2) {
+        assert.match(result.stderr, /Policy repository/);
+      } else {
+        assert.equal(result.stderr, "");
+      }
+    }
   });
 
   it("reports sandbox spawn denial separately from hook syntax errors", () => {
@@ -311,6 +404,76 @@ describe("agent deny hook template comparison", () => {
       /outside the child-process-restricted sandbox/,
     );
   });
+
+  it(
+    "selects native Windows Bash for syntax checks even when WSL is first",
+    {
+      skip: process.platform !== "win32",
+    },
+    () => {
+      assert.ok(denyCheck);
+      const nativeBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+      const syntaxCommands: string[] = [];
+      childProcess.execFileSync = ((command, args) => {
+        if (String(command).toLowerCase().endsWith("where.exe")) {
+          return args?.[0] === "bash"
+            ? `C:\\Windows\\System32\\bash.exe\n${nativeBash}\n`
+            : "";
+        }
+        if (args?.[0] === "-n") syntaxCommands.push(String(command));
+        return Buffer.from("");
+      }) as typeof childProcess.execFileSync;
+      syncBuiltinESMExports();
+
+      denyCheck.run(
+        makeAuditContext({
+          agentFilter: "codex",
+          denyMechanismEvidenceLevel: "static",
+          projectPath: PROJECT_ROOT,
+          agents: [stubAgentFacts({ agent: PROFILES.codex })],
+          fs: stubFS({
+            readFile: installedGuardrailContent(guardrailTemplates()),
+            listDir: (path) =>
+              path === PROFILES.codex.hooksDir ? ["deny-dangerous.sh"] : [],
+          }),
+        }),
+      );
+      assert.deepEqual(syntaxCommands, [nativeBash]);
+    },
+  );
+
+  for (const status of [2, 127]) {
+    it(`distinguishes Bash parse errors from file access failures (exit ${status})`, () => {
+      assert.ok(denyCheck);
+      childProcess.execFileSync = ((_command, args) => {
+        if (args?.[0] === "-n")
+          throw Object.assign(new Error("bash failed"), { status });
+        return Buffer.from("");
+      }) as typeof childProcess.execFileSync;
+      syncBuiltinESMExports();
+      const result = denyCheck.run(
+        makeAuditContext({
+          agentFilter: "codex",
+          denyMechanismEvidenceLevel: "static",
+          projectPath: PROJECT_ROOT,
+          agents: [stubAgentFacts({ agent: PROFILES.codex })],
+          fs: stubFS({
+            listDir: (path) =>
+              path === PROFILES.codex.hooksDir ? ["deny-dangerous.sh"] : [],
+          }),
+        }),
+      );
+      assert.ok(result);
+      assert.match(
+        result.message,
+        status === 2 ? /bash -n failed/ : /could not inspect/,
+      );
+      assert.match(
+        result.howToFix ?? "",
+        status === 2 ? /syntax errors/ : /path is readable/,
+      );
+    });
+  }
 
   it("reports self-test spawn denial instead of a deny-dangerous failure", () => {
     assert.ok(denyCheck, "agent deny check should exist");
@@ -359,17 +522,25 @@ describe("agent deny hook template comparison", () => {
   it("runs self-test with the selected agent dispatcher in GOAT_DENY_DANGEROUS_HOOK", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    let capturedEnv: NodeJS.ProcessEnv | undefined;
+    const capturedDispatchers: string[] = [];
+    const capturedCommands: string[] = [];
+    const capturedScripts: string[] = [];
+    const nativeBash = "C:\\Program Files\\Git\\bin\\bash.exe";
     childProcess.execFileSync = ((command, args, options) => {
-      if (command === "bash" && Array.isArray(args) && args[0] === "-n") {
+      if (String(command).toLowerCase().endsWith("where.exe")) {
+        return args?.[0] === "bash"
+          ? `C:\\Windows\\System32\\bash.exe\n${nativeBash}\n`
+          : "";
+      }
+      if (Array.isArray(args) && args[0] === "-n") {
         return Buffer.from("");
       }
-      if (
-        command === "bash" &&
-        Array.isArray(args) &&
-        args[1] === "--self-test=smoke"
-      ) {
-        capturedEnv = (options as { env?: NodeJS.ProcessEnv }).env;
+      if (Array.isArray(args) && args[1] === "--self-test=smoke") {
+        capturedCommands.push(String(command));
+        capturedScripts.push(String(args[0]));
+        const environment = (options as { env?: NodeJS.ProcessEnv }).env;
+        if (environment?.GOAT_DENY_DANGEROUS_HOOK)
+          capturedDispatchers.push(environment.GOAT_DENY_DANGEROUS_HOOK);
         return Buffer.from("");
       }
       return Buffer.from("");
@@ -419,10 +590,24 @@ describe("agent deny hook template comparison", () => {
     });
 
     assert.equal(denyCheck.run(ctx), null);
-    assert.equal(
-      capturedEnv?.GOAT_DENY_DANGEROUS_HOOK,
-      resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-dangerous.sh"),
+    const expectedBash = process.platform === "win32" ? nativeBash : "bash";
+    assert.deepEqual(capturedCommands, [expectedBash, expectedBash]);
+    // Windows self-test paths must be readable by native Bash, including UNC checkout roots.
+    const shellPath = (path: string) =>
+      process.platform === "win32" ? path.replaceAll("\\", "/") : path;
+    const selfTestPath = shellPath(
+      resolve(
+        PROJECT_ROOT,
+        ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
+      ),
     );
+    assert.deepEqual(capturedScripts, [selfTestPath, selfTestPath]);
+    assert.deepEqual(capturedDispatchers, [
+      shellPath(resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-dangerous.sh")),
+      shellPath(
+        resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-git-mutations.sh"),
+      ),
+    ]);
   });
 
   it("reports configured command spawn denial instead of exit -1", () => {
@@ -567,12 +752,14 @@ describe("agent deny hook template comparison", () => {
     childProcess.spawnSync = ((
       _command: string,
       args: readonly string[],
-      options: { env?: NodeJS.ProcessEnv },
+      options: { env?: NodeJS.ProcessEnv; input?: string },
     ) => {
-      // Missing shell text cannot represent configured or direct user execution.
-      const shellProgram = args[1] ?? "";
       // A direct script replay belongs to the later agent and must remain a separate result.
-      if (shellProgram.includes("| { bash '")) {
+      if (args.length === 1 && args[0]?.endsWith("deny-dangerous.sh")) {
+        assert.ok(
+          options.input,
+          "direct replay must receive its provider payload on stdin",
+        );
         directRuntimeProbeCalls += 1;
         return completedDirectHookProbe();
       }
@@ -638,13 +825,22 @@ describe("agent deny hook template comparison", () => {
       auditResult.message,
       /registered deny hook runtime check failed for claude/,
     );
-    assert.equal(configuredRuntimeProbeCalls, 2);
+    // Dangerous policy has three block probes and one allow; Git has two block probes and one allow.
+    assert.equal(configuredRuntimeProbeCalls, 7);
     assert.equal(directRuntimeProbeCalls, 1);
   });
 
   it("fails when a direct configured command is replayed from nested cwd", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
+    const nativeBash =
+      process.platform === "win32"
+        ? pickWindowsBashPath(discoverWindowsBashCandidates())
+        : null;
+    // Preserve the same relative-script failure on Windows without accidentally testing the WSL launcher.
+    const commandWindows = nativeBash
+      ? `& '${nativeBash.replaceAll("'", "''")}' '.goat-flow/hooks/deny-dangerous.sh'; exit $LASTEXITCODE`
+      : undefined;
     const ctx = makeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
@@ -675,6 +871,7 @@ describe("agent deny hook template comparison", () => {
                     {
                       type: "command",
                       command: ".goat-flow/hooks/deny-dangerous.sh",
+                      commandWindows,
                     },
                   ],
                 },
@@ -687,7 +884,7 @@ describe("agent deny hook template comparison", () => {
       }),
     });
 
-    const result = denyCheck.run(ctx);
+    const result = checkHookRuntimeSmoke(ctx);
     assert.ok(result, "expected nested-cwd configured command failure");
     assert.match(
       result.message,
@@ -740,7 +937,7 @@ describe("agent deny hook template comparison", () => {
       }),
     });
 
-    const result = denyCheck.run(ctx);
+    const result = checkHookRuntimeSmoke(ctx);
     assert.ok(result, "expected configured command runtime failure");
     assert.match(
       result.message,

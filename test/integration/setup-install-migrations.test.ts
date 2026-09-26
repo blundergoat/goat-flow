@@ -1,24 +1,316 @@
 /**
  * Exercises setup migrations that remove retired managed state while preserving user-owned files and settings.
+ *
  * Use when installer cleanup or hook convergence changes what returning users receive during an upgrade.
  * Fixtures cover historical layouts, provider registrations, config aliases, and repeated installation.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
-import { listHookSpecs } from "../../src/cli/server/hooks-registry.js";
+import { managedInstallStatePath } from "../../src/cli/managed-setup-state.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import {
+  readAgentHookState,
+  writeAgentHookState,
+} from "../../src/cli/server/agent-hook-writer.js";
+import {
+  agentHookSpawnDescriptor,
+  buildAgentHookDescriptor,
+} from "../../src/cli/server/agent-hook-command.js";
 import {
   makeTempProject,
   PROJECT_ROOT,
   readClaudePostTurnSafetyTimeout,
   runCliInstaller,
   runInstaller,
+  runInstallerWithEnvironment,
 } from "./setup-install.helpers.js";
 
 describe("setup --apply installer upgrade migrations", () => {
+  // ADD INTEGRATION: final-state tests cannot prove Git protection survives an interrupted split.
+  // Each fixture writes legacy Git coverage, interrupts a real atomic installer write, then retries.
+  for (const interruptedPath of [
+    ".claude/settings.json",
+    ".codex/hooks.json",
+    ".goat-flow/hooks/run-with-bash.mjs",
+    ".goat-flow/hooks/deny-git-mutations.sh",
+    ".goat-flow/hooks/deny-dangerous.sh",
+    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+  ]) {
+    it(`retains Git protection when the split stops at ${interruptedPath}`, () => {
+      const root = makeTempProject();
+      const hookDirectory = join(root, ".goat-flow/hooks");
+      mkdirSync(hookDirectory, { recursive: true });
+      assert.equal(spawnSync("git", ["init", "--quiet", root]).status, 0);
+      mkdirSync(join(hookDirectory, "vendor"));
+      // The launcher reads saved policy choices through this reader and its bundled parser before starting Bash.
+      for (const file of [
+        "run-with-bash.mjs",
+        "hook-launch-runtime.mjs",
+        "hook-provider-adapters.mjs",
+        "hook-policy-state.cjs",
+        "vendor/js-yaml.cjs",
+      ]) {
+        copyFileSync(
+          join(PROJECT_ROOT, "workflow/hooks", file),
+          join(hookDirectory, file),
+        );
+      }
+      // Fixture-created pre-split policy: the existing registration denies this exact push and permits status.
+      // The pending command is parsed as data and is never executed.
+      writeFileSync(
+        join(hookDirectory, "deny-dangerous.sh"),
+        [
+          "#!/usr/bin/env bash",
+          'node -e \'const p = JSON.parse(require("node:fs").readFileSync(0, "utf8")); if (p.tool_input.command === "git push origin main") { process.stderr.write("BLOCKED: Policy fixture: legacy Git protection\\n"); process.exit(2); }\'',
+          "",
+        ].join("\n"),
+      );
+      writeFileSync(
+        join(root, ".goat-flow/config.yaml"),
+        "hooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: false\n",
+      );
+      const profiles = getAgentProfiles().filter(
+        (agent) => agent.id === "claude" || agent.id === "codex",
+      );
+      const dangerous = getHookSpec("deny-dangerous");
+      const git = getHookSpec("deny-git-mutations");
+      assert.ok(dangerous && git);
+      for (const agent of profiles) {
+        assert.ok(agent.hookConfigFile && agent.hooksDir);
+        mkdirSync(join(root, agent.hookConfigFile, ".."), { recursive: true });
+        writeFileSync(
+          join(root, agent.hookConfigFile),
+          JSON.stringify({
+            userMarker: "preserve",
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [{ type: "command", command: "node user-hook.js" }],
+                },
+              ],
+            },
+          }),
+        );
+        writeAgentHookState(root, agent, dangerous, true);
+      }
+      // Replay only fixture-owned registered policy handlers; operands remain inert provider payloads.
+      const decisions = (command: string) =>
+        profiles.map((agent) => {
+          assert.ok(agent.hooksDir);
+          return [dangerous, git]
+            .filter((spec) => readAgentHookState(root, agent, spec).installed)
+            .map((spec) => {
+              assert.ok(agent.hooksDir);
+              const descriptor = agentHookSpawnDescriptor(
+                buildAgentHookDescriptor(agent.id, agent.hooksDir, spec),
+              );
+              return spawnSync(descriptor.command, descriptor.args, {
+                cwd: root,
+                input: JSON.stringify({
+                  tool_name: "Bash",
+                  tool_input: { command },
+                }),
+                encoding: "utf-8",
+                timeout: 30000,
+              });
+            });
+        });
+      assert.ok(
+        decisions("git status").every(
+          (results) => results.length === 1 && results[0]?.status === 0,
+        ),
+      );
+      assert.ok(
+        decisions("git push origin main").every((results) =>
+          results.some((result) => result.status === 2),
+        ),
+      );
+      const shimDirectory = join(root, "interruption-tools");
+      mkdirSync(shimDirectory);
+      const realMv = spawnSync("bash", ["-c", "command -v mv"], {
+        encoding: "utf-8",
+      }).stdout.trim();
+      assert.ok(realMv);
+      writeFileSync(
+        join(shimDirectory, "mv"),
+        '#!/usr/bin/env bash\nif [[ "${!#}" == "$M20_INTERRUPT_PATH" ]]; then printf \'M20 interrupted replacement\\n\' >&2; exit 73; fi\nexec "$M20_REAL_MV" "$@"\n',
+        { mode: 0o755 },
+      );
+      const interrupted = runInstallerWithEnvironment(
+        root,
+        {
+          PATH: `${shimDirectory}:${process.env.PATH ?? ""}`,
+          M20_REAL_MV: realMv,
+          M20_INTERRUPT_PATH: interruptedPath,
+        },
+        "--agent",
+        "codex",
+      );
+      assert.notEqual(interrupted.status, 0);
+      assert.match(interrupted.stderr, /M20 interrupted replacement/u);
+      for (const results of decisions("git push origin main")) {
+        assert.ok(
+          results.some(
+            (result) =>
+              result.status === 2 &&
+              /BLOCKED: Policy|Policy hook unavailable:/u.test(result.stderr),
+          ),
+          JSON.stringify(results),
+        );
+      }
+      const retried = runInstaller(root, "--agent", "codex");
+      assert.equal(retried.status, 0, retried.stderr || retried.stdout);
+      for (const agent of profiles) {
+        assert.ok(readAgentHookState(root, agent, dangerous).installed);
+        assert.ok(readAgentHookState(root, agent, git).installed);
+        assert.ok(agent.hookConfigFile);
+        const config = readFileSync(join(root, agent.hookConfigFile), "utf-8");
+        assert.match(config, /userMarker/u);
+        assert.match(config, /node user-hook\.js/u);
+      }
+      for (const results of decisions("git push origin main")) {
+        assert.deepEqual(
+          results.map((result) => result.status),
+          [0, 2],
+        );
+      }
+      assert.ok(
+        decisions("git status").every((results) =>
+          results.every((result) => result.status === 0),
+        ),
+      );
+    });
+  }
+
+  // Writes legacy install state, then runs public preview and the playbook install block against locally edited guidance in a disposable project.
+  // The invariant is exact preservation alongside installed replacements; later installer stages cannot hide these results behind a timeout.
+  it("preserves retired writing playbooks when installing replacements", () => {
+    const root = makeTempProject();
+    const playbookDirectory = join(root, ".goat-flow/skill-docs/playbooks");
+    mkdirSync(playbookDirectory, { recursive: true });
+    const retiredAgentPath = join(playbookDirectory, "writing-for-agents.md");
+    const retiredHumanProse = join(playbookDirectory, "writing-style.md");
+    const agentContent =
+      "# Local agent guidance\n\nKeep our project-specific review checklist.\n";
+    const humanContent =
+      "# Local prose guidance\n\nKeep our project-specific terminology.\n";
+    writeFileSync(retiredAgentPath, agentContent);
+    writeFileSync(retiredHumanProse, humanContent);
+    const retiredPlaybookPaths = [
+      ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
+      ".goat-flow/skill-docs/playbooks/writing-style.md",
+    ];
+    const statePath = managedInstallStatePath(root, "codex");
+    mkdirSync(dirname(statePath), { recursive: true });
+    // The old package baseline deliberately differs from both locally edited files.
+    const legacyBaseline = {
+      schemaVersion: "goat-flow.install-state.v1",
+      agent: "codex",
+      goatFlowVersion: "1.16.0",
+      files: retiredPlaybookPaths.map((path) => ({
+        path,
+        expectedSha256: createHash("sha256")
+          .update("retired package template\n")
+          .digest("hex"),
+      })),
+    };
+    writeFileSync(statePath, `${JSON.stringify(legacyBaseline, null, 2)}\n`);
+    const preview = runCliInstaller(
+      root,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    const report = JSON.parse(preview.stdout) as {
+      files: { path: string; state: string; action: string }[];
+    };
+    // Both retired names must carry the preservation promise before the test exercises installation.
+    for (const retiredPath of retiredPlaybookPaths) {
+      const previewRow = report.files.find((file) => file.path === retiredPath);
+      assert.ok(previewRow, `Preview must list ${retiredPath}`);
+      assert.equal(previewRow.state, "removed", `Retired: ${retiredPath}`);
+      assert.equal(previewRow.action, "preserve", `Preserve: ${retiredPath}`);
+    }
+
+    const installerSource = readFileSync(
+      join(PROJECT_ROOT, "workflow", "install-goat-flow.sh"),
+      "utf-8",
+    );
+    const blockStart = installerSource.indexOf('echo "Standalone playbooks');
+    const blockEnd = installerSource.indexOf(
+      'copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md"',
+      blockStart,
+    );
+    assert.ok(blockStart >= 0, "standalone playbook install block is missing");
+    assert.ok(blockEnd > blockStart, "playbook block end is missing");
+    // Execute the shipped migration, not a copy of its policy; only the ordinary copy primitive is supplied by the fixture.
+    const install = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "set -euo pipefail",
+          "copy_file() {",
+          '  local src="$1" dst="$2"',
+          '  mkdir -p "$(dirname "$dst")"',
+          '  cp "$src" "$dst"',
+          '  printf "%s\\n" "$dst"',
+          "}",
+          installerSource.slice(blockStart, blockEnd),
+        ].join("\n"),
+      ],
+      {
+        cwd: root,
+        encoding: "utf-8",
+        env: { ...process.env, GOAT_FLOW_ROOT: PROJECT_ROOT },
+        timeout: 10000,
+      },
+    );
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    // Every replacement must contain the shipped guidance while the project's retired copies remain available below.
+    for (const replacementPlaybook of [
+      "writing-agent-facing-instructions.md",
+      "writing-human-facing-prose.md",
+    ]) {
+      const templatePath = join(
+        PROJECT_ROOT,
+        "workflow/skills/playbooks",
+        replacementPlaybook,
+      );
+      assert.equal(
+        readFileSync(join(playbookDirectory, replacementPlaybook), "utf-8"),
+        readFileSync(templatePath, "utf-8"),
+        `Installed content: ${replacementPlaybook}`,
+      );
+    }
+    assert.equal(readFileSync(retiredAgentPath, "utf-8"), agentContent);
+    assert.equal(readFileSync(retiredHumanProse, "utf-8"), humanContent);
+    // The install log must tell users that old copies remain available for their own review and removal.
+    for (const retiredPath of retiredPlaybookPaths) {
+      assert.ok(
+        install.stdout.includes(`retained retired ${retiredPath}`),
+        `Missing retention notice for ${retiredPath}: ${install.stdout}`,
+      );
+    }
+  });
+
   it("keeps derived config migration flags under the force alias", () => {
     const root = makeTempProject();
     const firstInstall = runCliInstaller(root, "--agent", "codex");
@@ -642,8 +934,13 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.match(result.stdout, /migrated deny hook registration/);
   });
 
-  // Fixture purpose: writes disabled split-hook config to cover deny-dangerous state migration.
-  it("preserves disabled split guardrail config when migrating to deny-dangerous", () => {
+  /**
+   * Writes a 1.8.0 split-guardrail install whose three retired guard choices all map to deny-dangerous.
+   *
+   * @param isSecretPathsEnabled - saved secret-paths choice; true conflicts with the other two disabled guards
+   * @returns project root containing the legacy Codex guard scripts and config
+   */
+  function writeSplitGuardrailProject(isSecretPathsEnabled: boolean): string {
     const root = makeTempProject();
     mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
@@ -667,71 +964,45 @@ describe("setup --apply installer upgrade migrations", () => {
         "  guard-destructive-shell:",
         "    enabled: false",
         "  guard-secret-paths:",
-        "    enabled: true",
+        `    enabled: ${isSecretPathsEnabled}`,
         "  guard-repository-writes:",
-        "    enabled: true",
+        "    enabled: false",
         "",
       ].join("\n"),
     );
+    return root;
+  }
+
+  // Conflicting retired choices leave protection unknown, so install stops before migrating or writing anything.
+  it("refuses conflicting split guardrail choices without changing config", () => {
+    const root = writeSplitGuardrailProject(true);
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    const configBefore = readFileSync(configPath, "utf-8");
 
     const result = runInstaller(root, "--agent", "codex");
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    const config = readFileSync(
-      join(root, ".goat-flow", "config.yaml"),
-      "utf-8",
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /could not be read safely \(Hook config has conflicting choices for deny-dangerous\)/u,
     );
-    assert.doesNotMatch(
-      config,
-      /guard-(destructive-shell|secret-paths|repository-writes)/,
+    assert.equal(readFileSync(configPath, "utf-8"), configBefore);
+    assert.equal(
+      existsSync(join(root, ".codex", "hooks", "guard-common.sh")),
+      true,
     );
-    assert.match(config, /deny-dangerous:\n    enabled: false/);
   });
 
-  const disabledHookSpecs = listHookSpecs();
-  const managedScriptFiles = [
-    ...new Set(disabledHookSpecs.flatMap((hookSpec) => hookSpec.scriptFiles)),
-  ];
-  const disabledConfig =
-    "hooks:\n  deny-dangerous:\n    enabled: false\n  gruff-code-quality:\n    enabled: false\n  post-turn-safety:\n    enabled: false\n";
-  // Each named fixture writes an all-off config and launches setup twice so provider defaults cannot silently return.
-  for (const agentProfile of getAgentProfiles()) {
-    it(`${agentProfile.id} keeps disabled hooks installed and inert`, () => {
-      const consumerRoot = makeTempProject();
-      const { id: agentId, hookConfigFile, hooksDir } = agentProfile;
-      mkdirSync(join(consumerRoot, ".goat-flow"), { recursive: true });
-      writeFileSync(
-        join(consumerRoot, ".goat-flow", "config.yaml"),
-        disabledConfig,
-      );
-      const firstInstall = runInstaller(consumerRoot, "--agent", agentId);
-      assert.equal(
-        firstInstall.status,
-        0,
-        firstInstall.stderr || firstInstall.stdout,
-      );
-      assert.ok(hookConfigFile && hooksDir);
-      const hookConfigPath = join(consumerRoot, hookConfigFile);
-      const firstHookConfig = readFileSync(hookConfigPath, "utf-8");
-      assert.equal(
-        disabledHookSpecs.some((hookSpec) =>
-          firstHookConfig.includes(hookSpec.primaryScript),
-        ),
-        false,
-        `${agentId} restored a hook the user disabled`,
-      );
-      assert.equal(
-        managedScriptFiles.every((file) =>
-          existsSync(join(consumerRoot, hooksDir, file)),
-        ),
-        true,
-        `${agentId} removed files needed by a later UI toggle`,
-      );
-      const repeatedInstall = runInstaller(consumerRoot, "--agent", agentId);
-      assert.equal(repeatedInstall.status, 0, repeatedInstall.stderr);
-      assert.equal(readFileSync(hookConfigPath, "utf-8"), firstHookConfig);
-    });
-  }
+  // Disabled retired guards with no saved Git choice would add GitHub blocking, so install defers to the dashboard review.
+  it("requires policy review before migrating disabled split guardrail config", () => {
+    const root = writeSplitGuardrailProject(false);
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    const configBefore = readFileSync(configPath, "utf-8");
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /GitHub policy review is required/u);
+    assert.equal(readFileSync(configPath, "utf-8"), configBefore);
+  });
 
   it("prunes stale per-skill reference files during upgrades", () => {
     const root = makeTempProject();

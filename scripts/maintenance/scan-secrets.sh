@@ -13,7 +13,7 @@
 #   and falls back to pattern-based scanning.
 #
 # Exit:
-#   0 on scan completion, non-zero if command errors occur.
+#   0 when no potential secrets require review; non-zero on findings or command errors.
 #
 # Requirements:
 #   - bash, git

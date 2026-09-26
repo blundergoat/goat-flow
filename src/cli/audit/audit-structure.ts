@@ -1,18 +1,17 @@
 /**
- * Adapter from the validated manifest to the audit-facing `ProjectStructure`.
- * Audit checks read this narrowed shape rather than the full manifest, so projecting it lives in one place; building from the validated manifest (not
- * raw JSON) is what keeps malformed shapes out of audit logic.
+ * Provide the installation rules that audit checks compare with the user's project.
+ *
+ * The validated manifest owns required paths, supported agents, and canonical or retired skill names.
+ * This narrower view keeps those shared rules consistent across setup, agent, and drift findings.
  */
 import { loadManifest } from "../manifest/manifest.js";
 import type { ProjectStructure } from "./types.js";
 
 /**
- * Build the audit-facing `ProjectStructure` from the validated manifest.
- * Replaces the previous pass-through from raw JSON (`getProjectStructure()`), which allowed malformed shapes to leak into audit logic.
- * Skill name arrays are copied and each agent's optional fields (`hooks_dir`, `settings`, `hooks`) are included only when the manifest defines them.
+ * Build the validated installation rules used to explain missing or outdated project files.
+ * Copy skill-name lists and include optional agent settings only when the manifest defines them.
  *
- * @returns the narrowed project structure - required files/dirs, canonical and stale skill names with
- *   references, and per-agent paths - that audit checks consume in place of the raw manifest
+ * @returns - required project paths, skill names and references, and agent paths; absent references become an empty map
  */
 export function buildProjectStructure(): ProjectStructure {
   const manifest = loadManifest();
@@ -22,18 +21,23 @@ export function buildProjectStructure(): ProjectStructure {
     skills: {
       canonical: [...manifest.facts.skills.names],
       stale_names: [...manifest.facts.skills.stale_names],
+      // Without declared references, audit checks have no extra skill reference files to require.
       references: manifest.skills.references ?? {},
     },
+    // Every supported agent keeps its own installation paths, including agents the current report may later filter out.
     agents: Object.fromEntries(
-      Object.entries(manifest.agents).map(([id, agent]) => [
-        id,
+      Object.entries(manifest.agents).map(([agentId, agent]) => [
+        agentId,
         {
           instruction_file: agent.instruction_file,
           skills_dir: agent.skills_dir,
+          // An agent without a hooks directory must not acquire a directory requirement from this projection.
           ...(agent.hooks_dir !== undefined
             ? { hooks_dir: agent.hooks_dir }
             : {}),
+          // Omitted settings leave this agent without a settings-file requirement.
           ...(agent.settings !== undefined ? { settings: agent.settings } : {}),
+          // Only declared hook support is passed to checks that assess this agent's installation.
           ...(agent.hooks !== undefined ? { hooks: agent.hooks } : {}),
         },
       ]),

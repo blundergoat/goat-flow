@@ -1,12 +1,10 @@
 /**
- * Project-management HTTP route handlers for the dashboard server.
+ * Serve the selected project's plans and the dashboard's saved and nearby project lists.
  *
- * Backs `/api/plans` (read/write the active milestone plan), `/api/projects/list` (load and persist the recent-projects list to disk), and
- * `/api/projects/status` (classify adoption for one or many paths).
+ * The Projects view can add, archive, restore, and classify folders; the Tasks view reads plans and selects the active plan.
+ * Path validation protects writes, and route handlers report rejected requests and storage failures as JSON errors.
  *
- * Mutating routes validate every incoming path through the route context before any write and report failures as JSON status bodies rather than
- * throwing.
- * Persistence and identity normalisation live in dashboard-project-state.ts; task-plan parsing in dashboard-task-state.ts.
+ * dashboard-project-state.ts owns saved identities; dashboard-task-state.ts owns plan parsing and active-plan updates.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readdirSync } from "node:fs";
@@ -30,6 +28,7 @@ import {
   writeActiveTaskPlan,
 } from "./dashboard-task-state.js";
 import { LocalPathValidationError, validateLocalPath } from "./local-paths.js";
+import { writeFileAtomic } from "./safe-exec.js";
 
 /**
  * Load the persisted recent-projects state, preferring the current state file and falling back to the legacy projects-only file.
@@ -40,9 +39,9 @@ function readDashboardState(ctx: DashboardRouteContext) {
 }
 
 /**
- * Offer the folders sitting beside the project the dashboard was launched from, so a user can add a neighbouring repo without typing its path.
- * It swallows an unreadable parent directory into an empty list, and the alphabetical order is a stable contract so the suggestions do not
- * reshuffle between visits.
+ * Offer nearby repositories beside the launch project so the Projects view can suggest folders without manual path entry.
+ *
+ * Swallows listing failures into an empty result; alphabetical ordering keeps suggestions stable between visits.
  *
  * @param launchProjectPath - project path supplied when the dashboard server started
  * @returns sorted absolute sibling paths, excluding hidden directories and the parent itself; empty when nothing could be listed
@@ -59,8 +58,8 @@ export function discoverSiblingProjectPaths(
       .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
       .map((entry) => join(discoveryRoot, entry.name))
       .sort((first, second) => first.localeCompare(second));
-    // For example, the user launched from a directory whose parent they cannot read, so no suggestions are offered.
   } catch {
+    // A parent directory without read permission leaves the Projects view with no nearby suggestions.
     return [];
   }
 }
@@ -106,18 +105,21 @@ async function writeDashboardState(
   ctx: DashboardRouteContext,
   state: DashboardStateData,
 ): Promise<void> {
-  const { mkdir, rm: remove, writeFile } = await import("node:fs/promises");
-  await mkdir(dirname(ctx.dashboardStateFile), { recursive: true });
-  await writeFile(ctx.dashboardStateFile, JSON.stringify(state, null, 2));
+  const { rm: remove } = await import("node:fs/promises");
+  writeFileAtomic(
+    ctx.dashboardStateFile,
+    JSON.stringify(state, null, 2),
+    ctx.absDefault,
+  );
   await remove(ctx.legacyProjectsListFile, { force: true });
 }
 
 type ProjectArchiveAction = "archive" | "restore";
 
 /**
- * Pick the folder an Archive or Restore click acts on: a real local folder, or, for Archive only, the exact saved path of a row whose folder
- * has since been deleted, because hiding that stale row is the one thing the user can still want from it.
- * Error behavior: throws the validation error for Restore, for any non-missing failure, and for a missing path no saved row names.
+ * Resolve the folder for Archive or Restore; Archive also accepts an exact saved path whose folder has been deleted.
+ *
+ * Throws validation errors for Restore, other path failures, or missing paths absent from saved state.
  *
  * @param rawPath - path of the row the user clicked, exactly as the browser sent it
  * @param action - `archive` may name a deleted saved row; `restore` always needs a folder that exists
@@ -161,6 +163,7 @@ async function handleProjectArchiveRequest(
   res: ServerResponse,
   action: ProjectArchiveAction,
 ): Promise<void> {
+  // Archiving or restoring a saved project requires an explicit update request.
   if (req.method !== "POST") {
     ctx.jsonResponse(res, 405, { error: "Method not allowed" });
     return;
@@ -199,7 +202,7 @@ async function handleProjectArchiveRequest(
     ctx.jsonResponse(res, 200, { ok: true });
   } catch (err) {
     // For example the user clicks Restore on a row whose folder was deleted, or the dashboard state file cannot be written.
-    // The Projects view shows this message as an error toast and the row is left as it was.
+    // The Projects view receives an error response so it can explain why the action did not complete.
     ctx.jsonResponse(res, 400, {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -223,6 +226,7 @@ async function handleProjectsListWriteRequest(
   try {
     const { decodeProjectsListBody } = await import("./decoders.js");
     const decoded = decodeProjectsListBody(body);
+    // Invalid list fields must be corrected before any saved project or favorite can change.
     if (!decoded.ok) {
       ctx.jsonResponse(res, 400, {
         error: decoded.error,
@@ -250,6 +254,7 @@ async function handleProjectsListWriteRequest(
           nextProject,
           resolvedIdentities,
         );
+        // A changed repository identity must keep the user's saved row attached to the same checkout.
         if (freshIdentity)
           moveProjectRecordToIdentity(nextProject, freshIdentity);
         // The browser may still title the row by the key it last loaded, so both keys and the path are tried.
@@ -259,9 +264,13 @@ async function handleProjectsListWriteRequest(
             decoded.value.projectTitles[identity] ??
             decoded.value.projectTitles[nextProject.identity] ??
             decoded.value.projectTitles[project.currentPath];
+          // A supplied title is kept; an empty or omitted title restores the row's automatic name.
           if (title) nextProject.title = title;
           else Reflect.deleteProperty(nextProject, "title");
-        } else if (!nextProject.archivedAt) {
+        } else if (
+          // Omitted active rows become archived so their saved identity remains available for Restore.
+          !nextProject.archivedAt
+        ) {
           nextProject.archivedAt = archivedAt;
         }
         // The rebuild keys rows by their identity field, so a moved row lands under its fresh key even though this map keeps the old one.
@@ -310,6 +319,7 @@ async function handleProjectsListWriteRequest(
     });
     ctx.jsonResponse(res, 200, { ok: true });
   } catch (err) {
+    // A submitted folder that no longer exists fails validation; the Projects view receives the reason the list could not be saved.
     ctx.jsonResponse(res, 400, {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -317,11 +327,10 @@ async function handleProjectsListWriteRequest(
 }
 
 /**
- * Map an active-plan write error message to an HTTP status: a missing target is a
- * 404, anything else is treated as a 400 bad request.
+ * Distinguish a missing plan from other rejected selections so the Tasks view receives a useful failure status.
  *
- * @param message - The error message thrown while writing the active plan.
- * @returns `404` when the message indicates a missing target, otherwise `400`.
+ * @param message - error thrown while selecting the active plan
+ * @returns 404 when the target is missing, otherwise 400 for a rejected selection
  */
 function planWriteErrorStatus(message: string): number {
   return message.includes("does not exist") || message.includes("not found")
@@ -353,6 +362,7 @@ async function writeDashboardActivePlan(
     writeActiveTaskPlan(projectPath, planName);
     ctx.jsonResponse(res, 200, buildDashboardTaskState(projectPath, planName));
   } catch (err) {
+    // A plan deleted after the Tasks list loaded cannot be selected; return the missing-target status and explanation.
     const message = err instanceof Error ? err.message : String(err);
     ctx.jsonResponse(res, planWriteErrorStatus(message), { error: message });
   }
@@ -382,28 +392,32 @@ function readDashboardPlans(
       buildDashboardTaskState(projectPath, url.searchParams.get("plan")),
     );
   } catch (err) {
+    // A project folder removed since selection cannot supply plans; the Tasks view receives an error instead of an empty plan list.
     ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
   }
 }
 
-/** Return or update milestone/plan state for the selected project. */
+// Return or update milestone/plan state for the selected project.
 async function handleTasksRequest(
   ctx: DashboardRouteContext,
   req: IncomingMessage,
   url: URL,
   res: ServerResponse,
 ): Promise<boolean> {
+  // The current plan endpoint and its Tasks alias share this handler; other URLs must continue through routing.
   if (url.pathname !== "/api/plans" && url.pathname !== "/api/tasks") {
     return false;
   }
 
+  // A submitted selection updates the active-plan marker before returning refreshed Tasks state.
   if (req.method === "POST") {
     await writeDashboardActivePlan(ctx, req, url, res);
     return true;
   }
 
+  // Tasks supports reading plans or submitting a selection, so other methods receive a rejection.
   if (req.method !== "GET") {
     ctx.jsonResponse(res, 405, { error: "Method not allowed" });
     return true;
@@ -413,7 +427,7 @@ async function handleTasksRequest(
   return true;
 }
 
-/** Save/load the dashboard state to/from disk so it survives server restarts. */
+// Save/load the dashboard state to/from disk so it survives server restarts.
 async function handleProjectsListRequest(
   ctx: DashboardRouteContext,
   req: IncomingMessage,
@@ -427,13 +441,16 @@ async function handleProjectsListRequest(
         ? "restore"
         : null;
 
+  // Archive and Restore update one saved row without requiring the caller to resubmit its whole project list.
   if (archiveAction !== null) {
     await handleProjectArchiveRequest(ctx, req, res, archiveAction);
     return true;
   }
 
+  // A URL outside the saved-project routes remains available to another dashboard handler.
   if (url.pathname !== "/api/projects/list") return false;
 
+  // Opening Projects combines the persisted list with nearby folders the user has not archived.
   if (req.method === "GET") {
     const state = await readDashboardState(ctx);
     ctx.jsonResponse(res, 200, {
@@ -443,6 +460,7 @@ async function handleProjectsListRequest(
     return true;
   }
 
+  // A list submission persists the caller's projects and favorites for future dashboard sessions.
   if (req.method === "POST") {
     await handleProjectsListWriteRequest(ctx, req, res);
     return true;
@@ -453,19 +471,20 @@ async function handleProjectsListRequest(
 }
 
 /**
- * Classify project adoption for one or more paths because the dashboard sends
- * both the current project and stored recent projects through the same route.
+ * Classify the selected and saved project folders so their dashboard rows show the next available setup action.
  *
- * Reports malformed path lists and validation failures as JSON.
+ * Reports missing path lists as a request error and individual invalid folders as error rows.
  */
 function handleProjectsStatusRequest(
   ctx: DashboardRouteContext,
   url: URL,
   res: ServerResponse,
 ): boolean {
+  // Adoption status is separate from saving the project list, so unrelated URLs are left for other handlers.
   if (url.pathname !== "/api/projects/status") return false;
 
   const pathsParam = url.searchParams.get("paths");
+  // Without a folder list, the caller has not identified any project whose setup state can be shown.
   if (!pathsParam) {
     ctx.jsonResponse(res, 400, { error: "Missing paths parameter" });
     return true;
@@ -473,12 +492,15 @@ function handleProjectsStatusRequest(
 
   const paths = pathsParam
     .split(",")
-    .map((p) => p.trim())
+    .map((requestedPath) => requestedPath.trim())
     .filter(Boolean);
 
-  const results = paths.map((p) => {
+  const results = paths.map((requestedPath) => {
     try {
-      const projectPath = validateLocalPath(p, "write-local-state").path;
+      const projectPath = validateLocalPath(
+        requestedPath,
+        "write-local-state",
+      ).path;
       const identity = resolveProjectIdentity(projectPath, {
         allowMarkerWrite: false,
       });
@@ -490,8 +512,9 @@ function handleProjectsStatusRequest(
         ...classifyProjectState(fs),
       };
     } catch (err) {
+      // A saved folder may have been deleted; retain its error row so the other projects can still display their setup status.
       return {
-        path: p,
+        path: requestedPath,
         state: "error" as const,
         action: "none" as const,
         details: String(err),
@@ -499,8 +522,10 @@ function handleProjectsStatusRequest(
     }
   });
 
+  // A single-folder lookup represents a project switch; bulk row refreshes do not add switch events.
   if (paths.length === 1) {
     const result = results[0];
+    // Only a successfully classified folder counts as a completed project switch in the timeline.
     if (result?.state !== "error" && typeof result?.path === "string") {
       ctx.recordDashboardEvent(result.path, "project.switch", {
         state: result.state,
@@ -516,22 +541,23 @@ function handleProjectsStatusRequest(
 }
 
 /**
- * Bind the project-management handlers to one server's request context so each closure carries the
- * shared path validator, state-file locations, and evidence recorder.
+ * Bind the Projects and Tasks requests to this server's path validator, saved-state locations, and evidence recorder.
  *
  * @param ctx - per-server dashboard route context with path validation, state-file paths, and IO hooks
- * @returns the plans, projects-list, and projects-status handlers; each resolves true once it has
- *   answered a matching request, or false to let another handler claim the URL
+ * @returns handlers that answer matching plan or project requests, or return false for the next route group
  */
 export function createProjectRouteHandlers(ctx: DashboardRouteContext) {
   return {
+    // Connect Tasks reads and active-plan selections to this dashboard server.
     handleTasksRequest: (req: IncomingMessage, url: URL, res: ServerResponse) =>
       handleTasksRequest(ctx, req, url, res),
+    // Connect saved-project list, Archive, and Restore requests to this server's persisted state.
     handleProjectsListRequest: (
       req: IncomingMessage,
       url: URL,
       res: ServerResponse,
     ) => handleProjectsListRequest(ctx, req, url, res),
+    // Connect project-row status checks to this server's response and timeline helpers.
     handleProjectsStatusRequest: (url: URL, res: ServerResponse) =>
       handleProjectsStatusRequest(ctx, url, res),
   };

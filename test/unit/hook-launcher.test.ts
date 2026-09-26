@@ -17,8 +17,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { PassThrough, Writable } from "node:stream";
 import { describe, it } from "node:test";
-import { windowsTaskkillExecutablePath } from "../../workflow/hooks/run-with-bash.mjs";
+import {
+  relayLegacyHookOutput,
+  windowsTaskkillExecutablePath,
+} from "../../workflow/hooks/run-with-bash.mjs";
 import {
   describeInvalidHookLaunchTimeout,
   resolveHookLaunchTimeoutMs,
@@ -159,7 +163,7 @@ describe("hook launcher script validation", () => {
         assert.match(result[fixture.stream], fixture.pattern);
         assert.match(
           result[fixture.stream],
-          /exceeded its deadline and was killed/u,
+          /exceeded its deadline; process-tree termination was requested/u,
         );
         assert.ok(Date.now() - startedAt < 1_500, launcherDiagnostics(result));
       });
@@ -205,7 +209,7 @@ describe("hook launcher script validation", () => {
       );
       assert.match(
         launcherResult.stderr,
-        /exceeded its deadline and was killed/u,
+        /exceeded its deadline; process-tree termination was requested/u,
       );
       assert.equal(readFileSync(childStartedMarkerPath, "utf8"), "started\n");
       assert.ok(
@@ -240,6 +244,31 @@ describe("hook launcher script validation", () => {
       assert.equal(launcherResult.stdout, "legacy stdout\n");
       assert.equal(launcherResult.stderr, "legacy stderr\n");
     });
+  });
+
+  // Fixture purpose: saturates a one-byte destination so the relay must pause its source until the pending write drains.
+  it("applies host backpressure to legacy hook output", async () => {
+    let finishPendingWrite: (() => void) | null = null;
+    const hookOutput = new PassThrough({ highWaterMark: 128 * 1024 });
+    const hostOutput = new Writable({
+      highWaterMark: 1,
+      // Hold the first destination write open so Node exposes the relay's pause behavior.
+      write(_chunk, _encoding, callback) {
+        finishPendingWrite = callback;
+      },
+    });
+    relayLegacyHookOutput(hookOutput, hostOutput);
+
+    hookOutput.write(Buffer.alloc(64 * 1024));
+    await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
+    assert.equal(hookOutput.isPaused(), true);
+    assert.ok(finishPendingWrite);
+
+    finishPendingWrite();
+    await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
+    assert.equal(hookOutput.isPaused(), false);
+    hookOutput.destroy();
+    hostOutput.destroy();
   });
 
   // Fixture purpose: prove Claude-visible advice. Side effects: writes and starts one script.
@@ -437,6 +466,189 @@ describe("hook launcher script validation", () => {
       assert.match(modelVisibleContext, /adapter-delivery-failed/iu);
       assert.match(modelVisibleContext, /exceeded the 10000-byte limit/iu);
       assert.equal(launcherResult.stderr, "");
+    });
+  });
+
+  // A saved off choice must reach the provider without launching the deliberately failing script or requiring Bash.
+  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    for (const responseMode of ["policy", "antigravity", "copilot"]) {
+      it(`returns the provider allow response when ${hookId} is off in ${responseMode}`, () => {
+        withTempProject((root) => {
+          const hookDirectory = createManagedHookDirectory(root);
+          writeFileSync(
+            join(hookDirectory, `${hookId}.sh`),
+            "#!/usr/bin/env bash\nexit 99\n",
+          );
+          writeFileSync(
+            join(root, ".goat-flow/config.yaml"),
+            `hooks: {${hookId}: {enabled: false}}\n`,
+          );
+          const result = runLauncherProcess(
+            root,
+            `.goat-flow/hooks/${hookId}.sh`,
+            responseMode,
+            { ...process.env, PATH: "" },
+          );
+          assert.equal(result.status, 0, launcherDiagnostics(result));
+          assert.equal(result.stderr, "");
+          assert.equal(
+            result.stdout,
+            responseMode === "antigravity" ? '{"decision":"allow"}\n' : "",
+          );
+        });
+      });
+    }
+  }
+
+  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    for (const responseMode of ["policy", "antigravity", "copilot"]) {
+      for (const failure of ["missing script", "deadline"]) {
+        it(`attributes ${failure} to ${hookId} in ${responseMode}`, () => {
+          withTempProject((root) => {
+            const hookDirectory = createManagedHookDirectory(root);
+            if (failure === "deadline") {
+              writeFileSync(
+                join(hookDirectory, `${hookId}.sh`),
+                "#!/usr/bin/env bash\nsleep 5\n",
+              );
+            }
+            const result = runLauncherProcess(
+              root,
+              `.goat-flow/hooks/${hookId}.sh`,
+              responseMode,
+              {
+                ...process.env,
+                GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "10",
+              },
+            );
+            assert.equal(
+              result.status,
+              responseMode === "policy" ? 2 : 0,
+              launcherDiagnostics(result),
+            );
+            const reason =
+              responseMode === "policy"
+                ? result.stderr
+                : responseMode === "antigravity"
+                  ? JSON.parse(result.stdout).reason
+                  : JSON.parse(result.stdout).permissionDecisionReason;
+            assert.ok(reason.includes(hookId), reason);
+            assert.match(
+              reason,
+              failure === "deadline" ? /exceeded its deadline/u : /not found/u,
+            );
+            if (responseMode !== "policy") {
+              const response = JSON.parse(result.stdout);
+              assert.equal(
+                response.decision ?? response.permissionDecision,
+                "deny",
+              );
+              assert.equal(result.stderr, "");
+            }
+          });
+        });
+      }
+    }
+  }
+
+  for (const childStatus of [1, 127]) {
+    it(`denies an incomplete policy result with exit ${childStatus}`, () => {
+      withTempProject((root) => {
+        const hookDirectory = createManagedHookDirectory(root);
+        writeFileSync(
+          join(hookDirectory, "deny-git-mutations.sh"),
+          `#!/usr/bin/env bash\nprintf 'partial policy output\\n'\nprintf 'runtime fault\\n' >&2\nexit ${childStatus}\n`,
+        );
+        for (const responseMode of ["policy", "antigravity", "copilot"]) {
+          const result = runLauncherProcess(
+            root,
+            ".goat-flow/hooks/deny-git-mutations.sh",
+            responseMode,
+          );
+          assert.equal(
+            result.status,
+            responseMode === "policy" ? 2 : 0,
+            launcherDiagnostics(result),
+          );
+          const reason =
+            responseMode === "policy"
+              ? result.stderr
+              : responseMode === "antigravity"
+                ? JSON.parse(result.stdout).reason
+                : JSON.parse(result.stdout).permissionDecisionReason;
+          assert.match(
+            reason,
+            /policy exited with status (1|127) without a decision/u,
+          );
+          assert.doesNotMatch(result.stdout, /partial policy output/u);
+          assert.doesNotMatch(result.stderr, /runtime fault/u);
+          if (responseMode !== "policy") {
+            const response = JSON.parse(result.stdout);
+            assert.equal(
+              response.decision ?? response.permissionDecision,
+              "deny",
+            );
+          }
+        }
+      });
+    });
+  }
+
+  /**
+   * A policy-only install includes the launch runtime but not the provider adapter.
+   * Side effects: writes disposable hook files that withTempProject removes after the assertion.
+   */
+  it("keeps legacy policy decisions available without the provider adapter", () => {
+    withTempProject((root) => {
+      const hookDirectory = createManagedHookDirectory(root);
+      writeFileSync(
+        join(hookDirectory, "run-with-bash.mjs"),
+        readFileSync(HOOK_LAUNCHER_PATH),
+      );
+      writeFileSync(
+        join(hookDirectory, "hook-launch-runtime.mjs"),
+        readFileSync(
+          resolve(
+            import.meta.dirname,
+            "../../workflow/hooks/hook-launch-runtime.mjs",
+          ),
+        ),
+      );
+      writeFileSync(
+        join(hookDirectory, "hook-policy-state.cjs"),
+        readFileSync(
+          resolve(
+            import.meta.dirname,
+            "../../workflow/hooks/hook-policy-state.cjs",
+          ),
+        ),
+      );
+      mkdirSync(join(hookDirectory, "vendor"));
+      writeFileSync(
+        join(hookDirectory, "vendor", "js-yaml.cjs"),
+        readFileSync(
+          resolve(
+            import.meta.dirname,
+            "../../workflow/hooks/vendor/js-yaml.cjs",
+          ),
+        ),
+      );
+      writeFileSync(
+        join(hookDirectory, "deny-git-mutations.sh"),
+        "#!/usr/bin/env bash\nprintf 'unsafe allow marker\\n'\nexit 0\n",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(hookDirectory, "run-with-bash.mjs"),
+          ".goat-flow/hooks/deny-git-mutations.sh",
+          "policy",
+        ],
+        { cwd: root, encoding: "utf8" as const },
+      );
+      assert.equal(result.status, 0, launcherDiagnostics(result));
+      assert.match(result.stdout, /unsafe allow marker/u);
+      assert.equal(result.stderr, "");
     });
   });
 
