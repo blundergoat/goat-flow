@@ -1,11 +1,22 @@
 ---
 category: deny-writes
-last_reviewed: 2026-09-26
+last_reviewed: 2026-09-27
 ---
 
 External-write traps: pushes, GitHub mutations, and other side effects that leave the machine. They bypass local file guards, so the deny surface is the only control.
 
 Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
+
+## Footgun: Git editor fallbacks need hosted-command inspection
+
+**Status:** active | **Created:** 2026-09-27 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Include Git's fallback command variables in policy checks.
+
+**Prevention:** Inspect `EDITOR` and `VISUAL` like `GIT_EDITOR`, including unset and export forms; retain benign-editor controls.
+
+**Evidence:** On 2026-09-27, installed `--check` allowed destructive and publication payloads via both fallbacks but denied the `GIT_EDITOR` equivalents. `git var GIT_EDITOR` confirmed fallback selection; no payload ran. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `git_command_environment_variable_name`) now includes both names.
+
+---
 
 ## Footgun: Git push deny checks must normalize shell wrappers and control bodies
 
