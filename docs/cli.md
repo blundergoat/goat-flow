@@ -243,7 +243,9 @@ npx @blundergoat/goat-flow@latest learn new . --type footgun --category hooks --
 
 ### `goat-flow claims inspect|recover [path] --target <project-relative-path>`
 
-Inspect one path-write ownership marker, or remove only the unchanged marker an operator has confirmed is abandoned. Use this route when `install` or `learn new` reports that another cooperating writer owns a target. Claims never expire, and the command does not infer process liveness, marker age, or abandonment.
+Inspect one path-write ownership marker, or remove only the unchanged marker an operator has confirmed is abandoned.
+Use this route when install, hook changes, `learn new`, or index regeneration reports that another cooperating writer owns a target.
+Claims never expire, and the command does not infer process liveness, marker age, or abandonment.
 
 Start with the read-only inspection:
 
@@ -260,7 +262,14 @@ npx @blundergoat/goat-flow@latest claims recover . --target docs/cli.md \
   --marker-sha256 <64-lowercase-hex> --confirm-abandoned
 ```
 
-Recovery inspects the marker again and passes that same in-process evidence to the owner-safe removal helper. A missing confirmation, malformed or stale digest, unsafe marker, disappearance, or identity change leaves the marker in place and requires a fresh inspection. There is no force, expiry, process-liveness guess, claim stealing, or automatic cleanup path. Both subcommands support only terminal text or JSON output; they do not accept `--output`.
+Recovery inspects the marker again and passes that evidence to the removal helper.
+A short-lived `<key>.recovery` file beside the claim marker serializes recoveries for one target.
+An existing guard returns `recovery-busy`; the CLI names its path and explains how to handle an active or interrupted recovery without removing either file.
+
+Wait for an active recovery to finish. If it was interrupted, stop all writers and recoveries, then inspect the claim directory and marker.
+Remove only the abandoned `.recovery` file, then inspect the claim again before retrying.
+
+A missing confirmation, malformed or stale digest, unsafe marker, disappearance, or identity change leaves the claim in place for fresh inspection. There is no force, expiry, process-liveness guess, claim stealing, or automatic claim cleanup. Both subcommands support only terminal text or JSON output; they do not accept `--output`.
 
 ### `goat-flow diagnostics context [path] [--agent <id>] [--format text|json|markdown]`
 
@@ -323,7 +332,9 @@ This command is advisory static analysis. It reuses manifest-backed agent facts 
 
 ### `goat-flow index [path]`
 
-Regenerate the generated learning-loop `INDEX.md` files for `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/` from bucket content. Each row maps one active entry to its source file with a grep-friendly `(search: "...")` anchor and a one-sentence hook; resolved entries are skipped. Output is deterministic - re-running with unchanged buckets produces a zero diff - and buckets whose directory is absent are skipped. Run it after adding, editing, renaming, or resolving any learning-loop entry; `stats --check` fails until you do.
+Regenerate learning-loop `INDEX.md` files for `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/` from bucket content. Each row maps one active entry to its source file with a grep-friendly `(search: "...")` anchor and a one-sentence hook; resolved entries are skipped. Re-running with unchanged buckets produces a zero diff.
+
+When at least one bucket exists, the command holds claims for all four index paths while generating and refuses another cooperating index writer. Absent buckets are skipped; if all are absent, it returns without creating claim state. Run it after adding, editing, renaming, or resolving any learning-loop entry; `stats --check` fails until you do.
 
 ```bash
 npx @blundergoat/goat-flow@latest index                       # Regenerate all four bucket indexes
@@ -778,7 +789,10 @@ Then return to the newer dashboard's Hooks page, review the selected project and
 Retry ordinary install afterward. Review any remaining file conflicts with `--dry-run`, and authorize only the replacements you intend.
 A hook review does not approve replacing other installer files; the recovery fixture separately approves `.goat-flow/.gitignore` before convergence.
 
-The old paths disappear after migration; running an older goat-flow version afterward is unsupported. Hook changes and `learn new` request public install when legacy storage remains. Claim coverage stays limited to install, hook changes, and `learn new`; direct agent edits remain outside it. Gitignored state is not disposable cache.
+The old paths disappear after migration; running an older goat-flow version afterward is unsupported.
+Hook changes and `learn new` request public install when legacy storage remains.
+Claims cover install, hook changes, `learn new`, public `index`, and dashboard index regeneration; direct agent edits remain outside that coverage.
+Gitignored state is not disposable cache.
 
 Before `managed.json` exists, the public CLI inventories every supported agent's legacy `.goat-flow/state/install/<agent>.json` evidence together. Clean, version-ordered evidence bootstraps receipt-free v2 state. One malformed legacy file, or equal or unrankable versions that disagree on a path hash, blocks every agent because selecting one agent cannot resolve project-wide history. Repair the paths named by `goat-flow status . --format json`, then rerun that command; `--force` cannot choose baseline history. Once `managed.json` exists, legacy hashes never regain baseline authority. A public install publishes the v2 state and replaces every supported agent file with a hashless cutover marker under the complete write claims before target mutation. A missing or incompatible marker is reported as `cutover-incompatible` and repaired only through the public install path.
 
