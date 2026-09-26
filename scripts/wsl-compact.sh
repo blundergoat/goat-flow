@@ -5,15 +5,17 @@ IFS=$'\n\t'
 
 usage() {
   cat <<'EOF'
-Compact one WSL 2 distribution's VHDX from Git Bash on Windows.
+Compact one WSL 2 distribution's VHDX on Windows.
 
 Usage:
   bash scripts/wsl-compact.sh
 
-Run interactively in Git Bash as an administrator under the Windows account
-that owns the distribution. The menu lists WSL 2 distributions with a VHDX.
-Compaction shuts down all running WSL distributions, then uses DiskPart to
-compact only the selected virtual disk.
+Run it from Windows Command Prompt (where bash starts WSL), a WSL shell, or
+Git Bash, under the Windows account that owns the distribution. Unless Git
+Bash is already running as Administrator, the script asks for administrator
+approval (UAC) and continues in a new PowerShell window, because compaction
+shuts down all running WSL distributions. The menu lists WSL 2 distributions
+with a VHDX, and DiskPart compacts only the selected virtual disk.
 
 No disk is changed until you select a distribution and type its exact name.
 Close Docker Desktop and WSL terminals before confirming.
@@ -36,16 +38,30 @@ if (( $# > 0 )); then
   esac
 fi
 
+is_wsl() {
+  [[ -n "${WSL_DISTRO_NAME:-}" || -n "${WSL_INTEROP:-}" ]] && return 0
+  [[ -r /proc/sys/kernel/osrelease ]] && grep -qi 'microsoft' /proc/sys/kernel/osrelease
+}
+
 case "$(uname -s)" in
-  MINGW*|MSYS*) ;;
-  *) die "Run this script from Git Bash on Windows, outside WSL." ;;
+  MINGW*|MSYS*) platform=git-bash ;;
+  Linux)
+    is_wsl || die "Run this script from Windows Command Prompt, WSL, or Git Bash on Windows."
+    platform=wsl
+    ;;
+  *) die "Run this script from Windows Command Prompt, WSL, or Git Bash on Windows." ;;
 esac
 
-[[ -t 0 ]] || die "An interactive Git Bash terminal is required."
-command -v powershell.exe >/dev/null 2>&1 \
+[[ -t 0 ]] || die "An interactive terminal is required."
+powershell="$(command -v powershell.exe || true)"
+if [[ -z "$powershell" && "$platform" == wsl ]]; then
+  # WSL can leave Windows directories off PATH (appendWindowsPath=false).
+  powershell="$(wslpath -u 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' 2>/dev/null || true)"
+fi
+[[ -n "$powershell" && -x "$powershell" ]] \
   || die "powershell.exe was not found on the Windows PATH."
 
-powershell_code="$(cat <<'POWERSHELL'
+compaction_code="$(cat <<'POWERSHELL'
 $ErrorActionPreference = 'Stop'
 
 try {
@@ -74,6 +90,7 @@ try {
         }
 
         $vhdFileName = [string]($key.GetValue('VhdFileName', 'ext4.vhdx'))
+        # A VhdFileName with directory parts is skipped, so a listed VHDX always sits directly in its distribution's BasePath.
         if (-not $vhdFileName.EndsWith('.vhdx', [StringComparison]::OrdinalIgnoreCase) -or
             [IO.Path]::GetFileName($vhdFileName) -cne $vhdFileName) {
             continue
@@ -132,7 +149,7 @@ try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw 'Run Git Bash as Administrator under the Windows account that owns this distribution.'
+        throw 'Administrator rights are required to compact the VHDX.'
     }
 
     $key = Get-Item -LiteralPath $selected.RegistryKey
@@ -155,6 +172,7 @@ try {
         throw 'The VHDX path cannot be represented safely in a DiskPart script.'
     }
     $diskpartPath = $selected.Path
+    # Registrations such as Docker Desktop's store BasePath with the \\?\ prefix; DiskPart gets the plain drive-letter path.
     if ($diskpartPath.StartsWith('\\?\', [StringComparison]::Ordinal)) {
         $diskpartPath = $diskpartPath.Substring(4)
         if ($diskpartPath -notmatch '^[A-Za-z]:\\') {
@@ -171,11 +189,11 @@ try {
     $beforeBytes = ([IO.FileInfo]::new($selected.Path)).Length
     $diskpartScript = New-TemporaryFile
     try {
-        $commands = @(
+        $diskpartCommands = @(
             ('select vdisk file="{0}"' -f $diskpartPath)
             'compact vdisk'
         )
-        Set-Content -LiteralPath $diskpartScript.FullName -Value $commands -Encoding ASCII
+        Set-Content -LiteralPath $diskpartScript.FullName -Value $diskpartCommands -Encoding ASCII
         Write-Host 'Compacting the selected VHDX with DiskPart...'
         & diskpart.exe /s $diskpartScript.FullName
         $diskpartExit = $LASTEXITCODE
@@ -202,7 +220,40 @@ catch {
     [Console]::Error.WriteLine('[ERR] ' + $_.Exception.Message)
     exit 1
 }
+finally {
+    # The elevated-window handoff sets $holdWindow; its window closes on exit before the result can be read.
+    if ($holdWindow) {
+        Read-Host 'Press Enter to close' | Out-Null
+    }
+}
 POWERSHELL
 )"
 
-MSYS_NO_PATHCONV=1 powershell.exe -NoLogo -NoProfile -Command "$powershell_code"
+# fltmc.exe exits 0 only in an elevated session, so elevated Git Bash compacts in this terminal.
+# Other launches continue in a new elevated PowerShell window after UAC approval; it keeps running when wsl --shutdown ends a WSL launch.
+if [[ "$platform" == git-bash ]] && fltmc.exe >/dev/null 2>&1; then
+  MSYS_NO_PATHCONV=1 "$powershell" -NoLogo -NoProfile -Command "$compaction_code"
+  exit
+fi
+
+# -EncodedCommand is base64 UTF-16LE, so the script passes through both command lines without quoting.
+# shellcheck disable=SC2016  # $holdWindow is PowerShell source, not a Bash expansion.
+encoded="$(printf '$holdWindow = $true\n%s' "$compaction_code" | iconv -f UTF-8 -t UTF-16LE | base64 -w 0)"
+launch_template="$(cat <<'POWERSHELL'
+$ErrorActionPreference = 'Stop'
+try {
+    Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs -ArgumentList @(
+        '-NoLogo', '-NoProfile', '-EncodedCommand', 'ENCODED_COMMAND'
+    )
+}
+catch {
+    [Console]::Error.WriteLine('[ERR] ' + $_.Exception.Message)
+    exit 1
+}
+POWERSHELL
+)"
+
+printf 'Requesting administrator approval...\n'
+MSYS_NO_PATHCONV=1 "$powershell" -NoLogo -NoProfile -Command "${launch_template/ENCODED_COMMAND/$encoded}" \
+  || die "The administrator window did not open; no files were changed."
+printf 'Continuing in the administrator PowerShell window.\n'
