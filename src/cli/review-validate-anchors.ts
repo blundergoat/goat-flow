@@ -5,7 +5,7 @@
  * Paths and file kinds stay within the reviewed project; unavailable or changed evidence produces a repairable violation.
  * Raw reads avoid filters and Git writes, while the supplied authority checks drift before and after anchor lookup.
  */
-import { execFileSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import {
   closeSync,
   constants,
@@ -413,7 +413,7 @@ export function validateFindingLine(
 }
 
 /**
- * Read local Git metadata without optional writes, replacements, execution helpers, or lazy fetching.
+ * Launch one bounded local Git read without optional writes, replacements, execution helpers, or lazy fetching.
  *
  * @param root - selected project's real root; inherited Git location overrides cannot select a different project
  *
@@ -421,15 +421,14 @@ export function validateFindingLine(
  * @param input - transient command input; absent means no stdin payload
  * @param outputLimitBytes - largest buffered stdout accepted; blob reads pass their measured response size instead of the metadata default
  *
- * @returns raw Git output, including NUL-delimited paths where requested
- * @throws ReviewAuthorityError when local metadata or objects are unavailable; Git diagnostics are not exposed
+ * @returns process status and bounded raw output for the caller to classify
  */
-export function readGit(
+function runGit(
   root: string,
   args: string[],
   input?: Buffer | string,
   outputLimitBytes = GIT_METADATA_OUTPUT_LIMIT_BYTES,
-): Buffer {
+): SpawnSyncReturns<Buffer> {
   // A caller's alternate index or Git directory must not substitute another project for the selected root.
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -439,40 +438,74 @@ export function readGit(
         ),
     ),
   );
-  try {
-    return execFileSync(
-      "git",
-      [
-        "--no-optional-locks",
-        "--no-replace-objects",
-        "--literal-pathspecs",
-        "-C",
-        root,
-        "-c",
-        "core.fsmonitor=false",
-        "-c",
-        "core.untrackedCache=false",
-        ...args,
-      ],
-      {
-        input,
-        maxBuffer: outputLimitBytes,
-        stdio: ["pipe", "pipe", "pipe"],
-        env: {
-          ...environment,
-          GIT_OPTIONAL_LOCKS: "0",
-          GIT_NO_LAZY_FETCH: "1",
-          GIT_TERMINAL_PROMPT: "0",
-        },
+  return spawnSync(
+    "git",
+    [
+      "--no-optional-locks",
+      "--no-replace-objects",
+      "--literal-pathspecs",
+      "-C",
+      root,
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      "core.untrackedCache=false",
+      ...args,
+    ],
+    {
+      input,
+      maxBuffer: outputLimitBytes,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...environment,
+        LC_ALL: "C",
+        GIT_OPTIONAL_LOCKS: "0",
+        GIT_NO_LAZY_FETCH: "1",
+        GIT_TERMINAL_PROMPT: "0",
       },
-    );
-  } catch {
-    // A removed branch or unavailable object leaves the review without its selected source; Git diagnostics may contain file content.
-    throw new ReviewAuthorityError(
-      "authority-object",
-      `cannot read local Git ${args[0]} metadata for the selected review`,
-    );
-  }
+    },
+  );
+}
+
+/** Accept a completed child with EPERM metadata; reject failed launches and truncated output. */
+function completedGit(result: SpawnSyncReturns<Buffer>): boolean {
+  return (
+    result.status === 0 &&
+    result.signal === null &&
+    (result.error === undefined ||
+      ("code" in result.error && result.error.code === "EPERM"))
+  );
+}
+
+/** Return successful Git bytes or a content-safe refusal for unavailable metadata.
+ * @throws ReviewAuthorityError when the Git command did not complete successfully
+ */
+function gitOutput(result: SpawnSyncReturns<Buffer>, command: string): Buffer {
+  if (completedGit(result)) return result.stdout;
+  // A removed branch or unavailable object leaves the review without its selected source; Git diagnostics may contain file content.
+  throw new ReviewAuthorityError(
+    "authority-object",
+    `cannot read local Git ${command} metadata for the selected review`,
+  );
+}
+
+/**
+ * Read local Git metadata while preserving a completed result with sandbox error metadata.
+ *
+ * @param root - selected project's real root; inherited Git location overrides cannot select a different project
+ * @param args - fixed read command and literal arguments chosen by the authority reader
+ * @param input - transient command input; absent means no stdin payload
+ * @param outputLimitBytes - largest buffered stdout accepted; blob reads pass their measured response size instead of the metadata default
+ * @returns raw Git output, including NUL-delimited paths where requested
+ * @throws ReviewAuthorityError when local metadata or objects are unavailable; Git diagnostics are not exposed
+ */
+export function readGit(
+  root: string,
+  args: string[],
+  input?: Buffer | string,
+  outputLimitBytes = GIT_METADATA_OUTPUT_LIMIT_BYTES,
+): Buffer {
+  return gitOutput(runGit(root, args, input, outputLimitBytes), args[0] ?? "command");
 }
 
 /**
@@ -508,16 +541,21 @@ export function nulRecords(bytes: Buffer): string[] {
  */
 export function gitContext(projectRoot: string): GitContext {
   const root = realpathSync(projectRoot);
-  let topLevel: string;
-  try {
-    // Remove only Git's record terminator; trailing whitespace belongs to the selected project's directory name.
-    topLevel = readGit(root, ["rev-parse", "--show-toplevel"])
-      .toString()
-      .replace(/\n$/u, "");
-  } catch {
-    // A standalone folder can still be reviewed through explicit live paths or an area selection.
+  const topLevelResult = runGit(root, ["rev-parse", "--show-toplevel"]);
+  if (
+    topLevelResult.status === 128 &&
+    topLevelResult.error === undefined &&
+    /^fatal: not a git repository(?:\s|$)/u.test(
+      topLevelResult.stderr.toString("utf8").trimStart(),
+    )
+  ) {
+    // Only a confirmed non-repository response permits standalone file selection.
     return { root, objectFormat: null, blobs: new Map() };
   }
+  // Remove only Git's record terminator; trailing whitespace belongs to the selected project's directory name.
+  const topLevel = gitOutput(topLevelResult, "rev-parse")
+    .toString()
+    .replace(/\n$/u, "");
   requireAuthority(
     realpathSync(topLevel) === root,
     "selected project must be the repository root",

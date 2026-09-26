@@ -553,6 +553,22 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
     });
   });
 
+  it("keeps an inline Small plan compact when file writing is authorized later", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const delivery = readMarkdownSection(
+        skillPath,
+        "Phase 2 - Deliver Milestones",
+      );
+      const transition = delivery.match(/^\*\*Transition out:\*\* .+$/mu)?.[0];
+      assert.ok(transition, `${skillPath}: missing inline-to-file transition`);
+      assert.match(
+        transition,
+        /Hotfix\/Small Feature.*Mode 3.*Standard\+.*Mode 4/u,
+        `${skillPath}: an approved Small plan must keep compact Mode 3 rendering`,
+      );
+    });
+  });
+
   it("orders goat-plan path-only classification before bounded retrieval and plan reads", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
