@@ -17,6 +17,7 @@ const CLAIM_DIRECTORY = ".goat-flow/state/locks";
 const CLAIM_SCHEMA = "goat-flow.path-write-claim.v1";
 const CLAIM_KEY_DOMAIN = `${CLAIM_SCHEMA}\0`;
 const MAX_CLAIM_BYTES = 4096;
+const IDENTITY_READ_CHUNK_BYTES = 64 * 1024;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const UNSUPPORTED_EXCLUSIVE_CREATE_CODES = new Set([
   "ENOSYS",
@@ -315,35 +316,90 @@ function targetParentsExist(
   return true;
 }
 
+/** Return whether a later observation still names the single-link regular file inspected before hashing. */
+function isSameInspectedFile(
+  current: fs.Stats | null,
+  before: fs.Stats,
+): boolean {
+  return (
+    current !== null &&
+    isSingleLinkRegularFile(current) &&
+    current.dev === before.dev &&
+    current.ino === before.ino
+  );
+}
+
 /**
- * Read a target's bytes only when the same regular file remains at that path for the whole read.
+ * Open the inspected target without following a symlink swapped in after lstat; O_NONBLOCK keeps a swapped-in FIFO from
+ * hanging the open, and the caller's fstat check then rejects it as non-regular.
+ *
+ * @returns an open read-only descriptor the caller must close
+ * @throws PathWriteClaimError target-changed for a swapped-in symlink, or target-unreadable after removal or permission loss
+ */
+function openTargetWithoutFollowing(
+  absoluteTarget: string,
+  targetPath: string,
+): number {
+  try {
+    return fs.openSync(
+      absoluteTarget,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+  } catch (error) {
+    // ELOOP means a symlink replaced the inspected file; any other failure leaves the user's target unreadable.
+    const reason =
+      (error as NodeJS.ErrnoException).code === "ELOOP"
+        ? "target-changed"
+        : "target-unreadable";
+    throw new PathWriteClaimError(reason, targetPath);
+  }
+}
+
+/** Stream one descriptor into SHA-256 through a fixed buffer, so memory stays constant for any target size. */
+function hashDescriptor(descriptor: number): string {
+  const hash = createHash("sha256");
+  const chunk = Buffer.alloc(IDENTITY_READ_CHUNK_BYTES);
+  for (;;) {
+    const count = fs.readSync(descriptor, chunk, 0, chunk.length, null);
+    if (count === 0) return hash.digest("hex");
+    hash.update(chunk.subarray(0, count));
+  }
+}
+
+/**
+ * Hash a target only when the same regular file remains at that path for the whole read.
  * Use while capturing admission identity so a concurrent editor cannot make the command approve stale user content.
  *
+ * @returns lowercase SHA-256 of the exact bytes read from the inspected file
  * @throws PathWriteClaimError when the target cannot be read or changes during the identity read
  */
-function readStableTargetBytes(
+function readStableTargetDigest(
   absoluteTarget: string,
   targetPath: string,
   before: fs.Stats,
-): Buffer {
-  let bytes: Buffer;
+): string {
+  const descriptor = openTargetWithoutFollowing(absoluteTarget, targetPath);
+  let digest: string;
   try {
-    bytes = fs.readFileSync(absoluteTarget);
-  } catch {
-    // The user's editor or another command may remove or make the target unreadable after metadata was captured.
+    // The descriptor must name the inode inspected above, not a replacement created between lstat and open.
+    if (!isSameInspectedFile(fs.fstatSync(descriptor), before)) {
+      throw new PathWriteClaimError("target-changed", targetPath);
+    }
+    digest = hashDescriptor(descriptor);
+  } catch (error) {
+    if (error instanceof PathWriteClaimError) throw error;
+    // The user's editor or another command may make the target unreadable after metadata was captured.
     throw new PathWriteClaimError("target-unreadable", targetPath);
+  } finally {
+    fs.closeSync(descriptor);
   }
-  const after = readTargetStats(absoluteTarget, targetPath);
   // A missing, replaced, linked, or inode-changed target means the command no longer has the bytes the user reviewed.
   if (
-    after === null ||
-    !isSingleLinkRegularFile(after) ||
-    after.dev !== before.dev ||
-    after.ino !== before.ino
+    !isSameInspectedFile(readTargetStats(absoluteTarget, targetPath), before)
   ) {
     throw new PathWriteClaimError("target-changed", targetPath);
   }
-  return bytes;
+  return digest;
 }
 
 /**
@@ -370,8 +426,10 @@ function readIdentityAtRoot(
   if (!isSingleLinkRegularFile(before)) {
     throw new PathWriteClaimError("unsafe-target", targetPath);
   }
-  const bytes = readStableTargetBytes(absoluteTarget, targetPath, before);
-  return { state: "present", sha256: sha256(bytes) };
+  return {
+    state: "present",
+    sha256: readStableTargetDigest(absoluteTarget, targetPath, before),
+  };
 }
 
 /**

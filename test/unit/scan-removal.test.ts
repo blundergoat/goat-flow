@@ -239,5 +239,22 @@ describe("claims command routing", () => {
         ]),
       /claims target path must not contain terminal control characters/u,
     );
+    // Bidirectional overrides and isolates reorder the displayed Target: line without any C0/C1 byte.
+    assert.throws(
+      () =>
+        parseCLIArgs(["claims", "inspect", "--target", "docs/\u202edm.ilc"]),
+      /claims target path must not contain terminal control characters/u,
+    );
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "claims",
+          "inspect",
+          "project\u2067",
+          "--target",
+          "docs/cli.md",
+        ]),
+      /claims project path must not contain terminal control characters/u,
+    );
   });
 });

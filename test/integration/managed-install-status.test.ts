@@ -311,4 +311,23 @@ describe("managed install status evidence", () => {
     assert.deepEqual(malformed.subjects.paths, [evidencePath]);
     assert.match(malformed.reason, /not valid JSON/iu);
   });
+
+  it("blocks an oversized v2 authority file at the bounded read", () => {
+    const projectPath = makeTempProject();
+    mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
+      recursive: true,
+    });
+    // Valid but padded JSON: an unbounded read would load and parse it, failing schema checks instead of stopping at the size ceiling.
+    writeFileSync(
+      managedInstallStateV2Path(projectPath),
+      `{}${" ".repeat(9 * 1024 * 1024)}\n`,
+    );
+
+    const report = readEvidence(projectPath);
+    const malformed = evidenceEntry(report, "malformed-blocking");
+    assert.deepEqual(malformed.subjects.paths, [
+      ".goat-flow/state/install/managed.json",
+    ]);
+    assert.match(malformed.reason, /could not be read/iu);
+  });
 });

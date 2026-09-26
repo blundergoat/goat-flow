@@ -210,6 +210,16 @@ describe("path write claims", () => {
       state: "present",
       sha256: createHash("sha256").update(content).digest("hex"),
     });
+
+    // Non-repeating bytes spanning several read chunks and a partial tail: a chunk offset or tail error changes the digest.
+    const largeContent = Buffer.from(
+      Array.from({ length: 200_003 }, (_, index) => index % 251),
+    );
+    fs.writeFileSync(join(projectRoot, "large.bin"), largeContent);
+    assert.deepEqual(readPathWriteTargetIdentity(projectRoot, "large.bin"), {
+      state: "present",
+      sha256: createHash("sha256").update(largeContent).digest("hex"),
+    });
   });
 
   it("rejects a replaced coordination parent before allocating a claim marker", (context: TestContext) => {

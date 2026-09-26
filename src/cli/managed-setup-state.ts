@@ -11,7 +11,6 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
-  readFileSync,
   renameSync,
   rmSync,
   type Stats,
@@ -23,6 +22,7 @@ import type { ManagedSetupPreview } from "./managed-setup-preview.js";
 import { compareVersions, isReleaseVersion } from "./version-compare.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
 import { installStateRelativeDirectory } from "./local-state-migration.js";
+import { readProjectTextFile } from "./project-file.js";
 
 const MANAGED_INSTALL_STATE_SCHEMA = "goat-flow.install-state.v1" as const;
 
@@ -836,6 +836,36 @@ function parseLegacyInstallState(
 }
 
 /**
+ * Read one legacy state file through the bounded, no-follow project reader, then parse it.
+ * Error behavior: throws a read error for oversized, swapped, or unreadable files, and a JSON error for unparseable bytes.
+ *
+ * @param projectPath - selected project root that must contain the state file
+ * @param statePath - absolute legacy state path already inspected as a single-link regular file
+ * @param agent - agent named in the thrown diagnostics
+ * @returns the exact bytes read and their parsed JSON value
+ */
+function readLegacyInstallStateJson(
+  projectPath: string,
+  statePath: string,
+  agent: AgentId,
+): { serializedState: string; rawState: unknown } {
+  let serializedState: string;
+  try {
+    serializedState = readProjectTextFile(projectPath, statePath);
+  } catch {
+    throw new Error(`Legacy install state for ${agent} could not be read.`);
+  }
+  try {
+    return {
+      serializedState,
+      rawState: JSON.parse(serializedState) as unknown,
+    };
+  } catch {
+    throw new Error(`Legacy install state for ${agent} is not valid JSON.`);
+  }
+}
+
+/**
  * Read every known legacy state file before resolving any path baseline.
  * Invariant: every present known-agent file is inspected without consulting agent selection.
  * Error behavior: throws if any discovered legacy file is unsafe, malformed, or non-canonical.
@@ -853,14 +883,11 @@ function readLegacyInstallStateInventory(
       if (!stateStats.isFile() || stateStats.nlink !== 1) {
         throw new Error(`${affectedPath} must be a safe regular file.`);
       }
-      let serializedState: string;
-      let rawState: unknown;
-      try {
-        serializedState = readFileSync(statePath, "utf-8");
-        rawState = JSON.parse(serializedState) as unknown;
-      } catch {
-        throw new Error(`Legacy install state for ${agent} is not valid JSON.`);
-      }
+      const { serializedState, rawState } = readLegacyInstallStateJson(
+        projectPath,
+        statePath,
+        agent,
+      );
       const legacyState = parseLegacyInstallState(rawState, agent);
       // V1 predates UTF-8 canonical ordering, so preserve its parsed row sequence while rejecting duplicate-key or formatting ambiguity.
       const normalizedLegacyBytes = `${JSON.stringify(
@@ -1015,6 +1042,7 @@ function facadeEvidence(state: ManagedInstallStateV2): {
  * Error behavior: throws if the authority file is unsafe, unreadable, malformed, or non-canonical.
  */
 function readPersistedManagedInstallStateFacade(
+  projectPath: string,
   statePath: string,
   stateStats: Stats,
   relativeStatePath: string,
@@ -1024,7 +1052,8 @@ function readPersistedManagedInstallStateFacade(
   }
   let serializedState: string;
   try {
-    serializedState = readFileSync(statePath, "utf-8");
+    // Bounded, no-follow read: status reports an oversized or swapped authority file instead of exhausting memory on it.
+    serializedState = readProjectTextFile(projectPath, statePath);
   } catch {
     throw new Error("Managed install state could not be read.");
   }
@@ -1128,6 +1157,7 @@ export function readManagedInstallStateFacade(
     if (stateStats !== null) {
       source = "v2";
       return readPersistedManagedInstallStateFacade(
+        projectPath,
         statePath,
         stateStats,
         `${stateDirectory}/managed.json`,

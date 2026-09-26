@@ -24,6 +24,10 @@ import {
 } from "./cli-types.js";
 import { QUALITY_MODES, type QualityMode } from "./quality/schema.js";
 
+/** Same single-line policy as managed install state and learning entries: C0, DEL, C1, line separators, and bidirectional controls. */
+const TERMINAL_UNSAFE_CHARACTER =
+  /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/u;
+
 /**
  * Read the `--mode` filter used to narrow quality history and diff output.
  *
@@ -307,7 +311,8 @@ export function parseEventsPositionals(positionals: string[]): {
 
 /**
  * Keep operator-supplied claim paths from changing the shape of terminal diagnostics or copyable commands.
- * Error behavior: throws CLIError before path resolution or marker access when C0, DEL, or C1 control characters are present.
+ * Error behavior: throws CLIError before path resolution or marker access when C0, DEL, C1, line-separator, or bidirectional
+ * control characters are present, so a path cannot reorder or split the `Target:` line and recovery commands.
  *
  * @param label - public claim field named by a refusal
  * @param argumentValue - exact operator-supplied path checked before display
@@ -316,14 +321,7 @@ export function assertTerminalSafeClaimArgument(
   label: "project path" | "target path",
   argumentValue: string,
 ): void {
-  const hasControlCharacter = Array.from(argumentValue).some((character) => {
-    const codePoint = character.codePointAt(0);
-    return (
-      codePoint !== undefined &&
-      (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
-    );
-  });
-  if (hasControlCharacter) {
+  if (TERMINAL_UNSAFE_CHARACTER.test(argumentValue)) {
     throw new CLIError(
       `claims ${label} must not contain terminal control characters.`,
       2,

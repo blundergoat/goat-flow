@@ -271,6 +271,8 @@ scripts/                         = development, release, test, and maintenance s
 ├── setup-initial.sh             = initial repo scaffolding helper
 ├── start-dev.sh                 = local dashboard dev wrapper
 ├── warn-node-pty.mjs            = postinstall node-pty warning helper
+├── wsl-compact.sh               = Git Bash (Windows, admin) helper that compacts one selected WSL 2 VHDX via DiskPart
+├── wsl-disk-cleanup.sh          = in-distro WSL disk report, dry-run, and confirmed cleanup of stale caches and temp files
 ├── installers/                  = installer-related helper scripts
 └── maintenance/                 = cleanup, secret scanning, Zone.Identifier removal
 ```

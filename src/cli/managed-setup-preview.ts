@@ -18,6 +18,7 @@ import { dirname, posix } from "node:path";
 import { installStateRelativeDirectory } from "./local-state-migration.js";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
+import { readProjectTextFile } from "./project-file.js";
 import { getSkillFiles, loadManifest } from "./manifest/manifest.js";
 import {
   canonicalManagedInstallStateBytes,
@@ -177,10 +178,11 @@ function readManagedInstallCutoverEvidence(
     }
     let markerBytes: string;
     try {
-      markerBytes = readFileSync(managedInstallStatePath(projectPath, agent), {
-        encoding: "utf-8",
-        flag: "r",
-      });
+      // Bounded, no-follow read: `status` reaches this for every marker, so an oversized target file must not exhaust memory.
+      markerBytes = readProjectTextFile(
+        projectPath,
+        managedInstallStatePath(projectPath, agent),
+      );
     } catch {
       // An editor or permission change can make a marker unreadable between checks; report incompatible history.
       incompatibleAgents.push(agent);

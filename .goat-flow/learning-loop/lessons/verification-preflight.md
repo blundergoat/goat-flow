@@ -8,7 +8,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Preflight PASS output still needs exit-status proof
 
 **Status:** active | **Created:** 2026-06-07
-**Incident count:** 2 | **Latest occurrence:** 2026-07-12
+**Incident count:** 3 | **Latest occurrence:** 2026-09-26
 
 **Prevention:** When a shell gate has an EXIT trap or report renderer, capture both its summary and `$?` before treating it as final evidence; a green report line is not sufficient if the process status disagrees. End no-op-safe renderer helpers with `return 0`, make zero-match parser pipelines explicit with `|| true`, and keep the closeout an explicit error-count branch. Evidence anchors: `scripts/preflight-checks.sh` (search: `_emit_section_row`), `scripts/preflight-checks.sh` (search: `if [[ "$errors" -gt 0 ]]; then`).
 
@@ -17,6 +17,8 @@ last_reviewed: 2026-09-19
 **Root cause:** Preflight had successful no-op paths that returned 1 under `set -euo pipefail`: renderer helpers returned false when no expansion, phase change, or active section existed, and the code-map parser used `grep` inside command substitution without `|| true`, so a zero-match parse aborted. The EXIT trap preserved the non-zero status although no check had failed.
 
 **Recurrence 2026-07-12:** The new preflight runner passed focused checks, but `Doc/code drift` failed until `.goat-flow/code-map.md` listed the runner; keep the top-level script inventory current. `scripts/preflight-checks.sh` (search: `code-map.md scripts list drifts from scripts/ filesystem`).
+
+**Recurrence 2026-09-26:** Commit `03b81959` added `scripts/wsl-compact.sh` and `scripts/wsl-disk-cleanup.sh` without code-map rows. On PR #61 the `checks` job passed, and the drift surfaced only in `test-slow (2/5)` as a failing `checkDrift: installer round-trip fixture` test, whose name does not mention the code-map. Read the preflight report embedded in that failure for the `✗` row before debugging the fixture. `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `preflight should pass in temp round-trip repo`).
 
 ---
 
