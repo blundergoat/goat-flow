@@ -1,9 +1,25 @@
 ---
 category: filesystem-io
-last_reviewed: 2026-08-23
+last_reviewed: 2026-09-26
 ---
 
-**Scope:** Reading and writing files from agent code - byte-mode versus codepoint replacement, non-fatal IO contracts, and typing a wrapper over an overloaded Node API. Fixtures that create the files a test asserts are [test-fixtures.md](test-fixtures.md).
+**Scope:** File paths and I/O across runtimes - Unicode text replacement, Windows extended paths, non-fatal IO contracts, and Node wrapper typing. Fixtures that create the files a test asserts are [test-fixtures.md](test-fixtures.md).
+
+## Lesson: Probe WSL registry paths before choosing PowerShell path helpers
+
+**Status:** active | **Created:** 2026-09-26
+**Decision changed:** Use .NET path and file APIs for WSL VHDX discovery, and probe the actual registered paths before shipping the menu.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Build WSL VHDX paths with `[IO.Path]::Combine`, then inspect them with `[IO.File]` and `[IO.FileInfo]`. Test discovery against the registered WSL 2 distributions without shutting them down. Evidence: `scripts/wsl-compact.sh` (search: `$vhdPath = [IO.Path]::Combine`).
+
+**What happened:** The first compaction-menu implementation used PowerShell `Join-Path`. A read-only Windows PowerShell probe raised `PSArgumentNullException` for one registration whose `BasePath` began with `\\?\`. After switching to the .NET APIs, the probe found the VHDX files for all three WSL 2 registrations on this machine on 2026-09-26.
+
+**Root cause:** I assumed the path helper accepted every filesystem path form returned by the WSL registry without probing the registered values.
+
+---
+
 ## Lesson: UTF-8 punctuation sweeps need post-replacement grep
 
 **Status:** active | **Created:** 2026-05-23
