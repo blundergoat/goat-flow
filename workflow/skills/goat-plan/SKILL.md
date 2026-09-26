@@ -18,7 +18,7 @@ Use for milestones, replans, rescope, or plan resume in `.goat-flow/plans/<activ
 ## Boundary Commands
 
 - **NEVER:** Implement or do another skill's work.
-- **ALWAYS:** Keep the selected mode through transition.
+- **ALWAYS:** Keep the selected mode for the current request; new explicit intent runs Step 0 again.
 - **DEFER TO:** Direct tests/questions or the matching goat-* skill.
 
 | Excuse | Reality |
@@ -153,7 +153,7 @@ Edit the named file in place; a path alone does not qualify. Preserve unaffected
 
 Present Phase 1 inline and stop; no files or `.goat-flow/plans/` changes. Skip Phase 3.
 
-**Transition out:** On "write these to files" / "let's go ahead", switch to Mode 4 using approved Phase 1 output. If prior-turn/session, re-read instructions, `.active`, named sources. Do NOT re-run breakdown.
+**Transition out:** When the user explicitly requests files for an inline plan, reuse Phase 1: Hotfix/Small Feature selects Mode 3; Standard+ selects Mode 4. Across turns, re-read instructions, `.active`, and named sources; do not repeat breakdown. Clarify an ambiguous "let's go ahead".
 
 ### Mode 3: Small File-Write (Hotfix / Small Feature)
 
