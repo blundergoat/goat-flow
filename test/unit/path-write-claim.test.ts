@@ -1,7 +1,7 @@
 /**
  * Process and filesystem contract for cooperative path-write claims.
  *
- * Use when `install` or `learn new` changes claim admission, contention, cleanup, or operator-confirmed recovery.
+ * Use when install, hook changes, learning entries, or indexes change claim admission, cleanup, or recovery.
  * These tests cover cooperating writers; direct file edits remain outside the helper's guarantee.
  */
 import assert from "node:assert/strict";
@@ -669,6 +669,55 @@ describe("path write claims", () => {
       },
     ]);
     assert.deepEqual(releasePathWriteClaims(next), [
+      { targetPath, status: "released" },
+    ]);
+  });
+
+  // Fixture purpose: two inspected recoveries contend on one guard before a later writer claims the target.
+  // Filesystem side effects: abandon a claim in a disposable project, then check a new writer retains its claim.
+  it("serializes recoveries before another writer acquires the target", (context: TestContext) => {
+    const projectRoot = makeProject();
+    const targetPath = "managed.txt";
+    assert.deepEqual(runAbandoningOwner(projectRoot, targetPath), {
+      didAcquireClaim: true,
+    });
+    const firstEvidence = inspectPathWriteClaim(projectRoot, targetPath);
+    const secondEvidence = inspectPathWriteClaim(projectRoot, targetPath);
+    assert.ok(firstEvidence && secondEvidence);
+    const originalUnlink = fs.unlinkSync;
+    let secondRecoveryResult: string | null = null;
+    context.mock.method(fs, "unlinkSync", (path: fs.PathLike) => {
+      // Begin the second recovery just before the first removes the old marker, when a stale inspection would be dangerous.
+      if (
+        String(path) === firstEvidence.markerPath &&
+        secondRecoveryResult === null
+      ) {
+        secondRecoveryResult =
+          removeConfirmedAbandonedPathWriteClaim(secondEvidence);
+      }
+      return originalUnlink(path);
+    });
+    assert.equal(
+      removeConfirmedAbandonedPathWriteClaim(firstEvidence),
+      "removed",
+    );
+    assert.equal(secondRecoveryResult, "recovery-busy");
+    const expectedIdentity = readPathWriteTargetIdentity(
+      projectRoot,
+      targetPath,
+    );
+    const nextWriter = acquirePathWriteClaims(projectRoot, [
+      { targetPath, expectedIdentity },
+    ]);
+    assert.deepEqual(
+      runContender(projectRoot, targetPath, join(projectRoot, "third.txt")),
+      {
+        didAcquireClaim: false,
+        reason: "busy",
+        targetPath,
+      },
+    );
+    assert.deepEqual(releasePathWriteClaims(nextWriter), [
       { targetPath, status: "released" },
     ]);
   });

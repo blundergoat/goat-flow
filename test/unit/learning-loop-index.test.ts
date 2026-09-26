@@ -1,18 +1,28 @@
 /**
- * Unit tests for the learning-loop index generator: parse-bucket section/ADR parsing (active
- * entries in, resolved entries out, mechanical hook extraction) and format-index rendering
- * (unified row schema, generated frontmatter, determinism). Fixtures live in a temp dir so the
- * live repo's learning-loop content never leaks into assertions.
+ * Check how learning-loop entries become generated indexes in disposable projects.
+ *
+ * Active entries stay retrievable, resolved entries drop out, and rendered rows remain deterministic.
+ * Temporary fixtures keep this repository's own learning-loop content out of assertions.
  */
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFS } from "../../src/cli/facts/fs.js";
-import { generateIndexes } from "../../src/cli/learning-loop-index/generate.js";
+import {
+  generateIndexes,
+  generateIndexesWithClaims,
+} from "../../src/cli/learning-loop-index/generate.js";
 import {
   firstLearningEntryBodyParagraph,
+  INDEX_BUCKETS,
   parseActiveBucketSections,
   parseBucket,
 } from "../../src/cli/learning-loop-index/parse-bucket.js";
@@ -674,6 +684,50 @@ Choose the visible path. Later prose stays out of the hook.
       ]);
     } finally {
       rmSync(diagnosticRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Fixture purpose: a bucket appears after the first existence pass, as it could while another process creates a learning-loop directory.
+  // Filesystem side effects: creates that bucket inside a disposable project and checks that no unclaimed index was published.
+  it("leaves a newly appearing bucket for the next claimed index run", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goatflow-index-race-"));
+    const bucketPaths = {
+      footguns: FOOTGUNS_DIR,
+      lessons: LESSONS_DIR,
+      patterns: PATTERNS_DIR,
+      decisions: DECISIONS_DIR,
+    };
+    const projectFiles = createFS(projectRoot);
+    let existenceChecks = 0;
+    const filesWithAppearingBucket = {
+      ...projectFiles,
+      /** Return the original result; the filesystem side effect creates a bucket after the last check to model a concurrent writer. */
+      exists(path: string): boolean {
+        const existed = projectFiles.exists(path);
+        existenceChecks += 1;
+        // Another process creates a bucket only after every admission check has seen it absent.
+        if (existenceChecks === INDEX_BUCKETS.length) {
+          mkdirSync(join(projectRoot, FOOTGUNS_DIR), { recursive: true });
+        }
+        return existed;
+      },
+    };
+    try {
+      const results = generateIndexesWithClaims(
+        projectRoot,
+        filesWithAppearingBucket,
+        bucketPaths,
+      );
+      assert.deepEqual(
+        results.map((result) => result.entryCount),
+        [null, null, null, null],
+      );
+      assert.equal(
+        existsSync(join(projectRoot, FOOTGUNS_DIR, "INDEX.md")),
+        false,
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 });

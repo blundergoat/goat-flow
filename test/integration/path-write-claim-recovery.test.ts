@@ -5,7 +5,14 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -199,6 +206,55 @@ function assertRecoveryInputsFailClosed(
   assert.equal(existsSync(inspection.markerPath ?? ""), true);
 }
 
+/**
+ * Reproduce an interrupted recovery's guard and check that repeated CLI attempts explain how to unblock it.
+ *
+ * Side effects: spawns CLI commands and creates then removes a guard in the disposable project.
+ * Leaves the abandoned claim intact for the next recovery check.
+ */
+function assertRecoveryGuardBlocksRemoval(
+  projectRoot: string,
+  inspection: ClaimReport,
+): void {
+  assert.ok(inspection.markerPath);
+  const recoveryGuardPath = inspection.markerPath.replace(
+    /\.claim$/u,
+    ".recovery",
+  );
+  const originalClaimBytes = readFileSync(inspection.markerPath);
+  writeFileSync(recoveryGuardPath, "", { flag: "wx", mode: 0o600 });
+  try {
+    // Reinspection cannot remove a guard left by interrupted recovery, so both attempts must explain the same operator action.
+    for (const format of ["text", "json"]) {
+      const currentInspection = inspectClaim(projectRoot);
+      assert.equal(currentInspection.markerSha256, inspection.markerSha256);
+      const blocked = runClaims(
+        "recover",
+        projectRoot,
+        "--target",
+        targetPath,
+        "--marker-sha256",
+        currentInspection.markerSha256 ?? "",
+        "--confirm-abandoned",
+        "--format",
+        format,
+      );
+      assert.equal(blocked.status, 1, blocked.stderr);
+      assert.match(blocked.stderr, /Recovery is blocked by the guard/u);
+      assert.ok(blocked.stderr.includes(JSON.stringify(recoveryGuardPath)));
+      assert.match(blocked.stderr, /Nothing was removed/u);
+      assert.match(blocked.stderr, /stop all writers and recoveries/u);
+      assert.match(blocked.stderr, /remove only the abandoned guard/u);
+      assert.doesNotMatch(blocked.stderr, /changed after inspection/u);
+      assert.deepEqual(readFileSync(inspection.markerPath), originalClaimBytes);
+      assert.equal(readFileSync(recoveryGuardPath, "utf8"), "");
+    }
+  } finally {
+    // The fixture has no live recovery; removing its guard models the documented manual step before normal recovery resumes.
+    unlinkSync(recoveryGuardPath);
+  }
+}
+
 /** Recover the original marker, then prove a normal writer can acquire and release the target. */
 function recoverAndReacquire(
   projectRoot: string,
@@ -345,6 +401,7 @@ describe("public abandoned path-write claim recovery", () => {
       assert.match(inspection.markerSha256 ?? "", /^[a-f0-9]{64}$/u);
       assert.equal(existsSync(inspection.markerPath), true);
       assertRecoveryInputsFailClosed(projectRoot, inspection);
+      assertRecoveryGuardBlocksRemoval(projectRoot, inspection);
       recoverAndReacquire(projectRoot, inspection);
       const markerPath = assertChangedMarkerFailsClosed(projectRoot);
       assertAbsentAndUnsafeMarkersFailClosed(projectRoot, markerPath);
