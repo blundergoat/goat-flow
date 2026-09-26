@@ -150,7 +150,8 @@ try {
             [StringComparison]::OrdinalIgnoreCase)) {
         throw 'The selected distribution changed after the menu; refusing compaction.'
     }
-    if ($selected.Path -match '[\r\n"]') {
+    # DiskPart /s reads an ASCII script; UTF-16 input makes it print help and fail.
+    if ($selected.Path -match '[\r\n"]' -or $selected.Path -match '[^\x20-\x7E]') {
         throw 'The VHDX path cannot be represented safely in a DiskPart script.'
     }
     $diskpartPath = $selected.Path
@@ -174,7 +175,7 @@ try {
             ('select vdisk file="{0}"' -f $diskpartPath)
             'compact vdisk'
         )
-        Set-Content -LiteralPath $diskpartScript.FullName -Value $commands -Encoding Unicode
+        Set-Content -LiteralPath $diskpartScript.FullName -Value $commands -Encoding ASCII
         Write-Host 'Compacting the selected VHDX with DiskPart...'
         & diskpart.exe /s $diskpartScript.FullName
         $diskpartExit = $LASTEXITCODE
