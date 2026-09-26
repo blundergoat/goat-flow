@@ -150,7 +150,7 @@ Re-read Critical/High authority: staged=index|unstaged=worktree|deletions=truste
 
 **Proof Gate:** Apply preamble. Each `CONFIRMED` needs a fresh anchor at declared authority; every finding carries `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`; audits use current captured output.
 
-**Quick and Full zero-findings defence:** State what was scanned, checked surfaces, and why no finding survived. Quick with gaps reports `no supported component finding`, never zero findings. If a material critical surface is unassessed, a selected-baseline family is skipped/not-assessed, or any degradation flag is set, conclude `coverage-degraded` and MUST NOT recommend clearance; otherwise conclude `confident`. `tool-limited` is a degradation flag for an unavailable, withheld, or `execution-withheld` applicable tool, never a conclusion.
+**Quick and Full zero-findings defence:** State what was scanned, checked surfaces, and why no finding survived. Quick with gaps reports `no supported component finding`, never zero findings. If a material critical surface is unassessed, a selected-baseline family is skipped/not-assessed, or any degradation flag is set, conclude `coverage-degraded` and MUST NOT recommend clearance. Only a Full Assessment with no such gap concludes `confident`; every Quick Scan is bounded and stays `coverage-degraded`. `tool-limited` is a degradation flag for an unavailable, withheld, or `execution-withheld` applicable tool, never a conclusion.
 
 ### Persist Gate
 
