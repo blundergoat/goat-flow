@@ -1,9 +1,24 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-09-25
+last_reviewed: 2026-09-26
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
+
+## Lesson: Replacement fixtures must preallocate a distinct file identity
+
+**Status:** active | **Created:** 2026-09-26
+**Decision changed:** Preallocate a foreign file before swapping it into an identity-sensitive path.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** To test replacement detection, create the foreign file while the original still exists, then move it over the original path. Unlinking and recreating a file can reuse the same inode, so that sequence does not prove the path's identity changed. Evidence anchor: `test/unit/safe-exec.test.ts` (search: `rejects a replaced temporary file even when numeric file IDs collide`).
+
+**What happened:** The first atomic-write regression fixture unlinked the staged file and recreated it at the same path. The filesystem reused its inode, so the test expected a rejection that a correct identity check could not produce. Preallocating `foreign.tmp` before the stage existed, then renaming it into place, made the identity change deterministic; the focused suite passed after that correction.
+
+**Root cause:** The fixture equated file replacement with a distinct filesystem identity without ensuring distinct allocations.
+
+---
 
 ## Lesson: Metadata fixtures must use the intended header section
 
