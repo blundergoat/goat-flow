@@ -225,7 +225,7 @@ goat-flow hooks verify . --agent <id> --scenario git-mutations-hook --trusted-ta
 goat-flow hooks verify . --agent <id> --scenario all --trusted-target
 ```
 
-Both policy groups send fixed provider-shaped inputs through the exact configured handler; command operands are classified, never executed. `deny-hook` checks secret reads, pipe-to-shell and a read-only control. `git-mutations-hook` checks commit, push, destructive Git, GitHub writes and a read-only control. `all` runs thirteen scenarios: three dangerous, five Git, three Gruff and two post-turn.
+Both policy groups send fixed provider-shaped inputs through the exact configured handler; command operands are classified, never executed. `deny-hook` checks secret reads, pipe-to-shell and a read-only control. `git-mutations-hook` checks commit, push, destructive Git, GitHub writes, a command-hosting Git environment variable and a read-only control. `all` runs fourteen scenarios: three dangerous, six Git, three Gruff and two post-turn.
 A proven run exits `0`, reports `pass` for every selected scenario, and records one
 local `hook.verify` event per scenario. `fail`, `unsupported`, `not-configured`,
 `error`, a wrong total, or a missing evidence event means the requested proof is incomplete.

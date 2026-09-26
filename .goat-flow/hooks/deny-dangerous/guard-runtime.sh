@@ -1511,7 +1511,7 @@ check_git_hosted_commands() {
 # Remove one environment assignment without splitting its quoted value so the following executable receives policy checks.
 strip_one_assignment_prefix() {
   local c="$1"
-  [[ "$c" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] || return 1
+  [[ "$c" =~ ^[a-zA-Z_][a-zA-Z0-9_]*\+?= ]] || return 1
 
   local i char
   local in_single=0
@@ -1665,6 +1665,93 @@ git_config_source_variable_name() {
   return 1
 }
 
+# Config-source names a git-running shell already exports, so a plain declare/typeset/readonly/for/append keeps them visible to git.
+# The other config-source names need an explicit export before a child git can read them, matching the unexported-declare allow cases.
+git_config_source_variable_is_ambiently_exported() {
+  case "$1" in
+    HOME|XDG_CONFIG_HOME) return 0 ;;
+  esac
+  return 1
+}
+
+# Environment variables whose value git runs as a command, mirroring the command-hosting -c config keys above.
+git_command_environment_variable_name() {
+  case "$1" in
+    GIT_EXTERNAL_DIFF|GIT_SSH|GIT_SSH_COMMAND|GIT_PAGER|PAGER|GIT_EDITOR|GIT_SEQUENCE_EDITOR|GIT_PROXY_COMMAND|GIT_ASKPASS|SSH_ASKPASS)
+      return 0 ;;
+  esac
+  return 1
+}
+
+# Classify command-hosting Git environment variables set for a git action, so an env-supplied command receives the same
+# policy as its -c config equivalent. A literal value is inspected like any command; the value's danger is intrinsic, so an
+# exported assignment is inspected where it is written even when the git action follows in a later segment.
+check_git_command_environment() {
+  local raw="$1" verb="$2" depth="$3"
+  local -a words=()
+  local -a hosted=()
+  local word name value index=0 exports=0
+  case "$verb" in
+    git|git-*)
+      split_shell_words_into words "$raw"
+      # Skip a leading env wrapper so its assignments still reach inspection.
+      if [[ "${words[0]##*/}" == env ]]; then
+        index=1
+        while [[ "$index" -lt "${#words[@]}" ]]; do
+          case "${words[$index]}" in
+            --) index=$((index + 1)); break ;;
+            -u|--unset) index=$((index + 2)) ;;
+            -*) index=$((index + 1)) ;;
+            *) break ;;
+          esac
+        done
+      fi
+      # Only leading prefix assignments configure the following git action; a later argument that quotes the same text is data.
+      while [[ "$index" -lt "${#words[@]}" && "${words[$index]}" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; do
+        name="${BASH_REMATCH[1]}"
+        value="${BASH_REMATCH[2]}"
+        git_command_environment_variable_name "$name" && hosted+=("$value")
+        index=$((index + 1))
+      done
+      ;;
+    export|declare|typeset|local|readonly)
+      split_shell_words_into words "$raw"
+      [[ "$verb" == export ]] && exports=1
+      # A -x declaration exports its assignments to a later git just as export does; a plain declaration stays shell-local.
+      for word in "${words[@]}"; do
+        [[ "$word" == -* && "$word" == *x* ]] && exports=1
+      done
+      [[ "$exports" -eq 1 ]] || return 0
+      for word in "${words[@]}"; do
+        [[ "$word" == -* || "$word" == +* ]] && continue
+        [[ "${word##*/}" == "$verb" ]] && continue
+        if [[ "$word" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+          name="${BASH_REMATCH[1]}"
+          value="${BASH_REMATCH[2]}"
+          git_command_environment_variable_name "$name" && hosted+=("$value")
+        fi
+      done
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+  local payload output hosted_status
+  for payload in "${hosted[@]}"; do
+    [[ -n "$payload" ]] || continue
+    if output=$(check_command_segments "$payload" $((depth + 1))); then
+      # A structured provider returns its denial with exit zero; preserve that decision unchanged.
+      if [[ -n "$output" ]]; then printf '%s\n' "$output"; exit 0; fi
+    else
+      hosted_status=$?
+      # A delivered stderr denial ends the parent instead of becoming a second unavailable-result message.
+      [[ "$hosted_status" -eq 2 ]] && exit 2
+      return "$hosted_status"
+    fi
+  done
+  return 0
+}
+
 # Visible Git config environment assignments are not inherited by the hook's read-only alias lookup.
 # Refuse the unresolved configuration before normalizing away the assignments or export command.
 visible_git_config_environment_is_unresolved() {
@@ -1708,7 +1795,7 @@ visible_git_config_environment_is_unresolved() {
         GIT_CONFIG_PARAMETERS|GIT_CONFIG_GLOBAL|GIT_CONFIG_SYSTEM) [[ -z "$value" ]] || return 0 ;;
         *) return 0 ;;
       esac
-    elif [[ "$word" =~ ^(HOME|XDG_CONFIG_HOME|GIT_DIR|GIT_COMMON_DIR)= &&
+    elif [[ "$word" =~ ^(HOME|XDG_CONFIG_HOME|GIT_DIR|GIT_COMMON_DIR)\+?= &&
             ( "$scan_after_verb" -eq 1 || "$verb" == git || "$verb" == git-* ||
               "$verb" == bash || "$verb" == sh || "$verb" == zsh || "$verb" == dash ||
               "$verb" == find || "$verb" == xargs || "$verb" == parallel ) ]]; then
@@ -2438,8 +2525,8 @@ normalize_command_candidate() {
         fi
         ;;
     esac
-    # The parser cannot strip anything unless the command starts with an assignment.
-    if [[ "$c" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] && stripped=$(strip_one_assignment_prefix "$c"); then
+    # The parser cannot strip anything unless the command starts with a NAME=value or NAME+=value assignment.
+    if [[ "$c" =~ ^[a-zA-Z_][a-zA-Z0-9_]*\+?= ]] && stripped=$(strip_one_assignment_prefix "$c"); then
       c="$stripped"
       continue
     fi
@@ -2997,8 +3084,8 @@ track_git_config_environment() {
   local -a words=()
   split_shell_words_into words "$segment"
   local index=0 base word prev saw_config_assignment=0
-  # Consume every leading NAME=value assignment, remembering whether any names a configuration source.
-  while [[ "${words[$index]:-}" =~ ^([A-Za-z_][A-Za-z0-9_]*)= ]]; do
+  # Consume every leading NAME=value or NAME+=value assignment, remembering whether any names a configuration source.
+  while [[ "${words[$index]:-}" =~ ^([A-Za-z_][A-Za-z0-9_]*)\+?= ]]; do
     git_config_source_variable_name "${BASH_REMATCH[1]}" && saw_config_assignment=1
     index=$((index + 1))
   done
@@ -3043,6 +3130,30 @@ track_git_config_environment() {
           return 0
         fi
         prev="$word"
+      done
+      ;;
+    for)
+      # `for HOME in ...` reassigns the loop variable for every command in the loop body; an already-exported target relocates Git config.
+      if git_config_source_variable_is_ambiently_exported "${words[$((index + 1))]:-}"; then
+        __goat_git_config_env_unresolved=1
+        return 0
+      fi
+      ;;
+    declare|typeset|readonly|local)
+      # declare/typeset/readonly/local keep an already-exported variable exported without -x, so a config-source target relocates Git config.
+      # A -x flag exports every assignment, matching the export case; a plain declaration only reaches git for a name the shell already exports.
+      local declares_export=0
+      for word in "${words[@]:$((index + 1))}"; do
+        [[ "$word" == -* && "$word" == *x* ]] && declares_export=1
+      done
+      for word in "${words[@]:$((index + 1))}"; do
+        [[ "$word" == -* || "$word" == +* ]] && continue
+        if [[ "$word" =~ ^([A-Za-z_][A-Za-z0-9_]*)(\+?=|$) ]] && git_config_source_variable_name "${BASH_REMATCH[1]}"; then
+          if [[ "$declares_export" -eq 1 ]] || git_config_source_variable_is_ambiently_exported "${BASH_REMATCH[1]}"; then
+            __goat_git_config_env_unresolved=1
+            return 0
+          fi
+        fi
       done
       ;;
   esac
@@ -3396,6 +3507,9 @@ check_segment() {
   if [[ "$CMD_VERB" == git || "$CMD_VERB" == git-* ]]; then
     check_git_hosted_commands "$CMD_NORMALIZED" "$depth" || return $?
   fi
+
+  # A command-hosting Git environment variable, set as a prefix or exported, runs its value the same as a -c config key.
+  check_git_command_environment "$CMD_TRIMMED" "$CMD_VERB" "$depth" || return $?
 
   # Nested inspection restores its enclosing policy label so any later denial names the correct user-visible protection.
   if [[ -n "$previous_scope" ]]; then

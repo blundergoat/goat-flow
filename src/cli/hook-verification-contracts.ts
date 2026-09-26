@@ -42,6 +42,7 @@ export const HOOK_VERIFICATION_CONTRACTS = {
       "repository-push",
       "repository-destructive",
       "github-write",
+      "repository-environment-command",
       "read-only-control",
     ],
     evidenceLevel: "managed-hook-classifier",

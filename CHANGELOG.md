@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## v1.17.0 - 2026-09-25
+## v1.17.0 - 2026-09-26
 
 ### Added
 
@@ -65,9 +65,12 @@
 - **Git guards protect more branch and ref operations** - Deny soft resets, forced branch changes/copies, fetch mappings to local branches, stdin-fed fetch refspecs, revision resets with an empty pathspec, symbolic-ref writes, replacement refs, tag deletion/replacement, forced submodule operations and remote removal.
 - **Git guards cover more ways to discard work** - Deny bulk or directory `restore`/`checkout`, forced `checkout`/`switch`, `stash drop`/`clear`, `reflog expire`/`delete`, forced `rm`/`checkout-index`, `read-tree -u --reset` and forced worktree removal; single-file restores, including route paths such as `app/[id]/page.tsx`, and `restore --staged` remain allowed.
 - **Git-hosted commands and aliases receive policy checks** - Inspect `bisect run`, `submodule foreach`, `difftool --extcmd`, temporary/saved aliases and explicit pager, editor, SSH and filesystem-monitor commands; read-only controls stay allowed.
-- **GitHub guards cover more writes** - Deny `discussion comment`, `agent-task create` (including `agent`/`agents` aliases), `gist rename`, `codespace rebuild`, `codespace ports visibility` and `skill publish`; explicit skill dry runs stay allowed, while `--fix` writes stay blocked.
+- **Command-hosting Git environment variables are inspected** - A `GIT_EXTERNAL_DIFF`, `GIT_PAGER`/`PAGER`, `GIT_SSH_COMMAND`, `GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `GIT_PROXY_COMMAND` or `GIT_ASKPASS` value set for a git command is now classified the same as its `-c` config key, whether set as a prefix, through `env`, or exported, so it can no longer carry a commit or publication command past the hook; harmless values such as `GIT_PAGER=cat` stay allowed.
+- **GitHub guards cover more writes** - Deny `discussion comment`, `agent-task create`, `gist rename`, `codespace rebuild`, `codespace ports visibility`, `skill publish` and `repo autolink create`/`delete`, including built-in spellings such as `agent create`, `issue new` and `ext install`; explicit skill dry runs stay allowed, while `--fix` writes stay blocked.
+- **GitHub guards cover gh aliases, extensions and settings** - Deny `alias set`/`import`/`delete`, `config set`, `auth switch` and running a saved alias, extension or unrecognized gh command, because the hook cannot see what it runs; gh commands newer than this release stay denied until goat-flow lists them.
 - **Shell guards inspect more executable syntax** - Catch unquoted IFS expansion, pipeline `eval`, subshells, background commands, direct lockfile redirects and additional process-launch forms in Perl, Ruby, Python, PHP and Deno; quoted evidence, `yq eval` and JavaScript regex `.exec()` remain allowed.
 - **Git global options cannot conceal writes** - Policy checks consume option values before identifying the Git command and deny unrecognized global options.
+- **Relocating Git's configuration source is denied** - A chained or prefixed `HOME`, `XDG_CONFIG_HOME`, `GIT_DIR` or `GIT_COMMON_DIR` reassignment now blocks a following git across every form that reaches it — `export`, `read`/`printf -v`, `declare`/`typeset`/`readonly`/`local`, a `for` loop and a `+=` append; command-scoped prefix assignments on non-git commands and an unexported `declare` of a config source stay allowed. Git-alias denials after a dynamic `cd` now name the repository or destructive policy instead of the secret scope.
 - **Policy hook crashes deny execution** - Unexpected child exits, including `1` and `127`, return a denial in Claude, Antigravity and Copilot without leaking partial output.
 - **Quality reports reject terminal controls** - `quality save` refuses escape and text-direction characters in finding summaries, refuted claims and reasons, and multi-line file paths, preventing disguised `history`, `diff` and prompt output.
 

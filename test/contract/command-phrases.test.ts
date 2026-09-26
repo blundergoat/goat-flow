@@ -311,7 +311,7 @@ describe("bounded hook verification guidance", () => {
       );
       assert.match(
         content,
-        /thirteen scenarios: three dangerous, five Git, three Gruff and two post-turn/u,
+        /fourteen scenarios: three dangerous, six Git, three Gruff and two post-turn/u,
         relativePath,
       );
       assert.match(

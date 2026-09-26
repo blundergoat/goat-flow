@@ -177,6 +177,13 @@ const GIT_HOOK_SCENARIOS: readonly HookProbeScenario[] = [
     command: "gh pr create --fill",
   },
   {
+    id: "repository-environment-command",
+    label:
+      "A command-hosting Git environment variable cannot smuggle a publication command",
+    expected: "blocked",
+    command: "GIT_EXTERNAL_DIFF='git push origin main' git diff",
+  },
+  {
     id: "read-only-control",
     label: "Read-only repository status is allowed",
     expected: "allowed",
