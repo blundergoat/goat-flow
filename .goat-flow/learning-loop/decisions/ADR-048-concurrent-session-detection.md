@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-08-23
 **Ticket/Context:** `.goat-flow/plans/1.17.0/M03-concurrent-session-spike.md`
-**Updated:** 2026-09-05 - condensed; the option evaluation is folded into the comparison table. The 2026-09-03 amendment reconciled shipped claim adoption and marked the remaining rollout unplanned.
+**Updated:** 2026-09-26 - public index generation and operator recovery now coordinate on path-keyed claims and guards.
 
 ## Context
 
@@ -58,7 +58,7 @@ Config and provider writers invoked outside this registrar path retain their exi
 
 ## Rollout
 
-Shipped: the reusable claim and identity helper (`src/cli/path-write-claim.ts`), cross-process tests, stable diagnostics, sorted multi-target admission, and the managed-install transaction guard. `install` claims every previewed destination including config and managed agent-config paths, `learn new` claims its target bucket and all four generated indexes, and ADR-064 is the first full-lifecycle consumer.
+Shipped: the reusable claim and identity helper (`src/cli/path-write-claim.ts`), cross-process tests, stable diagnostics, sorted multi-target admission, and the managed-install transaction guard. `install` claims every previewed destination including config and managed agent-config paths; `learn new`, public `index`, and dashboard index regeneration claim all four generated indexes; ADR-064 is the first full-lifecycle consumer. Evidence: `src/cli/learning-loop-index/generate.ts` (search: `generateIndexesWithClaims`).
 
 Unplanned until a roadmap admits them: moving the `plans time` identity comparison inside the claim, guarding dashboard active-plan writes with a revision from the plan read route, covering config writers outside `install` and the guarded hook registrar, dashboard project-state revisioning, and session-log output. A future guarded writer must retain supported-platform proof for exclusive creation and cleanup; a platform that cannot provide it stops the dependent work for a revised decision rather than falling back to re-read-only checks.
 
@@ -68,7 +68,13 @@ Until a writer is guarded, goat-plan re-reads the exact milestone or marker imme
 
 ### Storage relocation — 2026-09-13
 
-The accepted storage layout is `.goat-flow/state/locks/` beneath one gitignored operational-state parent. Public install moves the former `.goat-flow/write-claims/` directory only when both lock namespaces are empty, preserves all installation evidence, and refuses occupied destinations. The operator must stop and upgrade every writer before migration. The user explicitly selected complete removal of old paths over retaining compatibility guards; running older writers afterward is unsupported. Recovery can inspect the sole legacy namespace before migration, but new claim acquisition refuses legacy storage and directs the operator to public install. Only install, hook changes and `learn new` acquire claims; further adoption remains deferred. The marker schema, key derivation, ownership checks and explicit recovery contract are unchanged. Evidence: `src/cli/local-state-migration.ts` (search: `migrateLegacyLocalState`), `test/integration/local-state-migration.test.ts` (search: `blocks legacy write admission`).
+The accepted storage layout is `.goat-flow/state/locks/` beneath one gitignored operational-state parent. Public install moves the former `.goat-flow/write-claims/` directory only when both lock namespaces are empty, preserves all installation evidence, and refuses occupied destinations. The operator must stop and upgrade every writer before migration. The user explicitly selected complete removal of old paths over retaining compatibility guards; running older writers afterward is unsupported. Recovery can inspect the sole legacy namespace before migration, but new claim acquisition refuses legacy storage and directs the operator to public install. At this relocation, only install, hook changes and `learn new` acquired claims; further adoption was deferred. The marker schema, key derivation, ownership checks and explicit recovery contract were unchanged. Evidence: `src/cli/local-state-migration.ts` (search: `migrateLegacyLocalState`), `test/integration/local-state-migration.test.ts` (search: `blocks legacy write admission`).
+
+### Index and recovery coordination — 2026-09-26
+
+Public `index` and dashboard index regeneration now claim all four index paths when any bucket exists. This covers a bucket that appears later during parsing and makes both routes cooperate with `learn new` and install. If all buckets are absent, generation returns skipped results without creating claim state or writing a bucket that appears after the check. Index publication keeps its existing direct file writes, so a process failure during publication can leave a partial index. Evidence: `src/cli/learning-loop-index/generate.ts` (search: `generateIndexesWithClaims`).
+
+Explicit recovery creates a short-lived `<key>.recovery` guard before its final marker comparison and removal. Two recoveries cannot use the same stale inspection to unlink a newly acquired claim. A crashed recovery leaves the guard for operator inspection; it is never cleared by age. Evidence: `src/cli/path-write-claim.ts` (search: `removeConfirmedAbandonedPathWriteClaim`), `test/unit/path-write-claim.test.ts` (search: `serializes recoveries before another writer acquires the target`).
 
 - Cooperating writers either hold one target's claim and validate expected bytes or fail without replacement; user-facing claims say cooperative detection.
 - `.goat-flow/state/locks/` is transient gitignored coordination state registered in the local-state architecture and manifest.
