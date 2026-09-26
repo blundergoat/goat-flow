@@ -274,9 +274,9 @@ function resolveProjectRoot(projectRoot: string): string {
 function readTargetStats(
   absolutePath: string,
   targetPath: string,
-): fs.Stats | null {
+): fs.BigIntStats | null {
   try {
-    return fs.lstatSync(absolutePath);
+    return fs.lstatSync(absolutePath, { bigint: true });
   } catch (error) {
     // Another tool may remove the target between checks; that absence is safe, while permission and I/O errors block the write.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -285,8 +285,8 @@ function readTargetStats(
 }
 
 /** Return whether one entry is a private regular-file identity safe to hash or replace. */
-function isSingleLinkRegularFile(stats: fs.Stats): boolean {
-  return stats.isFile() && !stats.isSymbolicLink() && stats.nlink === 1;
+function isSingleLinkRegularFile(stats: fs.BigIntStats): boolean {
+  return stats.isFile() && !stats.isSymbolicLink() && stats.nlink === 1n;
 }
 
 /**
@@ -318,8 +318,8 @@ function targetParentsExist(
 
 /** Return whether a later observation still names the single-link regular file inspected before hashing. */
 function isSameInspectedFile(
-  current: fs.Stats | null,
-  before: fs.Stats,
+  current: fs.BigIntStats | null,
+  before: fs.BigIntStats,
 ): boolean {
   return (
     current !== null &&
@@ -365,13 +365,15 @@ function openTargetWithoutFollowing(
 function readStableTargetDigest(
   absoluteTarget: string,
   targetPath: string,
-  before: fs.Stats,
+  before: fs.BigIntStats,
 ): string {
   const descriptor = openTargetWithoutFollowing(absoluteTarget, targetPath);
   let digest: string;
   try {
     // The descriptor must name the inode inspected above, not a replacement created between lstat and open.
-    if (!isSameInspectedFile(fs.fstatSync(descriptor), before)) {
+    if (
+      !isSameInspectedFile(fs.fstatSync(descriptor, { bigint: true }), before)
+    ) {
       throw new PathWriteClaimError("target-changed", targetPath);
     }
     digest = hashDescriptorSha256(descriptor);

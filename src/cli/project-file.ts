@@ -8,7 +8,7 @@ import {
   openSync,
   readSync,
   realpathSync,
-  type Stats,
+  type BigIntStats,
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
@@ -33,12 +33,12 @@ export function hashDescriptorSha256(descriptor: number): string {
 }
 
 /** Compare the physical file identity independently of its pathname and contents. */
-function hasSameFileIdentity(left: Stats, right: Stats): boolean {
+function hasSameFileIdentity(left: BigIntStats, right: BigIntStats): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }
 
 /** Inspect evidence without following links; throws for escapes, linked parents and non-regular leaves. */
-function inspectProjectFile(root: string, target: string): Stats {
+function inspectProjectFile(root: string, target: string): BigIntStats {
   const path = relative(root, target);
   if (
     path === "" ||
@@ -54,7 +54,7 @@ function inspectProjectFile(root: string, target: string): Stats {
       throw new Error("Evidence parent must be an unlinked directory.");
     parent = dirname(parent);
   }
-  const stats = lstatSync(target);
+  const stats = lstatSync(target, { bigint: true });
   if (!stats.isFile())
     throw new Error(
       "Evidence must be a regular file, not a link or special file.",
@@ -62,8 +62,16 @@ function inspectProjectFile(root: string, target: string): Stats {
   return stats;
 }
 
-/** Read the observed file length plus one byte so concurrent growth stays bounded. */
-function readBoundedBytes(
+/**
+ * Read the observed file length plus one byte so concurrent growth stays bounded.
+ *
+ * @param descriptor - open readable descriptor positioned at the first byte; the caller owns closing it
+ * @param observedSize - size from fstat; the allocation never exceeds it or maxBytes by more than one byte
+ * @param maxBytes - largest accepted file
+ * @returns the bytes read, possibly one byte past observedSize when the file grew during the read
+ * @throws Error when more than maxBytes are present, or the underlying read error
+ */
+export function readBoundedBytes(
   descriptor: number,
   observedSize: number,
   maxBytes: number,
@@ -107,25 +115,25 @@ export function readProjectTextFile(
     relative(lexicalRoot, resolve(lexicalRoot, path)),
   );
   const before = inspectProjectFile(root, target);
-  if (before.size > maxBytes)
+  if (before.size > BigInt(maxBytes))
     throw new Error(`Evidence file exceeds ${maxBytes} bytes.`);
   const descriptor = openSync(
     target,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
   );
   try {
-    const opened = fstatSync(descriptor);
+    const opened = fstatSync(descriptor, { bigint: true });
     if (!opened.isFile() || !hasSameFileIdentity(opened, before)) {
       throw new Error("Evidence file changed while opening.");
     }
-    const buffer = readBoundedBytes(descriptor, opened.size, maxBytes);
+    const buffer = readBoundedBytes(descriptor, Number(opened.size), maxBytes);
     const after = inspectProjectFile(root, target);
-    const finished = fstatSync(descriptor);
+    const finished = fstatSync(descriptor, { bigint: true });
     if (
       !hasSameFileIdentity(after, opened) ||
-      finished.size !== buffer.length ||
-      finished.mtimeMs !== opened.mtimeMs ||
-      finished.ctimeMs !== opened.ctimeMs ||
+      finished.size !== BigInt(buffer.length) ||
+      finished.mtimeNs !== opened.mtimeNs ||
+      finished.ctimeNs !== opened.ctimeNs ||
       realpathSync(lexicalRoot) !== root
     ) {
       throw new Error("Evidence file changed while reading.");

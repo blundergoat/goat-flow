@@ -14,10 +14,10 @@ import {
   lstatSync,
   mkdtempSync,
   openSync,
-  readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
+  type BigIntStats,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,6 +38,7 @@ import {
   type FileMode,
 } from "./review-validate-common.js";
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import { hashDescriptorSha256, readBoundedBytes } from "./project-file.js";
 import type { FINDING_SECTIONS } from "./review-validate-common.js";
 import {
   FINDING_CANDIDATE,
@@ -59,6 +60,8 @@ import {
 const GIT_METADATA_OUTPUT_LIMIT_BYTES = 128 * 1024 * 1024;
 /** Rationale: 64 MiB per blob read, because each response is buffered whole and a large tree then needs only a few Git calls. */
 const BLOB_BATCH_BYTES = 64 * 1024 * 1024;
+/** Rationale: the same 64 MiB as one blob batch, so a live anchor buffers no more than committed anchor evidence normally does. */
+const LIVE_ANCHOR_READ_LIMIT_BYTES = BLOB_BATCH_BYTES;
 
 /**
  * Return whether a resolved path remains under the reviewed project's real path.
@@ -1107,19 +1110,18 @@ export function livePath(root: string, path: string): string {
 }
 
 /**
- * Read one regular live file without following its final symlink.
+ * Open one regular live file without following its final symlink.
  *
  * @param root - selected project's real root
- *
  * @param path - literal selected file path; a deleted file is represented by null
- * @returns raw bytes and executable mode, or null when the file is absent
+ * @returns the open descriptor and its metadata, or null when the file is absent; the caller closes the descriptor
  *
- * @throws ReviewAuthorityError for unsupported paths or kinds; permission and read failures stop capture
+ * @throws ReviewAuthorityError for unsupported paths or kinds; permission failures stop capture
  */
-export function liveBytes(
+function openLiveFile(
   root: string,
   path: string,
-): { bytes: Buffer; mode: FileMode } | null {
+): { descriptor: number; details: BigIntStats } | null {
   const selectedPath = livePath(root, path);
   let descriptor: number;
   try {
@@ -1136,18 +1138,115 @@ export function liveBytes(
     );
   }
   try {
-    const details = fstatSync(descriptor);
+    const details = fstatSync(descriptor, { bigint: true });
     requireAuthority(
       details.isFile(),
       `selected live path is not a regular file: ${canonicalReviewJson(path)}`,
       "authority-unsupported",
     );
-    return {
-      bytes: readFileSync(descriptor),
-      mode: (details.mode & 0o111) === 0 ? "100644" : "100755",
-    };
-  } finally {
+    return { descriptor, details };
+  } catch (error) {
     closeSync(descriptor);
+    throw error;
+  }
+}
+
+/**
+ * Re-walk the selected path after a read and require it to still name the open file.
+ * O_NOFOLLOW guards only the final component, and Node cannot open through pinned directory descriptors, so a parent
+ * swapped for a symlink between the walk and the open would otherwise supply bytes from outside the project. Matching
+ * the open inode against the in-project inode afterwards closes that for reads, and on Windows, where O_NOFOLLOW is
+ * unavailable, it also covers a swapped final component. Stats are bigint because NTFS file IDs exceed 2^53.
+ *
+ * @param root - selected project's real root
+ * @param path - literal selected file path that was opened
+ * @param details - fstat metadata of the open descriptor
+ *
+ * @throws ReviewAuthorityError when a boundary became unsupported or the path now names a different file
+ */
+function requireLiveContainment(
+  root: string,
+  path: string,
+  details: BigIntStats,
+): void {
+  const selectedPath = livePath(root, path);
+  let current: BigIntStats | null = null;
+  try {
+    current = lstatSync(selectedPath, { bigint: true });
+  } catch {
+    // A file removed after the read no longer backs the bytes that were captured.
+    current = null;
+  }
+  requireAuthority(
+    realpathSync(root) === root &&
+      current !== null &&
+      current.isFile() &&
+      current.dev === details.dev &&
+      current.ino === details.ino,
+    `selected live file was replaced while reading: ${canonicalReviewJson(path)}`,
+    "authority-drift",
+  );
+}
+
+/** Map a regular file's permission bits onto the two Git file modes review evidence records. */
+function liveFileMode(details: BigIntStats): FileMode {
+  return (details.mode & 0o111n) === 0n ? "100644" : "100755";
+}
+
+/**
+ * Hash one regular live file through a fixed buffer, so snapshot capture memory stays constant for any file size.
+ *
+ * @param root - selected project's real root
+ * @param path - literal selected file path; a deleted file is represented by null
+ * @returns raw SHA-256 and executable mode, or null when the file is absent
+ *
+ * @throws ReviewAuthorityError for unsupported paths or kinds, or a file replaced while reading; read failures stop capture
+ */
+function liveDigest(
+  root: string,
+  path: string,
+): { sha256: string; mode: FileMode } | null {
+  const opened = openLiveFile(root, path);
+  if (opened === null) return null;
+  try {
+    const sha256 = hashDescriptorSha256(opened.descriptor);
+    requireLiveContainment(root, path, opened.details);
+    return { sha256, mode: liveFileMode(opened.details) };
+  } finally {
+    closeSync(opened.descriptor);
+  }
+}
+
+/**
+ * Read one regular live file's bytes for anchor lookup, refusing files above the live anchor limit.
+ *
+ * @param root - selected project's real root
+ * @param path - literal selected file path; a deleted file is represented by null
+ * @returns raw bytes and executable mode, or null when the file is absent
+ *
+ * @throws ReviewAuthorityError for unsupported paths, kinds, or sizes, or a file replaced while reading; read failures stop capture
+ */
+export function liveBytes(
+  root: string,
+  path: string,
+): { bytes: Buffer; mode: FileMode } | null {
+  const opened = openLiveFile(root, path);
+  if (opened === null) return null;
+  try {
+    requireAuthority(
+      opened.details.size <= BigInt(LIVE_ANCHOR_READ_LIMIT_BYTES),
+      `selected live anchor file exceeds ${LIVE_ANCHOR_READ_LIMIT_BYTES} bytes: ${canonicalReviewJson(path)}`,
+      "authority-unsupported",
+    );
+    const bytes = readBoundedBytes(
+      opened.descriptor,
+      Number(opened.details.size),
+      LIVE_ANCHOR_READ_LIMIT_BYTES,
+    );
+    requireLiveContainment(root, path, opened.details);
+    return { bytes, mode: liveFileMode(opened.details) };
+  } finally {
+    closeSync(opened.descriptor);
   }
 }
 
@@ -1162,17 +1261,17 @@ export function liveBytes(
  * @throws ReviewAuthorityError when the file's bytes or mode change during capture
  */
 export function liveState(root: string, path: string): FileState {
-  const before = liveBytes(root, path);
-  const after = liveBytes(root, path);
+  const before = liveDigest(root, path);
+  const after = liveDigest(root, path);
   // Both observations use the same absent/file shape so an editor save cannot be hidden by inconsistent metadata.
-  const describe = (file: ReturnType<typeof liveBytes>): FileState =>
+  const describe = (file: ReturnType<typeof liveDigest>): FileState =>
     file === null
       ? { kind: "absent" }
       : {
           kind: "file",
           from: "live",
           mode: file.mode,
-          sha256: rawHash(file.bytes),
+          sha256: file.sha256,
         };
   const state = describe(before);
   requireAuthority(

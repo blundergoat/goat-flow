@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-26
 ---
 
 ## Footgun: An additive classification rule can silently delete a published state value
@@ -61,6 +61,20 @@ last_reviewed: 2026-09-05
 **Why it happens:** Loggers default every level to stdout, and any module imported anywhere can log during initialisation. A set-once env-var fix works only when it runs before the logger module is first imported.
 
 **Evidence:** External: promptfoo PR #9329, where `code-scan --format sarif|json` printed through `console.log` while Winston's Console transport had no `stderrLevels`, so cache, telemetry, and update-check logs interleaved with the SARIF payload and GitHub Code Scanning rejected the upload; the fix set `PROMPTFOO_LOG_TO_STDERR=1` before the logger import. Local surfaces with the same shape: `src/cli/audit/render.ts` (search: "renderAuditJson") and `src/cli/audit/sarif.ts` (search: "renderAuditSarif"), plus JSON quality report exports under `src/cli/quality/`. The source-grep guardrail for banning stray `console.log` lives in `.goat-flow/learning-loop/patterns/verification.md` (search: `Source-grep guardrail`).
+
+---
+
+## Footgun: Number file identities lose precision on Windows NTFS
+
+**Status:** active | **Created:** 2026-09-26 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** Compare `dev` and `ino` only from stats read with `{ bigint: true }`. Number `Stats` round large NTFS file IDs, so a same-file check can accept a different file. On Windows, `constants.O_NOFOLLOW` and `constants.O_NONBLOCK` are undefined and OR to 0, so a post-read identity check is the only guard against a swapped final path component there. From WSL, probe Windows behaviour by running `/mnt/c/Program Files/nodejs/node.exe` against a built `dist/`.
+
+**Symptoms:** Linux CI stays green because ext4 inode numbers fit in a JavaScript number. On Windows nothing fails visibly: two files whose IDs round to the same number pass a `dev`/`ino` comparison.
+
+**Why it happens:** NTFS file IDs carry a sequence number in their high bits, which puts them near 1e17. A JavaScript number is exact only up to 2^53 (about 9e15), and at 1e17 adjacent representable values are 16 apart.
+
+**Evidence:** Windows Node v24.9.0 on 2026-09-26: 5 of 6 fresh `%TEMP%` files returned a number `ino` different from the bigint `ino`, for example exact `87257242780323374` against number `87257242780323380`; the same probe showed both open flags undefined. Bigint identity checks: `src/cli/project-file.ts` (search: `hasSameFileIdentity`), `src/cli/path-write-claim.ts` (search: `isSameInspectedFile`), `src/cli/review-validate-anchors.ts` (search: `requireLiveContainment`).
 
 ---
 
