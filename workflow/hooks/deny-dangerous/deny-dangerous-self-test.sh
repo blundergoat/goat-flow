@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
 
-# Verify policy changes before maintainers release or sync deny hooks.
-#
-# Commands and provider payloads are classified without executing their requested operations.
-#
-# Smoke checks cover essential allow/deny behavior; full checks add the complete policy and provider corpus.
-# Dispatchers re-enter this script for --self-test, which selects full coverage unless smoke is requested.
+# Exercise deny-hook policy without running the requested Git, GitHub, or shell operations.
+# Maintainers run smoke after a policy edit and full before shipping or syncing installed hooks.
 #
 # Usage: bash deny-dangerous-self-test.sh [--self-test[=smoke|full]] [--hook <name>]
-# Set GOAT_DENY_DANGEROUS_HOOK to choose an explicit dispatcher; otherwise use the owning checkout's hook.
-#
-# Exit: 0 with a PASS receipt when all executed assertions pass; 1 with FAIL labels for failed assertions or an unsupported mode.
+# GOAT_DENY_DANGEROUS_HOOK selects a dispatcher; otherwise the owning checkout's hook runs.
+# Exit: PASS with status 0 on success; FAIL with status 1 for a failed assertion or unsupported mode.
 
 # shellcheck disable=SC2016
 set -euo pipefail
@@ -827,6 +822,15 @@ run_smoke() {
   expect_block git 'git pull --no-rebase origin main' "pull merges fetched history"
   expect_allow git 'git merge --abort' "merge recovery"
   expect_allow git 'git rebase --abort' "rebase recovery"
+  # A developer may inspect help or a dry run; unreviewed subtree publication and object pruning remain blocked.
+  expect_block git 'git subtree push --prefix=src origin main' "subtree publishes through Git"
+  expect_block git 'git subtree --prefix=src push origin main' "subtree option before publication mode"
+  expect_block git 'git subtree add --prefix=vendor origin main' "subtree add creates history"
+  expect_allow git 'git subtree -h' "subtree usage control"
+  expect_block git 'git prune' "prune removes unreachable objects"
+  expect_block git 'git gc --prune=now' "gc prunes unreachable objects"
+  expect_allow git 'git prune --dry-run' "prune preview control"
+  expect_allow git 'git gc -h' "gc usage control"
   expect_block writes 'gh pr lock 61' "PR lock mutation"
   expect_block writes 'gh pr unlock 61' "PR unlock mutation"
   expect_block writes 'gh pr revert 61' "PR revert mutation"
@@ -1414,6 +1418,24 @@ run_full() {
   expect_block shell "GIT_PAGER='rm -rf .' git log" "pager environment variable hosts destructive shell"
   expect_block shell "env GIT_EXTERNAL_DIFF='rm -rf .' git diff" "env-wrapped external diff variable hosts destructive shell"
   expect_block shell "export GIT_EXTERNAL_DIFF='rm -rf .'; git diff" "exported external diff variable hosts destructive shell"
+  # Git editor fallbacks still host commands when Git-specific overrides are absent.
+  local editor_variable
+  for editor_variable in EDITOR VISUAL; do
+    expect_block shell "$editor_variable='rm -rf .' git config --edit" "Git $editor_variable fallback hosts destructive shell"
+    expect_block git "$editor_variable=\"git p'u'sh; :\" git config --edit" "Git $editor_variable fallback hosts quoted publication"
+    expect_allow shell "$editor_variable=true git config --edit" "safe Git $editor_variable fallback"
+    expect_allow git "$editor_variable=true git config --edit" "read-only Git $editor_variable fallback"
+  done
+  expect_block shell "env -u GIT_EDITOR EDITOR='rm -rf .' git config --edit" "unset Git override exposes EDITOR fallback"
+  expect_allow shell "env -u GIT_EDITOR EDITOR=true git config --edit" "safe EDITOR fallback after env unset"
+  expect_block git "unset GIT_EDITOR; VISUAL='git push; :' git config --edit" "unset Git override exposes VISUAL publication"
+  expect_allow git "unset GIT_EDITOR; VISUAL=true git config --edit" "safe VISUAL fallback after shell unset"
+  expect_block shell "export EDITOR='rm -rf .'; git config --edit" "exported EDITOR hosts destructive shell"
+  expect_allow shell "export EDITOR=true; git config --edit" "safe exported EDITOR"
+  expect_block git "export VISUAL='git push; :'; git config --edit" "exported VISUAL hosts publication"
+  expect_allow git "export VISUAL=true; git config --edit" "safe exported VISUAL"
+  expect_allow shell "printf %s 'EDITOR=rm -rf .'" "EDITOR assignment as literal output"
+  expect_allow git "printf %s 'VISUAL=git push'" "VISUAL assignment as literal output"
   expect_block shell "git -c difftool.x.cmd='rm -rf .' difftool -y -t x" "configured Git difftool hosts destructive shell"
   expect_block shell "git -c mergetool.x.cmd='rm -rf .' mergetool -y -t x" "configured Git mergetool hosts destructive shell"
   expect_block shell "git -c diff.x.command='rm -rf .' diff" "custom Git diff driver hosts destructive shell"
