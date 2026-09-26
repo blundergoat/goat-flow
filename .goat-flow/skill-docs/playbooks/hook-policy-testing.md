@@ -143,27 +143,31 @@ classified rather than trusted as inert wrapper text.
 
 ### 4. Verify installed policy and available canonical source
 
-The two entrypoints and shared parser/policy modules form one installable runtime unit. Always verify the
-installed policy that protects the user's selected project:
+The two entrypoints, shared parser/policy modules, self-test corpus and GraphQL helpers form one
+installable runtime unit. Prove available source/install parity first, then run each installed policy's
+full corpus once:
 
 ```bash
-bash .goat-flow/hooks/deny-dangerous.sh --self-test=full
-bash .goat-flow/hooks/deny-git-mutations.sh --self-test=full
-
-# Framework maintainers also prove the source that future consumers will install.
-if test -f workflow/hooks/deny-dangerous.sh; then
-  diff -q workflow/hooks/deny-dangerous.sh .goat-flow/hooks/deny-dangerous.sh
-  diff -q workflow/hooks/deny-git-mutations.sh .goat-flow/hooks/deny-git-mutations.sh
-  diff -qr workflow/hooks/deny-dangerous .goat-flow/hooks/deny-dangerous
-  bash workflow/hooks/deny-dangerous.sh --self-test=full
-  bash workflow/hooks/deny-git-mutations.sh --self-test=full
+# Framework maintainers compare the complete runtime future consumers will install.
+if test -d workflow/hooks; then
+  diff -q workflow/hooks/deny-dangerous.sh .goat-flow/hooks/deny-dangerous.sh || exit
+  diff -q workflow/hooks/deny-git-mutations.sh .goat-flow/hooks/deny-git-mutations.sh || exit
+  diff -qr workflow/hooks/deny-dangerous .goat-flow/hooks/deny-dangerous || exit
+  diff -q workflow/hooks/gh-graphql-read.cjs .goat-flow/hooks/gh-graphql-read.cjs || exit
+  diff -q workflow/hooks/vendor/graphql.cjs .goat-flow/hooks/vendor/graphql.cjs || exit
 fi
+
+bash .goat-flow/hooks/deny-dangerous.sh --self-test=full || exit
+bash .goat-flow/hooks/deny-git-mutations.sh --self-test=full || exit
 ```
 
 In the controlling workspace, either dispatcher resolves policy modules from
 the installed `.goat-flow/hooks/deny-dangerous/` store. Therefore dispatcher
-parity alone is insufficient: keep the module directories byte-identical and
-run both installed full corpora. Before live rollout of a parser change, create a disposable Git root with the complete candidate `.goat-flow/hooks/` store and run both corpora there.
+parity alone is insufficient. A mismatch fails verification; identical complete runtimes need only
+one full run per policy. `scripts/preflight-checks.sh` enforces this in the framework checkout.
+Keep configured-launcher probes for each provider and working directory: identical policy bytes do
+not prove registrations, payload formats or root discovery. Before live rollout of a parser change,
+create a disposable Git root with the complete candidate `.goat-flow/hooks/` store and run both corpora there.
 
 ### 5. Verify agent registration
 
@@ -248,7 +252,7 @@ A policy proof belongs to its exact hook and current complete runtime. Old combi
 After any hook-policy or registration change, require all of the following:
 
 - both installed smoke suites pass;
-- installed full suites pass; framework maintainers also run workflow-source suites;
+- both installed full suites pass once after any available source/install runtime parity checks;
 - every new deny case has a nearby allow control;
 - both entrypoint and shared-runtime mirrors are identical;
 - configured agents register each enabled policy separately;

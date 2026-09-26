@@ -1,9 +1,20 @@
 ---
 category: hook-testing
-last_reviewed: 2026-09-22
+last_reviewed: 2026-09-27
 ---
 
 **Scope:** Hook test coverage strategy and provider evidence - what a self-test actually exercises, which support layer a capture proves, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
+
+## Lesson: Source verification must distinguish absent and incomplete trees
+
+**Status:** active | **Created:** 2026-09-27
+**Decision changed:** When source checks are optional for consumers, detect the source directory and validate every required member; do not use one required member as the availability gate.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Exercise complete source, incomplete source, and consumer-only trees through the documented command. Incomplete source must fail before running suites; consumers without source still verify their installed runtime. Evidence: `workflow/skills/playbooks/hook-policy-testing.md` (search: `if test -d workflow/hooks`), `test/integration/preflight-deny-policy.test.ts` (search: `requires complete canonical runtime in the documented verification command`).
+
+**What happened:** The hook-testing playbook guarded all parity checks with the canonical dispatcher's existence. Running its published command after removing only that dispatcher from a fixture exited `0` and ran both installed suites. The source tree was incomplete, but verification treated it as absent.
 
 ## Lesson: Prove hook capability before marking an agent unsupported
 
@@ -84,12 +95,15 @@ last_reviewed: 2026-09-22
 **Decision changed:** Before adding an exact block-copy assertion, read the source-owned block reason or capture attributed classifier output; never infer the expected fragment from the command.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-09-27
 
 **Prevention:** Before writing an `expect_block_message` case, locate the owning block reason or capture the hook's attributed output, then reuse a stable source-owned fragment. Run the full central self-test after the RED fixture and after implementation; a verdict-only integration pass is not copy proof. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `dangerous nested command substitution`), `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Destructive git operation`).
 
 **What happened:** M33 added exact-copy self-test cases for nested deletion and a background hard reset, expecting "Recursive deletion" where the runtime says "rm -r without safe scoping", then "git reset --hard" where the policy says only "reset --hard"; the full self-test failed two verification iterations although the verdict-only matrix was green.
 
 **Root cause:** Expected copy was derived from each fixture's intent and command text instead of the block reason owned by the policy module, and a scope-only integration assertion cannot catch that mismatch.
+
+**Recurrence 2026-09-27:** The preflight mirror-drift test inferred a contiguous path from its fixture name. `diff -qr` instead reported an extra file as `Only in <directory>: <filename>`, so the first verification run failed despite rejecting the drift correctly. Capture each diagnostic shape before asserting its text; require the failure verdict and affected filename without inventing a path format. Evidence: `test/integration/preflight-deny-policy.test.ts` (search: `rejects entrypoint, shared-runtime, corpus and GraphQL drift before executing suites`).
 
 ---
 

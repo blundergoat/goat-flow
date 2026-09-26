@@ -812,36 +812,52 @@ fi
 
 # ── Deny Policy ──────────────────────────────────────────────────────
 section "Deny Policy"
-# Check both canonical deny policies so a release cannot omit one protection family.
-for policy_hook in deny-dangerous deny-git-mutations; do
-    # A canonical hook passes only after its full policy corpus succeeds.
-    if deny_self_test_output=$(bash "workflow/hooks/$policy_hook.sh" --self-test=full 2>&1); then
-        pass "workflow/hooks/$policy_hook.sh ${deny_self_test_output}"
-    else
-        fail "workflow/hooks/$policy_hook.sh full self-test"
-    fi
-done
-
-# Shared installed paths need one complete run each, regardless of how many providers own them.
-declare -A checked_policy_hook_paths=()
-# Check each declared installed hook directory before reporting installation safety.
+# Both entrypoints load the installed runtime, even when invoked from workflow/hooks.
+# Compare the complete policy unit before reusing one full run per policy across its mirrors.
+policy_hook_dirs=()
+policy_mirrors_match=1
 while IFS= read -r hookdir; do
-    # Both deny policies must be present and runnable in each installed directory.
-    for policy_hook in deny-dangerous deny-git-mutations; do
-        installed_policy_hook="$hookdir/$policy_hook.sh"
-        [[ -n "${checked_policy_hook_paths[$installed_policy_hook]+present}" ]] && continue
-        checked_policy_hook_paths["$installed_policy_hook"]=1
-        # A missing required policy hook is an installation failure, not a skipped check.
-        if [[ ! -f "$installed_policy_hook" ]]; then
-            fail "$installed_policy_hook required policy hook missing"
-        # An installed hook passes only after its full policy corpus succeeds.
-        elif deny_self_test_output=$(bash "$installed_policy_hook" --self-test=full 2>&1); then
-            pass "$installed_policy_hook ${deny_self_test_output}"
-        else
-            fail "$installed_policy_hook full self-test"
+    policy_hook_dirs+=("$hookdir")
+    hook_mirror_matches=1
+    for policy_file in deny-dangerous.sh deny-git-mutations.sh gh-graphql-read.cjs vendor/graphql.cjs; do
+        if [[ ! -f "workflow/hooks/$policy_file" || ! -f "$hookdir/$policy_file" ]] ||
+            ! cmp -s -- "workflow/hooks/$policy_file" "$hookdir/$policy_file"; then
+            fail "$hookdir/$policy_file missing or differs from workflow/hooks/$policy_file"
+            hook_mirror_matches=0
         fi
     done
+    if [[ ! -d workflow/hooks/deny-dangerous || ! -d "$hookdir/deny-dangerous" ]]; then
+        fail "$hookdir/deny-dangerous or workflow/hooks/deny-dangerous runtime directory missing"
+        hook_mirror_matches=0
+    elif ! policy_mirror_output=$(diff -qr -- workflow/hooks/deny-dangerous "$hookdir/deny-dangerous" 2>&1); then
+        fail "$hookdir/deny-dangerous runtime differs from workflow/hooks/deny-dangerous"
+        printf '%s\n' "$policy_mirror_output" | sed -n '1,20p' | details_pipe
+        hook_mirror_matches=0
+    fi
+    if [[ "$hook_mirror_matches" -eq 1 ]]; then
+        pass "$hookdir deny policy runtime matches workflow/hooks (entrypoints, modules, corpus, GraphQL helpers)"
+    else
+        policy_mirrors_match=0
+    fi
 done < <(manifest_eval hook-dirs)
+
+if [[ "${#policy_hook_dirs[@]}" -eq 0 ]]; then
+    fail "No installed hook directories declared in workflow/manifest.json"
+elif [[ "$policy_mirrors_match" -eq 0 ]]; then
+    skip "Full deny-policy suites (repair runtime mirror drift first)"
+else
+    # Policy ownership differs, so each policy still needs its own complete corpus.
+    for policy_hook in deny-dangerous deny-git-mutations; do
+        installed_policy_hook="${policy_hook_dirs[0]}/$policy_hook.sh"
+        if deny_self_test_output=$(bash "$installed_policy_hook" --self-test=full 2>&1); then
+            pass "$installed_policy_hook ${deny_self_test_output}"
+        else
+            deny_self_test_exit=$?
+            fail "$installed_policy_hook full self-test (exit $deny_self_test_exit)"
+            printf '%s\n' "$deny_self_test_output" | sed -n '1,20p' | details_pipe
+        fi
+    done
+fi
 
 # Runtime smoke test: pipe a known-blocked command through installed deny hooks
 while IFS= read -r hookdir; do
