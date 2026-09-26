@@ -6,10 +6,88 @@ import assert from "node:assert/strict";
 import childProcess from "node:child_process";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
+import os from "node:os";
 import { describe, it } from "node:test";
-import { gitContext } from "../../src/cli/review-validate-anchors.js";
+import { gitContext, readGit } from "../../src/cli/review-validate-anchors.js";
 
 describe("review Git process outcomes", () => {
+  it("feeds Git input from a finite file and closes its descriptor", (test) => {
+    const root = fs.realpathSync(process.cwd());
+    let descriptor: number | null = null;
+    test.mock.method(childProcess, "spawnSync", (...call: unknown[]) => {
+      const options = call[2] as { input?: unknown; stdio?: unknown };
+      assert.equal(options.input, undefined);
+      assert.ok(Array.isArray(options.stdio));
+      descriptor = options.stdio[0] as number;
+      assert.equal(typeof descriptor, "number");
+      assert.equal(fs.readFileSync(descriptor, "utf8"), "HEAD\n");
+      return {
+        status: 0,
+        signal: null,
+        error: undefined,
+        stdout: Buffer.from("HEAD commit 515\n"),
+        stderr: Buffer.alloc(0),
+      };
+    });
+    syncBuiltinESMExports();
+    try {
+      assert.equal(
+        readGit(root, ["cat-file", "--batch-check"], "HEAD\n").toString(),
+        "HEAD commit 515\n",
+      );
+      if (typeof descriptor !== "number") {
+        throw new Error("Git input descriptor was not supplied");
+      }
+      assert.throws(() => fs.fstatSync(descriptor), { code: "EBADF" });
+    } finally {
+      test.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+  });
+
+  it("fails closed without exposing a temporary path when Git input cannot be prepared", (test) => {
+    const root = fs.realpathSync(process.cwd());
+    test.mock.method(fs, "writeFileSync", () => {
+      throw Object.assign(new Error("private input path: disk full"), {
+        code: "ENOSPC",
+      });
+    });
+    syncBuiltinESMExports();
+    try {
+      assert.throws(
+        () => readGit(root, ["cat-file", "--batch-check"], "HEAD\n"),
+        (error: unknown) =>
+          error instanceof Error &&
+          /cannot read local Git cat-file metadata/u.test(error.message) &&
+          !error.message.includes("private input path"),
+      );
+    } finally {
+      test.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+  });
+
+  it("refuses a temporary directory inside the selected project before allocating input", (test) => {
+    const root = fs.realpathSync(process.cwd());
+    let allocations = 0;
+    test.mock.method(os, "tmpdir", () => root);
+    test.mock.method(fs, "mkdtempSync", () => {
+      allocations += 1;
+      throw new Error("unexpected input allocation");
+    });
+    syncBuiltinESMExports();
+    try {
+      assert.throws(
+        () => readGit(root, ["cat-file", "--batch-check"], "HEAD\n"),
+        /Git input needs a temporary directory outside the selected project/u,
+      );
+      assert.equal(allocations, 0);
+    } finally {
+      test.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+  });
+
   it("uses completed Git output despite EPERM metadata", (test) => {
     const root = fs.realpathSync(process.cwd());
     const outputs = [Buffer.from(`${root}\n`), Buffer.from("sha1\n")];
@@ -61,9 +139,22 @@ describe("review Git process outcomes", () => {
         /cannot read local Git rev-parse metadata/u,
       );
       reply = {
+        status: 0,
+        signal: null,
+        error: Object.assign(new Error("output truncated"), {
+          code: "ENOBUFS",
+        }),
+        stdout: Buffer.from(`${root}\n`),
+        stderr: Buffer.alloc(0),
+      };
+      assert.throws(
+        () => gitContext(root),
+        /cannot read local Git rev-parse metadata/u,
+      );
+      reply = {
         status: 128,
         signal: null,
-        error: undefined,
+        error: Object.assign(new Error("spawn metadata"), { code: "EPERM" }),
         stdout: Buffer.alloc(0),
         stderr: Buffer.from(
           "fatal: not a git repository (or any of the parent directories): .git\n",

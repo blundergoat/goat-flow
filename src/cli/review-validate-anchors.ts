@@ -12,10 +12,14 @@ import {
   existsSync,
   fstatSync,
   lstatSync,
+  mkdtempSync,
   openSync,
   readFileSync,
   realpathSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   canonicalReviewJson,
@@ -413,7 +417,8 @@ export function validateFindingLine(
 }
 
 /**
- * Launch one bounded local Git read without optional writes, replacements, execution helpers, or lazy fetching.
+ * Launch one bounded local Git read without optional Git writes, replacements, execution helpers, or lazy fetching.
+ * Stdin payloads use a private temporary file outside the reviewed project because Node-owned pipes can stall in managed sandboxes.
  *
  * @param root - selected project's real root; inherited Git location overrides cannot select a different project
  *
@@ -438,43 +443,73 @@ function runGit(
         ),
     ),
   );
-  return spawnSync(
-    "git",
-    [
-      "--no-optional-locks",
-      "--no-replace-objects",
-      "--literal-pathspecs",
-      "-C",
-      root,
-      "-c",
-      "core.fsmonitor=false",
-      "-c",
-      "core.untrackedCache=false",
-      ...args,
-    ],
-    {
-      input,
-      maxBuffer: outputLimitBytes,
-      stdio: ["pipe", "pipe", "pipe"],
-      env: {
-        ...environment,
-        LC_ALL: "C",
-        GIT_OPTIONAL_LOCKS: "0",
-        GIT_NO_LAZY_FETCH: "1",
-        GIT_TERMINAL_PROMPT: "0",
-      },
+  const commandArgs = [
+    "--no-optional-locks",
+    "--no-replace-objects",
+    "--literal-pathspecs",
+    "-C",
+    root,
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.untrackedCache=false",
+    ...args,
+  ];
+  const options = {
+    maxBuffer: outputLimitBytes,
+    env: {
+      ...environment,
+      LC_ALL: "C",
+      GIT_OPTIONAL_LOCKS: "0",
+      GIT_NO_LAZY_FETCH: "1",
+      GIT_TERMINAL_PROMPT: "0",
     },
+  };
+  if (input === undefined) {
+    return spawnSync("git", commandArgs, {
+      ...options,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  }
+
+  const temporaryRoot = realpathSync(tmpdir());
+  if (isWithinProject(root, temporaryRoot)) {
+    throw new ReviewAuthorityError(
+      "authority-object",
+      "Git input needs a temporary directory outside the selected project",
+    );
+  }
+  const inputDirectory = mkdtempSync(
+    join(temporaryRoot, "goat-flow-review-git-"),
   );
+  let inputDescriptor: number | null = null;
+  try {
+    const inputPath = join(inputDirectory, "input");
+    writeFileSync(inputPath, input, { flag: "wx", mode: 0o600 });
+    inputDescriptor = openSync(inputPath, "r");
+    return spawnSync("git", commandArgs, {
+      ...options,
+      stdio: [inputDescriptor, "pipe", "pipe"],
+    });
+  } finally {
+    if (inputDescriptor !== null) closeSync(inputDescriptor);
+    rmSync(inputDirectory, { recursive: true, force: true });
+  }
 }
 
-/** Accept a completed child with EPERM metadata; reject failed launches and truncated output. */
-function completedGit(result: SpawnSyncReturns<Buffer>): boolean {
+/** Treat EPERM as post-completion metadata only when Git supplied an exit status. */
+function hasUsableGitStatus(result: SpawnSyncReturns<Buffer>): boolean {
   return (
-    result.status === 0 &&
+    result.status !== null &&
     result.signal === null &&
     (result.error === undefined ||
       ("code" in result.error && result.error.code === "EPERM"))
   );
+}
+
+/** Accept a completed child; other statuses cannot supply successful Git bytes. */
+function completedGit(result: SpawnSyncReturns<Buffer>): boolean {
+  return result.status === 0 && hasUsableGitStatus(result);
 }
 
 /** Return successful Git bytes or a content-safe refusal for unavailable metadata.
@@ -505,7 +540,19 @@ export function readGit(
   input?: Buffer | string,
   outputLimitBytes = GIT_METADATA_OUTPUT_LIMIT_BYTES,
 ): Buffer {
-  return gitOutput(runGit(root, args, input, outputLimitBytes), args[0] ?? "command");
+  const command = args[0] ?? "command";
+  let result: SpawnSyncReturns<Buffer>;
+  try {
+    result = runGit(root, args, input, outputLimitBytes);
+  } catch (error) {
+    if (error instanceof ReviewAuthorityError) throw error;
+    // Temporary-input I/O failures cannot establish source authority; keep local paths out of diagnostics.
+    throw new ReviewAuthorityError(
+      "authority-object",
+      `cannot read local Git ${command} metadata for the selected review`,
+    );
+  }
+  return gitOutput(result, command);
 }
 
 /**
@@ -544,7 +591,7 @@ export function gitContext(projectRoot: string): GitContext {
   const topLevelResult = runGit(root, ["rev-parse", "--show-toplevel"]);
   if (
     topLevelResult.status === 128 &&
-    topLevelResult.error === undefined &&
+    hasUsableGitStatus(topLevelResult) &&
     /^fatal: not a git repository(?:\s|$)/u.test(
       topLevelResult.stderr.toString("utf8").trimStart(),
     )
