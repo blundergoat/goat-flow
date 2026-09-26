@@ -1677,7 +1677,7 @@ git_config_source_variable_is_ambiently_exported() {
 # Environment variables whose value git runs as a command, mirroring the command-hosting -c config keys above.
 git_command_environment_variable_name() {
   case "$1" in
-    GIT_EXTERNAL_DIFF|GIT_SSH|GIT_SSH_COMMAND|GIT_PAGER|PAGER|GIT_EDITOR|GIT_SEQUENCE_EDITOR|GIT_PROXY_COMMAND|GIT_ASKPASS|SSH_ASKPASS)
+    GIT_EXTERNAL_DIFF|GIT_SSH|GIT_SSH_COMMAND|GIT_PAGER|PAGER|GIT_EDITOR|GIT_SEQUENCE_EDITOR|EDITOR|VISUAL|GIT_PROXY_COMMAND|GIT_ASKPASS|SSH_ASKPASS)
       return 0 ;;
   esac
   return 1

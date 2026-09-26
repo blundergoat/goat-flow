@@ -23,7 +23,7 @@ is_git_publication_target() {
   local candidate="$1"
   candidate="${candidate#"${candidate%%[![:space:]]*}"}"
   case "$candidate" in
-    push | push\ * | send-pack | send-pack\ * | http-push | http-push\ * | svn\ dcommit | svn\ dcommit\ * | p4\ submit | p4\ submit\ * | \!*) return 0 ;;
+    push | push\ * | send-pack | send-pack\ * | http-push | http-push\ * | svn\ dcommit | svn\ dcommit\ * | p4\ submit | p4\ submit\ * | subtree\ push | subtree\ push\ * | \!*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -54,7 +54,7 @@ is_git_publication_alias_config() {
 
 # Git verbs that create, rewrite or move history reserved for the developer, before any non-committing exemption.
 # Notes changes create commits under a notes ref even when the developer's current branch stays unchanged.
-__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes worktree stash "
+__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes worktree stash subtree "
 
 # Decide whether a verb's arguments are exactly one of the listed words.
 # Use for recovery modes such as `--abort`, which Git accepts only without other arguments.
@@ -381,6 +381,18 @@ is_git_destructive_target() {
   # A usage request such as `stash drop -h` prints help and changes nothing.
   git_arguments_request_usage_only "$git_arguments" && return 1
   case "$git_verb" in
+    prune)
+      # A dry-run with only known preview flags leaves unreachable recovery objects intact.
+      if git_flags_within "$git_arguments" "-n --dry-run -v --verbose" &&
+        { git_arguments_include "$git_arguments" "-n" || git_arguments_include "$git_arguments" "--dry-run"; }; then
+        return 1
+      fi
+      return 0
+      ;;
+    gc)
+      # Even default gc can prune unreachable objects after its grace period.
+      return 0
+      ;;
     submodule)
       # Forced checkout/deinitialization can discard edits inside a submodule's worktree.
       if [[ "$git_arguments" =~ ^((--quiet|-q)[[:space:]]+)*(deinit|update)([[:space:]]|$) ]]; then
@@ -1081,7 +1093,7 @@ check_git_segment() {
         block "Cannot inspect Git pathspec after a dynamic directory change. Use a literal directory or ask the user to run this command manually." || return $?
       fi
       block \
-        "Destructive git operation (--no-verify, reset --hard, clean -f, forced rm or checkout-index, read-tree reset, worktree remove, bulk restore or checkout, forced checkout or switch, stash drop or clear, reflog expire or delete) can skip checks or discard work. Drop --no-verify if it is not needed; otherwise ask the user to run it manually." ||
+        "Destructive git operation (--no-verify, reset --hard, clean -f, forced rm or checkout-index, read-tree reset, worktree remove, bulk restore or checkout, forced checkout or switch, stash drop or clear, reflog expire or delete, prune or gc) can skip checks or discard work. Drop --no-verify if it is not needed; otherwise ask the user to run it manually." ||
         return $?
     fi
   done
