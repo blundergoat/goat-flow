@@ -63,7 +63,8 @@ Interactive 2FA: enable "authorization and writes" for your npm account,
 
     env -u NPM_TOKEN -u NODE_AUTH_TOKEN bash scripts/npm-publish.sh
 
-  Enter a fresh authenticator code when asked, after the release check.
+  After the release check, enter a fresh authenticator code, or press Enter
+  to let npm handle its own 2FA prompt (including browser/security keys).
 
 Token-only publishing: create a granular token with "Read and write (publish
   and stage)" for @blundergoat/goat-flow and "Bypass 2FA" enabled. Set it as
@@ -98,10 +99,6 @@ configure_token_from_env() {
   AUTH_SOURCE="$token_source"
 }
 
-trim_output() {
-  tr -d '\r' | awk '{$1=$1; print}'
-}
-
 # Shasum of the tarball npm would publish from the current tree.
 # Probed before and after the confirmation prompt: npm tarballs are
 # content-derived (internal mtimes are fixed), so equal shasums prove the
@@ -116,15 +113,14 @@ pack_shasum() {
 
 verify_publish_auth() {
   local npm_user
-  local tfa_mode
 
   echo "--- Auth check ---"
   if configure_token_from_env; then
     echo "Using ${AUTH_SOURCE} via temporary npm config."
   fi
 
-  if ! npm_user=$(npm whoami --registry="$REGISTRY_URL" 2>/dev/null); then
-    print_auth_instructions "npm is not authenticated for ${REGISTRY_URL}."
+  if ! npm_user=$(npm whoami --registry="$REGISTRY_URL"); then
+    print_auth_instructions "unable to verify npm login for ${REGISTRY_URL}. See npm's error above."
     exit 1
   fi
 
@@ -133,7 +129,7 @@ verify_publish_auth() {
   echo "Credential source: ${AUTH_SOURCE:-npm config or npm login}"
   echo "This script accepts NPM_TOKEN or NODE_AUTH_TOKEN for the same npm token; NPM_TOKEN takes priority."
   echo "Choose how this publish will satisfy npm's 2FA requirement:"
-  echo "  1) Enter a fresh 2FA code after the release check (default)"
+  echo "  1) Use interactive 2FA after the release check (default)"
   echo "  2) Use a token with Bypass 2FA enabled"
   read -rp "Authentication method [1/2, default 1]: " auth_choice
   case "$auth_choice" in
@@ -148,23 +144,10 @@ verify_publish_auth() {
     return 0
   fi
 
-  if ! tfa_mode=$(npm profile get "two-factor auth" --registry="$REGISTRY_URL" 2>/dev/null | trim_output); then
-    print_auth_instructions "unable to verify npm account 2FA before the release check."
-    exit 1
-  fi
-
-  if [[ -z "$tfa_mode" ]]; then
-    print_auth_instructions "npm did not report an account 2FA mode."
-    exit 1
-  fi
-
-  echo "Account 2FA mode: ${tfa_mode}"
-  if [[ "$tfa_mode" != *auth-and-writes ]]; then
-    print_auth_instructions "interactive publishing requires account 2FA for authorization and writes."
-    exit 1
-  fi
-
-  echo "A fresh 2FA code will be requested immediately before publishing."
+  # Profile reads are a separate capability from package publishing. A failed
+  # profile lookup cannot establish whether this credential can publish.
+  echo "npm will verify publishing permission and 2FA when publishing."
+  echo "After the release check, enter a fresh code or press Enter for npm's own 2FA prompt."
   echo ""
 }
 
@@ -212,10 +195,13 @@ while true; do
     read -rsp "Current npm 2FA code (Enter for npm's own prompt): " otp
     printf '\n'
     if [[ -n "$otp" ]]; then
-      if NPM_CONFIG_OTP="$otp" npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"; then
+      # npm normalizes both environment spellings; keep them consistent so an
+      # inherited lowercase setting cannot override the freshly entered code.
+      if NPM_CONFIG_OTP="$otp" npm_config_otp="$otp" npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"; then
         break
       fi
-    elif npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"; then
+    elif npm publish --otp= --ignore-scripts --access public --registry="$REGISTRY_URL"; then
+      # The empty CLI flag also clears an OTP stored in npm config files.
       break
     fi
     otp=""
