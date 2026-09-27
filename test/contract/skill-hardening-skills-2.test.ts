@@ -633,7 +633,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       assert.match(
         readMarkdownSection(skillPath, "Phase 2 - Rank and Compare"),
-        /reference pack's Ranking criteria/u,
+        /Ranking criteria[^\n]*`references\/sub-agent-directives\.md`/u,
         skillPath,
       );
     });
