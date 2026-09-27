@@ -1,6 +1,6 @@
 ---
 category: hook-probe-testing
-last_reviewed: 2026-09-26
+last_reviewed: 2026-09-27
 ---
 
 **Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md).
@@ -19,13 +19,26 @@ last_reviewed: 2026-09-26
 
 ## Lesson: Copilot JSON hook probes must use Copilot-shaped payloads
 
-**Status:** active | **Created:** 2026-06-07
+**Status:** active | **Created:** 2026-06-07 | **Incident count:** 2 | **Latest occurrence:** 2026-09-27
+
+**Decision changed:** Copy the provider's exact event shape and serialize command text at every JSON layer before interpreting a probe result.
+**Trigger phase:** ACT | **Caught at:** VERIFY
 
 **Prevention:** Manual Copilot/no-jq hook probes must copy the self-test contract: feed a top-level Copilot payload such as `{"toolName":"bash","toolArgs":"{\"command\":\"...\"}"}` to `bash workflow/hooks/deny-dangerous.sh` without `--check`, with `GOAT_DENY_FORCE_NO_JQ=1` only when testing the fallback parser. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `detect_output_mode`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_no_jq_copilot_block`).
+
+Use a JSON serializer instead of interpolating command strings into provider events.
+Include quoted command bodies in deny and allow controls, then require one complete response object.
 
 **What happened:** A cross-version no-jq probe set an invented JSON-mode switch and called the hook's direct-check interface. That produced stderr and exit 2; the real Copilot-shaped payload returned a JSON denial through the host's expected exit path.
 
 **Root cause:** I invented an output-mode environment switch instead of reading the hook's `detect_output_mode` path and existing self-test helper. Copilot JSON mode is selected from payload shape (`toolName` / `toolArgs`), and Copilot denials intentionally exit 0 so the host can consume the JSON decision.
+
+**Recurrence 2026-09-27:** A new Antigravity conditional-command test failed because the helper inserted unescaped double quotes into JSON.
+The same command returned the correct deny response when serialized with the documented `toolCall.args.CommandLine` shape.
+The Copilot and Antigravity command helpers now serialize their payloads; paired controls retain quoted commands and require one response.
+
+Evidence: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh`
+(search: `expect_copilot_block`, `expect_antigravity_block`, `quoted conditional deletion`, `conditional output returns one Antigravity allow`).
 
 ---
 
@@ -87,22 +100,55 @@ last_reviewed: 2026-09-26
 
 ## Lesson: Hook parser regressions need false-positive grammar probes
 
-**Status:** active | **Created:** 2026-05-27
-**Incident count:** 5 | **Latest occurrence:** 2026-09-26
+**Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 9 | **Latest occurrence:** 2026-09-27
+
+**Decision changed:** Test native conditions and both branches before replacing broad word matching with executable-verb checks.
+**Trigger phase:** ACT | **Caught at:** VERIFY
 
 **Prevention:** For shell hooks, build regression matrices from valid per-command grammar and common inert syntax, not only incident strings. Record whether every short or long option is standalone, consumes one or more values, accepts an equals or attached value, supplies the primary expression, or reads a file. Include CLI subcommands that collide with shell keywords, unquoted comments, quoted `#`, jq/yq dotted queries, and filename controls such as `private.key`, `deploy.pem`, and `prod.pfx`. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `powershell double-dash command remove-item`), (search: `git --git-dir push`), (search: `jq bundled raw filter file`), and (search: `yq eval subcommand key query`).
+
+For native shells, pair conditional deletions and publications with harmless branches, printed scripts and unevaluated script blocks.
+Check same-line and multiline headers, nested and alternate branches, commands before and after the conditional, and parent-process denial propagation.
+Keep the M50 literal-producer and protected-operand controls green; a broad destructive-word scan would reintroduce false positives.
+Preserve script blocks before splitting their separators, inspect executable bodies, and pair output-only blocks with nested invocation controls.
 
 **What happened:** A parser-hardening pass found missing PowerShell and Git option forms plus false positives for shell comments and dotted query syntax.
 
 **Root cause:** The tests covered obvious dangerous strings and a few equals-valued options, but not valid long-option space forms, shell comments, or dotted query syntax that resembles key-file extensions.
 
-**Recurrence 2026-08-19:** A jq/yq false-positive repair added a quote-aware filter-role parser but tested jq's ordinary `-f` form and yq's bare dotted expression only. A fresh review found protected-file bypasses behind jq short bundles, yq boolean flags, yq implicit inputs, attached expression options, and file-valued options; it also found `yq eval` blocked as shell `eval`. The expanded RED corpus failed 9 of 463 cases before the parser split the two command grammars; the final installed and workflow corpora each pass 470 cases after harmless jq data options were separated from file-reading options. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `yq auto-detects whether a positional token is an expression or a file`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (`check_destructive_segment`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `jq literal key-looking string argument`; search: `jq bundled raw filter file`; search: `yq eval subcommand key query`).
+The recurring mistake is proving the reported spelling without testing nearby executable and inert forms. The incident ledger retains each distinct boundary:
 
-**Recurrence 2026-09-18:** Follow-up review found quoted alias flags allowed and printed `qx`/`%x` text denied after the obvious forms had been repaired. The missing neighbours were Git's second quoting layer, operator-looking data, quote-delimited execution and executable string interpolation. The initial focused regressions failed 17 assertions; the corrected classifier corpus passed with those controls and retained raw process-module denials. Evidence: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git alias quoted hard-reset argument`, `Perl printed qx operator text`, `Ruby percent-x in executable string interpolation`). A separate current-installed Sync fixture exposed default-on Git protection becoming off during persistence; it must run with current ownership bytes so upgrade review cannot conceal the defect. Evidence: `test/integration/hook-effective-state.test.ts` (search: `preserves a missing Git choice during current-installed`).
+- **Recurrence 2026-08-19:** jq bundles and yq options bypassed file checks, while `yq eval` was mistaken for shell evaluation. Nine of 463 RED cases failed; the corrected corpus passed 470. Evidence: `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `yq auto-detects whether a positional token is an expression or a file`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `check_destructive_segment`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `jq literal key-looking string argument`, `jq bundled raw filter file`, `yq eval subcommand key query`).
+- **Recurrence 2026-09-18:** Quoted Git flags bypassed checks while printed interpreter operators were denied; 17 RED assertions covered the missing quoting and interpolation boundaries. Evidence: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git alias quoted hard-reset argument`, `Perl printed qx operator text`, `Ruby percent-x in executable string interpolation`). Current-installed upgrade fixtures also caught Git protection becoming off during Sync: `test/integration/hook-effective-state.test.ts` (search: `preserves a missing Git choice during current-installed`).
+- **Recurrence 2026-09-18:** Sync retained a YAML anchor, but toggles and direct saves removed it and broke references. Validate every writer, unrelated settings and repeated preparation; finish learning edits before the final index check. Evidence: `src/cli/config/writer.ts` (search: `replaceTopLevelHooksBlock`, `retainHooksAnchor`) and `test/unit/config-writer.test.ts` (search: `keeps hook anchors usable during an ordinary`). The extracted helper also restored the enforced complexity budget.
+- **Recurrence 2026-09-26:** A dynamic-directory alias denial blocked ordinary credential helpers; only the dangerous-hook full suite caught it. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_hosted_directory_unknown`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `ordinary Git credential helper receives a Git prefix`).
+- **Recurrence 2026-09-27:** Native-shell coverage passed while PowerShell option abbreviations and its implicit command form bypassed Git checks, and printed `Remove-Item` text was denied. Eight added RED assertions failed before the host parser recognized those forms and destructive checks used decoded command verbs. Native Windows output-only probes confirmed the option grammar without executing a write. Two later path regressions exposed backslash-qualified hosts missing dispatch and losing separators during a second decode. Evidence: `test/integration/deny-native-shells.test.ts` (search: `PowerShell host argument forms`, `Windows executable path`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `native_shell_command_into`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `PowerShell printed destructive verb`, `Windows cmd executable path publication`).
+- **Recurrence 2026-09-27:** The executable-verb correction passed direct-command tests but let conditional PowerShell and cmd deletions through.
+  The initial focused run failed 15 of 17 tests; quoted scripts and unevaluated script blocks already passed and had to remain available.
+  The parser now exposes conditions and branches before Bash normalization and keeps provider denials in the parent process.
+  A later allow control caught a false block when PowerShell's opening brace followed a newline; the paired multiline cases now cover that boundary.
+  Evidence: `test/integration/deny-native-shells.test.ts` (search: `Native shell conditionals`),
+  `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `native_conditional_commands_into`), and
+  `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `PowerShell conditional deletion`, `Gruff M50`).
 
-**Recurrence 2026-09-18:** The next recheck extended valid YAML shapes across Sync, prepared toggles and direct saves. An anchored hook block passed Sync, but both toggle paths removed the anchor while another setting still referenced it; the direct writer saved invalid YAML. Test every supported config shape at each write boundary, then parse the saved result and check unrelated settings and repeated preparation. Both new toggle regressions failed before `src/cli/config/writer.ts` (search: `replaceTopLevelHooksBlock`) retained the anchor. Full verification then caught the replacement function exceeding its complexity limit; extracting `retainHooksAnchor` preserved the behavior within that budget. The same gate read a stale index after lesson edits continued during verification. Finish source, lesson and index edits before starting the final gate. Evidence: `test/unit/config-writer.test.ts` (search: `keeps hook anchors usable during an ordinary`).
+- **Recurrence 2026-09-27:** Review found deletion and publication allowed inside a piped `ForEach-Object` block; the `%` alias also passed.
+  Eight of ten new focused tests failed, including an inert `Write-Output` block whose semicolon was treated as an executable separator.
+  Shared parsing now preserves block boundaries and inspects executable bodies through either policy.
+  Follow-up probes caught output flags, labels and multiple inert blocks being denied; direct output arguments now stay data while nested expressions remain inspected.
+  Evidence: `test/integration/deny-native-shells.test.ts` (search: `PowerShell executable script blocks`),
+  `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `native_script_block_commands_into`), and
+  `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `PowerShell executed script-block deletion`).
+  All probes classified text; none executed the proposed deletion or publication.
 
-**Recurrence 2026-09-26:** The first dynamic-directory alias deny also blocked an ordinary `credential.helper` value because Git's helper command runs with an unknown directory in the parser. The Git suite passed while the dangerous-hook full suite failed its existing credential-helper allow control. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_hosted_directory_unknown`) now distinguishes a visible dynamic shell directory from a deferred Git-hosted command; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `ordinary Git credential helper receives a Git prefix`) retains the control.
+- **Recurrence 2026-09-27 (review):** Running the HEAD and working-tree hooks over one probe matrix found seven Windows deletions that HEAD denied now passing.
+  Examples were `cmd /c "call del ..."`, `for ... do del` and `Microsoft.PowerShell.Management\Remove-Item`; Git publication also passed through
+  Bash-style escapes, cmd single quotes, unknown cmd and WSL switches, plain `wsl` operators and printed script blocks.
+  Harmless echo probes on the real `cmd.exe`, `powershell.exe` and `wsl.exe` confirmed each host's grammar before the fix; the existing native-shell suite had passed while every shape got through.
+  Before trusting an executable-verb check, run both builds over launch keywords, host escapes and quotes, unknown switches and unquoted Windows paths.
+  Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `native_launched_commands_into`, `host_escape_character`),
+  `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `cmd call deletion`), and
+  `test/integration/deny-native-shells.test.ts` (search: `Native host grammar`).
 
 ## Lesson: Normalize agent hook payload variants before field access
 

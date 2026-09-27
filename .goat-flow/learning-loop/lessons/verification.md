@@ -196,7 +196,7 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Bind the focused fixture to semantic anchors around the production block, run that exact block with only the primitives it needs, and assert both final filesystem state and operation order. Do not copy the migration sequence into the test, and keep the full installer run as separate repository proof because it covers unrelated stages. Evidence anchors: `workflow/install-goat-flow.sh` (search: `retired_writing_playbook`), `test/integration/setup-install-migrations.test.ts` (search: `preserves retired writing playbooks when installing replacements`), `test/integration/setup-install.helpers.ts` (search: `timeout: 30000`).
+**Prevention:** Bind the focused fixture to semantic anchors around the production block, run that exact block with only the primitives it needs, and assert both final filesystem state and operation order. Do not copy the migration sequence into the test, and keep the full installer run as separate repository proof because it covers unrelated stages. Evidence anchors: `workflow/install-goat-flow.sh` (search: `retired_writing_playbook`), `test/integration/setup-install-migrations.test.ts` (search: `preserves retired writing playbooks when installing replacements`), `test/integration/setup-install.helpers.ts` (search: `runInstallerWithEnvironment`).
 
 **Evidence note:** The current test checks public preview, then executes the production playbook block in isolation. Full installer runs remain separate proof.
 

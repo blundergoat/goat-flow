@@ -147,9 +147,9 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Status:** active | **Created:** 2026-07-17
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient.
 **Trigger phase:** VERIFY
-**Incident count:** 11 | **Latest occurrence:** 2026-09-12
+**Incident count:** 12 | **Latest occurrence:** 2026-09-27
 
-**Prevention:** After the final write, run `goat-flow plans check <plan-directory> --strict`, require warning-free exporter records, and check cited paths/anchors. Keep one live metadata value; fence history. Exercise compact/expanded fixtures through `parseMilestoneMarkdown` and plan commands against prepared disposable paths. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Preserve Status, Scope, Tasks, Proof, Exit/Exit criteria and Stop/rescope; compact Stop/rescope belongs inside Exit. Anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`; `readStopMarkdown`), `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
+**Prevention:** After the final write, run `goat-flow plans check <plan-directory> --strict`, require warning-free exporter records, and check cited paths/anchors. Keep one live metadata value; fence history. Current strict plans require a numeric effort split even when runtime is unknown; label the forecast provisional and name the measurement/reforecast checkpoint rather than omitting required fields. Exercise compact/expanded fixtures through `parseMilestoneMarkdown` and plan commands against prepared disposable paths. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Preserve Status, Scope, Tasks, Proof, Exit/Exit criteria and Stop/rescope; compact Stop/rescope belongs inside Exit. Anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`; `readStopMarkdown`), `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
 **What happened:** The 1.15.0 milestone files looked complete and passed a custom heading check, but the first `plans export` preview warned that all 11 records lacked portable objectives and boundary notes: the exporter then accepted only the bold `Objective` field while the files used a level-two section, omitted `Boundary Notes`, and placed CAO incident gates in peer sections the exporter would not include in task bodies.
 
@@ -165,6 +165,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-09-05 (ACTUAL_MEASURED):** Duplicate Proof headings and linked ISSUE bands broke author checks. `src/cli/plans-export.ts` (search: `addRepresentationConflict`), `workflow/skills/goat-plan/references/issue-format.md` (search: `## Tasks`).
 
 **Recurrence 2026-09-12:** After M70 passed, an acceptance note repeated Actual metadata. The next check rejected it; a prose receipt label restored one live field. `src/cli/plans-effort.ts` (search: `multiple Actual values supplied`).
+
+**Recurrence 2026-09-27:** A release replan replaced two uncertain numeric forecasts with unestimated status. Strict validation rejected both with `strict mode requires an Effort estimate with a product/proof/other split`. Restore the current-format estimate fields, count bulk work explicitly, and disclose unmeasured runtime without inventing timing evidence. Source: `src/cli/plans-check.ts` (search: `strict mode requires an Effort estimate with a product/proof/other split`). Evidence: ACTUAL_MEASURED.
 
 ---
 
