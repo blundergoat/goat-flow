@@ -7,7 +7,7 @@ Guardrails are goat-flow's runtime command-safety hooks. Each agent registers `d
 | Surface | Path | Role |
 | --- | --- | --- |
 | Dangerous policy | `workflow/hooks/deny-dangerous.sh` | Blocks recursive force deletion, privileged package-manager mutation, and secret-path access |
-| Git and GitHub policy | `workflow/hooks/deny-git-mutations.sh` | Blocks Git commits, publication, destructive Git operations, and GitHub writes; permits GitHub reads and issue/PR comments |
+| Git and GitHub policy | `workflow/hooks/deny-git-mutations.sh` | Blocks Git commits, publication, remote lock changes, destructive Git operations, and GitHub writes; permits GitHub reads and issue/PR comments |
 | Policy store | `.goat-flow/hooks/deny-dangerous/` | Shared `guard-runtime.sh` parser and response implementation plus three policy modules |
 | Self-test | `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` | Routes smoke/full cases to each owning policy; preflight invokes both entrypoints |
 
