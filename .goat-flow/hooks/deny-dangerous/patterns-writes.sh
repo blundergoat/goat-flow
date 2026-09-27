@@ -63,7 +63,7 @@ cobra_boolean_flag_enabled() {
   [[ "$enabled" -eq 1 ]]
 }
 
-# Classify LFS publication and history modes while preserving previews and usage.
+# Classify LFS publication, history and remote lock changes while preserving previews and usage.
 # Alias definitions are deferred until their appended arguments and original word boundaries are available.
 is_git_lfs_write_target() {
   local candidate="$1" write_kind="$2" mode="${3:-}"
@@ -74,7 +74,9 @@ is_git_lfs_write_target() {
     alias) lfs_words=("${__goat_git_invoked_alias_words[@]}") ;;
     *) split_shell_words_into lfs_words "$candidate" ;;
   esac
-  local value_options="--include --exclude --include-ref --exclude-ref --above --top --unit --pointers --object-map --message --remote"
+  [[ "${lfs_words[0]:-}" == lfs ]] || return 1
+  local value_options="--include --exclude --include-ref --exclude-ref --above --top --unit --pointers --object-map --message --remote --id"
+  local value_shorts="IXmri"
   local index word short
   for ((index = 1; index < ${#lfs_words[@]}; index++)); do
     word="${lfs_words[index]}"
@@ -86,7 +88,7 @@ is_git_lfs_write_target() {
         while [[ -n "$word" ]]; do
           short="${word:0:1}"
           word="${word:1}"
-          if [[ IXm == *"$short"* ]]; then
+          if [[ "$value_shorts" == *"$short"* ]]; then
             [[ -n "$word" ]] || index=$((index + 1))
             break
           fi
@@ -96,11 +98,11 @@ is_git_lfs_write_target() {
     esac
   done
   case "$write_kind:${commands[0]:-}:${commands[1]:-}" in
-    publication:push:*|history:migrate:import|history:migrate:export) ;;
+    publication:push:*|publication:pre-push:*|history:migrate:import|history:migrate:export|locks:lock:*|locks:unlock:*) ;;
     *) return 1 ;;
   esac
-  cobra_boolean_flag_enabled lfs_words help h "$value_options" IXm && return 1
-  if [[ "$write_kind" == publication ]] && cobra_boolean_flag_enabled lfs_words dry-run d "$value_options" IXm; then
+  cobra_boolean_flag_enabled lfs_words help h "$value_options" "$value_shorts" && return 1
+  if [[ "$write_kind" == publication ]] && cobra_boolean_flag_enabled lfs_words dry-run d "$value_options" "$value_shorts"; then
     return 1
   fi
   return 0
@@ -790,6 +792,16 @@ is_git_push() {
   return 1
 }
 
+# LFS locks change shared server state, including locks held by another developer.
+is_git_lfs_lock_mutation() {
+  __goat_git_strip_globals "$1" || return 1
+  is_git_lfs_write_target "$__goat_git_rest" locks direct && return 0
+  if resolve_git_invoked_alias_command && is_git_lfs_write_target "$__goat_git_invoked_alias_command" locks alias; then
+    return 0
+  fi
+  return 1
+}
+
 # Decide whether an existing guarded Git flag can discard work or bypass checks.
 # Use before execution so the developer retains the manual recovery decision.
 is_git_destructive() {
@@ -1190,6 +1202,10 @@ check_git_segment() {
     if [[ -n "${__goat_git_unknown_global_option-}" ]]; then
       block "Unrecognised Git global option ${__goat_git_unknown_global_option}: the hook cannot tell which Git command runs. Drop the option or ask the user to run the command manually." ||
         return $?
+    fi
+
+    if is_git_lfs_lock_mutation "$repository_write_candidate"; then
+      block "Git LFS remote lock changes are not allowed. Ask the user to manage LFS locks manually." || return $?
     fi
 
     # History creation is always left to the developer, even when an agent was asked to prepare it.
