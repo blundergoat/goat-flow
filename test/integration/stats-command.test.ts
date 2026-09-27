@@ -3,22 +3,14 @@
  * Exercises the extractor + report + render pipeline end-to-end against
  * temp-dir fixtures so the live repo's learning-loop content does not leak in.
  */
-import { describe, it, after } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { assertExists } from "../helpers/assert-exists.ts";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createFS } from "../../src/cli/facts/fs.js";
+import { extractFootgunFacts } from "../../src/cli/facts/shared/learning-loop.js";
 import {
-  extractFootgunFacts,
-  extractLearningLoopEntries,
-  extractLessonsFacts,
-} from "../../src/cli/facts/shared/learning-loop.js";
-import {
+  BUCKET_SIZE_HEADROOM_WARN_BYTES,
   BUCKET_SIZE_WARN_BYTES,
-  buildDecisionsSection,
-  buildStatsReport,
   checkStats,
 } from "../../src/cli/stats/stats.js";
 import {
@@ -26,158 +18,39 @@ import {
   renderStatsJson,
   renderStatsMarkdown,
 } from "../../src/cli/stats/render.js";
-import type {
-  LoadedConfig,
-  GoatFlowConfig,
-} from "../../src/cli/config/types.js";
+import {
+  disposableProjectDirectories,
+  loadReport,
+  loadReportWithoutLoopDirs,
+  makeFixtureRepo,
+  pinnedNow,
+  stubConfig,
+} from "./stats-command.helpers.js";
 
-/**
- * Build valid selected-project config for one stats scenario.
- * Use targeted overrides when the test needs a different path; empty overrides keep user defaults.
- * The full shape exists because extraction requires canonical config; fixed defaults isolate failures.
- */
-function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
-  return {
-    exists: true,
-    valid: true,
-    config: {
-      version: "1.2.3",
-      footguns: { path: ".goat-flow/learning-loop/footguns/" },
-      lessons: { path: ".goat-flow/learning-loop/lessons/" },
-      decisions: { path: ".goat-flow/learning-loop/decisions/" },
-      plans: { path: ".goat-flow/plans/" },
-      logs: { path: ".goat-flow/logs/" },
-      agents: null,
-      skills: { install: "all" },
-      lineLimits: { target: 125, limit: 150 },
-      toolchain: {
-        test: [],
-        lint: [],
-        build: [],
-        package: [],
-        format: [],
-      },
-      userRole: "developer",
-      telemetry: false,
-      learningLoop: { autoCapture: { enabled: false, targets: [] } },
-      knownGaps: [],
-      skillOverrides: {},
-      harness: { acknowledge: [] },
-      terminal: { idleTimeoutMinutes: 480 },
-      hooks: {},
-      ...overrides,
-    },
-    warnings: [],
-    errors: [],
-    parseError: null,
-  };
-}
+/** Build the same footgun with either the user-facing rule or incident narrative first. */
+function orderedFootgunBucket(shouldLeadWithPrevention: boolean): string {
+  const prevention =
+    "**Prevention:** Run the supported project check before reporting a result.";
+  const narrative =
+    "**Symptoms:** A user receives a result that the supported project check did not verify.";
+  const orderedBody = shouldLeadWithPrevention
+    ? [prevention, narrative]
+    : [narrative, prevention];
+  return `---
+category: quality
+last_reviewed: 2026-04-18
+---
 
-/**
- * Build a disposable project with the memory buckets a stats user would inspect.
- * Use when a test needs real filesystem extraction; absent decisions create an empty directory.
- */
-function makeFixtureRepo(spec: {
-  footguns: Record<string, string>;
-  lessons: Record<string, string>;
-  patterns?: Record<string, string>;
-  decisions?: Record<string, string>;
-}): string {
-  const fixtureProjectRoot = mkdtempSync(join(tmpdir(), "goatflow-stats-"));
-  const footgunDirectory = join(
-    fixtureProjectRoot,
-    ".goat-flow/learning-loop/footguns",
-  );
-  const lessonDirectory = join(
-    fixtureProjectRoot,
-    ".goat-flow/learning-loop/lessons",
-  );
-  const decisionDirectory = join(
-    fixtureProjectRoot,
-    ".goat-flow/learning-loop/decisions",
-  );
-  const patternDirectory = join(
-    fixtureProjectRoot,
-    ".goat-flow/learning-loop/patterns",
-  );
-  mkdirSync(footgunDirectory, { recursive: true });
-  mkdirSync(lessonDirectory, { recursive: true });
-  mkdirSync(patternDirectory, { recursive: true });
-  mkdirSync(decisionDirectory, { recursive: true });
-  // Each footgun fixture becomes a real bucket the selected-project extractor can discover.
-  for (const [bucketFilename, bucketContent] of Object.entries(spec.footguns)) {
-    writeFileSync(join(footgunDirectory, bucketFilename), bucketContent);
-  }
-  // Each lesson fixture becomes a real bucket the stats user would see.
-  for (const [bucketFilename, bucketContent] of Object.entries(spec.lessons)) {
-    writeFileSync(join(lessonDirectory, bucketFilename), bucketContent);
-  }
-  // Pattern fixtures share the semantic-anchor parser but have no freshness bucket in stats.
-  for (const [bucketFilename, bucketContent] of Object.entries(
-    spec.patterns ?? {},
-  )) {
-    writeFileSync(join(patternDirectory, bucketFilename), bucketContent);
-  }
-  // Omitted decisions model a user project with an empty but valid decision directory.
-  const decisionFixtures = spec.decisions ?? {};
-  // Each decision fixture becomes a real ADR row for structure validation.
-  for (const [decisionFilename, decisionContent] of Object.entries(
-    decisionFixtures,
-  )) {
-    writeFileSync(join(decisionDirectory, decisionFilename), decisionContent);
-  }
-  return fixtureProjectRoot;
-}
+## Footgun: Body order preserves stats findings
 
-const pinnedNow = new Date("2026-04-18T12:00:00Z");
-const disposableProjectDirectories: string[] = [];
+**Status:** active | **Created:** 2026-04-18 | **Evidence:** OBSERVED
+**Decision changed:** Use the supported project check.
+**Trigger phase:** VERIFY
 
-after(() => {
-  // Every temporary project is removed so the test runner leaves no user-visible workspace debris.
-  for (const disposableProjectDirectory of disposableProjectDirectories) {
-    rmSync(disposableProjectDirectory, { recursive: true, force: true });
-  }
-});
+${orderedBody.join("\n\n")}
 
-/**
- * Load a complete stats report from one seeded project fixture.
- * Use when tests need the same extraction and report path a CLI user triggers.
- */
-function loadReport(spec: Parameters<typeof makeFixtureRepo>[0]) {
-  const fixtureProjectRoot = makeFixtureRepo(spec);
-  disposableProjectDirectories.push(fixtureProjectRoot);
-  const projectFiles = createFS(fixtureProjectRoot);
-  const configState = stubConfig();
-  return buildStatsReport({
-    footguns: extractFootgunFacts(projectFiles, configState, pinnedNow),
-    lessons: extractLessonsFacts(projectFiles, configState, pinnedNow),
-    decisions: buildDecisionsSection(
-      projectFiles,
-      configState.config.decisions.path,
-    ),
-    learningLoopEntries: extractLearningLoopEntries(projectFiles, configState),
-  });
-}
-
-/**
- * Load a stats report for a project whose memory directories are absent.
- * Use when a test verifies the setup failure a user sees before goat-flow initialization.
- */
-function loadReportWithoutLoopDirs() {
-  const fixtureProjectRoot = mkdtempSync(
-    join(tmpdir(), "goatflow-stats-missing-"),
-  );
-  disposableProjectDirectories.push(fixtureProjectRoot);
-  const projectFiles = createFS(fixtureProjectRoot);
-  const configState = stubConfig();
-  return buildStatsReport({
-    footguns: extractFootgunFacts(projectFiles, configState, pinnedNow),
-    lessons: extractLessonsFacts(projectFiles, configState, pinnedNow),
-    decisions: buildDecisionsSection(
-      projectFiles,
-      configState.config.decisions.path,
-    ),
-  });
+The missing source remains visible at \`src/body-order-proof.ts\` (search: \`missingBodyOrderProof\`).
+`;
 }
 
 describe("goat-flow stats - happy path", () => {
@@ -187,11 +60,11 @@ describe("goat-flow stats - happy path", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n\n## Footgun: beta\n\n**Evidence:** ACTUAL_MEASURED\n\nBody.\n",
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Evidence:** ACTUAL_MEASURED\n**Trigger phase:** READ\n\nBody with `src/alpha.ts` ref.\n\n## Footgun: beta\n\n**Evidence:** ACTUAL_MEASURED\n**Trigger phase:** ACT\n\nBody.\n",
       },
       lessons: {
         "verification.md":
-          "---\ncategory: verification\nlast_reviewed: 2026-03-19\n---\n\n## Lesson: gamma\n\nBody.\n",
+          "---\ncategory: verification\nlast_reviewed: 2026-03-19\n---\n\n## Lesson: gamma\n\n**Trigger phase:** VERIFY\n\nBody.\n",
       },
     });
 
@@ -209,6 +82,23 @@ describe("goat-flow stats - happy path", () => {
     assert.ok(text.includes("Footguns"));
     assert.ok(text.includes("hooks.md"));
     assert.ok(text.includes("verification.md"));
+    assert.ok(
+      text.includes(
+        "Trigger phases: READ 1, SCOPE 0, ACT 1, VERIFY 0, untagged 0",
+      ),
+    );
+    assert.ok(
+      text.includes(
+        "Trigger phases: READ 0, SCOPE 0, ACT 0, VERIFY 1, untagged 0",
+      ),
+    );
+
+    const markdown = renderStatsMarkdown(report);
+    assert.ok(
+      markdown.includes(
+        "- Trigger phases: READ 1, SCOPE 0, ACT 1, VERIFY 0, untagged 0",
+      ),
+    );
 
     const json = JSON.parse(renderStatsJson(report));
     assert.equal(json.footguns.totalEntries, expectedFootgunEntries);
@@ -300,82 +190,32 @@ describe("goat-flow stats - happy path", () => {
   });
 });
 
-describe("goat-flow stats - graduation candidates", () => {
-  /** Fixture with recurrence markers on one active footgun, one resolved footgun, and one lesson. */
-  function loadRecurrenceReport() {
-    return loadReport({
-      footguns: {
-        "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n\n**Recurrence update (2026-04-17):** happened again after recording.\n\n## Resolved Entries\n\n## Footgun: closed trap\n\n**Status:** resolved | **Created:** 2026-04-01 | **Resolved:** 2026-04-02 | **Evidence:** ACTUAL_MEASURED\n\nBody.\n\n**Recurrence update (2026-04-01):** recurred before the fix landed.\n",
-      },
-      lessons: {
-        "verification.md":
-          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: beta\n\nBody.\n\n**Recurrence update (2026-04-10):** first repeat.\n\n**Recurrence update (2026-04-15):** second repeat.\n\n## Lesson: quiet\n\nBody without recurrences.\n",
-      },
-    });
-  }
-
-  it("lists active entries with recurrence updates and skips resolved entries", () => {
-    const report = loadRecurrenceReport();
-
-    assert.equal(report.footguns.totalGraduationCandidates, 1);
-    assert.deepEqual(report.footguns.buckets[0].graduationCandidates, [
-      { title: "alpha", recurrenceCount: 1 },
-    ]);
-    assert.equal(report.lessons.totalGraduationCandidates, 1);
-    assert.deepEqual(report.lessons.buckets[0].graduationCandidates, [
-      { title: "beta", recurrenceCount: 2 },
-    ]);
-  });
-
-  it("renders candidates in text and markdown with per-entry recurrence counts", () => {
-    const report = loadRecurrenceReport();
-
-    const text = renderStatsText(report);
-    assert.ok(text.includes("Graduation candidates"));
-    assert.ok(text.includes("hooks.md :: alpha (1 recurrence)"));
-    assert.ok(text.includes("verification.md :: beta (2 recurrences)"));
-    assert.ok(
-      !text.includes("closed trap"),
-      "resolved entries must not surface as graduation candidates",
-    );
-
-    const markdown = renderStatsMarkdown(report);
-    assert.ok(markdown.includes("**Graduation candidates**"));
-    assert.ok(markdown.includes("verification.md :: beta (2 recurrences)"));
-  });
-
-  it("keeps recurrence candidates report-only without optional-metadata warning noise", () => {
-    const verdict = checkStats(loadRecurrenceReport());
-    assert.equal(verdict.status, "pass");
-    assert.deepEqual(verdict.findings, []);
-    assert.equal(
-      verdict.warnings.filter((warning) => warning.rule === "memory-quality")
-        .length,
-      0,
-      "missing optional guidance must not turn every legacy bucket into a warning",
-    );
-  });
-
-  it("renders no graduation section when no entry has recurrence updates", () => {
-    const report = loadReport({
-      footguns: {
-        "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
-      },
-      lessons: {
-        "verification.md":
-          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: beta\n\nBody.\n",
-      },
-    });
-    assert.equal(report.footguns.totalGraduationCandidates, 0);
-    assert.equal(report.lessons.totalGraduationCandidates, 0);
-    assert.ok(!renderStatsText(report).includes("Graduation candidates"));
-    assert.ok(!renderStatsMarkdown(report).includes("Graduation candidates"));
-  });
-});
-
 describe("goat-flow stats --check", () => {
+  it("keeps findings identical when Prevention moves before the incident narrative", () => {
+    const ruleFirstFindings = checkStats(
+      loadReport({
+        footguns: { "body-order.md": orderedFootgunBucket(true) },
+        lessons: {},
+      }),
+    ).findings;
+    const narrativeFirstFindings = checkStats(
+      loadReport({
+        footguns: { "body-order.md": orderedFootgunBucket(false) },
+        lessons: {},
+      }),
+    ).findings;
+
+    assert.ok(
+      ruleFirstFindings.some((finding) => finding.rule === "stale-ref"),
+      "the fixture must produce a real finding before order-indifference is compared",
+    );
+    assert.equal(
+      JSON.stringify(ruleFirstFindings),
+      JSON.stringify(narrativeFirstFindings),
+      "moving the user-facing rule first must not change stats findings",
+    );
+  });
+
   it("fails when a pattern entry carries a stale semantic anchor", () => {
     const report = loadReport({
       footguns: {},
@@ -424,12 +264,12 @@ describe("goat-flow stats --check", () => {
     assert.equal(json.learningLoopEntries[0].hasDecisionChangedGuidance, false);
   });
 
-  it("warns on invalid trigger and occurrence order without failing", () => {
+  it("warns on invalid phase metadata and occurrence order without failing", () => {
     const report = loadReport({
       footguns: {},
       lessons: {
         "verification.md":
-          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: invalid recurrence metadata\n\n**Created:** 2026-04-10\n**Decision changed:** Re-run the original reproduction before closing.\n**Trigger phase:** DEPLOY\n**Latest occurrence:** 2026-04-09\n\nBody.\n",
+          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: invalid recurrence metadata\n\n**Created:** 2026-04-10\n**Decision changed:** Re-run the original reproduction before closing.\n**Trigger phase:** DEPLOY\n**Caught at:** RELEASE\n**Latest occurrence:** 2026-04-09\n\nBody.\n",
       },
     });
     const verdict = checkStats(report);
@@ -441,11 +281,12 @@ describe("goat-flow stats --check", () => {
         (warning) =>
           warning.rule === "memory-quality" &&
           warning.message.includes('invalid Trigger phase "DEPLOY"') &&
+          warning.message.includes('invalid Caught at "RELEASE"') &&
           warning.message.includes(
             "Latest occurrence 2026-04-09 predates Created 2026-04-10",
           ),
       ),
-      "expected both metadata issues in the bucket warning",
+      "expected all metadata issues in the bucket warning",
     );
   });
 
@@ -453,7 +294,7 @@ describe("goat-flow stats --check", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
+          '---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: alpha").\n',
       },
       lessons: {
         "verification.md":
@@ -482,6 +323,49 @@ describe("goat-flow stats --check", () => {
     assert.equal(
       finding.message,
       `.goat-flow/learning-loop/footguns/hooks.md: ${Buffer.byteLength(oversizedBucket)} bytes exceeds ${BUCKET_SIZE_WARN_BYTES}-byte threshold; split into narrower category buckets`,
+    );
+  });
+
+  it("warns before a bucket reaches the unchanged blocking size gate", () => {
+    const bucketPrefix =
+      '---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: alpha").\n';
+    const nearLimitBucket = `${bucketPrefix}${"x".repeat(BUCKET_SIZE_HEADROOM_WARN_BYTES - Buffer.byteLength(bucketPrefix))}`;
+    const report = loadReport({
+      footguns: { "hooks.md": nearLimitBucket },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    const warning = verdict.warnings.find(
+      (item) => item.rule === "bucket-size-headroom",
+    );
+
+    assert.equal(verdict.status, "pass");
+    assert.deepEqual(verdict.findings, []);
+    assertExists(warning, "expected a bucket-headroom warning");
+    assert.equal(
+      warning.message,
+      `.goat-flow/learning-loop/footguns/hooks.md: ${BUCKET_SIZE_HEADROOM_WARN_BYTES} bytes leaves ${BUCKET_SIZE_WARN_BYTES - BUCKET_SIZE_HEADROOM_WARN_BYTES} bytes before the ${BUCKET_SIZE_WARN_BYTES}-byte blocking threshold; split into narrower category buckets`,
+    );
+  });
+
+  it("keeps raw index size as telemetry without treating it as retrieval cost", () => {
+    const report = loadReport({ footguns: {}, lessons: {} });
+    report.indexes = [
+      {
+        bucket: "lessons",
+        dirPath: ".goat-flow/learning-loop/lessons/",
+        indexPath: ".goat-flow/learning-loop/lessons/INDEX.md",
+        state: "fresh",
+        sizeBytes: 50_000,
+      },
+    ];
+
+    const checked = checkStats(report);
+
+    assert.equal(report.indexes[0]?.sizeBytes, 50_000);
+    assert.equal(
+      checked.warnings.map((item) => String(item.rule)).includes("index-size"),
+      false,
     );
   });
 
@@ -841,7 +725,7 @@ describe("goat-flow stats --check", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
+          '---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: alpha").\n',
       },
       lessons: {
         "verification.md":
@@ -869,7 +753,7 @@ describe("goat-flow stats --check", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
+          '---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: alpha").\n',
       },
       lessons: {
         "verification.md":
@@ -889,6 +773,37 @@ describe("goat-flow stats --check", () => {
       verdict.warnings.filter((warning) => warning.rule === "decision-metadata")
         .length,
       0,
+    );
+  });
+
+  it("reports a missing anchor for an active footgun with only a bare path and ignores resolved history", () => {
+    const report = loadReport({
+      footguns: {
+        "hooks.md":
+          '---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: bare path only\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence anchors: `.goat-flow/learning-loop/footguns/hooks.md`.\n\n## Footgun: semantic anchor control\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence anchors: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: semantic anchor control").\n\n## Resolved Entries\n\n## Footgun: resolved bare path\n\n**Status:** resolved | **Evidence:** ACTUAL_MEASURED\n\nEvidence anchors: `.goat-flow/learning-loop/footguns/hooks.md`.\n',
+      },
+      lessons: {},
+    });
+
+    const verdict = checkStats(report);
+    const anchorFindings = verdict.findings.filter(
+      (finding) => finding.rule === "missing-anchor",
+    );
+
+    assert.equal(verdict.status, "fail");
+    assert.equal(anchorFindings.length, 1);
+    assert.equal(
+      anchorFindings[0]?.file,
+      ".goat-flow/learning-loop/footguns/hooks.md",
+    );
+    assert.ok(anchorFindings[0]?.message.includes('"bare path only"'));
+    assert.ok(
+      !anchorFindings[0]?.message.includes("semantic anchor control"),
+      "a valid search anchor must remain an accepted visible control",
+    );
+    assert.ok(
+      !anchorFindings[0]?.message.includes("resolved bare path"),
+      "resolved footgun history must not require anchor migration",
     );
   });
 

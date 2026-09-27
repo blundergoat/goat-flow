@@ -1,13 +1,9 @@
 /**
- * Writes the contract an agent must follow when it produces a quality report.
+ * Build the report instructions used when a maintainer launches a quality assessment.
  *
- * A quality assessment is written by a language model, so the prompt has to state exactly what a valid report looks like: which fields exist, which
- * values each one accepts, and what the agent is forbidden from inventing.
- * This module renders that contract into the prompt.
+ * The prompt names accepted fields, evidence obligations, and the persistence route so the resulting report can be saved and reopened.
  *
- * The vocabulary is pulled from the same constants the parser validates against, so the instructions an agent reads and the rules its output is
- * checked by can never drift apart.
- * A contract that allowed a value the parser rejects would fail the user at save time, after the expensive part of the work was already done.
+ * Shared schema constants and contract tests keep the CLI instructions and browser fallback aligned with validation.
  */
 import type { AgentId } from "../types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
@@ -18,6 +14,9 @@ import {
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
   QUALITY_GROUNDING_STATUSES,
+  QUALITY_IMPROVEMENT_CATEGORIES,
+  QUALITY_MAX_IMPROVEMENTS,
+  QUALITY_SCORE_RATIONALE_MAX_CHARACTERS,
   QUALITY_SCORE_CONFIDENCES,
   QUALITY_WORKTREE_STATES,
 } from "../quality/schema-types.js";
@@ -44,6 +43,7 @@ export interface ReportContractInput {
 
 /**
  * Per-surface presentation switches for the quality report contract block.
+ *
  * Use when CLI and dashboard prompt surfaces need the same report schema with different verbosity.
  * Invariant: option names stay internal so user-facing JSON field names do not drift.
  */
@@ -62,19 +62,13 @@ function backtickList(values: readonly (string | number)[]): string {
 }
 
 /**
- * THE single authoritative renderer for the quality report JSON contract.
- *
- * Every surface that asks an agent to write a quality report - the CLI's agent-setup and focused prompts today - appends this block, so a user
- * running `goat-flow quality --agent claude` and one clicking Launch in the dashboard's Quality page get reports that `goat-flow quality validate`,
- * `history`, and `diff` all parse identically.
- *
- * Field lists come from `quality/schema-types.ts`, so prompt text cannot drift from the parser.
- * (The dashboard's browser-side mirror cannot import this module - it is pinned to the same required fields by
- * `test/unit/quality-report-contract.test.ts`.)
+ * Append the report contract shared by CLI and dashboard quality prompts.
+ * Use after assessment guidance so the agent knows which fields and persistence route its saved report must use.
  *
  * @param lines - prompt line buffer; appended to in place
  * @param input - run facts embedded into the contract (agent, paths, prior report, mode)
  * @param opts - per-surface presentation switches (detail level, separator, sample type)
+ * @returns nothing; the supplied prompt buffer receives the report contract
  */
 
 export function appendQualityReportContract(
@@ -92,6 +86,7 @@ export function appendQualityReportContract(
   };
   /** Push extra lines that only the full-detail prompt carries. */
   const pushFull = (...texts: string[]): void => {
+    // Append these explanatory lines only when the selected prompt uses full detail.
     if (full) for (const text of texts) lines.push(text);
   };
 
@@ -109,6 +104,7 @@ export function appendQualityReportContract(
       : "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` - that path is gitignored and expected. No tracked-file writes or implementation edits are permitted.",
   );
   lines.push("");
+  // CLI-owned saves need a durable filename and saver instructions for history to find the report.
   if (!usesStagedDraft) {
     // Full detail spells out WHY the file must exist on disk - a report that
     // lives only in the agent's reply is invisible to history/diff.
@@ -154,7 +150,8 @@ export function appendQualityReportContract(
   lines.push(
     '    "unverified_probes": ["runtime grounding not yet recorded"],',
   );
-  lines.push('    "score_confidence": "low"');
+  lines.push('    "score_confidence": "low",');
+  lines.push('    "workspace_snapshot": { "start": null, "end": null }');
   lines.push("  },");
   lines.push('  "scores": {');
   lines.push(
@@ -163,6 +160,36 @@ export function appendQualityReportContract(
   lines.push(
     '    "system": { "total": 0, "usefulness": 0, "signal_to_noise": 0, "adaptability": 0, "learnability": 0 }',
   );
+  lines.push("  },");
+  lines.push('  "score_rationale": {');
+  lines.push('    "setup": {');
+  lines.push(
+    '      "accuracy": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "relevance": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "completeness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "friction": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
+  );
+  lines.push("    },");
+  lines.push('    "system": {');
+  lines.push(
+    '      "usefulness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "signal_to_noise": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "adaptability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "learnability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
+  );
+  lines.push("    }");
   lines.push("  },");
   lines.push('  "findings": [');
   const sampleType = opts.sampleFindingType ?? "setup_quality";
@@ -183,7 +210,9 @@ export function appendQualityReportContract(
       `    { "type": "${sampleType}", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta} }`,
     );
   }
-  lines.push("  ]");
+  lines.push("  ],");
+  lines.push('  "refuted_candidates": [],');
+  lines.push('  "improvements": []');
   lines.push("}");
   lines.push("```");
   lines.push("");
@@ -191,10 +220,8 @@ export function appendQualityReportContract(
 }
 
 /**
- * Append the rules the agent must follow when filling in the JSON template above it.
- *
- * These are the constraints a saved report is actually validated against, so wording that drifts from the parser is how a
- * user ends up with a report their own CLI rejects.
+ * Append the rules an assessor must follow when filling the report template.
+ * Use before persistence instructions so users receive reports their matching CLI can validate and save.
  *
  * @param lines - prompt lines appended to in place
  * @param input - the quality request, supplying mode and any prior report being compared
@@ -215,6 +242,9 @@ function appendReportJsonRules(
     "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",
   );
   lines.push(
+    `- Every score axis requires \`evidence\` and \`deduction\` as non-empty single-line strings of ${QUALITY_SCORE_RATIONALE_MAX_CHARACTERS} characters or fewer.`,
+  );
+  lines.push(
     `- Allowed \`type\` values: ${backtickList(QUALITY_FINDING_TYPES)}.`,
   );
   lines.push(
@@ -232,8 +262,26 @@ function appendReportJsonRules(
     `- \`evidence_method\` is REQUIRED on every finding. Allowed values: ${backtickList(QUALITY_EVIDENCE_METHODS)}.`,
   );
   pushVariant(
-    "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command` (the command), `evidence_exit_code` (integer), `evidence_summary` (literal pass/fail or warning summary), `evidence_warning_count` (integer), and `evidence_excerpt` (short single-line excerpt). Do not paste raw terminal blocks into JSON.",
-    "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command`, `evidence_exit_code`, `evidence_summary`, `evidence_warning_count`, and `evidence_excerpt`. Keep these single-line and concise; do not paste raw terminal blocks.",
+    "- A `runtime-probe` or `mixed` finding requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` from the same completed tool call. Optional `evidence_warning_count` and `evidence_excerpt` must match that output. Keep text single-line; do not reconstruct exits from memory or paste terminal blocks.",
+    "- A `runtime-probe` or `mixed` finding requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` from the same completed tool call. Optional `evidence_warning_count` and `evidence_excerpt` must match that output.",
+  );
+  lines.push(
+    "- Capture command output and its real exit code together. A grep with no matches can exit 1; a failed analyzer startup is not a clean run. Truncated output, a signal, or an unavailable exit code cannot support a precise count or a fabricated exit 0; name the missing evidence in `unverified_probes`.",
+    "- Recheck each candidate against current source, accepted decisions, and a negative control before scoring it. Report findings only for concrete current defects. Keep qualification gaps, maintenance work, and design opportunities distinct; a local classifier test does not prove live provider delivery. State whether a skill was inspected or invoked; static inspection is valid evidence for static claims.",
+    `- Record up to ${QUALITY_MAX_IMPROVEMENTS} actionable recommendations in \`improvements\`, or \`[]\` when none remain. Each row has \`category\` (${backtickList(QUALITY_IMPROVEMENT_CATEGORIES)}), \`summary\` (up to 240 characters), \`action\` and \`evidence\` (up to 1000 each), and \`file\` (path or null for project-wide work). Text must be non-empty and single-line. Preserve the same recommendations in prose; do not repeat refuted candidates or change rubric scores merely because an opportunity exists.`,
+  );
+  pushVariant(
+    "- `refuted_candidates` is REQUIRED and may be `[]`. Preserve every candidate you tested and excluded; never repeat those candidates in `findings`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; `evidence_command`, `evidence_exit_code`, and `evidence_excerpt` are optional unless the method rule below requires them.",
+    "- `refuted_candidates` is REQUIRED and may be `[]`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; excluded candidates do not belong in `findings`.",
+  );
+  lines.push(
+    "- A `runtime-probe` or `mixed` refuted candidate requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` so the disproval is reproducible.",
+  );
+  lines.push(
+    '- A refuted candidate must use `evidence_quality: "OBSERVED"`; an `INFERRED` candidate remains unresolved and must not enter the refutation ledger.',
+  );
+  lines.push(
+    '- A `static-analysis` or `mixed` refuted candidate requires a non-null `file` and a grep-friendly semantic anchor such as `(search: "pattern")` in `evidence_summary`.',
   );
   pushVariant(
     '- `scope` is REQUIRED at top level. Set `framework-self` if you detect this is the goat-flow repo itself (heuristic: `package.json` contains `"name": "@blundergoat/goat-flow"`). Otherwise set `consumer`.',
@@ -249,6 +297,11 @@ function appendReportJsonRules(
   pushVariant(
     `- \`assessment_context\` is REQUIRED for new reports. Set \`project_revision\` to the assessed Git HEAD or \`null\`; set \`working_tree_state\` to ${backtickList(QUALITY_WORKTREE_STATES)}; set \`grounding_status\` to ${backtickList(QUALITY_GROUNDING_STATUSES)}; list every skipped, denied, or unavailable command or skill probe in \`unverified_probes\`; and set \`score_confidence\` to ${backtickList(QUALITY_SCORE_CONFIDENCES)}. Use an empty \`unverified_probes\` array only when grounding is complete. This metadata does not change or cap the rubric scores.`,
     `- \`assessment_context\` is REQUIRED: record \`project_revision\`; \`working_tree_state\` as ${backtickList(QUALITY_WORKTREE_STATES)}; \`grounding_status\` as ${backtickList(QUALITY_GROUNDING_STATUSES)}; \`unverified_probes\`; and \`score_confidence\` as ${backtickList(QUALITY_SCORE_CONFIDENCES)}. This metadata does not change or cap the rubric scores.`,
+  );
+  lines.push(
+    "- Record `workspace_snapshot.start` before assessment and `.end` afterwards using the same raw-file snapshot request below; copy each returned `authority.fingerprint`. This covers the selected project's non-ignored regular files, not ignored plans/logs, symlinks, or nested repositories. Re-read any ignored evidence separately. These are reviewer-recorded fingerprints, not launcher attestation.",
+    `- With a version-matched CLI, send {"schema":"goat-review-request/v1","source":{"kind":"area","roots":["."],"sample":null}} on stdin to \`goat-flow review snapshot --project ${shellSingleQuote(input.projectPath)} --expected-version ${getPackageVersion()}\`. In the controlling framework checkout, the matching \`node --import tsx src/cli/cli.ts\` prefix is also valid.`,
+    "- If snapshot capture is unavailable, use null for that endpoint and name the limitation in `unverified_probes`. If endpoints differ, recheck affected findings and use partial grounding while the drift remains unresolved. A shared HEAD or a dirty/clean label alone does not establish identical assessed content. Compare score changes only with matching rubric, scope, and adequately grounded evidence.",
   );
   // Same prior-report id in both wordings - compute once so the branch doesn't
   // sit inline in each variant string.
@@ -285,12 +338,14 @@ function appendReportJsonRules(
   pushFull(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
   );
+  // Shell-based saving needs a quoted delimiter to keep report text from becoming commands.
   if (!isStagedDraftMode) {
     pushFull(
       "- QUOTE the persistence delimiter (`<<'JSON'`, not `<<JSON`). Unquoted delimiters make the shell interpret `$`, backticks, and escapes inside the report.",
     );
   }
   lines.push("");
+  // Dashboard-launched restricted reviews hand their draft to the launcher's persistence route.
   if (isStagedDraftMode) {
     appendStagedDraftPersistence(lines, input);
     return;
@@ -342,6 +397,7 @@ function appendReportJsonRules(
 
 /**
  * Add the dashboard staging instructions shown after an enforced quality review.
+ *
  * Use after a user launches a write-restricted review, so the launcher can save the report.
  * The receipt exposes an outcome but does not bind that outcome to this run's draft.
  *
@@ -401,16 +457,25 @@ function appendStagedDraftPersistence(
 }
 
 /**
- * Focused-mode wrapper over {@link appendQualityReportContract}: compact wording, trailing-section separator, framework-flavoured sample finding.
- * Kept as a named export so focused composers read naturally.
+ * Append the focused prose ledger followed by the compact shared report contract.
+ * Use for process, harness, and skills assessments so their users see the same disproval evidence as the full assessment.
  *
- * @param lines - prompt line buffer; appended to in place
- * @param input - run facts embedded into the contract
+ * @param lines - prompt line buffer; empty means the ledger starts the remaining focused output instructions
+ * @param input - run facts embedded into the contract; a null prior report keeps finding delta tags unset
+ * @returns nothing; the supplied prompt receives the prose ledger and JSON contract
  */
 export function appendFocusedReportContract(
   lines: string[],
   input: ReportContractInput,
 ): void {
+  lines.push("### Refuted Candidates");
+  lines.push(
+    "List every candidate finding you tested and excluded, why it was excluded, and the source anchor or command result that disproved it. Write `None` when no candidate was ruled out.",
+  );
+  lines.push(
+    "Keep these candidates out of findings and recommendations; the ledger exists so the user and later reviewers do not repeat disproved work.",
+  );
+  lines.push("");
   appendQualityReportContract(lines, input, {
     detail: "compact",
     hasLeadingSeparator: true,

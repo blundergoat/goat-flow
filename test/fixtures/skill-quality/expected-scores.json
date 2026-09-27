@@ -66,8 +66,8 @@
     "subtype": "playbook"
   },
   "reference:changelog": {
-    "minPct": 72,
-    "maxPct": 76,
+    "minPct": 78,
+    "maxPct": 82,
     "recommendation": "needs-human-review",
     "subtype": "playbook"
   },
@@ -108,8 +108,8 @@
     "subtype": "playbook"
   },
   "reference:release-notes": {
-    "minPct": 72,
-    "maxPct": 76,
+    "minPct": 82,
+    "maxPct": 86,
     "recommendation": "needs-human-review",
     "subtype": "playbook"
   },
@@ -125,6 +125,18 @@
     "recommendation": "reference-playbook",
     "subtype": "playbook"
   },
+  "reference:writing-agent-facing-instructions": {
+    "minPct": 84,
+    "maxPct": 88,
+    "recommendation": "reference-playbook",
+    "subtype": "playbook"
+  },
+  "reference:writing-human-facing-prose": {
+    "minPct": 76,
+    "maxPct": 80,
+    "recommendation": "reference-playbook",
+    "subtype": "playbook"
+  },
   "reference:writing-sentence-diagnostics": {
     "minPct": 68,
     "maxPct": 72,
@@ -134,12 +146,6 @@
   "reference:writing-structure-diagnostics": {
     "minPct": 73,
     "maxPct": 77,
-    "recommendation": "reference-playbook",
-    "subtype": "playbook"
-  },
-  "reference:writing-style": {
-    "minPct": 76,
-    "maxPct": 80,
     "recommendation": "reference-playbook",
     "subtype": "playbook"
   },

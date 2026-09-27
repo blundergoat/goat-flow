@@ -1,7 +1,7 @@
 ---
 name: goat-qa
 description: "Use when evaluating test coverage gaps, planning test strategy, or assessing testing risk for code changes."
-goat-flow-skill-version: "1.16.0"
+goat-flow-skill-version: "1.17.0"
 ---
 # /goat-qa
 
@@ -54,6 +54,16 @@ Before assessing a proposed or existing test, read `.goat-flow/skill-docs/playbo
 Creation dispositions are `ADD UNIT`, `ADD INTEGRATION`, `ADD END-TO-END/MANUAL`, `SKIP`, or `UNRESOLVED`. Existing-test dispositions are `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`. Failing the creation gate never authorizes deletion. Unresolved evidence keeps an existing test in place and names the next check. `CONSOLIDATE` and `MOVE LEVEL` retain the original until trustworthy replacement coverage passes; `PRUNE CANDIDATE` explains why no replacement is required.
 
 Mock collaborator call counts, call order, non-calls, and simulated cooperation remain `STRUCTURAL` unless the interaction is a named public protocol; they earn no integration confidence. Prefer consolidation when nearby cases lack distinct regression stories. Every recommendation carries the playbook's compact record. goat-qa stays report-only: ordinary ACT must re-read current code and coverage before any separately approved add, move, consolidation, or prune action.
+
+## Candidate Disproval Pass
+
+Run this pass immediately before every gated or final output. Re-read the evidence for each candidate and assign exactly one outcome:
+
+- `confirm` - the candidate survives disproval and may enter the gap report or testing plan when it also passes the test-selection gate.
+- `kill as false positive` - current evidence disproves the candidate, so exclude it from gaps and recommendations.
+- `keep with named missing evidence` - the available evidence cannot settle the candidate; keep it `UNRESOLVED` and name the next check.
+
+Preserve every killed candidate under `Refuted Candidates`: claim, exclusion reason, evidence quality/method/summary, nullable file/line, and any command, exit, or excerpt. Static evidence cites file and semantic anchor; runtime/mixed evidence names command and exit. Write `None` when empty. Never promote killed candidates into gaps or recommendations.
 
 ## Step 0 - Intake
 
@@ -121,7 +131,7 @@ For CRITICAL items with no coverage, annotate why: new path / missed coverage on
 
 Map each stated expectation to the code path that implements it. Gaps between intent and code are undertested-risk candidates.
 
-**BLOCKING GATE (auto-released on explicit test-plan intent):** Present gap analysis plus Verification Integrity, then stop and ask "Continue to Phase 3, or adjust first?" - unless the invocation already gave explicit "what should I test" / "test plan" intent, in which case treat it as a CHECKPOINT and continue through Phase 3 without pausing. Reserve diagrams for Phase 3; then suggest `/goat-plan`.
+**BLOCKING GATE (auto-released on explicit test-plan intent):** Run the Candidate Disproval Pass, then present gap analysis, Refuted Candidates, and Verification Integrity. Ask "Continue to Phase 3, or adjust first?" unless the invocation explicitly requested what to test or a test plan; then treat it as a CHECKPOINT and continue. Reserve diagrams for Phase 3, then suggest `/goat-plan`.
 
 **Illustrative scenario - input/output shape only; never evidence.**
 
@@ -169,7 +179,7 @@ Without any diff, classify each in-scope file by its *role*, not its recency:
 | UI / presentation | views, templates, styling |
 | Support | types, constants, pure helpers |
 
-Load-bearing + Interface files get CRITICAL or HIGH risk ratings by default.
+File role sets inspection priority, not risk. Assign risk from each named behaviour's demonstrated impact and blast radius after inventory. A public export or route alone does not force CRITICAL or HIGH.
 
 ### A3 - Coverage Analysis
 
@@ -187,20 +197,20 @@ Misaligned effort is an observed test-to-risk mismatch. Evidence must show dupli
 
 Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; NONE=1.0, STRUCTURAL=0.66, PARTIAL-BEHAVIOURAL=0.33, BEHAVIOURAL=0. Output:
 
-- **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per behaviour/invariant: file + code anchor, missing assertion, value-gated disposition, and intended owning surface or next evidence check.
-- **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path and value-gated disposition.
-- **Defer** - every matrix Defer pair: LOW-risk rows or a named behaviour with BEHAVIOURAL coverage. Record `SKIP`, `KEEP`, or another evidence-backed disposition as applicable. A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file.
+- **Blocking gaps** - every matrix Blocking pair. One line per behaviour/invariant: file + code anchor, missing assertion, value-gated disposition, and intended owning surface or next evidence check.
+- **High-value additions** - every matrix High-value pair; describe the untested path and value-gated disposition.
+- **Defer** - every matrix Defer pair; record an evidence-backed disposition. A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file.
 - **Misaligned effort** - evidence-backed test-to-risk mismatches with an existing-test disposition, or `none found` with named comparison.
 
 **Illustrative scenario - input/output shape only; never evidence.**
 
 **Worked Audit example:** Read tests, not filenames: integration coverage can make a file PARTIAL-BEHAVIOURAL. Classify `<target-project>/src/content-check.ts` as NONE only after checking unit, integration, and exported-symbol references.
 
-**BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template in `references/output-templates.md`.
+**BLOCKING GATE:** Run the Candidate Disproval Pass, then present the gap report and Refuted Candidates. Wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template in `references/output-templates.md`.
 
 ## Regression Guard Mode
 
-After a verified fix, cite its source; define the human-readable invariants; compare existing tests/manual coverage; apply the value gate and disposition set; emit the standalone template plus Verification Integrity. Do NOT verify the fix. This mode replaces the phase flow; skip Phases 1-3.
+After a verified fix, cite its source; define the human-readable invariants; compare existing tests/manual coverage; apply the value gate and disposition set; run the Candidate Disproval Pass; then emit the standalone template with Refuted Candidates and Verification Integrity. Do NOT verify the fix. This mode replaces the phase flow; skip Phases 1-3.
 
 ## Constraints
 
@@ -209,11 +219,10 @@ After a verified fix, cite its source; define the human-readable invariants; com
 - MUST assess gaps in BOTH directions: undertested risks AND misaligned test effort; report `none found` rather than inventing either
 - MUST use the declared mode's priority tiers: Standard uses "must test / should test / safe to skip"; Audit uses "Blocking / High-value / Defer"
 - MUST include Verification Integrity section
-- MUST apply the Proof Gate from `skill-preamble.md` to every claim made in the gap analysis or testing plan
-- MUST tag every finding/claim row with proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
+- MUST run the Candidate Disproval Pass before every gated or final output and preserve killed candidates under Refuted Candidates
+- MUST apply the preamble's Proof Gate to every claim made in the gap analysis or testing plan.
 - MUST apply `test-selection.md` before recommending an addition or an existing-test change; priority never substitutes for disposition
 - MUST NOT generate test code - hand off to the coding agent
-- Universal constraints from skill-preamble.md apply; per-mode MUSTs live in the phase bodies (Phase 1 diff/risk/blast-radius; Audit A2/A4), not restated here.
 - If flow diagrams are requested, use Mermaid flowcharts (8-15 nodes, happy path first, annotate gap status per node).
 - Regression guard: MUST state invariants as human-readable sentences; MUST cite prior fix-verification source; MUST NOT verify the fix itself
 - MUST defend zero-gap results explicitly: state what was checked and why no gaps surfaced. Zero gaps without justification is an error condition, not a clean bill.

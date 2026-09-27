@@ -1,15 +1,15 @@
 /**
- * Implements the `hooks` command family (list / sync / enable / disable / verify) for the CLI.
+ * Present hook list, Sync, toggle and verification results to terminal users.
  *
- * It is a thin presentation+validation layer over the server-side hook registrar: it lazy-imports the registrar so the heavy module only loads when a
- * hooks command actually runs, picks JSON vs the compact text table from `--format`, and translates the registrar's typed errors into CLIErrors with
- * the right exit code (404 -> usage error 2, everything else -> failure 1).
+ * The shared registrar owns project changes; this adapter chooses text or JSON and prints actionable failures.
+ * Unknown hooks produce usage exit 2; other registrar failures produce exit 1.
  */
 
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
-import type { ParsedCLI } from "./cli-types.js";
-import type { HookState } from "./server/hook-registrar.js";
+import { BATCH_HOOK_SCENARIOS } from "./cli-types.js";
+import type { HookScenario, ParsedCLI } from "./cli-types.js";
+import type { HookState, HookRegistrarError } from "./server/hook-registrar.js";
 
 /** Render desired and effective hook state as a compact terminal table. */
 function renderHooksText(hooks: HookState[]): string {
@@ -27,12 +27,14 @@ function renderHooksText(hooks: HookState[]): string {
     lines.push(
       `${hook.id}  ${hook.enabled ? "enabled" : "disabled"}  ${agentBits.join(", ")}`,
     );
+    // Only hooks that scan project folders show scan-root details; null means this row has no scan-root status.
     if (hook.scanRoots !== null) {
       const roots =
         hook.scanRoots.roots.length === 0
           ? "none"
           : hook.scanRoots.roots.join(", ");
       lines.push(`  scan roots: ${roots} [${hook.scanRoots.status}]`);
+      // A scan-root issue explains why the user's selected folders cannot currently be scanned.
       if (hook.scanRoots.issue !== null) {
         lines.push(`  ${hook.scanRoots.issue}`);
       }
@@ -42,11 +44,11 @@ function renderHooksText(hooks: HookState[]): string {
 }
 
 /**
- * Assert a hook id is present for the enable/disable toggles, which cannot run without a target.
- * Throws a usage CLIError (exit 2) naming the offending subcommand when the id is missing; the parser normally enforces this, so a throw here is a
- * defensive guard for direct callers.
+ * Require the hook ID chosen by an enable or disable command.
+ * Throws a usage error with exit 2 when the ID is missing, including for callers that bypass argument parsing.
  */
 function requireHookId(options: ParsedCLI): string {
+  // An explicit hook ID identifies the row the user wants to enable or disable.
   if (options.hookId) return options.hookId;
   throw new CLIError(`hooks ${options.hookSubcommand} requires <hook-id>.`, 2);
 }
@@ -65,9 +67,8 @@ function renderHooksResult(
 }
 
 /**
- * Render the single hook returned by an enable/disable toggle, reusing the list table for one row.
- * Emits JSON wrapping the hook under a `hook` key when `--format json`, otherwise the one-row text table, so toggle output stays shape-compatible
- * with `hooks list` for scripts that parse either.
+ * Render the changed hook as one terminal row or a JSON object containing `hook`.
+ * This preserves the existing toggle output contract for scripts.
  */
 function renderHookToggleResult(options: ParsedCLI, hook: HookState): void {
   writeOutput(
@@ -83,6 +84,7 @@ function renderHookToggleResult(options: ParsedCLI, hook: HookState): void {
  * A failed or unavailable proof keeps its structured report on stdout and sets exit 1.
  *
  * @param options - Parsed hook request; agent and scenario must be non-null and supported.
+ *
  * @returns Nothing; the user receives the report through stdout and the process exit code.
  * @throws CLIError When the agent or fixed scenario choice is missing or invalid.
  */
@@ -94,34 +96,59 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
   // Direct callers must select one bounded offline scenario group before target hook code runs.
   if (options.hookScenario === null) {
     throw new CLIError(
-      'hooks verify requires --scenario "deny-hook", "post-turn-hook", or "gruff-hook".',
+      'hooks verify requires --scenario "deny-hook", "post-turn-hook", "gruff-hook", or "all".',
       2,
     );
   }
   const {
+    renderHookRuntimeBatchReportJson,
+    renderHookRuntimeBatchReportText,
     renderHookRuntimeReportJson,
     renderHookRuntimeReportText,
+    summarizeHookRuntimeBatch,
     verifyManagedDenyHook,
   } = await import("./hooks-runtime-evidence.js");
   const { verifyManagedConfiguredHook } =
     await import("./hooks-configured-runtime-evidence.js");
-  const report =
-    options.hookScenario === "deny-hook"
+  const agent = options.agent;
+
+  /** Run one group through the entrypoint that owns it, keeping the single trust decision. */
+  const verifyScenarioGroup = (scenarioGroup: HookScenario) =>
+    scenarioGroup === "deny-hook" || scenarioGroup === "git-mutations-hook"
       ? verifyManagedDenyHook({
           projectPath: options.projectPath,
-          agent: options.agent,
-          scenarioGroup: options.hookScenario,
+          agent,
+          scenarioGroup,
           // The runtime-evidence layer uses this field as its no-execution gate.
-          // Omission and the deprecated alias both stay static; only explicit
-          // trusted-target selection releases the gate.
+          // Omission and the deprecated alias both stay static; only explicit trusted-target selection releases the gate.
           isTargetUntrusted: !options.isTargetTrusted,
         })
       : verifyManagedConfiguredHook({
           projectPath: options.projectPath,
-          agent: options.agent,
-          scenarioGroup: options.hookScenario,
+          agent,
+          scenarioGroup,
           isTargetUntrusted: !options.isTargetTrusted,
         });
+
+  // One batch runs every shipped group in order and keeps each verdict, so a failed group never hides a later one.
+  if (options.hookScenario === "all") {
+    const batch = summarizeHookRuntimeBatch(
+      options.projectPath,
+      agent,
+      BATCH_HOOK_SCENARIOS.map(verifyScenarioGroup),
+    );
+    writeOutput(
+      options,
+      options.format === "json"
+        ? renderHookRuntimeBatchReportJson(batch)
+        : renderHookRuntimeBatchReportText(batch),
+    );
+    // CI must receive failure when any group in the batch lacks matching recorded proof.
+    if (batch.status === "fail") process.exitCode = 1;
+    return;
+  }
+
+  const report = verifyScenarioGroup(options.hookScenario);
   writeOutput(
     options,
     options.format === "json"
@@ -132,12 +159,23 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
   if (report.status === "fail") process.exitCode = 1;
 }
 
+/** Keep file-level refusal and recovery details visible to CLI users without exposing the reviewed contents. */
+function renderHookFailure(error: HookRegistrarError): string {
+  const details = error.details;
+  const paths = [
+    ...new Set([...(details?.paths ?? []), ...(details?.changedPaths ?? [])]),
+  ];
+  return [
+    error.message,
+    ...paths.map((path) => `  - ${path}`),
+    ...(details?.recovery ? [details.recovery] : []),
+  ].join("\n");
+}
+
 /**
- * Handle the hooks command, dispatching list/sync/enable/disable to the lazily-imported registrar.
+ * Run the user's hook command and render its result through the shared guarded registrar.
  *
- * Reports registrar failures as CLIErrors: a HookRegistrarError 404 (unknown hook) throws exit 2, any other registrar error throws exit 1, and
- * non-registrar errors are rethrown unchanged.
- * An unrecognised subcommand that reaches the end throws a usage CLIError (exit 2) with the syntax.
+ * Unknown hooks or subcommands produce usage exit 2; other registrar failures produce exit 1, and unrelated errors propagate.
  *
  * @param options - parsed CLI options; reads `hookSubcommand`, `hookId`, `projectPath`, and `format`
  * @returns a promise that resolves once output is written; rejects (throws) on the error paths above
@@ -178,8 +216,13 @@ export async function handleHooksCommand(options: ParsedCLI): Promise<void> {
         return;
     }
   } catch (err) {
+    // For example, Sync may find a locally edited hook; print its refusal and recovery steps with a failure exit.
+    // Known hook failures carry actionable file details; unknown hook IDs are command usage errors.
     if (err instanceof HookRegistrarError) {
-      throw new CLIError(err.message, err.statusCode === 404 ? 2 : 1);
+      throw new CLIError(
+        renderHookFailure(err),
+        err.statusCode === 404 ? 2 : 1,
+      );
     }
     throw err;
   }

@@ -1,11 +1,13 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Observability
 
 Use this when instrumenting application code with logs, metrics, span events, or trace context - i.e. adding signals that humans and dashboards will consume to answer *what happened, where, and why does it matter?*. Covers severity discipline, structured fields, naming, cardinality budget, sensitive-data rules, and the log-vs-metric-vs-span-event decision.
 
 This playbook is OpenTelemetry-shaped - instrument kinds, severity numbers, semantic attribute names, and trace correlation rules all follow the OTel data model - but the discipline applies to any backend that ingests structured logs and metrics.
+
+> **Illustrative examples below define shape only; they are not incident evidence.**
 
 ## Availability Check
 
@@ -66,12 +68,14 @@ logger.error("Payment processing failed", {
     payment_gateway: gateway,
     amount_cents:    amountCents,
     currency:        currency,
-    error:           exception.message,
-    error_class:     typeName(exception),
+    error_type:      typeName(exception),
+    error_code:      classify(exception),
 })
 ```
 
 The message stays constant across thousands of failures; the attributes vary. A single log query can now group every payment failure and break it down by gateway, currency, or error class.
+
+Raw exception messages require an approved, sanitized storage path; prefer stable type and code fields because vendor text can contain secrets, identifiers, or unbounded cardinality.
 
 Identifier fields such as `user_id`, `account_id`, and `order_id` mean opaque internal IDs. Do not use emails, names, external account numbers, or other personal identifiers as stand-ins for IDs unless the service's logging policy explicitly allows that storage path.
 
@@ -79,7 +83,7 @@ Identifier fields such as `user_id`, `account_id`, and `order_id` mean opaque in
 
 When a log is emitted inside an active span through an OTel-aware logger, the SDK attaches `trace_id`, `span_id`, and `trace_flags` to the log record. This is what makes a log reachable from a trace and a trace reachable from a log. Consequences:
 
-- **Background jobs, queue consumers, and scheduled tasks must start their own root span** before emitting logs. Otherwise their logs have no trace context.
+- **Start or continue one span at the work-unit boundary.** A job or schedule with no valid upstream context starts a root span. A consumer processing one message may continue the extracted context; batch, fan-in, or asynchronous consumers commonly start a processing span and link the applicable message creation contexts. Follow the current messaging semantic convention rather than forcing every consumer into one parent shape.
 - **Long-running operations should emit logs inside the same span** rather than opening a fresh span per log. Many short, unrelated spans destroy the trace.
 - **Plain stdout loggers that bypass the OTel logs pipeline** will not get correlation for free; they need explicit context injection at the call site.
 
@@ -97,10 +101,12 @@ Severity is a filtering contract - downstream alert rules, dashboard panels, and
 | `DEBUG` | 5–8 | Internal state to aid diagnosis when a flag is on | Anything kept on by default in production |
 | `INFO` | 9–12 | Normal operational events (startup, work-unit complete, config loaded) | Per-iteration loop output, hot-path traces |
 | `WARN` | 13–16 | Unexpected-but-recovered; deprecated path used; fallback triggered; degraded mode entered | Routine success; user-caused validation failures |
-| `ERROR` | 17–20 | A specific operation failed and warrants follow-up | Validation errors (downgrade to WARN); retries that succeeded |
+| `ERROR` | 17–20 | A specific operation failed and warrants follow-up | Expected validation outcomes; retries that succeeded |
 | `FATAL` | 21–24 | Component failure affecting many operations; process exit imminent | A single failed request or job |
 
 Two failure modes to watch for:
+
+Expected validation normally needs no log or `INFO` only when it is a useful lifecycle event. An unexpected condition that recovers through fallback or degradation belongs at `WARN`; do not relabel routine user input as a warning.
 
 - **Over-logging at INFO and ERROR.** If a log always fires and always reads the same, it carries no information - remove it or move it to DEBUG behind a flag.
 - **Under-logging at WARN.** Warnings are the early signal: degraded behaviour that hasn't yet failed. A service that emits only INFO and ERROR is blind to drift.
@@ -125,8 +131,8 @@ Failures usually want **both** a log (the detail) and a metric (the rate):
 logger.error("Payment processing failed", {
     order_id:        orderId,
     payment_gateway: gateway,
-    error:           exception.message,
-    error_class:     typeName(exception),
+    error_type:      typeName(exception),
+    error_code:      classify(exception),
 })
 
 meter.counter("svc.payment.failures").add(1, {
@@ -143,7 +149,7 @@ The log answers "why did *this* payment fail"; the counter answers "what is the 
 
 Structure: `<namespace>.<domain>.<subject>.<measurement>`
 
-Examples using the generic `svc.` namespace: `svc.payment.failures`, `svc.credit.usage.count`, `svc.api.requests.duration`, `svc.messenger.queue.depth`.
+Examples using the generic `svc.` namespace: `svc.payment.failures`, `svc.credit.usage.count`, `svc.api.request.duration`, `svc.messenger.queue.depth`.
 
 Rules:
 
@@ -157,19 +163,19 @@ Rules:
 | Instrument | Suffix convention | Example |
 |---|---|---|
 | Counter (monotonic) | `.count` or an implied noun | `svc.payment.failures`, `svc.sms.sent.count` |
-| Gauge (sampled value, callback-driven) | `.current` or descriptive noun | `svc.worker.threads.current`, `svc.queue.depth` |
+| Gauge (sampled value, callback-driven) | `.current` or descriptive noun | `svc.worker.thread.current`, `svc.queue.depth` |
 | Histogram (distribution) | `.duration`, `.size`, `.latency` | `svc.api.request.duration`, `svc.upload.size` |
 | UpDownCounter (signed delta) | descriptive noun | `svc.credit.balance`, `svc.active.sessions` |
 
 ### Units
 
-Always declare the unit on the instrument (`ms`, `s`, `By`, `{requests}`, `{threads}`). Use UCUM where possible - it is what the OTel spec assumes. Unit mismatches between dashboards and instruments are the most common silent-misread bug; declare once, never assume.
+Always declare the unit on the instrument. Duration histograms use seconds (`s`); byte sizes use `By`; counts use singular annotations such as `{request}` or `{thread}`. Use UCUM where possible. Unit mismatches between dashboards and instruments are a common silent-misread bug; declare once, never assume.
 
 ### Attribute and label names
 
 | Context | Convention | Example |
 |---|---|---|
-| Metric labels | `lowercase_snake_case`; finite, known cardinality | `gateway`, `outcome`, `reason`, `http_method` |
+| Metric attributes | OTel semantic name when defined; otherwise a stable finite custom name | `gateway`, `outcome`, `reason`, `http.request.method` |
 | Log attributes | `lowercase_snake_case`; prefer OTel semantic names | `exception.type`, `exception.message`, `http.response.status_code` |
 | Custom resource or span attributes | `<namespace>.<name>` | `svc.region`, `svc.tenant_id`, `svc.cluster_id` |
 
@@ -182,7 +188,7 @@ Every unique combination of metric label values creates a new time series. Cost 
 Rules of thumb, in order:
 
 1. **Hand-enumeration test.** If you cannot list the possible values for a label on a napkin, it is too high-cardinality for a metric label. Move it to a log or span attribute.
-2. **Bounded enumerations only.** Acceptable labels look like `gateway` (3–10 values), `outcome` (`ok` / `failed` / `degraded`), `reason` (a known list), `http_method`, status class. Yes.
+2. **Bounded enumerations only.** Acceptable labels look like `gateway` (3–10 values), `outcome` (`ok` / `failed` / `degraded`), `reason` (a known list), `http.request.method`, or status class.
 3. **Identifiers, free text, timestamps.** Request ID, user ID, full error message, query string, IP address - **never** as a metric label. These belong on the log record.
 4. **When you need both granularities,** keep the metric label bounded (`error_type=gateway_timeout`) and put the specific identifier on the log (`error.message`, `request.id`). Connect them via `trace_id`.
 
@@ -201,8 +207,8 @@ meter.counter("svc.payment.failures").add(1, {
     error_type: classify(exception), // Bounded set: timeout, network, declined, ...
 })
 logger.error("Payment processing failed", {
-    error:       exception.message,   // Full text lives here
-    error_class: typeName(exception),
+    error_type: typeName(exception),
+    error_code: classify(exception),
 })
 ```
 
@@ -217,6 +223,7 @@ Logs, traces, and metrics routinely become evidence in incidents, audits, and se
 | Payment instruments (PAN, CVV, full card) | Never | Last 4 digits, tokenised reference |
 | PII fields without an approved storage path | No | Internal opaque ID |
 | Free-text user input | No (likely to embed PII) | Length, hash, or a classified type field |
+| Raw exception or vendor message | Only on an approved sanitized path | Stable error type or code |
 | Internal IDs (account, tenant, user, request) | Yes, within policy | - |
 | Operation names, route shapes, status codes, durations | Yes | - |
 
@@ -227,7 +234,7 @@ Redact at the boundary where the value is first introduced. Trusting every downs
 - **Interpolated message strings.** Defeats grouping and indexing. Use structured attributes.
 - **Severity by feeling.** A validation failure is not `ERROR`. A 4ms query is not `WARN`. Pick by who needs to act and how soon.
 - **Metric label explosion.** See cardinality rules. The only safe label values are ones you can list from memory.
-- **Logs without a span.** Background jobs and consumers that emit logs without first starting a root span produce untraceable records. Start a span at the work-unit boundary.
+- **Logs without a span.** Start or continue a span at the work-unit boundary. Extract message context and use the parent or link model required by the current topology; start a root only when no valid upstream context exists.
 - **Logs as metrics.** Parsing logs at query time to derive a rate is fragile and expensive. Emit the counter from the application instead.
 - **Hot-loop logging.** A log inside a 10k-iteration inner loop is a self-inflicted incident. Aggregate, then emit one summary at the end.
 - **Double-logging the same error.** A wrapper logs the exception, the caller catches and re-logs it. The reader thinks two things happened. Catch and rethrow; log once at the boundary that has the context.
@@ -249,7 +256,7 @@ Verification is the difference between "I added a log" and "I added a useful log
 
 ## Related References
 
-- `skill-preamble.md` - Proof Gate and OBSERVED / INFERRED tagging discipline applied when this playbook directs you to verify instrumentation.
-- `skill-conventions.md` - footgun and lesson entry shapes for recording recurring instrumentation traps with file evidence.
-- OTel Semantic Conventions (upstream spec) - authoritative names for `http.*`, `db.*`, `messaging.*`, `exception.*`, `service.*` attributes.
-- OTel data model documentation - severity numbers, instrument kinds, log record shape, span event shape.
+- `.goat-flow/skill-docs/skill-preamble.md` - Proof Gate and OBSERVED / INFERRED tagging discipline applied when this playbook directs you to verify instrumentation.
+- `.goat-flow/skill-docs/skill-conventions.md` - footgun and lesson entry shapes for recording recurring instrumentation traps with file evidence.
+- [OTel messaging spans](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/) - parent and link guidance for message creation contexts.
+- [OTel metric semantic conventions](https://opentelemetry.io/docs/specs/semconv/general/metrics/) and [HTTP metrics](https://opentelemetry.io/docs/specs/semconv/http/http-metrics/) - authoritative units and attribute names.

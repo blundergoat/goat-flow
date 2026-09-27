@@ -70,7 +70,10 @@ const REPORTING_COMMITTED_ANCHOR_FALLBACKS = [
   ".goat-flow/scratchpad/README.md",
 ] as const;
 
-/** Secret-bearing paths denied to every reporting session, inside the project. */
+/**
+ * Secret-bearing paths denied to every reporting session, inside the project.
+ * Only content shapes and credential stores are listed; a plain secrets/ or credentials* name would block application code.
+ */
 const REPORTING_SECRET_DENIES = [
   "**/.env",
   "**/.env.local",
@@ -80,14 +83,17 @@ const REPORTING_SECRET_DENIES = [
   "**/.env.test",
   "**/.envrc",
   "**/.env.*.local",
-  "**/secrets/**",
   "**/.ssh/**",
   "**/.aws/**",
-  "**/.docker/**",
   "**/.gnupg/**",
+  "**/.config/gcloud/**",
+  "**/.docker/**",
   "**/.kube/**",
-  "**/credentials*",
   "**/.npmrc",
+  "**/.netrc",
+  "**/.git-credentials",
+  "**/.config/gh/hosts.yml",
+  "**/.pgpass",
   "**/.pypirc",
   "**/*.pem",
   "**/*.key",
@@ -105,6 +111,10 @@ const CLAUDE_REPORTING_HOME_SECRET_DENIES = [
   "~/.gnupg/**",
   "~/.kube/**",
   "~/.npmrc",
+  "~/.netrc",
+  "~/.git-credentials",
+  "~/.config/gh/hosts.yml",
+  "~/.pgpass",
   "~/.pypirc",
   "~/credentials*",
   "~/**/*.pem",

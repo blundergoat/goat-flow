@@ -4,18 +4,29 @@
  * Where the checkers answer "is anything wrong", this answers "how is the plan going": one line per milestone, the effort split totalled across the
  * plan, and - once there is enough history - how the author's estimates have been comparing to reality.
  *
- * Calibration is deliberately quiet until a plan has enough finished milestones to say anything honest.
- * Reporting a ratio from one or two samples would tell an author their estimating is off when all it really shows is noise, so the summary stays
- * silent instead.
+ * Estimate-to-Actual calibration and work-unit rates need at least three eligible finished milestones.
+ * Coverage and plan-total diagnostics describe even smaller cohorts and always display their sample counts; they do not establish estimator bias.
  */
+import { scrubDurableText } from "./evidence/redaction.js";
+import {
+  selectPlanForecastHistory,
+  type PlanForecastHistory,
+} from "./plans-forecast-history.js";
 import {
   countAgentWorkUnits,
   deriveForecastRangeFromBasis,
+  floorUnallocatableLikely,
   isNumericActual,
+  renderLikelyFloorNote,
+  type FlooredForecastBasis,
   type PlanEffortForecastBasis,
   type PlanEffortSplit,
 } from "./plans-effort.js";
+import type { PlanForecastRecord } from "./plans-forecast-context.js";
 import type { PlanExportRecord } from "./plans-export.js";
+import { readActiveMilestones } from "./plans-check-structure.js";
+import { DEFAULT_FORECAST_BAND_QUANTILES } from "./config/config-vocabulary.js";
+import type { ForecastBandQuantiles } from "./config/types.js";
 
 /** Plan-level effort-mix target percentages from goat-plan's estimation guidance. */
 const MIX_TARGET: PlanEffortSplit = { product: 70, proof: 20, other: 10 };
@@ -27,6 +38,19 @@ const MIX_TOLERANCE_POINTS = 15;
 
 /** Effort categories reported in plan summaries. */
 const CATEGORIES = ["product", "proof", "other"] as const;
+
+/** Terminal statuses whose estimates stay visible on their own rows but leave the plan total the author steers by. */
+const EXCLUDED_FROM_TOTAL_STATUSES = new Set(["superseded", "deferred"]);
+
+/**
+ * Decide whether a milestone's estimate belongs in the plan total.
+ *
+ * @param record - parsed milestone; a missing status counts as live work
+ * @returns true when the milestone is superseded or deferred and therefore excluded
+ */
+function isExcludedFromTotal(record: PlanExportRecord): boolean {
+  return EXCLUDED_FROM_TOTAL_STATUSES.has(record.status.trim().toLowerCase());
+}
 
 /**
  * Render `(18 product / 5 proof / 2 other)`-style split text for report lines.
@@ -62,7 +86,32 @@ export function renderMilestoneLine(record: PlanExportRecord): string | null {
     const actualReasonText = actual.reason ? ` - ${actual.reason}` : "";
     actualText = ` | actual: ${actual.state} ~${actual.totalMinutes} min${actualSplitText}${actualReasonText}`;
   }
-  return `${record.sourceFile}: ~${record.effort.totalMinutes} min${splitText}${actualText}`;
+  // A terminal row says why its minutes are missing from the plan total instead of silently dropping out.
+  const exclusionText = isExcludedFromTotal(record)
+    ? ` | ${record.status.trim().toLowerCase()} - excluded from the plan total`
+    : "";
+  return `${record.sourceFile}: ~${record.effort.totalMinutes} min${splitText}${actualText}${exclusionText}`;
+}
+
+/**
+ * Report the active lanes only when parallel policy is enabled.
+ * @param records - all parsed milestones; inactive milestones contribute no active row
+ * @param maxActive - resolved positive safe integer cap; one suppresses this entire block
+ * @returns active rows and the cap total; invalid declarations display a fixed marker
+ */
+export function renderActivePlanSummary(
+  records: PlanExportRecord[],
+  maxActive: number,
+): string[] {
+  if (maxActive === 1) return [];
+  const active = readActiveMilestones(records);
+  return [
+    ...active.map(
+      (milestone) =>
+        `active: ${milestone.id} (${milestone.status}) | lane: ${milestone.lane ?? "<invalid>"}`,
+    ),
+    `plan: ${active.length} active milestones (cap ${maxActive})`,
+  ];
 }
 
 /**
@@ -79,6 +128,8 @@ function sumPlanSplits(records: PlanExportRecord[]): PlanEffortSplit {
   for (const record of records) {
     // Milestones without a split (legacy or headline-only) cannot shape the mix.
     if (!record.effort?.split) continue;
+    // Superseded and deferred work is reported on its own line so the total describes what the plan still owes.
+    if (isExcludedFromTotal(record)) continue;
     for (const category of CATEGORIES) {
       totals[category] += record.effort.split[category];
     }
@@ -97,9 +148,10 @@ function sumPlanSplits(records: PlanExportRecord[]): PlanEffortSplit {
 export function renderPlanSummary(records: PlanExportRecord[]): string[] {
   const totals = sumPlanSplits(records);
   const totalMinutes = totals.product + totals.proof + totals.other;
+  const excludedLines = renderExcludedSummary(records);
 
-  // Without any splits there is no mix to summarise, so the summary stays out of the report.
-  if (totalMinutes === 0) return [];
+  // Without any live splits there is no mix to summarise; excluded rows may still explain where the estimate went.
+  if (totalMinutes === 0) return excludedLines;
 
   // Convert minutes to the percentage mix the author compares against 70/20/10.
   const percentages = CATEGORIES.map((category) =>
@@ -121,10 +173,38 @@ export function renderPlanSummary(records: PlanExportRecord[]): string[] {
       "advisory: plan mix drifts more than 15 percentage points from the rough ~70/20/10 guide - check for duplicated proof or missing verification; keep and explain the mix when task risk warrants it",
     );
   }
+  lines.push(...excludedLines);
   return lines;
 }
 
-/** Below this many eligible samples a correction factor would be a guess, not calibration. */
+/**
+ * Render the estimates that left the plan total because their milestones are superseded or deferred.
+ * The author sees exactly which files carry those minutes, so the total never looks like it silently shrank.
+ *
+ * @param records - parsed milestones
+ * @returns one line naming every excluded milestone with its status and minutes; empty means nothing is excluded
+ */
+function renderExcludedSummary(records: PlanExportRecord[]): string[] {
+  const excludedRecords = records.filter(
+    (record) =>
+      record.effort?.split !== undefined && isExcludedFromTotal(record),
+  );
+  // No excluded rows means the plan total already describes every estimate.
+  if (excludedRecords.length === 0) return [];
+  const excludedMinutes = excludedRecords.reduce(
+    (sum, record) => sum + (record.effort?.totalMinutes ?? 0),
+    0,
+  );
+  const excludedRows = excludedRecords
+    .map(
+      (record) =>
+        `${record.sourceFile} ${record.status.trim().toLowerCase()} ${record.effort?.totalMinutes ?? 0}`,
+    )
+    .join(", ");
+  return [
+    `excluded: ${excludedMinutes} min in ${excludedRecords.length} superseded or deferred milestone${excludedRecords.length === 1 ? "" : "s"} - ${excludedRows}`,
+  ];
+}
 const MINIMUM_CALIBRATION_SAMPLES = 3;
 
 /** One milestone's measured-versus-estimated outcome, expressed as a raw-seconds ratio. */
@@ -143,41 +223,56 @@ interface WorkUnitCalibrationSample {
   minutesPerUnit: number;
 }
 
+/** An exclusion retains the reason that the author sees beside the affected pool. */
+type CalibrationDisposition<T> =
+  { sample: T; reason?: never } | { sample?: never; reason: string };
+
 /**
- * Turn one milestone into a calibration sample, or nothing when it is ineligible.
+ * Both pools require human-ratified `complete` status and receipt-backed `measured` Actual; pending, retrospective, unavailable and incomplete stay out.
+ * Raw positive seconds retain short measurements even when their displayed Actual rounds to zero.
  *
- * Eligibility is deliberately narrow.
- *
- * `complete` is the existing human ratification signal, so `human-verification-pending` never qualifies however good its receipt is; `measured` is
- * the only Actual state backed by system-stamped spans, so retrospective guesses, unavailable, and incomplete states stay out rather than dragging a
- * median toward invented numbers.
- *
- * @param record - one parsed milestone
- * @returns the sample; undefined means this milestone cannot calibrate anything
+ * @param record - candidate milestone; missing effort or receipt summary excludes it from both pools
+ * @returns the sample or one factual exclusion reason shared by both pools
  */
-function readCalibrationSample(
+function readCalibrationDisposition(
   record: PlanExportRecord,
-): CalibrationSample | undefined {
+): CalibrationDisposition<CalibrationSample> {
   const effort = record.effort;
 
   // Raw seconds are the authority; the rounded Actual minutes would compound rounding.
   const summary = record.timingReceipt?.summary;
-  if (!effort || !summary) return undefined;
-  if (record.status.trim().toLowerCase() !== "complete") return undefined;
-  if (effort.actual?.state !== "measured") return undefined;
+  if (record.status.trim().toLowerCase() !== "complete") {
+    return { reason: "status is not complete" };
+  }
+  if (!effort) return { reason: "missing effort estimate" };
+  if (effort.actual?.state !== "measured") {
+    return { reason: "Actual is not measured" };
+  }
+  if (!summary) return { reason: "missing receipt summary" };
 
   // A zero-minute estimate has no ratio to report, so it contributes nothing.
-  if (effort.totalMinutes <= 0) return undefined;
+  if (effort.totalMinutes <= 0) return { reason: "estimate is not positive" };
 
   // `plans time` permits a same-second receipt. Its 0.00 min/unit rate would be prescribed as a
   // reforecast that `readSafePositiveRate` then rejects, blocking the milestone indefinitely.
-  if (summary.totalSeconds <= 0) return undefined;
+  if (summary.totalSeconds <= 0) {
+    return { reason: "raw receipt seconds are not positive" };
+  }
   return {
-    sourceFile: record.sourceFile,
-    ratio: summary.totalSeconds / (effort.totalMinutes * 60),
-    measuredSeconds: summary.totalSeconds,
-    estimatedMinutes: effort.totalMinutes,
+    sample: {
+      sourceFile: record.sourceFile,
+      ratio: summary.totalSeconds / (effort.totalMinutes * 60),
+      measuredSeconds: summary.totalSeconds,
+      estimatedMinutes: effort.totalMinutes,
+    },
   };
+}
+
+/** Numerical consumers use the same admission decision as the explanatory output. */
+function readCalibrationSample(
+  record: PlanExportRecord,
+): CalibrationSample | undefined {
+  return readCalibrationDisposition(record).sample;
 }
 
 /**
@@ -194,38 +289,275 @@ function collectCalibrationSamples(
     .filter((sample): sample is CalibrationSample => sample !== undefined);
 }
 
-/**
- * Normalize one eligible receipt by its verified forecast-basis unit count.
- *
- * @param record - completed milestone; absent or stale basis means no unit evidence
- * @returns one minutes-per-unit sample; undefined keeps unreviewable data out
- */
-function readWorkUnitCalibrationSample(
+/** One eligible receipt compared with the forecast range its author recorded. */
+interface BandCoverageSample {
+  measuredMinutes: number;
+  lowMinutes: number;
+  highMinutes: number;
+  widthRatio: number;
+}
+
+/** Reuse calibration eligibility, adding only the stored range needed for coverage. */
+function readBandCoverageSample(
   record: PlanExportRecord,
-): WorkUnitCalibrationSample | undefined {
-  const calibrationSample = readCalibrationSample(record);
-  const forecastBasis = record.effort?.forecastBasis;
+): BandCoverageSample | undefined {
+  const sample = readCalibrationSample(record);
+  const range = record.effort?.forecastRange;
+  if (!sample || !range) return undefined;
+  return {
+    measuredMinutes: sample.measuredSeconds / 60,
+    lowMinutes: range.lowMinutes,
+    highMinutes: range.highMinutes,
+    widthRatio: range.highMinutes / range.lowMinutes,
+  };
+}
 
-  // Both a receipt-backed Actual and a parsed basis are required to compare like with like.
-  if (!calibrationSample || !forecastBasis) return undefined;
+/**
+ * Count below/above using raw receipt minutes, keeping both endpoints inside.
+ * Empty cohorts have no percentage or width; these descriptive lines never promise future coverage.
+ *
+ * @param records - parsed milestones whose stored ranges remain unchanged
+ * @returns one advisory line with the scoreable count, observed coverage and median high/low width
+ */
+function renderBandCoverageSummary(records: PlanExportRecord[]): string {
+  const samples = records
+    .map(readBandCoverageSample)
+    .filter((sample): sample is BandCoverageSample => sample !== undefined);
+  const below = samples.filter((s) => s.measuredMinutes < s.lowMinutes).length;
+  const above = samples.filter((s) => s.measuredMinutes > s.highMinutes).length;
+  const inside = samples.length - below - above;
+  const percentage =
+    samples.length === 0
+      ? "n/a"
+      : `${((inside / samples.length) * 100).toFixed(1)}%`;
+  const medianWidth = medianRatio(
+    samples.map((s) => s.widthRatio).sort((a, b) => a - b),
+  );
+  // Zero lower bounds are valid legacy ranges and have unbounded multiplicative width.
+  const width =
+    samples.length === 0
+      ? "n/a"
+      : Number.isFinite(medianWidth)
+        ? renderRatio(medianWidth)
+        : "unbounded";
+  return `band coverage: ${inside} of ${samples.length} inside (${percentage}) - ${below} below, ${above} above; median width ${width}`;
+}
 
-  const countedAgentWorkUnits = countAgentWorkUnits([
+/** Compare totals over the same receipt-eligible IDs, including range-less legacy plans. */
+function renderPlanTotalSummary(samples: CalibrationSample[]): string {
+  if (samples.length === 0) return "plan total: unavailable over 0 measured";
+  const actualMinutes =
+    samples.reduce((sum, sample) => sum + sample.measuredSeconds, 0) / 60;
+  const forecastMinutes = samples.reduce(
+    (sum, sample) => sum + sample.estimatedMinutes,
+    0,
+  );
+  return `plan total: ${actualMinutes.toFixed(2)}/${forecastMinutes} = ${renderRatio(actualMinutes / forecastMinutes)} over ${samples.length} measured`;
+}
+
+/** Count the agent-owned units on a milestone's checklist today; missing plan/admin time contributes no unit. */
+function countRecordAgentWorkUnits(record: PlanExportRecord): number {
+  return countAgentWorkUnits([
     ...record.tasks,
     ...record.testingGateItems,
     ...record.midProofItems,
     record.planAdminEstimate ?? {},
   ]);
+}
+
+/** Work one milestone registered at issue and in later revisions, counted by saved item identity. */
+interface RegisteredUnitGrowth {
+  issuedUnits: number;
+  addedUnits: number;
+  hasRevision: boolean;
+}
+
+/**
+ * Read the work a milestone registered in its forecast records.
+ * Saved records count under either declared forecast method, and an item added, dropped and added again still counts once.
+ *
+ * @param record - parsed milestone; one without saved records, or with rejected forecast metadata, has no registered work
+ * @returns units in the original forecast and distinct item IDs added by later revisions; undefined without a trusted original
+ */
+function readRegisteredUnitGrowth(
+  record: PlanExportRecord,
+): RegisteredUnitGrowth | undefined {
+  const context = record.forecastContext;
+  // The parser nulls the method when it rejects the metadata, so those records are not evidence.
+  if (!context?.method) return undefined;
+  const [original, ...revisions] = context.document?.records ?? [];
+  if (!original) return undefined;
+  const addedIds = new Set(
+    revisions.flatMap((revision) => revision.scopeDelta.added),
+  );
+  return {
+    issuedUnits: original.items.length,
+    addedUnits: addedIds.size,
+    hasRevision: revisions.length > 0,
+  };
+}
+
+/**
+ * Decide whether a finished checklist left its forecast basis with nothing registered to explain it.
+ *
+ * @param record - finished milestone; one without a forecast basis has no count to compare
+ * @param growth - the milestone's registered work; a saved revision already explains a moved count
+ * @returns true when the count moved with no recorded direction: the work may have been added, removed or re-split
+ */
+function hasUnexplainedUnitCount(
+  record: PlanExportRecord,
+  growth: RegisteredUnitGrowth | undefined,
+): boolean {
+  const forecastBasis = record.effort?.forecastBasis;
+  if (growth?.hasRevision || !forecastBasis) return false;
+  return forecastBasis.agentWorkUnits !== countRecordAgentWorkUnits(record);
+}
+
+/** Plan-wide counts behind the `unit growth:` line; units are summed only over milestones with trusted saved records. */
+interface UnitGrowthTally {
+  registeredCount: number;
+  grownCount: number;
+  issuedUnits: number;
+  addedUnits: number;
+  unexplainedCount: number;
+}
+
+/**
+ * Add up registered growth and unexplained count changes across the plan's finished milestones.
+ *
+ * @param records - every parsed milestone in the plan directory; only `complete` ones are read
+ * @returns the tally; all zeros means the plan has no growth to report
+ */
+function tallyUnitGrowth(records: PlanExportRecord[]): UnitGrowthTally {
+  const tally: UnitGrowthTally = {
+    registeredCount: 0,
+    grownCount: 0,
+    issuedUnits: 0,
+    addedUnits: 0,
+    unexplainedCount: 0,
+  };
+  for (const record of records) {
+    if (record.status.trim().toLowerCase() !== "complete") continue;
+    const growth = readRegisteredUnitGrowth(record);
+    if (growth) {
+      tally.registeredCount++;
+      tally.issuedUnits += growth.issuedUnits;
+      tally.addedUnits += growth.addedUnits;
+      if (growth.addedUnits > 0) tally.grownCount++;
+    }
+    if (hasUnexplainedUnitCount(record, growth)) tally.unexplainedCount++;
+  }
+  return tally;
+}
+
+/**
+ * Report work added after forecasts, so an overrun caused by new scope is not read as a bad estimate.
+ *
+ * Registered revisions are the only trusted source. A finished checklist that left its basis is counted without a direction.
+ * Unregistered additions leave no trace, which makes the reported growth a floor.
+ *
+ * @param records - every parsed milestone in the plan directory; only `complete` ones are read
+ * @returns one line, or none when no finished milestone registered additions or left its basis
+ */
+function renderUnitGrowthSummary(records: PlanExportRecord[]): string[] {
+  const tally = tallyUnitGrowth(records);
+  const clauses: string[] = [];
+  if (tally.grownCount > 0) {
+    const addedShare = ((tally.addedUnits / tally.issuedUnits) * 100).toFixed(
+      1,
+    );
+    clauses.push(
+      `${tally.grownCount} of ${tally.registeredCount} finished milestones registered added work - ${tally.issuedUnits} units at issue, ${tally.issuedUnits + tally.addedUnits} after additions (+${addedShare}%, unregistered additions not counted)`,
+    );
+  }
+  if (tally.unexplainedCount > 0) {
+    clauses.push(
+      tally.unexplainedCount === 1
+        ? "1 finished milestone counts differently from its forecast basis with no registered revision (direction unknown)"
+        : `${tally.unexplainedCount} finished milestones count differently from their forecast basis with no registered revision (direction unknown)`,
+    );
+  }
+  return clauses.length === 0 ? [] : [`unit growth: ${clauses.join("; ")}`];
+}
+
+/**
+ * Normalize one eligible receipt by its verified forecast-basis unit count.
+ *
+ * @param record - completed milestone; absent or stale basis means no unit evidence
+ * @returns a minutes-per-unit sample or the common/basis-specific exclusion reason
+ */
+function readWorkUnitCalibrationDisposition(
+  record: PlanExportRecord,
+): CalibrationDisposition<WorkUnitCalibrationSample> {
+  const calibration = readCalibrationDisposition(record);
+  const forecastBasis = record.effort?.forecastBasis;
+
+  // Both a receipt-backed Actual and a parsed basis are required to compare like with like.
+  if (!calibration.sample) return { reason: calibration.reason };
+  if (!forecastBasis) return { reason: "missing countable forecast basis" };
+
+  const countedAgentWorkUnits = countRecordAgentWorkUnits(record);
 
   // A stale declared count cannot become evidence for the next user's forecast.
-  if (countedAgentWorkUnits !== forecastBasis.agentWorkUnits) return undefined;
+  if (countedAgentWorkUnits !== forecastBasis.agentWorkUnits) {
+    return {
+      reason: `forecast basis declares ${forecastBasis.agentWorkUnits} units; current count is ${countedAgentWorkUnits}`,
+    };
+  }
 
   return {
-    sourceFile: record.sourceFile,
-    measuredSeconds: calibrationSample.measuredSeconds,
-    agentWorkUnits: countedAgentWorkUnits,
-    minutesPerUnit:
-      calibrationSample.measuredSeconds / 60 / countedAgentWorkUnits,
+    sample: {
+      sourceFile: record.sourceFile,
+      measuredSeconds: calibration.sample.measuredSeconds,
+      agentWorkUnits: countedAgentWorkUnits,
+      minutesPerUnit:
+        calibration.sample.measuredSeconds / 60 / countedAgentWorkUnits,
+    },
   };
+}
+
+/** Basis-only exclusions never remove the same receipt from estimate-ratio history. */
+function readWorkUnitCalibrationSample(
+  record: PlanExportRecord,
+): WorkUnitCalibrationSample | undefined {
+  return readWorkUnitCalibrationDisposition(record).sample;
+}
+
+/** Explain completed history without flooding plans that have no completed work yet. */
+function renderCalibrationEligibility(records: PlanExportRecord[]): string[] {
+  const completed = records.filter(
+    (record) => record.status.trim().toLowerCase() === "complete",
+  );
+  if (completed.length === 0) return [];
+  const lines: string[] = [];
+  const nonCompleteCount = records.length - completed.length;
+  if (nonCompleteCount > 0) {
+    lines.push(
+      `calibration eligibility: ${nonCompleteCount} non-complete milestones excluded from both pools`,
+    );
+  }
+  for (const record of completed) {
+    const calibration = readCalibrationDisposition(record);
+    if (!calibration.sample) {
+      lines.push(
+        `calibration exclusion: ${record.sourceFile} - both pools: ${calibration.reason}`,
+      );
+      continue;
+    }
+    const workUnit = readWorkUnitCalibrationDisposition(record);
+    if (!workUnit.sample) {
+      lines.push(
+        `calibration exclusion: ${record.sourceFile} - work-unit pool only: ${workUnit.reason}; estimate-ratio eligible`,
+      );
+    }
+    // Rounding a positive receipt to zero changes its display, not its admission or provenance.
+    if (Math.round(calibration.sample.measuredSeconds / 60) === 0) {
+      lines.push(
+        `calibration note: ${record.sourceFile} - ${calibration.sample.measuredSeconds}s raw rounds to 0 min; estimate-ratio eligible; work-unit ${workUnit.sample ? "eligible" : "excluded"}`,
+      );
+    }
+  }
+  return lines;
 }
 
 /** Select completed milestones whose receipts have a matching countable basis. */
@@ -240,11 +572,114 @@ function collectWorkUnitCalibrationSamples(
     );
 }
 
+/**
+ * Reproduce the selected-plan rates available at a frozen forecast's issue time.
+ * Admission, three-sample threshold and published precision match legacy advice.
+ *
+ * @param records - selected-folder records only; later outcomes cannot train this origin
+ * @param target - frozen work count and registered percentile pair
+ * @returns the unchanged selected-plan method, including its cold prior when sparse
+ */
+export function selectedPlanForecastBasis(
+  records: PlanExportRecord[],
+  target: PlanForecastRecord,
+) {
+  const earlier = records.filter((record) => {
+    const ends =
+      record.timingReceipt?.segments
+        .filter((segment) => segment.state === "closed")
+        .map((segment) => segment.endEpochSeconds ?? Infinity) ?? [];
+    return (
+      ends.length > 0 && Math.max(...ends) * 1000 < Date.parse(target.issuedAt)
+    );
+  });
+  const samples = collectWorkUnitCalibrationSamples(earlier);
+  const local = samples.length >= MINIMUM_CALIBRATION_SAMPLES;
+  const rates = local
+    ? readLocalWorkUnitRates(samples, target.quantiles)
+    : {
+        // Shipped cold-start default. The goat-plan skill, its milestone reference and the CLI and skills docs state the same three rates as text,
+        // and nothing compares that text with this literal, so change them together.
+        lowMinutesPerUnit: 1,
+        likelyMinutesPerUnit: 2.5,
+        highMinutesPerUnit: 6,
+      };
+  return {
+    samples,
+    selection: local ? ("selected-plan" as const) : ("cold-prior" as const),
+    basis: {
+      agentWorkUnits: target.items.length,
+      lowMinutesPerUnit: Number(rates.lowMinutesPerUnit.toFixed(2)),
+      likelyMinutesPerUnit: Number(rates.likelyMinutesPerUnit.toFixed(2)),
+      highMinutesPerUnit: Number(rates.highMinutesPerUnit.toFixed(2)),
+      source: local
+        ? "selected-plan earlier measured receipts"
+        : "cold-start prior",
+    },
+  };
+}
+
+/**
+ * Report pool selection separately from issued forecasts and selected-plan arithmetic; redact source-controlled identities before output.
+ *
+ * @param records - selected-plan milestones; completed or non-contextual records emit no history advice
+ * @param history - bounded same-project discovery, including failures that remain advisory
+ * @returns readable redacted selection, provenance and exclusion lines without replacement numerical forecasts
+ */
+export function renderForecastHistorySummary(
+  records: PlanExportRecord[],
+  history: PlanForecastHistory,
+): string[] {
+  const lines: string[] = [];
+  for (const record of records) {
+    if (
+      record.forecastContext?.method !== "contextual-v1" ||
+      record.status.trim().toLowerCase() === "complete"
+    )
+      continue;
+    const selected = selectPlanForecastHistory(history, record);
+    lines.push(
+      `history selection: ${record.sourceFile} - pool ${selected.selection}; ${selected.samples.length} matched samples; ${selected.intactCount} intact measurements before deduplication; ${selected.reason}`,
+    );
+    for (const sample of selected.samples)
+      lines.push(
+        `history sample: ${record.sourceFile} <- ${sample.id}; forecast ${sample.forecastId}; sha256 ${sample.sha256}; registered ${sample.registeredAt}; completed ${sample.completedAt}; ${sample.measuredSeconds}s / ${sample.agentWorkUnits} units`,
+      );
+    for (const exclusion of selected.exclusions)
+      lines.push(
+        `history exclusion: ${record.sourceFile} <- ${exclusion.id} - ${exclusion.reason}`,
+      );
+    lines.push(
+      `history limitation: ${record.sourceFile} - selection checks provided registration consistency, not independent timestamp authenticity; issued forecasts remain unchanged`,
+    );
+  }
+  return lines.map((line) => scrubDurableText(line));
+}
+
 /** Middle value of a sorted ratio list, averaging the pair when the count is even. */
 function medianRatio(sortedRatios: number[]): number {
   const middle = Math.floor(sortedRatios.length / 2);
   if (sortedRatios.length % 2 === 1) return sortedRatios[middle] ?? 0;
   return ((sortedRatios[middle - 1] ?? 0) + (sortedRatios[middle] ?? 0)) / 2;
+}
+
+/**
+ * Interpolate at index (n - 1) * p in an ascending rate sample.
+ * This convention keeps the reported endpoints deterministic, including small samples.
+ *
+ * @param sortedRates - ascending measured rates; empty returns zero, one sample returns itself
+ * @param quantile - fraction from zero to one, including the observed endpoints
+ * @returns the interpolated rate before rounding to the published two-decimal precision
+ */
+export function interpolatedQuantile(
+  sortedRates: readonly number[],
+  quantile: number,
+): number {
+  const position = (sortedRates.length - 1) * quantile;
+  const lowerIndex = Math.floor(position);
+  const lower = sortedRates[lowerIndex] ?? 0;
+  const upper = sortedRates[Math.ceil(position)] ?? lower;
+  return lower + (upper - lower) * (position - lowerIndex);
 }
 
 /** Format a ratio the way the report shows it, so comparisons stay eyeball-able. */
@@ -267,31 +702,33 @@ interface LocalWorkUnitRates {
 /** Convert sorted receipt samples into the local rates used for the next forecast; the sort is what makes the low, middle, and high values stable. */
 function readLocalWorkUnitRates(
   workUnitSamples: WorkUnitCalibrationSample[],
+  quantiles: ForecastBandQuantiles,
 ): LocalWorkUnitRates {
-  // Sorting measured rates exposes the observed low/high and the robust middle outcome.
+  // Interpolated endpoints reduce sensitivity to isolated extremes without removing samples.
   const sortedRates = workUnitSamples
     .map((workUnitSample) => workUnitSample.minutesPerUnit)
     .sort((leftRate, rightRate) => leftRate - rightRate);
-  // This path needs three samples, so the fallbacks only protect direct empty helper use.
   return {
-    lowMinutesPerUnit: sortedRates[0] ?? 0,
+    lowMinutesPerUnit: interpolatedQuantile(sortedRates, quantiles[0] / 100),
     likelyMinutesPerUnit: medianRatio(sortedRates),
-    highMinutesPerUnit: sortedRates.at(-1) ?? 0,
+    highMinutesPerUnit: interpolatedQuantile(sortedRates, quantiles[1] / 100),
   };
 }
 
-/** Compare copied two-decimal local rates with an unfinished milestone's basis. */
+/** Rates may move without changing the plan; compare every derived bound using the published local rates. */
 function basisMatchesLocalRates(
   forecastBasis: PlanEffortForecastBasis,
   localMinutesPerUnitRates: LocalWorkUnitRates,
 ): boolean {
+  const recordedRange = deriveForecastRangeFromBasis(forecastBasis);
+  const localRange = deriveForecastRangeFromBasis({
+    ...forecastBasis,
+    ...localMinutesPerUnitRates,
+  });
   return (
-    renderMinutesPerUnit(forecastBasis.lowMinutesPerUnit) ===
-      renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit) &&
-    renderMinutesPerUnit(forecastBasis.likelyMinutesPerUnit) ===
-      renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit) &&
-    renderMinutesPerUnit(forecastBasis.highMinutesPerUnit) ===
-      renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit)
+    recordedRange.lowMinutes === localRange.lowMinutes &&
+    recordedRange.likelyMinutes === localRange.likelyMinutes &&
+    recordedRange.highMinutes === localRange.highMinutes
   );
 }
 
@@ -315,6 +752,8 @@ function renderRequiredReforecasts(
 ): string[] {
   // Review each milestone separately so the CLI names exactly where the user must edit.
   return records.flatMap((milestoneRecord) => {
+    // Contextual advice owns its frozen origin and residual scope; legacy whole-work replacement would conflict with it.
+    if (milestoneRecord.forecastContext?.method === "contextual-v1") return [];
     const forecastBasis = milestoneRecord.effort?.forecastBasis;
     const milestoneStatus = milestoneRecord.status.trim().toLowerCase();
 
@@ -323,51 +762,92 @@ function renderRequiredReforecasts(
       return [];
     }
 
-    // Missing plan/admin time contributes no unit, matching the milestone's visible checklist.
-    const countedAgentWorkUnits = countAgentWorkUnits([
-      ...milestoneRecord.tasks,
-      ...milestoneRecord.testingGateItems,
-      ...milestoneRecord.midProofItems,
-      milestoneRecord.planAdminEstimate ?? {},
-    ]);
+    const countedAgentWorkUnits = countRecordAgentWorkUnits(milestoneRecord);
 
     // Count drift already has a strict error, so do not layer a misleading duration on top.
     if (countedAgentWorkUnits !== forecastBasis.agentWorkUnits) return [];
 
-    // Matching two-decimal rates mean the author already applied the available evidence.
-    if (basisMatchesLocalRates(forecastBasis, localMinutesPerUnitRates)) {
-      return [];
-    }
-
-    const locallyCalibratedBasis: PlanEffortForecastBasis = {
-      ...forecastBasis,
-      lowMinutesPerUnit: Number(
-        renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit),
-      ),
-      likelyMinutesPerUnit: Number(
-        renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit),
-      ),
-      highMinutesPerUnit: Number(
-        renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit),
-      ),
-    };
-    const locallyCalibratedRange = deriveForecastRangeFromBasis(
-      locallyCalibratedBasis,
+    const advised = readAdvisedLocalBasis(
+      forecastBasis,
+      localMinutesPerUnitRates,
     );
+    // Copyable rates that preserve all three bounds require no new forecast.
+    if (basisMatchesLocalRates(forecastBasis, advised.basis)) return [];
     return [
-      `reforecast required: ${milestoneRecord.sourceFile} - ${countedAgentWorkUnits} agent work units imply ${locallyCalibratedRange.lowMinutes}-${locallyCalibratedRange.highMinutes} agent-time minutes; likely ${locallyCalibratedRange.likelyMinutes} from local evidence; use ${renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit)}-${renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit)}-${renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit)} min/unit before implementation`,
+      renderReforecastLine(
+        milestoneRecord.sourceFile,
+        countedAgentWorkUnits,
+        advised,
+      ),
     ];
   });
+}
+
+/** The rates an author can copy from local history, with the floor applied to the likely when one was needed. */
+interface AdvisedLocalBasis {
+  basis: PlanEffortForecastBasis;
+  floored: FlooredForecastBasis | undefined;
+}
+
+/**
+ * Publish local rates at the precision authors copy, flooring the likely when whole-minute items cannot express it.
+ *
+ * @param forecastBasis - the milestone's saved basis, which supplies the unit count and source text
+ * @param localMinutesPerUnitRates - receipt-derived rates before rounding
+ * @returns the advised basis; `floored` is set when history ran under one minute per unit and its high rate could hold the floor
+ */
+function readAdvisedLocalBasis(
+  forecastBasis: PlanEffortForecastBasis,
+  localMinutesPerUnitRates: LocalWorkUnitRates,
+): AdvisedLocalBasis {
+  const publishedBasis: PlanEffortForecastBasis = {
+    ...forecastBasis,
+    lowMinutesPerUnit: Number(
+      renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit),
+    ),
+    likelyMinutesPerUnit: Number(
+      renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit),
+    ),
+    highMinutesPerUnit: Number(
+      renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit),
+    ),
+  };
+  const floored = floorUnallocatableLikely(
+    publishedBasis,
+    deriveForecastRangeFromBasis(publishedBasis).likelyMinutes,
+  );
+  return { basis: floored?.basis ?? publishedBasis, floored };
+}
+
+/**
+ * Render the advice an author copies into a stale milestone.
+ *
+ * @param sourceFile - the milestone to edit
+ * @param countedAgentWorkUnits - units on its checklist, already equal to its basis
+ * @param advised - the rates to copy; a floored likely is named with the measured rate it replaced
+ * @returns one `reforecast required:` line
+ */
+function renderReforecastLine(
+  sourceFile: string,
+  countedAgentWorkUnits: number,
+  advised: AdvisedLocalBasis,
+): string {
+  const { basis, floored } = advised;
+  const range = deriveForecastRangeFromBasis(basis);
+  const floorNote = floored ? `; ${renderLikelyFloorNote(floored)}` : "";
+  return `reforecast required: ${sourceFile} - ${countedAgentWorkUnits} agent work units imply ${range.lowMinutes}-${range.highMinutes} agent-time minutes; likely ${range.likelyMinutes} from local evidence; use ${renderMinutesPerUnit(basis.lowMinutesPerUnit)}-${renderMinutesPerUnit(basis.likelyMinutesPerUnit)}-${renderMinutesPerUnit(basis.highMinutesPerUnit)} min/unit before implementation${floorNote}`;
 }
 
 /**
  * Render the countable calibration and any next-milestone reforecast action.
  *
  * @param records - every milestone in the plan directory; empty yields uncalibrated
+ * @param quantiles - selected historical percentiles; the median and rounding rules stay fixed
  * @returns unit evidence and advisories; these lines never mutate files or fail the check
  */
 function renderWorkUnitCalibrationSummary(
   records: PlanExportRecord[],
+  quantiles: ForecastBandQuantiles,
 ): string[] {
   const workUnitSamples = collectWorkUnitCalibrationSamples(records);
 
@@ -378,15 +858,145 @@ function renderWorkUnitCalibrationSummary(
     ];
   }
 
-  const localMinutesPerUnitRates = readLocalWorkUnitRates(workUnitSamples);
+  const localMinutesPerUnitRates = readLocalWorkUnitRates(
+    workUnitSamples,
+    quantiles,
+  );
   return [
-    `work-unit calibration: ${workUnitSamples.length} eligible measured samples - median ${renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit)} min/unit, observed ${renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit)}-${renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit)} min/unit`,
+    `work-unit calibration: ${workUnitSamples.length} eligible measured samples - median ${renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit)} min/unit, p${quantiles[0]}-p${quantiles[1]} ${renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit)}-${renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit)} min/unit`,
     // Each sample line lets the author verify the summary from raw seconds and unit count.
     ...workUnitSamples.map(
       (workUnitSample) =>
         `work-unit sample: ${workUnitSample.sourceFile} ${renderMinutesPerUnit(workUnitSample.minutesPerUnit)} min/unit (${workUnitSample.measuredSeconds}s / ${workUnitSample.agentWorkUnits} units)`,
     ),
     ...renderRequiredReforecasts(records, localMinutesPerUnitRates),
+  ];
+}
+
+/** Completion time binds a measured rate to the history that was available before its completion group. */
+interface TimedWorkUnitSample extends WorkUnitCalibrationSample {
+  completionEpoch: number;
+}
+
+/** Untimed eligible samples still count in the cohort, but cannot train or receive a replay prediction. */
+function collectReplaySamples(records: PlanExportRecord[]): {
+  timed: TimedWorkUnitSample[];
+  missing: string[];
+} {
+  const timed: TimedWorkUnitSample[] = [];
+  const missing: string[] = [];
+  for (const record of records) {
+    const sample = readWorkUnitCalibrationSample(record);
+    if (!sample) continue;
+    const ends =
+      record.timingReceipt?.segments
+        .filter((segment) => segment.state === "closed")
+        .map((segment) => segment.endEpochSeconds)
+        .filter(
+          (epoch): epoch is number =>
+            epoch !== null && Number.isSafeInteger(epoch) && epoch >= 0,
+        ) ?? [];
+    if (ends.length === 0) {
+      missing.push(sample.sourceFile);
+      continue;
+    }
+    timed.push({ ...sample, completionEpoch: Math.max(...ends) });
+  }
+  timed.sort(
+    (a, b) =>
+      a.completionEpoch - b.completionEpoch ||
+      a.sourceFile.localeCompare(b.sourceFile),
+  );
+  missing.sort();
+  return { timed, missing };
+}
+
+/**
+ * Replay predictions use the rounded low and high rates a planner could have copied at that time.
+ * The likely is shown as measured, without the whole-minute floor that advice applies, because coverage reads only the band.
+ */
+function replayForecast(
+  sample: WorkUnitCalibrationSample,
+  prior: WorkUnitCalibrationSample[],
+  quantiles: ForecastBandQuantiles,
+) {
+  const rates = readLocalWorkUnitRates(prior, quantiles);
+  const published = {
+    lowMinutesPerUnit: Number(renderMinutesPerUnit(rates.lowMinutesPerUnit)),
+    likelyMinutesPerUnit: Number(
+      renderMinutesPerUnit(rates.likelyMinutesPerUnit),
+    ),
+    highMinutesPerUnit: Number(renderMinutesPerUnit(rates.highMinutesPerUnit)),
+  };
+  const range = deriveForecastRangeFromBasis({
+    ...published,
+    agentWorkUnits: sample.agentWorkUnits,
+    source: "completion-ordered history",
+  });
+  const actualMinutes = sample.measuredSeconds / 60;
+  const outcome =
+    actualMinutes < range.lowMinutes
+      ? "below"
+      : actualMinutes > range.highMinutes
+        ? "above"
+        : "inside";
+  return { published, range, outcome };
+}
+
+/** Equal completion times share one frozen training history, so ties cannot train each other. */
+function renderRuleCoverage(
+  records: PlanExportRecord[],
+  quantiles: ForecastBandQuantiles,
+): string[] {
+  const { timed, missing } = collectReplaySamples(records);
+  const groups = new Map<number, TimedWorkUnitSample[]>();
+  for (const sample of timed) {
+    const group = groups.get(sample.completionEpoch) ?? [];
+    group.push(sample);
+    groups.set(sample.completionEpoch, group);
+  }
+  const prior: WorkUnitCalibrationSample[] = [];
+  const detail = missing.map(
+    (sourceFile) =>
+      `rule skip: ${sourceFile} - no usable closed completion time; excluded from replay and training`,
+  );
+  let insufficient = 0;
+  let inside = 0;
+  let below = 0;
+  let above = 0;
+  for (const [epoch, group] of groups) {
+    for (const sample of group) {
+      if (prior.length < 8) {
+        insufficient++;
+        detail.push(
+          `rule skip: ${sample.sourceFile} - completion epoch ${epoch}; only ${prior.length} earlier samples (minimum 8)`,
+        );
+        continue;
+      }
+      const { published, range, outcome } = replayForecast(
+        sample,
+        prior,
+        quantiles,
+      );
+      if (outcome === "inside") inside++;
+      else if (outcome === "below") below++;
+      else above++;
+      detail.push(
+        `rule sample: ${sample.sourceFile} - completion epoch ${epoch}; prior ${prior.length}; rates ${renderMinutesPerUnit(published.lowMinutesPerUnit)}-${renderMinutesPerUnit(published.likelyMinutesPerUnit)}-${renderMinutesPerUnit(published.highMinutesPerUnit)} min/unit; ${sample.agentWorkUnits} units; band ${range.lowMinutes}-${range.highMinutes} min; likely ${range.likelyMinutes}; actual ${sample.measuredSeconds}s; ${outcome}`,
+      );
+    }
+    // Only after every tied prediction is fixed may this completion group enter the next group's history.
+    prior.push(...group);
+  }
+  const scored = inside + below + above;
+  const coverage =
+    scored === 0
+      ? "no score (n/a)"
+      : `${inside} of ${scored} inside (${((inside / scored) * 100).toFixed(1)}%) - ${below} below, ${above} above`;
+  return [
+    `forecast rule: historical p${quantiles[0]}/p${quantiles[1]}; nominal span ${quantiles[1] - quantiles[0]} percentage points is not a future coverage promise`,
+    `rule coverage: scored ${scored} of ${timed.length + missing.length} eligible work-unit samples; ${coverage}; skipped ${insufficient} insufficient history, ${missing.length} missing completion time`,
+    ...detail,
   ];
 }
 
@@ -397,13 +1007,15 @@ function renderWorkUnitCalibrationSummary(
  * It must never contribute errors and must never change a forecast: it reports how past measured milestones landed against their estimates and leaves
  * the judgement to the author.
  *
- * Below three eligible samples it says `uncalibrated` rather than offering a multiplier one or two data points cannot support.
+ * Below three eligible samples the calibration line says `uncalibrated`; descriptive coverage and plan-total lines still report the available cohort.
  *
  * @param records - every parsed milestone in the plan directory
+ * @param quantiles - validated historical percentiles; omitted uses p10/p90 without changing the median
  * @returns report lines; always at least the count line once the plan has milestones
  */
 export function renderCalibrationSummary(
   records: PlanExportRecord[],
+  quantiles: ForecastBandQuantiles = DEFAULT_FORECAST_BAND_QUANTILES,
 ): string[] {
   const estimateComparisonSamples = collectCalibrationSamples(records);
   let estimateComparisonLines: string[];
@@ -432,6 +1044,11 @@ export function renderCalibrationSummary(
   }
   return [
     ...estimateComparisonLines,
-    ...renderWorkUnitCalibrationSummary(records),
+    renderBandCoverageSummary(records),
+    renderPlanTotalSummary(estimateComparisonSamples),
+    ...renderUnitGrowthSummary(records),
+    ...renderWorkUnitCalibrationSummary(records, quantiles),
+    ...renderRuleCoverage(records, quantiles),
+    ...renderCalibrationEligibility(records),
   ];
 }

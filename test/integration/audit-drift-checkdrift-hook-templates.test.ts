@@ -22,6 +22,8 @@ import {
   writeHookFixtures,
 } from "./audit-drift.helpers.ts";
 import { buildAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
+import { PROFILES } from "../../src/cli/detect/agents.js";
+import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 describe("checkDrift: hook templates", () => {
@@ -53,6 +55,8 @@ describe("checkDrift: hook templates", () => {
                   type: "command",
                   command: postTurnDescriptor.command,
                   args: postTurnDescriptor.args,
+                  bash: postTurnDescriptor.bash,
+                  powershell: postTurnDescriptor.powershell,
                   timeout: 60,
                 },
               ],
@@ -247,6 +251,38 @@ describe("checkDrift: hook templates", () => {
       assert.ok(
         report.checked >= 5,
         `expected hook comparisons to contribute to checked count, got ${report.checked}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // Fixture: writes Claude's complete no-op-routed row but removes Copilot's native config so audit must name the missing native file.
+  it("does not count cross-loaded Claude routing as Copilot hook coverage", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      const denySpec = getHookSpec("deny-dangerous");
+      assert.ok(denySpec);
+      mkdirSync(join(root, ".claude"), { recursive: true });
+      writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
+      writeAgentHookState(root, PROFILES.claude, denySpec, true);
+      rmSync(join(root, ".github", "hooks", "hooks.json"), { force: true });
+
+      const report = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+        agentFilter: "copilot",
+      });
+      assert.equal(report.status, "fail");
+      assert.ok(
+        report.findings.some(
+          (finding) =>
+            finding.kind === "missing" &&
+            finding.path === ".github/hooks/hooks.json",
+        ),
+        `expected missing native Copilot config, findings=${JSON.stringify(report.findings)}`,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });

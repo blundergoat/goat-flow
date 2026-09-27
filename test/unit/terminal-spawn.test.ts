@@ -1,5 +1,8 @@
 /**
  * Unit tests for terminal spawn specs and terminal input chunking.
+ *
+ * Use these cases when changing how the dashboard opens a terminal or sends a user's command.
+ * Platform-specific specifications preserve selected paths and avoid executing the generated commands during these checks.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -262,7 +265,11 @@ describe("buildTerminalSpawnSpec", () => {
       const settings = JSON.parse(
         spec.env.GOAT_CLAUDE_REPORTING_SETTINGS ?? "",
       ) as { permissions: { allow: string[]; deny: string[] } };
-      const permissionPath = `//${parenthesizedProjectPath.replace(/^\/+/, "")}`;
+      // Claude's absolute-rule syntax uses a lowercase drive segment on Windows; parentheses remain literal path content.
+      const permissionPath = `//${parenthesizedProjectPath
+        .replaceAll("\\", "/")
+        .replace(/^([A-Za-z]):/u, (drive) => drive[0]!.toLowerCase())
+        .replace(/^\/+/, "")}`;
 
       assert.ok(
         settings.permissions.allow.includes(`Read(${permissionPath}/**)`),

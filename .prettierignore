@@ -4,8 +4,7 @@
 dist/
 node_modules/
 
-# Markdown has intentional formatting (tables, code blocks, frontmatter)
-# that Prettier rewrites aggressively. See ADR-032.
+# Keep deliberate Markdown tables, code blocks, and frontmatter formatting when maintainers run the formatter.
 *.md
 
 # Frozen release snapshots are immutable inputs for snapshot-claim drift checks.

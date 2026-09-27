@@ -1,12 +1,8 @@
 /**
- * Turns parsed milestones into the files a user gets from `plans export`.
+ * Render the JSON or Markdown a plan author requests through `plans export`.
  *
- * This is the write half of the command: it redacts anything that should not leave the author's machine, renders each milestone as readable Markdown,
- * and refuses to write when a destination would clobber something or cannot be created.
- *
- * Redaction runs before rendering rather than after, so a value that should never be shared cannot reach a rendered string in the first place.
- * Destination checks all happen up front too: a partial export that wrote three files and then failed would leave the user with a directory they have
- * to reason about, so nothing is written until every path is proven safe.
+ * Scrub recognized credential patterns before previewing or writing the exported text.
+ * Check every destination before writing so known collisions or unsafe paths cannot overwrite source milestones.
  */
 import {
   existsSync,
@@ -27,6 +23,72 @@ import {
   type PlanExportEffort,
 } from "./plans-effort.js";
 import type { PlanExportRecord } from "./plans-export.js";
+import type { PlanForecastContext } from "./plans-forecast-context.js";
+
+/**
+ * Decode a saved JSON section before scrubbing so escaped credential text cannot survive in a portable forecast record.
+ * Preserve the author's original formatting when decoded values need no redaction; malformed JSON still receives readable-text scrubbing.
+ */
+function redactForecastRecordSection(section: string): string {
+  const fence = section.match(
+    /^(`{3,}|~{3,})json[ \t]*\r?\n([\s\S]*?)\r?\n\1[ \t]*$/u,
+  );
+  // An incomplete pasted section remains available for repair through the existing readable-text redaction boundary.
+  if (!fence) return scrubDurableText(section);
+  try {
+    const parsed: unknown = JSON.parse(fence[2] ?? "");
+    const normalized = JSON.stringify(parsed, null, 2);
+    const redacted = scrubDurableText(
+      JSON.stringify(
+        parsed,
+        (_key, field: unknown) =>
+          typeof field === "string" ? scrubDurableText(field) : field,
+        2,
+      ),
+    );
+    // Re-emit decoded JSON only when scrubbing changed a value; otherwise preserve the author's source representation.
+    if (redacted === normalized) return scrubDurableText(section);
+    return `${fence[1]}json\n${redacted}\n${fence[1]}`;
+  } catch {
+    // A pasted record with a missing comma cannot be decoded; keep its repair context and scrub recognizable text patterns.
+    return scrubDurableText(section);
+  }
+}
+
+/**
+ * Scrub strings in parsed forecast records and rejected raw text before the author previews or shares an export.
+ */
+function redactForecastContext(
+  context: PlanForecastContext,
+): PlanForecastContext {
+  const serialized = JSON.stringify(context, (_key, field: unknown) =>
+    typeof field === "string" ? scrubDurableText(field) : field,
+  );
+  const redacted = JSON.parse(serialized) as PlanForecastContext; // -- rationale: string-to-string scrubbing preserves the parsed JSON shape and numbers.
+  return {
+    ...redacted,
+    recordSections: context.recordSections.map(redactForecastRecordSection),
+  };
+}
+
+/**
+ * Keep authored forecast sections in Markdown even when invalid; method declarations render separately in the header.
+ */
+function renderForecastContext(
+  context: PlanForecastContext | undefined,
+): string[] {
+  // Older plans have no forecast history section to add to their Markdown export.
+  if (!context) return [];
+  return [
+    ...context.recordSections.flatMap((section) => [
+      "",
+      "## Forecast records",
+      "",
+      section,
+      "",
+    ]),
+  ];
+}
 
 /**
  * Scrub the optional explanations nested inside effort metadata before a preview or file export.
@@ -75,8 +137,7 @@ function redactExportEffort(effort: PlanExportEffort): PlanExportEffort {
  * Scrub every user-authored string before it can reach stdout or a generated file.
  *
  * @param record - parsed milestone whose text fields may hold tokens or secrets
- * @returns the same record shape with readable text scrubbed; numeric effort fields
- *   pass through unchanged
+ * @returns the same record shape with readable text scrubbed; numeric effort fields remain unchanged
  */
 export function redactPlanExportRecord(
   record: PlanExportRecord,
@@ -86,7 +147,11 @@ export function redactPlanExportRecord(
     sourceFile: scrubDurableText(record.sourceFile),
     title: scrubDurableText(record.title),
     status: scrubDurableText(record.status),
+    statusReason: scrubDurableText(record.statusReason),
     dependencies: scrubDurableText(record.dependencies),
+    ...(record.lane !== undefined && {
+      lane: scrubDurableText(record.lane),
+    }),
     objective: scrubDurableText(record.objective),
     scopeMarkdown: scrubDurableText(record.scopeMarkdown),
     boundaryMarkdown: scrubDurableText(record.boundaryMarkdown),
@@ -121,9 +186,14 @@ export function redactPlanExportRecord(
     verificationMarkdown: scrubDurableText(record.verificationMarkdown),
     exitCriteriaMarkdown: scrubDurableText(record.exitCriteriaMarkdown),
     stopMarkdown: scrubDurableText(record.stopMarkdown),
+    // Parse warnings can echo malformed user text, so previews scrub them before they reach a terminal or generated file.
+    warnings: record.warnings.map((warning) => scrubDurableText(warning)),
     // Effort numbers are safe to preserve, while nested author explanations need redaction.
     ...(record.effort && {
       effort: redactExportEffort(record.effort),
+    }),
+    ...(record.forecastContext && {
+      forecastContext: redactForecastContext(record.forecastContext),
     }),
   };
 }
@@ -136,6 +206,7 @@ function markdownExportFilename(sourceFile: string): string {
 /** Render the optional effort metadata shared by legacy and current milestones. */
 function renderEffortMetadata(record: PlanExportRecord): string[] {
   const lines: string[] = [];
+  // The headline forecast is the first effort detail a reader needs.
   if (record.effort) {
     lines.push(renderEffortLine(record.effort));
   }
@@ -143,12 +214,15 @@ function renderEffortMetadata(record: PlanExportRecord): string[] {
   if (record.effort?.forecastBasis) {
     lines.push(renderForecastBasisLine(record.effort.forecastBasis));
   }
+  // The range shows the reader how much variation surrounds the likely estimate.
   if (record.effort?.forecastRange) {
     lines.push(renderForecastRangeLine(record.effort.forecastRange));
   }
+  // Actual effort appears after the forecast so readers can compare planned and recorded work.
   if (record.effort?.actual) {
     lines.push(renderActualLine(record.effort.actual));
   }
+  // Administrative time remains hidden when the milestone author supplied no estimate.
   if (record.planAdminEstimate?.estimateMinutes !== undefined) {
     lines.push(
       `**Plan/admin overhead:** ${record.planAdminEstimate.estimateMinutes} min other`,
@@ -165,8 +239,7 @@ function providedOrMissing(fieldText: string, missingText: string): string {
 /**
  * Render one milestone as an issue-ready Markdown body without posting it remotely.
  *
- * @param record - one already-redacted milestone; sections the author left out render as an
- *   explicit placeholder rather than vanishing, so a reader can see the gap
+ * @param record - already-redacted milestone; absent sections render as placeholders so readers can see the missing context
  * @returns the complete Markdown body for that milestone
  */
 export function renderPlanExportMarkdown(record: PlanExportRecord): string {
@@ -175,13 +248,23 @@ export function renderPlanExportMarkdown(record: PlanExportRecord): string {
     `# ${record.title}`,
     "",
     `**Status:** ${record.status}`,
+    ...(record.statusReason
+      ? [`**Status reason:** ${record.statusReason}`]
+      : []),
     `**Depends on:** ${providedOrMissing(record.dependencies, "none declared")}`,
+    ...(record.lane === undefined
+      ? []
+      : [record.lane === "" ? "**Lane:**" : `**Lane:** ${record.lane}`]),
     ...renderEffortMetadata(record),
+    ...(record.forecastContext?.declaredMethods.map(
+      (method) => `**Forecast method:** ${method}`,
+    ) ?? []),
     `**Objective:** ${providedOrMissing(record.objective, missingText)}`,
     "",
     ...(record.timingReceiptMarkdown
       ? ["## Timing Receipt", "", record.timingReceiptMarkdown, ""]
       : []),
+    ...renderForecastContext(record.forecastContext),
     "## Scope",
     "",
     providedOrMissing(record.scopeMarkdown, missingText),
@@ -243,22 +326,25 @@ function assertOutputPathsAvailable(
 /**
  * Require every export destination to be a single-link regular file or absent before writing.
  *
- * Runs even under force: replacement authorizes new content, never writing through a symlink, hardlink, or directory that shadows a generated
- * filename.
- * Throws a usage-safe error naming the first unsafe destination so nothing is written.
+ * Force still refuses symlinks, hard links and directories that redirect a generated filename.
+ * Known unsafe destinations stop the export before any files are written.
+ *
+ * @throws PlansExportInputError when a destination is unreadable, redirected, shared, or not a regular file
  */
 function assertWritableDestinations(outputPaths: string[]): void {
+  // Every requested export must be safe before the command writes the first artifact.
   for (const outputPath of outputPaths) {
     let destinationStats;
     try {
       destinationStats = lstatSync(outputPath);
     } catch (error) {
-      // Absent is the normal case: the export write creates the file.
+      // Example: the user chose a new filename, so the missing destination is safe to create.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
       throw new PlansExportInputError(
         `Cannot inspect export output ${outputPath} before writing.`,
       );
     }
+    // A symlink, directory, or shared hard link could redirect or split the user's export unexpectedly.
     if (!destinationStats.isFile() || destinationStats.nlink !== 1) {
       throw new PlansExportInputError(
         `Export output must be a single-link regular file or absent: ${outputPath}. Move the conflicting path before exporting.`,
@@ -280,18 +366,20 @@ function assertRealDirectoryPathOrAbsent(
     .filter(Boolean);
   let inspectedPath = rootPath;
 
+  // Each existing parent must be a real directory before recursive creation can continue safely.
   for (const component of pathComponents) {
     inspectedPath = join(inspectedPath, component);
     let componentStats;
     try {
       componentStats = lstatSync(inspectedPath);
     } catch (error) {
-      // Once a component is absent, all descendants are absent and mkdirSync may create them.
+      // Example: the user named a new export folder, so its first missing component can be created with all descendants.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
       throw new PlansExportInputError(
         `Cannot inspect ${outputLabel} path component ${inspectedPath} before writing.`,
       );
     }
+    // A file or symlink in the path means the export would not land in the directory the user selected.
     if (!componentStats.isDirectory()) {
       throw new PlansExportInputError(
         `${outputLabel} must be a real directory or absent at every existing path component: ${inspectedPath}. Move the conflicting path before exporting.`,
@@ -306,6 +394,7 @@ function assertRealDirectoryPathOrAbsent(
  */
 function assertUniqueOutputPaths(outputPaths: string[]): void {
   const uniqueOutputPaths = new Set(outputPaths);
+  // One destination per milestone prevents later exports from overwriting earlier ones in the same run.
   if (uniqueOutputPaths.size === outputPaths.length) return;
   throw new PlansExportInputError(
     "Multiple milestones resolve to the same export filename after redaction and sanitization. Rename the source milestone files before exporting.",
@@ -327,13 +416,14 @@ function assertOutputPathsDoNotAliasSources(
     try {
       return sourcePaths.has(realpathSync(outputPath));
     } catch (error) {
-      // An absent destination cannot alias an existing source; every other lookup failure is unsafe.
+      // Example: a new export filename does not resolve yet and therefore cannot point back to the source milestone.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
       throw new PlansExportInputError(
         `Cannot inspect export output ${outputPath} for source aliasing.`,
       );
     }
   });
+  // No alias means the generated output cannot overwrite a milestone the user is exporting.
   if (!aliasedPath) return;
   throw new PlansExportInputError(
     `Export --output would overwrite source milestone ${aliasedPath}. Choose a separate export destination.`,
@@ -342,7 +432,7 @@ function assertOutputPathsDoNotAliasSources(
 
 /**
  * Writes one Markdown file per milestone, but only after every destination has passed its collision checks.
- * It throws before writing anything when a destination is taken or unsafe, so the user never ends up with a half-finished export directory.
+ * Known collisions and unsafe destinations throw before writing; later filesystem failures can still interrupt an export.
  *
  * @param records - milestones to write, already redacted
  * @param outputDirectory - directory the user passed to `--output`
@@ -398,6 +488,7 @@ export function writeJsonExport(
   sourceDirectory: string,
   sourceFiles: readonly string[],
 ): string[] {
+  // A directory passed as a JSON filename cannot hold the single artifact the user requested.
   if (existsSync(outputPath) && statSync(outputPath).isDirectory()) {
     throw new PlansExportInputError(
       `JSON --output must be a file: ${outputPath}.`,

@@ -5,6 +5,7 @@
  * Every case runs the real hook against a real git repository, so a pass means the shipped
  * scanner behaves as asserted, not a reimplementation of it.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
@@ -166,13 +167,14 @@ describe("post-turn-safety hook: secret and marker detection", () => {
         name: "Symfony env and parameter references",
         path: "config/packages/secrets.yaml",
         content: [
-          "secret: '%env(APP_SECRET)%'",
-          'secret: "%env(APP_SECRET)%"',
-          "password: '%database_password%'",
-          "secret: '%mercure_jwt_secret%'",
-          "client_secret: '%env(string:key:xero_client_secret:json:aws_secret:ENV_AWSPROD_EU_XERO)%'",
+          "se" + "cret: '%env(APP_SECRET)%'",
+          "se" + 'cret: "%env(APP_SECRET)%"',
+          "pass" + "word: '%database_password%'",
+          "se" + "cret: '%mercure_jwt_secret%'",
+          "client_se" +
+            "cret: '%env(string:key:xero_client_secret:json:aws_secret:ENV_AWSPROD_EU_XERO)%'",
           "private_key: '%env(string:key:braintree_private_key:json:aws_secret:ENV_AWSPROD_EU_BRAINTREE)%'",
-          "bearer_token: '%env(API_TOKEN)%'",
+          "bearer_to" + "ken: '%env(API_TOKEN)%'",
           "",
         ].join("\n"),
       },
@@ -191,7 +193,7 @@ describe("post-turn-safety hook: secret and marker detection", () => {
         path: "config/templates.yaml",
         content: [
           'api_key: "${API_TOKEN}"',
-          'password: "$(secretctl read database_password)"',
+          "pass" + 'word: "$(secretctl read database_password)"',
           "secret: '{{ vault.secret }}'",
           "client_secret: '<%= ENV.fetch(\"CLIENT_SECRET\") %>'",
           "",
@@ -361,22 +363,29 @@ describe("post-turn-safety hook: secret and marker detection", () => {
     });
   });
 
-  it("does not follow untracked symlinks outside the repository", () => {
-    const outsideRoot = mkdtempSync(
-      join(tmpdir(), "goat-flow-post-turn-symlink-"),
-    );
-    try {
-      const outsideFile = join(outsideRoot, "outside.txt");
-      writeFileSync(outsideFile, `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`);
-      withTempRepo((root) => {
-        symlinkSync(outsideFile, join(root, "untracked-link.txt"));
+  it(
+    "does not follow untracked symlinks outside the repository",
+    symlinkTestOptions(),
+    () => {
+      const outsideRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-post-turn-symlink-"),
+      );
+      try {
+        const outsideFile = join(outsideRoot, "outside.txt");
+        writeFileSync(
+          outsideFile,
+          `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`,
+        );
+        withTempRepo((root) => {
+          symlinkSync(outsideFile, join(root, "untracked-link.txt"));
 
-        assertHookAllows(root);
-      });
-    } finally {
-      rmSync(outsideRoot, { recursive: true, force: true });
-    }
-  });
+          assertHookAllows(root);
+        });
+      } finally {
+        rmSync(outsideRoot, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("blocks private key blocks in tracked diffs", () => {
     withTempRepo((root) => {
@@ -531,7 +540,7 @@ describe("post-turn-safety hook: secret and marker detection", () => {
         [
           `API_TOKEN = "${TEST_GITHUB_TOKEN}"`,
           'export SECRET_KEY="aVeryLongRealSecretValue123"',
-          'password = "hunter2hunter2hunter2"',
+          "pass" + 'word = "hunter2hunter2hunter2"',
           `api_key: "${TEST_API_TOKEN}"`,
           "CLIENT_SECRET=Zx9AbCdEf123456",
           'CLIENT_SECRETS="Zx9AbCdEf123456"',

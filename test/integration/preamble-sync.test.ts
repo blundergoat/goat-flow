@@ -124,13 +124,21 @@ const INSTALLED_TEST_SELECTION = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/test-selection.md",
 );
-const TEMPLATE_WRITING_STYLE = resolve(
+const TEMPLATE_AGENT_FACING_INSTRUCTIONS = resolve(
   PROJECT_ROOT,
-  "workflow/skills/playbooks/writing-style.md",
+  "workflow/skills/playbooks/writing-agent-facing-instructions.md",
 );
-const INSTALLED_WRITING_STYLE = resolve(
+const INSTALLED_AGENT_FACING_INSTRUCTIONS = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/writing-style.md",
+  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
+);
+const TEMPLATE_HUMAN_FACING_PROSE = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/writing-human-facing-prose.md",
+);
+const INSTALLED_HUMAN_FACING_PROSE = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
 );
 const ROUTED_WRITING_DIAGNOSTIC_PAIRS = [
   "writing-sentence-diagnostics.md",
@@ -220,6 +228,37 @@ describe("preamble/conventions sync: current state", () => {
       0,
       "skill-preamble.md: template and installed should match",
     );
+  });
+
+  it("the skill-conventions discovery row names every load-bearing role it governs", () => {
+    // Byte parity alone lets two identical rows be identically wrong. Before 2026-08-29 both READMEs described this
+    // file as learning-entry formats only, hiding Adaptive Step 0, Orchestration Admission, recovery and authoring
+    // from any agent deciding whether to load it. A discovery row is the agent's whole context before that decision.
+    const governedRoles = [
+      "Adaptive Step 0",
+      "task tracking",
+      "Orchestration Admission",
+      "recovery",
+      "Interrupt Freeze",
+      "autonomy",
+      "authoring",
+    ];
+
+    for (const readmePath of [
+      TEMPLATE_REFERENCE_README,
+      INSTALLED_REFERENCE_README,
+    ]) {
+      const row = readFileSync(readmePath, "utf8")
+        .split("\n")
+        .find((line) => line.includes("[`skill-conventions.md`]"));
+      assert.ok(row, `${readmePath}: no skill-conventions discovery row`);
+      for (const role of governedRoles) {
+        assert.ok(
+          row.toLowerCase().includes(role.toLowerCase()),
+          `${readmePath}: the skill-conventions row does not name "${role}", so an agent cannot tell the file governs it`,
+        );
+      }
+    }
   });
 
   it("template and installed skill-conventions.md match", () => {
@@ -369,17 +408,34 @@ describe("preamble/conventions sync: current state", () => {
     );
   });
 
-  // Prose-style guidance ships to consumers, so the installed copy must not drift.
-  it("template and installed writing-style.md match", () => {
+  // Agent-document authoring guidance ships to consumers, so the installed copy must not drift.
+  it("template and installed writing-agent-facing-instructions.md match", () => {
     assertMirrorExists(
-      TEMPLATE_WRITING_STYLE,
-      INSTALLED_WRITING_STYLE,
-      "writing-style.md",
+      TEMPLATE_AGENT_FACING_INSTRUCTIONS,
+      INSTALLED_AGENT_FACING_INSTRUCTIONS,
+      "writing-agent-facing-instructions.md",
     );
     assert.equal(
-      diffQuiet(TEMPLATE_WRITING_STYLE, INSTALLED_WRITING_STYLE),
+      diffQuiet(
+        TEMPLATE_AGENT_FACING_INSTRUCTIONS,
+        INSTALLED_AGENT_FACING_INSTRUCTIONS,
+      ),
       0,
-      "writing-style.md: template and installed should match",
+      "writing-agent-facing-instructions.md: template and installed should match",
+    );
+  });
+
+  // Prose-style guidance ships to consumers, so the installed copy must not drift.
+  it("template and installed writing-human-facing-prose.md match", () => {
+    assertMirrorExists(
+      TEMPLATE_HUMAN_FACING_PROSE,
+      INSTALLED_HUMAN_FACING_PROSE,
+      "writing-human-facing-prose.md",
+    );
+    assert.equal(
+      diffQuiet(TEMPLATE_HUMAN_FACING_PROSE, INSTALLED_HUMAN_FACING_PROSE),
+      0,
+      "writing-human-facing-prose.md: template and installed should match",
     );
   });
 

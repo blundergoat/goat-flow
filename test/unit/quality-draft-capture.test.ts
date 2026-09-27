@@ -8,6 +8,7 @@
  * interval itself is unref'd and cleared by dispose, which the leak-sensitive terminal
  * test lesson requires this suite to prove.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { after, describe, it } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -39,6 +40,7 @@ import {
 } from "../../src/cli/server/quality-draft-capture.js";
 import type { QualityDraftCapture } from "../../src/cli/server/quality-draft-capture.js";
 import { runConcurrentQualityWorkers } from "../helpers/concurrent-quality-workers.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 const PACKAGE_VERSION = (
   JSON.parse(readFileSync("package.json", "utf8")) as { version: string }
@@ -69,7 +71,13 @@ function skipOnWindows(testContext: TestContext, reason: string): boolean {
   return true;
 }
 
-/** Build one schema-valid minimal report owned by the given project root. */
+/**
+ * Build the smallest current report the dashboard can accept for one selected project.
+ * Use in capture scenarios where empty findings and refutations keep the fixture focused on persistence.
+ *
+ * @param projectRoot - selected project directory; empty or missing paths cannot own a saved report
+ * @returns serialized current report with empty findings and refutation ledgers
+ */
 function validReport(projectRoot: string): string {
   return JSON.stringify({
     report_kind: "goat-flow-quality-report",
@@ -88,6 +96,7 @@ function validReport(projectRoot: string): string {
       grounding_status: "blocked",
       unverified_probes: ["fixture does not run project grounding"],
       score_confidence: "low",
+      workspace_snapshot: { start: null, end: null },
     },
     scores: {
       setup: {
@@ -105,7 +114,10 @@ function validReport(projectRoot: string): string {
         learnability: 0,
       },
     },
+    score_rationale: makeQualityScoreRationale(),
     findings: [],
+    refuted_candidates: [],
+    improvements: [],
   });
 }
 
@@ -179,7 +191,7 @@ describe("quality draft capture", () => {
     ) as { agent: string };
     assert.equal(persisted.agent, "claude");
     assert.match(
-      receipt.reportPath ?? "",
+      (receipt.reportPath ?? "").replaceAll("\\", "/"),
       /\.goat-flow\/logs\/quality\/\d{4}-\d{2}-\d{2}-\d{4}-claude-[0-9a-f]{5}\.json$/u,
     );
   });
@@ -231,70 +243,44 @@ describe("quality draft capture", () => {
     assert.match(eventText, /"raw_json":\{"kind":"redacted"/u);
   });
 
-  // Covers pre-existing symlink and multiply linked receipt destinations: writes both and expects refusal.
-  it("refuses pre-existing symlink and multiply linked receipt destinations", async (testContext) => {
-    if (
-      skipOnWindows(testContext, "Link fixtures require POSIX link semantics")
-    ) {
-      return;
-    }
-    const root = makeRoot();
-    const capture = makeCapture(root);
+  // Each linked destination must preserve its target and refuse publication; a symlink limitation cannot skip the hard-link proof.
+  for (const linkKind of ["symlink", "hard-link"] as const) {
+    it(
+      `refuses a pre-existing ${linkKind} receipt destination`,
+      linkKind === "symlink" ? symlinkTestOptions() : {},
+      async () => {
+        const root = makeRoot();
+        const capture = makeCapture(root);
+        const nonce = "receipt111";
+        const target = join(root, `${linkKind}-target.txt`);
+        const receipt = join(
+          capture.stagingDir,
+          `goat-quality-result-claude-${nonce}.json`,
+        );
+        writeFileSync(target, "retained marker");
+        // The selected fixture expresses either a redirected path or a second name for the user's existing file.
+        if (linkKind === "symlink") symlinkSync(target, receipt);
+        else linkSync(target, receipt);
+        writeFileSync(
+          join(capture.stagingDir, `goat-quality-draft-claude-${nonce}.json`),
+          validReport(root),
+        );
 
-    const symlinkNonce = "receipt111";
-    const symlinkTarget = join(root, "symlink-target.txt");
-    const symlinkReceipt = join(
-      capture.stagingDir,
-      `goat-quality-result-claude-${symlinkNonce}.json`,
+        await assert.doesNotReject(capture.processNow());
+        assert.equal(readFileSync(target, "utf8"), "retained marker");
+        assert.equal(lstatSync(receipt).isFile(), true);
+        assert.equal(lstatSync(receipt).nlink, 1);
+        assert.deepStrictEqual(readReceipt(capture.stagingDir, nonce), {
+          ok: false,
+          error: "quality capture: receipt destination already existed.",
+        });
+        const reports = readdirSync(
+          join(root, ".goat-flow", "logs", "quality"),
+        ).filter((name) => name.endsWith(".json"));
+        assert.deepStrictEqual(reports, []);
+      },
     );
-    writeFileSync(symlinkTarget, "symlink marker");
-    symlinkSync(symlinkTarget, symlinkReceipt);
-    writeFileSync(
-      join(
-        capture.stagingDir,
-        `goat-quality-draft-claude-${symlinkNonce}.json`,
-      ),
-      validReport(root),
-    );
-
-    await assert.doesNotReject(capture.processNow());
-    assert.equal(readFileSync(symlinkTarget, "utf8"), "symlink marker");
-    assert.equal(lstatSync(symlinkReceipt).isFile(), true);
-    assert.equal(lstatSync(symlinkReceipt).nlink, 1);
-    assert.deepStrictEqual(readReceipt(capture.stagingDir, symlinkNonce), {
-      ok: false,
-      error: "quality capture: receipt destination already existed.",
-    });
-
-    const hardLinkNonce = "receipt222";
-    const hardLinkTarget = join(root, "hard-link-target.txt");
-    const hardLinkReceipt = join(
-      capture.stagingDir,
-      `goat-quality-result-claude-${hardLinkNonce}.json`,
-    );
-    writeFileSync(hardLinkTarget, "hard-link marker");
-    linkSync(hardLinkTarget, hardLinkReceipt);
-    writeFileSync(
-      join(
-        capture.stagingDir,
-        `goat-quality-draft-claude-${hardLinkNonce}.json`,
-      ),
-      validReport(root),
-    );
-
-    await assert.doesNotReject(capture.processNow());
-    assert.equal(readFileSync(hardLinkTarget, "utf8"), "hard-link marker");
-    assert.equal(lstatSync(hardLinkReceipt).isFile(), true);
-    assert.equal(lstatSync(hardLinkReceipt).nlink, 1);
-    assert.deepStrictEqual(readReceipt(capture.stagingDir, hardLinkNonce), {
-      ok: false,
-      error: "quality capture: receipt destination already existed.",
-    });
-    const reports = readdirSync(
-      join(root, ".goat-flow", "logs", "quality"),
-    ).filter((name) => name.endsWith(".json"));
-    assert.deepStrictEqual(reports, []);
-  });
+  }
 
   it("rejects schema violations through the shared quality save core", async () => {
     const root = makeRoot();
@@ -371,7 +357,7 @@ describe("quality draft capture", () => {
   });
 
   // Covers files outside the draft name contract plus symlinked drafts: writes them and expects them ignored.
-  it("ignores files outside the draft name contract and symlinked drafts", async () => {
+  it("ignores files outside the draft name contract and symlinked drafts", async (test) => {
     const root = makeRoot();
     const capture = makeCapture(root);
     const stray = join(capture.stagingDir, "notes.json");
@@ -387,18 +373,24 @@ describe("quality draft capture", () => {
     writeFileSync(stray, "{}");
     writeFileSync(badName, "{}");
     writeFileSync(linkTarget, validReport(root));
-    symlinkSync(linkTarget, link);
-
     await capture.processNow();
 
     assert.equal(existsSync(stray), true);
     assert.equal(existsSync(badName), true);
-    assert.equal(lstatSync(link).isSymbolicLink(), true);
-    assert.equal(
-      existsSync(
-        join(capture.stagingDir, "goat-quality-result-claude-fff666.json"),
-      ),
-      false,
+    await test.test(
+      "ignores a linked draft",
+      symlinkTestOptions(),
+      async () => {
+        symlinkSync(linkTarget, link);
+        await capture.processNow();
+        assert.equal(lstatSync(link).isSymbolicLink(), true);
+        assert.equal(
+          existsSync(
+            join(capture.stagingDir, "goat-quality-result-claude-fff666.json"),
+          ),
+          false,
+        );
+      },
     );
   });
 
@@ -706,35 +698,39 @@ describe("quality draft capture", () => {
   });
 
   // Covers a project reached by real path and symlink: writes via each and expects one shared capture.
-  it("shares one capture across real-path and symlink aliases", async (testContext) => {
-    if (
-      skipOnWindows(
-        testContext,
-        "Directory symlink fixtures require Windows Developer Mode",
-      )
-    ) {
-      return;
-    }
-    const parent = makeRoot();
-    const realRoot = join(parent, "real");
-    const aliasRoot = join(parent, "alias");
-    mkdirSync(realRoot);
-    execFileSync("git", ["-C", realRoot, "init", "--quiet"]);
-    writeFileSync(join(realRoot, ".gitignore"), QUALITY_IGNORE_RULES);
-    symlinkSync(realRoot, aliasRoot, "dir");
-    const first = makeCapture(realRoot);
-    const second = makeCapture(aliasRoot);
-    assert.equal(first.stagingDir, second.stagingDir);
-    writeFileSync(
-      join(first.stagingDir, "goat-quality-draft-claude-mmm333.json"),
-      validReport(realRoot),
-    );
+  it(
+    "shares one capture across real-path and symlink aliases",
+    symlinkTestOptions(),
+    async (testContext) => {
+      if (
+        skipOnWindows(
+          testContext,
+          "Directory symlink fixtures require Windows Developer Mode",
+        )
+      ) {
+        return;
+      }
+      const parent = makeRoot();
+      const realRoot = join(parent, "real");
+      const aliasRoot = join(parent, "alias");
+      mkdirSync(realRoot);
+      execFileSync("git", ["-C", realRoot, "init", "--quiet"]);
+      writeFileSync(join(realRoot, ".gitignore"), QUALITY_IGNORE_RULES);
+      symlinkSync(realRoot, aliasRoot, "dir");
+      const first = makeCapture(realRoot);
+      const second = makeCapture(aliasRoot);
+      assert.equal(first.stagingDir, second.stagingDir);
+      writeFileSync(
+        join(first.stagingDir, "goat-quality-draft-claude-mmm333.json"),
+        validReport(realRoot),
+      );
 
-    await Promise.all([first.processNow(), second.processNow()]);
+      await Promise.all([first.processNow(), second.processNow()]);
 
-    const persisted = readdirSync(
-      join(realRoot, ".goat-flow", "logs", "quality"),
-    ).filter((entry) => entry.endsWith(".json"));
-    assert.equal(persisted.length, 1);
-  });
+      const persisted = readdirSync(
+        join(realRoot, ".goat-flow", "logs", "quality"),
+      ).filter((entry) => entry.endsWith(".json"));
+      assert.equal(persisted.length, 1);
+    },
+  );
 });

@@ -84,6 +84,93 @@ function decodeFixtureResult(hookResult: HookResultEnvelope) {
   return decodedResult.result;
 }
 
+/**
+ * Build the exact envelope a Gruff post-tool run emits when no configured analyzer can inspect the edited path.
+ * Use to prove the compact rendering is gated on every field rather than on the hook name alone.
+ *
+ * @param overrides - fields to vary so one axis at a time can be pushed off the compact path
+ * @returns complete Gruff advisory envelope for the requested variation
+ */
+function gruffNonApplicableResult(
+  overrides: Partial<HookResultEnvelope> = {},
+): HookResultEnvelope {
+  return {
+    schema: HOOK_RESULT_SCHEMA,
+    hookId: "gruff-code-quality",
+    event: "post-tool",
+    outcome: "advisory",
+    coverage: {
+      status: "complete",
+      attemptedUnits: 0,
+      completedUnits: 0,
+      skippedUnits: 0,
+    },
+    reasonCode: "findings-reported",
+    findings: [
+      {
+        code: "analysis-not-applicable",
+        target: "project",
+        message:
+          "The completed edit did not target a supported Gruff source file",
+      },
+    ],
+    execution: {
+      hookVersion: "1.15.1",
+      provider: "claude",
+      providerMode: "fixture",
+      adapterName: "claude-post-tool",
+      adapterVersion: HOOK_RESULT_ADAPTER_VERSION,
+      durationMs: 12,
+    },
+    ...overrides,
+  };
+}
+
+/**
+ * Decode post-tool feedback from the host field the model reads.
+ * Error behavior: throws on failed adaptation, malformed JSON, or missing feedback text.
+ *
+ * @param providerOutput - adapter result for one host
+ * @returns feedback text with real line breaks, not JSON escape sequences
+ */
+function providerFeedbackText(
+  providerOutput: ReturnType<typeof adaptHookResultForProvider>,
+): string {
+  assert.equal(providerOutput.state, "adapted");
+  if (providerOutput.state !== "adapted") {
+    throw new Error(providerOutput.reason);
+  }
+  assert.equal(providerOutput.exitCode, 0);
+  assert.equal(providerOutput.stderr, "");
+  const response = JSON.parse(providerOutput.stdout);
+  const feedback =
+    response.hookSpecificOutput?.additionalContext ??
+    response.additionalContext;
+  assert.equal(typeof feedback, "string");
+  return feedback;
+}
+
+/**
+ * Require the detailed rendering for every envelope that sits one field away from the compact predicate.
+ * Each case keeps its own label so a failure names the exact variation that wrongly compacted.
+ *
+ * @param detailedCases - label and envelope pairs that must all retain the coverage line
+ */
+function assertForEachDetailedCase(
+  detailedCases: ReadonlyArray<[string, HookResultEnvelope]>,
+): void {
+  for (const [caseLabel, hookResult] of detailedCases) {
+    const rendered = providerFeedbackText(
+      adaptHookResultForProvider(
+        decodeFixtureResult(hookResult),
+        "claude",
+        "post-tool",
+      ),
+    );
+    assert.match(rendered, /Coverage:/u, caseLabel);
+  }
+}
+
 describe("hook provider adapters", () => {
   // Runtime and TypeScript constants must stay identical for installed and dashboard users.
   it("keeps runtime result limits aligned with the typed contract", () => {
@@ -328,5 +415,128 @@ describe("hook provider adapters", () => {
         reason: "result event does not match the registered hook",
       },
     );
+  });
+
+  // HK-NA: a verified non-source edit repeats a three-line advisory whose coverage line adds nothing.
+  for (const provider of ["claude", "codex", "copilot"] as const) {
+    it(`compacts only the verified non-source Gruff advisory for ${provider}`, () => {
+      const fixture = gruffNonApplicableResult();
+      fixture.execution.provider = provider;
+      fixture.execution.adapterName = `${provider}-post-tool`;
+      const compact = providerFeedbackText(
+        adaptHookResultForProvider(
+          decodeFixtureResult(fixture),
+          provider,
+          "post-tool",
+        ),
+      );
+
+      // Decode before counting: JSON.stringify would hide a newline as two escaped characters.
+      assert.equal(compact.split(/\r\n|[\r\n]/u).length, 1, provider);
+      assert.equal(
+        compact,
+        "gruff-code-quality: ADVISORY - [analysis-not-applicable] project The completed edit did not target a supported Gruff source file",
+        provider,
+      );
+    });
+  }
+
+  // HK-CONTROLS: every neighbouring envelope must keep the detailed rendering and its distinct meaning.
+  it("keeps the detailed path for every envelope near the compact predicate", () => {
+    const detailedCases: ReadonlyArray<[string, HookResultEnvelope]> = [
+      [
+        "analyzer-confirmed ignore reports one attempted unit",
+        gruffNonApplicableResult({
+          coverage: {
+            status: "complete",
+            attemptedUnits: 1,
+            completedUnits: 1,
+            skippedUnits: 0,
+          },
+          findings: [
+            {
+              code: "analysis-not-applicable",
+              target: "src/generated.ts",
+              message: "This file is ignored by .gruff-ts.yaml",
+            },
+          ],
+        }),
+      ],
+      [
+        "incomplete coverage",
+        gruffNonApplicableResult({
+          coverage: {
+            status: "partial",
+            attemptedUnits: 0,
+            completedUnits: 0,
+            skippedUnits: 0,
+          },
+        }),
+      ],
+      [
+        "a real finding alongside the not-applicable code",
+        gruffNonApplicableResult({
+          findings: [
+            {
+              code: "analysis-not-applicable",
+              target: "project",
+              message:
+                "The completed edit did not target a supported Gruff source file",
+            },
+            {
+              code: "docs.missing-internal-function-doc",
+              target: "src/cli/thing.ts",
+              message: "Internal function is missing a maintainer comment",
+            },
+          ],
+        }),
+      ],
+      [
+        "a different finding code",
+        gruffNonApplicableResult({
+          findings: [
+            {
+              code: "analysis-unavailable",
+              target: "project",
+              message: "The configured analyzer could not be started",
+            },
+          ],
+        }),
+      ],
+      [
+        "a different reason code",
+        gruffNonApplicableResult({ reasonCode: "coverage-incomplete" }),
+      ],
+      [
+        "another hook reusing the same finding code",
+        gruffNonApplicableResult({ hookId: "deny-dangerous" }),
+      ],
+    ];
+
+    assertForEachDetailedCase(detailedCases);
+  });
+
+  // A line break inside the preserved text would be silently lost by a single-line summary.
+  it("keeps the detailed path when the preserved text spans lines", () => {
+    const multiline = providerFeedbackText(
+      adaptHookResultForProvider(
+        decodeFixtureResult(
+          gruffNonApplicableResult({
+            findings: [
+              {
+                code: "analysis-not-applicable",
+                target: "project",
+                message:
+                  "No analyzer supports this file type.\nRun setup to configure one.",
+              },
+            ],
+          }),
+        ),
+        "claude",
+        "post-tool",
+      ),
+    );
+
+    assert.match(multiline, /Coverage:/u);
   });
 });

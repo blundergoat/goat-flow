@@ -20,7 +20,19 @@ describe("agent config template parity", () => {
       join(PROJECT_ROOT, "workflow/hooks/agent-config/claude.json"),
       "utf-8",
     ),
-  ) as { permissions?: { deny?: unknown; allow?: unknown } };
+  ) as {
+    permissions?: { deny?: unknown; allow?: unknown };
+    hooks?: Record<
+      string,
+      Array<{
+        hooks?: Array<{
+          args?: unknown;
+          bash?: unknown;
+          powershell?: unknown;
+        }>;
+      }>
+    >;
+  };
   const claudeDeny = Array.isArray(claude.permissions?.deny)
     ? claude.permissions.deny.filter(
         (entry): entry is string => typeof entry === "string",
@@ -41,6 +53,21 @@ describe("agent config template parity", () => {
     join(PROJECT_ROOT, "workflow/hooks/agent-config/codex.toml"),
     "utf-8",
   );
+
+  it("routes every structured Claude template row away from cross-loading shells", () => {
+    const structuredRows = Object.values(claude.hooks ?? {})
+      .flat()
+      .flatMap((entry) => entry.hooks ?? [])
+      .filter((entry) => Array.isArray(entry.args));
+    assert.ok(structuredRows.length > 0, "Claude template must ship hooks");
+    assert.equal(
+      structuredRows.every(
+        (row) => row.bash === "exit 0" && row.powershell === "exit 0",
+      ),
+      true,
+      "every structured Claude row must carry both inert shell routes",
+    );
+  });
 
   // Env policy: deny rules beat allow rules on BOTH agents, so a broad
   // **/.env* deny would shadow .env.example. Each real env variant is
@@ -101,16 +128,89 @@ describe("agent config template parity", () => {
       "sample env edit allow entry present on Claude",
     );
     assert.match(codexTemplate, /env\.example stays readable/);
+  });
 
-    assert.ok(
-      claudeReadPatterns.has("**/credentials*"),
-      "Claude template should deny Read(**/credentials*)",
-    );
-    assert.match(
-      codexTemplate,
-      new RegExp(`"${escapeRegExp("**/credentials*")}"\\s*=\\s*"deny"`),
-      "Codex template should deny **/credentials*",
-    );
+  // A folder or file name is not evidence of secret content, and no allow rule can reopen a deny.
+  // One named case per retired pattern, so a failure names the heuristic that came back.
+  for (const pattern of ["**/secrets/**", "**/credentials*"]) {
+    it(`ships no ${pattern} name heuristic on either template`, () => {
+      assert.ok(
+        !claudeDeny.some((entry) => entry.endsWith(`(${pattern})`)),
+        `Claude template must not deny ${pattern}; it blocks application code such as a secrets route or credentials.ts`,
+      );
+      assert.doesNotMatch(
+        codexTemplate,
+        new RegExp(`"${escapeRegExp(pattern)}"\\s*=\\s*"deny"`),
+        `Codex template must not deny ${pattern}`,
+      );
+    });
+  }
+
+  for (const store of [
+    ".netrc",
+    ".git-credentials",
+    ".config/gh/hosts.yml",
+    ".pgpass",
+  ]) {
+    it(`protects the plaintext ${store} store in both templates and installed configs`, () => {
+      const installedClaude = JSON.parse(
+        readFileSync(join(PROJECT_ROOT, ".claude/settings.json"), "utf8"),
+      ) as { permissions: { deny: string[] } };
+      const installedCodex = readFileSync(
+        join(PROJECT_ROOT, ".codex/config.toml"),
+        "utf8",
+      );
+      for (const verb of ["Read", "Edit"]) {
+        assert.ok(claudeDeny.includes(`${verb}(~/${store})`));
+        assert.ok(
+          installedClaude.permissions.deny.includes(`${verb}(~/${store})`),
+        );
+      }
+      for (const config of [codexTemplate, installedCodex]) {
+        assert.match(
+          config,
+          new RegExp(`"${escapeRegExp(`**/${store}`)}"\\s*=\\s*"deny"`),
+        );
+      }
+    });
+  }
+
+  // Home anchors and project patterns protect different copies of the same credential stores.
+  it("protects Claude credential stores at home and inside the project", () => {
+    const storeNames = [
+      ".ssh",
+      ".aws",
+      ".gnupg",
+      ".config/gcloud",
+      ".docker",
+      ".kube",
+      ".npmrc",
+      ".pypirc",
+      ".netrc",
+      ".git-credentials",
+      ".config/gh/hosts.yml",
+      ".pgpass",
+    ];
+    for (const store of storeNames) {
+      for (const tool of ["Read", "Edit"]) {
+        const homeRule = claudeDeny.find((entry) =>
+          entry.startsWith(`${tool}(~/${store}`),
+        );
+        assert.ok(homeRule, `${tool} must protect the home ${store}`);
+        assert.ok(
+          claudeDeny.includes(homeRule.replace("(~/", "(**/")),
+          `${tool} must also protect the project ${store}`,
+        );
+      }
+    }
+  });
+
+  // The Bash deny hook owns shell command policy with a tokenizing parser; the only
+  // settings-layer command denies are the ADR-025 commit and push rules, because every
+  // other substring glob matched read-only commands that merely quoted the word.
+  it("limits settings-layer Bash denies to the ADR-025 commit and push rules", () => {
+    const bashDenies = claudeDeny.filter((entry) => entry.startsWith("Bash("));
+    assert.deepEqual(bashDenies, ["Bash(*git commit*)", "Bash(*git push*)"]);
   });
 
   // Regression guard: Claude Code v2.x removed the MultiEdit tool ("matches

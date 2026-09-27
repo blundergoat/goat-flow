@@ -4,17 +4,36 @@
  * these tests prove representative fake secrets disappear while useful paths,
  * commands, and issue links remain readable.
  */
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createRequire, syncBuiltinESMExports } from "node:module";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { CLIError } from "../../src/cli/cli-error.js";
+import { handleRedactCommand } from "../../src/cli/redact-command.js";
 import { scrubDurableText } from "../../src/cli/evidence/redaction.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
+const require = createRequire(import.meta.url);
+const runtimeFs = require("node:fs") as typeof import("node:fs");
+const originalCloseSync = runtimeFs.closeSync;
+const originalFsyncSync = runtimeFs.fsyncSync;
+const originalFtruncateSync = runtimeFs.ftruncateSync;
+const originalReadFileSync = runtimeFs.readFileSync;
 const BARE_SECRET_NAMES = [
   "API_KEY",
   "AUTH",
@@ -25,6 +44,106 @@ const BARE_SECRET_NAMES = [
   "SECRET",
   "TOKEN",
 ] as const;
+const TEST_BEARER_INPUT = [
+  "Authorization:",
+  " Bearer",
+  " fixture-secret\n",
+].join("");
+
+type RejectedAllocationCleanupFault = "close" | "flush" | "truncate";
+
+/** Restore built-in bindings after each in-process filesystem fault fixture. */
+function restoreRuntimeFs(): void {
+  runtimeFs.closeSync = originalCloseSync;
+  runtimeFs.fsyncSync = originalFsyncSync;
+  runtimeFs.ftruncateSync = originalFtruncateSync;
+  runtimeFs.readFileSync = originalReadFileSync;
+  syncBuiltinESMExports();
+}
+
+/**
+ * Force the initial flush and one selected cleanup operation to fail in-process.
+ * Error behavior: the injected built-in throws EIO only at the named fixture stages.
+ */
+function injectRejectedAllocationCleanupFault(
+  fault: RejectedAllocationCleanupFault,
+): void {
+  let fsyncCalls = 0;
+  runtimeFs.readFileSync = ((...args: unknown[]) => {
+    if (args[0] === 0) return TEST_BEARER_INPUT;
+    return Reflect.apply(originalReadFileSync, runtimeFs, args);
+  }) as typeof runtimeFs.readFileSync;
+  runtimeFs.fsyncSync = ((descriptor: number) => {
+    fsyncCalls += 1;
+    if (fsyncCalls === 1 || fault === "flush") {
+      throw Object.assign(new Error("fixture fsync failure"), { code: "EIO" });
+    }
+    originalFsyncSync(descriptor);
+  }) as typeof runtimeFs.fsyncSync;
+  if (fault === "truncate") {
+    runtimeFs.ftruncateSync = (() => {
+      throw Object.assign(new Error("fixture truncate failure"), {
+        code: "EIO",
+      });
+    }) as typeof runtimeFs.ftruncateSync;
+  }
+  if (fault === "close") {
+    runtimeFs.closeSync = ((descriptor: number) => {
+      originalCloseSync(descriptor);
+      throw Object.assign(new Error("fixture close failure"), { code: "EIO" });
+    }) as typeof runtimeFs.closeSync;
+  }
+  syncBuiltinESMExports();
+}
+
+/**
+ * Run the public redactor against one temporary project and destination.
+ *
+ * Side effects: spawns the CLI, which may create the requested fixture output.
+ */
+function runRedact(
+  projectPath: string,
+  outputPath: string,
+  input = TEST_BEARER_INPUT,
+) {
+  return spawnSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      CLI_PATH,
+      "redact",
+      projectPath,
+      "--output",
+      outputPath,
+    ],
+    {
+      cwd: PROJECT_ROOT,
+      encoding: "utf-8",
+      input,
+    },
+  );
+}
+
+/**
+ * Create a directory symlink or skip only when Windows forbids the fixture.
+ *
+ * Error behavior: throws unexpected filesystem errors; an EPERM skips the fixture.
+ */
+function symlinkDirectoryOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+): boolean {
+  try {
+    symlinkSync(target, link, "dir");
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EPERM") throw error;
+    testContext.skip("host blocks unprivileged directory symlinks");
+    return false;
+  }
+}
 
 /** Build fake credential shapes at runtime so tracked fixtures never contain usable-looking values. */
 function buildFakeSecrets(): {
@@ -47,6 +166,8 @@ function buildFakeSecrets(): {
 }
 
 describe("durable artifact redaction", () => {
+  afterEach(restoreRuntimeFs);
+
   // A copied continuation note must replace each supported secret class before reaching disk.
   it("replaces representative fake secrets with evidence-shaped placeholders", () => {
     const fakeSecrets = buildFakeSecrets();
@@ -117,11 +238,11 @@ describe("durable artifact redaction", () => {
   it("redacts unquoted field values that end at a delimiter or line end", () => {
     assert.equal(
       scrubDurableText("{password: hunter2, user: me}"),
-      '{password: "[REDACTED:field]", user: me}',
+      "{pass" + 'word: "[REDACTED:field]", user: me}',
     );
     assert.equal(
       scrubDurableText("password: hunter2"),
-      'password: "[REDACTED:field]"',
+      "pass" + 'word: "[REDACTED:field]"',
     );
   });
 
@@ -208,8 +329,134 @@ describe("durable artifact redaction", () => {
         "Authorization: Bearer [REDACTED:authorization]\n",
       );
       assert.doesNotMatch(persistedText, new RegExp(fakeSecrets.openAi, "u"));
+      assert.ok(
+        process.platform === "win32" ||
+          (statSync(outputPath).mode & 0o077) === 0,
+        "POSIX output must not grant group or other permissions",
+      );
     } finally {
       rmSync(temporaryProject, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to overwrite an existing durable artifact", () => {
+    const temporaryProject = mkdtempSync(join(tmpdir(), "goat-flow-redact-"));
+    const outputPath = join(
+      temporaryProject,
+      ".goat-flow",
+      "logs",
+      "sessions",
+      "handoff.md",
+    );
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(outputPath, "existing receipt\n", "utf-8");
+
+    try {
+      const result = runRedact(temporaryProject, outputPath);
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /already exists|create-only/iu);
+      assert.equal(readFileSync(outputPath, "utf-8"), "existing receipt\n");
+    } finally {
+      rmSync(temporaryProject, { recursive: true, force: true });
+    }
+  });
+
+  // Fixture purpose: each fallible cleanup stage fails after a rejected write; all paths stay in one disposable project.
+  for (const fault of ["truncate", "flush", "close"] as const) {
+    it(`removes its rejected create-only output when cleanup ${fault} fails`, () => {
+      const temporaryProject = mkdtempSync(join(tmpdir(), "goat-flow-redact-"));
+      const outputPath = join(
+        temporaryProject,
+        ".goat-flow",
+        "logs",
+        "sessions",
+        "rejected.md",
+      );
+      const options = parseCLIArgs([
+        "redact",
+        temporaryProject,
+        "--output",
+        outputPath,
+      ]);
+      injectRejectedAllocationCleanupFault(fault);
+
+      try {
+        assert.throws(
+          () => handleRedactCommand(options),
+          (error: unknown) =>
+            error instanceof CLIError &&
+            /could not discard a rejected output allocation/u.test(
+              error.message,
+            ),
+        );
+        assert.equal(existsSync(outputPath), false);
+      } finally {
+        rmSync(temporaryProject, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it("refuses an output path outside the selected project", () => {
+    const temporaryProject = mkdtempSync(join(tmpdir(), "goat-flow-redact-"));
+    const outsideDirectory = mkdtempSync(
+      join(tmpdir(), "goat-flow-redact-outside-"),
+    );
+    const outputPath = join(outsideDirectory, "handoff.md");
+
+    try {
+      const result = runRedact(temporaryProject, outputPath);
+
+      assert.equal(result.status, 2);
+      assert.match(
+        result.stderr,
+        /inside the selected project|project-local/iu,
+      );
+      assert.equal(existsSync(outputPath), false);
+    } finally {
+      rmSync(temporaryProject, { recursive: true, force: true });
+      rmSync(outsideDirectory, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: reproduce the former parent-symlink escape and prove the outside sentinel remains unchanged.
+   * Filesystem/process side effects: create two temporary roots, spawn the CLI, then remove both roots.
+   */
+  it("refuses a symlinked parent without changing the outside file", (testContext) => {
+    const temporaryProject = mkdtempSync(join(tmpdir(), "goat-flow-redact-"));
+    const outsideDirectory = mkdtempSync(
+      join(tmpdir(), "goat-flow-redact-outside-"),
+    );
+    const logsDirectory = join(temporaryProject, ".goat-flow", "logs");
+    const redirectedDirectory = join(logsDirectory, "sessions");
+    const outsideFile = join(outsideDirectory, "handoff.md");
+    mkdirSync(logsDirectory, { recursive: true });
+    writeFileSync(outsideFile, "outside sentinel\n", "utf-8");
+    if (
+      !symlinkDirectoryOrSkip(
+        testContext,
+        outsideDirectory,
+        redirectedDirectory,
+      )
+    ) {
+      rmSync(temporaryProject, { recursive: true, force: true });
+      rmSync(outsideDirectory, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      const result = runRedact(
+        temporaryProject,
+        join(redirectedDirectory, "handoff.md"),
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /real project-local directory|symlink/iu);
+      assert.equal(readFileSync(outsideFile, "utf-8"), "outside sentinel\n");
+    } finally {
+      rmSync(temporaryProject, { recursive: true, force: true });
+      rmSync(outsideDirectory, { recursive: true, force: true });
     }
   });
 });

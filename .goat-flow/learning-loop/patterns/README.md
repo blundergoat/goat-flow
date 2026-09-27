@@ -30,13 +30,7 @@ last_reviewed: 2026-05-02
 
 Inside a bucket, add entries as `## Pattern:` blocks. Each entry SHOULD include `**Context:**` and `**Approach:**` sections so a fresh agent can apply it without prior session knowledge.
 
-Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-style.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
-
-## Externally Sourced Patterns
-
-`external-lessons.md` holds approaches mined from merged PRs in other projects. Those entries answer a different question from a locally proven pattern - what went wrong elsewhere and what shape avoids it - so they use `**Root cause:**` plus `**Prevention:**` instead of `Context`/`Approach`, and each names its source PR. A pattern learned here uses the standard shape.
-
-An externally sourced entry belongs in this directory rather than `footguns/` when goat-flow has no instance of the hazard. If the trap does exist in this codebase, it is a footgun and needs the local surface named.
+Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
 
 ## Bucket Size
 

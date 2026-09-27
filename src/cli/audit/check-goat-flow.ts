@@ -5,18 +5,23 @@
  * version-current.
  * These checks inspect the selected project but never execute its application.
  */
-import type { BuildCheck } from "./types.js";
+import type { AuditContext, AuditFailure, BuildCheck } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import { AUDIT_VERSION } from "../constants.js";
+import { readManifestJson } from "../manifest/manifest-json.js";
 import { projectIsAheadOfCli } from "../version-compare.js";
 import {
+  instructionRouterReferencesPath,
   missingSkillReferenceInstructionRequirements,
   presentInstructionFiles,
   standalonePlaybookContractFailure,
   STANDALONE_PLAYBOOK_FILES,
+  textReferencesProjectPath,
 } from "./skill-docs-contract.js";
 
 const VERIFIED_ON = "2026-05-03";
+const SECURITY_POLICY_PATH = ".goat-flow/security-policy.md";
+const CODE_MAP_PATH = ".goat-flow/code-map.md";
 
 /** Return the setup spec provenance. */
 function setupSpecProvenance(paths: string[]): CheckEvidence {
@@ -63,6 +68,8 @@ const NAMED_PATHS = new Set([
   ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
   ".goat-flow/hooks/",
   ".goat-flow/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/deny-git-mutations.sh",
+  ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
   ".goat-flow/hooks/gruff-code-quality.sh",
   ".goat-flow/hooks/post-turn-safety.sh",
   ".goat-flow/hooks/deny-dangerous/",
@@ -115,6 +122,7 @@ export const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!**/plans/**",
   "!scratchpad/",
   "!**/scratchpad/**",
+  "**/state/",
   "**/logs/*/*/",
   "!logs/",
   "!**/logs/sessions/",
@@ -496,11 +504,60 @@ const instructionFileSkillReferencePointer: BuildCheck = {
 
 // === Catch-all for remaining manifest entries ===
 
+/**
+ * Require a present optional security policy to be reachable from cold-start orientation.
+ * The package manifest decides whether this policy is an optional goat-flow surface; target projects that did not install it remain valid.
+ */
+function installedSecurityPolicyDiscoveryFailure(
+  ctx: AuditContext,
+): AuditFailure | null {
+  const optionalFiles = readManifestJson().optional_files;
+  if (
+    !Object.hasOwn(optionalFiles, SECURITY_POLICY_PATH) ||
+    !ctx.fs.exists(SECURITY_POLICY_PATH)
+  ) {
+    return null;
+  }
+
+  const missingPointers: string[] = [];
+  // The dedicated code-map check owns absence; this contract owns discoverability once the map exists.
+  if (
+    ctx.fs.exists(CODE_MAP_PATH) &&
+    !textReferencesProjectPath(
+      ctx.fs.readFile(CODE_MAP_PATH) ?? "",
+      SECURITY_POLICY_PATH,
+    )
+  ) {
+    missingPointers.push(CODE_MAP_PATH);
+  }
+  // Only installed instruction surfaces are actionable; agent setup checks own absent files.
+  for (const instructionPath of presentInstructionFiles(ctx)) {
+    const instructionContent = ctx.fs.readFile(instructionPath) ?? "";
+    if (
+      !instructionRouterReferencesPath(instructionContent, SECURITY_POLICY_PATH)
+    ) {
+      missingPointers.push(instructionPath);
+    }
+  }
+  if (missingPointers.length === 0) return null;
+
+  return {
+    check: "Security policy discovery",
+    message: `Installed optional security policy is not discoverable from: ${missingPointers.join(", ")}`,
+    evidence: missingPointers[0],
+    howToFix:
+      "Add `.goat-flow/security-policy.md` to `.goat-flow/code-map.md` and to the Router Table in each present agent instruction file. Keep the policy optional; do not create it solely to satisfy this check.",
+  };
+}
+
 const otherFiles: BuildCheck = {
   id: "other-files",
   name: "Other required files",
   scope: "setup",
-  provenance: setupSpecProvenance(["workflow/manifest.json"]),
+  provenance: setupSpecProvenance([
+    "workflow/manifest.json",
+    "workflow/setup/reference/execution-loop.md",
+  ]),
   /** Run the Other required files check. */
   run: (ctx) => {
     const allRequired = [
@@ -512,15 +569,27 @@ const otherFiles: BuildCheck = {
     );
     const missing = uncovered.filter((p) => {
       const trimmed = p.endsWith("/") ? p.slice(0, -1) : p;
+      // Claim writers create this gitignored directory on demand; audit must not require it first.
+      if (p === ".goat-flow/state/locks/") {
+        if (ctx.fs.isReadableDirectory(trimmed)) return false;
+        if (!ctx.fs.isReadableDirectory(".goat-flow")) return true;
+        if (!ctx.fs.listDir(".goat-flow").includes("state")) return false;
+        return (
+          !ctx.fs.isReadableDirectory(".goat-flow/state") ||
+          ctx.fs.listDir(".goat-flow/state").includes("locks")
+        );
+      }
       return !ctx.fs.exists(trimmed);
     });
-    if (missing.length === 0) return null;
-    return {
-      check: "Other required files",
-      message: `Missing: ${missing.join(", ")}`,
-      evidence: missing[0],
-      howToFix: `Create ${missing.join(", ")} by running \`goat-flow setup\` or creating them manually.`,
-    };
+    if (missing.length > 0) {
+      return {
+        check: "Other required files",
+        message: `Missing: ${missing.join(", ")}`,
+        evidence: missing[0],
+        howToFix: `Create ${missing.join(", ")} by running \`goat-flow setup\` or creating them manually.`,
+      };
+    }
+    return installedSecurityPolicyDiscoveryFailure(ctx);
   },
 };
 
@@ -610,6 +679,8 @@ const hookVersionCurrent: BuildCheck = {
   scope: "setup",
   provenance: setupSpecProvenance([
     ".goat-flow/hooks/deny-dangerous.sh",
+    "workflow/hooks/deny-git-mutations.sh",
+    "workflow/hooks/deny-dangerous/guard-runtime.sh",
     ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/post-turn-safety.sh",
     "src/cli/constants.ts",
@@ -621,6 +692,8 @@ const hookVersionCurrent: BuildCheck = {
     // absent until enabled.
     const hookFiles = [
       { file: "deny-dangerous.sh", required: true },
+      { file: "deny-git-mutations.sh", required: true },
+      { file: "deny-dangerous/guard-runtime.sh", required: true },
       { file: "gruff-code-quality.sh", required: false },
       { file: "post-turn-safety.sh", required: true },
     ];

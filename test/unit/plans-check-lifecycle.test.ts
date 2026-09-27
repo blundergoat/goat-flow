@@ -1,8 +1,7 @@
 /**
- * How the checker ties claims to evidence: lifecycle snapshots, active-milestone limits,
- * and the timing receipts a measured Actual must reconcile against.
- * Runs the real CLI against written milestone fixtures, so failures read as an author would
- * see them in a terminal rather than as internals.
+ * How the checker ties milestone claims to evidence: lifecycle snapshots, active-slot limits, and receipt-backed Actuals.
+ * Every case runs the real CLI against written milestones, so failures match the guidance users see while moving a plan between workflow states.
+ * Temporary plans isolate each lifecycle transition and are removed after the assertion.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -24,6 +23,109 @@ import {
 } from "./plans-check.helpers.js";
 
 describe("plans check: lifecycle states and timing receipts", () => {
+  /**
+   * Fixture purpose: Lane metadata preserves inactive lifecycle states and report bytes.
+   * Process/filesystem side effects: runs the CLI against temporary plans and removes them afterward.
+   */
+  it("preserves inactive lifecycle behavior with declared Lane metadata", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-lane-lifecycle-"),
+    );
+    try {
+      const files: Record<string, string> = {};
+      const statuses = [
+        "complete",
+        "not-started",
+        "blocked",
+        "abandoned",
+        "superseded",
+        "deferred",
+      ];
+      for (const [index, status] of statuses.entries()) {
+        const isComplete = status === "complete";
+        files[`M0${index + 1}-fixture.md`] = canonicalMilestoneBody({
+          title: `M0${index + 1}: Lifecycle fixture`,
+          status,
+          statusReason: ["complete", "not-started"].includes(status)
+            ? undefined
+            : "Human assigned the remaining work to M01.",
+          isTaskChecked: isComplete,
+          includeActual: isComplete,
+          proofLines: [
+            `- [${isComplete ? "x" : " "}] Outcome is proven. [automated] (est: 1 min proof)`,
+          ],
+        });
+      }
+      const baseline = runPlansCheck(
+        writeCheckPlan(join(temporaryRoot, "base"), files),
+        "--strict",
+      );
+      const withLanes = Object.fromEntries(
+        Object.entries(files).map(([name, body]) => [
+          name,
+          `${body}\nLane: php\n`,
+        ]),
+      );
+      const result = runPlansCheck(
+        writeCheckPlan(join(temporaryRoot, "lane"), withLanes),
+        "--strict",
+      );
+      assert.equal(baseline.status, 0, baseline.stdout + baseline.stderr);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(result.stdout, baseline.stdout);
+      assert.equal(result.stderr, baseline.stderr);
+      const parallel = runPlansCheck(
+        writeCheckPlan(join(temporaryRoot, "lane"), withLanes),
+        "--strict",
+        "--max-active",
+        "2",
+      );
+      assert.equal(parallel.status, 0, parallel.stdout + parallel.stderr);
+      assert.match(parallel.stdout, /plan: 0 active milestones \(cap 2\)/u);
+      assert.doesNotMatch(parallel.stdout, /^active:/mu);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** All execution and review states consume slots, including pending human verification. */
+  it("counts in-progress, testing-gate, and human-verification-pending across lanes", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-active-states-"));
+    try {
+      const files: Record<string, string> = {};
+      for (const [index, status] of [
+        "in-progress",
+        "testing-gate",
+        "human-verification-pending",
+      ].entries()) {
+        const id = `M0${index + 1}`;
+        const pending = status === "human-verification-pending";
+        files[`${id}-fixture.md`] =
+          canonicalMilestoneBody({
+            title: `${id}: Active state`,
+            status,
+            isTaskChecked: status !== "in-progress",
+            includeActual: pending,
+            proofLines: [
+              `- [${pending ? "x" : " "}] Outcome is proven. [automated] (est: 1 min proof)`,
+            ],
+          }) + `\nLane: lane-${index}\n`;
+      }
+      const plan = writeCheckPlan(root, files);
+      const allowed = runPlansCheck(plan, "--strict", "--max-active", "3");
+      assert.equal(allowed.status, 0, allowed.stdout + allowed.stderr);
+      assert.match(allowed.stdout, /plan: 3 active milestones \(cap 3\)/u);
+      const capped = runPlansCheck(plan, "--strict", "--max-active", "2");
+      assert.equal(capped.status, 1);
+      assert.deepEqual(
+        capped.stdout.split("\n").filter((line) => line.startsWith("error:")),
+        ["error: plan: active milestone cap 2 exceeded: M01, M02, M03"],
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   const lifecycleFailureCases: Array<{
     name: string;
     body: string;
@@ -113,14 +215,20 @@ describe("plans check: lifecycle states and timing receipts", () => {
     {
       name: "blocked-active-receipt",
       body: withActiveTimingReceipt(
-        canonicalMilestoneBody({ status: "blocked" }),
+        canonicalMilestoneBody({
+          status: "blocked",
+          statusReason: "Waiting for the provider capture before resuming.",
+        }),
       ),
       expected: /blocked milestone must not have an active Timing Receipt/u,
     },
     {
       name: "abandoned-active-receipt",
       body: withActiveTimingReceipt(
-        canonicalMilestoneBody({ status: "abandoned" }),
+        canonicalMilestoneBody({
+          status: "abandoned",
+          statusReason: "Human approved stopping after the premise failed.",
+        }),
       ),
       expected: /abandoned milestone must not have an active Timing Receipt/u,
     },
@@ -142,6 +250,125 @@ describe("plans check: lifecycle states and timing receipts", () => {
         const result = runPlansCheck(planPath, "--strict");
         assert.equal(result.status, 1, result.stdout + result.stderr);
         assertSourceLabelledErrors(result.stdout);
+        assert.match(result.stdout, testCase.expected);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  for (const status of ["blocked", "abandoned", "deferred"] as const) {
+    /** Fixture purpose: compare the missing exceptional field with the canonical authoring shape. */
+    it(`strict mode requires one canonical status reason while ${status}`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), `goat-flow-plan-${status}-reason-`),
+      );
+      try {
+        const missingPath = writeCheckFixture(
+          join(temporaryRoot, "missing"),
+          canonicalMilestoneBody({ status }),
+        );
+        const validPath = writeCheckFixture(
+          join(temporaryRoot, "valid"),
+          canonicalMilestoneBody({
+            status,
+            statusReason:
+              status === "blocked"
+                ? "Waiting for callback evidence before resuming."
+                : "Human approved stopping after the premise failed.",
+          }),
+        );
+
+        const missing = runPlansCheck(missingPath, "--strict");
+        const valid = runPlansCheck(validPath, "--strict");
+        assert.equal(missing.status, 1, missing.stdout + missing.stderr);
+        assert.match(
+          missing.stdout,
+          new RegExp(`${status} milestone requires Status reason`, "u"),
+        );
+        assert.equal(valid.status, 0, valid.stdout + valid.stderr);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  /**
+   * Fixture purpose: preserve a historical abandoned snapshot in default mode while refusing it as current authoring.
+   * Process/filesystem side effects: spawns two CLI checks and writes one temporary milestone.
+   */
+  it("warns on legacy Abandoned fallback and rejects it in strict mode", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-legacy-abandoned-"),
+    );
+    try {
+      const planPath = writeCheckFixture(
+        temporaryRoot,
+        canonicalMilestoneBody({
+          status: "abandoned",
+          abandonedReason: "Human approved stopping after the premise failed.",
+        }),
+      );
+
+      const compatible = runPlansCheck(planPath);
+      const strict = runPlansCheck(planPath, "--strict");
+      assert.equal(compatible.status, 0, compatible.stdout + compatible.stderr);
+      assert.equal(strict.status, 1, strict.stdout + strict.stderr);
+      assert.match(
+        strict.stdout,
+        /legacy Abandoned field supplied; use Status reason/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  const invalidReasonCases = [
+    {
+      name: "blank exceptional reason",
+      body: canonicalMilestoneBody({ status: "blocked", statusReason: "" }),
+      expected: /blank Status reason supplied/u,
+    },
+    {
+      name: "duplicate canonical reasons",
+      body: canonicalMilestoneBody({
+        status: "blocked",
+        statusReason: "First reason.",
+      }).replace(
+        "Status reason: First reason.",
+        "Status reason: First reason.\nStatus reason: Second reason.",
+      ),
+      expected: /multiple Status reason values supplied/u,
+    },
+    {
+      name: "competing canonical and legacy reasons",
+      body: canonicalMilestoneBody({
+        status: "abandoned",
+        statusReason: "Canonical decision.",
+        abandonedReason: "Legacy decision.",
+      }),
+      expected: /conflicting status reason representations/u,
+    },
+    {
+      name: "stale reason after work resumes",
+      body: canonicalMilestoneBody({
+        status: "in-progress",
+        statusReason: "This field belongs only to exceptional states.",
+      }),
+      expected: /in-progress milestone must not include Status reason/u,
+    },
+  ] as const;
+
+  for (const testCase of invalidReasonCases) {
+    /** Fixture purpose: each malformed authority fails at its exact current-plan boundary. */
+    it(`strict mode rejects ${testCase.name}`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-plan-invalid-reason-"),
+      );
+      try {
+        const planPath = writeCheckFixture(temporaryRoot, testCase.body);
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
         assert.match(result.stdout, testCase.expected);
       } finally {
         rmSync(temporaryRoot, { recursive: true, force: true });
@@ -382,6 +609,142 @@ describe("plans check: lifecycle states and timing receipts", () => {
       assert.equal(result.status, 1);
       assertSourceLabelledErrors(result.stdout);
       assert.match(result.stdout, /multiple active milestones/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** Fixture purpose: a milestone awaiting the user's decision still owns the active slot, so another implementation cannot begin beside it.
+   * Filesystem/process side effects: writes a two-milestone plan, runs the CLI once, and removes the fixture. */
+  it("keeps human verification in the one-active-milestone rule", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-human-active-"),
+    );
+    const planPath = writeCheckPlan(temporaryRoot, {
+      "M01-review.md": canonicalMilestoneBody({
+        title: "M01: Await user review",
+        status: "human-verification-pending",
+        isTaskChecked: true,
+        proofLines: [
+          "- [x] Outcome is proven. [automated] (est: 1 min proof)",
+          "- [ ] [human] Approve completion. (est: 1 min proof)",
+        ],
+        includeActual: true,
+      }),
+      "M02-next.md": canonicalMilestoneBody({
+        title: "M02: Start the next outcome",
+        status: "in-progress",
+        dependsOn: "none",
+      }),
+    });
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /multiple active milestones: M01, M02/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** Fixture purpose: a spent milestone must point readers at the live work that carries its remainder.
+   * Filesystem/process side effects: writes three two-milestone plans, runs the CLI once each, and removes the fixtures. */
+  it("strict mode requires a superseded milestone to name a resolvable successor", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-superseded-"),
+    );
+    try {
+      const successorCases = [
+        {
+          name: "missing-id",
+          reason: "Carried elsewhere after the lock was spent.",
+          expected:
+            /superseded milestone must name its successor milestone in Status reason/u,
+        },
+        {
+          name: "unresolved",
+          reason: "Superseded by M09, which carries the remainder.",
+          expected: /superseded successor M09 does not resolve in this plan/u,
+        },
+      ];
+      for (const successorCase of successorCases) {
+        const planPath = writeCheckPlan(
+          join(temporaryRoot, successorCase.name),
+          {
+            "M01-spent.md": canonicalMilestoneBody({
+              title: "M01: Spent",
+              status: "superseded",
+              statusReason: successorCase.reason,
+            }),
+            "M02-carrier.md": canonicalMilestoneBody({
+              title: "M02: Carrier",
+              dependsOn: "none",
+            }),
+          },
+        );
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assertSourceLabelledErrors(result.stdout);
+        assert.match(result.stdout, successorCase.expected);
+      }
+
+      const validPath = writeCheckPlan(join(temporaryRoot, "valid"), {
+        "M01-spent.md": withPausedTimingReceipt(
+          canonicalMilestoneBody({
+            title: "M01: Spent",
+            status: "superseded",
+            statusReason:
+              "Superseded by M02, which carries the remainder under a fresh lock.",
+          }),
+        ),
+        "M02-carrier.md": canonicalMilestoneBody({
+          title: "M02: Carrier",
+          dependsOn: "none",
+        }),
+      });
+      const valid = runPlansCheck(validPath, "--strict");
+      assert.equal(valid.status, 0, valid.stdout + valid.stderr);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** Fixture purpose: terminal milestones keep their rows but leave the plan total the author steers by.
+   * Filesystem/process side effects: writes one three-milestone plan, runs the CLI once, and removes the fixture. */
+  it("reports superseded and deferred estimates on an excluded line instead of the plan total", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-excluded-total-"),
+    );
+    const planPath = writeCheckPlan(temporaryRoot, {
+      "M01-spent.md": canonicalMilestoneBody({
+        title: "M01: Spent",
+        status: "superseded",
+        statusReason: "Superseded by M03, which carries the remainder.",
+      }),
+      "M02-later.md": canonicalMilestoneBody({
+        title: "M02: Later",
+        status: "deferred",
+        statusReason:
+          "Deferred to the next release by scope; disposition recorded in the backlog.",
+      }),
+      "M03-live.md": canonicalMilestoneBody({
+        title: "M03: Live",
+        dependsOn: "none",
+      }),
+    });
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /^plan: 2 min estimated/mu);
+      assert.match(
+        result.stdout,
+        /^excluded: 4 min in 2 superseded or deferred milestones - M01-spent\.md superseded 2, M02-later\.md deferred 2$/mu,
+      );
+      assert.match(
+        result.stdout,
+        /^M01-spent\.md: ~2 min \(1 product \/ 1 proof \/ 0 other\) \| superseded - excluded from the plan total$/mu,
+      );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

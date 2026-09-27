@@ -26,8 +26,7 @@ import { RatchetFailureReport } from "./ratchet-failure-report.mjs";
  * Used before every scan so the gate runs the project's own installed analyzer, not one a hostile
  * config could substitute.
  *
- * @returns the executable plus any leading arguments; `prefixArgs` is empty on a normal run and
- *   carries the fixture entry only when a test overrides the analyzer
+ * @returns executable and prefix arguments for the installed entrypoint or a Node test fixture
  */
 function resolveAnalyzerLaunchCommand() {
   const fixtureAnalyzerPath = process.env.GOAT_FLOW_GRUFF_RATCHET_ANALYZER_BIN;
@@ -39,13 +38,14 @@ function resolveAnalyzerLaunchCommand() {
   const analyzerPackagePath =
     require.resolve("@blundergoat/gruff-ts/package.json");
   const analyzerPackage = JSON.parse(readFileSync(analyzerPackagePath, "utf8"));
-  return {
-    command: join(
-      dirname(analyzerPackagePath),
-      analyzerPackage.bin["gruff-ts"],
-    ),
-    prefixArgs: [],
-  };
+  const analyzerEntry = join(
+    dirname(analyzerPackagePath),
+    analyzerPackage.bin["gruff-ts"],
+  );
+  // Git Bash runs the package's real entrypoint with literal argv, including paths containing spaces.
+  return process.platform === "win32"
+    ? { command: "bash", prefixArgs: [analyzerEntry.replaceAll("\\", "/")] }
+    : { command: analyzerEntry, prefixArgs: [] };
 }
 
 /**
@@ -60,7 +60,15 @@ function resolveAnalyzerLaunchCommand() {
  *   `scan` absent means the maintainer sees an analyzer problem rather than a debt verdict
  */
 function scanRepositoryWithAnalyzer() {
-  const { command, prefixArgs } = resolveAnalyzerLaunchCommand();
+  let launchCommand;
+  try {
+    launchCommand = resolveAnalyzerLaunchCommand();
+  } catch (error) {
+    return {
+      failure: `analyzer failure: resolution failed (${error.message})`,
+    };
+  }
+  const { command, prefixArgs } = launchCommand;
   const analyzerRun = spawnSync(
     command,
     [...prefixArgs, "analyse", "--format=json", "--fail-on", "none"],

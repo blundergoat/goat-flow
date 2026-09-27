@@ -5,6 +5,12 @@
  * the read-only view.
  * Only latest matching verdicts count; unrelated, partial, or old-version events stay non-green.
  */
+import { createHash } from "node:crypto";
+import { lstatSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { getAgentProfiles } from "../agents/registry.js";
+import { managedFileIsTrusted } from "./hook-managed-installation.js";
+import { getHookSpec } from "./hooks-registry.js";
 import { AUDIT_VERSION } from "../constants.js";
 import {
   tailEvidenceEvents,
@@ -18,6 +24,48 @@ import {
 import type { AgentId } from "../types.js";
 
 const MAX_HOOK_PROOF_EVENTS = 500;
+
+/** Identify the two policy hooks whose proof depends on complete installed runtime bytes. */
+function isPolicyHook(hookId: string): boolean {
+  return hookId === "deny-dangerous" || hookId === "deny-git-mutations";
+}
+
+/**
+ * Bind offline policy proof to this installation's complete runtime revision.
+ * Bytes and filesystem revisions both participate so repairing old bytes cannot revive earlier proof.
+ * Reads trusted local files only. Error behavior: returns null for missing, redirected or unreadable dependencies.
+ *
+ * @param projectPath - selected checkout whose installed files supply the proof identity
+ * @param agentId - provider whose managed hook directory is inspected
+ * @param hookId - policy registry id; other hooks have no policy identity
+ * @returns runtime fingerprint, or null when this installation cannot supply trustworthy policy proof
+ */
+export function managedPolicyRuntimeIdentity(
+  projectPath: string,
+  agentId: AgentId,
+  hookId: string,
+): string | null {
+  if (!isPolicyHook(hookId)) return null;
+  const spec = getHookSpec(hookId);
+  const agent = getAgentProfiles().find((profile) => profile.id === agentId);
+  if (!spec || !agent?.hooksDir) return null;
+  const identity = createHash("sha256");
+  try {
+    for (const file of [...new Set(spec.scriptFiles)].sort()) {
+      const path = join(projectPath, agent.hooksDir, file);
+      if (!managedFileIsTrusted(projectPath, path)) return null;
+      const revision = lstatSync(path, { bigint: true });
+      identity.update(
+        `${file}\0${revision.dev}:${revision.ino}:${revision.mtimeNs}:${revision.ctimeNs}\0`,
+      );
+      identity.update(readFileSync(path));
+    }
+    return identity.digest("hex");
+  } catch {
+    // A file can disappear or become unreadable after trust inspection; status then requires new proof.
+    return null;
+  }
+}
 
 /** Return a string payload field, or null when local evidence omitted or changed its shape. */
 function evidenceText(
@@ -85,25 +133,23 @@ function hasCurrentHookRuntimeProof(
     verificationContract.requiredScenarioIds,
   );
   const latestScenarioVerdicts = new Map<string, string>();
-  let evidenceEvents: EvidenceEnvelope[];
-
-  try {
-    // Tailing this kind alone keeps proof readable after unrelated terminal or dashboard
-    // activity; a global window would evict every verification event and re-prompt the user.
-    evidenceEvents = tailEvidenceEvents(
-      projectPath,
-      MAX_HOOK_PROOF_EVENTS,
-      "hook.verify",
-    );
-  } catch {
-    // For example, a user may revoke access to local logs; the UI then asks for proof again.
-    return false;
-  }
+  const isPolicy = isPolicyHook(hookId);
+  const runtimeIdentity = isPolicy
+    ? managedPolicyRuntimeIdentity(projectPath, agentId, hookId)
+    : null;
+  if (isPolicy && runtimeIdentity === null) return false;
+  const evidenceEvents = readHookEvidenceEvents(projectPath);
 
   // Newest matching events overwrite older attempts so a later failed rerun stays visible.
   for (const evidenceEvent of evidenceEvents) {
     // Other local activity cannot prove that a user ran this verification command.
     if (evidenceEvent.event_kind !== "hook.verify") continue;
+    if (
+      isPolicy &&
+      evidenceText(evidenceEvent.payload, "runtime_identity") !==
+        runtimeIdentity
+    )
+      continue;
     const recordedVerdict = recordedScenarioVerdict(
       evidenceEvent.payload,
       agentId,
@@ -121,6 +167,20 @@ function hasCurrentHookRuntimeProof(
   return verificationContract.requiredScenarioIds.every(
     (scenarioId) => latestScenarioVerdicts.get(scenarioId) === "pass",
   );
+}
+
+/** Read only hook proof events. Error behavior: unreadable logs return no events and require fresh verification. */
+function readHookEvidenceEvents(projectPath: string): EvidenceEnvelope[] {
+  try {
+    // Filtering before the limit prevents unrelated activity from evicting hook proof.
+    return tailEvidenceEvents(
+      projectPath,
+      MAX_HOOK_PROOF_EVENTS,
+      "hook.verify",
+    );
+  } catch {
+    return [];
+  }
 }
 
 /**

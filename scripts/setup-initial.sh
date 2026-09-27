@@ -74,7 +74,13 @@ fi
 
 # 5. Install shellcheck if missing
 if ! command -v shellcheck >/dev/null 2>&1; then
-    if command -v apt-get >/dev/null 2>&1; then
+    if [[ "$OSTYPE" == msys* || "$OSTYPE" == mingw* || "$OSTYPE" == cygwin* ]] && command -v winget.exe >/dev/null 2>&1; then
+        info "Installing shellcheck via winget for the current user..."
+        winget.exe install --id koalaman.shellcheck --exact --source winget --scope user --accept-source-agreements --accept-package-agreements --disable-interactivity
+        if ! command -v shellcheck >/dev/null 2>&1; then
+            warn "Open a new Git Bash session for the updated PATH, then run shellcheck --version."
+        fi
+    elif command -v apt-get >/dev/null 2>&1; then
         info "Installing shellcheck via apt-get..."
         sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
     elif command -v brew >/dev/null 2>&1; then

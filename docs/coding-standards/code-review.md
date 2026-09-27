@@ -26,7 +26,7 @@ All must pass before approving:
 - **Generic Ask First boundaries**: template text like "auth, routing, deployment, API, DB" instead of actual project paths
 - **Removed patterns**: references to removed ADR concepts (see `scripts/preflight-checks.sh` for the enforced list)
 - **Hardcoded versions**: AUDIT_VERSION must derive from `package.json` via `constants.ts`
-- **Explicit `any` types**: use `unknown` and narrow instead
+- **Explicit `any` types**: use `unknown` and narrow instead. A load-bearing dynamic-interop `any` is not a finding when it carries an inline ESLint suppression with a same-line `-- rationale` comment, which `conventions.md` (search: `interop exception`) and `frontend.md` (search: `dynamic-interop exception`) both permit
 - **Missing .js in imports**: NodeNext requires `.js` extensions on relative imports
 
 ## Don't Nitpick

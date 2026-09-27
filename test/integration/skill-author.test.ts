@@ -1,5 +1,8 @@
 /**
  * Integration tests for `goat-flow skill new` filesystem output and input validation.
+ *
+ * Use these cases when changing skill scaffolding: authors must receive complete files or a specific validation failure.
+ * Each command writes only to its disposable project and checks the resulting discovery and reference surfaces.
  */
 import { describe, it, type TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -104,6 +107,99 @@ function assertRecommendedReferenceSubtype(
 }
 
 describe("skill new - description mode", () => {
+  // Capability fixtures are parser inputs, not records of live skill trials.
+  for (const skillType of ["technique", "pattern", "reference"]) {
+    it(`scaffolds a ${skillType} skill from capability evidence without invented pressure`, async (t) => {
+      const projectRoot = makeTempProject();
+      t.after(() => rmSync(projectRoot, { recursive: true, force: true }));
+      const name = `capability-${skillType}`;
+      const redLogPath = writeRedLog(projectRoot, name);
+      writeFileSync(
+        redLogPath,
+        `# Controlled capability fixture, not a live trial
+## Iteration 1 (RED)
+Skill type: ${skillType}
+Scenario: Trace the production parser with a missing workspace snapshot.
+Agent behaviour: failed to reject complete grounding without a workspace snapshot
+Control: A report with matching captured snapshots remains accepted without edits.
+`,
+      );
+
+      const result = await runSkillNew({
+        description: "I want a workflow that traces parser failures.",
+        name,
+        redLogPath,
+        agent: "codex",
+        shouldSkipConfirm: true,
+        projectRoot,
+        stdinAnswers: [],
+      });
+
+      assert.equal(result.written, true, result.output.join("\n"));
+      assertExists(result.proposedPath);
+      assert.ok(existsSync(result.proposedPath));
+    });
+  }
+
+  for (const [
+    label,
+    fields,
+    diagnostic,
+    behavior = "failed to reject complete grounding without a workspace snapshot",
+  ] of [
+    [
+      "unknown type",
+      "Skill type: unclassified\nControl: A valid report stays accepted.",
+      /Skill type/u,
+    ],
+    ["missing control", "Skill type: technique", /Control/u],
+    [
+      "placeholder control",
+      "Skill type: pattern\nControl: [correct input]",
+      /Control/u,
+    ],
+    [
+      "discipline without pressure",
+      "Skill type: discipline-enforcing\nControl: A valid report stays accepted.",
+      /three distinct documented pressures/u,
+    ],
+    [
+      "successful capability trial",
+      "Skill type: technique\nControl: A valid report stays accepted.",
+      /explicit failure outcome/u,
+      "completed the scenario successfully",
+    ],
+  ] as const) {
+    it(`rejects capability receipt with ${label}`, async (t) => {
+      const projectRoot = makeTempProject();
+      t.after(() => rmSync(projectRoot, { recursive: true, force: true }));
+      const name = "capability-invalid";
+      const redLogPath = writeRedLog(projectRoot, name);
+      writeFileSync(
+        redLogPath,
+        `# Controlled invalid receipt, not a live trial
+## Iteration 1 (RED)
+${fields}
+Scenario: Trace the production parser with a missing workspace snapshot.
+Agent behaviour: ${behavior}
+`,
+      );
+
+      const result = await runSkillNew({
+        description: "I want a workflow that traces parser failures.",
+        name,
+        redLogPath,
+        shouldSkipConfirm: true,
+        projectRoot,
+        stdinAnswers: [],
+      });
+
+      assert.equal(result.written, false);
+      assert.ok(!existsSync(result.proposedPath ?? ""));
+      assert.match(result.output.join("\n"), diagnostic);
+    });
+  }
+
   it("blocks discoverable skill scaffolds until RED evidence is supplied", async () => {
     const projectRoot = makeTempProject();
     const result = await runSkillNew({
@@ -421,7 +517,9 @@ Rationalisations captured (verbatim):
       assert.equal(result.written, true);
       assertExists(result.proposedPath);
       assert.ok(
-        result.proposedPath.includes(`/${expectedDirectory}/`),
+        result.proposedPath
+          .replaceAll("\\", "/")
+          .includes(`/${expectedDirectory}/`),
         `${agent ?? "default"}: ${result.proposedPath}`,
       );
       assert.ok(existsSync(result.proposedPath));
@@ -630,7 +728,9 @@ Rationalisations captured (verbatim):
     assert.equal(result.candidacy.recommendedArtifact.type, "skill");
     assert.equal(result.written, false);
     assertExists(result.proposedPath);
-    assert.ok(result.proposedPath.includes("/.agents/skills/"));
+    assert.ok(
+      result.proposedPath.replaceAll("\\", "/").includes("/.agents/skills/"),
+    );
     assert.ok(!existsSync(result.proposedPath));
   });
 
@@ -747,10 +847,8 @@ describe("skill new - draft mode", () => {
   });
 
   /*
-   * Fixture purpose: writes same-name agent copies so selected-agent draft
-   * scoring is proven to read the requested SKILL.md. The selected agent's
-   * path must decide which copy is scored, even when an identically named
-   * draft exists for another agent.
+   * Writes same-name agent drafts to prove that scoring reads the selected Codex file.
+   * Adding a Claude copy must leave the chosen path and score unchanged.
    */
   it("scores a substantive Codex SKILL.md draft without reading a same-name Claude copy", async () => {
     const projectRoot = makeTempProject();
@@ -793,7 +891,7 @@ describe("skill new - draft mode", () => {
       projectRoot,
       stdinAnswers: [],
     });
-    assert.equal(baseline.proposedPath, codexDraftPath);
+    assert.equal(baseline.proposedPath, codexDraftPath.replaceAll("\\", "/"));
     assertExists(baseline.postScaffoldScore);
     assert.equal(
       baseline.candidacy.nextSteps[0]?.action,
@@ -827,7 +925,7 @@ describe("skill new - draft mode", () => {
       projectRoot,
       stdinAnswers: [],
     });
-    assert.equal(withClaudeCopy.proposedPath, codexDraftPath);
+    assert.equal(withClaudeCopy.proposedPath, baseline.proposedPath);
     assert.equal(
       withClaudeCopy.candidacy.nextSteps[0]?.action,
       "Place under .agents/skills/<name>/SKILL.md",
@@ -881,7 +979,9 @@ describe("skill new - draft mode", () => {
     assert.equal(result.written, false);
     assert.ok(
       result.output.some((line) =>
-        line.includes(".goat-flow/skill-docs/playbooks/playwright.md"),
+        line
+          .replaceAll("\\", "/")
+          .includes(".goat-flow/skill-docs/playbooks/playwright.md"),
       ),
       "playbook-looking drafts should get a move suggestion to skill-docs/playbooks",
     );

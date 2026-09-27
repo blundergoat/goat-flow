@@ -5,11 +5,13 @@
  * gruff.hook.v1 contract rendering lives in gruff-code-quality-contract.test.ts;
  * shared fixtures live in gruff-code-quality-smoke.helpers.ts.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -22,12 +24,20 @@ import {
   cleanupHookTestDirs,
   git,
   initGit,
+  makeEditedGruffContractProject,
   makeRoot,
   readArgumentInvocations,
   readInvocations,
+  readMigratedGruffResult,
   resolveTool,
   runHook,
+  runMigratedHook,
+  sampleGruffEditPayload,
+  V2_GRUFF_CAPABILITIES,
+  V2_OUTCOME_CASES,
+  v2GruffEnvelope,
   writeJsonConfigErrorMockGruffPy,
+  writeLegacyScopeGruff,
   writeMockGruff,
   writeMockGruffBinary,
   writeNativeChangedRegionGruffPy,
@@ -629,80 +639,84 @@ describe("gruff-code-quality hook", () => {
 
   // Fixture purpose: writes contained and escaping analyzer symlinks so config trust is proved
   // against physical targets; both disposable roots are removed by the shared cleanup hook.
-  it("accepts a contained configured analyzer symlink and rejects an escaping one", () => {
-    const containedRoot = makeRoot();
-    const containedBinDir = writeMockGruffBinary(
-      containedRoot,
-      "trusted/bin",
-      "gruff-py",
-      "contained.rule",
-    );
-    mkdirSync(join(containedRoot, "configured"), { recursive: true });
-    symlinkSync(
-      join(containedBinDir, "gruff-py"),
-      join(containedRoot, "configured", "gruff-py"),
-    );
-    writeFileSync(join(containedRoot, ".gruff-py.yaml"), "rules: {}\n");
-    mkdirSync(join(containedRoot, ".goat-flow"), { recursive: true });
-    writeFileSync(
-      join(containedRoot, ".goat-flow", "config.yaml"),
-      "hooks:\n  gruff-code-quality:\n    binaries:\n      py: configured/gruff-py\n",
-    );
-    mkdirSync(join(containedRoot, "src"), { recursive: true });
-    writeFileSync(join(containedRoot, "src", "sample.py"), "a\nb\nc\n");
+  it(
+    "accepts a contained configured analyzer symlink and rejects an escaping one",
+    symlinkTestOptions(),
+    () => {
+      const containedRoot = makeRoot();
+      const containedBinDir = writeMockGruffBinary(
+        containedRoot,
+        "trusted/bin",
+        "gruff-py",
+        "contained.rule",
+      );
+      mkdirSync(join(containedRoot, "configured"), { recursive: true });
+      symlinkSync(
+        join(containedBinDir, "gruff-py"),
+        join(containedRoot, "configured", "gruff-py"),
+      );
+      writeFileSync(join(containedRoot, ".gruff-py.yaml"), "rules: {}\n");
+      mkdirSync(join(containedRoot, ".goat-flow"), { recursive: true });
+      writeFileSync(
+        join(containedRoot, ".goat-flow", "config.yaml"),
+        "hooks:\n  gruff-code-quality:\n    binaries:\n      py: configured/gruff-py\n",
+      );
+      mkdirSync(join(containedRoot, "src"), { recursive: true });
+      writeFileSync(join(containedRoot, "src", "sample.py"), "a\nb\nc\n");
 
-    const containedResult = runHook(
-      containedRoot,
-      {
-        tool_name: "Edit",
-        tool_input: {
-          file_path: "src/sample.py",
-          changed_ranges: [{ startLine: 3, endLine: 3 }],
+      const containedResult = runHook(
+        containedRoot,
+        {
+          tool_name: "Edit",
+          tool_input: {
+            file_path: "src/sample.py",
+            changed_ranges: [{ startLine: 3, endLine: 3 }],
+          },
         },
-      },
-      "/usr/bin:/bin",
-    );
-    assert.equal(containedResult.status, 0, containedResult.stderr);
-    assert.match(containedResult.stdout, /contained\.rule/u);
+        "/usr/bin:/bin",
+      );
+      assert.equal(containedResult.status, 0, containedResult.stderr);
+      assert.match(containedResult.stdout, /contained\.rule/u);
 
-    const escapingRoot = makeRoot();
-    const outsideRoot = makeRoot();
-    const outsideBinDir = writeMockGruffBinary(
-      outsideRoot,
-      "outside/bin",
-      "gruff-py",
-      "escaped.rule",
-    );
-    mkdirSync(join(escapingRoot, "configured"), { recursive: true });
-    symlinkSync(
-      join(outsideBinDir, "gruff-py"),
-      join(escapingRoot, "configured", "gruff-py"),
-    );
-    writeFileSync(join(escapingRoot, ".gruff-py.yaml"), "rules: {}\n");
-    mkdirSync(join(escapingRoot, ".goat-flow"), { recursive: true });
-    writeFileSync(
-      join(escapingRoot, ".goat-flow", "config.yaml"),
-      "hooks:\n  gruff-code-quality:\n    binaries:\n      py: configured/gruff-py\n",
-    );
-    mkdirSync(join(escapingRoot, "src"), { recursive: true });
-    writeFileSync(join(escapingRoot, "src", "sample.py"), "a\nb\nc\n");
+      const escapingRoot = makeRoot();
+      const outsideRoot = makeRoot();
+      const outsideBinDir = writeMockGruffBinary(
+        outsideRoot,
+        "outside/bin",
+        "gruff-py",
+        "escaped.rule",
+      );
+      mkdirSync(join(escapingRoot, "configured"), { recursive: true });
+      symlinkSync(
+        join(outsideBinDir, "gruff-py"),
+        join(escapingRoot, "configured", "gruff-py"),
+      );
+      writeFileSync(join(escapingRoot, ".gruff-py.yaml"), "rules: {}\n");
+      mkdirSync(join(escapingRoot, ".goat-flow"), { recursive: true });
+      writeFileSync(
+        join(escapingRoot, ".goat-flow", "config.yaml"),
+        "hooks:\n  gruff-code-quality:\n    binaries:\n      py: configured/gruff-py\n",
+      );
+      mkdirSync(join(escapingRoot, "src"), { recursive: true });
+      writeFileSync(join(escapingRoot, "src", "sample.py"), "a\nb\nc\n");
 
-    const escapingResult = runHook(
-      escapingRoot,
-      {
-        tool_name: "Edit",
-        tool_input: {
-          file_path: "src/sample.py",
-          changed_ranges: [{ startLine: 3, endLine: 3 }],
+      const escapingResult = runHook(
+        escapingRoot,
+        {
+          tool_name: "Edit",
+          tool_input: {
+            file_path: "src/sample.py",
+            changed_ranges: [{ startLine: 3, endLine: 3 }],
+          },
         },
-      },
-      "/usr/bin:/bin",
-    );
-    assert.equal(escapingResult.status, 0, escapingResult.stderr);
-    assert.equal(escapingResult.stdout, "");
-    assert.match(escapingResult.stderr, /resolves outside the repository/u);
-    assert.deepEqual(readInvocations(escapingRoot), []);
-  });
+        "/usr/bin:/bin",
+      );
+      assert.equal(escapingResult.status, 0, escapingResult.stderr);
+      assert.equal(escapingResult.stdout, "");
+      assert.match(escapingResult.stderr, /resolves outside the repository/u);
+      assert.deepEqual(readInvocations(escapingRoot), []);
+    },
+  );
 
   // Covers both override spellings a maintainer writes, because compact and commented forms must both work.
   it("uses compact and commented config binary override forms", () => {
@@ -814,7 +828,7 @@ describe("gruff-code-quality hook", () => {
   });
 
   // Fixture purpose: writes a PATH sandbox to cover fail-soft behavior when jq is absent.
-  it("fails soft when jq is unavailable", () => {
+  it("fails soft when jq is unavailable", symlinkTestOptions(), () => {
     const root = makeRoot();
     const gruffBinDir = writeMockGruff(root);
     const noJqBin = join(root, "no-jq-bin");
@@ -891,6 +905,11 @@ describe("gruff-code-quality hook", () => {
     // The agent sees gruff's real cause and fix on stdout, not the generic note.
     assert.match(result.stdout, /schemaVersion/);
     assert.match(result.stdout, /gruff-ts init --force/);
+    assert.match(
+      result.stdout,
+      /Do not run gruff-ts init --force in this project/u,
+    );
+    assert.match(result.stdout, /fresh temporary directory/u);
     assert.match(result.stdout, /\.gruff-ts\.yaml/);
     assert.doesNotMatch(result.stdout, /produced non-JSON output/);
   });
@@ -921,5 +940,138 @@ describe("gruff-code-quality hook", () => {
       /gruff-code-quality: gruff-py could not analyse src\/sample\.py - Unknown threshold size\.file-length/,
     );
     assert.doesNotMatch(result.stdout, /0 on changed lines/);
+  });
+});
+
+describe("gruff-code-quality hook (gruff.hook.v2 contract)", () => {
+  it("rejects incomplete successful envelopes instead of counting clean coverage", () => {
+    for (const envelope of [
+      JSON.stringify({
+        contractVersion: "gruff.hook.v2",
+        config: { schemaOk: true },
+      }),
+      v2GruffEnvelope({ findings: null }),
+      v2GruffEnvelope({ run: {} }),
+      v2GruffEnvelope({ diagnostics: null }),
+    ]) {
+      const root = makeEditedGruffContractProject(envelope, {
+        capabilities: V2_GRUFF_CAPABILITIES,
+      });
+      const result = readMigratedGruffResult(
+        runMigratedHook(root, sampleGruffEditPayload(), "/usr/bin:/bin"),
+      );
+      assert.equal(result.outcome, "incomplete");
+      assert.equal(result.reasonCode, "output-invalid");
+      assert.equal(
+        (result.coverage as { completedUnits: number }).completedUnits,
+        0,
+      );
+    }
+  });
+  for (const v2Case of V2_OUTCOME_CASES) {
+    it(`${v2Case.name}, and requests the whole file without failure gates`, () => {
+      const projectRoot = makeEditedGruffContractProject(v2Case.envelope, {
+        ...v2Case.behavior,
+        capabilities: V2_GRUFF_CAPABILITIES,
+      });
+      const result = readMigratedGruffResult(
+        runMigratedHook(
+          projectRoot,
+          sampleGruffEditPayload(),
+          "/usr/bin:/bin",
+          v2Case.environment,
+        ),
+      );
+      const findings = result.findings as Array<{
+        code: string;
+        message: string;
+      }>;
+      assert.equal(result.outcome, v2Case.outcome);
+      assert.equal(result.reasonCode, v2Case.reasonCode);
+      assert.deepEqual(
+        findings.map((finding) => finding.code),
+        v2Case.codes,
+      );
+      // An expected message pins the diagnostic text the user must see, not a generic parser error.
+      if (v2Case.message)
+        assert.match(findings[0]?.message ?? "", v2Case.message);
+      assert.equal(
+        readFileSync(join(projectRoot, "gruff-hook-args.log"), "utf8"),
+        "hook --format json src/sample.ts\n",
+      );
+    });
+  }
+
+  it("reports an advertised protocol it cannot read instead of falling back to analyse", () => {
+    const projectRoot = makeEditedGruffContractProject(v2GruffEnvelope(), {
+      capabilities: V2_GRUFF_CAPABILITIES.replace(
+        "gruff.hook.v2",
+        "gruff.hook.v3",
+      ),
+    });
+    const result = readMigratedGruffResult(
+      runMigratedHook(projectRoot, sampleGruffEditPayload(), "/usr/bin:/bin"),
+    );
+    const findings = result.findings as Array<{
+      code: string;
+      message: string;
+    }>;
+    assert.equal(result.outcome, "unavailable");
+    assert.equal(findings[0]?.code, "analyzer-capability-unsupported");
+    assert.match(findings[0]?.message ?? "", /gruff\.hook\.v3/u);
+    assert.equal(existsSync(join(projectRoot, "gruff-hook-args.log")), false);
+  });
+});
+
+describe("gruff-code-quality hook legacy analyse call", () => {
+  /**
+   * Runs one whole-file edit through a pre-contract analyzer with the given scope help.
+   * It writes a disposable project with the analyzer, a config and one source file, then runs the hook in it.
+   *
+   * @param scopeHelp - `--changed-scope` help lines copied from a real port
+   * @returns the neutral result and the analyzer argv the hook sent
+   */
+  function runWholeFileLegacyEdit(scopeHelp: string): {
+    result: Record<string, unknown>;
+    argv: string;
+  } {
+    const projectRoot = makeRoot();
+    writeLegacyScopeGruff(projectRoot, scopeHelp);
+    writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
+    mkdirSync(join(projectRoot, "src"), { recursive: true });
+    writeFileSync(join(projectRoot, "src", "sample.ts"), "a\nb\nc\nd\n");
+    const result = readMigratedGruffResult(
+      runMigratedHook(
+        projectRoot,
+        {
+          tool_name: "Write",
+          tool_input: {
+            file_path: "src/sample.ts",
+            changed_ranges: [{ startLine: 1, endLine: 4 }],
+          },
+        },
+        "/usr/bin:/bin",
+      ),
+    );
+    return {
+      result,
+      argv: readFileSync(join(projectRoot, "gruff-args.log"), "utf8"),
+    };
+  }
+
+  it("uses symbol scope for a whole-file edit when the analyzer lists no file scope, and ignores its stderr", () => {
+    const { result, argv } = runWholeFileLegacyEdit(
+      "  --changed-scope [symbol|hunk]   Changed-region scope: symbol or hunk.",
+    );
+    assert.equal(result.outcome, "pass");
+    assert.match(argv, /--changed-scope symbol src\/sample\.ts/u);
+  });
+
+  it("uses file scope for a whole-file edit when the analyzer's help lists it", () => {
+    const { result, argv } = runWholeFileLegacyEdit(
+      '  --changed-scope <scope>   Changed-region scope: hunk, symbol, or\n                            file. (default: "symbol")',
+    );
+    assert.equal(result.outcome, "pass");
+    assert.match(argv, /--changed-scope file src\/sample\.ts/u);
   });
 });

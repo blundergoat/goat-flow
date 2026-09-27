@@ -1,19 +1,17 @@
 /**
- * Load server-backed quality and skill-inventory state into Alpine fragments.
+ * Load saved quality summaries and skill inventory for the selected dashboard project and runner.
  *
- * Use when the user changes project, generates setup or quality prompts, or opens the Skills views - these loaders guard against stale responses
- * overwriting the screen after a context switch, and recover failures into visible empty states or toasts instead of a broken page.
- *
- * Hook loaders and Hooks-view actions live in dashboard-app-hook-setup-fragments.ts.
+ * Ignore stale responses after navigation; current request failures appear as toasts or leave optional sidebar grades uncached.
+ * App fragments expose these loaders to Home, Quality, Setup, and Skills actions; hook loading belongs to its own feature fragment.
  */
 
 /**
  * Check whether a quality response still belongs to the visible project and runner.
  * Use before applying async quality data that may race with user navigation.
  *
- * @param ctx - dashboard state at response time; missing project/runner mismatch means stale data
- * @param projectPath - project path captured when the request started; empty never matches a real project
- * @param runner - runner captured when the request started; empty would not match a supported runner
+ * @param ctx - visible dashboard state at response time; a changed project or runner makes the result stale
+ * @param projectPath - project path captured when the request started; it must still equal the selected path
+ * @param runner - supported runner captured when the request started; it must still be selected
  * @returns whether the response may update the screen
  */
 function dashboardIsCurrentQualityRequest(
@@ -29,7 +27,7 @@ function dashboardIsCurrentQualityRequest(
  * Use so the Home dashboard can show the most recent agent-setup review for the selected runner.
  *
  * @param ctx - dashboard state to update; stale project/runner responses are ignored
- * @returns nothing; it swallows a failed request into an empty Home summary rather than blocking the page
+ * @returns nothing; it reports current request failures as toasts and leaves the cleared Home summary empty
  */
 async function dashboardGenerateHomeQualitySummary(
   ctx: DashboardAppContext,
@@ -56,6 +54,7 @@ async function dashboardGenerateHomeQualitySummary(
       ctx.homeQualityLatest = readQualityHistoryLatest(payload.latest);
     }
   } catch (err) {
+    // An unreachable server or malformed history JSON leaves Home empty and shows the cause only for the still-selected project and runner.
     // Late failures for another project/runner should not interrupt the current Home view.
     if (
       !dashboardIsCurrentQualityRequest(ctx, requestProjectPath, requestAgent)
@@ -75,7 +74,7 @@ async function dashboardGenerateHomeQualitySummary(
  * Use after `/api/skill-quality/inventory` returns so the Skills tab only lists usable skill rows.
  *
  * @param payload - raw inventory response; missing `artifacts` means the Skills tab shows an empty list
- * @returns valid skill artifacts; empty array means no skill reports are available to select
+ * @returns skill rows with the required field types; an empty array leaves no skill available for selection
  */
 function dashboardReadSkillQualityArtifacts(
   payload: JsonRecord,
@@ -83,7 +82,7 @@ function dashboardReadSkillQualityArtifacts(
   // Missing or non-array artifacts mean there are no selectable skills in this response.
   return Array.isArray(payload.artifacts)
     ? payload.artifacts.filter(
-        // Keep only complete skill rows so the UI never renders broken chips.
+        // Only skill rows with the expected field types can be listed as selectable artifacts.
         (artifact): artifact is SkillQualityArtifact =>
           isRecord(artifact) &&
           artifact.kind === "skill" &&
@@ -188,6 +187,7 @@ async function dashboardLoadSkillQualityInventory(
       requestGeneration,
     );
   } catch (err) {
+    // Opening Skills while the server is unreachable, or receiving malformed inventory JSON, reports a toast for the current request.
     // Late failures from an older project/runner should not toast over the current view.
     if (
       !dashboardIsCurrentSkillInventoryRequest(
@@ -209,9 +209,9 @@ async function dashboardLoadSkillQualityInventory(
  * Use so the Skills list can show grades before the user opens each artifact.
  *
  * @param ctx - dashboard state to update; stale responses are ignored
- * @param art - skill artifact to prefetch; missing ids would leave no cache key
- * @param projectPath - project captured when the prefetch started; empty means stale/no-op
- * @param runner - runner captured when the prefetch started; empty means stale/no-op
+ * @param art - inventory skill whose ID selects the report and its sidebar cache entry
+ * @param projectPath - project selected when prefetch started; results apply only while that project stays selected
+ * @param runner - runner selected when prefetch started; results apply only while that runner stays selected
  * @param generation - prefetch generation captured at request start; old values are ignored
  * @returns nothing; it swallows a per-artifact failure, leaving that one skill without a cached grade
  */
@@ -240,7 +240,7 @@ async function dashboardPrefetchOneSkillReport(
     // Same-origin report payload feeds the grade cache for the matching skill row.
     ctx.skillQualityReports[art.id] = payload;
   } catch {
-    // Best-effort sidebar grades: one failed artifact falls back to no cached grade.
+    // A network failure or malformed report JSON leaves this skill without a cached grade while other skills continue loading.
     return;
   }
 }
@@ -250,8 +250,8 @@ async function dashboardPrefetchOneSkillReport(
  * Use after parallel report loads so the Skills tab can stamp freshness and select a default report.
  *
  * @param ctx - dashboard state to update; stale project/runner/generation batches are ignored
- * @param projectPath - project captured when prefetch started; empty means stale/no-op
- * @param runner - runner captured when prefetch started; empty means stale/no-op
+ * @param projectPath - project selected when prefetch started; results apply only while that project stays selected
+ * @param runner - runner selected when prefetch started; results apply only while that runner stays selected
  * @param generation - prefetch generation captured at request start; old values are ignored
  * @returns nothing; empty inventories leave no report selected
  */
@@ -284,8 +284,8 @@ function dashboardCompleteSkillReportPrefetch(
  * Use so the Skills sidebar can show grades without requiring one click per skill.
  *
  * @param ctx - dashboard state to update; stale responses are ignored by the prefetch helpers
- * @param projectPath - project captured when prefetch started; empty means stale/no-op
- * @param runner - runner captured when prefetch started; empty means stale/no-op
+ * @param projectPath - project selected when prefetch started; results apply only while that project stays selected
+ * @param runner - runner selected when prefetch started; results apply only while that runner stays selected
  * @param generation - prefetch generation captured at request start; old values are ignored
  * @returns nothing; empty inventories leave the sidebar without prefetched grades
  */
@@ -315,11 +315,8 @@ async function dashboardPrefetchSkillReports(
 }
 
 /**
- * Build setup scheduling and quality loading methods.
- *
- * Use when composing the dashboard app so setup prompts, quality generation, history, and Home summaries can share stale-response protection and
- * toast-based failure recovery.
- * Empty quality history leaves the view blank rather than failing the page.
+ * Expose Setup prompt scheduling and Quality loaders to dashboard actions.
+ * Shared helpers manage stale responses and toast-based recovery; an empty history leaves no saved reviews to display.
  */
 function dashboardSetupQualityLoadersFragment(): DashboardAppFragment {
   return {
@@ -334,8 +331,8 @@ function dashboardSetupQualityLoadersFragment(): DashboardAppFragment {
     },
 
     /**
-     * Generate a quality report for the selected project and runner.
-     * Use when the user runs a quality assessment from the dashboard.
+     * Prepare a quality-assessment prompt for the selected project and runner.
+     * Use when the user opens Quality or changes its assessment options.
      *
      * @param qualityOptions - generation options; empty options use the dashboard defaults
      * @returns nothing; quality state and errors update through the shared helper
@@ -389,13 +386,10 @@ function dashboardSetupQualityLoadersFragment(): DashboardAppFragment {
 }
 
 /**
- * Build skill-quality inventory loaders.
+ * Expose inventory refresh and report prefetch to the Skills view.
+ * Shared project, runner, and generation checks reject stale results; prefetch swallows individual failures without hiding other skills.
  *
- * Inventory and prefetch live together because both share the same project/runner generation guard: stale responses must not overwrite the Skills tab
- * after the user switches workspace or runner.
- * Prefetch swallows per-artifact failures as a best-effort fallback so one bad report does not hide the rest of the inventory.
- *
- * @returns dashboard fragment; empty methods are never returned because the Skills tab needs both loaders
+ * @returns app methods for refreshing the skill inventory and loading sidebar report grades
  */
 function dashboardSkillQualityInventoryLoadersFragment(): DashboardAppFragment {
   return {
@@ -413,8 +407,8 @@ function dashboardSkillQualityInventoryLoadersFragment(): DashboardAppFragment {
      * Prefetch reports for every skill artifact in parallel.
      * Use so the Skills sidebar can show grades before the user clicks each skill.
      *
-     * @param projectPath - project captured when prefetch started; empty means stale/no-op
-     * @param runner - runner captured when prefetch started; empty means stale/no-op
+     * @param projectPath - project selected when prefetch started; results apply only while that project stays selected
+     * @param runner - runner selected when prefetch started; results apply only while that runner stays selected
      * @param generation - prefetch generation captured at request start; old values are ignored
      * @returns nothing; stale prefetches stop without updating the Skills tab
      */

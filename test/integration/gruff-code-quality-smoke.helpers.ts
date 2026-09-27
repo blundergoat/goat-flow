@@ -1,9 +1,8 @@
 /**
- * Shared fixtures for the gruff-code-quality hook integration suites: disposable git
- * roots, mock gruff binaries (legacy analyse, native changed-region, gruff.hook.v1
- * contract, config-error shapes), the hook spawner, and invocation-log readers.
- * Imported by the smoke, contract, and provider-contract suites; each consumer
- * registers `after(cleanupHookTestDirs)` so temporary user projects are removed.
+ * Provides disposable projects, mock analyzers, hook launchers, and log readers for Gruff integration tests.
+ *
+ * Use these fixtures to reproduce a user's PostToolUse flow without changing their real checkout.
+ * Each consuming suite registers `after(cleanupHookTestDirs)` so temporary user projects are removed.
  */
 import {
   chmodSync,
@@ -15,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 
@@ -33,22 +32,97 @@ let payloadCounter = 0;
  * @returns nothing - deletes the registered temp directories from the filesystem
  */
 export function cleanupHookTestDirs(): void {
-  for (const dir of disposables) rmSync(dir, { recursive: true, force: true });
+  // Every registered fixture belongs to this test process and must disappear before the user sees a clean workspace.
+  for (const disposablePath of disposables) {
+    rmSync(disposablePath, { recursive: true, force: true });
+  }
 }
 
 /**
  * Resolve a tool's absolute path from PATH.
+ * Use when a fixture must launch the same Git, Bash, or jq executable available to the user's shell.
  *
- * @param name - binary name to look up (e.g. "bash")
- * @returns the first matching absolute path; throws when the tool is missing
+ * @param toolName - non-empty binary name such as `bash`; empty text cannot identify a user-installed tool
+ * @returns First matching absolute path; never empty when lookup succeeds.
+ * @throws When no matching executable exists on the user's PATH.
  */
-export function resolveTool(name: string): string {
-  for (const dir of (process.env.PATH ?? "").split(":")) {
-    if (!dir) continue;
-    const candidate = join(dir, name);
-    if (existsSync(candidate)) return candidate;
+export function resolveTool(toolName: string): string {
+  // Windows command shims may add PATHEXT suffixes; an explicit extension is already exact.
+  const executableSuffixes =
+    process.platform === "win32" && extname(toolName).length === 0
+      ? [
+          "",
+          ...(process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
+            .split(";")
+            .filter((executableSuffix) => executableSuffix.length > 0),
+        ]
+      : [""];
+  // Search in host order so the fixture selects the same tool a user would launch.
+  for (const pathEntry of (process.env.PATH ?? "").split(delimiter)) {
+    const pathDirectory = pathEntry.replace(/^"(.*)"$/u, "$1");
+    // Empty PATH entries cannot identify a stable executable location for the fixture.
+    if (!pathDirectory) continue;
+    // Try each host-supported suffix before moving to the user's next PATH directory.
+    for (const executableSuffix of executableSuffixes) {
+      const executableCandidatePath = join(
+        pathDirectory,
+        `${toolName}${executableSuffix}`,
+      );
+      // The first existing candidate preserves the user's normal PATH precedence.
+      if (existsSync(executableCandidatePath)) return executableCandidatePath;
+    }
   }
-  throw new Error(`required tool not found on PATH: ${name}`);
+  throw new Error(`required tool not found on PATH: ${toolName}`);
+}
+
+/**
+ * Convert a native PATH list into drive-mounted paths Git Bash accepts.
+ * Use before hook launch so Windows users exercise the same fixture sandbox as POSIX users.
+ *
+ * @param nativePathList - host PATH text; empty remains empty and exposes missing-tool behavior
+ * @returns Git Bash-compatible PATH text, or the original text on non-Windows hosts.
+ */
+function convertToGitBashPathList(nativePathList: string): string {
+  // POSIX paths already use the spelling Bash expects, including an intentionally empty sandbox.
+  if (process.platform !== "win32") return nativePathList;
+  return nativePathList
+    .replace(
+      /(^|:)([A-Za-z]):[\\/]/gu,
+      (_matchedDrivePrefix, pathSeparatorPrefix: string, driveLetter: string) =>
+        `${pathSeparatorPrefix}/${driveLetter.toLowerCase()}/`,
+    )
+    .replaceAll("\\", "/");
+}
+
+/**
+ * Build the hook PATH while preserving each fixture's analyzer sandbox.
+ * Use when `/usr/bin` means system tools are allowed; custom paths that omit jq stay isolated.
+ *
+ * @param pathPrefix - requested fixture PATH; empty deliberately prevents tool discovery
+ * @returns Host-compatible PATH passed to the user's simulated hook process.
+ */
+function buildHookSearchPath(pathPrefix: string): string {
+  const normalizedPathPrefix = convertToGitBashPathList(pathPrefix);
+  // Only Windows needs native Git and jq folders added to the fixture's POSIX system-path sentinel.
+  if (
+    process.platform !== "win32" ||
+    !normalizedPathPrefix
+      .split(":")
+      .some((pathEntry) => pathEntry === "/usr/bin")
+  ) {
+    return normalizedPathPrefix;
+  }
+  const requiredHostToolDirectories = ["git", "jq"].map((toolName) =>
+    convertToGitBashPathList(dirname(resolveTool(toolName))),
+  );
+  return [
+    ...new Set([
+      ...normalizedPathPrefix.split(":"),
+      ...requiredHostToolDirectories,
+    ]),
+  ]
+    .filter((pathEntry) => pathEntry.length > 0)
+    .join(":");
 }
 
 /**
@@ -139,7 +213,7 @@ exit 1
  * @returns nothing - mutates the repo and fails the test on a non-zero exit
  */
 export function git(root: string, args: string[]): void {
-  const result = spawnSync("git", args, {
+  const result = spawnSync(resolveTool("git"), args, {
     cwd: root,
     encoding: "utf-8",
     env: { ...process.env, PATH: "/usr/bin:/bin" },
@@ -189,12 +263,16 @@ export function runHook(
     // File-backed stdin keeps Bash `cat` readers from waiting forever for EOF
     // under Codex's sandboxed child-process plumbing.
     return spawnSync(
-      "bash",
+      resolveTool("bash"),
       ["-c", 'bash "$1" < "$2"', "gruff-code-quality-test", HOOK, payloadPath],
       {
         cwd: root,
         encoding: "utf-8",
-        env: { ...process.env, ...extraEnv, PATH: pathPrefix },
+        env: {
+          ...process.env,
+          ...extraEnv,
+          PATH: buildHookSearchPath(pathPrefix),
+        },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -244,6 +322,7 @@ export function makeEditedGruffContractProject(
     exitStatus?: number;
     standardError?: string;
     delaySeconds?: number;
+    capabilities?: string;
   } = {},
 ): string {
   const projectRoot = makeRoot();
@@ -477,6 +556,320 @@ const DEFAULT_CONTRACT_ENVELOPE =
 export const CLEAN_GRUFF_CONTRACT_ENVELOPE =
   '{"contractVersion":"gruff.hook.v1","findings":[],"suppressed":{"count":0},"ignored":{"paths":[]},"config":{"schemaOk":true,"error":null}}';
 
+/** Capability advertisement of a pre-v2 analyzer; contract mocks print it unless a case supplies another. */
+const V1_GRUFF_CAPABILITIES =
+  '{"contractVersion":"gruff.hook.v1","analyzer":{"name":"gruff-ts","version":"9.9.9"},"supports":{"changedRanges":true,"diff":true,"baseline":true,"scopeField":true,"metadata":true,"stableIdentity":true,"ignoreReport":true,"newOnly":true},"flags":{"changedRanges":"--changed-ranges","diff":"--diff","baseline":"--baseline"},"flagOrder":"any"}';
+
+/** Capability advertisement measured from gruff-ts 0.5.0 on 2026-09-19; every current port advertises this contract. */
+export const V2_GRUFF_CAPABILITIES =
+  '{"contractVersion":"gruff.hook.v2","analyzer":{"name":"gruff-ts","version":"0.5.0"},"supports":{"baseline":true,"baselineV3":true,"changedRanges":true,"confidenceGate":true,"deepScanBudget":true,"diagnostics":true,"diff":true,"ignoreReport":true,"metadata":true,"newOnly":true,"scopeField":true,"stableIdentity":true},"flags":{"baseline":"--baseline","changedRanges":"--changed-ranges","deepScanBudget":"--deep-scan-budget","diff":"--diff","failOnDiagnostics":"--fail-on-diagnostics","minConfidence":"--min-confidence"},"flagOrder":"any"}';
+
+/**
+ * Builds one gruff.hook.v2 result shaped like the envelope gruff-ts 0.5.0 returned for a single file.
+ * Contract: every key the v2 schema requires is present; a case changes one field and the rest keep their measured clean values.
+ *
+ * @param overrides - top-level envelope keys to replace; an empty object gives a clean one-file result
+ * @returns JSON text for the mock analyzer to print
+ */
+export function v2GruffEnvelope(
+  overrides: Record<string, unknown> = {},
+): string {
+  return JSON.stringify({
+    contractVersion: "gruff.hook.v2",
+    analyzer: { name: "gruff-ts", version: "0.5.0" },
+    run: {
+      mode: "full",
+      scope: "file",
+      paths: ["src/sample.ts"],
+      analysedFiles: 1,
+      baseline: { applied: false, schemaVersion: null, path: null },
+    },
+    findings: [],
+    diagnostics: [],
+    suppressed: { count: 0 },
+    suppressions: [],
+    ignored: { paths: [] },
+    config: { schemaOk: true, error: null },
+    ...overrides,
+  });
+}
+
+/**
+ * Builds one gruff.hook.v2 finding with the required keys a measured port emits.
+ * Contract: the finding always names the edited fixture file and carries every key the v2 schema requires.
+ *
+ * @param ruleId - rule identifier shown to the user
+ * @param scope - `file`, `project` or `symbol`; symbol findings are filtered by their line span
+ * @param line - first reported line
+ * @param endLine - last reported line; equal to `line` for a one-line span
+ * @returns finding object for `v2GruffEnvelope({ findings })`
+ */
+export function v2GruffFinding(
+  ruleId: string,
+  scope: "file" | "project" | "symbol",
+  line: number,
+  endLine: number,
+): Record<string, unknown> {
+  return {
+    ruleId,
+    file: "src/sample.ts",
+    line,
+    endLine,
+    severity: "warning",
+    confidence: "high",
+    pillar: ruleId.split(".")[0],
+    message: `${ruleId} finding`,
+    remediation: "fix it",
+    symbol: scope === "symbol" ? "sample" : null,
+    scope,
+    symbolOrdinal: null,
+    stableIdentity: `${ruleId}:${line}`,
+    fingerprint: `${ruleId}-${line}`,
+    baselineStatus: null,
+    metadata: {},
+  };
+}
+
+/**
+ * Writes a pre-contract analyzer whose help names its own `--changed-scope` values, as each measured port does.
+ * It prints a note on stderr before clean JSON, and rejects `file` scope with exit 2 unless its help lists `file`.
+ * Contract: argv is appended to `gruff-args.log` under the working directory, one line per analysis.
+ *
+ * @param root - project root that receives `bin/gruff-ts`
+ * @param scopeHelp - help lines describing `--changed-scope`, copied from a real port's wording
+ * @returns absolute path to the created bin directory
+ */
+export function writeLegacyScopeGruff(root: string, scopeHelp: string): string {
+  const binDir = join(root, "bin");
+  mkdirSync(binDir, { recursive: true });
+  const acceptsFileScope = /\bfile\b/u.test(scopeHelp);
+  writeFileSync(
+    join(binDir, "gruff-ts"),
+    `#!/usr/bin/env bash
+if [[ "$1" == "hook" ]]; then exit 2; fi
+if [[ "$1" == "analyse" && "$2" == "--help" ]]; then
+  cat <<'HELP'
+Usage: gruff-ts analyse [options] [paths...]
+  --format <format>
+  --fail-on <severity>
+  --no-baseline
+  --changed-ranges <ranges>
+${scopeHelp}
+HELP
+  exit 0
+fi
+printf '%s\\n' "$*" >> "$PWD/gruff-args.log"
+if [[ "${acceptsFileScope}" == "false" && " $* " == *" --changed-scope file "* ]]; then
+  printf 'unsupported --changed-scope "file" (want symbol or hunk)\\n' >&2
+  exit 2
+fi
+printf 'gruff-ts: note: using default rules\\n' >&2
+printf '{"findings":[]}\\n'
+`,
+  );
+  chmodSync(join(binDir, "gruff-ts"), 0o755);
+  return binDir;
+}
+
+/** A clean v2 run that analysed nothing, as a port reports an ignored or unreadable operand. */
+const V2_RUN_WITHOUT_ANALYSIS = {
+  mode: "full",
+  scope: "file",
+  paths: ["src/sample.ts"],
+  analysedFiles: 0,
+  baseline: { applied: false, schemaVersion: null, path: null },
+};
+
+/** One measured-shape v2 exchange and the neutral result the edit must produce. */
+export interface V2OutcomeCase {
+  name: string;
+  envelope: string;
+  behavior?: {
+    exitStatus?: number;
+    standardError?: string;
+    delaySeconds?: number;
+  };
+  environment?: NodeJS.ProcessEnv;
+  outcome: string;
+  reasonCode: string;
+  codes: string[];
+  message?: RegExp;
+}
+
+/** Measured-shape v2 exchanges covering every outcome class the hook must keep distinct. */
+export const V2_OUTCOME_CASES: V2OutcomeCase[] = [
+  {
+    name: "a clean result passes",
+    envelope: v2GruffEnvelope(),
+    outcome: "pass",
+    reasonCode: "completed-clean",
+    codes: [],
+  },
+  {
+    name: "file-scope and overlapping symbol findings surface while unrelated lines stay out",
+    envelope: v2GruffEnvelope({
+      findings: [
+        v2GruffFinding("size.file-length", "file", 1, 1),
+        v2GruffFinding("complexity.cyclomatic", "symbol", 2, 4),
+        v2GruffFinding("naming.short", "symbol", 9, 9),
+      ],
+    }),
+    outcome: "advisory",
+    reasonCode: "findings-reported",
+    codes: ["size.file-length", "complexity.cyclomatic"],
+  },
+  {
+    name: "the finding cap keeps the first attributable finding",
+    envelope: v2GruffEnvelope({
+      findings: [
+        v2GruffFinding("size.file-length", "file", 1, 1),
+        v2GruffFinding("complexity.cyclomatic", "symbol", 3, 3),
+      ],
+    }),
+    environment: { GRUFF_CODE_QUALITY_MAX_FINDINGS: "1" },
+    outcome: "advisory",
+    reasonCode: "findings-reported",
+    codes: ["size.file-length"],
+  },
+  {
+    name: "the severity floor keeps an advisory finding out of the list",
+    envelope: v2GruffEnvelope({
+      findings: [
+        {
+          ...v2GruffFinding("naming.short", "symbol", 3, 3),
+          severity: "advisory",
+        },
+      ],
+    }),
+    environment: { GRUFF_CODE_QUALITY_MIN_SEVERITY: "warning" },
+    outcome: "advisory",
+    reasonCode: "findings-reported",
+    codes: [],
+  },
+  {
+    name: "exit 1 with a complete payload still reports its findings",
+    envelope: v2GruffEnvelope({
+      findings: [v2GruffFinding("complexity.cyclomatic", "symbol", 3, 3)],
+    }),
+    behavior: { exitStatus: 1 },
+    outcome: "advisory",
+    reasonCode: "findings-reported",
+    codes: ["complexity.cyclomatic"],
+  },
+  {
+    name: "exit 2 with a fatal diagnostic is a failed analysis, not malformed output",
+    envelope: v2GruffEnvelope({
+      run: V2_RUN_WITHOUT_ANALYSIS,
+      diagnostics: [
+        {
+          type: "unreadable-input",
+          severity: "fatal",
+          file: null,
+          line: null,
+          message: "cannot read the operand",
+        },
+      ],
+    }),
+    behavior: {
+      exitStatus: 2,
+      standardError: "gruff-ts: cannot read the operand",
+    },
+    outcome: "unavailable",
+    reasonCode: "hook-unavailable",
+    codes: ["analyzer-failed"],
+    message: /cannot read the operand/u,
+  },
+  {
+    name: "a warning diagnostic without findings is reported",
+    envelope: v2GruffEnvelope({
+      diagnostics: [
+        {
+          type: "config",
+          severity: "warning",
+          file: null,
+          line: null,
+          message: "rule naming.short is deprecated",
+        },
+      ],
+    }),
+    outcome: "advisory",
+    reasonCode: "findings-reported",
+    codes: ["analyzer-diagnostic"],
+    message: /rule naming\.short is deprecated/u,
+  },
+  {
+    name: "an info diagnostic keeps a clean pass",
+    envelope: v2GruffEnvelope({
+      diagnostics: [
+        {
+          type: "config",
+          severity: "info",
+          file: null,
+          line: null,
+          message: "using defaults",
+        },
+      ],
+    }),
+    outcome: "pass",
+    reasonCode: "completed-clean",
+    codes: [],
+  },
+  {
+    name: "a run that analysed no file is incomplete coverage",
+    envelope: v2GruffEnvelope({ run: V2_RUN_WITHOUT_ANALYSIS }),
+    outcome: "incomplete",
+    reasonCode: "coverage-incomplete",
+    codes: ["analyzer-analysed-nothing"],
+  },
+  {
+    name: "a config-ignored file is not applicable",
+    envelope: v2GruffEnvelope({
+      run: V2_RUN_WITHOUT_ANALYSIS,
+      ignored: {
+        paths: [{ path: "src/sample.ts", source: "config", pattern: "src/**" }],
+      },
+    }),
+    outcome: "advisory",
+    reasonCode: "findings-reported",
+    codes: ["analysis-not-applicable"],
+  },
+  {
+    name: "malformed output is an invalid response",
+    envelope: "not json",
+    outcome: "incomplete",
+    reasonCode: "output-invalid",
+    codes: ["analyzer-response-invalid"],
+  },
+  {
+    name: "a refused config with null diagnostics shows the analyzer's own message",
+    envelope: v2GruffEnvelope({
+      run: V2_RUN_WITHOUT_ANALYSIS,
+      diagnostics: null,
+      config: {
+        schemaOk: false,
+        error: {
+          message: "missing schemaVersion",
+          remediation: "regenerate the config",
+        },
+      },
+    }),
+    behavior: { exitStatus: 2 },
+    outcome: "unavailable",
+    reasonCode: "hook-unavailable",
+    codes: ["analyzer-config-invalid"],
+    message: /^missing schemaVersion$/u,
+  },
+  {
+    name: "a timeout is incomplete",
+    envelope: v2GruffEnvelope(),
+    behavior: { delaySeconds: 2 },
+    environment: { GRUFF_CODE_QUALITY_TIMEOUT_SECONDS: "1" },
+    outcome: "incomplete",
+    reasonCode: "execution-timeout",
+    codes: ["analyzer-timeout"],
+  },
+];
+
 /** Finding response used when provider feedback must show one changed-file warning. */
 export const FINDING_GRUFF_CONTRACT_ENVELOPE =
   '{"contractVersion":"gruff.hook.v1","findings":[{"ruleId":"size.file-length","pillar":"size","severity":"warning","scope":"file","file":"src/sample.ts","line":1,"message":"file too long","remediation":"split it"},{"ruleId":"naming.short","pillar":"naming","severity":"advisory","scope":"line","file":"src/sample.ts","line":3,"message":"too short"}],"suppressed":{"count":0},"ignored":{"paths":[]},"config":{"schemaOk":true,"error":null}}';
@@ -488,8 +881,8 @@ export const FINDING_GRUFF_CONTRACT_ENVELOPE =
  * legacy analyse path). Logs the `hook` argv to gruff-hook-args.log.
  *
  * @param root - temp project root the shim is installed under
- * @param envelope - gruff.hook.v1 JSON the mock emits from `hook --format json`
- * @param behavior - optional exit, stderr, and delay controls; omitted values model a clean exchange
+ * @param envelope - hook JSON the mock emits from `hook --format json`
+ * @param behavior - optional exit, stderr, delay and capability controls; omitted values model a clean v1 exchange
  * @returns absolute path to the created node_modules/.bin directory
  */
 export function writeContractGruffBinary(
@@ -499,6 +892,7 @@ export function writeContractGruffBinary(
     exitStatus?: number;
     standardError?: string;
     delaySeconds?: number;
+    capabilities?: string;
   } = {},
 ): string {
   const binDir = join(root, "node_modules", ".bin");
@@ -518,7 +912,7 @@ export function writeContractGruffBinary(
 if [[ "$1" == "hook" && " $* " == *" --capabilities "* ]]; then
   printf 'capabilities\n' >> "$PWD/gruff-capabilities.log"
   cat <<'JSON'
-{"contractVersion":"gruff.hook.v1","analyzer":{"name":"gruff-ts","version":"9.9.9"},"supports":{"changedRanges":true,"diff":true,"baseline":true,"scopeField":true,"metadata":true,"stableIdentity":true,"ignoreReport":true,"newOnly":true},"flags":{"changedRanges":"--changed-ranges","diff":"--diff","baseline":"--baseline"},"flagOrder":"any"}
+${behavior.capabilities ?? V1_GRUFF_CAPABILITIES}
 JSON
   exit 0
 fi
@@ -551,6 +945,7 @@ export function readInvocations(root: string): string[] {
     ).trim();
     return content.length > 0 ? content.split("\n") : [];
   } catch (error) {
+    // A missing log means the simulated user action never reached Gruff, which is valid for skip and fail-open scenarios.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
@@ -568,6 +963,7 @@ export function readArgumentInvocations(root: string): string[] {
     const content = readFileSync(join(root, "gruff-args.log"), "utf-8").trim();
     return content.length > 0 ? content.split("\n") : [];
   } catch (error) {
+    // A missing argv log means the simulated user action never invoked Gruff, while other read errors still expose fixture failure.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }

@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
@@ -87,6 +88,20 @@ describe("quality history and diff CLI", () => {
         "utf-8",
       );
     }
+    const currentReportPath = join(
+      root,
+      ".goat-flow",
+      "logs",
+      "quality",
+      "2026-04-29-1100-claude-ccccc.json",
+    );
+    const currentReport = JSON.parse(readFileSync(currentReportPath, "utf-8"));
+    currentReport.score_rationale = makeQualityScoreRationale();
+    writeFileSync(
+      currentReportPath,
+      `${JSON.stringify(currentReport, null, 2)}\n`,
+      "utf-8",
+    );
     // Seed a codex-agent entry by cloning the latest claude fixture so history
     // filtering has cross-agent data to discriminate.
     const codexSource = JSON.parse(
@@ -129,6 +144,15 @@ describe("quality history and diff CLI", () => {
       /2026-04-29 \| claude \| agent-setup \| 85 \(\+5\) \| 80 \| 1 \| 1 \| 0/,
     );
     assert.match(history.stdout, /Use `--all` to lift the 20-run default/i);
+    assert.match(history.stdout, /Score rationale/u);
+    assert.match(
+      history.stdout,
+      /2026-04-29-1100-claude-ccccc[\s\S]*setup\.accuracy 25\/25[\s\S]*evidence: The cited source and runtime evidence support this axis score\./u,
+    );
+    assert.match(
+      history.stdout,
+      /2026-04-15-1000-claude-bbbbb[\s\S]*rationale unavailable \(legacy report\)/u,
+    );
 
     const historyJson = runCLI(root, [
       "quality",
@@ -154,6 +178,14 @@ describe("quality history and diff CLI", () => {
         "2026-04-01-0900-claude-aaaaa",
       ],
     );
+    assert.deepEqual(
+      historyPayload.reports[0].report.score_rationale,
+      makeQualityScoreRationale(),
+    );
+    assert.equal(
+      Object.hasOwn(historyPayload.reports[1].report, "score_rationale"),
+      false,
+    );
 
     const diff = runCLI(root, [
       "quality",
@@ -169,6 +201,27 @@ describe("quality history and diff CLI", () => {
     assert.equal(diffPayload.persisted.length, 1);
     assert.equal(diffPayload.from.id, "2026-04-01-0900-claude-aaaaa");
     assert.equal(diffPayload.to.id, "2026-04-15-1000-claude-bbbbb");
+
+    const diffText = runCLI(root, [
+      "quality",
+      "diff",
+      "2026-04-15-1000-claude-bbbbb:2026-04-29-1100-claude-ccccc",
+      "--format",
+      "text",
+    ]);
+    assert.equal(diffText.status, 0, diffText.stderr);
+    assert.match(
+      diffText.stdout,
+      /Setup 80\/100 → 85\/100 \(\+5\)\. System 75\/100 → 80\/100 \(\+5\)\./u,
+    );
+    assert.match(
+      diffText.stdout,
+      /From 2026-04-15-1000-claude-bbbbb[\s\S]*rationale unavailable \(legacy report\)/u,
+    );
+    assert.match(
+      diffText.stdout,
+      /To 2026-04-29-1100-claude-ccccc[\s\S]*system\.learnability 20\/25[\s\S]*deduction: The cited rating-band evidence explains the points deducted\./u,
+    );
   });
 
   // Fixture writes mode variants because cross-mode diffs must not pair implicitly by timestamp.

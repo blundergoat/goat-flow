@@ -2,7 +2,6 @@
 
 ## Requirements for the commit message
 
-
 ### Branch-derived prefix
 
 Read the branch with `git branch --show-current` and match the output against:
@@ -19,7 +18,6 @@ Read the branch with `git branch --show-current` and match the output against:
 
 Empty output means no prefix. Do not infer one from history, recent commits, or the diff.
 
-
 ### Message shape
 
 ```
@@ -28,7 +26,6 @@ Empty output means no prefix. Do not infer one from history, recent commits, or 
 Body explaining why the change is needed.
 - one fact per bullet, naming real files, behaviours, APIs, commands, or versions
 ```
-
 
 ### Subject rules
 
@@ -49,7 +46,6 @@ clarify, polish, tweak*. Use a verb that names the actual edit: *add, remove, re
 fix, deny, allow, gate, skip, cache, invalidate, log, retry, bump*. `update` earns its
 place only when the change is literally the update of a pinned value, and `bump` usually says
 that better.
-
 
 ## Body rules
 
@@ -82,8 +78,6 @@ GOOD: The installer failed on paths with spaces because $TARGET was unquoted.
       - add a regression test using a spaced tmpdir
 ```
 
-
-
 ## Never include
 
 - Secrets, tokens, credentials, or connection strings - in any line, including examples.
@@ -105,4 +99,3 @@ expanded unquoted at three call sites.
 - quote all path expansions in workflow/install-hooks.sh
 - add a regression test using a spaced tmpdir
 ```
-

@@ -1,37 +1,28 @@
 /**
- * Process- and global-state fixtures for tests that must temporarily replace a
- * `process.env` variable or a global such as `Date`. Use these instead of
- * writing to the global inline: each snapshots the prior value, applies the
- * override, and restores it in `finally` even when the body throws - which
- * keeps the mutation scoped to one callback and isolates the fixture, the shape
- * gruff's `test-quality.global-state-mutation` rule asks for (the rule flags any
- * `process.env.X =` / `globalThis.X =` text inside a test block, regardless of
- * restore). (search: "test-quality.global-state-mutation")
+ * Temporarily replace environment values or the clock while testing a user's configuration or date-dependent output.
  *
- * Footgun: `process.env` and `globalThis` are process-wide, so these helpers
- * bound a mutation in time, not across truly-parallel tests. Two tests that
- * override the same key concurrently can still race - keep them in separate
- * files or use distinct keys.
+ * Use the returned cleanup or scoped callback to restore the original state even when a test fails.
+ * These values are process-wide, so tests overriding the same key must not run concurrently in one process.
  */
 
 /**
- * Apply `process.env` overrides and return a function that restores the prior
- * values. Use in an imperative `try { ... } finally { restore() }` when the body
- * is long enough that callback-wrapping (`withEnv`) would hurt readability, or
- * when env teardown must interleave with other cleanup (e.g. a temp project).
+ * Apply environment overrides for a test and return cleanup for its finally block.
+ * Use when teardown must also restore other fixtures or a callback would obscure the test.
  *
- * @param overrides - env keys to set; each key's prior value (including the
- *   "previously unset" case) is captured so the returned function can restore it.
- * @returns a restore function that reverts every overridden key to its prior value.
+ * @param overrides - environment values for the test; an empty object changes nothing
+ * @returns cleanup that restores previous values and removes keys that were originally unset
  */
 export function setEnv(overrides: Record<string, string>): () => void {
   const previous = new Map<string, string | undefined>();
+  // Keep each key's original value so this test cannot leave a changed setting for the next case.
   for (const [key, value] of Object.entries(overrides)) {
     previous.set(key, process.env[key]);
     process.env[key] = value;
   }
   return () => {
+    // Restore every overridden setting, including those the test introduced for the first time.
     for (const [key, prior] of previous) {
+      // A previously unset variable must disappear again so later tests exercise the normal default.
       if (prior === undefined) {
         delete process.env[key];
       } else {
@@ -42,13 +33,11 @@ export function setEnv(overrides: Record<string, string>): () => void {
 }
 
 /**
- * Run `fn` with `process.env` overrides applied, restoring prior values after.
- * Prefer this scoped form over {@link setEnv} when the body is a single call or
- * short block, so restore can't be forgotten.
+ * Run a test callback with temporary environment values, then restore them even if the callback throws.
  *
- * @param overrides - env keys to set for the duration of `fn`.
- * @param block - work to run under the overrides; may be synchronous or async.
- * @returns whatever `fn` resolves to, after env has been restored.
+ * @param overrides - environment values for this callback; an empty object leaves the environment unchanged
+ * @param block - synchronous or asynchronous test work to finish before restoring the environment
+ * @returns the callback's result after restoration; callback failures propagate
  */
 export async function withEnv<T>(
   overrides: Record<string, string>,
@@ -63,19 +52,18 @@ export async function withEnv<T>(
 }
 
 /**
- * Run `fn` with the global `Date` constructor replaced by `fake`, then restore
- * the real `Date`. Use for tests that pin "now" or calendar getters.
+ * Pin the global clock for a synchronous test of date-dependent user output, then restore the original constructor.
  *
- * @param fake - stand-in `Date` constructor, typically a local `class extends Date`.
- * @param block - synchronous work to run while the stub is installed.
- * @returns whatever `fn` returns, after the real `Date` has been restored.
+ * @param fake - Date constructor supplying the test's chosen time
+ * @param block - synchronous test work to finish before restoring the clock
+ * @returns the callback's result after restoration; callback failures propagate
  */
 export function withStubbedDate<T>(fake: DateConstructor, block: () => T): T {
-  const real = globalThis.Date;
+  const originalDate = globalThis.Date;
   globalThis.Date = fake;
   try {
     return block();
   } finally {
-    globalThis.Date = real;
+    globalThis.Date = originalDate;
   }
 }

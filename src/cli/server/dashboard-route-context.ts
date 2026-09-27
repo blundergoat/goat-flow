@@ -1,11 +1,10 @@
 /**
- * Factory for the shared dashboard route context.
+ * Create the shared settings and IO helpers used while dashboard requests read or update the selected project.
  *
- * Resolves the per-server state-file locations once, allocates the in-memory quality audit cache, and bundles the IO helpers (evidence recording,
- * path validation, error-to-status mapping) that every non-terminal route closure depends on.
- * Centralising these here keeps individual route files free of validation and persistence wiring.
+ * State-file locations and the quality-audit cache are created once per server, so route groups share persistence and recent audit results.
+ * Path validation, response-status mapping, and project event recording give those routes a consistent request boundary.
  *
- * Consumed by dashboard-routes.ts; the context shape is defined in dashboard-route-types.ts.
+ * dashboard-routes.ts consumes the context; dashboard-route-types.ts defines its contract.
  */
 import { recordEvidenceEvent } from "../evidence/envelope.js";
 import {
@@ -19,13 +18,10 @@ import type {
 } from "./dashboard-route-types.js";
 
 /**
- * Build the per-server route context from the server's raw dependency bag, resolving state-file paths
- * and wiring the shared IO helpers exactly once per server instance.
+ * Connect the server's dependencies to saved-project state, recent quality audits, and the validation helpers used by dashboard requests.
  *
- * @param deps - server-owned dependencies (default path, dev flag, template/version, JSON responder,
- *   body reader) that the helpers close over
- * @returns the route context: the dependencies plus resolved state-file paths, a fresh quality audit
- *   cache, and the evidence/path-validation/error-status helpers
+ * @param deps - server settings and IO helpers, including its default project, page template, response writer, and request-body reader
+ * @returns shared route dependencies, resolved state-file paths, an initially empty audit cache, and evidence and validation helpers
  */
 export function createDashboardRouteContext(
   deps: DashboardRouteDependencies,
@@ -45,8 +41,8 @@ export function createDashboardRouteContext(
     legacyProjectsListFile,
     qualityAuditCache: new Map(),
     /**
-     * Record one dashboard interaction into the evidence trace, tagged with the server actor and the acting project root.
-     * Writes to the evidence envelope as a side effect; fire-and-forget from the route's perspective.
+     * Record a dashboard action in the acting project's timeline with the server as actor.
+     * The evidence writer reports append failures without throwing, so an unavailable trace does not reject the user's action.
      */
     recordDashboardEvent(projectPath, eventKind, payload): void {
       recordEvidenceEvent({
@@ -58,16 +54,14 @@ export function createDashboardRouteContext(
       });
     },
     /**
-     * Validate a caller-supplied path for the given purpose, substituting the server default when the raw value is empty.
-     * Throws LocalPathValidationError when the resolved path is outside the allowed roots, which routes map to a 400 via responseStatusForError.
+     * Resolve a request's project path; an absent or empty value selects the server's launch project.
+     * Throws LocalPathValidationError for missing, non-directory, or policy-blocked paths so routes can explain the rejection with a 400.
      */
     validatedPath(raw, purpose): string {
+      // Requests without a project selection operate on the folder from which this dashboard server was launched.
       return validateLocalPath(raw || deps.absDefault, purpose).path;
     },
-    /**
-     * Choose the HTTP status for a caught route error: 400 for a path-validation failure (caller sent a
-     * bad path), otherwise the caller-supplied fallback (typically 500). Pure mapping, no side effects.
-     */
+    // Report rejected project paths as 400 responses; other failures retain the status chosen by the route.
     responseStatusForError(err, fallback): number {
       return err instanceof LocalPathValidationError ? 400 : fallback;
     },

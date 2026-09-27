@@ -443,6 +443,35 @@ describe("scanContentQuality: unresolved readiness markers", () => {
 });
 
 describe("semantic anchor path boundaries", () => {
+  it("preserves literal backslashes in backticks and decodes quoted needles", () => {
+    const needle = String.raw`Playwright\\s+MCP`;
+    const fs = stubFS({
+      exists: () => true,
+      readFile: () => needle,
+    });
+    const evaluations = evaluateSearchAnchors(
+      fs,
+      [
+        `\`src/present.ts\` (search: \`${needle}\`)`,
+        `(\`src/present.ts\`, search: \`${needle}\`)`,
+        `\`src/present.ts\` (search: ${JSON.stringify(needle)})`,
+        `(\`src/present.ts\`, search: ${JSON.stringify(needle)})`,
+        `\`src/present.ts\` (search: \`absent\\\\needle\`)`,
+      ].join("\n"),
+    );
+
+    assert.deepEqual(
+      evaluations.map(({ needle, status }) => ({ needle, status })),
+      [
+        { needle, status: "valid" },
+        { needle, status: "valid" },
+        { needle, status: "valid" },
+        { needle, status: "valid" },
+        { needle: String.raw`absent\\needle`, status: "stale" },
+      ],
+    );
+  });
+
   it("does not inspect absolute or parent-traversal citation paths", () => {
     const inspectedPaths: string[] = [];
     const fs = stubFS({
@@ -468,6 +497,35 @@ describe("semantic anchor path boundaries", () => {
 
     assert.deepEqual(evaluations, []);
     assert.deepEqual(inspectedPaths, []);
+  });
+
+  it("checks path-in-parens combined citations and folds line-wrapped needles", () => {
+    const fs = stubFS({
+      exists: () => true,
+      readFile: (path) =>
+        path === "src/present.ts"
+          ? "the anchor text is here on one line"
+          : "unrelated file content",
+    });
+
+    const evaluations = evaluateSearchAnchors(
+      fs,
+      [
+        "(`src/present.ts`, search: `the anchor text is here`)",
+        "(`src/present.ts`, search: `the anchor text is\n   here`)",
+        "(`src/present.ts`, search: `absent needle text`)",
+      ].join("\n"),
+    );
+
+    assert.equal(evaluations.length, 3);
+    assert.equal(evaluations[0]?.status, "valid");
+    assert.equal(evaluations[0]?.filePath, "src/present.ts");
+    assert.equal(evaluations[0]?.needle, "the anchor text is here");
+    // A needle wrapped across lines folds to one space and still matches a single-line target.
+    assert.equal(evaluations[1]?.status, "valid");
+    // The combined form is now extracted, so a moved or absent needle is caught, not skipped.
+    assert.equal(evaluations[2]?.status, "stale");
+    assert.equal(evaluations[2]?.reason, "missing-needle");
   });
 });
 
@@ -772,6 +830,8 @@ describe("runContentQualityChecks: target discovery", () => {
     const targetPath = "src/cli/current.ts";
     const localArtifacts = [
       localPlan,
+      ".goat-flow/tasks/1.6.1/M04-skill-evaluator-shape-detection.md",
+      ".goat-flow/tasks/README.md",
       customLogReadme,
       privateToolDoc,
       antigravitySessionDoc,
@@ -835,6 +895,30 @@ describe("runContentQualityChecks: target discovery", () => {
     );
 
     assert.equal(staleAnchors.length, 0);
+  });
+
+  it("checks a direct citation after sentence punctuation without borrowing across prose", () => {
+    const targetPath = "src/cli/current.ts";
+    const fs = stubFS({
+      exists: (path) => path === targetPath,
+      readFile: () => "export const currentSymbol = true;\n",
+    });
+
+    const directGaps = [" ", "\n", ". ", ".\n"];
+    const unrelatedGaps = [". Other claim ", ".\n\n", ". See elsewhere "];
+    for (const gap of [...directGaps, ...unrelatedGaps]) {
+      const results = ["currentSymbol", "retiredSymbol"].flatMap((needle) =>
+        evaluateSearchAnchors(
+          fs,
+          `\`${targetPath}\`${gap}(search: \`${needle}\`)`,
+        ),
+      );
+      assert.deepEqual(
+        results.map((result) => result.status),
+        directGaps.includes(gap) ? ["valid", "stale"] : [],
+        JSON.stringify(gap),
+      );
+    }
   });
 
   it("validates root dotfile search anchors", () => {

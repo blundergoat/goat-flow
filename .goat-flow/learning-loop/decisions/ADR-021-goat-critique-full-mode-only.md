@@ -2,86 +2,45 @@
 
 **Status:** Accepted
 **Date:** 2026-04-19
-**Updated:** 2026-05-18 - stale file-line citations replaced with current anchors or historical notes where Quick-mode text was removed.
-**Updated:** 2026-05-27 - Runtime slot updated per ADR-020; delegation revisit trigger now names Claude, Codex, Antigravity, and Copilot.
-**Updated:** 2026-07-17 - lifecycle and delegation counts aligned with mandatory meta-audit and outcome capture.
-**Updated:** 2026-08-04 - refreshed skill and factual-drift anchors after contract refactors.
-**Updated:** 2026-08-15 - absorbed ADR-011 (critique is a core feature, not optional ceremony). Its standing rule and this ADR's mode contract answer the same recurring proposal: reduce what critique costs by weakening what critique does.
+**Updated:** 2026-09-05 - condensed; the "~130 lines" size claim is dropped because the skill is about 210 lines. Earlier amendments absorbed now-removed ADR-011 (critique is a core feature) on 2026-08-15 and made the lifecycle host-owned on 2026-08-30.
 
 ## Context
 
-- The skill previously shipped two modes: Quick (inline SKEPTIC/ANALYST/STRATEGIST lens passes in a single reviewer context) and Full / delegated (2-3 isolated sub-agents + cross-examination + dispute gating). That Quick-mode text was removed by this decision; the current skill now states `goat-critique runs only full delegated mode` (`.claude/skills/goat-critique/SKILL.md` (search: `goat-critique runs only full delegated mode`)).
-- Quick mode produced artifact-shaped output without the mechanism that makes the skill worth invoking. A single reviewer running three named lens passes in the same context is not multi-perspective critique - it is self-talk under three labels. Informational diversity, which the current skill body preserves through real delegated spawning (`.claude/skills/goat-critique/SKILL.md` (search: `Spawn all three sub-agents in parallel`)), disappears when all passes share one context.
-- The skill's own historical Quick-mode text admitted this gap: under Quick mode, Phase 2 required every split finding to be tagged as inconclusive because cross-examination was skipped. That deleted rule was a concession that Quick mode could not do the job the skill exists to do.
-- Low-ceremony multi-lens review is already covered elsewhere. `/goat-review` handles diff-level analysis, pre-existing separation, and single-reviewer quality questions without delegation. Users who want inline lens thinking have that surface; they do not need a Quick fallback inside goat-critique.
-- Recent in-repo experience during the 2026-04-19 quality follow-up ran in Quick mode because delegation authorization was implicit rather than explicit. The output was usable but structurally misrepresented the work done: section headings suggested multi-agent coverage while only one context was ever produced. Open-question tagging flagged the inconclusive findings, but the artifact shape still read like delegated critique on a quick scan.
-- The earlier rename recorded in ADR-009 aligned the skill's command name with its mechanism. Collapsing to delegated-only aligns the skill's behaviour with the mechanism the name now promises.
-- Proposals to remove, demote, or auto-skip critique recur in reviews, always framed as ceremony reduction. That pressure is what the standing rule below exists to answer, and it is the same pressure Quick mode was an accommodation to.
+The skill once shipped two modes: Quick, with inline SKEPTIC/ANALYST/STRATEGIST passes in one reviewer context, and Full, with isolated sub-agents, cross-examination, and dispute gating. Quick produced artifact-shaped output without the mechanism that makes the skill worth invoking. Three named passes in one context are self-talk under three labels, and the skill's own text conceded it by forcing every split finding to "inconclusive" because cross-examination was skipped. The 2026-04-19 in-repo quality run landed in Quick because delegation authorization was implicit, and its headings implied coverage that one context never produced.
+
+Proposals to remove, demote, or auto-skip critique recur in reviews, always framed as ceremony reduction. `/goat-review` already covers single-context multi-lens review.
 
 ## Decision
 
-### Standing rule: critique is a core feature
+goat-critique runs in one mode: full delegated, and it remains a core feature.
 
-1. **The critique skill is never removed, demoted, or auto-skipped.** It is a core product feature.
-2. **Improvements reduce ceremony around critique**, not the critique method itself.
-3. **Skills are installed verbatim**, so setup agents cannot compress or remove critique sections during adaptation (`workflow/setup/03-install-skills.md`).
-4. **The dispatcher routes users toward goat-plan and, when needed, the critique skill faster** - not away from them.
-5. **Future critique methodology must evaluate critique as a feature, not as overhead.** Score "how well does critique improve plan quality", not "how much time critique adds".
+**Standing rule.** Critique is never removed, demoted, or auto-skipped. Improvements reduce ceremony around critique, not the method. Skills install verbatim, so setup agents cannot compress critique sections (`workflow/setup/03-install-skills.md`). The dispatcher routes toward goat-plan and critique faster, not away from them. Future methodology scores how well critique improves plan quality, not how much time it adds.
 
-### Mode contract
+**Mode contract.**
+1. The mandatory lifecycle is Phases 1-5 plus Phase 5.5 meta-audit and Phase 5.6 outcome capture. Phase 1 spawns three isolated critique sub-agents, Phase 3 may spawn up to three cross-exam agents when disputes require them, and Phase 5.5 always spawns one meta-agent. No inline role-play substitute is permitted.
+2. The lifecycle is host-owned. The host runs Phases 1-5.6, spawns the bounded roles, presents both human gates, and captures the Phase 5.6 response. A forked sub-agent asked to run goat-critique returns control before Phase 1, so shared sub-agent gate conversion never fires.
+3. Skill-chained entry runs the full lifecycle and skips only intake confirmation.
+4. One output template ships; the dual Quick/Full template is gone.
+5. The `SKILLS_DOC_STALE_PHRASES` entry asserting "quick mode skips cross-examination" (`src/cli/audit/check-factual-semantic-drift.ts`, search: `SKILLS_DOC_STALE_PHRASES`) was removed, because it would false-positive on correct docs.
 
-1. **goat-critique runs in one mode: full delegated.** The mandatory lifecycle is Phases 1-5 plus Phase 5.5 meta-audit and Phase 5.6 outcome capture. Phase 1 spawns three isolated critique sub-agents, Phase 3 may spawn up to three cross-exam agents when disputes require them, and Phase 5.5 always spawns one meta-agent. No inline role-play substitute is permitted.
-2. ~~**If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.~~ **Superseded (2026-04-23; updated 2026-05-27):** All four supported agents (Claude Code, Codex, Antigravity, Copilot) ship sub-agent delegation. The redirect is dead ceremony per `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: `Sub-agent delegation is universal`). Removed from `docs/skills.md` and skill files.
-3. **Skill-chained entry still runs the full lifecycle (Phases 1-5, 5.5, and 5.6).** The only concession granted by skill-chaining is skipping the intake confirmation; it does not unlock a quick variant.
-4. **`Output Format` ships one template.** The dual Quick/Full template is removed.
-5. **The `SKILLS_DOC_STALE_PHRASES` detector entry that asserted "quick mode skips cross-examination and clarification" (`src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`); formerly `skills-critique-contract-drift`) is removed.** With Quick mode retired, the detector's own claim is no longer true; keeping it would false-positive on correct docs.
+The original "if delegation is unavailable, redirect to `/goat-review`" rule was superseded on 2026-04-23: all four supported runtimes ship sub-agent delegation (`.goat-flow/learning-loop/lessons/agent-tooling.md`, search: `Sub-agent delegation is universal`).
+
+## Failure Mode Comparison
+
+| Option | What fails | Verdict |
+| --- | --- | --- |
+| Keep Quick mode with stronger guardrails | Inline passes cannot produce isolated-context diversity; a louder warning adds no agents | Rejected |
+| Separate `/goat-critique-inline` entry point | Doubles the dispatcher surface for a form `/goat-review` already covers | Rejected |
+| Default to Full, keep Quick opt-in | Full was already opt-in by authorization and Quick stayed the habit | Rejected |
+| Merge into `/goat-review` with a multi-agent flag | goat-review gates on diff scope and blast radius, goat-critique on isolation and cross-examination; merging weakens both | Rejected |
+| Full delegated only, host-owned | Users lose an inline multi-lens option and stored Quick prompts break at Step 0; the artifact now matches the work performed | Accepted |
 
 ## Consequences
 
-**Positive**
-- Skill name and skill mechanism match on every invocation. The output artifact now corresponds to the work actually performed.
-- Open Questions remain a precise signal: they appear only when cross-examination was genuinely inconclusive, not as an automatic consequence of having skipped it.
-- File size drops (~210 → ~130 lines) and invocation ceremony drops with it. Closer to peer skills such as `/goat-review` and `/goat-qa` in surface area.
-- Users who previously hit Quick mode because delegation was implicit now land on `/goat-review`, which is already sized for single-context review and does not over-promise multi-agent coverage.
-
-**Negative**
-- Reduced accessibility: a user who wants lightweight multi-lens thinking without delegation overhead no longer gets an inline option from goat-critique. They must use `/goat-review` or apply the SKEPTIC/ANALYST/STRATEGIST framing themselves.
-- Existing habits and stored prompts that invoked goat-critique in Quick mode break immediately at Step 0. The redirect is explicit, but it is still a behavioural break.
-- Public docs referencing Quick mode (`docs/skills.md` (search: `goat-critique runs in one mode`)) must be updated in the same change. Stale references would re-introduce the expectation the skill just removed.
-- Harness / audit surfaces that referenced Quick vs Full mode as separate paths (`src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`)) need adjustment. Footgun/lesson narrative that discussed Quick mode is historical and remains as-is; it is not rewritten.
-- The 2026-04-19 quality-log Quick-mode run becomes an orphan pattern. It does not need retraction, but future readers comparing the log to the shipped skill will see a structure the skill no longer produces.
-
-**Neutral**
-- The Core Trio lens (SKEPTIC / ANALYST / STRATEGIST) is retained inside every delegated sub-agent. Only the inline application is retired.
-- Phases 3 (Cross-Examine) and 4 (Clarify) already only ran in full mode; their text does not change.
-- Downstream skills that called `/goat-critique` via chaining already assumed multi-agent mechanics; those call sites do not need to change.
-
-## Alternatives considered
-
-- **Keep Quick mode, strengthen the guardrails.** Reject. The structural problem is not guardrail strength - it is that inline lens passes cannot produce isolated-context diversity. A louder warning does not add agents.
-- **Rename Quick mode to `/goat-critique-inline` as a separate entry point.** Reject. Two entry points doubles the dispatcher decision surface, and the inline form is already covered by `/goat-review`.
-- **Default to Full, keep Quick as opt-in.** Reject. Prior wording already framed Full as opt-in by authorization, yet Quick was the routine behaviour. Making Quick opt-in does not change the default-path habit.
-- **Merge goat-critique into goat-review with a `--multi-agent` flag.** Reject. The two skills have materially different contracts: goat-review gates on diff scope, pre-existing separation, and blast radius; goat-critique gates on multi-perspective isolation and cross-examination. Merging flattens both contracts and weakens both.
-
-## Related decisions
-
-- **ADR-009** - canonical skill set. It records the `goat-sbao` to `goat-critique` rename, which aligned the command name with the operation; this ADR aligns the operation with its mechanism.
+- Open Questions appear only when cross-examination was inconclusive, not because it was skipped.
+- The Core Trio lens survives inside every delegated sub-agent; only inline application retired.
+- The shipped skill states the rule at `.claude/skills/goat-critique/SKILL.md` (search: `goat-critique runs only full delegated mode`) and spawns per (search: `Spawn all three sub-agents in parallel`); public docs at `docs/skills.md` (search: `goat-critique runs in one mode`).
 
 ## Revisit Triggers
 
-Open a new ADR only if one of these occurs after the change ships:
-
-1. Demand for inline multi-lens critique (not covered by `/goat-review`) becomes a repeated pain point across users.
-2. Delegation becomes unavailable by default in a supported agent runtime (Claude, Codex, Antigravity, Copilot), forcing the skill to add a fallback to stay useful.
-3. A lighter-weight brain-dump critique workflow emerges separately and makes goat-critique feel ceremonial for standard work, suggesting the ceremony ceiling was mis-set.
-
-## References
-
-- `workflow/skills/goat-critique/SKILL.md` (canonical template)
-- `.claude/skills/goat-critique/SKILL.md`
-- `.agents/skills/goat-critique/SKILL.md`
-- `.github/skills/goat-critique/SKILL.md`
-- `docs/skills.md` (search: `goat-critique runs in one mode`)
-- `src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`)
-- `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md`
-- `.goat-flow/skill-docs/skill-preamble.md`
+Repeated demand for inline multi-lens critique that `/goat-review` does not cover; delegation becoming unavailable by default in a supported runtime; a lighter critique workflow emerging that makes this one feel ceremonial for standard work.

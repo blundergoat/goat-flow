@@ -1,79 +1,89 @@
 /**
- * Human-readable summary strings for the audit report's setup and agent scopes.
- * These feed the one-line status blurbs renderers and the dashboard show per scope; they describe state, never pass/fail, so they stay separate from
- * the check functions that produce findings.
+ * Describe setup and agent state in the report's short status summaries.
+ *
+ * CLI renderers and the dashboard display these strings beside the checks that decide pass or fail.
+ * Missing agents and unconfigured optional tools receive explicit labels so absence is not mistaken for a complete setup.
  */
 import type { AuditContext } from "./types.js";
 
 /**
- * Build the setup-scope summary lines.
- * Skill and instruction-file figures are reported worst-case across agents (minimum skills installed, maximum instruction-file line count) so the
- * summary reflects the least-complete agent rather than an average.
+ * Summarize the least complete skill installation and largest instruction file across the audited agents.
+ * An empty agent list receives explicit absence labels so the report does not imply a complete installation.
  *
- * When no supported agents are present, every field returns an explicit "no supported agents" string instead of misleading zeros.
- *
- * @param ctx - audit context; supplies the canonical skill list, per-agent facts, and loaded config
- * @returns map of display keys (`skills`, `config`, `instructionFile`) to human-readable status strings
+ * @param ctx - canonical skill names, selected agents' installation facts, and loaded configuration
+ * @returns - skills, configuration, and instruction-file display text, including labels when no supported agents exist
  */
 export function setupSummary(ctx: AuditContext): Record<string, string> {
   const totalSkills = ctx.structure.skills.canonical.length;
+  // With no supported agent installed, show absence explicitly instead of treating zero counts as healthy setup.
   if (ctx.agents.length === 0) {
     return {
       skills: `0/${totalSkills} installed (no supported agents)`,
+      // This empty-agent summary reports whether configuration exists; detailed checks own its validity finding.
       config: ctx.config.exists
         ? "valid, no supported agents"
         : "invalid or missing",
       instructionFile: "0 lines (no supported agents)",
     };
   }
-  let minSkills = totalSkills;
-  let maxLines = 0;
-  for (const af of ctx.agents) {
-    minSkills = Math.min(minSkills, af.skills.found.length);
-    maxLines = Math.max(maxLines, af.instruction.lineCount);
+  let fewestInstalledSkills = totalSkills;
+  let largestInstructionLineCount = 0;
+  // Keep the weakest skill coverage and largest instruction file visible instead of averaging them away.
+  for (const agentFacts of ctx.agents) {
+    fewestInstalledSkills = Math.min(
+      fewestInstalledSkills,
+      agentFacts.skills.found.length,
+    );
+    largestInstructionLineCount = Math.max(
+      largestInstructionLineCount,
+      agentFacts.instruction.lineCount,
+    );
   }
   const configValid = ctx.config.exists && ctx.config.valid;
   const configVersion = ctx.config.config.version;
 
   return {
-    skills: `${minSkills}/${totalSkills} installed`,
+    skills: `${fewestInstalledSkills}/${totalSkills} installed`,
     config: configValid
       ? `valid, version ${configVersion}`
       : "invalid or missing",
-    instructionFile: `${maxLines} lines (max across agents)`,
+    instructionFile: `${largestInstructionLineCount} lines (max across agents)`,
   };
 }
 
 /**
- * Build the agent-scope summary lines.
- * Toolchain reports which of test/lint/build are configured (an empty toolchain is "not configured (optional)" because the toolchain is not
- * required).
+ * Summarize configured verification commands and installed deny mechanisms for the audit report.
+ * Missing toolchain commands remain optional; no supported agents is distinct from supported agents without deny protection.
  *
- * Hook status lists each agent whose deny mechanism is installed - whether file-based or config-based - and distinguishes "no supported agents" from
- * "none installed".
- *
- * @param ctx - audit context; supplies the loaded toolchain config and per-agent hook facts
- * @returns map of display keys (`toolchain`, `hooks`) to human-readable status strings for the report
+ * @param ctx - configured test, lint, and build commands plus each audited agent's deny-mechanism facts
+ * @returns - toolchain and hook display text; empty command lists and missing agents receive explicit absence labels
  */
 export function agentSummary(ctx: AuditContext): Record<string, string> {
   const toolchain = ctx.config.config.toolchain;
-  const parts: string[] = [];
-  if (toolchain.test.length > 0) parts.push("test");
-  if (toolchain.lint.length > 0) parts.push("lint");
-  if (toolchain.build.length > 0) parts.push("build");
+  const configuredSteps: string[] = [];
+  // Configured tests appear as a verification option; an empty list adds no test label.
+  if (toolchain.test.length > 0) configuredSteps.push("test");
+  // Configured lint commands appear beside the other verification steps available to the user.
+  if (toolchain.lint.length > 0) configuredSteps.push("lint");
+  // Configured builds complete the summary of verification steps the project can run.
+  if (toolchain.build.length > 0) configuredSteps.push("build");
 
   const hookInfo: string[] = [];
-  for (const af of ctx.agents) {
-    if (af.hooks.denyExists || af.hooks.denyIsConfigBased) {
-      hookInfo.push(`${af.agent.id}:deny installed`);
+  // Name the agents whose deny mechanism is installed so users can see which setup supplies protection.
+  for (const agentFacts of ctx.agents) {
+    // Config-based deny mechanisms count as installed even when the agent does not use a shell hook file.
+    if (agentFacts.hooks.denyExists || agentFacts.hooks.denyIsConfigBased) {
+      hookInfo.push(`${agentFacts.agent.id}:deny installed`);
     }
   }
 
   return {
+    // No configured commands is an optional omission, so the summary does not present it as an audit failure.
     toolchain:
-      parts.length > 0
-        ? parts.join(" + ") + " configured"
+      configuredSteps.length > 0
+        ? configuredSteps.join(" + ") + " configured"
         : "not configured (optional)",
+    // Distinguish an absent agent setup from installed agents that still have no deny mechanism.
     hooks:
       ctx.agents.length === 0
         ? "not applicable (no supported agents)"

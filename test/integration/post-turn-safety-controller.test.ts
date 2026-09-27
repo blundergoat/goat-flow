@@ -1,7 +1,10 @@
 /**
  * Controller-root integration coverage for post-turn-safety.
+ *
  * These cases use real independent Git repositories beneath one non-Git directory.
+ * Use them to verify that a controller reports every configured project's findings without scanning unlisted workspaces.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
 import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -278,34 +281,43 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
     });
   });
 
-  it("does not discover unlisted nested or symlinked repositories", () => {
-    withTempController(["gruff-go"], (controllerRoot, childRoots) => {
-      const nestedRoot = join(controllerRoot, "group", "nested-repo");
-      mkdirSync(nestedRoot, { recursive: true });
-      createCommittedRepo(nestedRoot);
-      writeFile(nestedRoot, ".env", `API_KEY=${TEST_API_TOKEN}\n`);
-      symlinkSync(
-        childRoots["gruff-go"],
-        join(controllerRoot, "linked-repo"),
-        "dir",
-      );
+  // A missing link privilege must not skip ordinary controller boundary coverage.
+  for (const includeLink of [false, true]) {
+    it(
+      `does not discover unlisted repositories (symlink=${includeLink})`,
+      includeLink ? symlinkTestOptions() : {},
+      () => {
+        withTempController(["gruff-go"], (controllerRoot, childRoots) => {
+          const nestedRoot = join(controllerRoot, "group", "nested-repo");
+          mkdirSync(nestedRoot, { recursive: true });
+          createCommittedRepo(nestedRoot);
+          writeFile(nestedRoot, ".env", `API_KEY=${TEST_API_TOKEN}\n`);
+          // The link variant checks alias discovery; ordinary unlisted repositories remain covered without link privileges.
+          if (includeLink)
+            symlinkSync(
+              childRoots["gruff-go"],
+              join(controllerRoot, "linked-repo"),
+              "dir",
+            );
 
-      const result = runHook(
-        controllerRoot,
-        MANAGED_STOP_ENV,
-        buildStopPayload("controller-boundary", false),
-      );
-      const envelope = assertManagedEnvelope(result);
+          const result = runHook(
+            controllerRoot,
+            MANAGED_STOP_ENV,
+            buildStopPayload("controller-boundary", false),
+          );
+          const envelope = assertManagedEnvelope(result);
 
-      assert.equal(envelope.outcome, "pass");
-      assert.deepEqual(envelope.coverage, {
-        status: "complete",
-        attemptedUnits: 1,
-        completedUnits: 1,
-        skippedUnits: 0,
-      });
-    });
-  });
+          assert.equal(envelope.outcome, "pass");
+          assert.deepEqual(envelope.coverage, {
+            status: "complete",
+            attemptedUnits: 1,
+            completedUnits: 1,
+            skippedUnits: 0,
+          });
+        });
+      },
+    );
+  }
 
   it("scans a configured nested repository without discovering its siblings", () => {
     withTempController([], (controllerRoot) => {

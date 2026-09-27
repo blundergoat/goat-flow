@@ -1,13 +1,10 @@
 /**
- * Skill/reference artifact quality HTTP route handlers for the dashboard server.
+ * Supply installed-artifact scores and evaluate the Markdown a user pastes or uploads in the Skills view.
  *
- * Backs `/api/skill-quality/inventory` (list a runner's installed skill and reference artifacts), `/api/skill-quality` (score one artifact and
- * compose its tip prompt), and `/api/quality/evaluate` plus its deprecated `/api/quality/analyse` alias (score uploaded or pasted markdown).
- * Discovery is narrowed to the selected runner's skill tree.
+ * Inventory and artifact requests use the selected runner's skill tree; evaluation accepts single documents or uploaded bundles.
+ * Validation and scoring failures become JSON errors, and oversized request bodies receive a 413 response.
  *
- * Oversized uploads are rejected as 413 and all validation/scoring failures are reported as JSON; alias responses also carry Deprecation headers.
- *
- * Scoring engine lives in quality/skill-quality.ts; body decoding in decoders.ts.
+ * The deprecated /api/quality/analyse route shares evaluation behavior and marks responses with deprecation headers.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
@@ -57,14 +54,16 @@ function parseRequiredAgentParam(
   return param as AgentId;
 }
 
-/** Map mirrored skill directories to the source label shown in quality reports. */
+// Map mirrored skill directories to the source label shown in quality reports.
 function skillSourceForDir(dir: string): ArtifactSource {
+  // Shared agent skill copies need the agent-mirror label so reports distinguish them from other installed sources.
   if (dir === ".agents/skills") return "agent-mirror";
+  // Copilot's installed skill copies carry their GitHub mirror source in the report.
   if (dir === ".github/skills") return "github-mirror";
   return "installed";
 }
 
-/** Narrow skill-quality discovery to the selected runner's installed skill tree. */
+// Narrow skill-quality discovery to the selected runner's installed skill tree.
 function runnerSkillQualityConfig(projectPath: string, agent: AgentId) {
   const base = loadQualityConfig(projectPath);
   const skillsDir = AGENT_PROFILE_MAP[agent].skillsDir;
@@ -91,6 +90,7 @@ function handleSkillQualityInventoryRequest(
   url: URL,
   res: ServerResponse,
 ): boolean {
+  // Individual scores and pasted evaluations have separate request handlers.
   if (url.pathname !== "/api/skill-quality/inventory") return false;
 
   const agent = parseRequiredAgentParam(
@@ -99,6 +99,7 @@ function handleSkillQualityInventoryRequest(
     "skill-quality inventory",
     res,
   );
+  // The runner check has already explained the invalid selection, so no inventory is discovered.
   if (!agent) return true;
   try {
     const projectPath = ctx.validatedPath(
@@ -111,6 +112,7 @@ function handleSkillQualityInventoryRequest(
     );
     ctx.jsonResponse(res, 200, { artifacts });
   } catch (err) {
+    // A project removed after selection cannot supply installed skills; the Skills view receives an error instead of an empty inventory.
     ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -119,8 +121,7 @@ function handleSkillQualityInventoryRequest(
 }
 
 /**
- * Score one skill/reference artifact because the dashboard needs artifact-level
- * feedback without running the full project inventory again.
+ * Score the artifact selected in the Skills view and return its improvement prompt without refreshing the whole inventory.
  *
  * Reports missing artifacts and validation failures as JSON.
  */
@@ -129,6 +130,7 @@ function handleSkillQualityRequest(
   url: URL,
   res: ServerResponse,
 ): boolean {
+  // Inventory loading and evaluation uploads must continue to their dedicated routes.
   if (url.pathname !== "/api/skill-quality") return false;
 
   const agent = parseRequiredAgentParam(
@@ -137,9 +139,11 @@ function handleSkillQualityRequest(
     "skill-quality",
     res,
   );
+  // A rejected runner selection already has an error response, so no artifact is scored.
   if (!agent) return true;
   const artifactId = url.searchParams.get("artifact");
 
+  // Without an artifact selection, the Skills view has not identified the document whose details should open.
   if (!artifactId) {
     ctx.jsonResponse(res, 400, {
       error: "skill-quality requires ?artifact=<id>",
@@ -154,6 +158,7 @@ function handleSkillQualityRequest(
     );
     const config = runnerSkillQualityConfig(projectPath, agent);
     const artifact = findArtifact(projectPath, artifactId, config);
+    // A skill removed since inventory loading no longer has a detail report; tell the view that its selection is missing.
     if (!artifact) {
       ctx.jsonResponse(res, 404, {
         error: `artifact not found: ${artifactId}`,
@@ -164,6 +169,7 @@ function handleSkillQualityRequest(
     const prompt = composeArtifactQualityPrompt(report);
     ctx.jsonResponse(res, 200, { ...report, prompt });
   } catch (err) {
+    // A selected project deleted before scoring fails validation; the detail request receives the reason its report is unavailable.
     ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -171,7 +177,7 @@ function handleSkillQualityRequest(
   return true;
 }
 
-/** Writes deprecation headers on every response served via the `/analyse` alias. */
+// Writes deprecation headers on every response served via the `/analyse` alias.
 function markEvaluateAliasDeprecation(res: ServerResponse): void {
   res.setHeader("Deprecation", "true");
   res.setHeader("Link", '</api/quality/evaluate>; rel="successor-version"');
@@ -193,6 +199,7 @@ function sendEvaluateError(
   status: number,
   payload: Record<string, unknown>,
 ): void {
+  // Older callers must receive the migration hint even when their evaluation request fails.
   if (isAlias) markEvaluateAliasDeprecation(res);
   ctx.jsonResponse(res, status, payload);
 }
@@ -219,6 +226,7 @@ async function readEvaluateRequestBody(
       tooLargeMessage: "Evaluate body too large",
     });
   } catch (err) {
+    // An upload exceeding the body limit is rejected before scoring; the Evaluate modal receives the size error.
     sendEvaluateError(ctx, res, isAlias, 413, {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -231,6 +239,7 @@ async function readEvaluateRequestBody(
  * Treats a missing `content` field as an empty string so the content path always has a value to score.
  */
 function evaluateRequestBody(projectPath: string, body: EvaluateBody) {
+  // Uploaded companion files must be evaluated together so the report can account for the composed artifact.
   if (body.files) {
     return evaluateUploadedBundle(projectPath, {
       files: body.files,
@@ -239,6 +248,7 @@ function evaluateRequestBody(projectPath: string, body: EvaluateBody) {
     });
   }
   return evaluateContent(projectPath, {
+    // With no upload bundle, absent content becomes an empty document for the content scorer.
     content: body.content ?? "",
     suggestedName: body.suggestedName,
     kind: body.kind,
@@ -262,14 +272,18 @@ async function handleQualityEvaluateRequest(
   res: ServerResponse,
 ): Promise<boolean> {
   const isAlias = url.pathname === "/api/quality/analyse";
+  // Current and legacy evaluation URLs share scoring; other Quality requests belong to separate handlers.
   if (url.pathname !== "/api/quality/evaluate" && !isAlias) return false;
+  // Evaluation requires submitted Markdown; simply opening the endpoint does not request a score.
   if (req.method !== "POST") {
     sendEvaluateError(ctx, res, isAlias, 405, { error: "Method not allowed" });
     return true;
   }
   const body = await readEvaluateRequestBody(ctx, req, res, isAlias);
+  // The body reader already returned the upload failure, so scoring must not start.
   if (body === null) return true;
   const decoded = decodeEvaluateBody(body);
+  // Invalid content or file fields must be corrected before the user's Markdown reaches the scorer.
   if (!decoded.ok) {
     sendEvaluateError(ctx, res, isAlias, 400, {
       error: decoded.error,
@@ -283,9 +297,11 @@ async function handleQualityEvaluateRequest(
       "project-read",
     );
     const result = evaluateRequestBody(projectPath, decoded.value);
+    // Successful evaluations also tell legacy callers which endpoint replaces this alias.
     if (isAlias) markEvaluateAliasDeprecation(res);
     ctx.jsonResponse(res, 200, result);
   } catch (err) {
+    // A project removed while the modal was open cannot provide scoring settings; return the error while preserving legacy-route headers.
     sendEvaluateError(ctx, res, isAlias, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -294,19 +310,20 @@ async function handleQualityEvaluateRequest(
 }
 
 /**
- * Bind the skill-quality handlers to one server's request context so each closure shares the path
- * validator, JSON responder, and body reader.
+ * Bind installed-skill reports and pasted or uploaded evaluations to this dashboard server's path validator and request-body reader.
  *
  * @param ctx - per-server dashboard route context with path validation, the body reader, and IO hooks
- * @returns the skill-quality, inventory, and evaluate handlers; each resolves true once it has
- *   answered a matching request, or false to let another handler claim the URL
+ * @returns handlers that answer matching skill or evaluation requests, or return false for the next route group
  */
 export function createSkillQualityRouteHandlers(ctx: DashboardRouteContext) {
   return {
+    // Connect the selected artifact's report request to this server's validated project paths.
     handleSkillQualityRequest: (url: URL, res: ServerResponse) =>
       handleSkillQualityRequest(ctx, url, res),
+    // Connect Skills inventory loading to the runner and project selected in the request.
     handleSkillQualityInventoryRequest: (url: URL, res: ServerResponse) =>
       handleSkillQualityInventoryRequest(ctx, url, res),
+    // Connect pasted and uploaded Markdown requests to the shared evaluation and error-response flow.
     handleQualityEvaluateRequest: (
       req: IncomingMessage,
       url: URL,

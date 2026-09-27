@@ -1,21 +1,22 @@
 /**
- * Plan and milestone state model behind the dashboard's `/api/plans` route.
+ * Builds the plan picker and milestone rows shown by the dashboard's Tasks view.
  *
- * Reads `.goat-flow/plans`, parsing each `M*.md` milestone into a compact summary (title, status, objective, checkbox progress) so the UI never
- * receives raw Markdown, and writes the `.active` marker to switch the selected plan.
- * Plan-name inputs are validated to a single top-level directory segment before any write so a request cannot escape the plans root.
+ * Reads Markdown into titles, status, objectives, and progress; missing optional files use empty values so partial work remains visible.
+ * The selection contract prefers the requested plan, then a usable active marker, then the first available plan.
  *
- * Filesystem reads swallow missing paths into empty state; the mutation helpers throw on malformed input or a non-existent plan.
- *
- * Consumed by dashboard-project-routes.ts.
+ * Writes only the active marker for an existing top-level plan; invalid selections throw, and directory-listing failures reach the route.
  */
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { maskNonRenderedMarkdown } from "../rendered-markdown.js";
 import { resolveLocalStatePath } from "./local-paths.js";
+import { writeFileAtomic } from "./safe-exec.js";
 
 /**
- * Milestone row parsed from an `M*.md` task file without sending full Markdown to the UI.
+ * Summarises one milestone without sending its Markdown to the Tasks view.
+ *
+ * Checkbox counts drive progress; an absent status uses `unknown` and an unreadable file keeps its filename as the title.
+ * An empty modification timestamp means the file's filesystem metadata was unavailable.
  */
 interface DashboardTaskMilestoneSummary {
   filename: string;
@@ -29,7 +30,10 @@ interface DashboardTaskMilestoneSummary {
 }
 
 /**
- * Task-plan row for the dashboard plan picker; `modifiedAt` comes from the newest milestone.
+ * Describes a plan in the Tasks picker, including whether it matches the active marker.
+ *
+ * The newest readable milestone dates the row; otherwise the folder timestamp is used, with the epoch as the final fallback.
+ * A zero milestone count leaves the plan selectable while there are no readable milestone filenames.
  */
 interface DashboardTaskPlanSummary extends Record<"active", boolean> {
   name: string;
@@ -39,11 +43,15 @@ interface DashboardTaskPlanSummary extends Record<"active", boolean> {
 }
 
 /**
- * Task browser response where `.active` is advisory and may name a missing plan.
+ * Carries the project's plan list and the milestones the Tasks view opens.
+ *
+ * The active marker is advisory and may name a missing plan; choosing a display fallback does not rewrite it.
+ * Null selection means no plan can open; an empty milestone list can also belong to a selected plan with no milestone files.
+ * The `exists` field separately reports whether the plans directory is available.
  */
 export interface DashboardTaskState {
   planRoot: string;
-  /** Deprecated compatibility alias for callers still reading the old field name. */
+  // Deprecated compatibility alias for callers still reading the old field name.
   taskRoot: string;
   exists: boolean;
   active: string | null;
@@ -53,38 +61,37 @@ export interface DashboardTaskState {
   milestones: DashboardTaskMilestoneSummary[];
 }
 
-/**
- * Return filesystem stats; swallows missing-path and permission errors as `null`.
- */
+// Read Tasks filesystem metadata; swallows unavailable paths as null so callers can choose their empty-state fallback.
 function statOrNull(path: string) {
   try {
     return statSync(path);
   } catch {
+    // A plan or milestone may be removed while Tasks loads; its caller can retain a fallback row or show no available directory.
     return null;
   }
 }
 
-/**
- * Read optional dashboard state files, swallowing local churn as a `null` fallback.
- */
+// Read optional plan text; a null fallback lets Tasks retain a row or ignore an unavailable active marker.
 function readOptionalTextFile(path: string): string | null {
   try {
     return readFileSync(path, "utf-8");
   } catch {
+    // An active marker or milestone may be missing during local edits; Tasks can use its empty-text fallback.
     return null;
   }
 }
 
-/**
- * List a stable numeric sort of `M*.md` milestones; swallows absent plan directories.
- */
+// List milestones in stable numeric order; swallows unreadable plan directories as an empty milestone list.
 function listTaskMilestoneFilenames(planPath: string): string[] {
   try {
     return readdirSync(planPath, { withFileTypes: true })
       .filter((entry) => entry.isFile() && /^M.*\.md$/iu.test(entry.name))
       .map((entry) => entry.name)
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      .sort((leftFilename, rightFilename) =>
+        leftFilename.localeCompare(rightFilename, undefined, { numeric: true }),
+      );
   } catch {
+    // A plan folder may disappear after it was listed; ignore this optional read failure and show no milestone rows.
     return [];
   }
 }
@@ -102,6 +109,7 @@ function readMarkdownField(
   pattern: RegExp,
   fallback: string,
 ): string {
+  // A missing or blank field keeps the display fallback for a partly written milestone.
   return content.match(pattern)?.[1]?.trim() || fallback;
 }
 
@@ -109,10 +117,8 @@ const LEVEL_TWO_ATX_HEADING = /^ {0,3}##[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
 const LEVEL_TWO_ATX_BOUNDARY = /^ {0,3}##(?:[ \t]+|$)/u;
 
 /**
- * Read one level-two Markdown section without consuming its peer sections.
- *
- * Returns `null` when the heading is absent so an intentionally empty canonical
- * section remains distinct from a legacy milestone with no section structure.
+ * Read one Markdown section for the milestone summary without consuming its peers.
+ * Null means no heading; an empty string preserves an intentionally empty Tasks section instead of counting legacy whole-file checkboxes.
  */
 function readLevelTwoSection(
   content: string,
@@ -123,10 +129,12 @@ function readLevelTwoSection(
     const heading = line.match(LEVEL_TWO_ATX_HEADING)?.[1]?.trim();
     return heading?.toLowerCase() === expectedHeading.toLowerCase();
   });
+  // No matching heading lets legacy milestones use their older whole-file or title fallback.
   if (headingIndex < 0) return null;
   const nextHeadingOffset = lines
     .slice(headingIndex + 1)
     .findIndex((line) => LEVEL_TWO_ATX_BOUNDARY.test(line));
+  // The last section continues to the file's end; a following peer heading belongs to another part of the milestone.
   const bodyEnd =
     nextHeadingOffset < 0 ? lines.length : headingIndex + 1 + nextHeadingOffset;
   return lines
@@ -135,29 +143,30 @@ function readLevelTwoSection(
     .trim();
 }
 
-/** Remove the local milestone identifier when a title supplies the objective. */
+// Remove the local milestone identifier when a title supplies the objective.
 function objectiveFromTitle(title: string): string {
   return title.replace(/^(?:M\d+|Milestone\s+\d+)\s*:\s*/iu, "").trim();
 }
 
-/** Prefer explicit objective metadata, then section content, then the outcome title. */
+// Prefer explicit objective metadata, then section content, then the outcome title.
 function readTaskObjective(content: string, title: string): string {
   const objectiveField = readMarkdownField(
     content,
     /^\*\*Objective:\*\*\s*(.+)$/mu,
     "",
   );
+  // Explicit objective metadata supplies the milestone's displayed outcome.
   if (objectiveField) return objectiveField;
+  // Absent or empty objective prose leaves the outcome title available as the milestone's objective.
   return readLevelTwoSection(content, "Objective") || objectiveFromTitle(title);
 }
 
-/**
- * Count Markdown task checkboxes using the same shape goat-plan writes into milestones.
- */
+// Count Markdown task checkboxes using the same shape goat-plan writes into milestones.
 function readTaskProgress(content: string): {
   totalTasks: number;
   completedTasks: number;
 } {
+  // Only an absent Tasks heading uses whole-file checkboxes; an intentionally empty Tasks section means zero tasks.
   const taskSource = readLevelTwoSection(content, "Tasks") ?? content;
   const taskMatches = Array.from(taskSource.matchAll(/^\s*-\s+\[( |x|X)\]/gmu));
   return {
@@ -180,10 +189,13 @@ function parseTaskMilestone(
   filename: string,
 ): DashboardTaskMilestoneSummary {
   const path = join(planPath, filename);
+  // A missing milestone still keeps its row; empty text supplies unknown status and zero progress.
   const content = maskNonRenderedMarkdown(readOptionalTextFile(path) ?? "");
+  // Unavailable filesystem metadata leaves this milestone's displayed update time empty.
   const modifiedAt = statOrNull(path)?.mtime.toISOString() ?? "";
   const progress = readTaskProgress(content);
   const outcomeTitle = readMarkdownField(content, /^#\s+(.+)$/mu, "");
+  // A milestone without a readable heading stays identifiable by its filename.
   const title = outcomeTitle || filename;
   return {
     filename,
@@ -213,15 +225,24 @@ function buildTaskPlanSummary(
   const planPath = join(taskRoot, name);
   const milestoneFilenames = listTaskMilestoneFilenames(planPath);
   const newestMilestoneTime = milestoneFilenames.reduce<number | null>(
-    (newest, filename) => {
-      const mtime = statOrNull(join(planPath, filename))?.mtime.getTime();
-      if (mtime === undefined) return newest;
-      return newest === null ? mtime : Math.max(newest, mtime);
+    (latestMilestoneMs, filename) => {
+      const modifiedAtMs = statOrNull(
+        join(planPath, filename),
+      )?.mtime.getTime();
+      // A milestone removed during the scan cannot date the plan; keep the latest readable timestamp.
+      if (modifiedAtMs === undefined) return latestMilestoneMs;
+      // The first readable milestone starts the timestamp; later ones keep the newest work at the top of the picker.
+      return latestMilestoneMs === null
+        ? modifiedAtMs
+        : Math.max(latestMilestoneMs, modifiedAtMs);
     },
     null,
   );
-  const planMtime = statOrNull(planPath)?.mtime.getTime() ?? 0;
-  const modifiedAt = new Date(newestMilestoneTime ?? planMtime).toISOString();
+  // With no readable milestones, use the folder's date; missing folder metadata uses the epoch for deterministic ordering.
+  const planModifiedAtMs = statOrNull(planPath)?.mtime.getTime() ?? 0;
+  const modifiedAt = new Date(
+    newestMilestoneTime ?? planModifiedAtMs,
+  ).toISOString();
   return {
     name,
     path: planPath,
@@ -231,9 +252,7 @@ function buildTaskPlanSummary(
   };
 }
 
-/**
- * List top-level task plan directories while ignoring local dotfile markers.
- */
+// List top-level task plan directories while ignoring local dotfile markers.
 function listTaskPlanNames(taskRoot: string): string[] {
   return readdirSync(taskRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
@@ -241,11 +260,11 @@ function listTaskPlanNames(taskRoot: string): string[] {
 }
 
 /**
- * Describe a project that has no plans yet, which the Tasks view renders as its onboarding empty state.
+ * Describe an unavailable plans directory so Tasks can render its empty state.
  *
- * @param planRoot - where plans would live if the user started one
- * @param active - plan named by any leftover `.active` marker, kept so a stale marker is still visible
- * @returns the empty state; `exists: false` is what tells the view to offer onboarding rather than an error
+ * @param planRoot - expected location of the project's plan directories
+ * @param active - leftover active marker, or null when no readable non-empty marker exists
+ * @returns empty plans and milestones with `exists: false`; any marker is retained without claiming its plan exists
  */
 function emptyDashboardTaskState(
   planRoot: string,
@@ -283,19 +302,17 @@ function selectDashboardTaskPlan(
   if (requestedPlan && requestedExists) return requestedPlan;
   // Otherwise the user resumes wherever they left off.
   if (hasActivePlan) return active;
+  // Without a usable click or active marker, open the first available plan; an empty picker has no selection.
   return plans[0]?.name ?? null;
 }
 
 /**
- * Build the Tasks view state: which plans exist for this project, and which one is currently active.
- *
- * A user opens Tasks expecting to resume the plan they were last working on, so the `.active` marker is read first
- * and preferred, and the preference order is a contract the view depends on.
+ * Build Tasks using the requested plan, then a usable active marker, then the first available plan.
+ * This selection contract lets an explicit picker choice win while missing local plan state remains an ordinary empty state.
  *
  * @param projectPath - selected project whose plans are listed
- * @param requestedPlan - plan the user clicked; null falls back to the active marker, then to the first plan found
- * @returns the state to render; an empty plan list means the Tasks view shows its onboarding empty state, because a
- *   project with no plans directory is a normal condition rather than an error
+ * @param requestedPlan - clicked plan; null, empty, or unknown names fall back to the active marker, then the first available plan
+ * @returns plans and selected milestones; no readable plans directory yields `exists: false`, while an empty directory can have `exists: true`
  */
 export function buildDashboardTaskState(
   projectPath: string,
@@ -303,9 +320,10 @@ export function buildDashboardTaskState(
 ): DashboardTaskState {
   const planRoot = resolveLocalStatePath(projectPath, "plans");
   const planRootStats = statOrNull(planRoot);
+  // A missing or blank marker means no plan is marked active; another plan can still open.
   const active =
     readOptionalTextFile(join(planRoot, ".active"))?.trim() || null;
-  // No plans directory at all, so the user has never started a plan here and sees the onboarding state.
+  // An absent, unreadable, or non-directory plans path leaves Tasks with its empty state.
   if (!planRootStats?.isDirectory()) {
     return emptyDashboardTaskState(planRoot, active);
   }
@@ -313,10 +331,13 @@ export function buildDashboardTaskState(
   const planNames = listTaskPlanNames(planRoot);
   const plans = planNames
     .map((name) => buildTaskPlanSummary(planRoot, name, active))
-    .sort((a, b) => {
-      const byMtime =
-        new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
-      return byMtime !== 0 ? byMtime : a.name.localeCompare(b.name);
+    .sort((leftPlan, rightPlan) => {
+      const modifiedTimeDifference =
+        new Date(rightPlan.modifiedAt).getTime() -
+        new Date(leftPlan.modifiedAt).getTime();
+      return modifiedTimeDifference !== 0
+        ? modifiedTimeDifference
+        : leftPlan.name.localeCompare(rightPlan.name);
     });
   const activeExists = Boolean(
     active && plans.some((plan) => plan.name === active),
@@ -327,6 +348,7 @@ export function buildDashboardTaskState(
     activeExists,
     plans,
   );
+  // No available plan leaves both the selected path and milestone list empty.
   const selectedPlanPath = selectedPlan ? join(planRoot, selectedPlan) : null;
   const milestones = selectedPlanPath
     ? listTaskMilestoneFilenames(selectedPlanPath).map((filename) =>
@@ -356,8 +378,10 @@ function parseJsonObjectBody(body: string): Record<string, unknown> {
   try {
     parsed = JSON.parse(body);
   } catch {
+    // An empty or malformed selection request cannot be decoded; report the error before changing the active plan.
     throw new Error("Request body must be valid JSON");
   }
+  // Null, arrays, and primitive JSON cannot carry the plan field required to switch Tasks.
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Request body must be a JSON object");
   }
@@ -370,6 +394,7 @@ function parseJsonObjectBody(body: string): Record<string, unknown> {
  * Throws when the plan name is hidden, relative, or path-like.
  */
 function assertTopLevelPlanName(planName: string): void {
+  // A selection must name one visible plan under this project; hidden names and path segments could target another location.
   if (
     planName === "." ||
     planName === ".." ||
@@ -382,9 +407,8 @@ function assertTopLevelPlanName(planName: string): void {
 }
 
 /**
- * Extract and validate the active task-plan name from the dashboard request body.
- * Throws when `body.plan` is missing, blank, or not a safe top-level plan name, so a malformed POST cannot select or escape into an unintended
- * directory.
+ * Read the plan selected by a dashboard mutation request.
+ * Throws for a missing, blank, or path-like name so the request cannot select an unintended directory.
  *
  * @param body - raw request body; must be JSON with a non-empty string `plan` field
  * @returns the trimmed, validated plan name guaranteed to be a single top-level directory segment
@@ -392,6 +416,7 @@ function assertTopLevelPlanName(planName: string): void {
 export function readActiveTaskPlanBody(body: string): string {
   const parsed = parseJsonObjectBody(body);
   const plan = parsed["plan"];
+  // A missing, blank, or non-text selection cannot identify the plan the user wants to activate.
   if (typeof plan !== "string" || plan.trim().length === 0) {
     throw new Error("body.plan must be a non-empty string");
   }
@@ -401,9 +426,8 @@ export function readActiveTaskPlanBody(body: string): string {
 }
 
 /**
- * Writes the `.active` marker so the dashboard can switch plans, but only for a plan that already exists, which keeps this route from ever
- * creating task structure on a user's behalf.
- * It throws when the plans directory is absent or the requested plan does not exist.
+ * Writes the active marker for an existing plan after the user switches plans in the dashboard.
+ * Throws when the plans directory or requested plan is unavailable; this operation does not create plan structure.
  *
  * @param projectPath - absolute project root whose `.goat-flow/plans` directory holds the plans
  * @param planName - validated top-level plan directory name to mark active; must already exist on disk
@@ -419,12 +443,13 @@ export function writeActiveTaskPlan(
     throw new Error(".goat-flow/plans does not exist for the selected project");
   }
   const planNames = listTaskPlanNames(planRoot);
-  // A marker pointing at a missing plan would leave the Tasks view stuck on nothing, so the write is refused.
+  // The requested plan may have been removed since the picker loaded; reject the switch while preserving the existing marker.
   if (!planNames.includes(planName)) {
     throw new Error(`plan not found: ${planName}`);
   }
-  writeFileSync(
+  writeFileAtomic(
     resolveLocalStatePath(projectPath, "plans/.active"),
     `${planName}\n`,
+    projectPath,
   );
 }

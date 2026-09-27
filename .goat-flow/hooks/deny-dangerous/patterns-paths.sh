@@ -50,7 +50,13 @@ strip_shell_quotes_for_path_scan() {
       continue
     fi
 
-    out+="$char"
+    # A single input redirect opens a file even without spaces; here-strings and quoted '<' remain data.
+    if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$char" == '<' &&
+          "${input:i+1:1}" != [\<\&\(] && ( "$i" -eq 0 || "${input:i-1:1}" != '<' ) ]]; then
+      out+='< '
+    else
+      out+="$char"
+    fi
   done
 
   if [[ "$escaped" -eq 1 ]]; then
@@ -265,19 +271,26 @@ key_material_path_touch() {
 # Decide whether text names a protected credential file or directory.
 # Use for direct operands after command-specific parsers reveal their file meaning.
 is_secret_path_touch() {
-  local c windows_path_view
-  c=$(strip_shell_quotes_for_path_scan "$1")
-  windows_path_view=$(windows_path_scan_view "$1")
+  local input="$1"
+  local c="$input"
+  local windows_path_view=""
+  if [[ "$input" == *\'* || "$input" == *\"* || "$input" == *\\* || "$input" == *'<'* ]]; then
+    c=$(strip_shell_quotes_for_path_scan "$input")
+  fi
+  # Only backslash-rooted Windows operands need the secondary slash-normalized view.
+  if [[ "$input" == *\\* ]]; then
+    windows_path_view=$(windows_path_scan_view "$input")
+  fi
   if [[ -n "$windows_path_view" ]]; then
     c+=" $windows_path_view"
   fi
-  # Fast path: only spawn sed if .env.example is even mentioned. The sed below
+  # Fast path: only spawn sed if the allowed .env.example spelling is mentioned. The sed below
   # masks .env.example so the subsequent .env regex doesn't false-match.
   # Drive-relative operands such as `C:.env` are deliberately not masked here: Windows resolves
   # them against the current directory on that drive, so they address the checkout's own
   # credential file. Only the `.env.example` spelling is exempt, on any drive.
   local env_scan="$c"
-  if [[ "$c" == *.env* ]]; then
+  if [[ "$c" == *.env.example* ]]; then
     # shellcheck disable=SC2001  # multi-pattern ERE with capture groups
     env_scan=$(sed -E \
       "s#(^|[[:space:]=:/'\"])\\.env\\.example([[:space:]]|$|['\"])#\\1__goat_env_example__\\2#g; s#(>|>>|>\\|)[[:space:]]*(['\"]?)\\.env\\.example([[:space:]]|$|['\"])#\\1\\2__goat_env_example__\\3#g" \
@@ -285,15 +298,69 @@ is_secret_path_touch() {
   fi
   if [[ "$env_scan" =~ (^|[[:space:]]|=|:|/|[\'\"])\.env[a-zA-Z0-9_.-]*([[:space:]]|$|[\'\"]) ]]; then return 0; fi
   if [[ "$env_scan" =~ (\>|\>\>|\>\|)[[:space:]]*[\'\"]?\.env[a-zA-Z0-9_.-]*([[:space:]]|$|[\'\"]) ]]; then return 0; fi
-  local secret_directory_re='(^|[[:space:]]|=|:|/|['\''"])(\.ssh|\.aws|\.config/gcloud|\.gnupg|secrets)(/|[[:space:]]|$|['\''"])'
+  # Credential stores are dot-directories the user never edits as source, so a bare `secrets` folder is not on this list:
+  # an application with a secrets page keeps `src/pages/secrets/` readable while `.ssh`, `.aws`, gcloud, and `.gnupg` stay blocked.
+  local secret_directory_re='(^|[[:space:]]|=|:|/|['\''"])(\.ssh|\.aws|\.config/gcloud|\.gnupg)(/|[[:space:]]|$|['\''"])'
   # Exact directory operands matter because users usually copy a whole key store without a slash.
   if [[ "$c" =~ $secret_directory_re ]]; then return 0; fi
-  local secret_config_file_re='(^|[[:space:]]|=|:|/|['\''"])(\.docker/config\.json|\.kube/config)([[:space:]]|$|['\''"])'
+  local secret_config_file_re='(^|[[:space:]]|=|:|/|['\''"])(\.docker/config\.json|\.kube/config|\.netrc|\.git-credentials|\.config/gh/hosts\.yml|\.pgpass)([[:space:]]|$|['\''"])'
   # Exact client config files contain credentials even though their parent directories are ordinary.
   if [[ "$c" =~ $secret_config_file_re ]]; then return 0; fi
   if [[ "$c" =~ application_default_credentials\.json ]]; then return 0; fi
   if key_material_path_touch "$1"; then return 0; fi
-  if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"])(credentials|\.npmrc|\.pypirc)([[:space:]]|$|\.|[\'\"]) ]]; then return 0; fi
+  # Only the exact `credentials.json` download and the two registry auth files count; a `credentials.ts` auth provider is ordinary source.
+  if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"])(credentials\.json|\.npmrc|\.pypirc)([[:space:]]|$|\.|[\'\"]) ]]; then return 0; fi
+  return 1
+}
+
+# Split curl's inner form grammar without treating quoted delimiters as attributes or files.
+split_curl_form_parts_into() {
+  local -n __goat_form_parts__="$1"
+  local value="$2" delimiter="$3" part="" char=""
+  local quoted=0 escaped=0 i
+  __goat_form_parts__=()
+  for ((i = 0; i < ${#value}; i++)); do
+    char="${value:i:1}"
+    if [[ "$escaped" -eq 1 ]]; then
+      part+="$char"
+      escaped=0
+      continue
+    fi
+    if [[ "$quoted" -eq 1 && "$char" == \\ ]]; then
+      part+="$char"
+      escaped=1
+      continue
+    fi
+    if [[ "$char" == '"' ]]; then quoted=$((1 - quoted)); fi
+    if [[ "$quoted" -eq 0 && "$char" == "$delimiter" ]]; then
+      __goat_form_parts__+=("$part")
+      part=""
+    else
+      part+="$char"
+    fi
+  done
+  __goat_form_parts__+=("$part")
+}
+
+# Form uploads and per-part header files are separate file-reading operands.
+curl_form_files_touch_secret() {
+  local form_value="${1#*=}" part file
+  local -a form_parts=() form_files=()
+  split_curl_form_parts_into form_parts "$form_value" ';'
+  part="${form_parts[0]}"
+  if [[ "$part" == @* || "$part" == \<* ]]; then
+    split_curl_form_parts_into form_files "${part:1}" ','
+    for file in "${form_files[@]}"; do
+      if is_secret_path_touch "$file"; then return 0; fi
+    done
+  fi
+  # Attributes apply to literal fields too; only headers=@file reads another local file.
+  for part in "${form_parts[@]:1}"; do
+    part="${part#"${part%%[![:space:]]*}"}"
+    if [[ "$part" == headers=@* ]] && is_secret_path_touch "${part#headers=@}"; then
+      return 0
+    fi
+  done
   return 1
 }
 
@@ -316,15 +383,8 @@ curl_file_reference_touches_secret() {
       referenced_file="${curl_option_value#*@}"
       ;;
     form)
-      local form_value="$curl_option_value"
-      # A named form field keeps its file marker after the first equals sign.
-      if [[ "$form_value" == *=* ]]; then
-        form_value="${form_value#*=}"
-      fi
-      # Curl form values use either at-file or less-than-file syntax.
-      [[ "$form_value" == @* || "$form_value" == \<* ]] || return 1
-      referenced_file="${form_value:1}"
-      referenced_file="${referenced_file%%;*}"
+      curl_form_files_touch_secret "$curl_option_value"
+      return $?
       ;;
     direct)
       referenced_file="$curl_option_value"
@@ -360,18 +420,18 @@ curl_file_operands_touch_secret() {
     curl_word="${curl_words[$curl_word_index]}"
     curl_option_value=""
     case "$curl_word" in
-      -d|--data|--data-ascii|--data-binary)
+      -d|--data|--data-ascii|--data-binary|--json|-H|--header|--proxy-header)
         curl_word_index=$((curl_word_index + 1))
         curl_option_value="${curl_words[$curl_word_index]:-}"
         # A protected at-file value would expose local credentials to the request target.
         if curl_file_reference_touches_secret data "$curl_option_value"; then return 0; fi
         ;;
-      -d?*)
-        curl_option_value="${curl_word#-d}"
+      -d?*|-H?*)
+        curl_option_value="${curl_word:2}"
         # Attached short data options use the same at-file meaning.
         if curl_file_reference_touches_secret data "$curl_option_value"; then return 0; fi
         ;;
-      --data=*|--data-ascii=*|--data-binary=*)
+      --data=*|--data-ascii=*|--data-binary=*|--json=*|--header=*|--proxy-header=*)
         curl_option_value="${curl_word#*=}"
         # Attached long data options use the same at-file meaning.
         if curl_file_reference_touches_secret data "$curl_option_value"; then return 0; fi
@@ -636,35 +696,214 @@ search_file_operands_touch_secret() {
   return 1
 }
 
+# GitHub CLI can print a stored credential without naming its backing file.
+# Keep ordinary auth status available while rejecting its explicit token mode.
+is_gh_token_disclosure() {
+  local candidate
+  candidate=$(normalize_command_candidate "$1")
+  local xargs_payload=""
+  if xargs_payload=$(strip_xargs_payload_command "$candidate"); then
+    candidate="$xargs_payload"
+  fi
+  local -a words=()
+  split_shell_words_into words "$candidate"
+  [[ "${#words[@]}" -gt 0 ]] || return 1
+  [[ "${words[0]##*/}" == gh ]] || return 1
+  candidate=$(strip_shell_redirections "$candidate") || return 0
+  split_shell_words_into words "$candidate"
+  local topic_index subcommand_index topic subcommand index
+  topic_index=$(gh_skip_options_index words 1)
+  topic="${words[topic_index]:-}"
+  [[ "${topic,,}" == auth ]] || return 1
+  subcommand_index=$(gh_skip_options_index words $((topic_index + 1)))
+  subcommand="${words[subcommand_index]:-}"
+  case "${subcommand,,}" in
+    token)
+      [[ "${#words[@]}" -eq $((subcommand_index + 2)) && "${words[subcommand_index + 1]}" == --help ]] && return 1
+      return 0 ;;
+    status)
+      for ((index = topic_index + 1; index < ${#words[@]}; index++)); do
+        [[ "$index" -eq "$subcommand_index" ]] && continue
+        case "${words[index]}" in
+          -h|--hostname|-u|--user) index=$((index + 1)) ;;
+          -t|-t=*|--show-token|--show-token=*) return 0 ;;
+        esac
+      done
+      ;;
+    git-credential)
+      [[ "${words[subcommand_index + 1]:-}" == get ]] && return 0
+      ;;
+  esac
+  return 1
+}
+
+# Git's credential fill and helper get operations print stored passwords or tokens to stdout.
+is_git_credential_disclosure() {
+  local candidate
+  candidate=$(normalize_command_candidate "$1")
+  local xargs_payload=""
+  if xargs_payload=$(strip_xargs_payload_command "$candidate"); then
+    candidate="$xargs_payload"
+  fi
+  __goat_git_strip_globals "$candidate" || return 1
+  local -a git_words=("${__goat_git_command_words[@]}")
+  local word
+  case "${git_words[0]:-}" in
+    credential) [[ "${git_words[1]:-}" == fill ]] ;;
+    credential-*)
+      for word in "${git_words[@]:1}"; do
+        [[ "$word" == get ]] && return 0
+      done
+      return 1
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# Separate file-opening redirections from arguments without interpreting quoted operators or here-string data as paths.
+# Unsupported compound syntax keeps the caller's original command under the generic secret scan.
+split_secret_redirections_into() {
+  local -n secret_words_ref="$1" secret_redirects_ref="$2"
+  local input="$3" word="" character quote="" escaped=0 redirect=0 i
+  secret_words_ref=()
+  secret_redirects_ref=()
+  for ((i = 0; i <= ${#input}; i++)); do
+    character="${input:i:1}"
+    if [[ "$escaped" -eq 1 ]]; then
+      [[ -n "$character" ]] || return 1
+      word+="$character"; escaped=0; continue
+    fi
+    if [[ "$quote" != "'" && "$character" == \\ ]]; then
+      word+="$character"; escaped=1; continue
+    fi
+    if [[ -n "$quote" ]]; then
+      word+="$character"
+      [[ "$character" == "$quote" ]] && quote=""
+      continue
+    fi
+    if [[ "$character" == "'" || "$character" == '"' ]]; then
+      word+="$character"; quote="$character"; continue
+    fi
+    if [[ -z "$character" || "$character" == [[:space:]\<\>\|\&\;] ]]; then
+      if [[ -n "$word" ]]; then
+        if [[ "$redirect" -eq 1 ]]; then
+          secret_redirects_ref+=("$word")
+        elif [[ "$redirect" -eq 0 ]]; then
+          # An unquoted descriptor belongs to its following redirect, not to the executable's argument list.
+          if [[ "$character" != [\<\>] || ! "$word" =~ ^([0-9]+|\{[a-zA-Z_][a-zA-Z0-9_]*\})$ ]]; then
+            secret_words_ref+=("$word")
+          fi
+        fi
+        word=""; redirect=0
+      fi
+      if [[ "$character" == [\<\>] || "${input:i:2}" == '&>' ]]; then
+        [[ "$redirect" -eq 0 ]] || return 1
+        case "${input:i}" in
+          '<<<'*) redirect=2; i=$((i + 2)) ;;
+          '<<'*|'<('*|'>('*) return 1 ;;
+          '&>>'*) redirect=1; i=$((i + 2)) ;;
+          '>>'*|'>&'*|'<&'*|'<>'*|'>|'*|'&>'*) redirect=1; i=$((i + 1)) ;;
+          *) redirect=1 ;;
+        esac
+      elif [[ "$character" == [\|\&\;] ]]; then
+        return 1
+      fi
+    else
+      word+="$character"
+    fi
+  done
+  [[ -z "$quote" && "$redirect" -eq 0 ]]
+}
+
+# Exempt only a proven literal-output suffix; wrapper operands such as flock's lock file remain protected.
+literal_output_prefix_candidate() {
+  local command_text="$1" normalized prefix_count i suffix matches=1
+  local -a original_words=() output_words=() normalized_words=() normalized_redirects=()
+  normalized=$(normalize_command_candidate "$command_text") || return 1
+  split_shell_words_into output_words "$normalized"
+  [[ "${#output_words[@]}" -gt 0 ]] || return 1
+  case "${output_words[0]##*/}" in printf|echo) ;; *) return 1 ;; esac
+  # Shell-text wrappers can expose redirects that were quoted in the outer command.
+  split_secret_redirections_into normalized_words normalized_redirects "$normalized" || return 1
+  split_shell_words_into original_words "$command_text"
+  prefix_count=$((${#original_words[@]} - ${#output_words[@]}))
+  if [[ "$prefix_count" -ge 0 ]]; then
+    for ((i = 0; i < ${#output_words[@]}; i++)); do
+      [[ "${original_words[prefix_count+i]}" == "${output_words[i]}" ]] || matches=0
+    done
+  else
+    matches=0
+  fi
+  if [[ "$matches" -eq 0 ]]; then
+    # watch and parallel join their command arguments as shell text rather than forwarding argv.
+    prefix_count=-1
+    for ((i = 0; i < ${#original_words[@]}; i++)); do
+      suffix=$(join_shell_words_from original_words "$i")
+      if [[ "$suffix" == "$normalized" ]]; then prefix_count="$i"; break; fi
+    done
+    [[ "$prefix_count" -ge 0 ]] || return 1
+  fi
+  for ((i = 0; i < prefix_count; i++)); do
+    # Environment assignments supply data to the literal producer; wrapper path options remain inspectable.
+    [[ "${original_words[i]}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] || printf '%q ' "${original_words[i]}"
+  done
+  printf '%s ' "${normalized_redirects[@]}"
+}
+
 # Apply secret-path policy to one user-visible command segment.
 # This gate blocks protected reads and uploads while preserving searches for quoted examples.
 check_secret_segment() {
   local cmd="$1"
   cmd="$CMD_TRIMMED"
 
-  if [[ "$HAS_REDIRECT" -eq 0 && "$HAS_PIPE" -eq 0 ]]; then
-    case "$CMD_VERB" in
-      echo|printf)
-        return 0 ;;
-    esac
+  # prepare_segment_context already checked every real stage and propagated provider denials.
+  # Scanning the combined pipeline again would turn literal producer data into file operands.
+  if [[ "$HAS_PIPE" -eq 1 ]]; then
+    local -a secret_pipeline_stages=()
+    split_top_level_pipeline_stages_into secret_pipeline_stages "$cmd"
+    [[ "${#secret_pipeline_stages[@]}" -gt 1 ]] && return 0
+  fi
+  local -a secret_command_words=() secret_redirect_words=()
+  local secret_command_text="$cmd" redirect_paths="" literal_prefix=""
+  local touches_secret=0
+  if [[ "$CMD_VERB" == echo || "$CMD_VERB" == printf || "$cmd" == *'<'* || "$cmd" == *'>'* ]] &&
+     split_secret_redirections_into secret_command_words secret_redirect_words "$cmd"; then
+    printf -v secret_command_text '%s ' "${secret_command_words[@]}"
+    printf -v redirect_paths '%s ' "${secret_redirect_words[@]}"
+    if is_secret_path_touch "$redirect_paths"; then
+      touches_secret=1
+    elif literal_prefix=$(literal_output_prefix_candidate "$secret_command_text"); then
+      if is_secret_path_touch "$literal_prefix"; then touches_secret=1; else return 0; fi
+    fi
   fi
 
-  local touches_secret=0
+  if is_gh_token_disclosure "$cmd"; then
+    block "GitHub authentication token output exposes a stored credential to the agent. Use gh auth status without token display." || return $?
+  fi
+  if is_git_credential_disclosure "$cmd"; then
+    block "Git credential output exposes stored passwords or tokens to the agent. Use git config --get credential.helper or request sanitized status." || return $?
+  fi
+
   local search_candidate=""
   local git_log_candidate=""
   # Curl needs option-aware file parsing before the generic path scanner runs.
   if [[ "$CMD_VERB" == "curl" ]] && curl_file_operands_touch_secret "$cmd"; then
     touches_secret=1
-  elif search_candidate=$(secret_search_command_candidate "$cmd"); then
+  # Ordered-letter globs are deliberate supersets: shell quotes or escapes can
+  # split the visible grep/log spelling, but cannot remove those ordered letters.
+  elif { is_search_command_verb "$CMD_VERB" ||
+          [[ "$CMD_VERB" == "git" && "$CMD_NORMALIZED" == *g*r*e*p* ]]; } &&
+       search_candidate=$(secret_search_command_candidate "$cmd"); then
     if search_file_operands_touch_secret "$search_candidate"; then
       touches_secret=1
     fi
-  elif [[ "$CMD_VERB" == "git" ]] && git_log_candidate=$(git_log_candidate_without_search_values "$cmd"); then
+  elif [[ "$CMD_VERB" == "git" && "$CMD_NORMALIZED" == *l*o*g* ]] &&
+       git_log_candidate=$(git_log_candidate_without_search_values "$cmd"); then
     if is_secret_path_touch "$git_log_candidate"; then
       touches_secret=1
     fi
   else
-    if is_secret_path_touch "$cmd"; then
+    if is_secret_path_touch "$secret_command_text"; then
       touches_secret=1
     fi
   fi
@@ -674,7 +913,7 @@ check_secret_segment() {
   # variants reach the secret block below.
 
   if [[ "$touches_secret" -eq 1 ]]; then
-    block "Secret-file access ($CMD_VERB). Reading or editing .env / SSH/AWS/GCP keys / credentials through the agent is an exfil risk." || return $?
+    block "Secret-file access ($CMD_VERB). Reading or editing .env / SSH/AWS/GCP keys / credentials through the agent is an exfil risk. Use a checked-in example or ask the user for sanitized fields." || return $?
   fi
 
   if is_unredirected_unpiped_read_only "$cmd"; then

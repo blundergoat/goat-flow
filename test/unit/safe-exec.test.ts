@@ -1,10 +1,24 @@
 /**
- * Unit tests for safe process execution and project-bounded atomic file writes.
+ * Check dashboard and CLI process helpers and atomic writes in disposable projects.
+ * A requested write must keep the original destination if its temporary file is substituted.
+ *
+ * Real files and scoped mocks make cleanup and identity mistakes observable.
  */
 import { strict as assert } from "node:assert";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { describe, it } from "node:test";
 import { tmpdir } from "node:os";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 
 import { withEnv } from "../helpers/global-fixtures.js";
@@ -14,7 +28,169 @@ import {
   SafeExecRejection,
   sideEffectfulRouteKey,
   spawnInheritedSync,
+  writeFileAtomic,
 } from "../../src/cli/server/safe-exec.js";
+
+describe("safe-exec/writeFileAtomic", () => {
+  it("refuses a temporary symlink collision without touching its target or deleting the collision", async (t) => {
+    if (process.platform === "win32") return;
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-collision-"));
+    const victim = join(root, "victim.txt");
+    await writeFile(victim, "keep");
+    const originalOpen = fs.openSync;
+    let collision = "";
+    t.mock.method(
+      fs,
+      "openSync",
+      (path: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode) => {
+        if (String(path).endsWith(".tmp")) {
+          collision = String(path);
+          fs.symlinkSync(victim, path);
+        }
+        return originalOpen(path, flags, mode);
+      },
+    );
+    syncBuiltinESMExports();
+    try {
+      assert.throws(
+        () => writeFileAtomic(join(root, "state.json"), "overwrite", root),
+        /EEXIST/,
+      );
+      assert.equal(await readFile(victim, "utf8"), "keep");
+      assert.equal(fs.lstatSync(collision).isSymbolicLink(), true);
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("replaces the complete destination", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-write-"));
+    const targetPath = join(root, "state.json");
+    try {
+      await writeFile(targetPath, "before\n", "utf-8");
+
+      writeFileAtomic(targetPath, "after\n", root);
+
+      assert.equal(await readFile(targetPath, "utf-8"), "after\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  // Fixture purpose: preallocate a foreign file so the stage and replacement have distinct filesystem identities.
+  // Filesystem side effects: swap it after close and confirm the destination and foreign stage both remain intact.
+  it("rejects a replaced temporary file even when numeric file IDs collide", async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-identity-"));
+    const targetPath = join(root, "state.json");
+    const foreignPath = join(root, "foreign.tmp");
+    await writeFile(targetPath, "before\n");
+    await writeFile(foreignPath, "foreign\n");
+    const originalOpen = fs.openSync;
+    const originalClose = fs.closeSync;
+    const originalFstat = fs.fstatSync;
+    const originalLstat = fs.lstatSync;
+    let stagedPath = "";
+    let wasReplaced = false;
+    t.mock.method(
+      fs,
+      "openSync",
+      (path: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode) => {
+        // Capture the temporary path chosen for this requested write so the fixture can replace that exact stage.
+        if (String(path).endsWith(".tmp")) stagedPath = String(path);
+        return originalOpen(path, flags, mode);
+      },
+    );
+    t.mock.method(fs, "closeSync", (descriptor: number) => {
+      originalClose(descriptor);
+      // Replace the stage once after it closes, just before publication checks its identity.
+      if (stagedPath && !wasReplaced) {
+        wasReplaced = true;
+        fs.unlinkSync(stagedPath);
+        fs.renameSync(foreignPath, stagedPath);
+      }
+    });
+    // Model two NTFS identities that round to the same Number; bigint reads retain the real file identity.
+    t.mock.method(
+      fs,
+      "fstatSync",
+      (descriptor: number, options?: { bigint?: boolean }) => {
+        const stats = originalFstat(descriptor, options as { bigint: true });
+        return options?.bigint
+          ? stats
+          : Object.assign(stats, { dev: 1, ino: 1 });
+      },
+    );
+    t.mock.method(
+      fs,
+      "lstatSync",
+      (path: fs.PathLike, options?: { bigint?: boolean }) => {
+        const stats = originalLstat(path, options as { bigint: true });
+        return options?.bigint || String(path) !== stagedPath
+          ? stats
+          : Object.assign(stats, { dev: 1, ino: 1 });
+      },
+    );
+    syncBuiltinESMExports();
+    try {
+      assert.throws(
+        () => writeFileAtomic(targetPath, "after\n", root),
+        /Atomic write temporary file changed/u,
+      );
+      assert.equal(await readFile(targetPath, "utf8"), "before\n");
+      assert.equal(await readFile(stagedPath, "utf8"), "foreign\n");
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves the destination when replacement fails after staging", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-failure-"));
+    const targetPath = join(root, "state.json");
+    try {
+      await mkdir(targetPath);
+      await writeFile(join(targetPath, "sentinel"), "before\n", "utf-8");
+
+      assert.throws(() => writeFileAtomic(targetPath, "after\n", root));
+
+      assert.equal(
+        await readFile(join(targetPath, "sentinel"), "utf-8"),
+        "before\n",
+      );
+      const stagedFiles = (await readdir(root)).filter(
+        (name) => name.startsWith(".state.json.") && name.endsWith(".tmp"),
+      );
+      assert.deepEqual(stagedFiles, []);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it(
+    "applies caller-selected replacement permissions under the process umask",
+    { skip: process.platform === "win32" },
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-mode-"));
+      const targetPath = join(root, "instructions.md");
+      const requestedFileMode = 0o640;
+      // The runner may restrict new files, so the user's replacement gets only permission bits allowed by its umask.
+      const expectedFileMode = requestedFileMode & ~process.umask();
+      try {
+        await writeFile(targetPath, "before\n", "utf-8");
+        await chmod(targetPath, requestedFileMode);
+
+        writeFileAtomic(targetPath, "after\n", root, requestedFileMode);
+
+        assert.equal(await readFile(targetPath, "utf-8"), "after\n");
+        assert.equal((await stat(targetPath)).mode & 0o777, expectedFileMode);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+});
 
 describe("safe-exec/spawnInheritedSync", () => {
   it("rejects a command whose basename is not allow-listed", () => {

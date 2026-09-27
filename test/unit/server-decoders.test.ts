@@ -10,9 +10,56 @@ import {
   decodeTerminalCreateBody,
   decodeProjectsListBody,
   decodeClientMessage,
+  decodeHookSyncBody,
+  decodeHookToggleBody,
 } from "../../src/cli/server/decoders.js";
 
 const RUNNERS = new Set(["claude", "codex", "antigravity", "copilot"]);
+
+describe("hook review consent", () => {
+  it("accepts each explicit consent independently and together", () => {
+    const confirmationIdentity = "a".repeat(64);
+    // A pristine migration needs policy consent only; locally edited files additionally need replacement consent.
+    for (const consent of [
+      { replace: true },
+      { acceptPolicyChange: true },
+      { replace: true, acceptPolicyChange: true },
+    ]) {
+      const request = { ...consent, confirmationIdentity };
+      assert.deepEqual(decodeHookSyncBody(JSON.stringify(request)), {
+        ok: true,
+        value: request,
+      });
+      assert.deepEqual(
+        decodeHookToggleBody(JSON.stringify({ enabled: false, ...request })),
+        { ok: true, value: { enabled: false, ...request } },
+      );
+    }
+    assert.deepEqual(decodeHookSyncBody("{}"), { ok: true, value: {} });
+  });
+
+  it("rejects missing identities, unchecked consent and client-supplied review details", () => {
+    const confirmationIdentity = "a".repeat(64);
+    // A stale client cannot express consent using a checkbox value, identity or file list without the complete request contract.
+    for (const request of [
+      { acceptPolicyChange: true },
+      { replace: true },
+      { confirmationIdentity },
+      { acceptPolicyChange: false, confirmationIdentity },
+      { acceptPolicyChange: "true", confirmationIdentity },
+      { acceptPolicyChange: null, confirmationIdentity },
+      { replace: false, acceptPolicyChange: true, confirmationIdentity },
+      { acceptPolicyChange: true, confirmationIdentity: "bad" },
+      { acceptPolicyChange: true, confirmationIdentity, paths: [] },
+    ]) {
+      assert.equal(decodeHookSyncBody(JSON.stringify(request)).ok, false);
+      assert.equal(
+        decodeHookToggleBody(JSON.stringify({ enabled: true, ...request })).ok,
+        false,
+      );
+    }
+  });
+});
 type DecodeResult<T> =
   { ok: true; value: T } | { ok: false; error: string; path: string };
 
@@ -212,6 +259,7 @@ describe("decodeTerminalCreateBody", () => {
       "body.qualityReportProjectPath",
     );
 
+    // Reject runner/access combinations that cannot establish the user's requested execution authority.
     for (const invalidCombination of [
       { runner: "codex", accessMode: "reporting" },
       { runner: "claude", accessMode: "workspace" },
@@ -369,6 +417,7 @@ describe("decodeClientMessage", () => {
   it("rejects non-JSON frames", () => {
     const result = decodeClientMessage("not json");
     assert.equal(result.ok, false);
+    // A successful decode has no refusal fields to inspect; this malformed request must take the error path.
     if (result.ok) return;
     assert.equal(result.path, "message");
   });

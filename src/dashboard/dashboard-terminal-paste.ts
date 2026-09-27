@@ -1,7 +1,17 @@
 /**
- * Dashboard terminal paste and launch-prompt lifecycle helpers.
- * Use when the Workspace adapts prompts, explains access, or submits text to a runner.
+ * Keep Workspace loading feedback, waiting badges, and prompt submission aligned with the attached terminal.
+ *
+ * Use these helpers while launching a prompt, pasting more text, or retiring a pane's pending work.
  * Prompt guidance must describe the same authority the backend applies to that session.
+ */
+
+/**
+ * Update both copies of a session so terminal callbacks and the visible Workspace row stay in step.
+ *
+ * @param ctx - dashboard state holding visible session rows
+ * @param sessionId - row to update; a missing row still allows the attached session copy to be updated
+ * @param fallback - attached session copy retained by the event handler
+ * @param mutate - the same state update applied once to each distinct session copy
  */
 function dashboardMutateLocalSession(
   ctx: DashboardTerminalContext,
@@ -10,28 +20,38 @@ function dashboardMutateLocalSession(
   mutate: (session: LocalSession) => void,
 ): void {
   const reactive = ctx.sessions.find((s) => s.id === sessionId);
+  // Update the visible row when it is still in Workspace.
   if (reactive) mutate(reactive);
+  // Event handlers retain an attached copy; keep it current without applying the same update twice to one object.
   if (reactive !== fallback) mutate(fallback);
 }
 
-/** Clear the loading-overlay escalation timers for one terminal session. */
+// Clear the loading-overlay escalation timers for one terminal session.
 function dashboardClearTerminalLoadingTimers(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // A pane without refs has no loading hints or retry timers to cancel.
   if (!refs) return;
+  // Cancel the pending slow-start hint when loading no longer needs escalation.
   if (refs.loadingSlowTimer) {
     clearTimeout(refs.loadingSlowTimer);
     refs.loadingSlowTimer = undefined;
   }
+  // Cancel a pending Retry reveal so it cannot appear after loading has settled.
   if (refs.loadingRetryTimer) {
     clearTimeout(refs.loadingRetryTimer);
     refs.loadingRetryTimer = undefined;
   }
 }
 
-/** Return whether retry can reproduce the original launch, including an intentional empty prompt. */
+/**
+ * Offer Retry only when the dashboard can reproduce the original launch prompt.
+ *
+ * @param refs - pane launch details; absent refs mean no reproducible prompt is recorded
+ * @returns true for a recorded prompt, including an intentional empty prompt; false for a restored session without one
+ */
 function dashboardHasTerminalRetryPrompt(
   refs: TerminalRefs | undefined,
 ): boolean {
@@ -41,7 +61,7 @@ function dashboardHasTerminalRetryPrompt(
   );
 }
 
-/** Move one session through the terminal loading-overlay state machine. */
+// Move one session through the terminal loading-overlay state machine.
 function dashboardSetTerminalLoadingPhase(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -49,18 +69,22 @@ function dashboardSetTerminalLoadingPhase(
   phase: TerminalLoadingPhase,
   error?: string,
 ): void {
+  // Ready or failed loading no longer needs timed slow-start or retry escalation.
   if (phase === "ready" || phase === "error") {
     dashboardClearTerminalLoadingTimers(ctx, sessionId);
   }
   dashboardMutateLocalSession(ctx, sessionId, fallback, (target) => {
     target.loadingPhase = phase;
+    // Show the failure message and offer Retry only when this launch can be reproduced.
     if (phase === "error") {
+      // An omitted error uses the standard startup message; a supplied message remains unchanged.
       target.loadingError = error ?? "Could not start session.";
       target.loadingShowRetry = dashboardHasTerminalRetryPrompt(
         ctx._terminalRefs[sessionId],
       );
     } else {
       target.loadingError = undefined;
+      // The first usable output clears the loading overlay's extra hints and Retry control.
       if (phase === "ready") {
         target.loadingShowSlowHint = false;
         target.loadingShowRetry = false;
@@ -69,29 +93,33 @@ function dashboardSetTerminalLoadingPhase(
   });
 }
 
-/** Arm the slow-start and retry affordances for the loading overlay. */
+// Arm the slow-start and retry affordances for the loading overlay.
 function dashboardArmTerminalLoadingTimers(
   ctx: DashboardTerminalContext,
   sessionId: string,
   fallback: LocalSession,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // No pane refs means there is nowhere to retain or cancel loading timers.
   if (!refs) return;
   dashboardClearTerminalLoadingTimers(ctx, sessionId);
   refs.loadingSlowTimer = setTimeout(() => {
     refs.loadingSlowTimer = undefined;
+    // The attached session copy keeps loading state available if its visible row is no longer present.
     const current = ctx.sessions.find((s) => s.id === sessionId) ?? fallback;
+    // A finished or ready session no longer needs the slow-start hint.
     if (current.ended || current.loadingPhase === "ready") return;
     dashboardMutateLocalSession(ctx, sessionId, fallback, (target) => {
       target.loadingShowSlowHint = true;
     });
   }, TERMINAL_LOADING_SLOW_HINT_MS);
-  // Rehydrated sessions do not retain the original prompt, so retry would
-  // otherwise destroy the live session and relaunch an empty assessment.
+  // A restored session without its original prompt must stay open; offering Retry would lose that launch.
   if (!dashboardHasTerminalRetryPrompt(refs)) return;
   refs.loadingRetryTimer = setTimeout(() => {
     refs.loadingRetryTimer = undefined;
+    // Read the attached copy when this timer can no longer find a visible session row.
     const current = ctx.sessions.find((s) => s.id === sessionId) ?? fallback;
+    // Once the session is ready or ended, do not reveal Retry for its old loading attempt.
     if (current.ended || current.loadingPhase === "ready") return;
     dashboardMutateLocalSession(ctx, sessionId, fallback, (target) => {
       target.loadingShowRetry = true;
@@ -99,7 +127,7 @@ function dashboardArmTerminalLoadingTimers(
   }, TERMINAL_LOADING_RETRY_MS);
 }
 
-/** Mark the loading overlay ready as soon as the PTY sends its first output. */
+// Mark the loading overlay ready as soon as the PTY sends its first output.
 function dashboardMarkTerminalLoadingReady(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -107,34 +135,40 @@ function dashboardMarkTerminalLoadingReady(
   previousTail: string,
   output: string,
 ): void {
+  // Only the first nonempty output settles initial loading; empty chunks and later output do not repeat the transition.
   if (previousTail.length > 0 || output.length === 0) return;
   dashboardSetTerminalLoadingPhase(ctx, sessionId, fallback, "ready");
 }
 
-/** Cancel a pending "awaiting input" reveal for one terminal session. */
+// Cancel a pending "awaiting input" reveal for one terminal session.
 function dashboardClearAwaitingInputTimer(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // No pending reveal means the user has no delayed waiting badge to cancel.
   if (!refs?.awaitingInputTimer) return;
   clearTimeout(refs.awaitingInputTimer);
   refs.awaitingInputTimer = undefined;
 }
 
-/** Show the waiting badge only after waiting-looking output stays quiet. */
+// Show the waiting badge only after waiting-looking output stays quiet.
 function dashboardScheduleAwaitingInputReveal(
   ctx: DashboardTerminalContext,
   sessionId: string,
   fallback: LocalSession,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // A missing pane cannot show a badge, and an existing reveal timer keeps its original deadline.
   if (!refs || refs.awaitingInputTimer) return;
   refs.awaitingInputTimer = setTimeout(() => {
     refs.awaitingInputTimer = undefined;
     const reactive = ctx.sessions.find((s) => s.id === sessionId);
+    // The attached copy still carries output if the visible row has been removed.
     const current = reactive ?? fallback;
+    // An ended session cannot be waiting for another answer from the user.
     if (current.ended) return;
+    // Empty output or a tail without a waiting prompt supplies no reason to reveal the badge.
     if (!dashboardOutputLooksAwaitingInput(current.outputTail ?? "")) return;
     dashboardMutateLocalSession(ctx, sessionId, fallback, (target) => {
       target.awaitingInput = true;
@@ -142,24 +176,26 @@ function dashboardScheduleAwaitingInputReveal(
   }, AWAITING_INPUT_VISIBLE_DELAY_MS);
 }
 
-/** Cancel a delayed submit for a bracketed paste. */
+// Cancel a delayed submit for a bracketed paste.
 function dashboardClearPasteSubmitTimer(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // This pane has no delayed Enter waiting to be cancelled.
   if (!refs?.pasteSubmitTimer) return;
   clearTimeout(refs.pasteSubmitTimer);
   refs.pasteSubmitTimer = undefined;
 }
 
-/** Cancel all pending delayed submit state for a bracketed paste. */
+// Cancel all pending delayed submit state for a bracketed paste.
 function dashboardClearPasteSubmitState(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   dashboardClearPasteSubmitTimer(ctx, sessionId);
   const refs = ctx._terminalRefs[sessionId];
+  // Clear queued text and commit tracking only while this pane still owns those pending pastes.
   if (refs) {
     refs.pasteSubmitQueue = undefined;
     refs.pasteSubmitOutputTail = undefined;
@@ -168,12 +204,19 @@ function dashboardClearPasteSubmitState(
   }
 }
 
-/** Submit the current terminal composer if the session is still attached. */
+/**
+ * Send Enter to the runner after the user's pasted text is ready to submit.
+ *
+ * @param ctx - dashboard state holding the pane's socket
+ * @param sessionId - receiving session; a missing pane cannot submit
+ * @returns true when Enter was sent, or false when the socket is missing or closed
+ */
 function dashboardSendTerminalSubmit(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): boolean {
   const refs = ctx._terminalRefs[sessionId];
+  // A closed or missing connection cannot deliver Enter to the runner.
   if (!refs?.ws || refs.ws.readyState !== WebSocket.OPEN) return false;
   refs.ws.send(JSON.stringify({ type: "input", data: "\r" }));
   return true;
@@ -203,16 +246,20 @@ function dashboardArmPasteSubmitTimer(
   } = {},
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // A closed pane no longer owns a paste that this timer can submit.
   if (!refs) return;
   dashboardClearPasteSubmitTimer(ctx, sessionId);
+  // A new paste starts with empty commit history so older output cannot submit it early.
   if (retryCount === 0) refs.pasteSubmitOutputTail = "";
   refs.pasteSubmitTimer = setTimeout(() => {
     const currentRefs = ctx._terminalRefs[sessionId];
+    // Clear the fired timer only if the user still has this pane attached.
     if (currentRefs) currentRefs.pasteSubmitTimer = undefined;
     const submitted = dashboardSubmitPendingPaste(ctx, sessionId, {
       keepAwaitingCommit,
       retryIfStillCommitted,
     });
+    // A temporary inability to send Enter gets a bounded retry instead of leaving the paste waiting indefinitely.
     if (!submitted && retryCount < TERMINAL_PASTE_SUBMIT_MAX_RETRIES) {
       dashboardArmPasteSubmitTimer(ctx, sessionId, {
         delayMs: TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS,
@@ -264,16 +311,18 @@ function dashboardArmPasteSubmitRetryIfStillCommitted(
   }
   refs.pasteSubmitTimer = setTimeout(() => {
     const currentRefs = ctx._terminalRefs[sessionId];
+    // The pane may have closed while waiting; only an existing pane can clear its timer reference.
     if (currentRefs) currentRefs.pasteSubmitTimer = undefined;
     const currentTarget = ctx.sessions.find(
       (session) => session.id === sessionId,
     );
+    // A removed session supplies no output showing a paste still in its composer.
     const currentTail = currentTarget?.outputTail ?? "";
-    // The stuck-paste heuristic is the loop condition; snapshot equality was
-    // only a single-shot fallback and can fire on marker text that already moved.
+    // Retry only while the latest output still shows the paste waiting in the composer.
     if (dashboardOutputStillAtCommittedPaste(currentTail)) {
       dashboardSendTerminalSubmit(ctx, sessionId);
       const nextRetryCount = retryCount + 1;
+      // Bound repeated Enter attempts so a stuck composer cannot keep receiving submits forever.
       if (nextRetryCount < TERMINAL_PASTE_SUBMIT_MAX_RETRIES) {
         dashboardArmPasteSubmitRetryIfStillCommitted(
           ctx,
@@ -300,13 +349,18 @@ function dashboardSendNextQueuedPaste(
 ): void {
   const refs = ctx._terminalRefs[sessionId];
   const next = refs?.pasteSubmitQueue?.shift();
-  // Nothing queued, so the session simply goes idle until the user pastes again.
+  // No next queued paste means this helper sends nothing further to the runner.
   if (!refs || !next) return;
+  // Removing the last queued paste leaves no queue for later input to wait behind.
   if (refs.pasteSubmitQueue?.length === 0) refs.pasteSubmitQueue = undefined;
   dashboardSendBracketedPaste(ctx, sessionId, next);
 }
 
-/** Submit a bracketed paste once the runner has had time to commit it. */
+/**
+ * Send Enter for a settled paste, then release or keep watching its queue according to the runner's commit behavior.
+ *
+ * @returns true when Enter was sent, even if another commit check is pending; false means the socket could not submit
+ */
 function dashboardSubmitPendingPaste(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -321,7 +375,9 @@ function dashboardSubmitPendingPaste(
   dashboardClearPasteSubmitTimer(ctx, sessionId);
   const submitted = dashboardSendTerminalSubmit(ctx, sessionId);
   const refs = ctx._terminalRefs[sessionId];
+  // Keep the caller informed when the runner connection could not accept Enter.
   if (!submitted) return false;
+  // A fallback Enter may precede the runner's paste marker, so hold the next paste until that wait is released.
   if (keepAwaitingCommit && refs?.pasteSubmitAwaitingCommit) {
     refs.pasteSubmitFallbackSubmitted = true;
     refs.pasteSubmitTimer = setTimeout(() => {
@@ -329,10 +385,12 @@ function dashboardSubmitPendingPaste(
     }, TERMINAL_PASTE_FALLBACK_RELEASE_DELAY_MS);
     return true;
   }
+  // Keep commit tracking on an attached pane in step with the Enter just sent.
   if (refs) {
     refs.pasteSubmitAwaitingCommit = false;
     refs.pasteSubmitFallbackSubmitted = retryIfStillCommitted;
   }
+  // Runners that still display the committed paste get a bounded check before the next queued prompt is sent.
   if (
     retryIfStillCommitted &&
     dashboardArmPasteSubmitRetryIfStillCommitted(ctx, sessionId)
@@ -356,7 +414,7 @@ function dashboardSendBracketedPaste(
   paste: DashboardQueuedPaste,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
-  // A closed socket means the pane is gone or reconnecting, and sending now would lose the text silently.
+  // A missing or closed socket cannot deliver this paste; no input is sent.
   if (!refs?.ws || refs.ws.readyState !== WebSocket.OPEN) return;
   refs.ws.send(JSON.stringify({ type: "input", data: paste.data }));
   // The runner needs a moment before Enter, so the submit is armed on a timer instead of sent now.
@@ -372,7 +430,10 @@ function dashboardSendBracketedPaste(
       keepAwaitingCommit: !claudeNoMarkerFallback,
       retryIfStillCommitted: claudeNoMarkerFallback,
     });
-  } else if (dashboardSendTerminalSubmit(ctx, sessionId)) {
+  } else if (
+    // Immediate Enter releases the next paste only after this one was submitted.
+    dashboardSendTerminalSubmit(ctx, sessionId)
+  ) {
     dashboardSendNextQueuedPaste(ctx, sessionId);
   } else {
     dashboardArmPasteSubmitTimer(ctx, sessionId, {
@@ -395,7 +456,7 @@ function dashboardSendOrQueueBracketedPaste(
   paste: DashboardQueuedPaste,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
-  // The pane is gone, so there is nowhere to send the text.
+  // Without pane refs, this paste has no attached destination.
   if (!refs) return;
   // An earlier paste is still settling, so this one waits its turn rather than arriving mid-prompt.
   if (refs.pasteSubmitTimer || refs.pasteSubmitAwaitingCommit) {
@@ -405,7 +466,7 @@ function dashboardSendOrQueueBracketedPaste(
   dashboardSendBracketedPaste(ctx, sessionId, paste);
 }
 
-/** React to runner output while a bracketed paste submit is pending. */
+// React to runner output while a bracketed paste submit is pending.
 function dashboardHandlePasteSubmitOutput(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -413,26 +474,32 @@ function dashboardHandlePasteSubmitOutput(
 ): void {
   const refs = ctx._terminalRefs[sessionId];
   const target = ctx.sessions.find((session) => session.id === sessionId);
+  // Claude and Antigravity may emit paste markers even when no dashboard submit is pending.
   const runnerUsesPasteMarker =
     target?.runner === "claude" || target?.runner === "antigravity";
+  // A timer or commit wait means this pane still owns a paste awaiting Enter.
   const hasPendingPaste =
     refs?.pasteSubmitTimer !== undefined ||
     refs?.pasteSubmitAwaitingCommit === true;
+  // Without a pane or relevant paste state, this output cannot advance dashboard paste submission.
   if (!refs || (!hasPendingPaste && !runnerUsesPasteMarker)) return;
+  // The first chunk starts commit history; later chunks extend it so a split paste marker can still be recognized.
   const outputTail = ((refs.pasteSubmitOutputTail ?? "") + output).slice(-2000);
   refs.pasteSubmitOutputTail = outputTail;
+  // Pending pastes use accumulated output; otherwise inspect only this chunk so an old marker cannot trigger work.
   const committedPaste = dashboardOutputLooksCommittedPaste(
     hasPendingPaste ? outputTail : output,
   );
+  // A paste marker shows the runner accepted the text and lets submission move forward.
   if (committedPaste) {
     const alreadySubmitted = refs.pasteSubmitFallbackSubmitted === true;
     refs.pasteSubmitAwaitingCommit = false;
+    // A fallback already sent Enter, so this marker must not submit the same prompt twice.
     if (alreadySubmitted) return;
     refs.pasteSubmitFallbackSubmitted = false;
-    // A "[Pasted text]" marker echoed back when nothing is awaiting submit means the paste was already submitted (e.g. immediate-submit path for
-    // single-line pastes) or originated outside the dashboard.
-    // Don't fire a spurious extra Enter.
+    // A marker without a dashboard paste waiting for Enter must not trigger an extra submit.
     if (!hasPendingPaste) return;
+    // These runners need a brief settling delay after the marker before Enter reaches the committed paste.
     if (target?.runner === "claude" || target?.runner === "antigravity") {
       dashboardArmPasteSubmitTimer(ctx, sessionId, {
         delayMs: TERMINAL_PASTE_MARKER_SETTLE_DELAY_MS,
@@ -444,7 +511,13 @@ function dashboardHandlePasteSubmitOutput(
   }
 }
 
-/** Resolve the terminal filesystem mode from preset intent and investigator posture. */
+/**
+ * Resolve the terminal's write access from the chosen preset and the user's investigator role.
+ *
+ * @param preset - selected preset; null supplies no write permission and resolves to reporting mode
+ * @param userRole - current role; investigator keeps reporting mode even for a preset that may write
+ * @returns workspace mode only for a writing preset outside investigator mode; otherwise reporting mode
+ */
 function dashboardTerminalAccessMode(
   preset: Preset | null,
   userRole: string,
@@ -507,20 +580,28 @@ function dashboardGlobalLaunchContext(
   ].join("\n");
 }
 
-/** Read loaded xterm.js constructors; throws if asset loading did not attach globals. */
+// Read loaded xterm.js constructors; throws if asset loading did not attach globals.
 function getXtermConstructors(): {
   Terminal: NonNullable<Window["Terminal"]>;
   FitAddon: new () => FitAddonInstance;
 } {
   const Terminal = window.Terminal;
   const FitAddon = window.FitAddon?.FitAddon;
+  // Launch cannot mount the pane until both terminal assets have attached their browser globals.
   if (!Terminal || !FitAddon) {
     throw new Error("xterm.js globals unavailable after load");
   }
   return { Terminal, FitAddon };
 }
 
-/** Send text to a specific terminal session without changing the active tab. */
+/**
+ * Send or queue prompt text for a specific session while preserving the user's active tab.
+ *
+ * @param ctx - dashboard state supplying the session, socket, and prompt adapter
+ * @param sessionId - receiving session; an unknown id reports that no terminal is active
+ * @param text - prompt text; empty text still follows adaptation and submission rather than being rejected here
+ * @returns true when the paste was sent or queued; false reports a missing session or closed socket as a toast
+ */
 function dashboardSendToTerminalSession(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -528,26 +609,24 @@ function dashboardSendToTerminalSession(
   { adapt = true }: { adapt?: boolean } = {},
 ): boolean {
   const target = ctx.sessions.find((session) => session.id === sessionId);
+  // A prompt sent after its session row was removed has no terminal destination.
   if (!target) {
     ctx.showToast("No active terminal session", true);
     return false;
   }
   const refs = ctx._terminalRefs[sessionId];
+  // A disconnected pane cannot accept another prompt; show the user why it was not sent.
   if (!refs?.ws || refs.ws.readyState !== WebSocket.OPEN) {
     ctx.showToast("No active terminal session", true);
     return false;
   }
+  // Dashboard sends normally adapt the prompt to its runner; already-adapted launch text can bypass that step.
   const prepared = dashboardPreparePasteBody(
     adapt ? ctx.adaptPrompt(text, target.runner) : text,
   );
-  // Bracketed paste prevents shells and REPLs from treating multi-line prompts as a stream of independent keystrokes.
-  // Claude Code commits long pastes asynchronously, so submit on its pasted-text echo or fall back after a short bounded delay for CLIs that do not
-  // echo that state.
+  // Bracketed paste keeps a multiline prompt together; its runner-specific submit waits for a paste marker or a bounded fallback.
   const pasteData = "\x1b[200~" + prepared + "\x1b[201~";
-  // Claude/Antigravity only compress MULTI-LINE pastes into the "[Pasted text]" marker we detect to submit fast.
-  // Single-line pastes render inline with no marker, so waiting hits the 15s fallback.
-  // Submit those immediately to match the existing single-line/non-Claude semantics.
-  //
+  // Claude/Antigravity multiline pastes wait for commit; single-line pastes submit immediately because they render without a marker.
   // Verify this assumption against captured `agy` PTY output before changing it.
   const isMultiLinePaste = prepared.includes("\n");
   const delayedSubmit =
@@ -560,17 +639,19 @@ function dashboardSendToTerminalSession(
   dashboardClearAwaitingInputTimer(ctx, sessionId);
   target.lastInputTime = Date.now();
   target.awaitingInput = false;
+  // Focus the receiving pane only when it is already the user's active tab.
   if (ctx.activeSessionId === sessionId && refs.xterm) refs.xterm.focus();
   return true;
 }
 
-/** Send text to the active terminal session and focus it. */
+// Send text to the active terminal session and focus it.
 function dashboardSendToTerminal(
   ctx: DashboardTerminalContext,
   text: string,
   { adapt = true }: { adapt?: boolean } = {},
 ): boolean {
   const active = ctx._activeSession;
+  // Sending a prompt without an active terminal shows a toast instead of choosing a session for the user.
   if (!active) {
     ctx.showToast("No active terminal session", true);
     return false;
@@ -578,34 +659,37 @@ function dashboardSendToTerminal(
   return dashboardSendToTerminalSession(ctx, active.id, text, { adapt });
 }
 
-/** Cancel the absolute fallback for one pending dashboard launch prompt. */
+// Cancel the absolute fallback for one pending dashboard launch prompt.
 function dashboardClearLaunchPromptFallbackTimer(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // There is no forced-delivery deadline to cancel for a pane without this pending timer.
   if (!refs?.launchPromptFallbackTimer) return;
   clearTimeout(refs.launchPromptFallbackTimer);
   refs.launchPromptFallbackTimer = undefined;
 }
 
-/** Cancel quiet-window delivery for one pending dashboard launch prompt. */
+// Cancel quiet-window delivery for one pending dashboard launch prompt.
 function dashboardClearLaunchPromptQuietTimer(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // No quiet-window timer means output settling is not currently waiting to deliver the prompt.
   if (!refs?.launchPromptQuietTimer) return;
   clearTimeout(refs.launchPromptQuietTimer);
   refs.launchPromptQuietTimer = undefined;
 }
 
-/** Clear any pending dashboard launch prompt state for one terminal session. */
+// Clear any pending dashboard launch prompt state for one terminal session.
 function dashboardClearLaunchPrompt(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // A removed pane owns no pending launch prompt or delivery timers.
   if (!refs) return;
   dashboardClearLaunchPromptFallbackTimer(ctx, sessionId);
   dashboardClearLaunchPromptQuietTimer(ctx, sessionId);
@@ -613,7 +697,11 @@ function dashboardClearLaunchPrompt(
   refs.launchPromptOutputSeen = false;
 }
 
-/** Send a pending dashboard launch prompt once the terminal is ready. */
+/**
+ * Deliver the saved launch prompt when the runner is ready, or when an allowed fallback requests delivery.
+ *
+ * @returns true when the prompt was sent or queued; false means no prompt, a failed/closed session, or readiness is still pending
+ */
 function dashboardMaybeSendLaunchPrompt(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -621,14 +709,19 @@ function dashboardMaybeSendLaunchPrompt(
 ): boolean {
   const refs = ctx._terminalRefs[sessionId];
   const prompt = refs?.launchPrompt;
+  // An absent or empty prompt has no launch text waiting to be delivered.
   if (!prompt) return false;
   const target = ctx.sessions.find((session) => session.id === sessionId);
+  // A removed or ended session cannot receive its pending launch prompt.
   if (!target || target.ended) {
     dashboardClearLaunchPrompt(ctx, sessionId);
     return false;
   }
+  // Keep the pending prompt until the attached socket can deliver it.
   if (!refs.ws || refs.ws.readyState !== WebSocket.OPEN) return false;
+  // A runner that has not produced captured text has no readiness or startup-failure evidence yet.
   const outputTail = target.outputTail ?? "";
+  // A visible runner startup failure replaces loading feedback and cancels this launch's unsent prompt.
   if (dashboardOutputLooksRunnerStartupFailure(outputTail, target.runner)) {
     dashboardSetTerminalLoadingPhase(
       ctx,
@@ -644,6 +737,7 @@ function dashboardMaybeSendLaunchPrompt(
     outputTail,
     target.runner,
   );
+  // Normal delivery waits for readiness; Antigravity keeps that requirement even when a fallback requests a forced send.
   if (!ready && (!force || target.runner === "antigravity")) {
     return false;
   }
@@ -656,12 +750,13 @@ function dashboardMaybeSendLaunchPrompt(
   });
 }
 
-/** Arm the conservative fallback used only if the runner produces no output. */
+// Arm the conservative fallback used only if the runner produces no output.
 function dashboardArmLaunchPromptNoOutputFallback(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // Arm only one deadline for an unsent prompt on an open socket before any runner output has arrived.
   if (
     !refs?.launchPrompt ||
     refs.launchPromptOutputSeen === true ||
@@ -673,58 +768,64 @@ function dashboardArmLaunchPromptNoOutputFallback(
   }
   refs.launchPromptFallbackTimer = setTimeout(() => {
     const currentRefs = ctx._terminalRefs[sessionId];
+    // The pane may have closed during the wait; clear its deadline only while its refs remain.
     if (currentRefs) currentRefs.launchPromptFallbackTimer = undefined;
     dashboardMaybeSendLaunchPrompt(ctx, sessionId, { force: true });
   }, TERMINAL_LAUNCH_PROMPT_NO_OUTPUT_FALLBACK_DELAY_MS);
 }
 
 /**
- * Arm a short cap once runner output proves the PTY stream is live.
- * The cap is unconditional by design: it exists for runners that emit output but never surface a known readiness marker (custom prompts, alternate
- * CLIs).
+ * Bound the wait after runner output arrives so prompts can reach runners without a recognized readiness marker.
  *
- * Gating the force-send on a readiness check would stall those sessions forever; the sibling quiet-window path covers the more common "output settles
- * then send" case.
+ * This timer requests forced delivery; Antigravity still needs the readiness check in dashboardMaybeSendLaunchPrompt.
+ * The separate quiet-window timer also requests delivery once output settles.
  */
 function dashboardArmLaunchPromptAfterOutputFallback(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // No unsent prompt needs a deadline, and an existing deadline should keep its original start time.
   if (!refs?.launchPrompt || refs.launchPromptFallbackTimer) return;
   refs.launchPromptFallbackTimer = setTimeout(() => {
     const currentRefs = ctx._terminalRefs[sessionId];
+    // A pane still present can release the fired deadline before trying prompt delivery.
     if (currentRefs) currentRefs.launchPromptFallbackTimer = undefined;
     dashboardMaybeSendLaunchPrompt(ctx, sessionId, { force: true });
   }, TERMINAL_LAUNCH_PROMPT_AFTER_OUTPUT_FALLBACK_DELAY_MS);
 }
 
-/** Schedule prompt delivery after runner output has settled. */
+// Schedule prompt delivery after runner output has settled.
 function dashboardScheduleLaunchPromptQuietSend(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // Quiet output matters only while a prompt is waiting on a connected pane.
   if (!refs?.launchPrompt || !refs.ws || refs.ws.readyState !== WebSocket.OPEN)
     return;
   dashboardClearLaunchPromptQuietTimer(ctx, sessionId);
   refs.launchPromptQuietTimer = setTimeout(() => {
     const currentRefs = ctx._terminalRefs[sessionId];
+    // A closed pane has no quiet-window state to clear when this timer fires.
     if (currentRefs) currentRefs.launchPromptQuietTimer = undefined;
     dashboardMaybeSendLaunchPrompt(ctx, sessionId, { force: true });
   }, TERMINAL_LAUNCH_PROMPT_QUIET_DELAY_MS);
 }
 
-/** React to a new output chunk while a dashboard launch prompt is pending. */
+// React to a new output chunk while a dashboard launch prompt is pending.
 function dashboardHandleLaunchPromptOutput(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // Once launch text has been sent or cleared, later output needs no delivery tracking.
   if (!refs?.launchPrompt) return;
   const firstOutput = refs.launchPromptOutputSeen !== true;
   refs.launchPromptOutputSeen = true;
+  // A readiness marker can send the prompt now and ends this output chunk's scheduling work.
   if (dashboardMaybeSendLaunchPrompt(ctx, sessionId)) return;
+  // The first output replaces the silent-runner deadline with the deadline for a live output stream.
   if (firstOutput) {
     dashboardClearLaunchPromptFallbackTimer(ctx, sessionId);
     dashboardArmLaunchPromptAfterOutputFallback(ctx, sessionId);
@@ -732,14 +833,16 @@ function dashboardHandleLaunchPromptOutput(
   dashboardScheduleLaunchPromptQuietSend(ctx, sessionId);
 }
 
-/** Send a dashboard launch prompt after the browser terminal is attached. */
+// Send a dashboard launch prompt after the browser terminal is attached.
 function dashboardScheduleLaunchPrompt(
   ctx: DashboardTerminalContext,
   sessionId: string,
   prompt: string,
 ): void {
+  // A blank launch intentionally starts without prompt text and needs no delivery timers.
   if (!prompt.trim()) return;
   dashboardClearLaunchPrompt(ctx, sessionId);
+  // A newly created session may receive its launch prompt before its terminal pane attaches.
   const refs = ctx._terminalRefs[sessionId] ?? {};
   refs.launchPrompt = prompt;
   refs.launchPromptOutputSeen = false;
@@ -747,5 +850,3 @@ function dashboardScheduleLaunchPrompt(
   dashboardArmLaunchPromptNoOutputFallback(ctx, sessionId);
   dashboardMaybeSendLaunchPrompt(ctx, sessionId);
 }
-
-/** Send a preset prompt to an active session in the current project. */

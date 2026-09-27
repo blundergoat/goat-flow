@@ -1,15 +1,15 @@
 /**
  * Command and option type vocabulary shared between the CLI parser and the command handlers.
  *
- * Centralising the subcommand unions, the parsed-option shape, and the removed-command map here keeps the parser (which produces these values) and
- * dispatch (which consumes them) agreeing on one source of truth, so adding a command means touching the union once rather than hunting string
- * literals across files.
+ * Centralising subcommand unions, parsed options, and removed commands keeps the parser and dispatch on one source of truth.
+ * Adding a command then changes the union once instead of scattering string literals across files.
  *
  * Pure type/const declarations only; no runtime behaviour lives here.
  */
 
 import type { CLIOptions } from "./types.js";
 import type { QualityMode } from "./quality/schema.js";
+import type { ForecastBandQuantiles } from "./config/types.js";
 
 /** Supported CLI subcommand names. */
 export type Command =
@@ -23,8 +23,11 @@ export type Command =
   | "manifest"
   | "events"
   | "hooks"
+  | "claims"
   | "menu"
   | "stats"
+  | "recall"
+  | "learn"
   | "diagnostics"
   | "index"
   | "redact"
@@ -41,8 +44,19 @@ export type PlansTimeAction = "start" | "stop" | "status";
 /** Categories stamped on timing spans and reconciled into structured Actuals. */
 export type PlansTimeCategory = "product" | "proof" | "other";
 
-/** Deterministic checks for drafted goat-review Markdown. */
-export type ReviewSubcommand = "validate";
+/** Explicit learning-loop authoring action. */
+export type LearnSubcommand = "new";
+
+/** Learning-loop entry grammars supported by the safe scaffold command. */
+export type LearnEntryType = "footgun" | "lesson" | "pattern";
+
+/** Canonical evidence taxonomy required by footgun entries. */
+export type LearnEvidenceKind =
+  "ACTUAL_MEASURED" | "OBSERVED" | "EXTERNAL_REFERENCE";
+
+/** Deterministic checks for review drafts, transient ledgers, and completed reports. */
+export type ReviewSubcommand =
+  "snapshot" | "validate" | "validate-draft" | "validate-ledger";
 
 /** Read-only diagnostics views an operator can run without changing the selected project. */
 export type DiagnosticsSubcommand =
@@ -60,8 +74,12 @@ export type SkillSubcommand = "new" | "doctor";
  */
 export type EventsSubcommand = "tail";
 
+/** Explicit read and confirmed-removal operations for one path-write ownership marker. */
+export type ClaimsSubcommand = "inspect" | "recover";
+
 /**
  * Second positional accepted after `hooks`: state operations, toggles, and explicit verification.
+ *
  * `enable`/`disable` additionally require a `<hook-id>`; `verify` requires one selected agent.
  * Keep this in sync with HOOK_SUBCOMMANDS, the parser's runtime membership check.
  */
@@ -75,12 +93,31 @@ export const HOOK_SUBCOMMANDS = new Set<string>([
 ]);
 
 /** Bounded offline scenario groups users may request through `hooks verify`. */
-export type HookScenario = "deny-hook" | "post-turn-hook" | "gruff-hook";
+export type HookScenario =
+  "deny-hook" | "git-mutations-hook" | "post-turn-hook" | "gruff-hook";
+
+/**
+ * Every shipped scenario group, in the order one `--scenario all` run executes them.
+ * Deny runs first because it guards the most destructive commands a user can reach.
+ */
+export const BATCH_HOOK_SCENARIOS: readonly HookScenario[] = [
+  "deny-hook",
+  "git-mutations-hook",
+  "post-turn-hook",
+  "gruff-hook",
+];
+
+/**
+ * What a user asked `hooks verify` to prove: one explicit group, or every shipped group.
+ * `all` never reaches the registrar, which keeps consuming the closed `HookScenario` union.
+ */
+export type HookScenarioSelection = HookScenario | "all";
 
 /**
  * The mutually exclusive modes of the `quality` command.
- * `prompt` (the default when no subcommand positional is given) emits an assessment prompt; `history`/`diff` read prior runs; `save` redacts,
- * validates, and persists an in-memory report; `validate` schema-checks a written report; `candidacy` scores a skill/playbook idea.
+ *
+ * - prompt emits an assessment prompt and is the default without a subcommand; history and diff read prior runs.
+ * - save redacts, validates and persists an in-memory report; validate checks a written report's schema; candidacy scores an artifact idea.
  *
  * The parser maps the first positional to one of these, and dispatch routes on the chosen member.
  */
@@ -90,8 +127,9 @@ export type QualitySubcommand =
 /**
  * One resolved input to `quality candidacy`, distinguishing the two ways a caller can supply it.
  *
- * `mode: "draft"` means `value` is a resolved filesystem path to an existing draft to score; `mode: "description"` means `value` is the free-form
- * text describing the proposed artifact.
+ * - mode: "draft" selects an existing draft's resolved path for scoring.
+ * - mode: "description" supplies the caller's text describing the proposed artifact.
+ *
  * The two are mutually exclusive at the CLI; the parser rejects supplying both.
  */
 export interface CandidacyInputArg {
@@ -118,8 +156,11 @@ export const COMMANDS: Command[] = [
   "manifest",
   "events",
   "hooks",
+  "claims",
   "menu",
   "stats",
+  "recall",
+  "learn",
   "diagnostics",
   "index",
   "redact",
@@ -151,10 +192,12 @@ export interface ParsedCLI extends CLIOptions {
   checkContent: boolean;
   isTargetTrusted: boolean;
   isTargetUntrusted: boolean;
-  auditDetails: boolean;
+  includeAuditDetails: boolean;
   shouldCheck: boolean;
   shouldApply: boolean;
   shouldDryRun: boolean;
+  /** Move legacy bookkeeping only; false leaves the normal preview/install workflow selected. */
+  shouldMigrateStateOnly: boolean;
   shouldForce: boolean;
   shouldForceManaged: boolean;
   shouldForceUserOwned: boolean;
@@ -178,25 +221,40 @@ export interface ParsedCLI extends CLIOptions {
   eventsLimit: number;
   hookSubcommand: HookSubcommand | null;
   hookId: string | null;
-  hookScenario: HookScenario | null;
+  hookScenario: HookScenarioSelection | null;
+  claimsSubcommand: ClaimsSubcommand | null;
+  claimsTargetPath: string | null;
+  claimsMarkerSha256: string | null;
+  shouldConfirmAbandoned: boolean;
   reviewSubcommand: ReviewSubcommand | null;
   reviewValidatePath: string | null;
+  /** Caller-supplied installed skill contract; null leaves legacy callers without a version-match guarantee. */
+  reviewExpectedVersion: string | null;
   plansSubcommand: PlansSubcommand | null;
   plansStrict: boolean;
+  plansMaxActive: number | null;
+  plansBandQuantiles: ForecastBandQuantiles | null;
   plansTimeAction: PlansTimeAction | null;
   plansTimeCategory: PlansTimeCategory | null;
   plansTimeFinalize: boolean;
   plansTimeDiscardOpen: boolean;
+  learnSubcommand: LearnSubcommand | null;
+  learnEntryType: LearnEntryType | null;
+  learnCategory: string | null;
+  learnTitle: string | null;
+  learnEvidencePaths: readonly string[];
+  learnSearchLiterals: readonly string[];
+  learnEvidenceKind: LearnEvidenceKind | null;
+  /** Project-relative file or directory operands used by read-only learning-loop recall. */
+  recallPaths: readonly string[];
   diagnosticsSubcommand: DiagnosticsSubcommand | null;
   includeAll: boolean;
 }
 
 /**
- * The slice of ParsedCLI that the `skill` command path populates, projected out so the parser can build and spread just the skill-authoring fields
- * without restating each one.
+ * Group the skill command's parsed fields so the parser can build and pass its authoring input together.
  *
- * Every member is meaningful only when the command is `skill`; for any other command the parser fills these with their null/false defaults, so the
- * subcommand identifies authoring versus read-only diagnosis.
+ * Other commands retain null or false defaults; for skill, the subcommand distinguishes authoring from read-only diagnosis.
  */
 export type SkillCLIFields = Pick<
   ParsedCLI,

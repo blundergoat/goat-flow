@@ -1,16 +1,10 @@
 /**
- * Checks the `(search: "...")` citations a user writes into learning-loop entries.
+ * Checks learning-loop citations so maintainers can find evidence that moved or disappeared.
  *
- * These anchors are how a lesson or footgun points at real code, so this module answers the question the content audit exists to ask: does the text a
- * user cited still exist where they said it does, or has the code moved on and left the note lying?
- *
- * Reading is deliberately layered.
- *
- * Struck-through text and fenced examples are blanked out first - without that, an author writing *about* an anchor inside a code sample would be
- * accused of a broken citation - and the blanking preserves line positions so any finding still points at the line the user is looking at in their
- * editor.
- *
- * Path policy lives in `reference-paths.ts`; this module owns extraction and verdicts.
+ * The content audit applies the same citation rules to guidance and accepted decisions:
+ * - Ignore struck text and fenced examples while preserving the author's line numbers.
+ * - Extract file paths and search needles, then check literal matches in the selected project.
+ * - Use path policy from reference-paths.ts and return valid or stale citation verdicts.
  */
 import { posix as pathPosix } from "node:path";
 import type { ReadonlyFS } from "../../types.js";
@@ -21,9 +15,16 @@ import {
   type ReferenceValidationOptions,
 } from "./reference-paths.js";
 
-/** File tokens and search needles in citation order, including chained needles. */
+/**
+ * File tokens and search needles in citation order.
+ *
+ * Match the author's citation in one of three forms:
+ * - Combined path and needle in one parenthesis group (groups 1-3), including the comma between them.
+ * - A bare file token (group 4) that a following search anchor may use.
+ * - A standalone search anchor (groups 5-6) whose target depends on the preceding text.
+ */
 const SEARCH_CITATION_TOKEN_REGEX =
-  /`((?:[^`]+\.[a-zA-Z0-9]{1,10}|\.[a-zA-Z0-9_-]+))`|\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
+  /\(\s*`([^`]+)`\s*,\s*search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\s*\)|`((?:[^`]+\.[a-zA-Z0-9]{1,10}|\.[a-zA-Z0-9_-]+))`|\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
 
 /** One concrete `(search: ...)` citation after filesystem validation. */
 export interface SearchAnchorEvaluation {
@@ -36,9 +37,8 @@ export interface SearchAnchorEvaluation {
 }
 
 /**
- * One `(search: ...)` citation exactly as the user wrote it, before anything is checked.
- * This is the raw shape lifted from their entry text; `SearchAnchorEvaluation` is the same citation after we look on disk and decide whether it still
- * points at anything real.
+ * A citation extracted from the author's text before checking its target file.
+ * SearchAnchorEvaluation adds the result of checking whether that evidence still exists.
  */
 interface SearchAnchorCitation {
   filePath: string;
@@ -52,75 +52,80 @@ export interface MarkdownFence {
   length: number;
 }
 
-/** Mask struck text without changing line positions used by diagnostics. */
+/** Exclude evidence the author struck through while keeping findings aligned with the original line numbers. */
 function maskStrikethroughPreservingLines(content: string): string {
   return content.replace(/~~[\s\S]*?~~/g, (span) =>
     span.replace(/[^\r\n]/g, " "),
   );
 }
 
-/** Return whether a backtick opener carries an info string CommonMark rejects. */
-function hasInvalidBacktickFenceInfo(run: string, remainder: string): boolean {
-  return run[0] === "`" && remainder.includes("`");
+/** Detect an invalid fence opener so ordinary author text is not hidden from citation checks. */
+function hasInvalidBacktickFenceInfo(
+  fenceMarker: string,
+  remainder: string,
+): boolean {
+  return fenceMarker[0] === "`" && remainder.includes("`");
 }
 
-/** Return whether one fence marker closes the active Markdown example. */
+/** Recognize when the author's fenced example ends so later prose can be checked again. */
 function closesMarkdownFence(
-  run: string,
+  fenceMarker: string,
   remainder: string,
   activeFence: MarkdownFence,
 ): boolean {
   return (
-    run[0] === activeFence.character &&
-    run.length >= activeFence.length &&
+    fenceMarker[0] === activeFence.character &&
+    fenceMarker.length >= activeFence.length &&
     /^[ \t]*$/.test(remainder)
   );
 }
 
 /**
- * Track whether we are inside a fenced example while reading a user's entry line by line.
- * Use when scanning entry text for citations, so an example the user opened with ``` keeps everything beneath it out of the scan until they close it
- * again.
+ * Track whether a line belongs to the author's fenced example before scanning it for citations.
+ * This reads the supplied state and returns the next state without changing the document or the caller's state object.
  *
- * @param line - the next line of the user's entry, exactly as they wrote it
- * @param activeFence - fence currently holding the scan open; `null` means we are in the
- *   user's ordinary prose, where citations do count
- * @returns the fence state to carry into the next line, plus whether this line was itself a
- *   fence marker; `activeFence: null` in the result means their example just closed
+ * @param line - the author's next line; an empty line keeps the current prose or fenced-example state
+ * @param activeFence - current example fence; null means ordinary prose, whose citations are checked
+ * @returns next fence state and marker flag; a null activeFence means the next line is outside any fenced example
  */
 export function advanceMarkdownFenceState(
   line: string,
   activeFence: MarkdownFence | null,
 ): { activeFence: MarkdownFence | null; isFenceLine: boolean } {
   const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
-  const run = match?.[1];
-  if (run === undefined) return { activeFence, isFenceLine: false };
+  const fenceMarker = match?.[1];
+  // A line without a fence marker keeps the author's current prose or example context.
+  if (fenceMarker === undefined) return { activeFence, isFenceLine: false };
 
-  const character = run[0] as "`" | "~";
+  const character = fenceMarker[0] as "`" | "~";
+  // A marker with no trailing text has an empty info string, which is valid when opening or closing an example.
   const remainder = match?.[2] ?? "";
+  // Outside an example, a valid opening fence starts a region whose citations must be ignored.
   if (activeFence === null) {
-    // CommonMark rejects backticks in a backtick fence's info string. Treating
-    // this as a fence would hide the visible content that follows it.
-    if (hasInvalidBacktickFenceInfo(run, remainder)) {
+    // A backtick inside the opener's info string makes it ordinary text; hiding it would conceal citations the author can see.
+    if (hasInvalidBacktickFenceInfo(fenceMarker, remainder)) {
       return { activeFence: null, isFenceLine: false };
     }
     return {
-      activeFence: { character, length: run.length },
+      activeFence: { character, length: fenceMarker.length },
       isFenceLine: true,
     };
   }
 
-  if (closesMarkdownFence(run, remainder, activeFence)) {
+  // A matching closing marker returns the author to ordinary prose, where evidence citations count again.
+  if (closesMarkdownFence(fenceMarker, remainder, activeFence)) {
     return { activeFence: null, isFenceLine: true };
   }
   return { activeFence, isFenceLine: false };
 }
 
-/** Mask fenced Markdown without shifting the line positions used by diagnostics. */
+/** Hide the author's fenced examples from citation checks while preserving the line numbers shown in findings. */
 function maskMarkdownFencesPreservingLines(content: string): string {
   const visibleLines: string[] = [];
+  // Each document begins in ordinary prose; a fence changes which following lines can supply evidence.
   let activeFence: MarkdownFence | null = null;
 
+  // Carry the example boundary across lines so a multiline code sample never becomes live evidence.
   for (const line of content.split(/\r?\n/)) {
     const fenceState = advanceMarkdownFenceState(line, activeFence);
     activeFence = fenceState.activeFence;
@@ -134,30 +139,93 @@ function maskMarkdownFencesPreservingLines(content: string): string {
   return visibleLines.join("\n");
 }
 
-/** Return the one-based line containing a character offset. */
+/**
+ * Normalize a search needle so an author can wrap a citation across lines without changing the literal it names.
+ * Decode escapes only in quoted needles; backtick needles keep literal backslashes.
+ *
+ * @param rawNeedle - the needle exactly as captured between the citation's backticks or quotes
+ * @param isQuoted - whether double quotes, rather than literal Markdown backticks, delimit the needle
+ * @returns the literal string to look for in the cited file
+ */
+function normalizeCitationNeedle(rawNeedle: string, isQuoted: boolean): string {
+  const literal = isQuoted ? rawNeedle.replace(/\\(["\\])/g, "$1") : rawNeedle;
+  return literal.replace(/\s*\r?\n\s*/g, " ");
+}
+
+/** Find the source line to show a maintainer for a citation; line numbers start at one, as they do in an editor. */
 function lineNumberAtOffset(content: string, offset: number): number {
   let line = 1;
+  // Count only text before the citation so its finding points at the line the maintainer needs to edit.
   for (let index = 0; index < offset; index++) {
+    // Each preceding newline advances the editor line reported for this citation.
     if (content[index] === "\n") line++;
   }
   return line;
 }
 
-/** Extract direct and same-sentence chained citations from visible Markdown. */
+/** Read a combined path-and-needle citation; null means it lacks a usable file target or search text. */
+function combinedCitationAt(
+  match: RegExpMatchArray,
+  content: string,
+  matchIndex: number,
+): SearchAnchorCitation | null {
+  const combinedPath = match[1];
+  const rawNeedle = match[2] ?? match[3];
+  // Both the target and the search text are needed before this part of the author's prose can become a citation.
+  if (combinedPath === undefined || rawNeedle === undefined) return null;
+  // A label that is not a file reference must not send the audit looking for an invented target.
+  if (!isFileRef(combinedPath)) return null;
+  return {
+    filePath: combinedPath,
+    needle: normalizeCitationNeedle(rawNeedle, match[3] !== undefined),
+    line: lineNumberAtOffset(content, matchIndex),
+  };
+}
+
+/** Keep a citation's preceding file target only while the intervening prose still connects them; null means no target can be inferred. */
+function activeFilePathAfterGap(
+  gap: string,
+  isAwaitingDirectSearch: boolean,
+  activeFilePath: string | null,
+): string | null {
+  // The first anchor may follow its file path across a period or line wrap, but not across unrelated prose or a paragraph break.
+  if (isAwaitingDirectSearch) {
+    return /^[ \t]*\.?[ \t]*(?:\n[ \t]*)?$/.test(gap) ? activeFilePath : null;
+  }
+  // Later anchors can share a target within one sentence; a new sentence or line ends that association.
+  return /\n|[.!?](?:\s|$)/.test(gap) ? null : activeFilePath;
+}
+
+/** Collect the author's visible citations, including chained needles, without guessing targets from unrelated sentences. */
 function extractVisibleSearchAnchorCitations(
   content: string,
 ): SearchAnchorCitation[] {
   const citations: SearchAnchorCitation[] = [];
+  // Until a file token appears, standalone search text has no evidence target to check.
   let activeFilePath: string | null = null;
   let isAwaitingDirectSearch = false;
   let previousTokenEnd = 0;
 
+  // Read citations in author order so each standalone needle can use only a preceding, still-connected target.
   for (const match of content.matchAll(
     new RegExp(SEARCH_CITATION_TOKEN_REGEX.source, "g"),
   )) {
     const matchIndex = match.index;
     const tokenEnd = matchIndex + match[0].length;
-    const filePath = match[1];
+
+    // A combined citation already names its target; it must not lend that target to a later standalone anchor.
+    if (match[1] !== undefined) {
+      const combined = combinedCitationAt(match, content, matchIndex);
+      // Keep only a complete citation; malformed combined text remains ordinary prose.
+      if (combined !== null) citations.push(combined);
+      activeFilePath = null;
+      isAwaitingDirectSearch = false;
+      previousTokenEnd = tokenEnd;
+      continue;
+    }
+
+    const filePath = match[4];
+    // A new file token replaces the prior target, so the next anchor follows the file the author most recently named.
     if (filePath !== undefined) {
       activeFilePath = isFileRef(filePath) ? filePath : null;
       isAwaitingDirectSearch = activeFilePath !== null;
@@ -165,17 +233,17 @@ function extractVisibleSearchAnchorCitations(
       continue;
     }
 
-    const gap = content.slice(previousTokenEnd, matchIndex);
-    if (isAwaitingDirectSearch) {
-      if (!/^[ \t]*(?:\n[ \t]*)?$/.test(gap)) activeFilePath = null;
-    } else if (/\n|[.!?](?:\s|$)/.test(gap)) {
-      activeFilePath = null;
-    }
-    const rawNeedle = match[2] ?? match[3];
+    activeFilePath = activeFilePathAfterGap(
+      content.slice(previousTokenEnd, matchIndex),
+      isAwaitingDirectSearch,
+      activeFilePath,
+    );
+    const rawNeedle = match[5] ?? match[6];
+    // Record an anchor only when the author's text supplies both a connected target and a search needle.
     if (activeFilePath !== null && rawNeedle !== undefined) {
       citations.push({
         filePath: activeFilePath,
-        needle: rawNeedle.replace(/\\(["\\])/g, "$1"),
+        needle: normalizeCitationNeedle(rawNeedle, match[6] !== undefined),
         line: lineNumberAtOffset(content, matchIndex),
       });
     }
@@ -185,7 +253,7 @@ function extractVisibleSearchAnchorCitations(
   return citations;
 }
 
-/** Extract visible semantic-anchor citations while ignoring fenced examples. */
+/** Prepare the author's prose for evidence checks by excluding struck citations and fenced examples. */
 function extractSearchAnchorCitations(content: string): SearchAnchorCitation[] {
   const withoutStrikethrough = maskStrikethroughPreservingLines(content);
   return extractVisibleSearchAnchorCitations(
@@ -193,12 +261,12 @@ function extractSearchAnchorCitations(content: string): SearchAnchorCitation[] {
   );
 }
 
-/** Return whether a citation identifies one concrete repository file. */
+/** Check that the author named one file; glob patterns and template paths cannot identify evidence to verify. */
 function isConcreteSearchAnchorPath(filePath: string): boolean {
   return isFileRef(filePath) && !/[*?{}<>]|\.\.\./.test(filePath);
 }
 
-/** Build one failed semantic-anchor result without duplicating its evidence. */
+/** Keep the author's citation alongside its failure reason so the audit can show exactly which evidence needs repair. */
 function staleSearchAnchorEvaluation(
   anchor: SearchAnchorCitation,
   reason: "missing-file" | "missing-needle" | "gitignored-path",
@@ -207,24 +275,26 @@ function staleSearchAnchorEvaluation(
   return { ...anchor, status: "stale", reason, diagnostic };
 }
 
-/** Choose a citing-file-relative candidate only for explicit local path forms. */
+/** Resolve local citations from the skill or document folder; null retains the project-root interpretation, with no filesystem reads. */
 function localSearchAnchorCandidate(
   filePath: string,
   sourcePath: string,
 ): string | null {
   const skillRoot = /^(.+\/skills\/[^/]+)(?:\/|$)/.exec(sourcePath)?.[1];
+  // A skill author may cite its own reference pack without repeating the installed skill directory.
   if (
     skillRoot !== undefined &&
     (filePath.startsWith("references/") || filePath === "SKILL.md")
   ) {
     return pathPosix.join(skillRoot, filePath);
   }
+  // Only explicit relative paths follow the document's folder; other citations keep their project-root meaning.
   return filePath.startsWith("./") || filePath.startsWith("../")
     ? pathPosix.join(pathPosix.dirname(sourcePath), filePath)
     : null;
 }
 
-/** Reject a relative citation candidate that normalizes outside the project. */
+/** Detect citations outside the selected project so an author's evidence cannot make the audit inspect another workspace. */
 function isEscapedSearchAnchorPath(path: string): boolean {
   return (
     pathPosix.isAbsolute(path) ||
@@ -233,37 +303,40 @@ function isEscapedSearchAnchorPath(path: string): boolean {
   );
 }
 
-/** Resolve the skill-relative citation forms used by installed and source skills. */
+/** Resolve the author's citation to a project path; null rejects an escape, and a missing sourcePath means project-root references only. */
 function resolveSearchAnchorPath(
   filePath: string,
   sourcePath: string | undefined,
 ): string | null {
+  // Without the citing document's path, there is no local folder from which to resolve a relative citation.
   const relativeCandidate =
     sourcePath === undefined
       ? null
       : localSearchAnchorCandidate(filePath, sourcePath);
+  // A citation with no explicit local interpretation keeps the path the author supplied.
   const normalized = pathPosix.normalize(relativeCandidate ?? filePath);
   return isEscapedSearchAnchorPath(normalized) ? null : normalized;
 }
 
-/** Validate one parsed citation, returning null only when policy excludes it. */
+/** Validate one parsed citation for the content audit; null means policy excludes it, not that the author's evidence was verified. */
 function evaluateSearchAnchor(
   fs: ReadonlyFS,
   anchor: SearchAnchorCitation,
   options: ReferenceValidationOptions,
 ): SearchAnchorEvaluation | null {
+  // Placeholder paths and globs do not name one file whose evidence can be checked.
   if (!isConcreteSearchAnchorPath(anchor.filePath)) return null;
   const resolvedPath = resolveSearchAnchorPath(
     anchor.filePath,
     options.sourcePath,
   );
-  // Evidence citations may never make the target filesystem inspect outside
-  // the selected project, even when the raw path has a source-relative form.
+  // Reject a path escape before reading files, even when the author expressed it relative to the citing document.
   if (resolvedPath === null) return null;
   const resolvedAnchor = {
     ...anchor,
     filePath: resolvedPath,
   };
+  // Local plans and logs may disappear in another checkout, so they cannot serve as durable evidence for a published lesson.
   if (isIntentionallyGitignored(resolvedAnchor.filePath)) {
     return staleSearchAnchorEvaluation(
       resolvedAnchor,
@@ -271,10 +344,13 @@ function evaluateSearchAnchor(
       `${resolvedAnchor.filePath} (gitignored path used as durable evidence anchor)`,
     );
   }
+  // Skip targets outside the freshness policy rather than presenting an unsupported check as a valid citation.
   if (!isCheckableForStaleness(resolvedAnchor.filePath, fs)) return null;
 
   const diagnostic = `${resolvedAnchor.filePath} (search: \`${resolvedAnchor.needle}\`)`;
+  // A removed or mistyped target normally leaves the author with a stale citation to repair.
   if (!fs.exists(resolvedAnchor.filePath)) {
+    // External-repository evidence may be absent locally; callers must opt in before that absence can be skipped.
     if (options.allowMissingFiles === true) return null;
     return staleSearchAnchorEvaluation(
       resolvedAnchor,
@@ -283,6 +359,7 @@ function evaluateSearchAnchor(
     );
   }
   const fileContent = fs.readFile(resolvedAnchor.filePath);
+  // An unreadable target provides no verifiable text, so the audit reports the citation as stale.
   if (fileContent === null) {
     return staleSearchAnchorEvaluation(
       resolvedAnchor,
@@ -290,6 +367,7 @@ function evaluateSearchAnchor(
       diagnostic,
     );
   }
+  // The file still exists, but the quoted text has moved or changed; the author needs a current semantic anchor.
   if (!fileContent.includes(resolvedAnchor.needle)) {
     return staleSearchAnchorEvaluation(
       resolvedAnchor,
@@ -297,6 +375,7 @@ function evaluateSearchAnchor(
       diagnostic,
     );
   }
+  // The target and literal both exist, so this citation needs no stale reason or repair diagnostic.
   return {
     ...resolvedAnchor,
     status: "valid",
@@ -306,21 +385,14 @@ function evaluateSearchAnchor(
 }
 
 /**
- * Validate visible `(search: ...)` citations against the selected project.
+ * Check the author's visible citations against the selected project, using the same rules for guidance and accepted decisions.
  *
- * Callers that accept evidence from external repositories may ignore missing files while still detecting a moved literal in any target present
- * locally.
- * Placeholder and glob paths are skipped because they do not identify one concrete file.
- *
- * Every selected source document, including accepted ADRs, uses the same literal-resolution contract.
+ * Callers may opt to skip missing external-repository files; placeholder paths and globs are always excluded.
  *
  * @param fs - read-only filesystem used to open the files the user cited
- * @param content - the user's entry text; content with no citations is not an error and
- *   simply yields nothing to report
- * @param options - policy for evidence that may live in another repo; omitted means every
- *   cited file must exist locally or the citation is reported as stale
- * @returns one result per resolvable citation, each marked valid or stale; an empty list
- *   means the user cited nothing checkable, not that everything passed
+ * @param content - the author's entry text; empty text or no checkable citations produces no results
+ * @param options - evidence policy; omission requires every checkable target to exist locally or be reported as stale
+ * @returns valid or stale results for checkable citations; an empty list means no citation verdicts, not that all evidence passed
  */
 export function evaluateSearchAnchors(
   fs: ReadonlyFS,
@@ -328,8 +400,10 @@ export function evaluateSearchAnchors(
   options: ReferenceValidationOptions = {},
 ): SearchAnchorEvaluation[] {
   const evaluations: SearchAnchorEvaluation[] = [];
+  // Evaluate each visible citation independently so one stale pointer cannot hide the remaining results from the author.
   for (const anchor of extractSearchAnchorCitations(content)) {
     const evaluation = evaluateSearchAnchor(fs, anchor, options);
+    // Excluded citations have no verdict; do not count them as evidence the audit verified.
     if (evaluation !== null) evaluations.push(evaluation);
   }
   return evaluations;

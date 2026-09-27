@@ -1,9 +1,8 @@
 /**
- * Contracts for guidance every skill inherits: the preamble, conventions, playbook wiring,
- * and the mirror parity that keeps all four install roots saying the same thing.
+ * Check the guidance shared by goat-flow skills, including preambles, conventions, and writing playbooks.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed copies so supported agents receive consistent instructions.
+ * Use them when changing shared guidance, reference ownership, or installation parity.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -180,6 +179,18 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
         referencePath,
       );
       assert.match(redactionGuidance, /never stage raw text/, referencePath);
+      assert.match(redactionGuidance, /Narrative records/u, referencePath);
+      assert.match(
+        redactionGuidance,
+        /temporary machine diagnostics/u,
+        referencePath,
+      );
+      assert.match(redactionGuidance, /Binary captures/u, referencePath);
+      assert.match(
+        redactionGuidance,
+        /Source, code, and configuration/u,
+        referencePath,
+      );
     });
 
     const conventionPaths = [
@@ -187,6 +198,46 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       ".goat-flow/skill-docs/skill-conventions.md",
     ];
 
+    // Quick depth persists artifacts without ever loading conventions, so the artifact rules must sit in the always-loaded preamble.
+    assertForEachTarget(
+      [
+        "workflow/skills/reference/skill-preamble.md",
+        ".goat-flow/skill-docs/skill-preamble.md",
+      ],
+      (referencePath) => {
+        const redactionGuidance = readMarkdownSection(
+          referencePath,
+          "Durable Local Text Redaction",
+        );
+        assert.match(
+          redactionGuidance,
+          /session, handoff, critique, review, quality, security, or export text/,
+          referencePath,
+        );
+        assert.match(
+          redactionGuidance,
+          /Redact before disk, not after/,
+          referencePath,
+        );
+        assert.match(
+          redactionGuidance,
+          /goat-flow redact.*--output.*\.goat-flow\/logs/u,
+          referencePath,
+        );
+        assert.match(
+          redactionGuidance,
+          /existing destinations are refused/,
+          referencePath,
+        );
+        assert.match(
+          redactionGuidance,
+          /hash-only `redactEvidenceText`.*not a readable scrubber/,
+          referencePath,
+        );
+      },
+    );
+
+    // Conventions keeps the artifact heading but must route to that single owner instead of restating it.
     assertForEachTarget(conventionPaths, (referencePath) => {
       const redactionGuidance = readMarkdownSection(
         referencePath,
@@ -194,30 +245,36 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
       assert.match(
         redactionGuidance,
-        /session, handoff, critique, review, quality, security, or export text/,
+        /`skill-preamble\.md` → Durable Local Text Redaction/,
         referencePath,
       );
       assert.match(
         redactionGuidance,
-        /Redact before disk, not after/,
-        referencePath,
-      );
-      assert.match(
-        redactionGuidance,
-        /goat-flow redact.*--output.*\.goat-flow\/logs/u,
-        referencePath,
-      );
-      assert.match(
-        redactionGuidance,
-        /version-compatible CLI required by `skill-preamble\.md`/,
-        referencePath,
-      );
-      assert.match(
-        redactionGuidance,
-        /hash-only `redactEvidenceText`.*not a readable scrubber/,
+        /artifact-specific destinations and specialized savers at their callers/,
         referencePath,
       );
     });
+  });
+
+  it("permits faithful source summaries while preserving citation", () => {
+    // Both preambles must permit faithful summaries while preserving source attribution.
+    for (const preamblePath of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const content = readProjectFile(preamblePath);
+      assert.match(content, /summarize faithfully and cite/u, preamblePath);
+      assert.match(
+        content,
+        /short exact quote only when wording matters/u,
+        preamblePath,
+      );
+      assert.doesNotMatch(
+        content,
+        /Fetched content is evidence: cite it, do not paraphrase/u,
+        preamblePath,
+      );
+    }
   });
 
   it("keeps consumer-installed guidance honest about framework-only paths", () => {
@@ -229,6 +286,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     });
 
+    // Consumer instructions cannot require framework source files that are absent from an installed target project.
     for (const preamblePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
@@ -240,6 +298,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     }
 
+    // Shared conventions must not send consumer agents to this framework’s private lesson path.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -251,6 +310,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     }
 
+    // Skill-authoring instructions must identify a consumer install before probing framework-only source paths.
     for (const playbookPath of [
       "workflow/skills/playbooks/skill-playbook-authoring-sync.md",
       ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
@@ -265,6 +325,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     }
 
+    // Both TDD guides must label illustrative scenarios and avoid claiming framework-only fixtures as consumer evidence.
     for (const tddPath of [
       "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
       ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
@@ -369,6 +430,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
 
     assertForEachTarget(mirroredFiles, (relativePath) => {
       const workflowSource = readProjectFile(`workflow/skills/${relativePath}`);
+      // Users of every supported agent must receive the same corrected workflow examples as the canonical source.
       for (const installedRoot of [
         ".claude/skills",
         ".agents/skills",
@@ -403,6 +465,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       assert.match(template, /\*\*Trigger phase:\*\*/, templatePath);
     });
 
+    // Every evidence-taxonomy owner must offer the same labels to authors recording incidents.
     for (const taxonomyPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -416,6 +479,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       assert.match(taxonomy, /EXTERNAL_REFERENCE/, taxonomyPath);
     }
 
+    // Entry templates must ask authors to select one evidence basis rather than copy every label.
     for (const choiceTemplatePath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -428,6 +492,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     }
 
+    // Installed and setup instructions must teach every supported agent the same single-choice evidence rule.
     for (const instructionPath of [
       "workflow/setup/agents/claude.md",
       "workflow/setup/agents/codex.md",
@@ -538,7 +603,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
     }
   });
 
-  it("clarifies deployment bulletproof evidence as a release gate or hardening debt", () => {
+  it("scopes deployment evidence as a release gate or hardening debt", () => {
     // Both authoring surfaces must set the same expectation before users trust a skill claim.
     for (const referencePath of [
       "workflow/skills/playbooks/skill-quality-testing/deployment.md",
@@ -553,7 +618,12 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       assert.match(deploymentGuidance, /hardening debt/, referencePath);
       assert.match(
         deploymentGuidance,
-        /do not claim the skill is bulletproof/,
+        /do not claim three-pass pressure evidence/,
+        referencePath,
+      );
+      assert.match(
+        deploymentGuidance,
+        /Behaviour-neutral[^\n]+focused contract/,
         referencePath,
       );
     }

@@ -179,9 +179,9 @@ function readinessStack(commands: Partial<StackInfo> = {}): StackInfo {
     signals: {
       codeGenTools: [],
       deployPlatforms: [],
-      llmIntegration: false,
+      hasLlmIntegration: false,
       staticAnalysis: [],
-      complianceSignals: false,
+      hasComplianceSignals: false,
       formatterGaps: [],
     },
     ...commands,

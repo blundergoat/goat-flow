@@ -54,6 +54,72 @@ describe("dashboard /api/quality", () => {
     assert.match(String(payload.prompt), /end-to-end resumability/);
   });
 
+  it("names a selected target only when the request sent one", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-quality-no-target-"));
+    try {
+      const { res, body } = await fetchJson(
+        `/api/quality?path=${encodeURIComponent(root)}&agent=claude&mode=process&fast=true`,
+      );
+      assert.equal(res.status, 200);
+      const payload = expectRecord(body, "Quality response without target");
+      // An omitted target must not fall back to the server's own project and present it as a target the user chose.
+      assert.equal(
+        String(payload.prompt).includes("Selected target project"),
+        false,
+        "prompt names a selected target project the request never sent",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps mode evidence under the requested project when a target differs", async () => {
+    const owningRoot = await mkdtemp(
+      join(tmpdir(), "goat-flow-quality-owner-"),
+    );
+    const selectedRoot = await mkdtemp(
+      join(tmpdir(), "goat-flow-quality-selected-"),
+    );
+    try {
+      const { res, body } = await fetchJson(
+        `/api/quality?path=${encodeURIComponent(owningRoot)}` +
+          `&target=${encodeURIComponent(selectedRoot)}` +
+          `&agent=claude&mode=process&fast=true`,
+      );
+      assert.equal(res.status, 200);
+      const payload = expectRecord(body, "Cross-project quality response");
+      // Callers resolve mode ownership before the request, so the audit, prior report, and event all belong to `path`.
+      assert.ok(
+        String(payload.prompt).includes(`- Project path: \`${owningRoot}\``),
+        "prompt does not name the requested project as its own root",
+      );
+      // A reviewer inspecting a second project still needs to see which one they selected.
+      assert.ok(
+        String(payload.prompt).includes(
+          `- Selected target project: \`${selectedRoot}\``,
+        ),
+        "prompt drops the separately selected target",
+      );
+
+      const owningEvents = await readEventEnvelopes(owningRoot);
+      const selectedEvents = await readEventEnvelopes(selectedRoot);
+      assert.equal(
+        owningEvents.length,
+        1,
+        `expected one event under the requested project, found ${owningEvents.length}`,
+      );
+      // Recording under the selected target would attribute a controlling-workspace review to the user's project.
+      assert.equal(
+        selectedEvents.length,
+        0,
+        `recorded ${selectedEvents.length} event(s) under the selected target`,
+      );
+    } finally {
+      await rm(owningRoot, { recursive: true, force: true });
+      await rm(selectedRoot, { recursive: true, force: true });
+    }
+  });
+
   it("uses cache-only audit enrichment when fast=true is requested", async () => {
     const root = await mkdtemp(join(tmpdir(), "goat-flow-quality-fast-"));
     try {

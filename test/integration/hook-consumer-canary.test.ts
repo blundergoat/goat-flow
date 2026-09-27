@@ -224,7 +224,7 @@ describe("source hook consumer canary", () => {
     assert.match(modelVisibleContext, /execution-timeout/u);
     assert.match(
       modelVisibleContext,
-      /hook exceeded its deadline and was killed/u,
+      /hook exceeded its deadline; process-tree termination was requested/u,
     );
     assert.equal(canaryResult.stderr, "");
   });

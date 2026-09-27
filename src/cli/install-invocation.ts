@@ -149,11 +149,14 @@ function installerSpawnEnv(
 ): NodeJS.ProcessEnv {
   // POSIX shells already resolve the intended Bash and need no PATH rewrite.
   if (bashCommand === "bash") return baseEnv;
+  // Windows commonly spells this key "Path"; preserve it so Node never chooses a competing, truncated PATH entry.
+  const pathKey =
+    Object.keys(baseEnv).find((key) => key.toLowerCase() === "path") ?? "PATH";
   // A restricted host may omit PATH; Git Bash's own folder still becomes usable.
-  const existingPath = baseEnv.PATH ?? "";
+  const existingPath = baseEnv[pathKey] ?? "";
   return {
     ...baseEnv,
-    PATH: `${bashCommandDir(bashCommand)}${delimiter}${existingPath}`,
+    [pathKey]: `${bashCommandDir(bashCommand)}${delimiter}${existingPath}`,
   };
 }
 
