@@ -50,9 +50,9 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 **Decision changed:** Check lower-level remote-ref writers against `is_git_publication_target` when changing the publication guard; test direct and alias forms beside a read-only Git control.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-09-25
+**Incident count:** 3 | **Latest occurrence:** 2026-09-27
 
-**Prevention:** Keep the publication verb set aligned with Git commands that update remote refs. For each newly covered verb, classify a direct write, an alias expansion and an adjacent read-only control with both the canonical and installed hook suites.
+**Prevention:** Cover commands that upload repository objects or update remote refs. Test direct and alias writes beside read-only controls; prove dry-run exemptions from the final parsed Boolean value.
 
 **Symptoms:** Both installed hooks returned exit 0 for `git http-push --force https://example.invalid/repo.git main`, and the Git policy also allowed an alias expanding to that command. The same policy denied `git send-pack origin main` with exit 2. Git 2.43's `git-http-push` manual says the command updates a remote branch and `--force` disables its fast-forward check; the executable is installed in this workspace. No remote command was executed during classification.
 
@@ -61,6 +61,8 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 **Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_publication_target`) now includes `http-push`; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git http-push publication`) pins the direct write beside alias and read-only controls. The [Git 2.43 manual](https://git-scm.com/docs/git-http-push/2.43.0.html) describes the remote-ref write.
 
 **Recurrence 2026-09-25:** The same classifier still allowed `git svn dcommit` and `git p4 submit`, which publish through optional Git bridges. `is_git_publication_target` now names both, and the corpus (search: `Git SVN publication`) tests direct and alias forms beside `svn fetch` and `p4 sync` controls. The local hook verdict was measured; bridge execution was not available in this workspace.
+
+**Recurrence 2026-09-27:** `git lfs push origin main` and its aliases exited 0. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_lfs_write_target`) classifies uploads while preserving dry runs. The shared corpus (search: `Git LFS publication`) covers cancelled previews and alias arguments. Probes classified text; Git LFS was not installed.
 
 ---
 
@@ -85,7 +87,7 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: GitHub CLI comments bypassed shared-system write guardrails
 
 **Status:** active | **Created:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 5 | **Latest occurrence:** 2026-09-26
+**Incident count:** 6 | **Latest occurrence:** 2026-09-27
 
 **Prevention:**
 1. Treat `git push` as one GitHub write path among many. Every new shared-system `gh` mutation route needs a hook rule and a self-test case, and the suite keeps read-only controls (`issue view`, `pr checks`, `gh api --method GET`) so write blocking never becomes a GitHub-read ban.
@@ -94,7 +96,7 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 4. Prove dry-run exceptions from parsed options: consume value operands, honor `--`, and apply the last Boolean value.
    A non-publishing mode that writes local files is still a write under ADR-028.
 
-**Symptoms:** Before 2026-05-20, an agent could post to GitHub through `gh issue comment ... --body-file` or `gh api ... -X POST` while `git push` was blocked, and a narrow first fix still missed `gh issue --repo owner/repo comment ...` and `xargs ... gh issue comment ...`. The residual trap is any `gh` write outside the comment carve-out: PR review, merge, create, edit, close, ready; issue create, close, edit, delete, lock, transfer, develop; release, repo, label, workflow, run, gist, secret, variable, key, auth, codespace, project, cache; and `gh api` with a non-GET/HEAD method or body fields, except a proven read-only GraphQL query under ADR-028.
+**Symptoms:** GitHub comment and API writes passed while `git push` was blocked; the first repair missed interspersed global flags and `xargs`. The commands and incident are recorded below. Remaining writes outside ADR-028's issue/PR conversation-comment carve-out still require classification; proven GraphQL queries remain allowed.
 
 **Why it happens:** The hook once treated `gh` as an ordinary command unless it contained an already-blocked shell pattern, and CLI parsers accept option placements the incident never showed.
 
@@ -111,7 +113,9 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 
 **Recurrence 2026-09-25 (Codespace filesystem):** `gh codespace cp README.md remote:/tmp/review-write` and `gh codespace ssh -- touch /tmp/review-write`, including the `cs` alias, passed both installed hooks. Local `gh codespace cp --help` says copies can target the remote filesystem, and `ssh --help` accepts a remote command. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `gh_codespace_ssh_is_config_only`) now blocks copies and interactive or command-bearing SSH. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `codespace remote shell command`) keeps configuration output and usage available. No Codespace command was executed.
 
-**Recurrence 2026-09-26 (aliases, settings, and unknown topics):** The write table was a denylist that ended in "allow", so `gh alias set`/`import`/`delete`, `gh config set`, `gh auth switch`, `gh repo autolink create`/`delete`, built-in spellings (`issue`/`pr`/`repo`/`gist`/`release new`, `variable remove`, `ext`/`skills`/`agent-tasks` shorthands, `extension exec`), and any unrecognised first word (a saved alias or extension, or a case-changed topic) all passed. gh runs a saved alias or installed extension for any non-built-in word and cannot show the hook what it will run. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_builtin_topic`) now fails closed on any first word outside the gh manual's command set, normalises the built-in shorthands, and adds the alias/config/auth-switch/autolink write cases; the built-in list is the enumerated surface to extend when gh ships a new command. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `saved gh alias invocation`) pairs each block with its read-only control (`alias list`, `config get`, `auth status`, `ext list`). No remote mutation ran.
+**Recurrence 2026-09-26 (aliases, settings, and unknown topics):** Alias/config writes, auth switching, autolink writes, built-in shorthands and unknown topics passed. Unknown topics execute saved aliases or extensions whose actions the hook cannot inspect. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_builtin_topic`) now refuses unknown topics, normalizes shorthands and names the missing writes. Extend the built-in set when gh adds commands. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `saved gh alias invocation`) pairs denials with alias/config/auth/extension reads. No remote mutation ran.
+
+**Recurrence 2026-09-27:** `gh extension browse` and forced PR checkout (`pr co` included) exited 0; installed help confirms their write modes. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `extension:browse`, `pr:checkout`) guards them. Rechecks caught `--branch topic checkout` ordering and false denial of `--force --detach`, which skips branch resets. The shared corpus (search: `expect_lfs_and_github_interactive_writes`) retains help, inspection, disabled force and effective detach controls. No TUI or checkout ran.
 
 ---
 
@@ -185,7 +189,7 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Decision changed:** Classify history writers in one set; grant exact non-writing modes only after checking the alias expansion and appended arguments.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 11 | **Latest occurrence:** 2026-09-25
+**Incident count:** 12 | **Latest occurrence:** 2026-09-27
 
 **Prevention:**
 1. When a Git command can create, rewrite or move history, including notes refs, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
@@ -196,7 +200,7 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 6. Match a flag the way Git parses it, inside a short bundle or as a unique long prefix (search: `git_option_present`), including `--pathspec-fr` for `--pathspec-from-file`. Treat a whole-tree, directory, exclusion or glob magic, `*` or `?` glob, parent, pathspec-file or command-substitution argument as bulk (search: `git_pathspecs_name_bulk`). Carry literal `cd` and `git -C` paths into directory checks; unresolved directory changes require a refusal for `restore` and `checkout --` pathspecs (search: `track_git_shell_directory`). Normalize internal `.` and `..` components before classifying scope: `src/..` covers the current tree, while `src/../README.md` stays targeted. A `[` class alone stays targeted, because it names dynamic-route files such as `app/[id]/page.tsx`. Classify an alias invocation as its expansion plus the arguments Git appends (search: `resolve_git_invoked_alias_command`).
 7. Treat these as known gaps (measured 2026-09-23): arguments supplied through `xargs` or `find` stdin, a quoted pathspec that contains a flag spelling, a variable pathspec other than `$PWD` or `$HOME`, a command substitution before `--` in `checkout`, and environment-backed alias overrides. `reflog expire -n` and `filter-repo --analyze` deny conservatively.
 
-**Symptoms:** `804d98d8` (2026-09-21) added `commit-tree`, `update-ref`, `cherry-pick`, `revert` and `am`. A PR #61 review on 2026-09-22 showed `git merge topic`, `git rebase main` and `git pull --no-rebase origin main` still exited 0 under `deny-git-mutations.sh --check`; reproduced on 2026-09-23 at `86f211d0`. Later on 2026-09-23, a quality-assessment payload replay at `53641821` found `filter-branch`, `filter-repo` and `fast-import` exiting 0 on both deny hooks, and every history denial telling the agent to ask for a commit, including `pull` and `rebase`. An adversarial review of that fix then found exact-word matching missing `checkout -fq`, `switch --discard`, `restore ':(top)'` and alias arguments such as `git -c alias.x=stash x clear`. A false-positive replay of 575 shapes against the HEAD policy then showed the widened glob rule denying single route files such as `git restore "app/[id]/page.tsx"`, and a blanket `:` rule denying `:(literal)` and root-anchored single files.
+**Symptoms:** After `804d98d8` added five history verbs, PR #61 exposed allowed merge/rebase/pull commands, reproduced at `86f211d0` on 2026-09-23. Replay at `53641821` found allowed `filter-branch`, `filter-repo` and `fast-import`, plus commit-specific denial text for other verbs. Follow-up probes missed `checkout -fq`, `switch --discard`, `restore ':(top)'` and `git -c alias.x=stash x clear`. A 575-shape replay then found false denials for `git restore "app/[id]/page.tsx"`, `:(literal)` and root-anchored single files.
 
 **Why it happens:** The commit class is a list of verbs, so coverage ends at the verbs someone remembered. The old exemptions matched `-n`, `--abort` or `--quit` anywhere in the joined arguments, so they could not rule out an abbreviation, negation or message value.
 
@@ -221,3 +225,5 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Recurrence 2026-09-25 (worktree reset):** The installed `--check` classifier returned exit 0 for `git worktree add -B main ../other HEAD~3`, its bundled `-qBmain` spelling, and an alias to `worktree`; `git worktree add -h` defines `-B` as creating or resetting a branch. A first matcher also denied a quoted `--reason 'branch -B'` value; a disposable worktree confirmed Git treats `-B` after `--reason` as lock text. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_worktree_add_resets_branch`) now reads argument boundaries before classifying the branch reset. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `worktree add resets an existing branch`) pairs the denial with `-b`, lock-reason, `list`, and help controls. Classifier probes never ran the branch reset; the disposable worktree did not change this project's branches.
 
 **Recurrence 2026-09-25 (stash history):** `git stash push`, `save`, `create`, `store`, `pop` and `branch` all passed the installed classifier. `git stash -h` identifies their commit, ref or branch effects; `pop` also removes a stash entry. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_stash_preserves_history`) now guards those modes, including the default push and aliases, while retaining `list`, `show`, `apply` and usage. The shared corpus (search: `stash history mode`) failed on the write forms before repair and passed afterward. No stash command was executed.
+
+**Recurrence 2026-09-27:** LFS import/export and import `--no-rewrite` exited 0 despite history writes. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_lfs_write_target`) guards them. The shared corpus (search: `LFS migration import writes history`) retains info/help. Recheck caught quoted `--help` messages falsely blamed on aliases; `git_history_block_reason` now uses original arguments. Probes classified text; no migration ran.

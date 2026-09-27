@@ -17,12 +17,102 @@ declare -gA __goat_git_alias_expansions=()
 # Preserve alias argument boundaries for Git commands that execute a nested shell command.
 declare -gA __goat_git_raw_alias_expansions=()
 
+# Read a Cobra Boolean flag without mistaking another option's value for a flag.
+# Git LFS and gh share this grammar: short bundles, explicit Boolean values, and last occurrence wins.
+cobra_boolean_flag_enabled() {
+  local -n flag_words="$1"
+  local long_name="$2" short_name="$3" value_options="$4" value_shorts="$5"
+  local index word short value enabled=0
+  for ((index = 1; index < ${#flag_words[@]}; index++)); do
+    word="${flag_words[index]}"
+    case "$word" in
+      --) break ;;
+      --"$long_name") enabled=1 ;;
+      --"$long_name"=*)
+        value="${word#*=}"
+        case "$value" in
+          1|t|T|true|TRUE|True) enabled=1 ;;
+          *) enabled=0 ;;
+        esac ;;
+      --*)
+        [[ " $value_options " == *" $word "* ]] && index=$((index + 1)) ;;
+      -?*)
+        word="${word#-}"
+        while [[ -n "$word" ]]; do
+          short="${word:0:1}"
+          word="${word:1}"
+          # A value-taking shorthand owns the rest of its bundle or the next argument.
+          if [[ "$value_shorts" == *"$short"* ]]; then
+            [[ -n "$word" ]] || index=$((index + 1))
+            break
+          fi
+          if [[ "$short" == "$short_name" ]]; then
+            enabled=1
+            if [[ "$word" == =* ]]; then
+              case "${word#=}" in
+                1|t|T|true|TRUE|True) enabled=1 ;;
+                *) enabled=0 ;;
+              esac
+            fi
+          fi
+          # An explicit value terminates a Boolean shorthand bundle.
+          [[ "$word" == =* ]] && break
+        done ;;
+    esac
+  done
+  [[ "$enabled" -eq 1 ]]
+}
+
+# Classify LFS publication and history modes while preserving previews and usage.
+# Alias definitions are deferred until their appended arguments and original word boundaries are available.
+is_git_lfs_write_target() {
+  local candidate="$1" write_kind="$2" mode="${3:-}"
+  [[ "$mode" == strict ]] && return 1
+  local -a lfs_words=() commands=()
+  case "$mode" in
+    direct) lfs_words=("${__goat_git_command_words[@]}") ;;
+    alias) lfs_words=("${__goat_git_invoked_alias_words[@]}") ;;
+    *) split_shell_words_into lfs_words "$candidate" ;;
+  esac
+  local value_options="--include --exclude --include-ref --exclude-ref --above --top --unit --pointers --object-map --message --remote"
+  local index word short
+  for ((index = 1; index < ${#lfs_words[@]}; index++)); do
+    word="${lfs_words[index]}"
+    case "$word" in
+      --) commands+=("${lfs_words[@]:index+1}"); break ;;
+      --*) [[ " $value_options " == *" $word "* ]] && index=$((index + 1)) ;;
+      -?*)
+        word="${word#-}"
+        while [[ -n "$word" ]]; do
+          short="${word:0:1}"
+          word="${word:1}"
+          if [[ IXm == *"$short"* ]]; then
+            [[ -n "$word" ]] || index=$((index + 1))
+            break
+          fi
+          [[ "$word" == =* ]] && break
+        done ;;
+      *) commands+=("$word") ;;
+    esac
+  done
+  case "$write_kind:${commands[0]:-}:${commands[1]:-}" in
+    publication:push:*|history:migrate:import|history:migrate:export) ;;
+    *) return 1 ;;
+  esac
+  cobra_boolean_flag_enabled lfs_words help h "$value_options" IXm && return 1
+  if [[ "$write_kind" == publication ]] && cobra_boolean_flag_enabled lfs_words dry-run d "$value_options" IXm; then
+    return 1
+  fi
+  return 0
+}
+
 # Decide whether a direct subcommand or alias expansion publishes Git objects.
 # Use for both visible Git commands and alias config so their deny set cannot drift.
 is_git_publication_target() {
   local candidate="$1"
   candidate="${candidate#"${candidate%%[![:space:]]*}"}"
   case "$candidate" in
+    lfs|lfs\ *) is_git_lfs_write_target "$candidate" publication "${2:-}"; return $? ;;
     push | push\ * | send-pack | send-pack\ * | http-push | http-push\ * | svn\ dcommit | svn\ dcommit\ * | p4\ submit | p4\ submit\ * | subtree\ push | subtree\ push\ * | \!*) return 0 ;;
     *) return 1 ;;
   esac
@@ -54,7 +144,7 @@ is_git_publication_alias_config() {
 
 # Git verbs that create, rewrite or move history reserved for the developer, before any non-committing exemption.
 # Notes changes create commits under a notes ref even when the developer's current branch stays unchanged.
-__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes worktree stash subtree "
+__goat_git_history_verbs=" commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes worktree stash subtree lfs "
 
 # Decide whether a verb's arguments are exactly one of the listed words.
 # Use for recovery modes such as `--abort`, which Git accepts only without other arguments.
@@ -272,6 +362,10 @@ is_git_commit_target() {
   local arguments=""
   [[ "$candidate" == *[[:space:]]* ]] && arguments="${candidate#*[[:space:]]}"
   [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
+  if [[ "$verb" == lfs ]]; then
+    is_git_lfs_write_target "$candidate" history "$mode"
+    return $?
+  fi
   # Aliases to a conditional verb are safe until their own or appended arguments select the history-writing form.
   if [[ "$mode" == "strict" && " reset branch checkout switch fetch symbolic-ref replace notes worktree stash " != *" $verb "* ]]; then
     return 0
@@ -621,7 +715,7 @@ record_git_alias_expansion() {
   local alias_expansion
   alias_expansion="$(normalize_git_alias_expansion "$1")"
   # Publishing through an alias requires the same developer-controlled action as a direct Git publication command.
-  if is_git_publication_target "$alias_expansion"; then
+  if is_git_publication_target "$alias_expansion" strict; then
     __goat_git_aliased_push=1
   fi
   # History creation remains reserved for the developer even when an alias conceals the commit subcommand.
@@ -685,7 +779,10 @@ record_git_persistent_alias() {
 # Use after shared wrapper normalization so the user sees one push policy everywhere.
 is_git_push() {
   __goat_git_strip_globals "$1" || return 1
-  is_git_publication_target "$__goat_git_rest" && return 0
+  is_git_publication_target "$__goat_git_rest" direct && return 0
+  if resolve_git_invoked_alias_command && is_git_publication_target "$__goat_git_invoked_alias_command" alias; then
+    return 0
+  fi
   # A configured Git alias can publish even when the visible subcommand is different.
   if [[ "$__goat_git_aliased_push" -eq 1 ]]; then
     return 0
@@ -711,11 +808,15 @@ is_git_destructive() {
 # Sets __goat_git_invoked_alias_command and succeeds only for a recorded alias; it avoids a subshell on every Git command.
 resolve_git_invoked_alias_command() {
   __goat_git_invoked_alias_command=""
+  __goat_git_invoked_alias_words=()
   local invoked_word="${__goat_git_rest%%[[:space:]]*}"
   # Only a valid alias name can select a recorded expansion.
   [[ "$invoked_word" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || return 1
   local alias_expansion="${__goat_git_alias_expansions["${invoked_word,,}"]-}"
   [[ -n "$alias_expansion" ]] || return 1
+  # LFS help and dry-run exemptions must not read quoted message text as options.
+  split_shell_words_into __goat_git_invoked_alias_words "${__goat_git_raw_alias_expansions["${invoked_word,,}"]}"
+  __goat_git_invoked_alias_words+=("${__goat_git_command_words[@]:1}")
   __goat_git_invoked_alias_command="$alias_expansion"
   # Visible arguments follow the expansion exactly as Git appends them.
   if [[ "$__goat_git_rest" == *[[:space:]]* ]]; then
@@ -749,7 +850,7 @@ is_git_commit() {
   __goat_git_strip_globals "$1" || return 1
   is_git_commit_target "$__goat_git_rest" direct && return 0
   # Git appends visible arguments to an alias; a safe checkout or fetch alias can become a ref rewrite.
-  if resolve_git_invoked_alias_command && is_git_commit_target "$__goat_git_invoked_alias_command"; then
+  if resolve_git_invoked_alias_command && is_git_commit_target "$__goat_git_invoked_alias_command" alias; then
     return 0
   fi
   # A configured Git alias can commit even when the visible subcommand is different.
@@ -835,11 +936,11 @@ gh_skip_options_index() {
         i=$((i + 1))
         break
         ;;
-      --repo|--hostname|--cwd|--config-dir|--jq|--template|--cache|--codespace|-R|-H|-q|-c)
+      --repo|--hostname|--cwd|--config-dir|--jq|--template|--cache|--codespace|--branch|-R|-H|-q|-c|-b)
         i=$((i + 2))
         continue
         ;;
-      --repo=*|--hostname=*|--cwd=*|--config-dir=*|--jq=*|--template=*|--cache=*|--codespace=*|-R?*|-H?*|-q?*|-c?*)
+      --repo=*|--hostname=*|--cwd=*|--config-dir=*|--jq=*|--template=*|--cache=*|--codespace=*|--branch=*|-R?*|-H?*|-q?*|-c?*|-b?*)
         i=$((i + 1))
         continue
         ;;
@@ -985,6 +1086,12 @@ is_gh_write_operation() {
       return 0 ;;
     pr:create|pr:new|pr:review|pr:merge|pr:close|pr:reopen|pr:edit|pr:ready|pr:update-branch|pr:lock|pr:unlock|pr:revert)
       return 0 ;;
+    pr:checkout|pr:co)
+      cobra_boolean_flag_enabled words help h '--branch --repo --hostname --cwd --config-dir' bRH && return 1
+      # Detached checkout skips the local branch reset even when --force is enabled.
+      cobra_boolean_flag_enabled words detach '' '--branch --repo --hostname --cwd --config-dir' bRH && return 1
+      cobra_boolean_flag_enabled words force f '--branch --repo --hostname --cwd --config-dir' bRH
+      return $? ;;
     release:create|release:new|release:upload|release:delete|release:edit|release:delete-asset)
       return 0 ;;
     discussion:create|discussion:edit|discussion:comment|agent-task:create)
@@ -1023,6 +1130,9 @@ is_gh_write_operation() {
       gh_skill_publish_is_dry_run words "$i" "$subcommand_index" && return 1
       return 0 ;;
     extension:install|extension:remove|extension:upgrade)
+      return 0 ;;
+    extension:browse)
+      cobra_boolean_flag_enabled words help h '--repo --hostname --cwd --config-dir' RH && return 1
       return 0 ;;
     extension:exec)
       __goat_gh_uninspectable_command=1
@@ -1063,7 +1173,7 @@ check_git_segment() {
     # Remote publication is always left to the developer, regardless of wrappers or pipeline position.
     if is_git_push "$repository_write_candidate"; then
       # A visible push names publication; an alias can hide a push or a shell command, so its reason says both.
-      if is_git_publication_target "$__goat_git_rest"; then
+      if is_git_publication_target "$__goat_git_rest" direct; then
         case "$__goat_git_rest" in
           svn\ dcommit|svn\ dcommit\ *|p4\ submit|p4\ submit\ *)
             block "Git bridge publication is not allowed. Ask the user to publish manually." || return $?
@@ -1105,7 +1215,7 @@ check_git_segment() {
 git_history_block_reason() {
   local verb="${__goat_git_rest%%[[:space:]]*}"
   # When the visible command is not the history write, name the invoked alias's verb or give a neutral reason.
-  if ! is_git_commit_target "$__goat_git_rest"; then
+  if ! is_git_commit_target "$__goat_git_rest" direct; then
     verb=""
     if resolve_git_invoked_alias_command && is_git_commit_target "$__goat_git_invoked_alias_command" strict; then
       verb="${__goat_git_invoked_alias_command%%[[:space:]]*}"
