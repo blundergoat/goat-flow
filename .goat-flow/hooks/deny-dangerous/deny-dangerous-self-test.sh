@@ -218,7 +218,8 @@ expect_copilot_block() {
   }
   executed=$((executed + 1))
   local payload output
-  payload="{\"toolName\":\"bash\",\"toolArgs\":\"{\\\"command\\\":\\\"$command\\\"}\"}"
+  # Serialize both JSON layers so quoted commands reach Copilot's classifier with their original bytes.
+  payload=$(node -e 'process.stdout.write(JSON.stringify({toolName:"bash",toolArgs:JSON.stringify({command:process.argv[1]})}));' "$command")
   # A provider hook must complete its response protocol successfully before the result can be trusted.
   if ! output="$(printf '%s' "$payload" | bash "$(hook_path "$hook")" 2>&1)"; then
     record_fail "$hook Copilot payload should exit 0 for $label"
@@ -301,7 +302,8 @@ expect_antigravity_block() {
   }
   executed=$((executed + 1))
   local payload output
-  payload="{\"hookEventName\":\"PreToolUse\",\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"$command\"}}}"
+  # Serialize the command as data so quotes in a user's native-shell body cannot corrupt the provider event.
+  payload=$(node -e 'process.stdout.write(JSON.stringify({hookEventName:"PreToolUse",toolCall:{name:"run_command",args:{CommandLine:process.argv[1]}}}));' "$command")
   # A provider hook must complete its response protocol successfully before the result can be trusted.
   if ! output="$(printf '%s' "$payload" | bash "$(hook_path "$hook")" 2>&1)"; then
     record_fail "$hook Antigravity payload should exit 0 for $label"
@@ -328,7 +330,8 @@ expect_antigravity_allow() {
   }
   executed=$((executed + 1))
   local payload output
-  payload="{\"hookEventName\":\"PreToolUse\",\"toolCall\":{\"name\":\"run_command\",\"args\":{\"CommandLine\":\"$command\"}}}"
+  # The allow control must carry the same exact command bytes as its paired denial probe.
+  payload=$(node -e 'process.stdout.write(JSON.stringify({hookEventName:"PreToolUse",toolCall:{name:"run_command",args:{CommandLine:process.argv[1]}}}));' "$command")
   if ! output="$(printf '%s' "$payload" | bash "$(hook_path "$hook")" 2>&1)"; then
     record_fail "$hook Antigravity payload should exit 0 for $label"
     return
@@ -748,6 +751,39 @@ run_smoke() {
   expect_block shell "rm -rf /" "rm -rf"
   expect_block paths "cat .env" ".env read"
   expect_block git "git push origin main" "git push"
+  # Native command hosts must preserve the same publication policy and harmless output controls.
+  local native_host
+  for native_host in 'cmd //c' 'powershell -c' 'pwsh -Command'; do
+    expect_block git "$native_host \"git.exe push origin main\"" "$native_host hosted publication"
+    expect_allow git "$native_host \"git.exe status --short\"" "$native_host hosted status"
+    expect_allow git "$native_host \"echo git.exe push\"" "$native_host literal publication text"
+  done
+  expect_block git 'wsl -e git.exe push origin main' 'WSL hosted publication'
+  expect_allow git 'wsl -e git.exe status --short' 'WSL hosted status'
+  expect_block git 'git.exe LFS push origin main' 'case-insensitive LFS executable publication'
+  expect_block git 'git.exe Lfs lock probe.txt' 'case-insensitive LFS executable lock'
+  expect_allow git 'git.exe LFS version' 'case-insensitive LFS executable version'
+  expect_block shell 'cmd //c rmdir /s /q C:\goat-probe-target' 'Git Bash cmd recursive deletion'
+  expect_block shell 'wsl.exe -e rm -rf ~' 'WSL hosted recursive deletion'
+  expect_allow shell 'cmd //c "echo del /s /q example"' 'cmd literal deletion documentation'
+  expect_allow shell 'cmd /c "echo rmdir /s /q example"' 'cmd literal directory documentation'
+  expect_block shell 'cmd //c "echo Ready & del /s /q C:\goat-probe-target"' 'cmd chained deletion'
+  # Native PowerShell events must receive an explicit recovery denial, never the non-shell continuation path.
+  local native_policy native_output native_status
+  for native_policy in shell git; do
+    selected_hook "$native_policy" || { record_skip; continue; }
+    executed=$((executed + 1))
+    # The classifier receives inert provider input; the proposed command never runs.
+    if native_output=$(bash "$(hook_path "$native_policy")" <<<'{"tool_name":"PowerShell","tool_input":{"command":"echo safe"}}' 2>&1); then
+      native_status=0
+    else
+      native_status=$?
+    fi
+    # Either policy must explain how the agent can continue safely through Bash.
+    if [[ "$native_status" -ne 2 || "$native_output" != *"Use the Bash tool"* ]]; then
+      record_fail "$native_policy must reject the unqualified native PowerShell tool with a Bash recovery route"
+    fi
+  done
   expect_block_message shell "rm -rf /" "rm -rf copy" "destructive" "rm -r without safe scoping"
   expect_block_message paths "cat .env" ".env read copy" "secret" "Use a checked-in example or ask the user for sanitized fields"
   expect_block_message git "git push origin main" "git publication copy" "repository" "Git publication is not allowed"
@@ -1232,6 +1268,88 @@ run_full() {
   expect_block shell "powershell --encodedcommand SQBlAHgAaQB0AA==" "powershell double-dash encodedcommand"
   expect_allow shell "pwsh --version" "powershell version"
   expect_allow shell "echo pwsh --command remove-item" "powershell literal"
+  expect_block git 'powershell -NoP -C "git.exe push origin main"' 'PowerShell abbreviated host publication'
+  expect_allow git 'powershell -NoP -C "git.exe status --short"' 'PowerShell abbreviated host inspection'
+  expect_block git 'powershell "git.exe push origin main"' 'PowerShell implicit command publication'
+  expect_allow git 'powershell "git.exe status --short"' 'PowerShell implicit command inspection'
+  expect_block git '"C:\Windows\System32\cmd.exe" //c "git.exe push origin main"' 'Windows cmd executable path publication'
+  expect_allow git '"C:\Windows\System32\cmd.exe" //c "git.exe status --short"' 'Windows cmd executable path inspection'
+  expect_block git '"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoP -C "git.exe push origin main"' 'Windows PowerShell executable path publication'
+  expect_allow git '"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoP -C "git.exe status --short"' 'Windows PowerShell executable path inspection'
+  expect_allow shell 'powershell -Command "Write-Output '\''Remove-Item example'\''"' 'PowerShell printed destructive verb'
+  expect_block shell 'powershell -NoP -Co "Write-Output Ready; Remove-Item -Recurse -Force example"' 'PowerShell executed destructive verb'
+  expect_block shell 'powershell -Command -' 'PowerShell stdin command remains opaque'
+  expect_allow shell 'powershell -Command "Write-Output Ready"' 'PowerShell literal output remains inspectable'
+  # Conditional actions need the same decision as direct commands; printed scripts remain useful investigation data.
+  expect_block shell "powershell -Command 'if (\$true) { Remove-Item -Recurse -Force example }'" 'PowerShell conditional deletion'
+  expect_allow shell "powershell -Command 'if (\$true) { Write-Output Ready }'" 'PowerShell conditional output'
+  expect_block shell "powershell -Command 'if (\$true)
+{ Remove-Item example }'" 'PowerShell multiline conditional deletion'
+  expect_allow shell "powershell -Command 'if (\$true)
+{ Write-Output Ready }'" 'PowerShell multiline conditional output'
+  expect_block shell "powershell -Command 'if (\$false) { Write-Output Ready } else { Remove-Item example }'" 'PowerShell alternate deletion'
+  expect_allow shell "powershell -Command 'if (\$false) { Write-Output Ready } else { Write-Output Ready }'" 'PowerShell alternate output'
+  expect_block git "powershell -Command 'if (\$true) { git.exe push origin main }'" 'PowerShell conditional publication'
+  expect_allow git "powershell -Command 'if (\$true) { git.exe status --short }'" 'PowerShell conditional inspection'
+  expect_allow shell "powershell -Command 'Write-Output { Remove-Item example }'" 'PowerShell unevaluated script block'
+  expect_block shell 'powershell -Command "1 | ForEach-Object { Remove-Item -Recurse -Force example }"' 'PowerShell executed script-block deletion'
+  expect_allow shell 'powershell -Command "1 | ForEach-Object { Write-Output Ready }"' 'PowerShell executed script-block output'
+  expect_block git 'powershell -Command "1 | ForEach-Object { git.exe push origin main }"' 'PowerShell executed script-block publication'
+  expect_allow git 'powershell -Command "1 | ForEach-Object { git.exe status --short }"' 'PowerShell executed script-block inspection'
+  expect_allow shell 'powershell -Command "Write-Output { Write-Output Ready; Remove-Item example }"' 'PowerShell output-only script-block separators'
+  expect_copilot_block shell 'powershell -Command "1 | ForEach-Object { Remove-Item example }"' 'script-block deletion returns one Copilot denial'
+  expect_antigravity_block shell 'powershell -Command "1 | ForEach-Object { Remove-Item example }"' 'script-block deletion returns one Antigravity denial'
+  expect_block shell 'cmd /c "if exist example del /s /q example"' 'cmd conditional deletion'
+  expect_allow shell 'cmd /c "if exist example echo Ready"' 'cmd conditional output'
+  expect_block git 'cmd /c "if exist example git.exe push origin main"' 'cmd conditional publication'
+  expect_allow git 'cmd /c "if exist example git.exe status --short"' 'cmd conditional inspection'
+  expect_copilot_block shell "powershell -Command 'if (\$true) { Remove-Item example }'" 'conditional deletion returns one Copilot denial'
+  expect_copilot_block shell 'cmd /c "if exist example del /s /q example"' 'quoted conditional deletion returns one Copilot denial'
+  expect_antigravity_block shell 'cmd /c "if exist example del /s /q example"' 'conditional deletion returns one Antigravity denial'
+  expect_antigravity_allow shell 'cmd /c "if exist example echo Ready"' 'conditional output returns one Antigravity allow'
+  # Native hosts keep their own grammar: launch keywords, escapes, quotes and switches must not hide the command they run.
+  expect_block shell 'cmd /c "call del /s /q C:\goat-probe-target"' 'cmd call deletion'
+  expect_allow shell 'cmd /c "call echo Ready"' 'cmd call output'
+  expect_block shell 'cmd /c "for %i in (x) do del /s /q %i"' 'cmd loop-body deletion'
+  expect_allow shell 'cmd /c "for %i in (x) do echo %i"' 'cmd loop-body output'
+  expect_block git "cmd /c \"for /f %i in ('git.exe push origin main') do echo %i\"" 'cmd for /f set publication'
+  expect_allow git "cmd /c \"for /f %i in ('git.exe status --short') do echo %i\"" 'cmd for /f set inspection'
+  expect_block shell 'cmd /c "start /b del /s /q C:\goat-probe-target"' 'cmd start deletion'
+  expect_allow shell 'cmd /c "start /b echo Ready"' 'cmd start output'
+  expect_block shell 'cmd /c "@del /s /q C:\goat-probe-target"' 'cmd echo-suppressed deletion'
+  expect_allow shell 'cmd /c "@echo Ready"' 'cmd echo-suppressed output'
+  expect_block git 'cmd //c "echo a\& git.exe push origin main"' 'cmd backslash is not an escape'
+  expect_allow git 'cmd //c "echo a ^& git.exe push origin main"' 'cmd caret escapes an ampersand'
+  expect_block git "cmd //c \"echo ' & git.exe push origin main & echo '\"" 'cmd single quotes do not quote'
+  expect_block git 'cmd //e:on //c "git.exe push origin main"' 'cmd Git Bash switch before publication'
+  expect_allow git 'cmd //e:on //c "git.exe status --short"' 'cmd Git Bash switch before inspection'
+  expect_block git 'cmd /t:0a /c "git.exe push origin main"' 'cmd unknown switch'
+  expect_allow git 'cmd /q /c "git.exe status --short"' 'cmd known switch inspection'
+  expect_block git 'cmd /c"git.exe push origin main"' 'cmd attached command publication'
+  expect_allow git 'cmd /c"git.exe status --short"' 'cmd attached command inspection'
+  expect_block shell 'powershell -c "Microsoft.PowerShell.Management\Remove-Item example"' 'PowerShell module-qualified deletion'
+  expect_allow shell 'powershell -c "Microsoft.PowerShell.Utility\Write-Output Ready"' 'PowerShell module-qualified output'
+  expect_block shell 'powershell -c ". Remove-Item example"' 'PowerShell dot-operator deletion'
+  expect_allow shell 'powershell -c ". Write-Output Ready"' 'PowerShell dot-operator output'
+  expect_block shell 'powershell -c "rd -Recurse example"' 'PowerShell Remove-Item alias'
+  expect_block shell 'powershell -c "Write-Output a\; Remove-Item example"' 'PowerShell backslash is not an escape'
+  expect_block git 'powershell -c "C:\tools\git.exe push origin main"' 'PowerShell unquoted Windows Git path publication'
+  expect_allow git 'powershell -c "C:\tools\git.exe status --short"' 'PowerShell unquoted Windows Git path inspection'
+  expect_block git 'powershell -c "Start-Process git.exe push origin main"' 'PowerShell positional Start-Process publication'
+  expect_allow git 'powershell -c "Start-Process git.exe status"' 'PowerShell positional Start-Process inspection'
+  expect_block git "powershell -c \"Invoke-Expression 'git.exe status --short'\"" 'PowerShell Invoke-Expression stays opaque'
+  expect_block git 'powershell -c "echo {git.exe push origin main} | % {& $_}"' 'PowerShell printed block invoked by a later stage'
+  expect_allow git 'powershell -c "echo {git.exe status --short} | % {& $_}"' 'PowerShell printed inspection block invoked by a later stage'
+  expect_block shell 'xargs powershell -c "Remove-Item example"' 'xargs-hosted PowerShell deletion'
+  expect_allow shell 'xargs powershell -c "Write-Output Ready"' 'xargs-hosted PowerShell output'
+  expect_block git "xargs bash -c 'git push origin main'" 'xargs-hosted Bash publication'
+  expect_allow git "xargs bash -c 'git status --short'" 'xargs-hosted Bash inspection'
+  expect_block git "wsl echo a '&&' git push origin main" 'WSL default shell re-reads operators'
+  expect_allow git "wsl echo a '&&' git status --short" 'WSL default shell inspection'
+  expect_allow git "wsl --shell-type none echo a '&&' git push origin main" 'WSL without a shell keeps operators literal'
+  expect_block git 'wsl --shell-type standard git push origin main' 'WSL shell-type publication'
+  expect_block git 'wsl --unregister Ubuntu' 'WSL unrecognized option'
+  expect_allow git 'wsl --list --verbose' 'WSL distribution listing'
   expect_block shell 'cmd /c "RMDIR /S /Q C:\important"' "cmd rmdir"
   expect_allow shell "echo ok # rm -rf /" "destructive text in shell comment"
   expect_allow shell "rm -r node_modules" "scoped recursive node_modules"

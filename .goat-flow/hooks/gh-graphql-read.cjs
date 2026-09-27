@@ -1,7 +1,8 @@
 /**
  * Admit one literal GitHub GraphQL query without executing command text or reading request files.
- * The Bash policy passes its raw stage and decoded API arguments. Exit 0 proves a query,
- * 2 denies unresolved/unsafe input, and 3 leaves a known REST request to the existing policy.
+ *
+ * Bash supplies raw command text and decoded API operands; the helper classifies them without sending a GitHub request.
+ * Exit 0 admits a query, 2 denies unsafe or unresolved input, and 3 leaves a REST request to the existing policy.
  */
 "use strict";
 
@@ -298,6 +299,14 @@ function applyGraphqlField(selection, flag, operand) {
 }
 
 module.exports = { classify };
+// A shell invocation needs an exit decision; importing classify for tests has no process-exit side effect.
 if (require.main === module) {
+  // Stdin preserves /graphql exactly when Git Bash would otherwise rewrite it as a Windows path.
+  if (process.argv[2] === "--stdin-argv") {
+    const apiOperands = require("node:fs").readFileSync(0, "utf8").split("\0");
+    // A missing final separator means the request was cut short; do not approve incomplete evidence.
+    if (apiOperands.pop() !== "") process.exit(2);
+    process.exit(classify(apiOperands.shift(), apiOperands));
+  }
   process.exit(classify(process.argv[2], process.argv.slice(3)));
 }

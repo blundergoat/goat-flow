@@ -480,11 +480,14 @@ stop_reentry_state_matches() {
   if [ ! -f "$stop_state_path" ] || [ -L "$stop_state_path" ] || [ ! -O "$stop_state_path" ]; then
     return 1
   fi
-  read_stop_state_mode "$stop_state_path" || return 1
-  # Group or public access would expose or permit tampering with the continuation record.
-  if [ "$stop_state_mode" != "600" ]; then
-    return 1
-  fi
+  # Git Bash exposes synthetic mode bits; native ACLs own Windows access control.
+  # Keep owner, regular-file, session and failure checks on every host, and require private POSIX modes where meaningful.
+  case "${OSTYPE:-}" in
+    msys*|cygwin*) ;;
+    *)
+      read_stop_state_mode "$stop_state_path" || return 1
+      [ "$stop_state_mode" = "600" ] || return 1 ;;
+  esac
   IFS=' ' read -r state_version saved_session_fingerprint saved_failure_fingerprint unexpected_state_text <"$stop_state_path" || return 1
   # Extra, empty, or malformed fields mean the state cannot represent this exact user cycle.
   if [ "$state_version" != "v1" ] || [ -n "$unexpected_state_text" ] || \
@@ -1884,6 +1887,10 @@ post_turn_self_test() (
   local synthetic_assignment_value="${synthetic_assignment_prefix}234567890"
 
   # A relative invocation must remain callable after the fixture changes working directory.
+  # Node on Windows can pass BASH_SOURCE as a drive-qualified path; normalize before the POSIX absolute-path check.
+  if command -v cygpath >/dev/null 2>&1; then
+    self_test_script="$(cygpath -u -- "$self_test_script")" || return 1
+  fi
   case "$self_test_script" in
     /*) ;;
     *) self_test_script="$(pwd)/$self_test_script" ;;

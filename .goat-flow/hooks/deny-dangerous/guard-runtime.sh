@@ -993,6 +993,7 @@ split_shell_words_into() {
 }
 
 # Rebuild the remaining proposed command after wrapper options so downstream policies see its executable and arguments together.
+# Modes: `text` keeps words as typed, `argv` quotes every word, and `wsl-shell` quotes only spaced words, as plain `wsl` does.
 join_shell_words_from() {
   local -n __goat_words_join_ref__="$1"
   local start_index="$2"
@@ -1006,6 +1007,9 @@ join_shell_words_from() {
     # Only argv-based launchers retain word boundaries; shell payloads and comparison strings keep their text form.
     if [[ "$mode" == argv ]]; then
       printf -v quoted_word '%q' "$quoted_word"
+    # WSL double-quotes only whitespace-bearing arguments, so operators and expansions elsewhere reach the Linux shell live.
+    elif [[ "$mode" == wsl-shell && "$quoted_word" == *[[:space:]]* ]]; then
+      quoted_word="\"${quoted_word//\"/\\\"}\""
     fi
     out+="$quoted_word "
   done
@@ -2279,6 +2283,7 @@ normalize_flock_prefix() {
 
 # Keep shell redirections out of the API request so developers can save read-only GitHub evidence to a file.
 # Use before decoding gh arguments; unresolved redirect syntax returns failure instead of guessing the request.
+# shellcheck disable=SC2329 # -- Called by the separately sourced path and Git policy modules.
 strip_shell_redirections() {
   local command_text="$1" request_words="" character quote="" escaped=0 cursor=0 word_start=0 descriptor_prefix remaining_command
   # Preserve quoted request data while separating where the developer sends command output.
@@ -2610,6 +2615,19 @@ split_command_segments_into() {
   local previous_character_escaped=0
   local command_substitution_depth=0
   local command_index=0
+  local native_conditional_re='^[[:space:]]*if([[:space:](]|$)'
+  local native_header_re='(^|[[:space:]}])(if|elseif|else)[[:space:]]*$'
+  local native_alternate_re='^else(if)?([[:space:]{(]|$)'
+  local native_group_body native_group_tail native_group_length native_group_prefix
+  local native_conditional_host=0
+  case "${__goat_inline_command_host:-}" in powershell|powershell.exe|pwsh|pwsh.exe|cmd|cmd.exe) native_conditional_host=1 ;; esac
+  # Split with the grammar of the program that runs this text, so `cmd /c "echo ' & del build & echo '"` still exposes `del build`.
+  # PowerShell escapes with a backtick; cmd escapes with a caret outside double quotes and has no single-quoted strings.
+  local host_escape_character="\\" host_single_quotes_are_strings=1
+  case "${__goat_inline_command_host:-}" in
+    powershell|powershell.exe|pwsh|pwsh.exe) host_escape_character='`' ;;
+    cmd|cmd.exe) host_escape_character='^' host_single_quotes_are_strings=0 ;;
+  esac
 
   # Each character extends the stage the developer submitted or closes a real shell boundary.
   for ((command_index = 0; command_index < ${#developer_command}; command_index++)); do
@@ -2622,8 +2640,9 @@ split_command_segments_into() {
       continue
     fi
 
-    # Outside single quotes, a backslash protects the user's next search or path character.
-    if [[ "$in_single_quote" -eq 0 && "$command_character" == "\\" ]]; then
+    # Outside single quotes, the host's escape character protects the user's next character; cmd's caret is plain text inside double quotes.
+    if [[ "$in_single_quote" -eq 0 && "$command_character" == "$host_escape_character" ]] &&
+       [[ "$host_escape_character" != '^' || "$in_double_quote" -eq 0 ]]; then
       current_policy_stage+="$command_character"
       previous_character_escaped=1
       continue
@@ -2641,8 +2660,8 @@ split_command_segments_into() {
       continue
     fi
 
-    # Single-quoted patterns remain search data even when they name protected operations.
-    if [[ "$in_double_quote" -eq 0 && "$command_character" == "'" ]]; then
+    # Single-quoted patterns remain search data even when they name protected operations; cmd has no such quoting.
+    if [[ "$host_single_quotes_are_strings" -eq 1 && "$in_double_quote" -eq 0 && "$command_character" == "'" ]]; then
       # Closing quotes return later shell operators to executable policy scope.
       if [[ "$in_single_quote" -eq 1 ]]; then
         in_single_quote=0
@@ -2656,6 +2675,44 @@ split_command_segments_into() {
     # Only unquoted operators can change what the agent would execute for the developer.
     if [[ "$in_single_quote" -eq 0 && "$in_double_quote" -eq 0 ]]; then
       next_command_character="${developer_command:command_index+1:1}"
+
+      # A PowerShell script block is one argument; its own separators belong to a later recursive inspection.
+      case "${__goat_inline_command_host:-}:$command_character" in
+        powershell*:'{'|pwsh*:'{')
+          native_command_group_into native_group_body native_group_tail "${developer_command:command_index}" ||
+            block "Cannot inspect this PowerShell script block. Use separate literal commands through Bash."
+          native_group_length=$(("${#developer_command}" - command_index - "${#native_group_tail}"))
+          current_policy_stage+="${developer_command:command_index:native_group_length}"
+          command_index=$((command_index + native_group_length - 1))
+          continue
+          ;;
+      esac
+
+      # Keep a native conditional's complete branches together so an inner separator cannot hide its condition or else branch.
+      if [[ "$native_conditional_host" -eq 1 && "${current_policy_stage,,}" =~ $native_conditional_re ]]; then
+        case "${__goat_inline_command_host:-}:$command_character" in
+          powershell*:'('|powershell*:'{'|pwsh*:'('|pwsh*:'{'|cmd*:'(')
+            native_command_group_into native_group_body native_group_tail "${developer_command:command_index}" ||
+              block "Cannot inspect this native conditional. Use separate literal commands through Bash."
+            native_group_length=$((${#developer_command} - command_index - ${#native_group_tail}))
+            current_policy_stage+="${developer_command:command_index:native_group_length}"
+            command_index=$((command_index + native_group_length - 1))
+            continue
+            ;;
+        esac
+        # PowerShell allows a line break before a branch's brace or alternate header; retain it inside the same conditional.
+        if [[ "$command_character" == $'\n' && "${__goat_inline_command_host:-}" != cmd* ]]; then
+          native_group_prefix="${current_policy_stage%"${current_policy_stage##*[![:space:]]}"}"
+          native_group_tail="${developer_command:command_index+1}"
+          native_group_tail="${native_group_tail#"${native_group_tail%%[![:space:]]*}"}"
+          # A condition ending in ')' still needs its body; a following else belongs to the branch already collected.
+          if [[ "$native_group_prefix" == *')' || "${native_group_prefix,,}" =~ $native_header_re ||
+                "${native_group_tail,,}" =~ $native_alternate_re ]]; then
+            current_policy_stage+="$command_character"
+            continue
+          fi
+        fi
+      fi
 
       # Command/process substitution openers are checked recursively, so inner pipes stay out of this stage list.
       if [[ "$next_command_character" == '(' ]] &&
@@ -2907,6 +2964,418 @@ has_unmatched_closing_parenthesis() {
   return 1
 }
 
+# Find the command a Windows shell (cmd, PowerShell or WSL) will run, so the policy checks it like a directly typed command.
+#
+# Example: an agent in Git Bash proposes `cmd //c "del /s /q build"`, and this hands `del /s /q build` to the same checks.
+# An empty result means the host runs no inline command, as with `pwsh --version`; status 2 means an option could not be placed.
+native_shell_command_into() {
+  local -n hosted_command_ref="$1"
+  local command_text="$2" shell_host option_name option_spelling operand_index=1 payload_mode=text attached_command
+  local -a host_words=()
+  hosted_command_ref=""
+  split_shell_words_into host_words "$command_text"
+  # The executable word is already normalized; decoding it twice would consume Windows path separators.
+  shell_host="${command_text%%[[:space:]]*}"
+  shell_host="${shell_host//\\//}"
+  shell_host="${shell_host##*/}"
+  shell_host="${shell_host,,}"
+  shell_host="${shell_host%.exe}"
+  # Without -e, WSL joins its arguments into a line that the user's default Linux shell parses again.
+  [[ "$shell_host" != wsl ]] || payload_mode=wsl-shell
+  # Skip host settings and their values until the user's literal action begins.
+  while (( operand_index < ${#host_words[@]} )); do
+    option_name="${host_words[operand_index],,}"
+    # PowerShell accepts shortened host options; normalize those before deciding where the user's command starts.
+    if [[ "$shell_host" == powershell || "$shell_host" == pwsh ]] && [[ "$option_name" == [-/]* ]]; then
+      option_spelling="${option_name#[-/]}"
+      option_spelling="${option_spelling#[-/]}"
+      case "$option_spelling" in
+        c|co|com|comm|comma|comman|command) option_name=-command ;;
+        nop|nopr|nopro|noprof|noprofi|noprofil|noprofile) option_name=-noprofile ;;
+        noni|nonin|nonint|noninte|noninter|nonintera|noninterac|noninteract|noninteracti|noninteractiv|noninteractive) option_name=-noninteractive ;;
+        nol|nolo|nolog|nologo) option_name=-nologo ;;
+        ep|ex|exe|exec|execu|execut|executi|executio|execution|executionp|executionpo|executionpol|executionpoli|executionpolic|executionpolicy) option_name=-executionpolicy ;;
+        f|fi|fil|file) option_name=-file ;;
+        h|he|hel|help|\?) option_name=-help ;;
+        v|ve|ver|vers|versi|versio|version) option_name=-version ;;
+        *) option_name="-$option_spelling" ;;
+      esac
+    fi
+    # Git Bash's doubled switch slash reaches cmd as one slash, so both spellings share one option grammar.
+    [[ "$shell_host" != cmd ]] || option_name="${option_name/#\/\//\/}"
+    case "$shell_host:$option_name" in
+      cmd:/c|cmd:/k|powershell:-c|powershell:-command|powershell:--command|pwsh:-c|pwsh:-command|pwsh:--command)
+        operand_index=$((operand_index + 1)); break ;;
+      cmd:/c?*|cmd:/k?*)
+        # cmd also runs a command written directly against its switch, as in `cmd /cdir`.
+        attached_command="${host_words[operand_index]#"${host_words[operand_index]%%[!/]*}"}"
+        hosted_command_ref="${attached_command:1}"
+        # Words after the attached command are its arguments, as in `cmd /cgit.exe push origin main`.
+        (( operand_index + 1 >= ${#host_words[@]} )) ||
+          hosted_command_ref+=" $(join_shell_words_from host_words $((operand_index + 1)) text)"
+        return 0 ;;
+      # Echo, quoting, colour and extension switches such as /q or /e:on do not change which command runs.
+      cmd:/d|cmd:/s|cmd:/q|cmd:/a|cmd:/u|cmd:/t:*|cmd:/e:*|cmd:/f:*|cmd:/v:*) ;;
+      # `cmd /?` only prints help, so there is nothing to check.
+      cmd:/\?) return 0 ;;
+      # An unlisted switch might hide the command after it, so the agent is asked for a supported spelling instead.
+      cmd:/*) return 2 ;;
+      powershell:-noprofile|powershell:-noninteractive|powershell:-nologo|powershell:-noexit|powershell:-sta|powershell:-mta|pwsh:-noprofile|pwsh:-noninteractive|pwsh:-nologo|pwsh:-noexit|pwsh:-sta|pwsh:-mta) ;;
+      powershell:-executionpolicy|powershell:-inputformat|powershell:-outputformat|powershell:-windowstyle|powershell:-version|pwsh:-executionpolicy|pwsh:-inputformat|pwsh:-outputformat|pwsh:-windowstyle|pwsh:-workingdirectory)
+        operand_index=$((operand_index + 1)) ;;
+      powershell:-help|pwsh:-help|pwsh:-version) return 0 ;;
+      powershell:-file|pwsh:-file)
+        # An ordinary script path keeps its existing policy; stdin-fed code provides no literal body for inspection.
+        [[ "${host_words[operand_index+1]:-}" != - ]] || return 2
+        return 0 ;;
+      powershell:-*|pwsh:-*) return 2 ;;
+      # Windows PowerShell defaults to command text; pwsh defaults to a script path.
+      powershell:*) break ;;
+      pwsh:*) return 0 ;;
+      # `wsl -e` runs its arguments directly, so quoted operators stay literal text.
+      wsl:-e|wsl:--exec)
+        payload_mode=argv; operand_index=$((operand_index + 1)); break ;;
+      # A double dash still sends the rest of the line to the default shell rather than executing it directly.
+      wsl:--)
+        operand_index=$((operand_index + 1)); break ;;
+      # Distribution, user and directory choices take a value but leave the command unchanged.
+      wsl:-d|wsl:--distribution|wsl:--distribution-id|wsl:-u|wsl:--user|wsl:--cd)
+        operand_index=$((operand_index + 1)) ;;
+      wsl:--shell-type)
+        # Only the none shell type runs arguments without a shell re-reading their operators; an unknown type gets the recovery message.
+        case "${host_words[operand_index+1],,}" in
+          none) payload_mode=argv ;;
+          standard|login) ;;
+          *) return 2 ;;
+        esac
+        operand_index=$((operand_index + 1)) ;;
+      # Starting in the system distribution or the home directory leaves the command unchanged.
+      wsl:--system|wsl:\~) ;;
+      # Help, version, status and distribution listing run no Linux command.
+      wsl:--help|wsl:--version|wsl:-v|wsl:--status|wsl:--list|wsl:-l) return 0 ;;
+      # Other options, such as `--unregister`, are administrative or unknown, so the agent gets a recovery message.
+      wsl:-*) return 2 ;;
+      # The first plain word starts the Linux command line.
+      wsl:*) break ;;
+      # cmd given a plain word opens an interactive prompt instead of running it, so there is no inline command.
+      *) return 0 ;;
+    esac
+    operand_index=$((operand_index + 1))
+  done
+  # No remaining operand means the user supplied no inline action for this decoder to inspect.
+  (( operand_index < ${#host_words[@]} )) || return 0
+  # PowerShell's dash body reads executable stdin; ask for visible source instead of treating it as an empty action.
+  if [[ "$shell_host" == powershell || "$shell_host" == pwsh ]] && [[ "${host_words[operand_index]}" == - ]]; then
+    return 2
+  fi
+  hosted_command_ref=$(join_shell_words_from host_words "$operand_index" "$payload_mode")
+}
+
+# Read a native condition or branch without executing it, keeping quoted braces and Windows paths as user data.
+# The caller receives its body and remaining text; an unmatched group cannot establish a safe inspection boundary.
+native_command_group_into() {
+  local -n native_group_body_ref="$1" native_group_tail_ref="$2"
+  local native_group_text="$3" native_open="${3:0:1}" native_close native_escape='`'
+  local native_quote="" native_character native_group_index native_group_depth=0 native_escaped=0
+  native_group_body_ref=""
+  native_group_tail_ref=""
+  case "$native_open" in
+    '(') native_close=')' ;;
+    '{') native_close='}' ;;
+    *) return 1 ;;
+  esac
+  case "${__goat_inline_command_host:-}" in cmd|cmd.exe) native_escape='^' ;; esac
+  # Find the matching boundary using the host's escape character, so a Windows path ending in a backslash stays intact.
+  for ((native_group_index = 0; native_group_index < ${#native_group_text}; native_group_index++)); do
+    native_character="${native_group_text:native_group_index:1}"
+    # An escaped delimiter belongs to the user's argument rather than ending this executable branch.
+    if (( native_escaped )); then
+      native_escaped=0
+      continue
+    fi
+    # Single-quoted PowerShell text is literal; elsewhere the native escape protects the following character.
+    if [[ "$native_quote" != "'" && "$native_character" == "$native_escape" ]]; then
+      native_escaped=1
+      continue
+    fi
+    # A quoted closing brace or parenthesis must not shorten the branch the policy inspects.
+    if [[ -n "$native_quote" ]]; then
+      [[ "$native_character" == "$native_quote" ]] && native_quote=""
+      continue
+    fi
+    # cmd only quotes with double quotes; PowerShell also accepts single-quoted argument text.
+    if [[ "$native_character" == '"' || ( "$native_escape" == '`' && "$native_character" == "'" ) ]]; then
+      native_quote="$native_character"
+      continue
+    fi
+    # Nested groups stay inside their enclosing branch and receive a later recursive policy check.
+    if [[ "$native_character" == "$native_open" ]]; then
+      native_group_depth=$((native_group_depth + 1))
+    elif [[ "$native_character" == "$native_close" ]]; then
+      native_group_depth=$((native_group_depth - 1))
+      # The complete branch is ready; any following else or command remains available to the caller.
+      if (( native_group_depth == 0 )); then
+        native_group_body_ref="${native_group_text:1:native_group_index-1}"
+        native_group_tail_ref="${native_group_text:native_group_index+1}"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+# Expose every executable part of a native if statement, including its condition and alternate branches.
+# Return 1 for ordinary commands and 2 for conditional syntax that cannot be inspected; quoted script text stays ordinary data.
+native_conditional_commands_into() {
+  local -n native_commands_ref="$1"
+  local native_text="$2" native_host="${__goat_inline_command_host:-}" native_clause native_condition_prefix
+  local native_if_re='^if([[:space:](]|$)' native_else_re='^else([[:space:]{(]|$)'
+  local native_elseif_re='^elseif([[:space:](]|$)'
+  native_commands_ref=()
+  case "$native_host" in powershell|powershell.exe|pwsh|pwsh.exe|cmd|cmd.exe) ;; *) return 1 ;; esac
+  native_text="${native_text#"${native_text%%[![:space:]]*}"}"
+  [[ "${native_text,,}" =~ $native_if_re ]] || return 1
+  native_text="${native_text:2}"
+  native_text="${native_text#"${native_text%%[![:space:]]*}"}"
+  case "$native_host" in
+    powershell|powershell.exe|pwsh|pwsh.exe)
+      [[ "$native_text" == \(* ]] || return 2
+      native_command_group_into native_clause native_text "$native_text" || return 2
+      native_commands_ref+=("$native_clause")
+      native_text="${native_text#"${native_text%%[![:space:]]*}"}"
+      [[ "$native_text" == \{* ]] || return 2
+      ;;
+    cmd|cmd.exe)
+      local native_cmd_word='("[^"]*"|[^[:space:]=]+)'
+      local native_cmd_flags='(/i[[:space:]]+)?(not[[:space:]]+)?'
+      local native_cmd_test="(exist|defined|errorlevel|cmdextversion)[[:space:]]+$native_cmd_word"
+      local native_cmd_comparison="$native_cmd_word([[:space:]]*==[[:space:]]*|[[:space:]]+(equ|neq|lss|leq|gtr|geq)[[:space:]]+)$native_cmd_word"
+      local native_cmd_condition_re="^$native_cmd_flags($native_cmd_test|$native_cmd_comparison)[[:space:]]+"
+      [[ "${native_text,,}" =~ $native_cmd_condition_re ]] || return 2
+      native_condition_prefix="${BASH_REMATCH[0]}"
+      native_text="${native_text:${#native_condition_prefix}}"
+      # An ungrouped cmd branch runs the remaining command; nested if statements are inspected on the recursive pass.
+      if [[ "$native_text" != \(* ]]; then
+        native_commands_ref+=("$native_text")
+        return 0
+      fi
+      ;;
+  esac
+  native_command_group_into native_clause native_text "$native_text" || return 2
+  native_commands_ref+=("$native_clause")
+  native_text="${native_text#"${native_text%%[![:space:]]*}"}"
+  # PowerShell elseif has its own executable condition, so inspect it as another complete conditional.
+  if [[ "$native_host" != cmd* && "${native_text,,}" =~ $native_elseif_re ]]; then
+    native_commands_ref+=("if${native_text:6}")
+    return 0
+  fi
+  # Both sides remain subject to policy regardless of the condition's apparent value.
+  if [[ "${native_text,,}" =~ $native_else_re ]]; then
+    native_text="${native_text:4}"
+    native_text="${native_text#"${native_text%%[![:space:]]*}"}"
+    case "$native_host:${native_text:0:1}" in
+      powershell*:'{'|pwsh*:'{'|cmd*:'(')
+        native_command_group_into native_clause native_text "$native_text" || return 2
+        native_commands_ref+=("$native_clause")
+        ;;
+      cmd:*) native_commands_ref+=("$native_text"); return 0 ;;
+      cmd.exe:*) native_commands_ref+=("$native_text"); return 0 ;;
+      *) return 2 ;;
+    esac
+  fi
+  # Commands following the conditional still execute and must not disappear after a successful branch check.
+  [[ -z "$native_text" ]] || native_commands_ref+=("$native_text")
+  return 0
+}
+
+# Find the script blocks a PowerShell command would run, so a deletion inside `ForEach-Object { ... }` gets the same checks as a direct one.
+#
+# Example: `1 | % { Remove-Item build }` exposes `Remove-Item build`, while `Write-Output { Remove-Item build }` only prints it.
+# A printed block still counts when a later stage can run it, as in `echo { Remove-Item build } | % { & $_ }`; status 1 means none runs.
+native_script_block_commands_into() {
+  local -n script_commands_ref="$1"
+  local script_text="$2" script_stage_index
+  local script_output_re='^[[:space:]]*(write-output|echo)([[:space:]]|$)'
+  local -a script_stages=() script_stage_bodies=()
+  script_commands_ref=()
+  # Only PowerShell has script blocks; braces under cmd or Bash keep their own meaning.
+  case "${__goat_inline_command_host:-}" in powershell|powershell.exe|pwsh|pwsh.exe) ;; *) return 1 ;; esac
+  # A command without a brace has no script block to inspect.
+  [[ "$script_text" == *'{'* ]] || return 1
+  split_top_level_pipeline_stages_into script_stages "$script_text"
+  # A single stage prints its output blocks to the screen, so only its executable blocks need checks.
+  if (( ${#script_stages[@]} == 1 )); then
+    native_script_block_bodies_into script_stage_bodies "$script_text" 1 || return $?
+    # An empty list means every block in the stage is printed text.
+    (( ${#script_stage_bodies[@]} == 0 )) || script_commands_ref+=("${script_stage_bodies[@]}")
+  else
+    # The pipeline walker checks every stage alone, so this pass covers only printed blocks that feed a later stage.
+    for ((script_stage_index = 0; script_stage_index < ${#script_stages[@]} - 1; script_stage_index++)); do
+      # A stage that does not print a block is covered when the walker checks it on its own.
+      [[ "${script_stages[script_stage_index],,}" =~ $script_output_re ]] || continue
+      native_script_block_bodies_into script_stage_bodies "${script_stages[script_stage_index]}" 0 || return $?
+      # A printing stage with no braces adds nothing to check.
+      (( ${#script_stage_bodies[@]} == 0 )) || script_commands_ref+=("${script_stage_bodies[@]}")
+    done
+  fi
+  # Status 0 only when at least one block would run; the caller then checks each body as a command.
+  (( ${#script_commands_ref[@]} > 0 ))
+}
+
+# List the bodies of one pipeline stage's top-level script blocks, in the order the user wrote them.
+# With keep_output_inert=1, a block handed straight to Write-Output or echo is printed text; status 2 means an unclosed block.
+native_script_block_bodies_into() {
+  local -n script_bodies_ref="$1"
+  local script_text="$2" keep_output_inert="$3" script_quote="" script_character script_index script_escaped=0
+  local script_body script_tail script_length script_parentheses=0
+  local script_output_re='^[[:space:]]*(write-output|echo)([[:space:]]|$)'
+  script_bodies_ref=()
+  # Walk the stage once so quoted braces and nested blocks are not mistaken for extra top-level blocks.
+  for ((script_index = 0; script_index < ${#script_text}; script_index++)); do
+    script_character="${script_text:script_index:1}"
+    # The character after a backtick is literal text, so an escaped brace cannot open a block.
+    if (( script_escaped )); then
+      script_escaped=0
+      continue
+    fi
+    # PowerShell escapes with a backtick everywhere except inside single-quoted strings.
+    if [[ "$script_quote" != "'" && "$script_character" == '`' ]]; then
+      script_escaped=1
+      continue
+    fi
+    # Braces inside a quoted string are text the user is printing or passing, not a block.
+    if [[ -n "$script_quote" ]]; then
+      [[ "$script_character" == "$script_quote" ]] && script_quote=""
+      continue
+    fi
+    # A quote starts a string whose braces must not count as blocks.
+    if [[ "$script_character" == "'" || "$script_character" == '"' ]]; then
+      script_quote="$script_character"
+      continue
+    fi
+    # Parentheses mark an expression; a block inside one can run even under Write-Output, as in `Write-Output (& { ... })`.
+    case "$script_character" in
+      '(') script_parentheses=$((script_parentheses + 1)) ;;
+      ')') script_parentheses=$((script_parentheses - 1)) ;;
+    esac
+    [[ "$script_character" == '{' ]] || continue
+    native_command_group_into script_body script_tail "${script_text:script_index}" || return 2
+    # A printed block stays inert only when the caller allows it; a block in an expression or followed by `.Invoke()` still runs.
+    if [[ "$keep_output_inert" -ne 1 || ! "${script_text,,}" =~ $script_output_re || "$script_parentheses" -ne 0 ||
+          "${script_tail#"${script_tail%%[![:space:]]*}"}" == .* ]]; then
+      script_bodies_ref+=("$script_body")
+    fi
+    script_length=$(("${#script_text}" - script_index - "${#script_tail}"))
+    script_index=$((script_index + script_length - 1))
+  done
+  return 0
+}
+
+# Find the command behind a Windows launch keyword, so `call del`, `start /b del` or PowerShell's `. Remove-Item` gets the verb's own checks.
+#
+# Example: an agent proposes `cmd /c "for %i in (build) do del /s /q %i"`, and this hands `del /s /q %i` to the same checks.
+# Status 1 means the segment has no launch keyword; status 2 means the launched command cannot be read as literal text.
+native_launched_commands_into() {
+  local -n launched_commands_ref="$1"
+  local launch_text="$2" launch_text_lower launch_verb launch_switch launch_word_index loop_set loop_head
+  local -a launch_words=()
+  local cmd_loop_head_re='^for[[:space:]]+((/[dl]|/f([[:space:]]+"[^"]*")?|/r([[:space:]]+[^%[:space:]]+)?)[[:space:]]+)*%%?[a-z][[:space:]]+in[[:space:]]*\('
+  local cmd_loop_re="${cmd_loop_head_re}([^)]*)\\)[[:space:]]*do[[:space:]]+"
+  launched_commands_ref=()
+  launch_text="${launch_text#"${launch_text%%[![:space:]]*}"}"
+  launch_text_lower="${launch_text,,}"
+  case "${__goat_inline_command_host:-}" in
+    cmd|cmd.exe)
+      # An at sign only hides the command echo, so `@del build` still deletes.
+      if [[ "$launch_text" == @* ]]; then
+        launched_commands_ref+=("${launch_text:1}")
+        return 0
+      fi
+      # `call` runs the named command or batch file, as in `call del build`.
+      if [[ "$launch_text_lower" =~ ^call([[:space:]]+|$) ]]; then
+        launched_commands_ref+=("${launch_text:${#BASH_REMATCH[0]}}")
+        return 0
+      fi
+      # `start` runs a program, optionally in a new window, as in `start /b del build`.
+      if [[ "$launch_text_lower" =~ ^start([[:space:]]+|$) ]]; then
+        launch_text="${launch_text:${#BASH_REMATCH[0]}}"
+        # The first quoted argument names the new window, as in `start "" del build`; it is not the program start runs.
+        if [[ "$launch_text" == \"* ]]; then
+          launch_text="${launch_text:1}"
+          # An unclosed title leaves no readable program name.
+          [[ "$launch_text" == *\"* ]] || return 2
+          launch_text="${launch_text#*\"}"
+        fi
+        # Window, priority and wait switches come before the program; /d, /node and /affinity also take a value.
+        while true; do
+          launch_text="${launch_text#"${launch_text%%[![:space:]]*}"}"
+          # The first word without a leading slash is the program start runs.
+          [[ "$launch_text" == /* ]] || break
+          launch_switch="${launch_text%%[[:space:]]*}"
+          launch_text="${launch_text:${#launch_switch}}"
+          case "${launch_switch,,}" in
+            /d|/node|/affinity)
+              launch_text="${launch_text#"${launch_text%%[![:space:]]*}"}"
+              launch_text="${launch_text#"${launch_text%%[[:space:]]*}"}" ;;
+          esac
+        done
+        # A bare `start` only opens an empty window, which leaves nothing to check.
+        [[ -z "$launch_text" ]] || launched_commands_ref+=("$launch_text")
+        return 0
+      fi
+      # A `for` loop runs its `do` command once per item, as in `for %i in (build dist) do del /s /q %i`.
+      if [[ "$launch_text_lower" =~ ^for[[:space:]] ]]; then
+        # An unrecognized loop header could hide which part of the line runs, so the agent gets a recovery message.
+        [[ "$launch_text_lower" =~ $cmd_loop_re ]] || return 2
+        loop_set="${BASH_REMATCH[5]}"
+        # A repeated regex group keeps only its last switch, so read the switches from the whole loop head.
+        loop_head="${BASH_REMATCH[0]%%\%*}"
+        launched_commands_ref+=("${launch_text:${#BASH_REMATCH[0]}}")
+        # `for /f` also runs a quoted command in its set, as in `for /f %i in ('git branch -D main') do echo %i`.
+        if [[ "$loop_head" == */f* ]]; then
+          # Re-measure on the original text so the set command keeps its letter case; `-D` and `-d` mean different Git actions.
+          [[ "$launch_text_lower" =~ $cmd_loop_head_re ]] || return 2
+          loop_set="${launch_text:${#BASH_REMATCH[0]}:${#loop_set}}"
+          loop_set="${loop_set#"${loop_set%%[![:space:]]*}"}"
+          loop_set="${loop_set%"${loop_set##*[![:space:]]}"}"
+          # A single-quoted or backtick-quoted set is a command; a plain list or double-quoted string is data.
+          case "$loop_set" in
+            \'*\'|\`*\`) launched_commands_ref+=("${loop_set:1:${#loop_set}-2}") ;;
+          esac
+        fi
+        return 0
+      fi
+      ;;
+    powershell|powershell.exe|pwsh|pwsh.exe)
+      # The dot operator runs the named command in the current scope, so `. Remove-Item build` deletes like `Remove-Item build`.
+      if [[ "$launch_text" =~ ^\.[[:space:]]+ ]]; then
+        launched_commands_ref+=("${launch_text:${#BASH_REMATCH[0]}}")
+        return 0
+      fi
+      # A module-qualified name such as Microsoft.PowerShell.Utility\Invoke-Expression runs the same command as its bare name.
+      # The hosted body already uses forward slashes, so the qualifier ends at the last slash.
+      launch_verb="${launch_text_lower%%[[:space:]]*}"
+      launch_verb="${launch_verb##*/}"
+      case "$launch_verb" in
+        # Invoke-Expression runs text assembled at run time, which no literal check can follow.
+        iex|invoke-expression) return 2 ;;
+        start|saps|start-process)
+          # Positional Start-Process runs its target with the listed arguments, as in `Start-Process git.exe push`.
+          split_shell_words_into launch_words "$launch_text"
+          # Named parameters such as -ArgumentList change how the words are read, so the agent gets a recovery message.
+          for ((launch_word_index = 1; launch_word_index < ${#launch_words[@]}; launch_word_index++)); do
+            [[ "${launch_words[launch_word_index]}" != -* ]] || return 2
+          done
+          # A bare Start-Process names no program, which leaves nothing to check.
+          (( ${#launch_words[@]} < 2 )) || launched_commands_ref+=("$(join_shell_words_from launch_words 1 text)")
+          return 0 ;;
+      esac
+      ;;
+  esac
+  # No launch keyword: the caller checks this segment as an ordinary command.
+  return 1
+}
+
 # Prepare one shared view of a user-visible command segment for every policy module.
 # Use once per segment so shell, secret, and repository checks classify identical text.
 prepare_segment_context() {
@@ -2982,16 +3451,24 @@ prepare_segment_context() {
   fi
 
   local -a inline_shell_words=()
-  local inner_c="" shell_index
-  case "$CMD_VERB" in
+  local inner_c="" shell_index inline_shell_source="$CMD_NORMALIZED" inline_shell_verb xargs_hosted_command
+  # xargs keeps its prefix for stdin-target checks, but a shell it launches, as in `xargs powershell -c "Remove-Item build"`, still runs a body.
+  if [[ "$CMD_VERB" == xargs ]] && xargs_hosted_command=$(strip_xargs_payload_command "$CMD_NORMALIZED"); then
+    inline_shell_source="$xargs_hosted_command"
+  fi
+  # The launched shell's name decides which grammar reads its body, whatever path or slash style the user typed.
+  inline_shell_verb="${inline_shell_source%%[[:space:]]*}"
+  inline_shell_verb="${inline_shell_verb//\\//}"
+  inline_shell_verb="${inline_shell_verb##*/}"
+  case "$inline_shell_verb" in
     sh|bash|dash|ash|ksh|zsh)
-      split_shell_words_into inline_shell_words "$CMD_NORMALIZED"
+      split_shell_words_into inline_shell_words "$inline_shell_source"
       for ((shell_index = 1; shell_index < ${#inline_shell_words[@]}; shell_index += 1)); do
         case "${inline_shell_words[$shell_index]}" in
           -o|+o) shell_index=$((shell_index + 1)) ;;
           -[a-zA-Z]*c*|-c)
             inner_c="${inline_shell_words[$((shell_index + 1))]:-}"
-            local raw_shell_body="$CMD_NORMALIZED" drop_index
+            local raw_shell_body="$inline_shell_source" drop_index
             for ((drop_index = 0; drop_index <= shell_index; drop_index += 1)); do
               raw_shell_body=$(drop_first_shell_word "$raw_shell_body")
             done
@@ -3025,26 +3502,38 @@ prepare_segment_context() {
         esac
       done ;;
   esac
+  case "${inline_shell_verb,,}" in
+    cmd|cmd.exe|powershell|powershell.exe|pwsh|pwsh.exe|wsl|wsl.exe)
+      # Encoded, stdin-fed or unsupported host input cannot prove the action; request literal source with supported options.
+      if ! native_shell_command_into inner_c "$inline_shell_source"; then
+        block "Cannot inspect this native shell command. Use a literal command with supported host options through Bash." || return $?
+      fi
+      ;;
+  esac
   # Inline shell code executes inside the outer action, so its body must receive its own complete policy inspection.
   if [[ -n "$inner_c" ]]; then
-    # An empty inline shell body contains no action; a nonempty body must pass the same checks as direct commands.
-    if [[ -n "$inner_c" ]]; then
-      saved_cmd_trimmed="$CMD_TRIMMED"
-      saved_cmd_normalized="$CMD_NORMALIZED"
-      saved_cmd_verb="$CMD_VERB"
-      saved_cmd_unquoted="$CMD_UNQUOTED"
-      saved_cmd_lower="$CMD_LOWER"
-      saved_has_redirect="$HAS_REDIRECT"
-      saved_has_pipe="$HAS_PIPE"
-      check_command_segments "$inner_c" $((depth + 1)) || return $?
-      CMD_TRIMMED="$saved_cmd_trimmed"
-      CMD_NORMALIZED="$saved_cmd_normalized"
-      CMD_VERB="$saved_cmd_verb"
-      CMD_UNQUOTED="$saved_cmd_unquoted"
-      CMD_LOWER="$saved_cmd_lower"
-      HAS_REDIRECT="$saved_has_redirect"
-      HAS_PIPE="$saved_has_pipe"
-    fi
+    # Nested checks inherit this interpreter through Bash's dynamic scope; another inline shell replaces it for its own body.
+    local __goat_inline_command_host="${inline_shell_verb,,}"
+    # cmd and PowerShell treat a backslash as a path separator, never an escape, so their body is checked with forward slashes.
+    # Otherwise `C:\tools\git.exe push` or `Module\Remove-Item` collapses into one unrecognized word and passes unchecked.
+    case "$__goat_inline_command_host" in
+      cmd|cmd.exe|powershell|powershell.exe|pwsh|pwsh.exe) inner_c="${inner_c//\\//}" ;;
+    esac
+    saved_cmd_trimmed="$CMD_TRIMMED"
+    saved_cmd_normalized="$CMD_NORMALIZED"
+    saved_cmd_verb="$CMD_VERB"
+    saved_cmd_unquoted="$CMD_UNQUOTED"
+    saved_cmd_lower="$CMD_LOWER"
+    saved_has_redirect="$HAS_REDIRECT"
+    saved_has_pipe="$HAS_PIPE"
+    check_command_segments "$inner_c" $((depth + 1)) || return $?
+    CMD_TRIMMED="$saved_cmd_trimmed"
+    CMD_NORMALIZED="$saved_cmd_normalized"
+    CMD_VERB="$saved_cmd_verb"
+    CMD_UNQUOTED="$saved_cmd_unquoted"
+    CMD_LOWER="$saved_cmd_lower"
+    HAS_REDIRECT="$saved_has_redirect"
+    HAS_PIPE="$saved_has_pipe"
   fi
 }
 
@@ -3221,6 +3710,12 @@ check_command_segments() {
   local -a git_directory_stack=()
   local -a git_directory_unknown_stack=()
   local -a git_config_unresolved_stack=()
+  local -a native_conditional_commands=()
+  local native_conditional_status native_conditional_command
+  local -a native_script_commands=()
+  local native_script_status native_script_command
+  local -a native_launched_commands=()
+  local native_launched_status native_launched_command
 
   # Only the destructive-shell policy owns download-then-execute chain checks; Git policy retains its separate scope.
   if [[ "$GOAT_GUARD_SCOPE" == "deny-dangerous" ]] && declare -F check_command_chain_policy >/dev/null 2>&1; then
@@ -3241,6 +3736,53 @@ check_command_segments() {
     nested_segment="${nested_segment#"${nested_segment%%[![:space:]]*}"}"
     nested_segment="${nested_segment%"${nested_segment##*[![:space:]]}"}"
     [[ -z "$nested_segment" ]] && continue
+    native_launched_status=0
+    native_launched_commands_into native_launched_commands "$nested_segment" || native_launched_status=$?
+    # A launch keyword such as `call` or `start` runs the command after it, so that command gets the checks it would get alone.
+    if [[ "$native_launched_status" -eq 0 ]]; then
+      # Bound nested keywords so a long chain like `call call call ...` cannot stall the user's agent session.
+      if (( depth >= 16 )); then
+        block "Native command prefixes exceed inspection depth. Use separate literal commands through Bash." || return $?
+      fi
+      # A bare `start` opens an empty window and leaves nothing to inspect.
+      (( ${#native_launched_commands[@]} > 0 )) || continue
+      # A `for /f` loop can launch two commands, its set command and its loop body, and each must pass.
+      for native_launched_command in "${native_launched_commands[@]}"; do
+        check_command_segments "$native_launched_command" $((depth + 1)) || return $?
+      done
+      continue
+    # A launched command the parser cannot read, such as Invoke-Expression text, stops with a recovery message.
+    elif [[ "$native_launched_status" -eq 2 ]]; then
+      block "Cannot inspect this native command form. Use separate literal commands through Bash." || return $?
+    fi
+    native_conditional_status=0
+    native_conditional_commands_into native_conditional_commands "$nested_segment" || native_conditional_status=$?
+    # Native if conditions and branches execute under different grammar from Bash and must be exposed before Bash normalization.
+    if [[ "$native_conditional_status" -eq 0 ]]; then
+      # Bound recursive branches so an oversized conditional cannot stall the user's agent session.
+      if (( depth >= 16 )); then
+        block "Native conditional nesting exceeds inspection depth. Use separate literal commands through Bash." || return $?
+      fi
+      # Stay in the parent process so a provider's JSON denial ends the entire action.
+      for native_conditional_command in "${native_conditional_commands[@]}"; do
+        check_command_segments "$native_conditional_command" $((depth + 1)) || return $?
+      done
+      continue
+    elif [[ "$native_conditional_status" -eq 2 ]]; then
+      block "Cannot inspect this native conditional. Use separate literal commands through Bash." || return $?
+    fi
+    native_script_status=0
+    native_script_block_commands_into native_script_commands "$nested_segment" || native_script_status=$?
+    if [[ "$native_script_status" -eq 0 ]]; then
+      if (( depth >= 16 )); then
+        block "PowerShell script-block nesting exceeds inspection depth. Use separate literal commands through Bash." || return $?
+      fi
+      for native_script_command in "${native_script_commands[@]}"; do
+        check_command_segments "$native_script_command" $((depth + 1)) || return $?
+      done
+    elif [[ "$native_script_status" -eq 2 ]]; then
+      block "Cannot inspect this PowerShell script block. Use separate literal commands through Bash." || return $?
+    fi
     directory_segment="$nested_segment"
     while [[ "$directory_segment" == \(* ]]; do
       git_directory_stack+=("$__goat_git_command_directory")
@@ -3421,6 +3963,10 @@ main() {
     fi
     # A known tool name decides whether this policy owns the requested action or should return provider continuation.
     if [[ -n "$tool_name" ]]; then
+      # PowerShell syntax has no qualified native-tool classifier; do not silently treat it as a non-shell tool.
+      if [[ "${tool_name,,}" == powershell ]]; then
+        block "Native PowerShell tool commands are not supported by this policy. Use the Bash tool with Git Bash instead." || return $?
+      fi
       # Non-shell tools bypass shell classification only when the selected policy does not own their requested file action.
       if ! tool_is_shell_command "$tool_name"; then
         # The dangerous-hook entrypoint still inspects secret-file operations even when no shell tool was invoked.

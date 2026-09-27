@@ -74,7 +74,8 @@ is_git_lfs_write_target() {
     alias) lfs_words=("${__goat_git_invoked_alias_words[@]}") ;;
     *) split_shell_words_into lfs_words "$candidate" ;;
   esac
-  [[ "${lfs_words[0]:-}" == lfs ]] || return 1
+  local lfs_executable="${lfs_words[0]:-}"
+  [[ "${lfs_executable,,}" == lfs ]] || return 1
   local value_options="--include --exclude --include-ref --exclude-ref --above --top --unit --pointers --object-map --message --remote --id"
   local value_shorts="IXmri"
   local index word short
@@ -114,7 +115,7 @@ is_git_publication_target() {
   local candidate="$1"
   candidate="${candidate#"${candidate%%[![:space:]]*}"}"
   case "$candidate" in
-    lfs|lfs\ *) is_git_lfs_write_target "$candidate" publication "${2:-}"; return $? ;;
+    [lL][fF][sS]|[lL][fF][sS]\ *) is_git_lfs_write_target "$candidate" publication "${2:-}"; return $? ;;
     push | push\ * | send-pack | send-pack\ * | http-push | http-push\ * | svn\ dcommit | svn\ dcommit\ * | p4\ submit | p4\ submit\ * | subtree\ push | subtree\ push\ * | \!*) return 0 ;;
     *) return 1 ;;
   esac
@@ -363,11 +364,12 @@ is_git_commit_target() {
   local verb="${candidate%%[[:space:]]*}"
   local arguments=""
   [[ "$candidate" == *[[:space:]]* ]] && arguments="${candidate#*[[:space:]]}"
-  [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
-  if [[ "$verb" == lfs ]]; then
+  # Windows may resolve uppercase LFS to git-lfs; that must retain the same history-write boundary.
+  if [[ "${verb,,}" == lfs ]]; then
     is_git_lfs_write_target "$candidate" history "$mode"
     return $?
   fi
+  [[ "$__goat_git_history_verbs" == *" $verb "* ]] || return 1
   # Aliases to a conditional verb are safe until their own or appended arguments select the history-writing form.
   if [[ "$mode" == "strict" && " reset branch checkout switch fetch symbolic-ref replace notes worktree stash " != *" $verb "* ]]; then
     return 0
@@ -876,9 +878,10 @@ is_gh_api_write() {
   local start_index="$2"
   local raw_stage="$3"
   local graphql_status
-  # GraphQL operation proof precedes method shortcuts. A missing parser or uncertain
-  # payload is a denial; only a positively identified REST request reaches the legacy rules.
-  if node "$GOAT_HOOK_LIB_DIR/../gh-graphql-read.cjs" "$raw_stage" "${__goat_gh_words_ref__[@]:start_index}"; then
+  # Prove a GraphQL query before method shortcuts; uncertain input stays denied and only identified REST requests reach the legacy rules.
+  # Stdin preserves /graphql and other literal operands across Git Bash's native-process argument conversion.
+  if printf '%s\0' "$raw_stage" "${__goat_gh_words_ref__[@]:start_index}" |
+     node "$GOAT_HOOK_LIB_DIR/../gh-graphql-read.cjs" --stdin-argv; then
     return 1
   else
     graphql_status=$?

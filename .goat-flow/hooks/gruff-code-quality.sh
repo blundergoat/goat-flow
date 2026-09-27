@@ -1254,6 +1254,8 @@ self_test() {
     printf 'gruff-code-quality self-test: env override must beat config override: %s\n' "$winner" >&2
     return 1
   }
+  # Git Bash infers executability from a shebang even after chmod -x; use inert data for this fixture.
+  printf 'non-executable analyzer fixture\n' > "$tmp/strands_agents/.venv/bin/gruff-py"
   chmod -x "$tmp/strands_agents/.venv/bin/gruff-py"
   output="$(PATH="$tmp/empty-bin:$PATH" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"
   [[ "$output" == *"hooks.gruff-code-quality.binaries.py points at strands_agents/.venv/bin/gruff-py which is not an executable file"* ]] || {
@@ -1261,6 +1263,7 @@ self_test() {
     printf 'gruff-code-quality self-test: non-executable config override diagnostic failed: %s\n' "$output" >&2
     return 1
   }
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/strands_agents/.venv/bin/gruff-py"
   chmod +x "$tmp/strands_agents/.venv/bin/gruff-py"
   printf 'hooks:\n  gruff-code-quality:\n    binaries:\n      py: missing/gruff-py\n' > "$tmp/.goat-flow/config.yaml"
   output="$(PATH="$tmp/empty-bin:$PATH" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"

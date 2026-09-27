@@ -963,27 +963,29 @@ check_destructive_segment() {
     block "Shell stdin (<<< / here-doc) hides commands from inspection. Run the command directly." || return $?
   fi
 
-  local powershell_eval_re='(^|[[:space:]])(powershell|pwsh)(\.exe)?([[:space:]]+--?[a-z0-9-]+(=[^[:space:]]+)?)*[[:space:]]+--?(c|command|encodedcommand)([[:space:]]|$)'
-  # Inline PowerShell can mutate the machine even when the outer shell command appears indirect.
-  if [[ "$CMD_LOWER" =~ $powershell_eval_re ]]; then
-    # Destructive PowerShell verbs need manual execution with explicit intent.
-    if [[ "$CMD_LOWER" =~ (remove-item|clear-disk|format-volume|stop-computer|restart-computer|set-executionpolicy[[:space:]]+(unrestricted|bypass)) ]]; then
-      block "PowerShell destructive verb. Run manually with explicit confirmation." || return $?
-    fi
-    # Encoded PowerShell input cannot be inspected here; review the decoded command separately.
-    if [[ "$CMD_LOWER" =~ --?encodedcommand[[:space:]]+ ]]; then
-      block "PowerShell -EncodedCommand is opaque to inspection. Run the decoded command directly." || return $?
-    fi
-  fi
-  local cmd_eval_re='(^|[[:space:]])cmd(\.exe)?[[:space:]]+/[ck][[:space:]]+'
-  # Windows command-shell input needs the same destructive-operation check as direct shell commands.
-  if [[ "$CMD_LOWER" =~ $cmd_eval_re ]]; then
-    local cmd_destructive_re='(^|[[:space:]/"])(del|erase|rmdir|rd|format)([[:space:]]|$|\.exe)'
-    # Windows deletion or formatting verbs remain manual operations.
-    if [[ "$CMD_LOWER" =~ $cmd_destructive_re ]]; then
-      block "cmd.exe destructive verb (del/rmdir/rd/format). Run manually with explicit confirmation." || return $?
-    fi
-  fi
+  # Check the verb a Windows shell will run, so `cmd /c "echo del build"` stays allowed while `cmd /c "del build"` needs the user.
+  case "${__goat_inline_command_host:-}" in
+    powershell|powershell.exe|pwsh|pwsh.exe)
+      # PowerShell resolves ri, rm, rmdir, rd, del and erase to Remove-Item, so they share its manual-only decision.
+      case "${CMD_VERB,,}" in
+        remove-item|ri|rm|rmdir|rd|del|erase|clear-disk|format-volume|stop-computer|restart-computer)
+          block "PowerShell destructive verb. Run manually with explicit confirmation." || return $? ;;
+        set-executionpolicy)
+          local powershell_policy_re="(^|[[:space:]'\"])(unrestricted|bypass)([[:space:]'\"]|$)"
+          # A policy change remains manual when any supplied option requests unrestricted or bypass execution.
+          if [[ "$cmd_normalized_lower" =~ $powershell_policy_re ]]; then
+            block "PowerShell destructive verb. Run manually with explicit confirmation." || return $?
+          fi ;;
+      esac ;;
+    cmd|cmd.exe)
+      # `format.com` and `format` are the same program, so a file extension cannot hide a drive format.
+      local windows_verb="${CMD_VERB,,}"
+      windows_verb="${windows_verb%.exe}"
+      case "${windows_verb%.com}" in
+        del|erase|rmdir|rd|format)
+          block "cmd.exe destructive verb (del/rmdir/rd/format). Run manually with explicit confirmation." || return $? ;;
+      esac ;;
+  esac
 
   local sudo_package_re='(^|[[:space:];&|])sudo[[:space:]]+(apt(-get)?|dnf|yum|pacman|brew)[[:space:]]+(install|remove|upgrade|update)'
   # Privileged package changes affect the user's machine beyond project files.
