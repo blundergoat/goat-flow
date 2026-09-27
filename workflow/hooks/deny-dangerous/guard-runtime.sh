@@ -735,6 +735,20 @@ first_word_base() {
   printf '%s' "${word##*/}"
 }
 
+# Route explicit Windows Git executable names through the ordinary Git policies without changing assignment values.
+normalize_git_executable_word() {
+  local -n git_executable_word_ref="$1"
+  [[ "$git_executable_word_ref" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] && return 0
+  local executable_path="${git_executable_word_ref//\\//}"
+  local executable_base="${executable_path##*/}" normalized_base
+  case "${executable_base,,}" in
+    git.exe|git-*.exe)
+      normalized_base="${executable_base,,}"
+      git_executable_word_ref="${executable_path%"$executable_base"}${normalized_base%.exe}"
+      ;;
+  esac
+}
+
 # Remove shell quoting from the executable name while keeping quoted spaces inside that word for consistent policy classification.
 normalize_leading_command_word() {
   local c="$1"
@@ -764,8 +778,14 @@ normalize_leading_command_word() {
       continue
     fi
 
-    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
+    # Double quotes preserve backslashes before ordinary characters, including Windows path separators.
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
+      if [[ "$in_double" -eq 1 ]]; then
+        case "${c:i+1:1}" in
+          '$'|'`'|'"'|\\|$'\n') ;;
+          *) current+="$char"; continue ;;
+        esac
+      fi
       escaped=1
       continue
     fi
@@ -911,8 +931,14 @@ split_shell_words_into() {
       continue
     fi
 
-    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
+    # Match shell quoting so wrapper payloads and raw Git environment checks retain Windows path separators.
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
+      if [[ "$in_double" -eq 1 ]]; then
+        case "${input:i+1:1}" in
+          '$'|'`'|'"'|\\|$'\n') ;;
+          *) current+="$char"; word_started=1; continue ;;
+        esac
+      fi
       escaped=1
       continue
     fi
@@ -970,11 +996,18 @@ split_shell_words_into() {
 join_shell_words_from() {
   local -n __goat_words_join_ref__="$1"
   local start_index="$2"
+  local mode="${3:-text}"
   local out=""
+  local quoted_word=""
   local i
   # Keep the remaining argument order when rebuilding the executable action after wrapper settings.
   for ((i = start_index; i < ${#__goat_words_join_ref__[@]}; i++)); do
-    out+="${__goat_words_join_ref__[$i]} "
+    quoted_word="${__goat_words_join_ref__[$i]}"
+    # Only argv-based launchers retain word boundaries; shell payloads and comparison strings keep their text form.
+    if [[ "$mode" == argv ]]; then
+      printf -v quoted_word '%q' "$quoted_word"
+    fi
+    out+="$quoted_word "
   done
   printf '%s' "${out% }"
 }
@@ -1052,6 +1085,7 @@ strip_watch_payload_command() {
 
   local watch_word_index=1
   local watch_word=""
+  local watch_mode=text
   # Return 2 for uncertain option arity so the caller cannot silently allow a hidden payload.
   while [[ "$watch_word_index" -lt "${#watch_words[@]}" ]]; do
     watch_word="${watch_words[$watch_word_index]}"
@@ -1069,7 +1103,12 @@ strip_watch_payload_command() {
         watch_word_index=$((watch_word_index + 1))
         continue
         ;;
-      -b|--beep|-c|--color|-C|--no-color|-d|--differences|--differences=*|-e|--errexit|-g|--chgexit|-p|--precise|-r|--no-rerun|-t|--no-title|-w|--no-wrap|-x|--exec)
+      -x|--exec)
+        watch_mode=argv
+        watch_word_index=$((watch_word_index + 1))
+        continue
+        ;;
+      -b|--beep|-c|--color|-C|--no-color|-d|--differences|--differences=*|-e|--errexit|-g|--chgexit|-p|--precise|-r|--no-rerun|-t|--no-title|-w|--no-wrap)
         watch_word_index=$((watch_word_index + 1))
         continue
         ;;
@@ -1085,7 +1124,7 @@ strip_watch_payload_command() {
 
   # Missing payload means watch would not run a user command.
   [[ "$watch_word_index" -lt "${#watch_words[@]}" ]] || return 1
-  join_shell_words_from watch_words "$watch_word_index"
+  join_shell_words_from watch_words "$watch_word_index" "$watch_mode"
 }
 
 # Return the command GNU parallel will invoke for the supported common option forms.
@@ -1159,6 +1198,7 @@ __goat_git_strip_globals() {
   # Empty command text cannot select a Git repository or invoke an alias.
   [[ "${#words[@]}" -gt 0 ]] || return 1
 
+  normalize_git_executable_word 'words[0]'
   local command_base="${words[0]##*/}"
   # Git subcommands can also run as git-<verb> executables, including absolute paths in Git's exec directory.
   if [[ "$command_base" == git-* ]]; then
@@ -1757,7 +1797,7 @@ check_git_command_environment() {
 visible_git_config_environment_is_unresolved() {
   local raw="$1" verb="$2"
   local -a words=()
-  local word name value saw_declaration=0 declaration_exports=0 scan_after_verb=0
+  local word command_word name value saw_declaration=0 declaration_exports=0 scan_after_verb=0
   # An earlier chained segment relocated Git's configuration source, so this Git action is also unresolved.
   if [[ "${__goat_git_config_env_unresolved:-0}" -eq 1 &&
         ( "$verb" == git || "$verb" == git-* ||
@@ -1784,7 +1824,9 @@ visible_git_config_environment_is_unresolved() {
   [[ "$verb" == export || "$declaration_exports" -eq 1 ]] && scan_after_verb=1
   for word in "${words[@]}"; do
     # A command argument can quote the same text as inert data; only prefixes affect the process environment.
-    if [[ -n "$verb" && "$scan_after_verb" -eq 0 && "${word##*/}" == "$verb" ]]; then
+    command_word="$word"
+    normalize_git_executable_word command_word
+    if [[ -n "$verb" && "$scan_after_verb" -eq 0 && "${command_word##*/}" == "$verb" ]]; then
       break
     fi
     if [[ "$word" =~ ^(GIT_CONFIG_(COUNT|PARAMETERS|KEY_[0-9]+|VALUE_[0-9]+|GLOBAL|SYSTEM))=(.*)$ ]]; then
@@ -1926,7 +1968,7 @@ normalize_exec_prefix() {
   [[ "$i" -lt "${#words[@]}" ]] || return 1
   word="${words[$i]}"
   word_starts_with_redirection "$word" && return 1
-  join_shell_words_from words "$i"
+  join_shell_words_from words "$i" argv
 }
 
 # Reveal the command after timeout options and duration; uncertain option arity must fail closed at the caller.
@@ -1969,7 +2011,7 @@ normalize_timeout_prefix() {
   [[ "$i" -lt "${#words[@]}" ]] || return 1
   i=$((i + 1)) # DURATION
   [[ "$i" -lt "${#words[@]}" ]] || return 1
-  join_shell_words_from words "$i"
+  join_shell_words_from words "$i" argv
 }
 
 # Reveal a supported session-launch command so a new session cannot conceal the guarded executable.
@@ -2006,7 +2048,7 @@ normalize_setsid_prefix() {
     break
   done
   [[ "$i" -lt "${#words[@]}" ]] || return 1
-  join_shell_words_from words "$i"
+  join_shell_words_from words "$i" argv
 }
 
 # Reveal the command after stream-buffer settings so output buffering does not change policy classification.
@@ -2043,7 +2085,7 @@ normalize_stdbuf_prefix() {
     break
   done
   [[ "$i" -lt "${#words[@]}" ]] || return 1
-  join_shell_words_from words "$i"
+  join_shell_words_from words "$i" argv
 }
 
 # Reveal a newly launched command after I/O scheduling options; existing-process forms supply no launch payload.
@@ -2083,7 +2125,7 @@ normalize_ionice_prefix() {
     break
   done
   [[ "$i" -lt "${#words[@]}" ]] || return 1
-  join_shell_words_from words "$i"
+  join_shell_words_from words "$i" argv
 }
 
 # Reveal a newly launched command after CPU selection; existing-process forms supply no launch payload.
@@ -2120,7 +2162,7 @@ normalize_taskset_prefix() {
   [[ "$i" -lt "${#words[@]}" ]] || return 1
   i=$((i + 1)) # CPU mask/list
   [[ "$i" -lt "${#words[@]}" ]] || return 1
-  join_shell_words_from words "$i"
+  join_shell_words_from words "$i" argv
 }
 
 # Reveal a newly launched command after scheduling policy and priority; existing-process forms supply no launch payload.
@@ -2166,7 +2208,7 @@ normalize_chrt_prefix() {
   [[ "$i" -lt "${#words[@]}" ]] || return 1
   i=$((i + 1)) # priority
   [[ "$i" -lt "${#words[@]}" ]] || return 1
-  join_shell_words_from words "$i"
+  join_shell_words_from words "$i" argv
 }
 
 # Reveal the executable or explicit command string protected by a lock; incomplete lock-only forms supply no launch payload.
@@ -2232,7 +2274,7 @@ normalize_flock_prefix() {
     printf '%s' "${words[$((i + 1))]}"
     return 0
   fi
-  join_shell_words_from words "$i"
+  join_shell_words_from words "$i" argv
 }
 
 # Keep shell redirections out of the API request so developers can save read-only GitHub evidence to a file.
@@ -2372,6 +2414,9 @@ normalize_command_candidate() {
       continue
     fi
     word="${c%%[[:space:]]*}"
+    after_word="${c#"$word"}"
+    normalize_git_executable_word word
+    c="$word$after_word"
     base="${word##*/}"
     # Timing and hangup wrappers do not change the child action, so reveal its executable before classification.
     if [[ "$base" == "time" || "$base" == "nohup" ]]; then
@@ -2410,7 +2455,7 @@ normalize_command_candidate() {
           *) break ;;
         esac
       done
-      c=$(join_shell_words_from nice_words "$nice_index")
+      c=$(join_shell_words_from nice_words "$nice_index" argv)
       continue
     fi
     # Privilege elevation wraps the action but does not authorize an otherwise guarded command.
@@ -3471,7 +3516,7 @@ source "$GOAT_HOOK_LIB_DIR/patterns-writes.sh" || deny_dangerous_unavailable "fa
 
 # During an interrupted upgrade the old policy file can still be present. It
 # must not reach main without the split API and accidentally allow on return 127.
-for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias is_git_builtin_word git_arguments_are_one_of git_flags_within git_arguments_include split_curl_form_parts_into curl_form_files_touch_secret git_symbolic_ref_is_read_only; do
+for required_policy_function in check_destructive_segment check_secret_segment split_secret_redirections_into literal_output_prefix_candidate check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias is_git_builtin_word git_arguments_are_one_of git_flags_within git_arguments_include split_curl_form_parts_into curl_form_files_touch_secret git_symbolic_ref_is_read_only; do
   declare -F "$required_policy_function" >/dev/null ||
     deny_dangerous_unavailable "policy store lacks required function $required_policy_function"
 done

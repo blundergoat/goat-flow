@@ -50,7 +50,13 @@ strip_shell_quotes_for_path_scan() {
       continue
     fi
 
-    out+="$char"
+    # A single input redirect opens a file even without spaces; here-strings and quoted '<' remain data.
+    if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$char" == '<' &&
+          "${input:i+1:1}" != [\<\&\(] && ( "$i" -eq 0 || "${input:i-1:1}" != '<' ) ]]; then
+      out+='< '
+    else
+      out+="$char"
+    fi
   done
 
   if [[ "$escaped" -eq 1 ]]; then
@@ -268,7 +274,7 @@ is_secret_path_touch() {
   local input="$1"
   local c="$input"
   local windows_path_view=""
-  if [[ "$input" == *\'* || "$input" == *\"* || "$input" == *\\* ]]; then
+  if [[ "$input" == *\'* || "$input" == *\"* || "$input" == *\\* || "$input" == *'<'* ]]; then
     c=$(strip_shell_quotes_for_path_scan "$input")
   fi
   # Only backslash-rooted Windows operands need the secondary slash-normalized view.
@@ -754,17 +760,121 @@ is_git_credential_disclosure() {
   esac
 }
 
+# Separate file-opening redirections from arguments without interpreting quoted operators or here-string data as paths.
+# Unsupported compound syntax keeps the caller's original command under the generic secret scan.
+split_secret_redirections_into() {
+  local -n secret_words_ref="$1" secret_redirects_ref="$2"
+  local input="$3" word="" character quote="" escaped=0 redirect=0 i
+  secret_words_ref=()
+  secret_redirects_ref=()
+  for ((i = 0; i <= ${#input}; i++)); do
+    character="${input:i:1}"
+    if [[ "$escaped" -eq 1 ]]; then
+      [[ -n "$character" ]] || return 1
+      word+="$character"; escaped=0; continue
+    fi
+    if [[ "$quote" != "'" && "$character" == \\ ]]; then
+      word+="$character"; escaped=1; continue
+    fi
+    if [[ -n "$quote" ]]; then
+      word+="$character"
+      [[ "$character" == "$quote" ]] && quote=""
+      continue
+    fi
+    if [[ "$character" == "'" || "$character" == '"' ]]; then
+      word+="$character"; quote="$character"; continue
+    fi
+    if [[ -z "$character" || "$character" == [[:space:]\<\>\|\&\;] ]]; then
+      if [[ -n "$word" ]]; then
+        if [[ "$redirect" -eq 1 ]]; then
+          secret_redirects_ref+=("$word")
+        elif [[ "$redirect" -eq 0 ]]; then
+          # An unquoted descriptor belongs to its following redirect, not to the executable's argument list.
+          if [[ "$character" != [\<\>] || ! "$word" =~ ^([0-9]+|\{[a-zA-Z_][a-zA-Z0-9_]*\})$ ]]; then
+            secret_words_ref+=("$word")
+          fi
+        fi
+        word=""; redirect=0
+      fi
+      if [[ "$character" == [\<\>] || "${input:i:2}" == '&>' ]]; then
+        [[ "$redirect" -eq 0 ]] || return 1
+        case "${input:i}" in
+          '<<<'*) redirect=2; i=$((i + 2)) ;;
+          '<<'*|'<('*|'>('*) return 1 ;;
+          '&>>'*) redirect=1; i=$((i + 2)) ;;
+          '>>'*|'>&'*|'<&'*|'<>'*|'>|'*|'&>'*) redirect=1; i=$((i + 1)) ;;
+          *) redirect=1 ;;
+        esac
+      elif [[ "$character" == [\|\&\;] ]]; then
+        return 1
+      fi
+    else
+      word+="$character"
+    fi
+  done
+  [[ -z "$quote" && "$redirect" -eq 0 ]]
+}
+
+# Exempt only a proven literal-output suffix; wrapper operands such as flock's lock file remain protected.
+literal_output_prefix_candidate() {
+  local command_text="$1" normalized prefix_count i suffix matches=1
+  local -a original_words=() output_words=() normalized_words=() normalized_redirects=()
+  normalized=$(normalize_command_candidate "$command_text") || return 1
+  split_shell_words_into output_words "$normalized"
+  [[ "${#output_words[@]}" -gt 0 ]] || return 1
+  case "${output_words[0]##*/}" in printf|echo) ;; *) return 1 ;; esac
+  # Shell-text wrappers can expose redirects that were quoted in the outer command.
+  split_secret_redirections_into normalized_words normalized_redirects "$normalized" || return 1
+  split_shell_words_into original_words "$command_text"
+  prefix_count=$((${#original_words[@]} - ${#output_words[@]}))
+  if [[ "$prefix_count" -ge 0 ]]; then
+    for ((i = 0; i < ${#output_words[@]}; i++)); do
+      [[ "${original_words[prefix_count+i]}" == "${output_words[i]}" ]] || matches=0
+    done
+  else
+    matches=0
+  fi
+  if [[ "$matches" -eq 0 ]]; then
+    # watch and parallel join their command arguments as shell text rather than forwarding argv.
+    prefix_count=-1
+    for ((i = 0; i < ${#original_words[@]}; i++)); do
+      suffix=$(join_shell_words_from original_words "$i")
+      if [[ "$suffix" == "$normalized" ]]; then prefix_count="$i"; break; fi
+    done
+    [[ "$prefix_count" -ge 0 ]] || return 1
+  fi
+  for ((i = 0; i < prefix_count; i++)); do
+    # Environment assignments supply data to the literal producer; wrapper path options remain inspectable.
+    [[ "${original_words[i]}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] || printf '%q ' "${original_words[i]}"
+  done
+  printf '%s ' "${normalized_redirects[@]}"
+}
+
 # Apply secret-path policy to one user-visible command segment.
 # This gate blocks protected reads and uploads while preserving searches for quoted examples.
 check_secret_segment() {
   local cmd="$1"
   cmd="$CMD_TRIMMED"
 
-  if [[ "$HAS_REDIRECT" -eq 0 && "$HAS_PIPE" -eq 0 ]]; then
-    case "$CMD_VERB" in
-      echo|printf)
-        return 0 ;;
-    esac
+  # prepare_segment_context already checked every real stage and propagated provider denials.
+  # Scanning the combined pipeline again would turn literal producer data into file operands.
+  if [[ "$HAS_PIPE" -eq 1 ]]; then
+    local -a secret_pipeline_stages=()
+    split_top_level_pipeline_stages_into secret_pipeline_stages "$cmd"
+    [[ "${#secret_pipeline_stages[@]}" -gt 1 ]] && return 0
+  fi
+  local -a secret_command_words=() secret_redirect_words=()
+  local secret_command_text="$cmd" redirect_paths="" literal_prefix=""
+  local touches_secret=0
+  if [[ "$CMD_VERB" == echo || "$CMD_VERB" == printf || "$cmd" == *'<'* || "$cmd" == *'>'* ]] &&
+     split_secret_redirections_into secret_command_words secret_redirect_words "$cmd"; then
+    printf -v secret_command_text '%s ' "${secret_command_words[@]}"
+    printf -v redirect_paths '%s ' "${secret_redirect_words[@]}"
+    if is_secret_path_touch "$redirect_paths"; then
+      touches_secret=1
+    elif literal_prefix=$(literal_output_prefix_candidate "$secret_command_text"); then
+      if is_secret_path_touch "$literal_prefix"; then touches_secret=1; else return 0; fi
+    fi
   fi
 
   if is_gh_token_disclosure "$cmd"; then
@@ -774,7 +884,6 @@ check_secret_segment() {
     block "Git credential output exposes stored passwords or tokens to the agent. Use git config --get credential.helper or request sanitized status." || return $?
   fi
 
-  local touches_secret=0
   local search_candidate=""
   local git_log_candidate=""
   # Curl needs option-aware file parsing before the generic path scanner runs.
@@ -794,7 +903,7 @@ check_secret_segment() {
       touches_secret=1
     fi
   else
-    if is_secret_path_touch "$cmd"; then
+    if is_secret_path_touch "$secret_command_text"; then
       touches_secret=1
     fi
   fi

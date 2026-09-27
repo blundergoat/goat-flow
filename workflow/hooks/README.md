@@ -10,7 +10,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 | `hook-launch-runtime.mjs` | Managed runtime | Required with registered hooks | Runs the child hook, caps output, enforces deadlines, and prepares provider-visible launcher failures |
 | `hook-provider-adapters.mjs` | Provider response | Required with migrated result hooks | Validates the versioned result envelope and translates it into the active coding agent's documented response shape |
 | `deny-dangerous.sh` | PreToolUse | Default on | Blocks destructive shell commands and direct secret-path access |
-| `deny-git-mutations.sh` | PreToolUse | Default on | Blocks Git commits, publication, destructive Git operations, and GitHub writes; permits GitHub reads and issue/PR comments |
+| `deny-git-mutations.sh` | PreToolUse | Default on | Blocks Git commits, publication, remote lock changes, destructive Git operations, and GitHub writes; permits GitHub reads and issue/PR comments |
 | `deny-dangerous/*.sh` | Shared policy runtime | Required with either policy hook | `guard-runtime.sh` owns parsing and responses; three policy modules and the central `deny-dangerous-self-test.sh` retain the combined corpus |
 | `gruff-code-quality.sh` | PostToolUse | Optional | Checks each edited source file with its nearest package config and returns attributable line, symbol, file, and project findings through a bounded provider result |
 | `post-turn-safety.sh` | Stop | Default for supported Stop agents | Scans changed text content for built-in safety hazards such as obvious secrets, private keys, credential assignments, and merge conflict markers |

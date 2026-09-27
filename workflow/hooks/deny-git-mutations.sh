@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034,SC2317,SC2319
 # goat-flow-hook-version: 1.17.0
-# deny-git-mutations.sh: Git commit, publication, destructive-operation and GitHub CLI policy.
+# deny-git-mutations.sh: Git commit, publication, remote-lock, destructive-operation and GitHub CLI policy.
 #
 # The entrypoint fixes policy ownership; the target project supplies the shared parser.
 # Use before an agent runs Git or GitHub work so repository writes receive the provider's expected refusal.

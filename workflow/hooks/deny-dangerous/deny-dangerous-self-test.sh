@@ -923,6 +923,76 @@ expect_git_directory_pathspecs() {
 
 # Pin optional Git/GitHub write paths alongside their inspection modes and real CLI flag grammar.
 expect_lfs_and_github_interactive_writes() {
+  expect_block git 'git-lfs.exe pre-push origin' "Windows LFS executable publication"
+  expect_block git 'git.exe lfs unlock --force file.bin' "Windows Git dispatcher remote unlock"
+  expect_block git 'GiT-LFS.ExE pre-push origin' "Windows executable name case"
+  expect_block git "'C:/Program Files/Git/mingw64/bin/git-lfs.exe' pre-push origin" "Windows LFS executable path with spaces"
+  expect_block git 'env FLAG=yes git-lfs.exe lock file.bin' "wrapped Windows LFS lock"
+  expect_block git "bash -c 'git.exe lfs pre-push origin'" "nested Windows Git dispatcher"
+  expect_block git 'git.exe -c alias.pub="lfs pre-push" pub origin' "Windows Git dispatcher alias"
+  expect_block git 'GIT_PAGER="git-lfs.exe pre-push origin" git.exe log' "Windows Git hosted environment publication"
+  expect_block git 'HOME=/tmp git.exe status' "Windows Git unresolved config environment"
+  expect_block destructive "git.exe -c core.pager='rm -rf .' log" "Windows Git hosted destructive pager"
+  expect_block destructive "git-config.exe imap.tunnel 'rm -rf .'" "Windows Git helper hosted command"
+  expect_allow git 'git.exe status' "Windows Git status control"
+  expect_allow git 'git-lfs.exe pre-push --dry-run origin' "Windows LFS preview control"
+  expect_allow git 'git-lfs.exe locks --verify' "Windows LFS lock listing"
+  expect_allow git 'git-lfs.exe unlock --help' "Windows LFS usage control"
+  expect_allow git 'git.exe log -S GIT_CONFIG_COUNT=1 -- README.md' "Windows Git config text stays search data"
+  expect_allow git 'git.exe log -S HOME=/tmp -- README.md' "Windows Git home text stays search data"
+  expect_allow destructive 'git.exe -c core.pager=cat log' "Windows Git benign pager"
+  expect_allow git "printf '%s' 'git-lfs.exe pre-push origin'" "Windows Git executable text stays data"
+  expect_block git "'C:\Program Files\Git\cmd\git.exe' lfs pre-push origin" "single-quoted native Windows Git path"
+  expect_block git '"C:\Program Files\Git\cmd\git.exe" lfs pre-push origin' "double-quoted native Windows Git path"
+  expect_block git "'C:\Program Files\Git\mingw64\bin\git-lfs.exe' unlock --id123" "native Windows LFS unlock"
+  expect_block git 'nice "C:\Program Files\Git\cmd\git.exe" lfs pre-push origin' "wrapped native Windows Git path"
+  expect_allow git "'C:\Program Files\Git\cmd\git.exe' status" "native Windows Git status control"
+  expect_allow git '"C:\Program Files\Git\cmd\git.exe" log -S HOME=/tmp -- README.md' "native Windows Git search data"
+  expect_allow git 'nice "C:\Program Files\Git\cmd\git.exe" log -S HOME=/tmp -- README.md' "wrapped native Windows Git search data"
+  expect_allow git '"C:\Program Files\Git\mingw64\bin\git-lfs.exe" pre-push --dry-run origin' "native Windows LFS preview"
+  expect_block destructive "\"C:\Program Files\Git\cmd\git.exe\" -c core.pager='rm -rf .' log" "native Windows Git destructive pager"
+  expect_allow destructive '"C:\Program Files\Git\cmd\git.exe" -c core.pager=cat log' "native Windows Git benign pager"
+  expect_allow git "printf '%s' '\"C:\Program Files\Git\cmd\git.exe\" lfs pre-push origin'" "native Windows Git path stays data"
+  expect_block git "GIT_PAGER='\"C:\Program Files\Git\mingw64\bin\git-lfs.exe\" pre-push origin' git.exe log" "native Windows Git hosted publication"
+  local argv_wrapper
+  for argv_wrapper in exec 'timeout 5' setsid 'stdbuf -o0' 'ionice -c2' 'taskset -c 0' 'chrt -o 0' 'flock /tmp/goat.lock' 'watch --exec'; do
+    expect_block git "$argv_wrapper \"C:\Program Files\Git\cmd\git.exe\" lfs pre-push origin" "$argv_wrapper native Windows Git publication"
+    expect_allow git "$argv_wrapper \"C:\Program Files\Git\cmd\git.exe\" log -S HOME=/tmp -- README.md" "$argv_wrapper native Windows Git search data"
+  done
+  expect_block git 'watch "git push"' "watch shell payload publication"
+  expect_block git 'parallel "git push"' "parallel shell payload publication"
+  expect_allow git 'watch "git status"' "watch shell payload read control"
+  expect_allow git 'parallel "git status"' "parallel shell payload read control"
+  expect_block destructive 'watch "rm -rf ."' "watch shell payload destruction"
+  expect_allow destructive 'watch "ls -la"' "watch shell payload benign command"
+  expect_block git 'git lfs pre-push origin' "LFS pre-push uploads objects"
+  expect_block git 'git-lfs pre-push origin' "direct LFS pre-push helper"
+  expect_block git 'git -c alias.publish="lfs pre-push" publish origin' "LFS pre-push alias"
+  expect_block git 'cat refs.txt | git lfs pre-push origin' "LFS pre-push reads pipeline refs"
+  expect_block git "bash -c 'git lfs pre-push origin'" "wrapped LFS pre-push"
+  expect_block git 'git lfs pre-push --dry-run --dry-run=false origin' "LFS pre-push cancelled preview"
+  expect_block git 'git -c alias.publish="lfs pre-push -d" publish -d=false origin' "LFS pre-push alias cancelled preview"
+  expect_block git 'git lfs pre-push --help=false origin' "LFS pre-push disabled help"
+  expect_block git 'git lfs pre-push origin -- --dry-run' "LFS pre-push dry-run operand"
+  expect_allow git 'git lfs pre-push --dry-run origin' "LFS pre-push preview"
+  expect_allow git 'git-lfs pre-push --dry-run=false -d=true origin' "LFS pre-push last Boolean preview"
+  expect_allow git 'git -c alias.publish="lfs pre-push" publish --dry-run origin' "LFS pre-push alias preview"
+  expect_allow git 'git lfs pre-push --help' "LFS pre-push usage"
+  expect_block_message git 'git lfs lock assets/model.bin' "LFS remote lock creation" "repository" "Git LFS remote lock changes" "Git publication"
+  expect_block git 'git-lfs unlock --force assets/model.bin' "LFS removes another user's lock"
+  expect_block git 'git -c alias.release="lfs unlock" release --id 123' "LFS unlock alias"
+  expect_block git 'git -c alias.l=lfs l lock assets/model.bin' "LFS alias with appended lock"
+  expect_block git 'git lfs unlock --id --help' "LFS lock ID consumes help spelling"
+  expect_block git 'git lfs lock -r --help assets/model.bin' "LFS remote consumes help spelling"
+  expect_block git 'git lfs unlock -i --help' "LFS short lock ID consumes help spelling"
+  expect_block git 'git lfs lock --help=false assets/model.bin' "LFS lock disabled help"
+  expect_allow git 'git lfs lock --help' "LFS lock usage"
+  expect_allow git 'git -c alias.release="lfs unlock" release --help' "LFS unlock alias usage"
+  expect_allow git 'git lfs locks --verify' "LFS remote lock listing"
+  expect_allow git 'git show lock' "non-LFS lock operand"
+  expect_allow git 'git lfs ls-files' "LFS tracked-file listing"
+  expect_allow destructive 'git lfs pre-push origin' "LFS publication belongs to repository policy"
+  expect_allow destructive 'git lfs unlock --force assets/model.bin' "LFS remote locks belong to repository policy"
   expect_block git 'git lfs push origin main' "Git LFS publication"
   expect_block git 'git-lfs push origin main' "direct Git LFS publication"
   expect_block git 'git -c alias.lp="lfs push" lp origin main' "Git LFS publication alias"
@@ -2083,6 +2153,83 @@ run_full() {
   expect_antigravity_block paths "cat .env" ".env read"
   expect_antigravity_secret_file_block
   expect_antigravity_block git "git push" "git push"
+
+  # Gruff M50: literal producers stay usable while every protected file operand is still denied.
+  expect_allow paths "printf '%s' 'credentials' | goat-flow redact" "literal protected word piped to redactor"
+  expect_allow paths "echo .env | cat" "literal environment path piped as text"
+  expect_allow paths "printf '%s' 'credentials' |& cat" "literal source stderr pipeline"
+  expect_allow paths "printf '%s' 'credentials' | head -n 1 | goat-flow redact" "literal source through multiple data stages"
+  expect_allow paths "printf '%s' 'credentials' | grep '.env'" "literal source with protected-looking search pattern"
+  expect_allow paths "printf '%s' '# hidden credentials
+def sample() -> str:
+    return \"literal\"
+' | goat-flow redact" "multiline source operators remain quoted data"
+  expect_allow paths "printf '%s' 'parser'\''s credentials' | goat-flow redact" "escaped quote boundary within source data"
+  expect_block paths "printf x | cat .env" "literal producer cannot hide protected consumer read"
+  expect_block paths "cat .env | printf '%s' 'credentials'" "literal consumer cannot hide protected producer read"
+  expect_block paths "printf x | tee .env" "literal producer cannot hide protected consumer write"
+  expect_block paths "printf x >.env | cat" "producer output redirection stays protected"
+  expect_block paths "printf x <.env | cat" "producer input redirection stays protected"
+  expect_block paths "printf '%s' '.env' | cat >.env" "consumer output redirection stays protected"
+  expect_block paths 'printf "%s" "$(cat .env)" | goat-flow redact' "source substitution still checks protected reads"
+  expect_block paths "printf x < <(cat .env) | cat" "source process substitution still checks protected reads"
+  expect_block paths "printf x |& cat .env" "stderr pipeline cannot hide protected read"
+  expect_block paths "printf x | head .env | cat" "middle pipeline stage still checks protected reads"
+  expect_block shell "printf '%s' 'cat .env' | bash" "literal source cannot become shell input"
+  expect_copilot_block paths "printf x | cat .env" "protected read in pipeline"
+  expect_antigravity_block paths "printf x | cat .env" "protected read in pipeline"
+  expect_copilot_payload_allow paths \
+    '{"toolName":"bash","toolArgs":{"command":"echo .env | cat"}}' \
+    "literal protected path sent as data in pipeline"
+  expect_allow paths "cat<<<'.env'" "here-string data remains literal"
+  expect_allow paths "printf '%s' '<.env' | cat" "quoted redirect spelling stays data"
+  expect_block paths "printf x < .env | cat" "spaced input redirect stays protected"
+  expect_allow paths "printf x <.env.example | cat" "compact sample input stays available"
+  expect_allow paths "cat '<.env'" "quoted less-than filename is not a redirect"
+  expect_block paths "printf x <.ssh/config | cat" "compact SSH input stays protected"
+  expect_block paths "printf x <.npmrc" "compact registry credential input stays protected"
+  expect_block paths "cat<credentials.json" "compact credential input stays protected"
+
+  expect_allow paths 'env printf "%s" ".env" | cat' 'env literal producer through pipeline'
+  expect_allow paths 'command echo .env | cat' 'command literal producer through pipeline'
+  expect_allow paths 'nice printf "%s" ".env" | cat' 'nice literal producer through pipeline'
+  expect_allow paths ''"'"'printf'"'"' '"'"'%s'"'"' '"'"'.env'"'"' | cat' 'quoted printf producer through pipeline'
+  expect_block paths 'env printf x <.env | cat' 'env producer input stays protected'
+  expect_block paths 'command echo x <.env | cat' 'command producer input stays protected'
+  expect_allow paths 'env printf "%s" ".env"' 'env literal producer without pipeline'
+  expect_allow paths 'command echo .env' 'command literal producer without pipeline'
+  expect_allow paths 'nice printf "%s" ".env"' 'nice literal producer without pipeline'
+  expect_allow paths ''"'"'printf'"'"' '"'"'%s'"'"' '"'"'.env'"'"'' 'quoted printf producer without pipeline'
+
+  # Redirection operands and wrapper files remain paths even when the final executable only prints literals.
+  expect_block paths 'cat<.env>/dev/null' 'compact input followed by output'
+  expect_allow paths 'cat<.env.example>/dev/null' 'compact sample input followed by output'
+  expect_block paths 'printf x<.env>/dev/null | cat' 'compact producer redirects through pipeline'
+  expect_block paths 'printf x <".env">/dev/null' 'quoted compact input followed by output'
+  expect_block paths 'cat<private.pem>/dev/null' 'compact key input followed by output'
+  expect_block paths 'cat<.npmrc>/dev/null' 'compact registry input followed by output'
+  expect_block paths 'cat<credentials.json>/dev/null' 'compact credential input followed by output'
+  expect_block paths 'printf x<>.env | cat' 'read-write redirect stays protected'
+  expect_allow paths 'printf x<>.env.example | cat' 'read-write sample redirect stays available'
+  expect_block paths 'printf x 2>&1>.env' 'protected output after descriptor duplication'
+  expect_block paths 'echo x&>.env' 'combined output redirect stays protected'
+  expect_block paths 'echo .env >/dev/null 2>.env' 'later protected stderr target remains visible'
+  expect_allow paths "printf '%s' '.env' > /dev/null | cat" 'redirected literal output stays data'
+  expect_allow paths "printf '%s' '.env' 2>/dev/null | cat" 'literal output with stderr redirect'
+  expect_allow paths 'echo .env >&2 | cat' 'literal output through descriptor duplication'
+  expect_allow paths 'cat <<< .env' 'spaced here-string is data'
+  expect_allow paths "printf '%s' .env <<< text" 'literal output with here-string input'
+  expect_allow paths 'env printf %s .env >/dev/null' 'wrapped literal output with redirect'
+  expect_allow paths 'env NOTE=.env printf safe' 'literal producer environment value stays data'
+  expect_block paths 'flock .env echo safe' 'literal producer cannot hide protected lock file'
+  expect_block paths 'flock echo flock .env echo safe' 'nested lock wrappers retain protected file'
+  expect_allow paths 'flock /tmp/ordinary.lock echo .env' 'ordinary lock around literal output'
+  expect_allow paths "watch 'echo .env'" 'watch shell text prints literal path'
+  expect_allow paths 'watch "echo '\''.env'\''"' 'watch shell text preserves quoted literal path'
+  expect_block paths "watch 'echo safe > .env'" 'watch shell text opens protected output'
+  expect_allow paths "watch 'echo safe > /dev/null'" 'watch shell text ordinary output target'
+  expect_copilot_block paths 'cat<.env>/dev/null' 'compact redirected secret read'
+  expect_antigravity_block paths 'cat<.env>/dev/null' 'compact redirected secret read'
 
   # Pipeline checks used to return deny plus allow, or duplicate denial objects.
   expect_copilot_block shell "printf x | nice -n1 rm -rf /" "pipeline destructive decision"
