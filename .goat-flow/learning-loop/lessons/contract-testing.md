@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-09-22
+last_reviewed: 2026-09-27
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -238,7 +238,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Decision changed:** Make semantic wording assertions case-insensitive unless casing is the contract, and bound shared files to the exact owned section, object, or fence.
 
-**Trigger phase:** ACT | **Incident count:** 7 | **Latest occurrence:** 2026-08-29
+**Trigger phase:** ACT | **Incident count:** 8 | **Latest occurrence:** 2026-09-27
 **Caught at:** VERIFY
 
 **Prevention:**
@@ -264,6 +264,8 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Recurrence (2026-08-29):** A preflight contract used one greedy file-wide regex to require `instruction-files`, `new Set`, and `instruction_file`. Replacing the owned mode body with `process.exit(0)` still matched those tokens in later sibling modes, so the test could pass after deduplication was removed. The correction locates the exact `instruction-files` mode boundaries, slices only that owner, and asserts the deduplication tokens inside it. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `instruction-files must remain a bounded manifest mode`).
 
-**Root cause:** The contract parser treated presentation boundaries and a shared container as the semantic owner, or expected canonical values that the producer never promised. The assertions therefore coupled correct doctrine to incidental casing, Markdown nesting, unrelated sibling content, and free-form labels.
+**Recurrence 2026-09-27:** I changed critique routing prose before checking its literal pin; the fast suite failed. `test/contract/skill-hardening-skills-2.test.ts` (search: `defines evidence-based goat-critique ranking criteria`) now requires the criteria and explicit reference path in their owning section.
 
-**Fix:** Use case-insensitive semantic regular expressions, bound template extraction to its code fence, inspect only the named prompt objects owned by the change, define machine-counted values in the producer, normalize presentation-only wrappers, and separate exhaustive path-existence proof from content checks over exact semantic owners.
+**Root cause:** Assertions coupled doctrine to incidental formatting, sibling content or unpromised canonical values.
+
+**Fix:** Bind checks to the owning section, code fence or object; tolerate presentation-only casing and whitespace. Require canonical producer values for machine-counted records. Check path existence separately from content.

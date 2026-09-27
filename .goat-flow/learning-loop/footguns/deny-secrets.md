@@ -1,6 +1,6 @@
 ---
 category: deny-secrets
-last_reviewed: 2026-09-25
+last_reviewed: 2026-09-27
 ---
 
 Secret-path read traps: what counts as a secret path, and which read channels the deny surface actually binds.
@@ -30,20 +30,25 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 ## Footgun: Secret-path matching must distinguish search data from file operands
 
 **Status:** active | **Created:** 2026-08-17 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 2 | **Latest occurrence:** 2026-09-02
-**Decision changed:** Exempt protected text only after a command-specific parser proves that it is search data, and keep every remaining file operand under the secret-path matcher.
+**Incident count:** 4 | **Latest occurrence:** 2026-09-27
+**Decision changed:** Exempt protected text only after command parsing proves that it is literal or search data, and keep every remaining file operand under the secret-path matcher.
 
 **Prevention:**
 1. Limit data exemptions to the documented grammar of `git log -S`, `-G`, and `--grep`; malformed or unrecognised forms fall back to the generic fail-closed scan.
 2. Retain Git-global options and their operands before `log`, stop option parsing at `--`, and retain every later token as a path operand.
 3. Pair every harmless-search allow case with direct protected pathspec, read, write, and upload block cases for the same secret family.
 4. Verify configs containing protected-path rules through repository-owned parity tests or non-shell file readers; never embed those rules in an ad hoc shell command.
+5. Inspect pipeline stages separately. After every stage passes, do not rescan the combined pipeline as file operands. Separate every redirection target before exempting literal arguments; keep wrapper file operands and pair protected targets with quoted-data, sample-file and here-string controls.
 
 **Symptoms:** The hook blocked `git log -S`, `-G`, and `--grep` searches for a permission-rule string containing `.ssh` when the only pathspec was an ordinary settings file. The first exemption then allowed protected Git-global paths such as `git -C ~/.ssh log -S token` and misparsed a quoted search value containing spaces.
 
 **Why it happens:** The generic matcher sees a protected substring anywhere and cannot tell a history search value from a path operand. Git-global options may carry paths before `log`, and `--` makes every following token a pathspec, so only recognised search values between those boundaries are data.
 
 **Evidence:** Before the exemption the focused corpus failed only the three history allow cases with `FAIL: paths should allow git log ... secret-rule search literal`; after the parser change `git log --oneline -S 'Write(**/.ssh/**)' -- .claude/settings.json` exited 0. A focused RED then showed `git -C ~/.ssh` and `git --git-dir=~/.ssh/repo` wrongly exiting 0; preserving word boundaries and Git-global operands made all 92 path assertions pass. `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `git_log_candidate_without_search_values`) removes only recognised search values before `--`; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git log protected separated global path`) pairs the allows with global-path, pathspec, write, and upload blocks. **Recurrence 2026-09-02:** an ad hoc Node verification embedded protected GCP permission rules while parsing `.claude/settings.json`; the hook correctly blocked it, and the check moved to `test/unit/agent-config-template-parity.test.ts` (search: `protects Claude credential stores at home and inside the project`) and `scripts/preflight-checks.sh` (search: `Agent Config Parity`).
+
+**Recurrence 2026-09-27:** Gruff's M50 repair added 21 classifier cases. Replaying them against the published 1.16.0 hooks, the 1.17.0 candidate and Gruff's repaired hooks produced 12, 17 and 21 expected verdicts respectively. The candidate still denied `echo .env | cat` and a protected-looking grep pattern, while allowing `printf x <.env | cat`. No classified command executed. `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `split_secret_redirections_into`, `literal_output_prefix_candidate`) distinguishes those operands without changing quoted operators into redirects. Its pipeline exemption relies on the complete stage checks and denial propagation in `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Every real pipeline stage executes independently`). The corpus (search: `Gruff M50`) retains all 21 cases and 18 nearby controls, including structured provider responses and wrapped producers. Gruff's repaired 1.16.0 hooks failed eight of ten additional wrapper controls because the literal-output helper matched the raw first word; the 1.17.0 adaptation uses the resolved executable name while scanning the original redirections.
+
+**Recurrence 2026-09-27 (adjacent redirects):** A second review found seven failures in 30 classifier probes: four compact protected inputs followed by output redirects passed, and three harmless redirected literal outputs were denied. Follow-up probes also allowed `cat<private.pem>/dev/null` and `flock .env echo safe`. The path parser now checks redirection operands separately and retains wrapper files when exempting a proven literal-output suffix. Verification caught false positives for `watch 'echo .env'` and `env NOTE=.env printf safe`; shell-text payloads and environment data need distinct controls. The shared corpus (search: `compact input followed by output`, `literal producer cannot hide protected lock file`, `watch shell text prints literal path`) preserves those cases beside protected redirects inside the wrapper. No classified command executed.
 
 ---
 

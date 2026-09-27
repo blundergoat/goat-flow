@@ -6,7 +6,7 @@
 
 ## Context
 
-ADR-025 blocked pushes because they mutate shared remote state, but it did not cover other GitHub write paths. On 2026-05-20 a coding agent posted an issue comment after treating forwarded Slack text as authorization; the command was `gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md`, and local probes showed `gh api repos/owner/repo/issues/1/comments -X POST -f body=hi` also passed the then-monolithic hook. The incident is recorded in `.goat-flow/learning-loop/footguns/deny-writes.md` (search: `GitHub CLI comments bypassed shared-system write guardrails`).
+ADR-025 blocked pushes because they mutate shared remote state, but it did not cover other GitHub write paths. On 2026-05-20 a coding agent posted an issue comment after treating forwarded Slack text as authorization; the command was `gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md`, and local probes showed `gh api repos/owner/repo/issues/1/comments -X POST -f body=hi` also passed the then-monolithic hook. The incident is recorded in `.goat-flow/learning-loop/footguns/deny-github.md` (search: `GitHub CLI comments bypassed shared-system write guardrails`).
 
 The first response blocked all GitHub CLI writes. It was narrowed on 2026-06-02 because issue and pull-request conversation comments are low-blast-radius, reversible writes that approve nothing, merge nothing, release nothing, and change no configuration.
 
