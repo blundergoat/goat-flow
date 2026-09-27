@@ -4,6 +4,7 @@
  * Use these tests when verdicts, event metadata, or `hooks verify` grammar changes
  * so unavailable hooks never look successful and captured hook text never leaks.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -202,42 +203,52 @@ describe("hooks runtime evidence", () => {
   };
 
   /** Fixture writes a symlinked hook script and proves it cannot smuggle execution outside the checkout. */
-  it("rejects a symlinked hook script pointing outside the checkout", () => {
-    const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-hook-symlink-"));
-    const outsidePath = mkdtempSync(join(tmpdir(), "goat-flow-hook-outside-"));
-    const markerPath = join(outsidePath, "executed.marker");
-    const outsideScript = join(outsidePath, "outside-hook.sh");
+  it(
+    "rejects a symlinked hook script pointing outside the checkout",
+    symlinkTestOptions(),
+    () => {
+      const projectPath = mkdtempSync(
+        join(tmpdir(), "goat-flow-hook-symlink-"),
+      );
+      const outsidePath = mkdtempSync(
+        join(tmpdir(), "goat-flow-hook-outside-"),
+      );
+      const markerPath = join(outsidePath, "executed.marker");
+      const outsideScript = join(outsidePath, "outside-hook.sh");
 
-    try {
-      writeFileSync(
-        outsideScript,
-        `#!/usr/bin/env bash\ntouch "${markerPath}"\nexit 0\n`,
-        { mode: 0o755 },
-      );
-      mkdirSync(join(projectPath, ".goat-flow", "hooks"), { recursive: true });
-      symlinkSync(
-        outsideScript,
-        join(projectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),
-      );
+      try {
+        writeFileSync(
+          outsideScript,
+          `#!/usr/bin/env bash\ntouch "${markerPath}"\nexit 0\n`,
+          { mode: 0o755 },
+        );
+        mkdirSync(join(projectPath, ".goat-flow", "hooks"), {
+          recursive: true,
+        });
+        symlinkSync(
+          outsideScript,
+          join(projectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        );
 
-      const execution = executeManagedHookProbe(
-        projectPath,
-        ".goat-flow/hooks/deny-dangerous.sh",
-        PROBE_SCENARIO,
-      );
+        const execution = executeManagedHookProbe(
+          projectPath,
+          ".goat-flow/hooks/deny-dangerous.sh",
+          PROBE_SCENARIO,
+        );
 
-      assert.equal(
-        execution.hasSpawnError,
-        true,
-        "the probe must be rejected, not executed",
-      );
-      assert.equal(execution.exitCode, null);
-      assert.ok(!existsSync(markerPath), "the outside script must never run");
-    } finally {
-      rmSync(projectPath, { recursive: true, force: true });
-      rmSync(outsidePath, { recursive: true, force: true });
-    }
-  });
+        assert.equal(
+          execution.hasSpawnError,
+          true,
+          "the probe must be rejected, not executed",
+        );
+        assert.equal(execution.exitCode, null);
+        assert.ok(!existsSync(markerPath), "the outside script must never run");
+      } finally {
+        rmSync(projectPath, { recursive: true, force: true });
+        rmSync(outsidePath, { recursive: true, force: true });
+      }
+    },
+  );
 
   /** Control fixture writes a regular in-checkout hook script, still executable after the symlink guard. */
   it("still executes a regular in-checkout hook script", () => {

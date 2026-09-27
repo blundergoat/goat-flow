@@ -380,6 +380,36 @@ describe("plans check: structure, identity, and dependencies", () => {
     }
   });
 
+  // Writes a completed milestone with overlong prose; archived wording must not block read-only orientation.
+  it("keeps completed prose advisory under strict validation", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-completed-prose-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      withPlainLanguageSections(
+        canonicalMilestoneBody({
+          status: "complete",
+          isTaskChecked: true,
+          includeActual: true,
+          proofLines: [
+            "- [x] Outcome is proven → focused check passes. [automated] (est: 1 min proof)",
+          ],
+        }),
+        "current",
+        "x".repeat(121),
+      ),
+    );
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /warning: M01-fixture\.md: current plain-language section.*invalid length/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   /**
    * Writes one temporary milestone per identifier class and runs both CLI modes.
    * Invariant: each named case echoes its token and becomes blocking only in strict mode.

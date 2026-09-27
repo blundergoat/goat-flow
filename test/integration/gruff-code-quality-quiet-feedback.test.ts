@@ -284,6 +284,9 @@ describe("gruff-code-quality hook delivers source results through Claude's regis
     });
     assert.match(context, /gruff-code-quality: INCOMPLETE/u);
     assert.match(context, /edited-path-outside-project/u);
-    assert.ok(context.includes(siblingSourcePath), context);
+    assert.ok(
+      context.includes(siblingSourcePath.replaceAll("\\", "/")),
+      context,
+    );
   });
 });

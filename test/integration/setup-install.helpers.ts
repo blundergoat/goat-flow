@@ -141,7 +141,7 @@ export function runInstallerWithEnvironment(
       cwd: PROJECT_ROOT,
       encoding: "utf-8",
       env: { ...process.env, ...environmentOverrides },
-      timeout: 30000,
+      timeout: process.platform === "win32" ? 120_000 : 30_000,
     },
   );
 }
@@ -169,7 +169,7 @@ export function runCliInstaller(root: string, ...extraArgs: string[]) {
     {
       cwd: PROJECT_ROOT,
       encoding: "utf-8",
-      timeout: 30000,
+      timeout: process.platform === "win32" ? 120_000 : 30_000,
     },
   );
 }

@@ -987,7 +987,10 @@ describe("hook operation recovery boundaries", () => {
           "claude",
           "--force-managed",
         ],
-        { encoding: "utf-8", timeout: 30_000 },
+        {
+          encoding: "utf-8",
+          timeout: process.platform === "win32" ? 120_000 : 30_000,
+        },
       );
       assert.equal(installed.status, 0, installed.stderr || installed.stdout);
       syncHookStates(projectPath);

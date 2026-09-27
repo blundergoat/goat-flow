@@ -56,14 +56,18 @@ describe("quality draft staging", () => {
     for (const root of roots) rmSync(root, { recursive: true, force: true });
   });
 
-  it("creates the staging directory chain with a 0700 leaf", () => {
+  it("creates the staging directory chain with a private POSIX leaf", () => {
     const root = makeRoot();
     const stagingDir = ensureQualityDraftStagingDirectory(root);
     assert.equal(
       stagingDir,
       join(root, ".goat-flow", "logs", "quality", "staging"),
     );
-    assert.equal(lstatSync(stagingDir).mode & 0o777, 0o700);
+    assert.equal(lstatSync(stagingDir).isDirectory(), true);
+    // Windows enforces access through ACLs; Node's synthetic mode bits are not a privacy proof.
+    if (process.platform !== "win32") {
+      assert.equal(lstatSync(stagingDir).mode & 0o777, 0o700);
+    }
     assert.equal(ensureQualityDraftStagingDirectory(root), stagingDir);
   });
 

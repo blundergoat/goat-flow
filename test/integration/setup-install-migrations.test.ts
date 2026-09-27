@@ -120,6 +120,7 @@ describe("setup --apply installer upgrade migrations", () => {
               );
               return spawnSync(descriptor.command, descriptor.args, {
                 cwd: root,
+                env: { ...process.env, ...descriptor.env },
                 input: JSON.stringify({
                   tool_name: "Bash",
                   tool_input: { command },

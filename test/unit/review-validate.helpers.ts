@@ -91,6 +91,8 @@ export function createVersionedReviewedProject(testContext: TestContext): {
   };
 
   runGit(["init", "--quiet"]);
+  // Raw-byte authority fixtures must not inherit the maintainer's checkout conversion policy.
+  runGit(["config", "core.autocrlf", "false"]);
   writeFileSync(join(projectRoot, ".git/info/exclude"), ".goat-flow/logs/\n");
   const base = runGit(
     ["commit-tree", runGit(["mktree"], "")],
@@ -579,6 +581,7 @@ export function repository(
 ): { root: string; base: string } {
   const root = createReviewedProject(test);
   git(root, ["init", "-q", `--object-format=${format}`]);
+  git(root, ["config", "core.autocrlf", "false"]);
   writeFileSync(join(root, ".git/info/exclude"), ".goat-flow/logs/\n");
   git(root, ["add", "src/example.ts"]);
   const base = git(
@@ -686,11 +689,11 @@ export function assertReviewResult(
 }
 
 /**
- * Run a literal fixture command and retain its actual result against the same before/after source; null requests a real interrupted process.
+ * Run a literal fixture command and retain its actual result against the same before/after source; null requests a real timed-out process.
  *
  * @param root - disposable project in which the literal fixture command may run
  * @param snapshot - selected source whose review and workspace fingerprints must stay unchanged
- * @param exitCode - requested process exit; null sends SIGTERM to exercise an actual interrupted command
+ * @param exitCode - requested process exit; null uses a one-second process deadline on every host
  * @returns recorded command, origin, and its single measured attempt for later classification
  * @throws AssertionError when the process result or source measurements differ from the requested control
  */
@@ -703,7 +706,7 @@ export function fixtureGate(
     process.execPath,
     "-e",
     exitCode === null
-      ? 'process.kill(process.pid,"SIGTERM")'
+      ? "setInterval(() => {}, 1000)"
       : `process.exit(${exitCode})`,
   ];
   const before = capture(
@@ -714,6 +717,7 @@ export function fixtureGate(
   const result = spawnSync(argv[0]!, argv.slice(1), {
     cwd: root,
     encoding: "utf8",
+    timeout: exitCode === null ? 1000 : undefined,
   });
   const after = capture(
     root,
@@ -721,6 +725,8 @@ export function fixtureGate(
     true,
   );
   assert.equal(result.status, exitCode);
+  if (exitCode === null)
+    assert.equal((result.error as NodeJS.ErrnoException)?.code, "ETIMEDOUT");
   assert.equal(before.authority.fingerprint, snapshot.fingerprint);
   assert.equal(after.authority.fingerprint, snapshot.fingerprint);
   assert.equal(before.checkout.fingerprint, snapshot.workspace);

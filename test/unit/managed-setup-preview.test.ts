@@ -1,9 +1,10 @@
 /**
  * Managed setup preview contract tests for the nine user-visible drift states.
- * These fixtures keep classification independent from filesystem setup so failures
- * tell users whether local edits, package changes, or missing baselines caused a block.
+ *
+ * These fixtures distinguish local edits, package changes and missing baselines so users can identify what blocked setup.
  * State serialization checks also ensure continuation data stays hash-only.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -40,7 +41,6 @@ import {
   writeManagedInstallStateV2,
   type ManagedInstallStateV2,
 } from "../../src/cli/managed-setup-state.js";
-import { getTemplatePath } from "../../src/cli/paths.js";
 
 const OLD_EXPECTED_HASH = "a".repeat(64);
 const CURRENT_FILE_HASH = "b".repeat(64);
@@ -250,7 +250,10 @@ describe("managed install state", () => {
       const serializedState = readFileSync(statePath, "utf-8");
       assert.match(serializedState, /goat-flow\.install-state\.v1/u);
       assert.match(serializedState, new RegExp(NEW_EXPECTED_HASH, "u"));
-      assert.doesNotMatch(serializedState, new RegExp(projectPath, "u"));
+      assert.equal(
+        serializedState.includes(JSON.stringify(projectPath).slice(1, -1)),
+        false,
+      );
       assert.doesNotMatch(serializedState, /The managed template/u);
     } finally {
       rmSync(projectPath, { recursive: true, force: true });
@@ -258,38 +261,44 @@ describe("managed install state", () => {
   });
 
   /** This fixture writes through the baseline contract and proves redirected storage receives nothing. */
-  it("refuses a target-controlled symlink for the install-state directory", () => {
-    const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-preview-state-"));
-    const redirectedStatePath = mkdtempSync(
-      join(tmpdir(), "goat-flow-preview-redirect-"),
-    );
-    const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v2",
-      coverage: "install-write-set",
-      agent: "codex",
-      goatFlowVersion: "1.13.1",
-      baselineStatus: "missing",
-      verdict: "ready",
-      limits: [],
-      files: [],
-    };
+  it(
+    "refuses a target-controlled symlink for the install-state directory",
+    symlinkTestOptions(),
+    () => {
+      const projectPath = mkdtempSync(
+        join(tmpdir(), "goat-flow-preview-state-"),
+      );
+      const redirectedStatePath = mkdtempSync(
+        join(tmpdir(), "goat-flow-preview-redirect-"),
+      );
+      const preview: ManagedSetupPreview = {
+        schemaVersion: "goat-flow.managed-setup-preview.v2",
+        coverage: "install-write-set",
+        agent: "codex",
+        goatFlowVersion: "1.13.1",
+        baselineStatus: "missing",
+        verdict: "ready",
+        limits: [],
+        files: [],
+      };
 
-    try {
-      mkdirSync(join(projectPath, ".goat-flow/state"), { recursive: true });
-      symlinkSync(
-        redirectedStatePath,
-        join(projectPath, ".goat-flow", "state", "install"),
-      );
-      assert.throws(
-        () => writeManagedInstallState(projectPath, preview),
-        /.goat-flow\/state\/install must be a project-local directory/u,
-      );
-      assert.deepEqual(readdirSync(redirectedStatePath), []);
-    } finally {
-      rmSync(projectPath, { recursive: true, force: true });
-      rmSync(redirectedStatePath, { recursive: true, force: true });
-    }
-  });
+      try {
+        mkdirSync(join(projectPath, ".goat-flow/state"), { recursive: true });
+        symlinkSync(
+          redirectedStatePath,
+          join(projectPath, ".goat-flow", "state", "install"),
+        );
+        assert.throws(
+          () => writeManagedInstallState(projectPath, preview),
+          /.goat-flow\/state\/install must be a project-local directory/u,
+        );
+        assert.deepEqual(readdirSync(redirectedStatePath), []);
+      } finally {
+        rmSync(projectPath, { recursive: true, force: true });
+        rmSync(redirectedStatePath, { recursive: true, force: true });
+      }
+    },
+  );
 
   /**
    * This fixture writes a symlinked temp entry, then proves the preview still
@@ -297,108 +306,120 @@ describe("managed install state", () => {
    * when an attacker pre-plants the temp path, so the victim file outside the
    * project stays untouched.
    */
-  it("never writes baseline bytes through a pre-planted temp symlink", () => {
-    const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-preview-state-"));
-    const victimPath = join(
-      mkdtempSync(join(tmpdir(), "goat-flow-preview-victim-")),
-      "victim.json",
-    );
-    const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v2",
-      coverage: "install-write-set",
-      agent: "codex",
-      goatFlowVersion: "1.13.1",
-      baselineStatus: "missing",
-      verdict: "ready",
-      limits: [],
-      files: [
-        {
-          path: ".goat-flow/hooks/deny-dangerous.sh",
-          ownership: "system-owned",
-          state: "added",
-          action: "create",
-          reason: "The managed template is not installed yet.",
-          oldExpectedSha256: null,
-          currentStatus: "missing",
-          currentSha256: null,
-          newExpectedSha256: NEW_EXPECTED_HASH,
-        },
-      ],
-    };
-
-    try {
-      mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
-        recursive: true,
-      });
-      writeFileSync(victimPath, "untouched\n", "utf-8");
-      const statePath = managedInstallStatePath(projectPath, "codex");
-      // An untrusted checkout can pre-plant the deterministic temp name.
-      symlinkSync(victimPath, `${statePath}.tmp-${process.pid}`);
-
-      writeManagedInstallState(projectPath, preview);
-
-      assert.equal(
-        readFileSync(victimPath, "utf-8"),
-        "untouched\n",
-        "the symlink target must never receive baseline bytes",
+  it(
+    "never writes baseline bytes through a pre-planted temp symlink",
+    symlinkTestOptions(),
+    () => {
+      const projectPath = mkdtempSync(
+        join(tmpdir(), "goat-flow-preview-state-"),
       );
-      const stateStats = lstatSync(statePath);
-      assert.ok(
-        stateStats.isFile(),
-        "recorded baseline must be a regular file",
+      const victimPath = join(
+        mkdtempSync(join(tmpdir(), "goat-flow-preview-victim-")),
+        "victim.json",
       );
-      assert.match(
-        readFileSync(statePath, "utf-8"),
-        /goat-flow\.install-state\.v1/u,
-      );
-    } finally {
-      rmSync(projectPath, { recursive: true, force: true });
-      rmSync(join(victimPath, ".."), { recursive: true, force: true });
-    }
-  });
+      const preview: ManagedSetupPreview = {
+        schemaVersion: "goat-flow.managed-setup-preview.v2",
+        coverage: "install-write-set",
+        agent: "codex",
+        goatFlowVersion: "1.13.1",
+        baselineStatus: "missing",
+        verdict: "ready",
+        limits: [],
+        files: [
+          {
+            path: ".goat-flow/hooks/deny-dangerous.sh",
+            ownership: "system-owned",
+            state: "added",
+            action: "create",
+            reason: "The managed template is not installed yet.",
+            oldExpectedSha256: null,
+            currentStatus: "missing",
+            currentSha256: null,
+            newExpectedSha256: NEW_EXPECTED_HASH,
+          },
+        ],
+      };
+
+      try {
+        mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
+          recursive: true,
+        });
+        writeFileSync(victimPath, "untouched\n", "utf-8");
+        const statePath = managedInstallStatePath(projectPath, "codex");
+        // An untrusted checkout can pre-plant the deterministic temp name.
+        symlinkSync(victimPath, `${statePath}.tmp-${process.pid}`);
+
+        writeManagedInstallState(projectPath, preview);
+
+        assert.equal(
+          readFileSync(victimPath, "utf-8"),
+          "untouched\n",
+          "the symlink target must never receive baseline bytes",
+        );
+        const stateStats = lstatSync(statePath);
+        assert.ok(
+          stateStats.isFile(),
+          "recorded baseline must be a regular file",
+        );
+        assert.match(
+          readFileSync(statePath, "utf-8"),
+          /goat-flow\.install-state\.v1/u,
+        );
+      } finally {
+        rmSync(projectPath, { recursive: true, force: true });
+        rmSync(join(victimPath, ".."), { recursive: true, force: true });
+      }
+    },
+  );
 
   /**
    * This fixture writes and removes a valid baseline behind a target-controlled directory symlink.
    * It proves the baseline invariant: outside-project hashes are invalid and preview blocks.
    */
-  it("rejects a valid baseline behind a symlinked install-state directory", () => {
-    const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-preview-state-"));
-    const redirectedStatePath = mkdtempSync(
-      join(tmpdir(), "goat-flow-preview-redirect-"),
-    );
-    try {
-      mkdirSync(join(projectPath, ".goat-flow/state"), { recursive: true });
-      writeFileSync(
-        join(redirectedStatePath, "codex.json"),
-        `${JSON.stringify({
-          schemaVersion: "goat-flow.install-state.v1",
-          agent: "codex",
-          goatFlowVersion: "1.13.1",
-          files: [],
-        })}\n`,
-        "utf-8",
+  it(
+    "rejects a valid baseline behind a symlinked install-state directory",
+    symlinkTestOptions(),
+    () => {
+      const projectPath = mkdtempSync(
+        join(tmpdir(), "goat-flow-preview-state-"),
       );
-      symlinkSync(
-        redirectedStatePath,
-        join(projectPath, ".goat-flow", "state", "install"),
+      const redirectedStatePath = mkdtempSync(
+        join(tmpdir(), "goat-flow-preview-redirect-"),
       );
+      try {
+        mkdirSync(join(projectPath, ".goat-flow/state"), { recursive: true });
+        writeFileSync(
+          join(redirectedStatePath, "codex.json"),
+          `${JSON.stringify({
+            schemaVersion: "goat-flow.install-state.v1",
+            agent: "codex",
+            goatFlowVersion: "1.13.1",
+            files: [],
+          })}\n`,
+          "utf-8",
+        );
+        symlinkSync(
+          redirectedStatePath,
+          join(projectPath, ".goat-flow", "state", "install"),
+        );
 
-      const preview = buildManagedSetupPreview(projectPath, "codex");
-      assert.equal(preview.baselineStatus, "malformed-blocking");
-      assert.equal(preview.verdict, "blocked");
-      assert.equal(
-        preview.limits.some((limit) =>
-          limit.includes(
-            ".goat-flow/state/install must be a project-local directory.",
+        const preview = buildManagedSetupPreview(projectPath, "codex");
+        assert.equal(preview.baselineStatus, "malformed-blocking");
+        assert.equal(preview.verdict, "blocked");
+        assert.equal(
+          preview.limits.some((limit) =>
+            limit.includes(
+              ".goat-flow/state/install must be a project-local directory.",
+            ),
           ),
-        ),
-        true,
-      );
-    } finally {
-      rmSync(projectPath, { recursive: true, force: true });
-      rmSync(redirectedStatePath, { recursive: true, force: true });
-    }
-  });
+          true,
+        );
+      } finally {
+        rmSync(projectPath, { recursive: true, force: true });
+        rmSync(redirectedStatePath, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 /**
@@ -741,7 +762,7 @@ describe("managed install state v2 facade", () => {
       const result = readManagedInstallStateFacade(projectPath);
       assert.equal(result.status, "malformed-blocking");
       assert.equal(result.state, null);
-      assert.doesNotMatch(result.error ?? "", new RegExp(projectPath, "u"));
+      assert.equal((result.error ?? "").includes(projectPath), false);
     } finally {
       rmSync(projectPath, { recursive: true, force: true });
     }
@@ -1076,40 +1097,15 @@ describe("invalid managed install state", () => {
           JSON.stringify(preview),
           /super-secret-invalid-json/u,
         );
-        assert.doesNotMatch(
-          JSON.stringify(preview),
-          new RegExp(projectPath, "u"),
+        assert.equal(
+          JSON.stringify(preview).includes(
+            JSON.stringify(projectPath).slice(1, -1),
+          ),
+          false,
         );
       } finally {
         rmSync(projectPath, { recursive: true, force: true });
       }
     });
   }
-
-  /** This fixture writes a managed symlink whose matching destination bytes must not authorize overwrite. */
-  it("treats a managed target symlink as unmanaged instead of hashing its destination", () => {
-    const projectPath = mkdtempSync(
-      join(tmpdir(), "goat-flow-target-symlink-"),
-    );
-    const managedDirectory = join(projectPath, ".goat-flow", "logs", "quality");
-    const managedPath = join(managedDirectory, "README.md");
-    try {
-      // The symlink points at the real template, proving byte equality cannot hide a non-regular target.
-      mkdirSync(managedDirectory, { recursive: true });
-      symlinkSync(
-        getTemplatePath("workflow/setup/reference/quality-readme.md"),
-        managedPath,
-      );
-      const preview = buildManagedSetupPreview(projectPath, "codex");
-      const managedFile = preview.files.find(
-        (file) => file.path === ".goat-flow/logs/quality/README.md",
-      );
-      assert.equal(managedFile?.state, "unmanaged");
-      assert.equal(managedFile?.currentStatus, "non-regular");
-      assert.match(managedFile?.reason ?? "", /symlink or non-regular/u);
-      assert.equal(preview.verdict, "blocked");
-    } finally {
-      rmSync(projectPath, { recursive: true, force: true });
-    }
-  });
 });

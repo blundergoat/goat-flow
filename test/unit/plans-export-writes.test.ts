@@ -339,7 +339,7 @@ describe("plans export: CLI previews and protected writes", () => {
     const planPath = join(temporaryRoot, "1.15.0");
     const outputPath = join(temporaryRoot, "exports");
     writePlanFixture(planPath, completeMilestoneBody(), "M01-a!.md");
-    writePlanFixture(planPath, completeMilestoneBody(), "M01-a?.md");
+    writePlanFixture(planPath, completeMilestoneBody(), "M01-a#.md");
 
     try {
       const result = runPlansExport(

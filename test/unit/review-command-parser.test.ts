@@ -4,6 +4,7 @@
  *
  * Temporary projects let usage failures be checked before any report or stdin is consumed.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -127,38 +128,42 @@ describe("review project and version options", () => {
       }
   });
 
-  it("captures the selected project through a canonical directory while reading a relative request", (test) => {
-    const cwd = createReviewedProject(test);
-    const project = createReviewedProject(test);
-    writeFileSync(
-      join(project, "src/example.ts"),
-      "export const selectedProject = true;\n",
-    );
-    const alias = join(cwd, "selected-project");
-    symlinkSync(project, alias, "dir");
-    const input = JSON.stringify({
-      schema: "goat-review-request/v1",
-      source: {
-        kind: "paths",
-        paths: [{ path: "src/example.ts", from: "live" }],
-      },
-    });
-    writeFileSync(join(cwd, "request.json"), input);
-    const result = reviewCli(cwd, [
-      "review",
-      "snapshot",
-      "request.json",
-      "--project",
-      alias,
-      "--expected-version",
-      getPackageVersion(),
-    ]);
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(
-      result.stdout.trim(),
-      canonicalReviewJson(captureReviewSnapshot(input, project)),
-    );
-  });
+  it(
+    "captures the selected project through a canonical directory while reading a relative request",
+    symlinkTestOptions(),
+    (test) => {
+      const cwd = createReviewedProject(test);
+      const project = createReviewedProject(test);
+      writeFileSync(
+        join(project, "src/example.ts"),
+        "export const selectedProject = true;\n",
+      );
+      const alias = join(cwd, "selected-project");
+      symlinkSync(project, alias, "dir");
+      const input = JSON.stringify({
+        schema: "goat-review-request/v1",
+        source: {
+          kind: "paths",
+          paths: [{ path: "src/example.ts", from: "live" }],
+        },
+      });
+      writeFileSync(join(cwd, "request.json"), input);
+      const result = reviewCli(cwd, [
+        "review",
+        "snapshot",
+        "request.json",
+        "--project",
+        alias,
+        "--expected-version",
+        getPackageVersion(),
+      ]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(
+        result.stdout.trim(),
+        canonicalReviewJson(captureReviewSnapshot(input, project)),
+      );
+    },
+  );
 
   it("refuses missing or non-directory projects and preserves informational commands", (test) => {
     const cwd = createReviewedProject(test);

@@ -241,8 +241,11 @@ describe("collectLearningLoopRecall", () => {
   it("uses filesystem identity for case aliases without folding a case-sensitive filesystem", () => {
     const differentlyCasedPath = "SRC/Core/File.ts";
     assert.equal(
-      collectLearningLoopRecall(fs, BUCKET_PATHS, [differentlyCasedPath])
-        .totalMatches,
+      collectLearningLoopRecall(
+        { ...fs, samePathIdentity: (left, right) => left === right },
+        BUCKET_PATHS,
+        [differentlyCasedPath],
+      ).totalMatches,
       0,
     );
 

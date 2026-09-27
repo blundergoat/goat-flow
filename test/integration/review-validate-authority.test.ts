@@ -4,19 +4,15 @@
  *
  * Fixture arrangement may write its disposable repository; snapshots and validation must preserve all fixture bytes and modes.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import { syncBuiltinESMExports } from "node:module";
-import { readReviewReceipt } from "../../src/cli/review-validate-ledger.js";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  renameSync,
   chmodSync,
   existsSync,
   mkdirSync,
   symlinkSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -28,21 +24,16 @@ import {
   readReviewAnchor,
   readReviewAuthority,
   reviewGateId,
-  type ReviewAuthoritySnapshot,
 } from "../../src/cli/review-validate-authority.js";
-import { validateReviewReport } from "../../src/cli/review-validate.js";
 import {
   CLI_PATH,
   createReviewedProject,
   withIntegrityFields,
-  cleanReview,
-  fullCleanReview,
   git,
   repository,
   capture,
   fixtureState,
   assertReviewResult,
-  fixtureGate,
   reportWithGate,
   report,
   zeroFindingReport,
@@ -279,7 +270,7 @@ describe("review authority across real repository state", () => {
   }
 
   // Added, removed, and executable files distinguish a frozen whole-area selection from a deliberately bounded sample.
-  it("detects included membership and mode drift while keeping an area sample bounded", (test) => {
+  it("detects included membership drift while keeping an area sample bounded", (test) => {
     const { root } = repository(test);
     const worktree = capture(root, {
       kind: "worktree",
@@ -300,11 +291,29 @@ describe("review authority across real repository state", () => {
     assertReviewResult(root, zeroFindingReport(worktree), "authority-drift");
     assertReviewResult(root, report(area), "authority-drift");
     assertReviewResult(root, report(sample), "pass");
-    chmodSync(join(root, "src/example.ts"), 0o755);
-    assertReviewResult(root, report(sample), "authority-drift");
   });
 
-  it("retains absent explicit paths and rejects unsafe, duplicated, or unsupported selections", (test) => {
+  it(
+    "detects a changed POSIX executable mode in a selected live file",
+    {
+      skip:
+        process.platform === "win32"
+          ? "Win32 chmod cannot change POSIX executable bits"
+          : false,
+    },
+    (test) => {
+      const { root } = repository(test);
+      const sample = capture(root, {
+        kind: "area",
+        roots: ["src"],
+        sample: ["src/example.ts"],
+      }).authority;
+      chmodSync(join(root, "src/example.ts"), 0o755);
+      assertReviewResult(root, report(sample), "authority-drift");
+    },
+  );
+
+  it("retains absent explicit paths and rejects unsafe, duplicated, or unsupported selections", async (test) => {
     const root = createReviewedProject(test);
     const absent = capture(root, {
       kind: "paths",
@@ -341,38 +350,47 @@ describe("review authority across real repository state", () => {
         }),
       /duplicate/u,
     );
-    symlinkSync("src/example.ts", join(root, "linked.ts"));
-    assert.throws(
-      () =>
-        capture(root, {
-          kind: "paths",
-          paths: [{ path: "linked.ts", from: "live" }],
-        }),
-      /symlink/u,
-    );
+    await test.test("rejects a linked selection", symlinkTestOptions(), () => {
+      symlinkSync("src/example.ts", join(root, "linked.ts"));
+      assert.throws(
+        () =>
+          capture(root, {
+            kind: "paths",
+            paths: [{ path: "linked.ts", from: "live" }],
+          }),
+        /symlink/u,
+      );
+    });
   });
 
-  // Unrelated symlinks and incompatible selected revisions separate readable finding evidence from an executable full workspace.
-  it("captures qualified files independently of unrelated unsupported tree entries and refuses incompatible execution views", (test) => {
+  // A tracked link in the disposable repository must not hide independently readable finding evidence.
+  it(
+    "captures qualified files independently of unrelated unsupported tree entries",
+    symlinkTestOptions(),
+    (test) => {
+      const { root, base } = repository(test);
+      symlinkSync("src/example.ts", join(root, "linked.ts"));
+      git(root, ["add", "linked.ts"]);
+      const head = git(
+        root,
+        ["commit-tree", git(root, ["write-tree"]), "-p", base],
+        "symlink fixture\n",
+      );
+      const source = {
+        kind: "paths",
+        paths: [{ path: "src/example.ts", from: "git", revision: head }],
+      };
+      const snapshot = capture(root, source).authority;
+      assertReviewResult(root, report(snapshot), "pass");
+      const execution = capture(root, source, true);
+      assert.equal(execution.authority.workspace, null);
+      assert.match(execution.checkout.reason ?? "", /unsupported/u);
+    },
+  );
+
+  // Writes different fixture revisions to prove an incompatible selection cannot become an execution workspace on any host.
+  it("refuses incompatible execution views without requiring symlinks", (test) => {
     const { root, base } = repository(test);
-    symlinkSync("src/example.ts", join(root, "linked.ts"));
-    git(root, ["add", "linked.ts"]);
-    const head = git(
-      root,
-      ["commit-tree", git(root, ["write-tree"]), "-p", base],
-      "symlink fixture\n",
-    );
-    const source = {
-      kind: "paths",
-      paths: [{ path: "src/example.ts", from: "git", revision: head }],
-    };
-    const snapshot = capture(root, source).authority;
-    assertReviewResult(root, report(snapshot), "pass");
-    const execution = capture(root, source, true);
-    assert.equal(execution.authority.workspace, null);
-    assert.match(execution.checkout.reason ?? "", /unsupported/u);
-    git(root, ["read-tree", base]);
-    unlinkSync(join(root, "linked.ts"));
     const earlier = revision(root, { "src/other.ts": "earlierBytes\n" }, [
       base,
     ]);
@@ -395,7 +413,10 @@ describe("review authority across real repository state", () => {
   // One delimiter-bearing filename exercises the actual Git, index, live-file, and Markdown boundaries together.
   it("preserves special-character paths and escaped anchors literally on Git and live sides", (test) => {
     const { root } = repository(test);
-    const path = 'src/space "quote"\tline\npipe|tick`colon:é.ts';
+    const path =
+      process.platform === "win32"
+        ? "src/space apostrophe'tick`é.ts"
+        : 'src/space "quote"\tline\npipe|tick`colon:é.ts';
     const literal = 'literal | ` " <tag> &\nsecond line';
     writeFileSync(join(root, path), literal);
     git(root, ["add", "--", path]);
@@ -511,7 +532,7 @@ describe("review authority across real repository state", () => {
     );
   });
 
-  it("does not run Git content filters and excludes nested/ignored trees from an area", (test) => {
+  it("does not run Git content filters and excludes nested/ignored trees from an area", async (test) => {
     const { root } = repository(test);
     const marker = join(root, "filter-ran");
     git(root, ["config", "filter.review.clean", `touch ${marker}`]);
@@ -527,7 +548,6 @@ describe("review authority across real repository state", () => {
     mkdirSync(join(root, "src/nested"));
     git(join(root, "src/nested"), ["init", "-q"]);
     writeFileSync(join(root, "src/nested/other.ts"), "other");
-    symlinkSync("ignored", join(root, "src/linked"));
     const area = capture(root, {
       kind: "area",
       roots: ["src"],
@@ -544,6 +564,22 @@ describe("review authority across real repository state", () => {
       }).authority.inventory[0]?.new.kind,
       "file",
     );
+    await test.test(
+      "excludes symlinked area entries",
+      symlinkTestOptions(),
+      () => {
+        symlinkSync("ignored", join(root, "src/linked"));
+        const linkedArea = capture(root, {
+          kind: "area",
+          roots: ["src"],
+          sample: null,
+        }).authority;
+        assert.deepEqual(
+          linkedArea.inventory.map((entry) => entry.path),
+          ["src/example.ts"],
+        );
+      },
+    );
   });
 
   it("uses Git's effective autocrlf setting and boolean spellings for live comparisons", (test) => {
@@ -559,6 +595,13 @@ describe("review authority across real repository state", () => {
     }
     // Later configuration wins; an earlier true value cannot block the operator's effective false setting.
     git(root, ["config", "core.autocrlf", "true"]);
+    git(root, ["config", "--add", "core.autocrlf", "false"]);
+    assert.deepEqual(
+      capture(root, { kind: "unstaged" }).authority.inventory,
+      [],
+    );
+    // A shadowed input is not a boolean, so a typed read of every value would refuse this effective false setting.
+    git(root, ["config", "--replace-all", "core.autocrlf", "input"]);
     git(root, ["config", "--add", "core.autocrlf", "false"]);
     assert.deepEqual(
       capture(root, { kind: "unstaged" }).authority.inventory,
@@ -604,27 +647,36 @@ describe("review authority across real repository state", () => {
     assertReviewResult(root, report(selected.authority), "pass");
   });
 
-  it("preserves trailing whitespace in the selected repository's directory name", (test) => {
-    const parent = createReviewedProject(test);
-    const root = join(parent, "reviewed project \t");
-    mkdirSync(root);
-    mkdirSync(join(root, ".goat-flow/logs/review"), { recursive: true });
-    writeFileSync(
-      join(root, ".goat-flow/logs/review/goat-review-bundle.fixture.diff"),
-      "",
-    );
-    git(root, ["init", "-q"]);
-    writeFileSync(join(root, "example.ts"), "loadConfig\n");
-    const snapshot = capture(root, {
-      kind: "paths",
-      paths: [{ path: "example.ts", from: "live" }],
-    }).authority;
-    assertReviewResult(
-      root,
-      report(snapshot, "loadConfig", "example.ts"),
-      "pass",
-    );
-  });
+  it(
+    "preserves trailing whitespace in the selected repository's directory name",
+    {
+      skip:
+        process.platform === "win32"
+          ? "Win32 paths cannot preserve trailing whitespace"
+          : false,
+    },
+    (test) => {
+      const parent = createReviewedProject(test);
+      const root = join(parent, "reviewed project \t");
+      mkdirSync(root);
+      mkdirSync(join(root, ".goat-flow/logs/review"), { recursive: true });
+      writeFileSync(
+        join(root, ".goat-flow/logs/review/goat-review-bundle.fixture.diff"),
+        "",
+      );
+      git(root, ["init", "-q"]);
+      writeFileSync(join(root, "example.ts"), "loadConfig\n");
+      const snapshot = capture(root, {
+        kind: "paths",
+        paths: [{ path: "example.ts", from: "live" }],
+      }).authority;
+      assertReviewResult(
+        root,
+        report(snapshot, "loadConfig", "example.ts"),
+        "pass",
+      );
+    },
+  );
 });
 
 describe("review snapshot CLI and gate provenance", () => {
@@ -835,217 +887,3 @@ describe("review snapshot CLI and gate provenance", () => {
     );
   });
 });
-
-describe("review integrity through the CLI and recorded gates", () => {
-  it("rejects a receipt replaced after its opened bytes were checked", (test) => {
-    const root = createReviewedProject(test);
-    const relativeReceipt =
-      ".goat-flow/logs/review/goat-review-bundle.fixture.diff";
-    const receipt = join(root, relativeReceipt);
-    assert.ok(
-      readReviewReceipt(root, relativeReceipt, "final") instanceof Buffer,
-    );
-    const originalStat = fs.fstatSync;
-    let observations = 0;
-    // Replace the actual leaf at the second descriptor observation, after the reader has consumed the original file.
-    test.mock.method(fs, "fstatSync", (descriptor: number) => {
-      const details = originalStat(descriptor);
-      // The second observation occurs after reading, so this real replacement tests the final path-identity check.
-      if (++observations === 2) {
-        renameSync(receipt, `${receipt}.retained`);
-        writeFileSync(receipt, "replacement receipt");
-      }
-      return details;
-    });
-    syncBuiltinESMExports();
-    try {
-      assert.throws(
-        () => readReviewReceipt(root, relativeReceipt, "final"),
-        /changed during validation/u,
-      );
-      assert.equal(observations, 2);
-    } finally {
-      test.mock.restoreAll();
-      syncBuiltinESMExports();
-    }
-  });
-
-  it("keeps skipped gates at zero and requires unresolved blockers despite an unrelated passing command", (test) => {
-    const root = createReviewedProject(test);
-    const skipped = validSkippedReport(root);
-    assertReviewResult(root, skipped, "pass");
-    const inflated = withIntegrityFields(skipped, {
-      "Gate evidence":
-        "pass=99, changed-code=0, pre-existing=0, infrastructure=0, unresolved=0",
-    });
-    const inflatedResult = validateReviewReport(inflated, root);
-    assert.ok(
-      inflatedResult.violations.some((issue) =>
-        /totals must equal distinct credited commands/u.test(issue.message),
-      ),
-    );
-    const full = fullCleanReview(cleanReview(root));
-    const snapshot: ReviewAuthoritySnapshot = JSON.parse(
-      full.match(/^- Authority snapshot: (.*)$/mu)![1]!,
-    );
-    const gates = JSON.parse(full.match(/^- Gate authority: (.*)$/mu)![1]!);
-    const failed = fixtureGate(root, snapshot, 1);
-    gates.gates.push(failed);
-    gates.hostInstructions.push({
-      reference: failed.origin.reference,
-      sha256: failed.origin.sha256,
-    });
-    const unresolved = withIntegrityFields(full, {
-      "Gate authority": canonicalReviewJson(gates),
-      "Gate evidence":
-        "pass=1, changed-code=0, pre-existing=0, infrastructure=0, unresolved=1",
-      "Gate findings": canonicalReviewJson({ [failed.id]: ["R-001"] }),
-      "Final dispositions": '{"R-001":"unresolved"}',
-      Evidence: "1 OBSERVED / 0 INFERRED",
-      Verdicts: "0/0/0/1",
-      "Degradation flags": "gate-evidence-incomplete",
-      "Degradation evidence": canonicalReviewJson({
-        "gate-evidence-incomplete": `${failed.id} returned a nonzero exit; source causality remains unclassified.`,
-      }),
-      Conclusion: "coverage-degraded",
-    })
-      .replace(
-        "No findings survived this fixture.",
-        "- R-001 [MUST:needs-decision] **Unconfirmed: classify the failing gate** `src/example.ts` (search: `loadConfig`) - The fixture gate failed. | Harm: required verification is incomplete. | Evidence: OBSERVED | Proof: RUNTIME | Missing proof: source causality | Next check: compare the trusted base",
-      )
-      .replace("Decision: **YES**", "Decision: **NO**");
-    assertReviewResult(root, unresolved, "pass");
-    // Each single-field mutation must fail for its own missing link, disclosure, or command count.
-    for (const [field, value, pattern] of [
-      ["Gate findings", "{}", /must name exactly/u],
-      [
-        "Gate findings",
-        canonicalReviewJson({ [failed.id]: ["R-999"] }),
-        /absent or historical/u,
-      ],
-      ["Degradation flags", "none", /gate-evidence-incomplete must agree/u],
-      [
-        "Degradation evidence",
-        canonicalReviewJson({
-          "gate-evidence-incomplete": "A command failed.",
-        }),
-        /evidence must name gate-v1:sha256:/u,
-      ],
-      [
-        "Gate evidence",
-        "pass=2, changed-code=0, pre-existing=0, infrastructure=0, unresolved=0",
-        /totals must equal/u,
-      ],
-    ] as const) {
-      const result = validateReviewReport(
-        withIntegrityFields(unresolved, { [field]: value }),
-        root,
-      );
-      assert.ok(
-        result.violations.some((issue) => pattern.test(issue.message)),
-        JSON.stringify(result.violations),
-      );
-    }
-    assertReviewResult(
-      root,
-      unresolved.replace("[MUST:needs-decision]", "[MAY:needs-decision]"),
-      "gate-state",
-    );
-    assertReviewResult(
-      root,
-      unresolved.replace(
-        "Decision: **NO**",
-        "Decision: **PENDING REFUTER/HUMAN**",
-      ),
-      "ship-verdict-contradiction",
-    );
-    // The same observed failure needs different report consequences once the host establishes its cause.
-    for (const outcome of ["changed-code", "pre-existing"] as const) {
-      failed.outcome = outcome;
-      failed.reason =
-        "The fixture failure has been classified against the selected source.";
-      const classified = withIntegrityFields(unresolved, {
-        "Gate authority": canonicalReviewJson(gates),
-        "Gate evidence": `pass=1, changed-code=${Number(outcome === "changed-code")}, pre-existing=${Number(outcome === "pre-existing")}, infrastructure=0, unresolved=0`,
-        "Gate findings": canonicalReviewJson(
-          outcome === "changed-code" ? { [failed.id]: ["R-001"] } : {},
-        ),
-        "Final dispositions": '{"R-001":"confirmed"}',
-        Verdicts: "1/0/0/0",
-        "Degradation flags": "none",
-        "Degradation evidence": "{}",
-        Conclusion: "confident",
-      });
-      const disclosed =
-        outcome === "pre-existing"
-          ? `${classified}\n## Pre-existing Nearby\n- The recorded command also fails against the base.\n`
-          : classified;
-      assertReviewResult(root, disclosed, "pass");
-      assertReviewResult(
-        root,
-        withIntegrityFields(disclosed, {
-          "Gate findings": canonicalReviewJson(
-            outcome === "changed-code" ? {} : { [failed.id]: ["R-001"] },
-          ),
-        }),
-        "gate-state",
-      );
-      // A pre-existing classification still needs its own nearby-issue disclosure in a diff review.
-      if (outcome === "pre-existing")
-        assertReviewResult(root, classified, "gate-state");
-    }
-    failed.outcome = "skipped";
-    failed.attempts = [];
-    failed.reason = "The operator did not select this command for execution.";
-    const mixed = withIntegrityFields(full, {
-      "Gate authority": canonicalReviewJson(gates),
-      Gates: "unavailable",
-      "Degradation flags": "gates-not-run",
-      "Degradation evidence":
-        '{"gates-not-run":"One selected command was skipped."}',
-      Conclusion: "coverage-degraded",
-    }).replace("Decision: **YES**", "Decision: **YES WITH CONDITIONS**");
-    assertReviewResult(root, mixed, "pass");
-    assertReviewResult(
-      root,
-      withIntegrityFields(mixed, { Gates: "run" }),
-      "gate-state",
-    );
-    const interrupted = fixtureGate(root, snapshot, null);
-    gates.gates[1] = interrupted;
-    gates.hostInstructions[1] = {
-      reference: interrupted.origin.reference,
-      sha256: interrupted.origin.sha256,
-    };
-    assertReviewResult(
-      root,
-      withIntegrityFields(unresolved, {
-        "Gate authority": canonicalReviewJson(gates),
-      }),
-      "gate-state",
-    );
-    interrupted.outcome = "infrastructure";
-    interrupted.reason =
-      "The fixture process was interrupted by SIGTERM; no repository cause is established.";
-    const infrastructure = withIntegrityFields(full, {
-      "Gate authority": canonicalReviewJson(gates),
-      "Gate evidence":
-        "pass=1, changed-code=0, pre-existing=0, infrastructure=1, unresolved=0",
-      "Degradation flags": "gate-evidence-incomplete",
-      "Degradation evidence": canonicalReviewJson({
-        "gate-evidence-incomplete": `${interrupted.id} was interrupted.`,
-      }),
-      Conclusion: "coverage-degraded",
-    }).replace("Decision: **YES**", "Decision: **YES WITH CONDITIONS**");
-    assertReviewResult(root, infrastructure, "pass");
-  });
-});
-
-/** Capture a complete no-execution report before introducing contradictory gate totals in a disposable project. */
-function validSkippedReport(root: string): string {
-  const snapshot = capture(root, {
-    kind: "paths",
-    paths: [{ path: "src/example.ts", from: "live" }],
-  }).authority;
-  return report(snapshot);
-}

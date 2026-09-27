@@ -726,7 +726,7 @@ describe("hook registrar: launchers and installation", () => {
         assert.fail("Claude must register the approved argv handler");
       }
       assert.deepEqual(managedRows[0], {
-        matcher: "Bash",
+        matcher: "Bash|PowerShell",
         hooks: [
           {
             type: "command",

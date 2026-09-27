@@ -4,6 +4,7 @@
  * Every case runs the canonical launcher against a disposable project so the result matches
  * what an agent and user would see without touching a real project.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -835,22 +836,26 @@ describe("hook launcher script validation", () => {
     });
   }
 
-  it("fails closed when the managed hook script is a symlink", () => {
-    withTempProject((root) => {
-      const hookDir = createManagedHookDirectory(root);
-      const redirectTarget = join(root, "innocent-looking.sh");
-      writeFileSync(redirectTarget, "#!/usr/bin/env bash\nexit 0\n");
-      symlinkSync(redirectTarget, join(hookDir, "deny-dangerous.sh"));
+  it(
+    "fails closed when the managed hook script is a symlink",
+    symlinkTestOptions(),
+    () => {
+      withTempProject((root) => {
+        const hookDir = createManagedHookDirectory(root);
+        const redirectTarget = join(root, "innocent-looking.sh");
+        writeFileSync(redirectTarget, "#!/usr/bin/env bash\nexit 0\n");
+        symlinkSync(redirectTarget, join(hookDir, "deny-dangerous.sh"));
 
-      const result = runLauncherProcess(
-        root,
-        ".goat-flow/hooks/deny-dangerous.sh",
-      );
-      assert.equal(result.status, 2, launcherDiagnostics(result));
-      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
-      assert.match(result.stderr, /symlink/u);
-    });
-  });
+        const result = runLauncherProcess(
+          root,
+          ".goat-flow/hooks/deny-dangerous.sh",
+        );
+        assert.equal(result.status, 2, launcherDiagnostics(result));
+        assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+        assert.match(result.stderr, /symlink/u);
+      });
+    },
+  );
 
   it("fails closed when the managed hook path is not a regular file", () => {
     withTempProject((root) => {
@@ -887,98 +892,106 @@ describe("hook launcher script validation", () => {
   // The hook path text stays inside the project, so only resolving the symlinked parent directory
   // reveals that the script really lives elsewhere. This fixture writes a project plus an outside
   // directory and spawns the launcher, because path text alone cannot prove containment.
-  it("fails closed when a symlinked parent directory escapes the project root", () => {
-    withTempProject((root) => {
-      const outsideHooks = mkdtempSync(join(tmpdir(), "goat-flow-outside-"));
-      try {
-        writeFileSync(
-          join(outsideHooks, "deny-dangerous.sh"),
-          "#!/usr/bin/env bash\nexit 0\n",
-        );
-        mkdirSync(join(root, ".goat-flow"), { recursive: true });
-        symlinkSync(outsideHooks, join(root, ".goat-flow", "hooks"));
+  it(
+    "fails closed when a symlinked parent directory escapes the project root",
+    symlinkTestOptions(),
+    () => {
+      withTempProject((root) => {
+        const outsideHooks = mkdtempSync(join(tmpdir(), "goat-flow-outside-"));
+        try {
+          writeFileSync(
+            join(outsideHooks, "deny-dangerous.sh"),
+            "#!/usr/bin/env bash\nexit 0\n",
+          );
+          mkdirSync(join(root, ".goat-flow"), { recursive: true });
+          symlinkSync(outsideHooks, join(root, ".goat-flow", "hooks"));
 
-        const result = runLauncherProcess(
-          root,
-          ".goat-flow/hooks/deny-dangerous.sh",
-        );
-        assert.equal(result.status, 2, launcherDiagnostics(result));
-        assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
-        assert.match(result.stderr, /escaped the project root/u);
-      } finally {
-        rmSync(outsideHooks, { recursive: true, force: true });
-      }
-    });
-  });
+          const result = runLauncherProcess(
+            root,
+            ".goat-flow/hooks/deny-dangerous.sh",
+          );
+          assert.equal(result.status, 2, launcherDiagnostics(result));
+          assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+          assert.match(result.stderr, /escaped the project root/u);
+        } finally {
+          rmSync(outsideHooks, { recursive: true, force: true });
+        }
+      });
+    },
+  );
 
   /*
    * Fixture purpose: invokes the launcher and an in-project hook through symlinked root spellings,
    * then writes an outside control target to prove physical normalization does not widen trust.
    * Side effects: creates and removes symlink hosts plus child Node and Bash processes.
    */
-  it("executes through a symlinked project root while rejecting a physical escape", () => {
-    withTempProject((root) => {
-      const linkedHookExitStatus = 7;
-      const linkHost = mkdtempSync(join(tmpdir(), "goat-flow-linked-root-"));
-      const outsideHooks = mkdtempSync(join(tmpdir(), "goat-flow-outside-"));
-      try {
-        const hookDir = createManagedHookDirectory(root);
-        const hookPath = join(hookDir, "exit-seven.sh");
-        writeFileSync(
-          hookPath,
-          `#!/usr/bin/env bash\nprintf 'linked launch ran\\n'\nexit ${linkedHookExitStatus}\n`,
-        );
-        const linkedProjectRoot = join(linkHost, "project");
-        const linkedLauncherPath = join(linkHost, "run-with-bash.mjs");
-        symlinkSync(root, linkedProjectRoot, "dir");
-        symlinkSync(HOOK_LAUNCHER_PATH, linkedLauncherPath);
+  it(
+    "executes through a symlinked project root while rejecting a physical escape",
+    symlinkTestOptions(),
+    () => {
+      withTempProject((root) => {
+        const linkedHookExitStatus = 7;
+        const linkHost = mkdtempSync(join(tmpdir(), "goat-flow-linked-root-"));
+        const outsideHooks = mkdtempSync(join(tmpdir(), "goat-flow-outside-"));
+        try {
+          const hookDir = createManagedHookDirectory(root);
+          const hookPath = join(hookDir, "exit-seven.sh");
+          writeFileSync(
+            hookPath,
+            `#!/usr/bin/env bash\nprintf 'linked launch ran\\n'\nexit ${linkedHookExitStatus}\n`,
+          );
+          const linkedProjectRoot = join(linkHost, "project");
+          const linkedLauncherPath = join(linkHost, "run-with-bash.mjs");
+          symlinkSync(root, linkedProjectRoot, "dir");
+          symlinkSync(HOOK_LAUNCHER_PATH, linkedLauncherPath);
 
-        const linkedResult = spawnSync(
-          process.execPath,
-          [
-            linkedLauncherPath,
-            join(linkedProjectRoot, ".goat-flow", "hooks", "exit-seven.sh"),
-            "gruff",
-          ],
-          {
-            cwd: linkedProjectRoot,
-            encoding: "utf8",
-          },
-        );
-        assert.equal(
-          linkedResult.status,
-          linkedHookExitStatus,
-          launcherDiagnostics(linkedResult),
-        );
-        assert.equal(linkedResult.stdout, "linked launch ran\n");
+          const linkedResult = spawnSync(
+            process.execPath,
+            [
+              linkedLauncherPath,
+              join(linkedProjectRoot, ".goat-flow", "hooks", "exit-seven.sh"),
+              "gruff",
+            ],
+            {
+              cwd: linkedProjectRoot,
+              encoding: "utf8",
+            },
+          );
+          assert.equal(
+            linkedResult.status,
+            linkedHookExitStatus,
+            launcherDiagnostics(linkedResult),
+          );
+          assert.equal(linkedResult.stdout, "linked launch ran\n");
 
-        writeFileSync(
-          join(outsideHooks, "outside.sh"),
-          "#!/usr/bin/env bash\nexit 0\n",
-        );
-        symlinkSync(outsideHooks, join(root, "outside-hooks"), "dir");
-        const escapingResult = spawnSync(
-          process.execPath,
-          [
-            linkedLauncherPath,
-            join(linkedProjectRoot, "outside-hooks", "outside.sh"),
-            "policy",
-          ],
-          {
-            cwd: linkedProjectRoot,
-            encoding: "utf8",
-          },
-        );
-        assert.equal(
-          escapingResult.status,
-          2,
-          launcherDiagnostics(escapingResult),
-        );
-        assert.match(escapingResult.stderr, /escaped the project root/u);
-      } finally {
-        rmSync(linkHost, { recursive: true, force: true });
-        rmSync(outsideHooks, { recursive: true, force: true });
-      }
-    });
-  });
+          writeFileSync(
+            join(outsideHooks, "outside.sh"),
+            "#!/usr/bin/env bash\nexit 0\n",
+          );
+          symlinkSync(outsideHooks, join(root, "outside-hooks"), "dir");
+          const escapingResult = spawnSync(
+            process.execPath,
+            [
+              linkedLauncherPath,
+              join(linkedProjectRoot, "outside-hooks", "outside.sh"),
+              "policy",
+            ],
+            {
+              cwd: linkedProjectRoot,
+              encoding: "utf8",
+            },
+          );
+          assert.equal(
+            escapingResult.status,
+            2,
+            launcherDiagnostics(escapingResult),
+          );
+          assert.match(escapingResult.stderr, /escaped the project root/u);
+        } finally {
+          rmSync(linkHost, { recursive: true, force: true });
+          rmSync(outsideHooks, { recursive: true, force: true });
+        }
+      });
+    },
+  );
 });

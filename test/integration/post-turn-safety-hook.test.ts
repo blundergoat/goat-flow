@@ -5,6 +5,7 @@
  * Every case runs the real hook against a real git repository, so a pass means the shipped
  * scanner behaves as asserted, not a reimplementation of it.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
@@ -362,22 +363,29 @@ describe("post-turn-safety hook: secret and marker detection", () => {
     });
   });
 
-  it("does not follow untracked symlinks outside the repository", () => {
-    const outsideRoot = mkdtempSync(
-      join(tmpdir(), "goat-flow-post-turn-symlink-"),
-    );
-    try {
-      const outsideFile = join(outsideRoot, "outside.txt");
-      writeFileSync(outsideFile, `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`);
-      withTempRepo((root) => {
-        symlinkSync(outsideFile, join(root, "untracked-link.txt"));
+  it(
+    "does not follow untracked symlinks outside the repository",
+    symlinkTestOptions(),
+    () => {
+      const outsideRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-post-turn-symlink-"),
+      );
+      try {
+        const outsideFile = join(outsideRoot, "outside.txt");
+        writeFileSync(
+          outsideFile,
+          `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`,
+        );
+        withTempRepo((root) => {
+          symlinkSync(outsideFile, join(root, "untracked-link.txt"));
 
-        assertHookAllows(root);
-      });
-    } finally {
-      rmSync(outsideRoot, { recursive: true, force: true });
-    }
-  });
+          assertHookAllows(root);
+        });
+      } finally {
+        rmSync(outsideRoot, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("blocks private key blocks in tracked diffs", () => {
     withTempRepo((root) => {

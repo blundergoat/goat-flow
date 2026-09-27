@@ -525,6 +525,7 @@ describe("agent deny hook template comparison", () => {
     const capturedDispatchers: string[] = [];
     const capturedCommands: string[] = [];
     const capturedScripts: string[] = [];
+    const capturedTimeouts: number[] = [];
     const nativeBash = "C:\\Program Files\\Git\\bin\\bash.exe";
     childProcess.execFileSync = ((command, args, options) => {
       if (String(command).toLowerCase().endsWith("where.exe")) {
@@ -536,6 +537,7 @@ describe("agent deny hook template comparison", () => {
         return Buffer.from("");
       }
       if (Array.isArray(args) && args[1] === "--self-test=smoke") {
+        capturedTimeouts.push((options as { timeout: number }).timeout);
         capturedCommands.push(String(command));
         capturedScripts.push(String(args[0]));
         const environment = (options as { env?: NodeJS.ProcessEnv }).env;
@@ -592,6 +594,8 @@ describe("agent deny hook template comparison", () => {
     assert.equal(denyCheck.run(ctx), null);
     const expectedBash = process.platform === "win32" ? nativeBash : "bash";
     assert.deepEqual(capturedCommands, [expectedBash, expectedBash]);
+    const expectedTimeout = process.platform === "win32" ? 120_000 : 30_000;
+    assert.deepEqual(capturedTimeouts, [expectedTimeout, expectedTimeout]);
     // Windows self-test paths must be readable by native Bash, including UNC checkout roots.
     const shellPath = (path: string) =>
       process.platform === "win32" ? path.replaceAll("\\", "/") : path;

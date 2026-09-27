@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 
 const installerPath = resolve(
@@ -88,7 +88,7 @@ describe("install-browser-tools force cleanup", () => {
             env: {
               ...process.env,
               HOME: homePath,
-              PATH: `${shimDirectory}:${process.env.PATH ?? ""}`,
+              PATH: `${shimDirectory}${delimiter}${process.env.PATH ?? ""}`,
               BROWSER_TOOLS_HOME: installRoot,
               BROWSER_TOOLS_VENV: protectedTarget,
               BROWSER_TOOLS_BIN_DIR: wrapperDirectory,

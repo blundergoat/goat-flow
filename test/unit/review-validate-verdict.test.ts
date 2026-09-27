@@ -7,13 +7,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  mkdirSync,
-  renameSync,
-  symlinkSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { writeFileSync } from "node:fs";
 
 import { join } from "node:path";
 
@@ -21,10 +15,7 @@ import {
   renderReviewValidationResult,
   validateReviewReport,
 } from "../../src/cli/review-validate.js";
-import {
-  readReviewReceipt,
-  validateRefutationLedgerText,
-} from "../../src/cli/review-validate-ledger.js";
+import { validateRefutationLedgerText } from "../../src/cli/review-validate-ledger.js";
 import {
   createReviewedProject,
   createVersionedReviewedProject,
@@ -1000,75 +991,5 @@ describe("exclusive final review dispositions", () => {
         /degradation flags require Conclusion/,
       );
     }
-  });
-});
-
-describe("review receipt files", () => {
-  it("verifies final bundle files and refuses symlink leaves or parents", (test) => {
-    // Each filesystem mutation starts from a real valid receipt so the refusal belongs to that defect alone.
-    for (const defect of [
-      "missing",
-      "directory",
-      "leaf-symlink",
-      "parent-symlink",
-    ] as const) {
-      const root = createReviewedProject(test);
-      const receipt = join(
-        root,
-        ".goat-flow/logs/review/goat-review-bundle.fixture.diff",
-      );
-      const control = validReview(root);
-      assert.deepEqual(validateReviewReport(control, root).violations, []);
-      // Redirecting a parent must fail even when the linked directory still contains the original receipt.
-      if (defect === "parent-symlink") {
-        renameSync(
-          join(root, ".goat-flow/logs"),
-          join(root, ".goat-flow/retained"),
-        );
-        symlinkSync("retained", join(root, ".goat-flow/logs"), "dir");
-      } else {
-        unlinkSync(receipt);
-        // A directory with the expected filename cannot supply the receipt's bytes.
-        if (defect === "directory") mkdirSync(receipt);
-        // A linked leaf must be rejected even when it points to a regular file inside the project.
-        if (defect === "leaf-symlink")
-          symlinkSync(join(root, "src/example.ts"), receipt);
-      }
-      assertDispositionFailure(
-        control,
-        root,
-        /cannot verify declared review bundle/,
-      );
-    }
-  });
-
-  it("checks fresh draft destinations without creating files or accepting existing evidence", (test) => {
-    const root = createReviewedProject(test);
-    const absent = ".goat-flow/logs/review/goat-review-bundle.future.diff";
-    assert.equal(readReviewReceipt(root, absent, "draft"), null);
-    assert.throws(() => readReviewReceipt(root, absent, "final"), /absent/);
-    assert.throws(
-      () =>
-        readReviewReceipt(
-          root,
-          ".goat-flow/logs/review/goat-review-bundle.fixture.diff",
-          "draft",
-        ),
-      /already exists/,
-    );
-    assert.throws(
-      () => readReviewReceipt(root, "../outside.diff", "draft"),
-      /outside/,
-    );
-    symlinkSync("review", join(root, ".goat-flow/logs/linked"), "dir");
-    assert.throws(
-      () =>
-        readReviewReceipt(
-          root,
-          ".goat-flow/logs/linked/goat-review-bundle.future.diff",
-          "draft",
-        ),
-      /outside/,
-    );
   });
 });

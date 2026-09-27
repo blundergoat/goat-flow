@@ -312,7 +312,7 @@ function runRegisteredCodexHandler(
   const spawnOptions = {
     cwd: projectRoot,
     encoding: "utf8" as const,
-    env: options.environment ?? process.env,
+    env: { ...(options.environment ?? process.env), ...selected.env },
     timeout: 60_000,
   };
   // Piped requests reproduce the provider's direct payload delivery to its configured command.

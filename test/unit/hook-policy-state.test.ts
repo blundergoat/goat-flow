@@ -4,6 +4,7 @@
  * Malformed or untrusted config must never become an off switch.
  * Mixed-choice upgrades require review when ownership changes, including pristine installed files.
  */
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { tmpdir } from "node:os";
@@ -125,7 +126,7 @@ test("normalizes each legacy dangerous choice without changing the Git choice", 
   }
 });
 
-test("defaults genuinely absent config on and reads through a physical root alias", (t) => {
+test("defaults absent config on and follows a physical root alias", async (t) => {
   const root = fs.mkdtempSync(join(tmpdir(), "goat-policy-state-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   assert.deepEqual(readPolicyChoices(root), {});
@@ -136,55 +137,68 @@ test("defaults genuinely absent config on and reads through a physical root alia
     join(project, ".goat-flow/config.yaml"),
     "hooks: {deny-dangerous: {enabled: false}}",
   );
-  fs.symlinkSync(project, join(root, "alias"), "dir");
-  assert.deepEqual(readPolicyChoices(join(root, "alias")), {
-    "deny-dangerous": false,
-  });
+  await t.test(
+    "reads the choice through an alias",
+    symlinkTestOptions(),
+    () => {
+      fs.symlinkSync(project, join(root, "alias"), "dir");
+      assert.deepEqual(readPolicyChoices(join(root, "alias")), {
+        "deny-dangerous": false,
+      });
+    },
+  );
 });
 
-test("rejects linked directories, linked config and nonregular config", (t) => {
-  const root = fs.mkdtempSync(join(tmpdir(), "goat-policy-shapes-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const outside = join(root, "outside");
-  fs.mkdirSync(outside);
-  fs.writeFileSync(
-    join(outside, "config.yaml"),
-    "hooks: {deny-dangerous: {enabled: false}}",
+// Separate cases keep hard-link and directory refusals covered on hosts without symlink privileges.
+for (const shape of [
+  "directory-link",
+  "file-link",
+  "dangling-link",
+  "hard-link",
+  "directory-file",
+]) {
+  const needsSymlink = shape !== "hard-link" && shape !== "directory-file";
+  test(
+    `rejects ${shape} config`,
+    needsSymlink ? symlinkTestOptions() : {},
+    (t) => {
+      const root = fs.mkdtempSync(join(tmpdir(), "goat-policy-shapes-"));
+      t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+      const outside = join(root, "outside");
+      fs.mkdirSync(outside);
+      fs.writeFileSync(
+        join(outside, "config.yaml"),
+        "hooks: {deny-dangerous: {enabled: false}}",
+      );
+      const project = join(root, "project");
+      const directory = join(project, ".goat-flow");
+      const config = join(directory, "config.yaml");
+      fs.mkdirSync(project);
+      // A linked workflow directory must not redirect the saved policy choice outside its owner.
+      if (shape === "directory-link") fs.symlinkSync(outside, directory, "dir");
+      else {
+        fs.mkdirSync(directory);
+        // Multiple file owners make a saved choice unsafe even when its bytes are valid YAML.
+        if (shape === "hard-link")
+          fs.linkSync(join(outside, "config.yaml"), config);
+        // A folder at the config path supplies no settings, regardless of its name.
+        else if (shape === "directory-file") fs.mkdirSync(config);
+        else
+          fs.symlinkSync(
+            join(outside, shape === "dangling-link" ? "absent" : "config.yaml"),
+            config,
+          );
+      }
+      assert.throws(() => readPolicyChoices(project), /Hook config/u, shape);
+    },
   );
-  // Linked or non-file config paths must fail trust checks before their saved choice can influence a launcher.
-  for (const shape of [
-    "directory-link",
-    "file-link",
-    "dangling-link",
-    "hard-link",
-    "directory-file",
-  ]) {
-    const project = join(root, shape),
-      directory = join(project, ".goat-flow"),
-      config = join(directory, "config.yaml");
-    fs.mkdirSync(project);
-    // A linked workflow directory reproduces config escaping the selected project's physical setup folder.
-    if (shape === "directory-link") fs.symlinkSync(outside, directory, "dir");
-    else {
-      fs.mkdirSync(directory);
-      // A hard-linked config reproduces a saved choice with another filesystem owner.
-      if (shape === "hard-link")
-        fs.linkSync(join(outside, "config.yaml"), config);
-      // A directory at the config path cannot supply the user's YAML settings.
-      else if (shape === "directory-file") fs.mkdirSync(config);
-      else
-        fs.symlinkSync(
-          join(outside, shape === "dangling-link" ? "absent" : "config.yaml"),
-          config,
-        );
-    }
-    assert.throws(() => readPolicyChoices(project), /Hook config/, shape);
-  }
-});
+}
 
 test("rejects unreadable config instead of defaulting it on or off", (t) => {
   // Root bypasses this fixture's permission failure, so skip without claiming that unreadable-file behavior was tested.
   if (process.getuid?.() === 0) return t.skip("root bypasses file permissions");
+  if (process.platform === "win32")
+    return t.skip("chmod does not revoke Windows ACL read access");
   const root = fs.mkdtempSync(join(tmpdir(), "goat-policy-permissions-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(join(root, ".goat-flow"));

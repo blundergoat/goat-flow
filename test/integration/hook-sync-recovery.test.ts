@@ -108,6 +108,7 @@ function replaySavedCodexCommand(
   const launch = agentHookSpawnDescriptor({ form: "shell", command });
   return spawnSync(launch.command, launch.args, {
     cwd: projectPath,
+    env: { ...process.env, ...launch.env },
     encoding: "utf8",
     input: JSON.stringify({
       tool_name: "Bash",

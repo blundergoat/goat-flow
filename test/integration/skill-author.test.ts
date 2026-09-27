@@ -1,5 +1,8 @@
 /**
  * Integration tests for `goat-flow skill new` filesystem output and input validation.
+ *
+ * Use these cases when changing skill scaffolding: authors must receive complete files or a specific validation failure.
+ * Each command writes only to its disposable project and checks the resulting discovery and reference surfaces.
  */
 import { describe, it, type TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -514,7 +517,9 @@ Rationalisations captured (verbatim):
       assert.equal(result.written, true);
       assertExists(result.proposedPath);
       assert.ok(
-        result.proposedPath.includes(`/${expectedDirectory}/`),
+        result.proposedPath
+          .replaceAll("\\", "/")
+          .includes(`/${expectedDirectory}/`),
         `${agent ?? "default"}: ${result.proposedPath}`,
       );
       assert.ok(existsSync(result.proposedPath));
@@ -723,7 +728,9 @@ Rationalisations captured (verbatim):
     assert.equal(result.candidacy.recommendedArtifact.type, "skill");
     assert.equal(result.written, false);
     assertExists(result.proposedPath);
-    assert.ok(result.proposedPath.includes("/.agents/skills/"));
+    assert.ok(
+      result.proposedPath.replaceAll("\\", "/").includes("/.agents/skills/"),
+    );
     assert.ok(!existsSync(result.proposedPath));
   });
 
@@ -840,10 +847,8 @@ describe("skill new - draft mode", () => {
   });
 
   /*
-   * Fixture purpose: writes same-name agent copies so selected-agent draft
-   * scoring is proven to read the requested SKILL.md. The selected agent's
-   * path must decide which copy is scored, even when an identically named
-   * draft exists for another agent.
+   * Writes same-name agent drafts to prove that scoring reads the selected Codex file.
+   * Adding a Claude copy must leave the chosen path and score unchanged.
    */
   it("scores a substantive Codex SKILL.md draft without reading a same-name Claude copy", async () => {
     const projectRoot = makeTempProject();
@@ -886,7 +891,7 @@ describe("skill new - draft mode", () => {
       projectRoot,
       stdinAnswers: [],
     });
-    assert.equal(baseline.proposedPath, codexDraftPath);
+    assert.equal(baseline.proposedPath, codexDraftPath.replaceAll("\\", "/"));
     assertExists(baseline.postScaffoldScore);
     assert.equal(
       baseline.candidacy.nextSteps[0]?.action,
@@ -920,7 +925,7 @@ describe("skill new - draft mode", () => {
       projectRoot,
       stdinAnswers: [],
     });
-    assert.equal(withClaudeCopy.proposedPath, codexDraftPath);
+    assert.equal(withClaudeCopy.proposedPath, baseline.proposedPath);
     assert.equal(
       withClaudeCopy.candidacy.nextSteps[0]?.action,
       "Place under .agents/skills/<name>/SKILL.md",
@@ -974,7 +979,9 @@ describe("skill new - draft mode", () => {
     assert.equal(result.written, false);
     assert.ok(
       result.output.some((line) =>
-        line.includes(".goat-flow/skill-docs/playbooks/playwright.md"),
+        line
+          .replaceAll("\\", "/")
+          .includes(".goat-flow/skill-docs/playbooks/playwright.md"),
       ),
       "playbook-looking drafts should get a move suggestion to skill-docs/playbooks",
     );

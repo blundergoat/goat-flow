@@ -794,7 +794,7 @@ last_reviewed: 2026-08-01
               assert.match(message, /No learning-loop files were changed/u);
               assert.ok(
                 message.includes(
-                  `goat-flow claims inspect '${projectRoot}' --target '${ownedTarget}'`,
+                  `goat-flow claims inspect '${projectRoot.replaceAll("\\", "/")}' --target '${ownedTarget}'`,
                 ),
                 message,
               );

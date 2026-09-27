@@ -339,6 +339,14 @@ export function withCommandShim(
   const shimRoot = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-shim-"));
   // A missing PATH represents a user environment where only the test shim is discoverable.
   const originalPath = process.env.PATH ?? "";
+  // Resolve before installing the shim; a nested Bash -> Node -> Bash trip can convert an env-carried search path twice.
+  const realCommand = spawnSync(
+    "bash",
+    ["-c", 'command -v "$1"', "sh", command],
+    { encoding: "utf8" },
+  );
+  assert.equal(realCommand.status, 0, realCommand.stderr);
+  const quotedExecutable = `'${realCommand.stdout.trim().replaceAll("'", "'\\''")}'`;
   try {
     const commandPath = join(shimRoot, command);
     writeFileSync(
@@ -347,14 +355,13 @@ export function withCommandShim(
         "#!/usr/bin/env bash",
         "set -u",
         scriptBody,
-        `PATH="\${GOAT_FLOW_TEST_ORIGINAL_PATH:?}" exec ${command} "$@"`,
+        `exec ${quotedExecutable} "$@"`,
         "",
       ].join("\n"),
     );
     chmodSync(commandPath, 0o755);
     scenario({
       PATH: `${shimRoot}${delimiter}${originalPath}`,
-      GOAT_FLOW_TEST_ORIGINAL_PATH: originalPath,
     });
   } finally {
     rmSync(shimRoot, { recursive: true, force: true });

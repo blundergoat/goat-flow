@@ -679,10 +679,12 @@ describe("hook provider contracts", () => {
         assert.equal(firstEnvelope.reasonCode, "coverage-incomplete");
         const writtenStatePaths = statePaths();
         assert.equal(writtenStatePaths.length, 1);
-        assert.equal(
-          statSync(writtenStatePaths[0] as string).mode & 0o777,
-          0o600,
-        );
+        if (process.platform !== "win32") {
+          assert.equal(
+            statSync(writtenStatePaths[0] as string).mode & 0o777,
+            0o600,
+          );
+        }
 
         const reentryResult = runHook(
           projectRoot,
@@ -734,7 +736,9 @@ describe("hook provider contracts", () => {
             const writtenStatePaths = reentryStatePaths();
             assert.equal(writtenStatePaths.length, 1);
             const reentryStatePath = writtenStatePaths[0] as string;
-            assert.equal(statSync(reentryStatePath).mode & 0o777, 0o600);
+            if (process.platform !== "win32") {
+              assert.equal(statSync(reentryStatePath).mode & 0o777, 0o600);
+            }
             assert.equal(
               readFileSync(reentryStatePath, "utf8").includes(
                 sessionIdentifier,

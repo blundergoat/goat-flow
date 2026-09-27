@@ -7,6 +7,7 @@
  * Use this suite when changing command grammar or policy boundaries.
  */
 import assert from "node:assert/strict";
+import { checkInstalledPolicy } from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -274,14 +275,10 @@ function runInertPolicyCheck(
   userCommand: string,
   hook: PolicyHook = "deny-dangerous",
 ): ReturnType<typeof spawnSync> {
-  return spawnSync(
-    "bash",
-    [resolve(fixtureHooks, `${hook}.sh`), "--check", userCommand],
-    {
-      cwd: policyFixture,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    },
+  return checkInstalledPolicy(
+    resolve(fixtureHooks, `${hook}.sh`),
+    policyFixture,
+    userCommand,
   );
 }
 

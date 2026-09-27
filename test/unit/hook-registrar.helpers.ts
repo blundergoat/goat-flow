@@ -53,7 +53,7 @@ export const SUPPORTED_PROVIDER_HOOK_CASES = [
   {
     agent: PROFILES.claude,
     hookId: "deny-git-mutations",
-    registrationTargets: [{ event: "PreToolUse", matcher: "Bash" }],
+    registrationTargets: [{ event: "PreToolUse", matcher: "Bash|PowerShell" }],
   },
   {
     agent: PROFILES.codex,
@@ -73,7 +73,7 @@ export const SUPPORTED_PROVIDER_HOOK_CASES = [
   {
     agent: PROFILES.claude,
     hookId: "deny-dangerous",
-    registrationTargets: [{ event: "PreToolUse", matcher: "Bash" }],
+    registrationTargets: [{ event: "PreToolUse", matcher: "Bash|PowerShell" }],
   },
   {
     agent: PROFILES.claude,
@@ -1154,7 +1154,7 @@ export function runCodexLauncher(
     return spawnSync(spawnDescriptor.command, spawnDescriptor.args, {
       cwd,
       encoding: "utf8",
-      env,
+      env: { ...env, ...spawnDescriptor.env },
       stdio: [fileDescriptor, "pipe", "pipe"],
     });
   } finally {
