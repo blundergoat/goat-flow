@@ -8,15 +8,16 @@
 #   bash scripts/npm-publish.sh
 #
 # Behavior:
-#   1) reads package.json version and verifies npm publish auth
+#   1) reads package.json version and selects interactive 2FA or a bypass token
 #   2) runs `npm run publish:check` once - the single expensive gate
 #      (versions, instruction parity, build, package links, fast + slow tests)
 #   3) prints an --ignore-scripts dry-run summary and records the tarball
 #      shasum
 #   4) asks for manual confirmation, re-probes the shasum so the approved
-#      bytes are provably what ships, then publishes with --ignore-scripts
+#      bytes are provably what ships, then publishes with --ignore-scripts.
+#      A failed interactive 2FA attempt can be retried without repeating checks
 #      (prepublishOnly already ran as step 2; rerunning it would repeat
-#      ~11 minutes of identical checks against an unchanged tree)
+#      the full release check against an unchanged tree)
 #
 # Exit:
 #   0 if published or explicitly aborted; non-zero on failed checks, package
@@ -25,27 +26,13 @@
 # Requirements:
 #   - node, npm
 #   - package.json and build/test scripts configured for the project
-#   - npm publish authentication:
-#       npm package publishing requires either account 2FA for the publish
-#       prompt or a granular access token with Bypass 2FA enabled.
-#
-#     Preferred token setup for this script:
-#       1. In npmjs.com, open Account -> Access Tokens.
-#       2. Generate a Granular Access Token.
-#       3. Grant read/write access to @blundergoat/goat-flow or the
-#          @blundergoat scope.
-#       4. Enable Bypass 2FA for write actions.
-#       5. Either store it in your npm user config:
-#            npm config set //registry.npmjs.org/:_authToken=npm_...
-#            bash scripts/npm-publish.sh
-#
-#          Or keep it out of ~/.npmrc and pass it for this shell only:
-#            export NPM_TOKEN="npm_..."
-#            bash scripts/npm-publish.sh
-#
-#     NODE_AUTH_TOKEN is also accepted for the temporary-token path. The
-#     script writes env tokens to a temporary npm config file and removes it
-#     on exit. Do not commit an .npmrc containing a real token.
+#   - npm authentication from `npm login`, npm user config, NPM_TOKEN, or
+#     NODE_AUTH_TOKEN. This script treats the latter two as token aliases;
+#     NPM_TOKEN wins if both are set. Environment tokens are placed in a
+#     temporary npm config that is removed on exit.
+#   - For interactive 2FA, enable account 2FA for authorization and writes.
+#     For token-only publishing, use a granular token with package publish
+#     permission and Bypass 2FA enabled. Never commit a token-bearing .npmrc.
 set -euo pipefail
 
 # Publish @blundergoat/goat-flow to npm
@@ -54,6 +41,7 @@ set -euo pipefail
 PACKAGE_NAME="@blundergoat/goat-flow"
 REGISTRY_URL="https://registry.npmjs.org/"
 AUTH_SOURCE=""
+AUTH_MODE=""
 TEMP_NPMRC=""
 
 cleanup() {
@@ -63,35 +51,25 @@ cleanup() {
 }
 trap cleanup EXIT
 
-print_token_instructions() {
+print_auth_instructions() {
   local reason="$1"
 
   printf 'Error: %s\n' "$reason" >&2
   cat >&2 <<'EOF'
 
-Publish token setup:
-  1. Go to npmjs.com -> Account -> Access Tokens.
-  2. Generate a Granular Access Token.
-  3. Grant read/write access to @blundergoat/goat-flow or the @blundergoat scope.
-  4. Enable Bypass 2FA for write actions.
-  5. Store the token in your npm user config:
+Interactive 2FA: enable "authorization and writes" for your npm account,
+  then run `npm login --auth-type=web` and rerun this script without token
+  environment overrides:
 
-       npm config set //registry.npmjs.org/:_authToken=npm_...
-       bash scripts/npm-publish.sh
+    env -u NPM_TOKEN -u NODE_AUTH_TOKEN bash scripts/npm-publish.sh
 
-     This is simple, but it persists the token in ~/.npmrc.
+  Enter a fresh authenticator code when asked, after the release check.
 
-     To avoid storing the token, pass it for this shell only:
-
-       export NPM_TOKEN="npm_..."
-       bash scripts/npm-publish.sh
-
-     NODE_AUTH_TOKEN works too:
-
-       export NODE_AUTH_TOKEN="npm_..."
-       bash scripts/npm-publish.sh
-
-Do not commit an .npmrc containing a real token.
+Token-only publishing: create a granular token with "Read and write (publish
+  and stage)" for @blundergoat/goat-flow and "Bypass 2FA" enabled. Set it as
+  NPM_TOKEN, or store it in your npm user config. NODE_AUTH_TOKEN is an alias;
+  this script accepts either name, and you only need one. Do not commit a
+  token-bearing .npmrc.
 EOF
 }
 
@@ -120,10 +98,6 @@ configure_token_from_env() {
   AUTH_SOURCE="$token_source"
 }
 
-has_configured_registry_token() {
-  npm config list 2>/dev/null | grep -Eq '^//registry\.npmjs\.org/:_authToken = \(protected\)$'
-}
-
 trim_output() {
   tr -d '\r' | awk '{$1=$1; print}'
 }
@@ -150,44 +124,47 @@ verify_publish_auth() {
   fi
 
   if ! npm_user=$(npm whoami --registry="$REGISTRY_URL" 2>/dev/null); then
-    print_token_instructions "npm is not authenticated for ${REGISTRY_URL}."
+    print_auth_instructions "npm is not authenticated for ${REGISTRY_URL}."
     exit 1
   fi
 
   echo "Logged in as: ${npm_user}"
 
-  if [[ -n "$AUTH_SOURCE" ]]; then
-    echo "Publish token source: ${AUTH_SOURCE}"
-    echo "Token must be granular, read/write for ${PACKAGE_NAME}, and Bypass 2FA enabled."
-    echo ""
-    return 0
-  fi
+  echo "Credential source: ${AUTH_SOURCE:-npm config or npm login}"
+  echo "This script accepts NPM_TOKEN or NODE_AUTH_TOKEN for the same npm token; NPM_TOKEN takes priority."
+  echo "Choose how this publish will satisfy npm's 2FA requirement:"
+  echo "  1) Enter a fresh 2FA code after the release check (default)"
+  echo "  2) Use a token with Bypass 2FA enabled"
+  read -rp "Authentication method [1/2, default 1]: " auth_choice
+  case "$auth_choice" in
+    "" | 1) AUTH_MODE="otp" ;;
+    2) AUTH_MODE="token" ;;
+    *) printf 'Error: choose 1 or 2.\n' >&2; exit 1 ;;
+  esac
 
-  if has_configured_registry_token; then
-    AUTH_SOURCE="npm user config"
-    echo "Publish token source: ${AUTH_SOURCE}"
-    echo "Token must be granular, read/write for ${PACKAGE_NAME}, and Bypass 2FA enabled."
+  if [[ "$AUTH_MODE" == "token" ]]; then
+    echo "The token must have publish permission for ${PACKAGE_NAME} and Bypass 2FA enabled."
     echo ""
     return 0
   fi
 
   if ! tfa_mode=$(npm profile get "two-factor auth" --registry="$REGISTRY_URL" 2>/dev/null | trim_output); then
-    print_token_instructions "unable to verify npm 2FA state and no publish token was supplied."
+    print_auth_instructions "unable to verify npm account 2FA before the release check."
     exit 1
   fi
 
   if [[ -z "$tfa_mode" ]]; then
-    print_token_instructions "npm did not report an account 2FA mode and no publish token was supplied."
+    print_auth_instructions "npm did not report an account 2FA mode."
     exit 1
   fi
 
   echo "Account 2FA mode: ${tfa_mode}"
-  if [[ "$tfa_mode" == "disabled" ]]; then
-    print_token_instructions "npm account 2FA is disabled and no publish token was supplied."
+  if [[ "$tfa_mode" != *auth-and-writes ]]; then
+    print_auth_instructions "interactive publishing requires account 2FA for authorization and writes."
     exit 1
   fi
 
-  echo "No explicit publish token supplied; npm must complete the publish with an interactive OTP."
+  echo "A fresh 2FA code will be requested immediately before publishing."
   echo ""
 }
 
@@ -200,7 +177,11 @@ verify_publish_auth
 # suites; the publish calls below pass --ignore-scripts so prepublishOnly
 # cannot rerun the same checks against the unchanged tree.
 echo "--- Publish check ---"
+echo "Running the full release gate, including the serial slow test suite."
+check_started=$SECONDS
 npm run publish:check
+check_elapsed=$((SECONDS - check_started))
+printf 'Release check passed in %dm %ds.\n' "$((check_elapsed / 60))" "$((check_elapsed % 60))"
 echo ""
 
 # Tarball preview only; the gate above already validated this exact tree.
@@ -217,15 +198,35 @@ if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
   exit 0
 fi
 
-# Approval covered the dry-run bytes; publishing different bytes needs a new
-# gate run, not a warning.
-current_shasum=$(pack_shasum)
-if [[ "$current_shasum" != "$approved_shasum" ]]; then
-  printf 'Error: package contents changed since the dry run (shasum %s -> %s). Re-run the script.\n' \
-    "$approved_shasum" "$current_shasum" >&2
-  exit 1
-fi
+# Retry only the publish request after an OTP failure. Every attempt rechecks
+# the approved tarball; changed bytes require a fresh full release check.
+while true; do
+  current_shasum=$(pack_shasum)
+  if [[ "$current_shasum" != "$approved_shasum" ]]; then
+    printf 'Error: package contents changed since the dry run (shasum %s -> %s). Re-run the script.\n' \
+      "$approved_shasum" "$current_shasum" >&2
+    exit 1
+  fi
 
-npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"
+  if [[ "$AUTH_MODE" == "otp" ]]; then
+    read -rsp "Current npm 2FA code (Enter for npm's own prompt): " otp
+    printf '\n'
+    if [[ -n "$otp" ]]; then
+      if NPM_CONFIG_OTP="$otp" npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"; then
+        break
+      fi
+    elif npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"; then
+      break
+    fi
+    otp=""
+    read -rp "Publish failed. If the error above was a 2FA code rejection, retry with a fresh code? (y/N) " retry
+    if [[ "$retry" != "y" && "$retry" != "Y" ]]; then
+      exit 1
+    fi
+  else
+    npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"
+    break
+  fi
+done
 echo ""
 echo "Published: https://www.npmjs.com/package/${PACKAGE_NAME}/v/${VERSION}"
