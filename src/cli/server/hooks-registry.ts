@@ -148,7 +148,7 @@ const HOOKS: HookSpec[] = [
     id: "deny-git-mutations",
     displayName: "Deny Git and GitHub writes",
     description:
-      "Block Git commits, publication, destructive Git operations, and GitHub writes; allow GitHub reads and issue or PR comments.",
+      "Block Git commits, publication, remote lock changes, destructive Git operations, and GitHub writes; allow GitHub reads and issue or PR comments.",
     event: "PreToolUse",
     matcher: "Bash",
     scriptFiles: [
