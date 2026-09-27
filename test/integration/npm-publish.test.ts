@@ -14,6 +14,15 @@ import { after, describe, it } from "node:test";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const SCRIPT = join(PROJECT_ROOT, "scripts/npm-publish.sh");
+const npmLookup = spawnSync("bash", ["-c", "command -v npm"], {
+  encoding: "utf8",
+});
+assert.equal(
+  npmLookup.status,
+  0,
+  "npm must be available for OTP config checks",
+);
+const REAL_NPM = npmLookup.stdout.trim();
 const workspaces: string[] = [];
 
 after(() => {
@@ -28,25 +37,37 @@ after(() => {
 function runPublishScript(
   input: string,
   runConfig: {
-    profileMode?: string;
+    authenticated?: boolean;
     firstAttempt?: "reject" | "succeed";
     packMode?: "stable" | "change-on-third";
     token?: string;
     nodeAuthToken?: string;
+    inheritedOtp?: string;
   } = {},
 ) {
   const workspace = mkdtempSync(join(tmpdir(), "goat-flow-npm-publish-"));
   workspaces.push(workspace);
   const npmLog = join(workspace, "npm.log");
   const npmCommand = join(workspace, "npm");
+  const npmUserConfig = join(workspace, "npm-user-config");
+  writeFileSync(
+    npmUserConfig,
+    runConfig.inheritedOtp ? `otp=${runConfig.inheritedOtp}\n` : "",
+  );
   writeFileSync(
     npmCommand,
     `#!/usr/bin/env bash
 set -euo pipefail
 printf 'command:%s\\n' "$*" >> "$MOCK_NPM_LOG"
 case "$1" in
-  whoami) printf 'publisher\\n' ;;
-  profile) printf '%s\\n' "$MOCK_PROFILE_MODE" ;;
+  whoami)
+    if [[ "$MOCK_AUTHENTICATED" != 1 ]]; then
+      printf 'npm error code E401\\n' >&2
+      exit 1
+    fi
+    printf 'publisher\\n'
+    ;;
+  profile) printf 'npm error code E403\\n' >&2; exit 1 ;;
   run) : ;;
   pack)
     count=0
@@ -61,7 +82,17 @@ case "$1" in
     ;;
   publish)
     if [[ " $* " == *" --dry-run "* ]]; then exit 0; fi
-    printf 'publish-otp:%s\\n' "\${NPM_CONFIG_OTP:-}" >> "$MOCK_NPM_LOG"
+    # Use npm's real config parser, but never its publish command.
+    otp_flags=()
+    for arg in "$@"; do
+      case "$arg" in --otp=*) otp_flags+=("$arg") ;; esac
+    done
+    effective_otp=$(
+      cd "$MOCK_WORKSPACE"
+      "$MOCK_REAL_NPM" config get otp "\${otp_flags[@]}"
+    )
+    if [[ "$effective_otp" == null ]]; then effective_otp=""; fi
+    printf 'publish-otp:%s\\n' "$effective_otp" >> "$MOCK_NPM_LOG"
     if [[ "$MOCK_FAIL_FIRST_PUBLISH" == 1 && ! -f "$MOCK_FIRST_PUBLISH_MARKER" ]]; then
       : > "$MOCK_FIRST_PUBLISH_MARKER"
       printf 'simulated publish rejection\\n' >&2
@@ -81,8 +112,18 @@ esac
       HOME: workspace,
       NPM_TOKEN: runConfig.token ?? "",
       NODE_AUTH_TOKEN: runConfig.nodeAuthToken ?? "",
+      NPM_CONFIG_USERCONFIG: npmUserConfig,
+      NPM_CONFIG_GLOBALCONFIG: join(workspace, "npm-global-config"),
+      ...(runConfig.inheritedOtp
+        ? {
+            npm_config_otp: runConfig.inheritedOtp,
+            NPM_CONFIG_OTP: runConfig.inheritedOtp,
+          }
+        : {}),
       MOCK_NPM_LOG: npmLog,
-      MOCK_PROFILE_MODE: runConfig.profileMode ?? "auth-and-writes",
+      MOCK_REAL_NPM: REAL_NPM,
+      MOCK_WORKSPACE: workspace,
+      MOCK_AUTHENTICATED: runConfig.authenticated === false ? "0" : "1",
       MOCK_FAIL_FIRST_PUBLISH: runConfig.firstAttempt === "reject" ? "1" : "0",
       MOCK_FIRST_PUBLISH_MARKER: join(workspace, "first-publish"),
       MOCK_PACK_MODE: runConfig.packMode ?? "stable",
@@ -107,13 +148,20 @@ describe("npm publish helper", () => {
     assert.doesNotMatch(result.stdout + result.stderr, /123456|654321/u);
   });
 
-  it("stops before the expensive gate when account 2FA cannot authorize writes", () => {
-    const { result, log } = runPublishScript("1\n", {
-      profileMode: "auth-only",
-    });
+  it("continues with interactive 2FA when login succeeds but profile access is unavailable", () => {
+    const { result, log } = runPublishScript("\ny\n123456\n");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(log.match(/command:run publish:check/gu)?.length, 1);
+    assert.match(log, /publish-otp:123456/u);
+  });
+
+  it("stops before the expensive gate when npm is not authenticated", () => {
+    const { result, log } = runPublishScript("", { authenticated: false });
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /interactive publishing requires account 2FA/u);
+    assert.match(result.stderr, /npm error code E401/u);
+    assert.match(result.stderr, /unable to verify npm login/u);
     assert.doesNotMatch(log, /command:run publish:check/u);
+    assert.doesNotMatch(log, /command:publish /u);
   });
 
   it("requires a fresh release check if the tarball changes before retry", () => {
@@ -152,4 +200,16 @@ describe("npm publish helper", () => {
     assert.match(result.stdout, /Credential source: NODE_AUTH_TOKEN/u);
     assert.match(log, /publish-otp:\n/u);
   });
+
+  for (const code of ["123456", ""]) {
+    it(`overrides stale OTP settings with ${code ? "a fresh code" : "npm's own prompt"}`, () => {
+      const { result, log } = runPublishScript(`1\ny\n${code}\n`, {
+        inheritedOtp: "654321",
+      });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.ok(log.includes(`publish-otp:${code}\n`));
+      assert.doesNotMatch(log, /publish-otp:654321/u);
+      assert.doesNotMatch(result.stdout + result.stderr, /123456|654321/u);
+    });
+  }
 });
