@@ -57,6 +57,22 @@ Registration shapes differ by provider (ADR-053). Claude registers an exec-form 
 
 Both policies default on for fresh installs. An upgrade preserves an explicit deny-git-mutations.enabled choice; otherwise migration records the previous dangerous-hook choice before either toggle changes it. A runtime read with no Git choice defaults on.
 
+Claude's two policy registrations match `Bash|PowerShell`. An enabled policy blocks the native `PowerShell` tool with a message directing the agent
+to Bash because the shared parser does not support the full PowerShell language. Refresh existing registrations with `goat-flow hooks sync .`, review
+any local modifications before replacing them, and start a fresh Claude session. Literal `cmd /c`, Git Bash's `cmd //c`, `powershell -Command`,
+`pwsh -Command`, `wsl -e` and plain `wsl` commands submitted through Bash receive nested policy checks, including when `xargs` launches the host;
+this is not a claim of general PowerShell parsing.
+Native executable paths accept both slash styles. PowerShell command and profile abbreviations and its implicit command form receive the same checks.
+Each body is split with its host's own escapes and quotes. cmd's `@`, `call`, `start` and `for` (including a `for /f` command set), and PowerShell's
+dot operator and positional `Start-Process`, expose the command they launch. Unquoted Windows paths and module-qualified cmdlet names keep their verb.
+Encoded or stdin-fed code, `Invoke-Expression`, named `Start-Process` parameters and unrecognized cmd, PowerShell or WSL options receive a recovery
+denial, including WSL administration such as `wsl --shutdown`; use literal commands with supported options.
+Ordinary `-File <path>` calls retain their existing policy.
+Printing a command remains distinct from executing it, including the Gruff M50 quoted-pipeline controls in the central self-test.
+
+On Windows, local verification preserves registered Bash source outside the argv conversion boundary. This fixes configured replay without
+changing the deferred Antigravity or Copilot registration transport or claiming that either provider delivered a hook event.
+
 Disabling either policy retains its owned registration so a cached bootstrap can still reach the launcher. The launcher checks script shape and physical-root containment, then reads .goat-flow/config.yaml with the shipped locked YAML parser. Only an unambiguous boolean false skips that policy, before Bash discovery or policy execution. Missing settings default on; malformed YAML, conflicting legacy choices, unsafe config paths and missing launch dependencies remain unavailable. Explicit off does not create scan-verification evidence.
 
 If installed launch dependencies differ from the current bundle, disable refuses before saving. Sync on the Hooks page refreshes pristine launch dependencies and requests review before replacing diverged files. Once those dependencies are current, disabled policy-only files remain inert and preserved. Shared repairs refresh every affected hook row and invalidate retained proof. A saved choice does not establish provider reload or recovery of an existing live session. Disabling Git enforcement never grants an agent permission to commit or push (ADR-025).
@@ -114,6 +130,10 @@ Tracked and staged text is scanned from added hunks, including files above the w
 For a valid Stop payload, the first incomplete command failure blocks and records only owner-local hashes. One exact active replay may end with an incomplete `bounded-reentry-ended` result so the user can regain control; it never becomes a pass or a clean scan. Controller aggregation ends only when every non-pass child reports that exact bounded result. Changed findings, incomplete content coverage, budget exhaustion, and malformed input always block. Run `bash .goat-flow/hooks/post-turn-safety.sh --self-test` to check clean, finding, incomplete, and Bash 3 outcomes; unknown options fail instead of scanning.
 
 goat-flow does not ship a project-validation Stop hook or a plan-reminder Stop hook. Run project-specific build, test, lint, typecheck, format, and milestone accounting through explicit verification gates. The shipped `gruff-code-quality.sh` prefers payload-declared edit or patch targets, uses Git only when a runtime omits paths, and reports incomplete scope instead of clean work when Git fails.
+
+Stop recovery records require a regular, owned file plus matching session and failure hashes. POSIX also requires mode `0600`; Git Bash's
+synthetic mode bits cannot establish Windows privacy, so Windows relies on the workspace's ACLs. The hook does not audit those ACLs and does not
+protect a checkout writable by another untrusted local process. Recovery still reports incomplete evidence, never a clean scan.
 
 ## Codex Permissions
 

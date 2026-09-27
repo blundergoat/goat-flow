@@ -107,7 +107,7 @@
             "timeout": 30
           }
         ],
-        "matcher": "Bash"
+        "matcher": "Bash|PowerShell"
       },
       {
         "hooks": [
@@ -128,7 +128,7 @@
             "timeout": 30
           }
         ],
-        "matcher": "Bash"
+        "matcher": "Bash|PowerShell"
       }
     ],
     "Stop": [

@@ -84,7 +84,7 @@
           "registrationTargets": [
             {
               "event": "PreToolUse",
-              "matcher": "Bash"
+              "matcher": "Bash|PowerShell"
             }
           ],
           "config": {
@@ -109,7 +109,7 @@
                       "timeout": 30
                     }
                   ],
-                  "matcher": "Bash"
+                  "matcher": "Bash|PowerShell"
                 }
               ]
             }
@@ -147,7 +147,7 @@
           "registrationTargets": [
             {
               "event": "PreToolUse",
-              "matcher": "Bash"
+              "matcher": "Bash|PowerShell"
             }
           ],
           "config": {
@@ -172,7 +172,7 @@
                       "timeout": 30
                     }
                   ],
-                  "matcher": "Bash"
+                  "matcher": "Bash|PowerShell"
                 }
               ]
             }
