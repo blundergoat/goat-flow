@@ -227,8 +227,9 @@ function collectPlainLanguageCardinalityFindings(
 
 /**
  * Evaluate both reader-facing section roles from one parsed milestone.
- * Use for default advisories and strict failures so both modes share exactly one interpretation.
- * Missing or malformed prose becomes findings and never interrupts the rest of the plan check.
+ *
+ * Default and strict checks share the same findings; complete milestones keep prose corrections advisory so archived plans remain readable.
+ * Structural errors still block, and malformed prose returns findings rather than interrupting the remaining checks.
  *
  * @param record - parsed milestone; an absent hidden section list means an older caller supplied no prose evidence
  * @returns all present, missing, current, and legacy findings; empty means the pair is complete and compliant
@@ -284,7 +285,13 @@ function collectMilestonePlainLanguageFindings(
           sectionContract.currentHeading,
           currentSection.body,
           true,
-        ),
+        ).map((finding) => ({
+          ...finding,
+          // Finished records remain navigable without rewriting historical prose; structural and lifecycle gates still apply.
+          isStrictBlocking:
+            finding.isStrictBlocking &&
+            record.status.trim().toLowerCase() !== "complete",
+        })),
       );
     }
     // Historical aliases remain visible but advisory even when the user explicitly chooses strict mode.

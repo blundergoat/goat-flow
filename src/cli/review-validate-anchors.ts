@@ -1376,18 +1376,25 @@ export function requireRawComparison(
   ])
     .toString()
     .trim();
-  // Git owns boolean spellings such as yes and on; input is a separate conversion mode and must be refused before boolean parsing.
+  // Parse only the effective value: Git's typed --get also parses shadowed entries, so a global input can reject a local false.
+  // An empty stdin config lets Git own boolean spellings without re-reading those overridden values.
   requireAuthority(
     !unsafe &&
       autocrlf !== "input" &&
-      readGit(context.root, [
-        "config",
-        "--type=bool",
-        "--default",
-        "false",
-        "--get",
-        "core.autocrlf",
-      ])
+      readGit(
+        context.root,
+        [
+          "config",
+          "--file",
+          "-",
+          "--type=bool",
+          "--default",
+          autocrlf,
+          "--get",
+          "core.autocrlf",
+        ],
+        "",
+      )
         .toString()
         .trim() === "false",
     "live comparison requires unsupported content conversion; select explicit raw paths",

@@ -390,7 +390,7 @@ export function managedConfiguredProbeTransport(
     configuredHandler.commandWindows !== undefined;
   return {
     ...probe,
-    environment,
+    environment: { ...environment, ...probe.env },
     input: payload,
     stdin: needsFileBackedInput ? "file" : "pipe",
   };

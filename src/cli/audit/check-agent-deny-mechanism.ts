@@ -30,6 +30,10 @@ import {
 
 // === 4. Agent Deny Mechanism ===
 
+// Native Git Bash pays a launch cost per smoke case; keep audit bounded above the measured Windows corpus duration.
+const DENY_POLICY_SMOKE_TIMEOUT_MS =
+  process.platform === "win32" ? 120_000 : 30_000;
+
 const LEGACY_DENY_HOOK_FILES = [
   "guard-common.sh",
   "guard-destructive-shell.sh",
@@ -413,7 +417,7 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
 
 /**
  * Spawns the installed deny self-test only after the caller requested full target-hook evidence.
- * Reports a failed local policy test or launch restriction; success does not prove external-agent hook delivery.
+ * Deduplicating shared dispatchers keeps audit bounded; it reports policy or launch failures without claiming provider delivery.
  *
  * @param ctx - target project and included agents whose installed dispatcher can be supplied to the self-test
  * @returns - self-test or environment failure, or null when runnable tests pass or no self-test file was readable
@@ -437,6 +441,7 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
       const denyPath = join(ctx.projectPath, denyRelPath);
       const dispatcherRelPath = join(agentFacts.agent.hooksDir, `${hookId}.sh`);
       const dispatcherPath = join(ctx.projectPath, dispatcherRelPath);
+      // Several agents can share this hook directory; one completed replay covers the same installed bytes.
       if (testedDispatchers.has(dispatcherPath)) continue;
       testedDispatchers.add(dispatcherPath);
       // When a dispatcher exists, the shared self-test must exercise that agent's installed entry point instead of its default.
@@ -445,7 +450,11 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
           ? process.env
           : { ...process.env, GOAT_DENY_DANGEROUS_HOOK: dispatcherPath };
       try {
-        runHookBash([denyPath, "--self-test=smoke"], 30000, env);
+        runHookBash(
+          [denyPath, "--self-test=smoke"],
+          DENY_POLICY_SMOKE_TIMEOUT_MS,
+          env,
+        );
       } catch (error) {
         // A user-edited deny policy can fail its self-test; a missing shell or sandbox restriction may stop the test before it runs.
         // A recorded zero exit means the self-test completed successfully despite the process API's error object.

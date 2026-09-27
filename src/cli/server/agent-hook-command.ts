@@ -370,10 +370,16 @@ export type AgentHookHandlerDescriptor =
       powershell: string;
     };
 
-/** Executable and ordered arguments used to replay one configured handler on the current platform. */
+/**
+ * Describes the local process used when a user verifies an installed hook.
+ *
+ * Arguments retain the registered handler's platform contract; optional environment values preserve shell source on Windows.
+ * Callers merge those values into the selected project's environment before spawning the replay.
+ */
 export interface AgentHookSpawnDescriptor {
   command: string;
   args: string[];
+  env?: NodeJS.ProcessEnv;
 }
 
 /** Quote one literal argument for Windows PowerShell without exposing its contents to expression parsing. */
@@ -407,21 +413,23 @@ function codexWindowsHookCommand(
 }
 
 /**
- * Select the exact platform registration a local configured-hook probe must replay.
- * Windows Codex shell handlers use `commandWindows`; other command strings retain their Bash contract.
+ * Choose the process that replays a registered hook when the user runs `goat-flow hooks verify` on this platform.
+ * A Windows override such as Codex's `commandWindows` wins; other shell handlers run their Bash source unchanged.
  *
  * @param descriptor - Registered handler whose current-platform command is selected.
  * @param platform - Host platform used for selection; defaults to the running Node process.
- * @returns Executable and ordered arguments that replay the registered handler.
+ * @returns Executable, arguments and optional environment additions; absent env means ordinary platform quoting is sufficient.
  */
 export function agentHookSpawnDescriptor(
   descriptor: AgentHookHandlerDescriptor,
   platform: NodeJS.Platform = process.platform,
 ): AgentHookSpawnDescriptor {
+  // Claude's exec registration is already literal argv and needs no intermediate shell.
   if (descriptor.form === "argv") {
     // Shell-routing fields belong to host config identity, never Claude's direct exec replay.
     return { command: descriptor.command, args: [...descriptor.args] };
   }
+  // A registered Windows override takes precedence; without one, the original Bash contract remains authoritative.
   if (platform === "win32" && descriptor.commandWindows !== undefined) {
     return {
       command: "powershell.exe",
@@ -431,6 +439,21 @@ export function agentHookSpawnDescriptor(
         "-Command",
         descriptor.commandWindows,
       ],
+    };
+  }
+  // Windows argv conversion can strip nested quotes; environment transport preserves source and leaves stdin for the event.
+  if (platform === "win32") {
+    // This executes the selected trusted handler for local verification; provider delivery still needs its own capture.
+    // If a caller drops env, the replay fails with a named error instead of running nothing and reporting a passing hook.
+    return {
+      command: "bash",
+      args: [
+        "--noprofile",
+        "--norc",
+        "-c",
+        'eval "${GOAT_FLOW_HOOK_REPLAY_COMMAND:?hook replay command missing}"',
+      ],
+      env: { GOAT_FLOW_HOOK_REPLAY_COMMAND: descriptor.command },
     };
   }
   return { command: "bash", args: ["-c", descriptor.command] };
@@ -817,6 +840,13 @@ export function entryMatchesSpecRegistration(
 export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
   // Stop events are matcherless because they follow the completed user turn rather than a tool.
   if (spec.event === "Stop") return "";
+  // Native PowerShell must reach the explicit unsupported-tool denial instead of bypassing both policies.
+  if (
+    agent.id === "claude" &&
+    ["deny-dangerous", "deny-git-mutations"].includes(spec.id)
+  ) {
+    return "Bash|PowerShell";
+  }
   // Codex reports source edits through the canonical apply_patch tool observed in live delivery.
   if (agent.id === "codex" && spec.id === "gruff-code-quality") {
     return "^apply_patch$";

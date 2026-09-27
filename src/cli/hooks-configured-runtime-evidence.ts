@@ -499,7 +499,7 @@ function executeConfiguredFeedbackProbe(
   const execution = spawnSync(probe.command, probe.args, {
     cwd: projectPath,
     encoding: "utf-8",
-    env: managedHookEnvironment(projectPath),
+    env: { ...managedHookEnvironment(projectPath), ...probe.env },
     input: scenario.payload,
     shell: false,
     timeout: timeoutMs,

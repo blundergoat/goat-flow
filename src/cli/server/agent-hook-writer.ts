@@ -199,8 +199,12 @@ export function deriveManagedHookDesiredState(
   }
 
   const providerMatcher = matcherForAgent(agent, spec);
-  // Antigravity keeps its provider matcher in one registration rather than one row per tool.
-  if (agent.id === "antigravity") {
+  // Keep one policy handler per event; Claude's alternation covers both shell tools without duplicating the launcher.
+  if (
+    agent.id === "antigravity" ||
+    (agent.id === "claude" &&
+      (spec.id === "deny-dangerous" || spec.id === "deny-git-mutations"))
+  ) {
     return {
       managedScriptFiles,
       registrationTargets: [{ event, matcher: providerMatcher }],
