@@ -34,7 +34,7 @@ installed policy works.
 
 ## Intent
 
-`deny-dangerous` protects against destructive shell and secret access. `deny-git-mutations` protects against Git commit, publication, destructive Git operations and GitHub CLI writes. Both use one parser and policy store. Mixed existing/requested policy choices require explicit dashboard consent before ownership bytes change; test policy-only review, separate replacement consent, Cancel, stale identities and zero-write CLI/direct-installer refusal. Force and CLI admission cannot bypass review. Policy testing proves three separate outcomes:
+`deny-dangerous` protects against destructive shell and secret access. `deny-git-mutations` protects against Git commit, publication, remote lock changes, destructive Git operations and GitHub CLI writes. Both use one parser and policy store. Mixed existing/requested policy choices require explicit dashboard consent before ownership bytes change; test policy-only review, separate replacement consent, Cancel, stale identities and zero-write CLI/direct-installer refusal. Force and CLI admission cannot bypass review. Policy testing proves three separate outcomes:
 
 1. dangerous command grammar is denied;
 2. a nearby harmless control remains allowed;
