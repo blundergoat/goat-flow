@@ -176,14 +176,23 @@ select_bin_dir() {
     BIN_DIR_REASON="fallback user bin; add it to PATH after install"
 }
 
+# Normalize a selected install path before checking whether --force would remove the user's checkout or home.
+# Git Bash drive paths and PWD must name the same location; unresolved paths retain their spelling for the later safety check.
 resolve_file_path() {
-    readlink -f "$1" 2>/dev/null || printf '%s\n' "$1"
+    local candidate="$1"
+    # Native Windows environment overrides and Bash's PWD must share one path spelling before ancestor checks.
+    if command -v cygpath >/dev/null 2>&1; then
+        candidate="$(cygpath -u -- "$candidate")" || return 1
+    fi
+    readlink -f "$candidate" 2>/dev/null || printf '%s\n' "$candidate"
 }
 
+# Report whether removing the candidate would also remove a protected working location.
 path_is_same_or_ancestor() {
     local candidate="$1"
     local protected_path="$2"
 
+    # The filesystem root contains every protected location and can never be a safe replacement target.
     if [[ "$candidate" == "/" ]]; then
         return 0
     fi
@@ -192,6 +201,8 @@ path_is_same_or_ancestor() {
     [[ "$candidate" == "$protected_path" || "$protected_path" == "$candidate/"* ]]
 }
 
+# Refuse broad or unrecognizable --force targets before the installer replaces an existing browser environment.
+# Exit 4 leaves the user's files intact and identifies the target that needs correction.
 validate_force_venv_target() {
     local forbidden
     local resolved_checkout_root
@@ -207,13 +218,17 @@ validate_force_venv_target() {
     resolved_user_home="$(resolve_file_path "$HOME")"
     script_directory="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
     resolved_checkout_root="$(git -C "$script_directory" rev-parse --show-toplevel 2>/dev/null || resolve_file_path "$script_directory/..")"
+    resolved_checkout_root="$(resolve_file_path "$resolved_checkout_root")"
 
+    # Replacing a venv must not also remove the user's home, active checkout or installation root.
     for forbidden in / "$resolved_user_home" "$resolved_install_root" "$resolved_working_directory" "$resolved_checkout_root"; do
+        # A broad override, including a differently spelled Windows path, needs correction before any removal.
         if path_is_same_or_ancestor "$resolved_target" "$forbidden"; then
             echo -e "${RED}Refusing --force removal of broad path: ${resolved_target}${NC}" >&2
             exit 4
         fi
     done
+    # Without Python's venv marker this may be an ordinary user folder rather than a disposable environment.
     if [[ ! -f "$VENV_DIR/pyvenv.cfg" ]]; then
         echo -e "${RED}Refusing --force removal because this is not a recognizable Python venv: ${VENV_DIR}${NC}" >&2
         echo -e "${WHITE}Expected marker: ${VENV_DIR}/pyvenv.cfg${NC}" >&2

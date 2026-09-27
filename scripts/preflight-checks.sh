@@ -796,16 +796,25 @@ if command -v shellcheck >/dev/null 2>&1; then
     # Also shellcheck installed hooks. SC2001 stays excluded (sed rewrites are deliberate); SC2016 no longer is,
     # because the one literal that raised it now carries a narrow directive at its own site.
     while IFS= read -r hookdir; do
-        # Only directories containing shell hooks can contribute a hook lint result.
-        if compgen -G "$hookdir/*.sh" >/dev/null 2>&1; then
+        hook_shell_files=()
+        # Installed entrypoints and sourced modules both contribute to the developer's lint verdict.
+        for hook_shell_file in "$hookdir"/*.sh "$hookdir"/deny-dangerous/*.sh; do
+            [[ ! -f "$hook_shell_file" ]] || hook_shell_files+=("$hook_shell_file")
+        done
+        # Include sourced policy modules so this gate covers the published shell-lint command.
+        if [[ "${#hook_shell_files[@]}" -gt 0 ]]; then
             # Each hook directory needs a successful shellcheck result before receiving a pass.
-            if shellcheck --exclude=SC2001 "$hookdir"/*.sh >/dev/null 2>&1; then
+            if shellcheck --exclude=SC2001 "${hook_shell_files[@]}" >/dev/null 2>&1; then
                 pass "Shellcheck ($hookdir/)"
             else
-                fail "Shellcheck ($hookdir/) - run shellcheck --exclude=SC2001 $hookdir/*.sh for details"
+                fail "Shellcheck ($hookdir/) - run the instruction file's shellcheck command for details"
             fi
         fi
-    done < <(manifest_eval hook-dirs)
+    done < <(
+        manifest_eval hook-dirs
+        # Framework development also checks canonical copies; consumer projects need only their installed hooks.
+        if [[ -d workflow/hooks ]]; then printf '%s\n' workflow/hooks; fi
+    )
 else
     warn "Shellcheck not installed - run: bash scripts/setup-initial.sh"
 fi
@@ -1033,11 +1042,13 @@ function runCommand(entry, input, cwd) {
       },
     );
   }
-  return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${entry.command}; }`], {
+  // Stdin preserves the configured shell text across Node -> Git Bash on Windows; -c argv can lose nested quotes.
+  // This is local Bash replay, not evidence that the provider delivers this descriptor.
+  return spawnSync("bash", ["--noprofile", "--norc", "-s"], {
     cwd,
     encoding: "utf8",
     env: { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: input },
-    input: "",
+    input: `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${entry.command}; }\n`,
     timeout: 5000,
   });
 }
@@ -2025,7 +2036,7 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
 
     test_count=$(echo "$test_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
     pass_count=$(echo "$test_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
-    fail_count=$(echo "$test_output" | grep '# fail' | grep -oE '[0-9]+' || echo "0")
+    fail_count=$(echo "$test_output" | grep '# fail' | grep -oE '[0-9]+' || echo "?")
 
     # Tests pass only when the process succeeded and reported a real non-zero test count.
     if [[ "$test_exit" -eq 0 ]] && [[ "$test_count" != "0" ]] && [[ "$test_count" != "?" ]]; then
@@ -2052,6 +2063,11 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
         printf '%s\n' "$test_output" | tail -20 | details_pipe || true
     else
         fail "Tests failed ($fail_count/$test_count failures)"
+        # Startup errors or a different reporter still need visible diagnostics when no TAP failure record exists.
+        if ! grep -qE '^[[:space:]]*not ok [0-9]' <<< "$test_output"; then
+            # A runner can fail before TAP starts, or select a different reporter. Keep its actual diagnostic.
+            printf '%s\n' "$test_output" | tail -30 | cut -c1-200 | details_pipe || true
+        fi
         # Name up to five failing tests, then show the first failure's diagnostic without its stack so the maintainer sees why Tests stopped.
         # The line and byte caps stop one flooded assertion message from burying the report.
         LC_ALL=C awk -v max_lines=30 -v max_bytes=200 '

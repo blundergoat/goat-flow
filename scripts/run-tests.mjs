@@ -208,6 +208,7 @@ const testRunnerArguments = [
   "--import",
   "tsx",
   "--test",
+  "--test-reporter=tap",
   "--test-concurrency",
   mode === "slow" ? "1" : mode === "fast" ? "8" : "8",
 ];
