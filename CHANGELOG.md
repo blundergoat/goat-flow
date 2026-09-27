@@ -19,7 +19,7 @@
 - **BREAKING: path audits require `audit`** - Replace `goat-flow <path>` with `goat-flow audit <path>`; unknown commands now exit `2`.
 - **BREAKING: shared installation state** - `.goat-flow/install-state/<agent>.json` baselines merge into `.goat-flow/state/install/managed.json`. Stop and upgrade every writer, then run `goat-flow install . --agent <id>`; conflicting baselines, unsafe state or occupied destinations stop migration. Use `goat-flow status . --format json` for repairs, or `goat-flow install . --agent <id> --migrate-state-only` before dashboard policy review to move bookkeeping alone. Never run older writers afterward; the legacy installer refuses managed projects.
 - **BREAKING: strict checks require exceptional-status reasons** - `plans check --strict` now requires one `Status reason:` for `blocked`, `abandoned`, `superseded` and `deferred`, and none for ordinary states; add or remove the field before resuming an in-flight plan.
-- **BREAKING: strict checks enforce plain plan summaries** - The existing 70–120-character sentence rule for `What problem are we solving` and `Who benefits and how` now fails `plans check --strict` when violated; rewrite summaries without milestone IDs, ADR numbers, versions, flags or internal paths. Legacy headings remain advisory.
+- **BREAKING: strict checks enforce plain plan summaries** - The existing 70–120-character sentence rule for `What problem are we solving` and `Who benefits and how` now fails `plans check --strict` when violated; rewrite summaries without milestone IDs, ADR numbers, versions, flags or internal paths. Legacy headings and completed milestones retain advisory prose findings; structural and lifecycle errors still block.
 - **BREAKING: new quality reports require refutations and score evidence** - Supply `refuted_candidates` (use `[]` when empty) and per-axis `evidence`/`deduction` in `score_rationale`; shipped prompts include both. Historical reports remain readable by `validate`, `history` and `diff`.
 - **BREAKING: `redact --output` never overwrites** - Use a fresh project-local path; existing files, linked parents and outside-project paths are refused.
 - **BREAKING: critique reports use a coverage ledger** - Replace `## Rubric Coverage Gaps` with `## Rubric Coverage`, marking each dimension `finding`, `checked-clean` or `unassessed`; include stable finding IDs, source agent IDs, host verification and separate `HUMAN-PENDING` evidence. Recommendations cite surviving finding IDs; `CLEAN` never grants clearance. Leaks and missing fields share one replacement allowance before coverage is incomplete.
@@ -38,6 +38,7 @@
 - **Gruff accepts v2 results and checks older capabilities** - `gruff.hook.v2` findings, warnings and failures work directly; older analyzers receive `file` scope only when they advertise support. Run `goat-flow hooks sync .` to refresh installed launchers.
 - **Full reviews reach spec-drift and optional refuters** - Refuters require enforced execution boundaries and fall back to local-only review when unavailable; automated-review matching strips one trailing `[bot]`, uses semantic locations and preserves unknown authors.
 - **Clarity follows explicit documentation intent** - Update/edit/fix permits documentation edits and report/review/check withholds them before the `documentation` keyword is considered; approved private moves within one writable file need no repeat approval, and inventory and test-case accounting precede naming and comment changes.
+- **`/goat-clarity` replies in plain language** - Interactive runs summarize changes, preserved code, checks and limitations; full receipts remain available on request and in delegated or headless runs.
 - **QA reports retain disproved candidates** - `/goat-qa` rechecks candidates before gated or final output and records excluded claims under `Refuted Candidates`.
 - **Security reports retain supported findings despite coverage gaps** - Bounded passive inspection is available for explicitly trusted components; Quick reports use eight sections and remain `coverage-degraded`. Posture is `block`, `needs-decision`, `accepted-risk`, `watch` or `none`; conclusion is `confident` or `coverage-degraded`, with `tool-limited` as a degradation flag.
 - **Security scans gather leads before verification** - Authorized dependency audits run before finding verification; execution-control gaps report `execution-withheld`, while approval-only gaps report `scanner-withheld`.
@@ -45,6 +46,12 @@
 
 ### Fixed
 
+- **Windows verification preserves evidence** - Hook replay keeps quoted commands intact, preflight lints nested policy modules, and test failures retain bounded diagnostics.
+- **Windows trusted audits allow bounded smoke startup** - The smoke prerequisite gets two minutes on Windows; timeouts still fail the audit.
+- **Windows Stop recovery ends repeated infrastructure failures** - Matching continuation state works with native ACLs instead of synthetic POSIX mode bits.
+- **Review snapshots honor effective Git settings** - An overridden global line-ending setting no longer rejects a locally valid raw-byte comparison.
+- **Pipeline-stage denials print one reason** - A policy denial no longer appends a misleading hook-unavailable message or asks for setup to run again.
+- **Browser-tool cleanup normalizes Windows paths** - `--force` refuses native-path ancestors of the checkout and home before removing a venv.
 - **Quality prompts name the selected target** - Focused prompts use the target project's path for audit commands and omit targets the request did not select.
 - **`quality diff` keeps each finding on one row** - A saved summary containing a line break no longer prints as an extra, forged finding row.
 - **Install checks required dependencies before writing** - Missing `js-yaml` stops setup with the package root and `npm install`/reinstall instructions.
@@ -57,12 +64,15 @@
 
 ### Security
 
+- **Claude native PowerShell tools fail closed** - Enabled deny hooks match `Bash|PowerShell` and direct native PowerShell requests back to Bash; run `goat-flow hooks sync .` and restart the session to refresh existing registrations. This is containment, not full PowerShell-language support.
+- **Windows-hosted writes receive policy checks** - Covered writes, deletions and secret reads stay blocked through cmd, PowerShell, WSL and `xargs`, including `call`, `start` and `for` launches; printing command text stays allowed. Unrecognized host options and `Invoke-Expression` receive a recovery denial.
+- **GraphQL checks preserve endpoint spelling on Windows** - `/graphql` mutations remain denied with explicit GET; read queries remain available.
 - **Review validation preserves its input** - `--output` refuses the same file, symbolic/hard links and aliased redirected stdin.
 - **Credential rules protect home and project copies** - Claude adds home-directory protection alongside existing project-local store denies; upgrades print and add each missing location partner.
 - **Managed setup paths reject terminal controls** - Installation state refuses control characters that could disguise a managed path in terminal output.
 - **Setup refuses linked legacy guides** - Commit-guide migration leaves symbolic links and outside-project sources untouched.
 - **Git guards deny more history writers** - `merge`, `rebase`, `pull`, `filter-branch`, `filter-repo`, `fast-import` and mutating `notes` modes deny like `commit`, with messages naming the blocked command; notes reads, prune previews, exact recovery flags, `merge --squash` and `merge --no-ff --no-commit` remain available.
-- **Git LFS guards cover uploads and remote locks** - Deny `lfs push`, `lfs pre-push`, `lfs lock` and `lfs unlock`, including aliases and direct `git-lfs` commands; upload previews, help and lock listings remain available.
+- **Git LFS guards cover uploads and remote locks** - Deny `lfs push`, `lfs pre-push`, `lfs lock` and `lfs unlock`, including case variants of the LFS executable, aliases and direct `git-lfs` commands; upload previews, help and lock listings remain available.
 - **Explicit Windows Git executables receive policy checks** - Classify `git.exe` and `git-*.exe`, including mixed-case names, quoted Windows paths, wrappers and Git-hosted commands; read-only commands and literal command text remain allowed.
 - **Secret guards distinguish literal text from file access** - Allow piped or redirected `echo`/`printf` data; deny protected redirection targets and wrapper files, including compact `<.env>/dev/null` reads.
 - **Git guards protect more branch and ref operations** - Deny soft resets, forced branch changes/copies, fetch mappings to local branches, stdin-fed fetch refspecs, revision resets with an empty pathspec, symbolic-ref writes, replacement refs, tag deletion/replacement, forced submodule operations and remote removal.
