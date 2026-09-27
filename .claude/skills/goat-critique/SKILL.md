@@ -89,11 +89,11 @@ Execute in this order:
 
 **2. Classify each finding:** **Consensus** (≥2 agents, severity within ±1), **Split** (≥2 agents, severity differs ≥2 levels or explicit reject vs blocking), **Unique** (one agent only). Silence is not a dismiss; treat as Unique.
 
-**3. Rank each sub-agent's critique** using the reference pack's Ranking criteria: Grounding, Specificity, Actionability, Coverage and Calibration; strong, adequate or limited with evidence, never summed.
+**3. Rank each sub-agent's critique** using Ranking criteria in `references/sub-agent-directives.md`: Grounding, Specificity, Actionability, Coverage and Calibration; strong, adequate or limited with evidence, never summed.
 
 **4. Verify sub-agent dimension coverage.** Verify each Coverage-ledger scope against its named evidence for clean and non-clean returns. Demote unsubstantiated claims before the union in step 5.
 
-**5. Union the coverage ledgers.** Merge the agents' rows into one host ledger per selected dimension - `finding`, `checked-clean` or `unassessed` - by the reference pack's union rule. Unassessed coverage never generates a HIGH or MEDIUM artifact finding.
+**5. Union the coverage ledgers.** Merge the agents' rows into one host ledger per selected dimension - `finding`, `checked-clean` or `unassessed` - using **How the host unions these rows** in `references/sub-agent-directives.md`. Unassessed coverage never generates a HIGH or MEDIUM artifact finding.
 
 **6. Spot-check OBSERVED claims.** For each finding marked OBSERVED, re-read the cited file + semantic anchor or proof artifact. Findings that fail spot-check get tagged `[evidence-gap: spot-check failed]`; Phase 3 decides retract or upgrade.
 
@@ -124,7 +124,7 @@ Present unresolved items with decision count/titles. Ask each as `Q[N]: [decisio
 
 Before drafting, apply Final-finding schema and Audit payload identity from `references/rubric-examples.md`. Lead with a **Verdict** block:
 - **Gate: BLOCK | CONCERNS | CLEAN** - derived from surviving findings: any CRITICAL → BLOCK, any HIGH (no CRITICAL) → CONCERNS, else CLEAN. CLEAN coexists with lower-severity findings and with limited coverage; show coverage status beside it.
-- Assessment: STRONG / ADEQUATE / WEAK / FLAWED, using the reference pack's overall-assessment bands and synthesising sub-agent assessments with cross-examination outcomes
+- Assessment: STRONG / ADEQUATE / WEAK / FLAWED, using the overall-assessment bands in `references/sub-agent-directives.md` and synthesising sub-agent assessments with cross-examination outcomes
 - Risk level: the highest surviving evidenced artifact severity, floored at LOW and labelled `no evidenced defect` when none survives - a floor, not a clearance
 - Top 1-3 blockers (if any) - one line each, linked to findings below
 - If differential mode: append the **Differential baselines** delta block, including unassessed/unmapped prior findings.
