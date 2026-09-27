@@ -7,16 +7,6 @@ Git command-policy traps: publication, remote locks, history changes, aliases an
 
 Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 
-## Footgun: Git editor fallbacks need hosted-command inspection
-
-**Status:** active | **Created:** 2026-09-27 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Include Git's fallback command variables in policy checks.
-
-**Prevention:** Inspect `EDITOR` and `VISUAL` like `GIT_EDITOR`, including unset and export forms; retain benign-editor controls.
-
-**Evidence:** On 2026-09-27, installed `--check` allowed destructive and publication payloads via both fallbacks but denied the `GIT_EDITOR` equivalents. `git var GIT_EDITOR` confirmed fallback selection; no payload ran. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `git_command_environment_variable_name`) now includes both names.
-
----
 
 ## Footgun: Git push deny checks must normalize shell wrappers and control bodies
 
@@ -179,3 +169,17 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Recurrence 2026-09-25 (stash history):** `git stash push`, `save`, `create`, `store`, `pop` and `branch` all passed the installed classifier. `git stash -h` identifies their commit, ref or branch effects; `pop` also removes a stash entry. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_stash_preserves_history`) now guards those modes, including the default push and aliases, while retaining `list`, `show`, `apply` and usage. The shared corpus (search: `stash history mode`) failed on the write forms before repair and passed afterward. No stash command was executed.
 
 **Recurrence 2026-09-27:** LFS import/export and import `--no-rewrite` exited 0 despite history writes. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_lfs_write_target`) guards them. The shared corpus (search: `LFS migration import writes history`) retains info/help. Recheck caught quoted `--help` messages falsely blamed on aliases; `git_history_block_reason` now uses original arguments. Probes classified text; no migration ran.
+
+## Resolved Entries
+
+## Footgun: Git editor fallbacks need hosted-command inspection
+
+**Status:** resolved | **Created:** 2026-09-27 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Include Git's fallback command variables in policy checks.
+
+**Prevention:** Inspect `EDITOR` and `VISUAL` like `GIT_EDITOR`, including unset and export forms; retain benign-editor controls.
+
+**Evidence:** On 2026-09-27, installed `--check` allowed destructive and publication payloads via both fallbacks but denied the `GIT_EDITOR` equivalents. `git var GIT_EDITOR` confirmed fallback selection; no payload ran. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `git_command_environment_variable_name`) now includes both names.
+
+
+**Resolution:** The current whitelist and fallback prefix/unset/export regression controls cover both names. The 2026-09-27 release check denied the original malicious fallbacks and allowed benign editors; the original omission has no observed residual. Evidence: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `EDITOR`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `git_command_environment_variable_name`).
