@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -38,11 +39,15 @@ function runPublishScript(
   input: string,
   runConfig: {
     authenticated?: boolean;
+    loginSucceeds?: boolean;
     firstAttempt?: "reject" | "succeed";
     packMode?: "stable" | "change-on-third";
     token?: string;
     nodeAuthToken?: string;
     inheritedOtp?: string;
+    inheritedUserConfig?: boolean;
+    inheritedDryRun?: boolean;
+    tempConfigFails?: boolean;
   } = {},
 ) {
   const workspace = mkdtempSync(join(tmpdir(), "goat-flow-npm-publish-"));
@@ -52,16 +57,47 @@ function runPublishScript(
   const npmUserConfig = join(workspace, "npm-user-config");
   writeFileSync(
     npmUserConfig,
-    runConfig.inheritedOtp ? `otp=${runConfig.inheritedOtp}\n` : "",
+    [
+      runConfig.inheritedOtp ? `otp=${runConfig.inheritedOtp}` : "",
+      runConfig.inheritedDryRun ? "dry-run=true" : "",
+    ].join("\n"),
   );
+  if (runConfig.tempConfigFails) {
+    const mktempCommand = join(workspace, "mktemp");
+    writeFileSync(
+      mktempCommand,
+      "#!/usr/bin/env bash\nprintf 'mktemp: simulated creation failure\\n' >&2\nexit 1\n",
+    );
+    chmodSync(mktempCommand, 0o755);
+  }
   writeFileSync(
     npmCommand,
     `#!/usr/bin/env bash
 set -euo pipefail
 printf 'command:%s\\n' "$*" >> "$MOCK_NPM_LOG"
 case "$1" in
+  login)
+    if [[ "$MOCK_LOGIN_SUCCEEDS" != 1 ]]; then
+      printf 'simulated browser login cancellation\\n' >&2
+      exit 1
+    fi
+    # Resolve auth options with real npm without opening a browser or signing in.
+    effective_auth=$(
+      cd "$MOCK_WORKSPACE"
+      shift
+      "$MOCK_REAL_NPM" config get auth-type otp "$@"
+    )
+    printf 'login-config:%s\\n' "$effective_auth" >> "$MOCK_NPM_LOG"
+    printf 'login-userconfig:%s\\n' "$NPM_CONFIG_USERCONFIG" >> "$MOCK_NPM_LOG"
+    : > "$MOCK_LOGIN_MARKER"
+    ;;
   whoami)
-    if [[ "$MOCK_AUTHENTICATED" != 1 ]]; then
+    effective_userconfig=$(
+      cd "$MOCK_WORKSPACE"
+      "$MOCK_REAL_NPM" config get userconfig
+    )
+    printf 'whoami-userconfig:%s\\n' "$effective_userconfig" >> "$MOCK_NPM_LOG"
+    if [[ "$MOCK_AUTHENTICATED" != 1 && ! -f "$MOCK_LOGIN_MARKER" ]]; then
       printf 'npm error code E401\\n' >&2
       exit 1
     fi
@@ -83,16 +119,18 @@ case "$1" in
   publish)
     if [[ " $* " == *" --dry-run "* ]]; then exit 0; fi
     # Use npm's real config parser, but never its publish command.
-    otp_flags=()
-    for arg in "$@"; do
-      case "$arg" in --otp=*) otp_flags+=("$arg") ;; esac
-    done
+    config_flags=("\${@:2}")
     effective_otp=$(
       cd "$MOCK_WORKSPACE"
-      "$MOCK_REAL_NPM" config get otp "\${otp_flags[@]}"
+      "$MOCK_REAL_NPM" config get otp "\${config_flags[@]}"
     )
     if [[ "$effective_otp" == null ]]; then effective_otp=""; fi
     printf 'publish-otp:%s\\n' "$effective_otp" >> "$MOCK_NPM_LOG"
+    effective_dry_run=$(
+      cd "$MOCK_WORKSPACE"
+      "$MOCK_REAL_NPM" config get dry-run "\${config_flags[@]}"
+    )
+    printf 'publish-dry-run:%s\\n' "$effective_dry_run" >> "$MOCK_NPM_LOG"
     if [[ "$MOCK_FAIL_FIRST_PUBLISH" == 1 && ! -f "$MOCK_FIRST_PUBLISH_MARKER" ]]; then
       : > "$MOCK_FIRST_PUBLISH_MARKER"
       printf 'simulated publish rejection\\n' >&2
@@ -114,6 +152,12 @@ esac
       NODE_AUTH_TOKEN: runConfig.nodeAuthToken ?? "",
       NPM_CONFIG_USERCONFIG: npmUserConfig,
       NPM_CONFIG_GLOBALCONFIG: join(workspace, "npm-global-config"),
+      ...(runConfig.inheritedUserConfig
+        ? { npm_config_userconfig: npmUserConfig }
+        : {}),
+      ...(runConfig.inheritedDryRun
+        ? { npm_config_dry_run: "true", NPM_CONFIG_DRY_RUN: "true" }
+        : {}),
       ...(runConfig.inheritedOtp
         ? {
             npm_config_otp: runConfig.inheritedOtp,
@@ -124,39 +168,55 @@ esac
       MOCK_REAL_NPM: REAL_NPM,
       MOCK_WORKSPACE: workspace,
       MOCK_AUTHENTICATED: runConfig.authenticated === false ? "0" : "1",
+      MOCK_LOGIN_SUCCEEDS: runConfig.loginSucceeds === false ? "0" : "1",
+      MOCK_LOGIN_MARKER: join(workspace, "logged-in"),
       MOCK_FAIL_FIRST_PUBLISH: runConfig.firstAttempt === "reject" ? "1" : "0",
       MOCK_FIRST_PUBLISH_MARKER: join(workspace, "first-publish"),
       MOCK_PACK_MODE: runConfig.packMode ?? "stable",
       MOCK_PACK_COUNT: join(workspace, "pack-count"),
     },
   });
-  return { result, log: readFileSync(npmLog, "utf8") };
+  return {
+    result,
+    log: existsSync(npmLog) ? readFileSync(npmLog, "utf8") : "",
+    npmUserConfig,
+  };
 }
 
 describe("npm publish helper", () => {
-  it("accepts a fresh 2FA code on retry without repeating the full release check", () => {
-    const { result, log } = runPublishScript("1\ny\n123456\ny\n654321\n", {
+  it("retries browser authentication without repeating the full release check", () => {
+    const { result, log } = runPublishScript("1\ny\ny\n", {
       firstAttempt: "reject",
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(log.match(/command:run publish:check/gu)?.length, 1);
-    assert.deepEqual(log.match(/publish-otp:\d+/gu), [
-      "publish-otp:123456",
-      "publish-otp:654321",
+    assert.deepEqual(log.match(/publish-otp:[^\n]*\n/gu), [
+      "publish-otp:\n",
+      "publish-otp:\n",
     ]);
     assert.equal(log.match(/command:pack /gu)?.length, 3);
-    assert.doesNotMatch(result.stdout + result.stderr, /123456|654321/u);
   });
 
   it("continues with interactive 2FA when login succeeds but profile access is unavailable", () => {
-    const { result, log } = runPublishScript("\ny\n123456\n");
+    const { result, log } = runPublishScript("\ny\n", { authenticated: false });
     assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(
+      log,
+      /^command:login --auth-type=web --otp= --registry=https:\/\/registry\.npmjs\.org\//u,
+    );
+    assert.match(log, /login-config:auth-type=web\notp=\n/u);
+    assert.doesNotMatch(log, /command:profile /u);
     assert.equal(log.match(/command:run publish:check/gu)?.length, 1);
-    assert.match(log, /publish-otp:123456/u);
+    assert.match(log, /publish-otp:\n/u);
+    assert.match(result.stdout, /Credential source: npm web login/u);
+    assert.doesNotMatch(
+      result.stdout + result.stderr,
+      /Current npm 2FA code|fresh code/u,
+    );
   });
 
   it("stops before the expensive gate when npm is not authenticated", () => {
-    const { result, log } = runPublishScript("", { authenticated: false });
+    const { result, log } = runPublishScript("2\n", { authenticated: false });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /npm error code E401/u);
     assert.match(result.stderr, /unable to verify npm login/u);
@@ -164,24 +224,70 @@ describe("npm publish helper", () => {
     assert.doesNotMatch(log, /command:publish /u);
   });
 
+  it("stops before the expensive gate when browser login is cancelled", () => {
+    const { result, log } = runPublishScript("1\n", { loginSucceeds: false });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /simulated browser login cancellation/u);
+    assert.match(result.stderr, /npm browser login failed/u);
+    assert.doesNotMatch(log, /command:run publish:check|command:publish /u);
+  });
+
+  it("uses the web login config instead of installing environment tokens in browser mode", () => {
+    const { result, log, npmUserConfig } = runPublishScript("1\ny\n", {
+      token: "fixture-token",
+      nodeAuthToken: "fixture-alias-token",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.ok(log.includes(`login-userconfig:${npmUserConfig}\n`));
+    assert.match(result.stdout, /Credential source: npm web login/u);
+    assert.doesNotMatch(
+      result.stdout + result.stderr,
+      /fixture-token|fixture-alias-token/u,
+    );
+  });
+
   it("requires a fresh release check if the tarball changes before retry", () => {
-    const { result, log } = runPublishScript("1\ny\n123456\ny\n", {
+    const { result, log } = runPublishScript("1\ny\ny\n", {
       firstAttempt: "reject",
       packMode: "change-on-third",
     });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /package contents changed since the dry run/u);
-    assert.deepEqual(log.match(/publish-otp:\d+/gu), ["publish-otp:123456"]);
+    assert.deepEqual(log.match(/publish-otp:[^\n]*\n/gu), ["publish-otp:\n"]);
   });
 
   it("accepts one bypass token without asking for an OTP", () => {
-    const { result, log } = runPublishScript("2\ny\n", {
+    const { result, log, npmUserConfig } = runPublishScript("2\ny\n", {
       token: "fixture-token",
+      inheritedUserConfig: true,
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Credential source: NPM_TOKEN/u);
-    assert.doesNotMatch(log, /command:profile /u);
+    assert.doesNotMatch(log, /command:profile |command:login /u);
     assert.match(log, /publish-otp:\n/u);
+    const selectedConfig = log.match(/whoami-userconfig:([^\n]+)/u)?.[1];
+    assert.ok(selectedConfig, "npm resolved the token config");
+    assert.notEqual(
+      selectedConfig,
+      npmUserConfig,
+      "inherited config did not override the token config",
+    );
+    assert.equal(
+      existsSync(selectedConfig),
+      false,
+      "temporary token config was removed",
+    );
+  });
+
+  it("stops before authentication when temporary token config creation fails", () => {
+    const { result, log } = runPublishScript("2\ny\n", {
+      token: "fixture-token",
+      tempConfigFails: true,
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /mktemp: simulated creation failure/u);
+    assert.doesNotMatch(log, /command:whoami|command:run |command:publish/u);
+    assert.doesNotMatch(result.stdout + result.stderr, /fixture-token/u);
   });
 
   it("accepts an authenticated npm config credential without parsing npm config output", () => {
@@ -189,7 +295,7 @@ describe("npm publish helper", () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Credential source: npm config or npm login/u);
     assert.doesNotMatch(log, /command:config /u);
-    assert.doesNotMatch(log, /command:profile /u);
+    assert.doesNotMatch(log, /command:profile |command:login /u);
   });
 
   it("accepts NODE_AUTH_TOKEN as an alternative token variable", () => {
@@ -198,18 +304,26 @@ describe("npm publish helper", () => {
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Credential source: NODE_AUTH_TOKEN/u);
+    assert.doesNotMatch(log, /command:login /u);
     assert.match(log, /publish-otp:\n/u);
   });
 
-  for (const code of ["123456", ""]) {
-    it(`overrides stale OTP settings with ${code ? "a fresh code" : "npm's own prompt"}`, () => {
-      const { result, log } = runPublishScript(`1\ny\n${code}\n`, {
-        inheritedOtp: "654321",
-      });
-      assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.ok(log.includes(`publish-otp:${code}\n`));
-      assert.doesNotMatch(log, /publish-otp:654321/u);
-      assert.doesNotMatch(result.stdout + result.stderr, /123456|654321/u);
+  it("overrides stale OTP settings with browser authentication", () => {
+    const { result, log } = runPublishScript("1\ny\n", {
+      inheritedOtp: "654321",
     });
-  }
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(log, /login-config:auth-type=web\notp=\n/u);
+    assert.match(log, /publish-otp:\n/u);
+    assert.doesNotMatch(log + result.stdout + result.stderr, /654321/u);
+  });
+
+  it("performs the confirmed publish despite inherited dry-run settings", () => {
+    const { result, log } = runPublishScript("1\ny\n", {
+      inheritedDryRun: true,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(log, /command:publish --dry-run --ignore-scripts/u);
+    assert.match(log, /publish-dry-run:false\n/u);
+  });
 });
