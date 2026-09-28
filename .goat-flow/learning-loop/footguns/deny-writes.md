@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-09-27
+last_reviewed: 2026-09-28
 ---
 
 Git command-policy traps: publication, remote locks, history changes, aliases and commands hosted by Git.
@@ -131,7 +131,7 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Decision changed:** Classify history writers in one set; grant exact non-writing modes only after checking the alias expansion and appended arguments.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 12 | **Latest occurrence:** 2026-09-27
+**Incident count:** 13 | **Latest occurrence:** 2026-09-28
 
 **Prevention:**
 1. When a Git command can create, rewrite or move history, including notes refs, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
@@ -169,6 +169,8 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Recurrence 2026-09-25 (stash history):** `git stash push`, `save`, `create`, `store`, `pop` and `branch` all passed the installed classifier. `git stash -h` identifies their commit, ref or branch effects; `pop` also removes a stash entry. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_stash_preserves_history`) now guards those modes, including the default push and aliases, while retaining `list`, `show`, `apply` and usage. The shared corpus (search: `stash history mode`) failed on the write forms before repair and passed afterward. No stash command was executed.
 
 **Recurrence 2026-09-27:** LFS import/export and import `--no-rewrite` exited 0 despite history writes. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_lfs_write_target`) guards them. The shared corpus (search: `LFS migration import writes history`) retains info/help. Recheck caught quoted `--help` messages falsely blamed on aliases; `git_history_block_reason` now uses original arguments. Probes classified text; no migration ran.
+
+**Recurrence 2026-09-28 (forced clean):** The installed classifier allowed `git clean --for -d`, `git clean --forc`, `git clean -d --fo -x` and `git clean --f -d`, but denied `git clean -efolder` and `git clean -- --force`. A prefix-only substitution also risks reading exclusion patterns as flags. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Original words let clean consume`) passes original direct and alias words to `git_option_present`; clean consumes separated and quoted exclusion values and stops at `--`. Existing string callers keep their grammar. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `clean force prefix for`, `clean quoted exclude value preserves words`, `clean alias force after quoted exclude value`) failed before repair and passed in the complete candidate hook store. Plain dry runs stay allowed; a dry run with force stays denied. Probes classified text without running cleanup.
 
 ## Resolved Entries
 

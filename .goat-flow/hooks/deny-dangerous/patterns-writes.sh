@@ -467,18 +467,16 @@ is_git_destructive_target() {
   if [[ "$rest" =~ ^reset([[:space:]]|$) ]] && [[ "$rest" =~ (^|[[:space:]])--hard([[:space:]]|$) ]]; then
     return 0
   fi
-  # Forced clean can remove untracked work the user has not reviewed.
-  if [[ "$rest" =~ ^clean([[:space:]]|$) ]] && \
-     { [[ "$rest" =~ (^|[[:space:]])--force([[:space:]]|$) ]] || \
-       [[ "$rest" =~ (^|[[:space:]])-[^-[:space:]]*f[^[:space:]]*([[:space:]]|$) ]]; }; then
-    return 0
-  fi
   local git_verb="${rest%%[[:space:]]*}"
   local git_arguments=""
   [[ "$rest" == *[[:space:]]* ]] && git_arguments="${rest#*[[:space:]]}"
   # A usage request such as `stash drop -h` prints help and changes nothing.
   git_arguments_request_usage_only "$git_arguments" && return 1
   case "$git_verb" in
+    clean)
+      # Exclude patterns can contain force spellings; retain the original words for this parser.
+      git_option_present "$git_arguments" f force 1 e exclude "${2:-}" && return 0
+      ;;
     prune)
       # A dry-run with only known preview flags leaves unreachable recovery objects intact.
       if git_flags_within "$git_arguments" "-n --dry-run -v --verbose" &&
@@ -570,17 +568,32 @@ git_arguments_request_usage_only() {
 # real spellings. A value-taking short flag ends its bundle: `-bfix` names branch `fix` rather than setting `-f`.
 #   $1 arguments; $2 short letter, or empty for a long-only option; $3 long name without dashes;
 #   $4 shortest prefix Git accepts for that name; $5 short letters that take a value
+#   $6 optional value-taking long name; $7 optional original command-word array (including the verb)
+# Original words let clean consume a whole quoted exclude pattern; existing string callers retain their grammar.
 git_option_present() {
   local -a option_words=()
   local option_word long_name bundle letter
-  local index
-  read -r -d '' -a option_words <<< "$1" || true
+  local index skip_value=0
+  if [[ -n "${7:-}" ]]; then
+    local -n original_option_words="$7"
+    option_words=("${original_option_words[@]:1}")
+  else
+    read -r -d '' -a option_words <<< "$1" || true
+  fi
   for option_word in "${option_words[@]}"; do
+    if [[ "$skip_value" -eq 1 ]]; then
+      skip_value=0
+      continue
+    fi
     [[ "$option_word" == "--" ]] && return 1
     if [[ "$option_word" == --?* ]]; then
       long_name="${option_word#--}"
       long_name="${long_name%%=*}"
       [[ "${#long_name}" -ge "$4" && "$3" == "$long_name"* ]] && return 0
+      # Clean accepts exclude prefixes too; an attached value stays inside this word.
+      if [[ -n "${6:-}" && "$6" == "$long_name"* && "$option_word" != *=* ]]; then
+        skip_value=1
+      fi
       continue
     fi
     [[ -n "$2" && "$option_word" == -?* ]] || continue
@@ -588,7 +601,13 @@ git_option_present() {
     for ((index = 0; index < ${#bundle}; index++)); do
       letter="${bundle:index:1}"
       [[ "$letter" == "$2" ]] && return 0
-      [[ "$5" == *"$letter"* ]] && break
+      if [[ "$5" == *"$letter"* ]]; then
+        # Only original words can prove where a separated, possibly quoted value ends.
+        if [[ -n "${7:-}" && "$index" -eq "$((${#bundle} - 1))" ]]; then
+          skip_value=1
+        fi
+        break
+      fi
     done
   done
   return 1
@@ -727,7 +746,9 @@ record_git_alias_expansion() {
     __goat_git_aliased_commit=1
   fi
   # Destructive flags in an alias retain the same manual-review boundary as a visible destructive Git command.
-  if is_git_destructive_target "$alias_expansion"; then
+  local -a alias_words=()
+  split_shell_words_into alias_words "$1"
+  if is_git_destructive_target "$alias_expansion" alias_words; then
     __goat_git_aliased_destructive=1
   fi
 }
@@ -809,9 +830,9 @@ is_git_lfs_lock_mutation() {
 is_git_destructive() {
   __goat_git_pathspec_unknown_directory=0
   __goat_git_strip_globals "$1" || return 1
-  is_git_destructive_target "$__goat_git_rest" && return 0
+  is_git_destructive_target "$__goat_git_rest" __goat_git_command_words && return 0
   # Git appends the visible arguments to an alias, so an alias to `stash` invoked as `st clear` still clears stashes.
-  if resolve_git_invoked_alias_command && is_git_destructive_target "$__goat_git_invoked_alias_command"; then
+  if resolve_git_invoked_alias_command && is_git_destructive_target "$__goat_git_invoked_alias_command" __goat_git_invoked_alias_words; then
     return 0
   fi
   # A configured Git alias can carry the guarded flag even when the visible word looks harmless.
@@ -1203,7 +1224,7 @@ check_git_segment() {
 
     # An unlisted global option might take the next word as its value, so the hook cannot tell which command runs.
     if [[ -n "${__goat_git_unknown_global_option-}" ]]; then
-      block "Unrecognised Git global option ${__goat_git_unknown_global_option}: the hook cannot tell which Git command runs. Drop the option or ask the user to run the command manually." ||
+      block "Unrecognised Git global option: the hook cannot tell which Git command runs. Drop the option or ask the user to run the command manually." ||
         return $?
     fi
 

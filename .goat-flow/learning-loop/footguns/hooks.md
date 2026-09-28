@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-09-25
+last_reviewed: 2026-09-28
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. Scanner blind spots live in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -148,6 +148,20 @@ last_reviewed: 2026-09-25
 
 **Evidence:** `src/cli/server/agent-hook-command.ts` (search: `structuredHookLaunchBootstrap`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `BLOCKED: Policy %s`), and the unused Claude deny shape in `workflow/hooks/hook-provider-adapters.mjs` (search: `Claude and Codex share the current hookSpecificOutput permission shape`).
 
+
+## Footgun: Raw option text in policy reasons can break display and provider JSON
+
+**Status:** active | **Created:** 2026-09-28 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Use fixed denial reasons for untrusted option data; pair recovery wording with existing authorization and provider-response assertions.
+**Trigger phase:** ACT
+
+**Prevention:** Keep unknown-option reasons fixed instead of echoing the token. Construct display controls in tests and assert the complete text message and decoded provider reason, not just a denial substring. Failure diagnostics must use printable case labels without interpolating rejected command data. Keep the provider's existing exit and decision protocol. A cleanup hint may describe individual literal file removal and empty-directory removal only for already-approved deletion; retain target-count confirmation, secret restrictions and human-only operations.
+
+**Symptoms:** The unknown Git option reason echoed U+202E, U+200B and U+001B through the classifier. The escape character also made Copilot and Antigravity responses fail JSON parsing. The unsafe-recursive-cleanup reason supplied only “Specify an explicit target path”, although the recorded literal-file and empty-directory recovery classified as allowed. Secret-file removal remained denied.
+
+**Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Unrecognised Git global option`) now supplies fixed text. `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Only for already-approved deletion`) limits recovery to the existing authority. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unknown option $display_label`, `approved cleanup recovery copy`, `cleanup recovery preserves secret restriction`) failed against the original reasons and passed in the complete candidate hook store for text, Copilot and Antigravity. The incident-backed recovery is owned by `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: `When deny hook blocks a command, use the unblocked equivalent`). No candidate deletion was executed. These are local classifier results, not live provider delivery evidence.
+
+**Recheck 2026-09-28:** Injecting the fixed text plus a stray U+202E into the test helper produced zero assertion failures; injecting the whole unsafe token made its failure diagnostic echo U+202E. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `block copy should match fixed text`, `omit forbidden command data`) now rejects extra text in fixed-message cases and keeps rejected data out of diagnostics. Nine output-mutation checks covered valid text, stray controls and complete tokens for U+202E, U+200B and U+001B; only valid fixed output was accepted, and no tested control appeared in diagnostics.
 
 ---
 
