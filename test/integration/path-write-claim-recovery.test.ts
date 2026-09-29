@@ -6,8 +6,10 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import {
+  closeSync,
   existsSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   unlinkSync,
@@ -43,15 +45,35 @@ interface ClaimReport {
 }
 
 /**
- * Run the real CLI with bounded captured output.
+ * Run the real CLI with private output files, removed after capture.
  * Side effect: spawns one child process and may inspect or remove a marker in the selected temporary project.
  */
 function runClaims(...args: string[]) {
-  return spawnSync(
-    process.execPath,
-    ["--import", "tsx", cliEntryPath, "claims", ...args],
-    { cwd: repositoryRoot, encoding: "utf8" },
-  );
+  const directory = mkdtempSync(join(tmpdir(), "goat-claim-cli-output-"));
+  const stdoutPath = join(directory, "stdout");
+  const stderrPath = join(directory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    for (const path of [stdoutPath, stderrPath])
+      descriptors.push(openSync(path, "wx", 0o600));
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", cliEntryPath, "claims", ...args],
+      {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        stdio: ["ignore", ...descriptors],
+      },
+    );
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 /** Parse a successful JSON response while retaining subprocess diagnostics in the assertion. */
@@ -61,30 +83,35 @@ function parseClaimReport(result: ReturnType<typeof runClaims>): ClaimReport {
 }
 
 /** Wait for the child to confirm it owns the marker before sending a signal. */
-async function waitForReady(child: ReturnType<typeof spawn>): Promise<void> {
+async function waitForReady(
+  child: ReturnType<typeof spawn>,
+  outputDirectory: string,
+): Promise<void> {
   await new Promise<void>((resolveReady, rejectReady) => {
-    let stdout = "";
-    let stderr = "";
+    const stdout = () => readFileSync(join(outputDirectory, "stdout"), "utf8");
+    const stderr = () => readFileSync(join(outputDirectory, "stderr"), "utf8");
     const timeout = setTimeout(() => {
+      clearInterval(poll);
       rejectReady(
-        new Error(`claim-owning child did not become ready: ${stderr}`),
+        new Error(`claim-owning child did not become ready: ${stderr()}`),
       );
     }, 10_000);
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      stderr += chunk.toString();
-    });
-    child.stdout?.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
-      if (!stdout.includes("READY\n")) return;
+    const poll = setInterval(() => {
+      if (!stdout().includes("READY\n")) return;
       clearTimeout(timeout);
+      clearInterval(poll);
       resolveReady();
-    });
+    }, 10);
     child.once("exit", (code, signal) => {
-      if (stdout.includes("READY\n")) return;
       clearTimeout(timeout);
+      clearInterval(poll);
+      if (stdout().includes("READY\n")) {
+        resolveReady();
+        return;
+      }
       rejectReady(
         new Error(
-          `claim-owning child exited before readiness: code=${String(code)} signal=${String(signal)} stderr=${stderr}`,
+          `claim-owning child exited before readiness: code=${String(code)} signal=${String(signal)} stderr=${stderr()}`,
         ),
       );
     });
@@ -95,7 +122,10 @@ async function waitForReady(child: ReturnType<typeof spawn>): Promise<void> {
  * Spawn one writer that deliberately exits without releasing its temporary-project claim.
  * Side effect: starts a child process and creates one marker beneath the supplied temporary project.
  */
-function spawnClaimOwner(projectRoot: string): ReturnType<typeof spawn> {
+function spawnClaimOwner(
+  projectRoot: string,
+  outputDirectory: string,
+): ReturnType<typeof spawn> {
   const childSource = `
     import { acquirePathWriteClaims } from ${JSON.stringify(claimModuleUrl)};
     const projectRoot = process.env.GOAT_FLOW_TEST_CLAIM_PROJECT;
@@ -104,15 +134,22 @@ function spawnClaimOwner(projectRoot: string): ReturnType<typeof spawn> {
     process.stdout.write("READY\\n");
     setInterval(() => {}, 1000);
   `;
-  return spawn(
-    process.execPath,
-    ["--import", "tsx", "--input-type=module", "--eval", childSource],
-    {
-      cwd: repositoryRoot,
-      env: { ...process.env, GOAT_FLOW_TEST_CLAIM_PROJECT: projectRoot },
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
+  const descriptors: number[] = [];
+  try {
+    for (const name of ["stdout", "stderr"])
+      descriptors.push(openSync(join(outputDirectory, name), "wx", 0o600));
+    return spawn(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "--eval", childSource],
+      {
+        cwd: repositoryRoot,
+        env: { ...process.env, GOAT_FLOW_TEST_CLAIM_PROJECT: projectRoot },
+        stdio: ["ignore", ...descriptors],
+      },
+    );
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+  }
 }
 
 /** Inspect one temporary-project marker through the real JSON CLI route. */
@@ -370,9 +407,12 @@ describe("public abandoned path-write claim recovery", () => {
 
   // The fixture kills an owning child to reproduce the real crash residue. Invariant: only the inspected unchanged marker is removed; every stale or invalid route preserves current ownership.
   it("recovers only the inspected unchanged marker and refuses every stale or invalid route", async () => {
-    const claimOwner = spawnClaimOwner(projectRoot);
+    const outputDirectory = mkdtempSync(
+      join(tmpdir(), "goat-claim-owner-output-"),
+    );
+    const claimOwner = spawnClaimOwner(projectRoot, outputDirectory);
     try {
-      await waitForReady(claimOwner);
+      await waitForReady(claimOwner, outputDirectory);
       const childExit = once(claimOwner, "exit");
       assert.equal(claimOwner.kill("SIGINT"), true);
       await childExit;
@@ -410,6 +450,7 @@ describe("public abandoned path-write claim recovery", () => {
         claimOwner.kill("SIGKILL");
         await once(claimOwner, "exit");
       }
+      rmSync(outputDirectory, { recursive: true, force: true });
     }
   });
 });

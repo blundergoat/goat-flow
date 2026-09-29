@@ -6,7 +6,14 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -47,14 +54,39 @@ const activeHelpCommands = [
  * @returns captured child-process status, stdout, and stderr
  */
 function runHelpCommand(commandArguments: string[]) {
-  return spawnSync(
-    process.execPath,
-    ["--import", "tsx", cliEntryPath, ...commandArguments],
-    {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-    },
-  );
+  // Private files preserve child output when managed pipes return empty captures.
+  const captureDirectory = mkdtempSync(join(tmpdir(), "goat-cli-help-output-"));
+  const stdoutPath = join(captureDirectory, "stdout");
+  const stderrPath = join(captureDirectory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    for (const path of [stdoutPath, stderrPath]) {
+      descriptors.push(openSync(path, "wx", 0o600));
+    }
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", cliEntryPath, ...commandArguments],
+      {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        stdio: ["ignore", ...descriptors],
+      },
+    );
+    const stdout = readFileSync(stdoutPath, "utf8");
+    const stderr = readFileSync(stderrPath, "utf8");
+    assert.equal(result.status, 0, stderr || result.error?.message);
+    assert.equal(result.signal, null);
+    // Completed EPERM metadata is acceptable only after the exit checks above.
+    assert.ok(
+      !result.error ||
+        ("code" in result.error && result.error.code === "EPERM"),
+      result.error?.message,
+    );
+    return { ...result, stdout, stderr };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(captureDirectory, { recursive: true, force: true });
+  }
 }
 
 describe("root CLI help", () => {
@@ -73,18 +105,11 @@ describe("root CLI help", () => {
 
   it("renders concise navigation and returns before project dispatch", () => {
     const requestedOutputPath = join(bareProjectDirectory, "audit-output.json");
-    const rootHelpProcess = spawnSync(
-      process.execPath,
-      [
-        "--import",
-        "tsx",
-        cliEntryPath,
-        "--help",
-        "--output",
-        requestedOutputPath,
-      ],
-      { cwd: repositoryRoot, encoding: "utf8" },
-    );
+    const rootHelpProcess = runHelpCommand([
+      "--help",
+      "--output",
+      requestedOutputPath,
+    ]);
 
     assert.equal(
       rootHelpProcess.status,

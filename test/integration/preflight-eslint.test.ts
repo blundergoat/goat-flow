@@ -6,11 +6,47 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
+
+/** Spawn the real classifier or ESLint with finite input, then read and remove private capture files. */
+function runWithFileStreams(command: string, args: string[], input = "") {
+  const directory = mkdtempSync(join(tmpdir(), "goat-eslint-verdict-streams-"));
+  const inputPath = join(directory, "stdin");
+  const stdoutPath = join(directory, "stdout");
+  const stderrPath = join(directory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    writeFileSync(inputPath, input, { flag: "wx", mode: 0o600 });
+    descriptors.push(openSync(inputPath, "r"));
+    for (const path of [stdoutPath, stderrPath])
+      descriptors.push(openSync(path, "wx", 0o600));
+    const result = spawnSync(command, args, {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      stdio: descriptors,
+    });
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
 
 /**
  * Check the production preflight verdict; this helper spawns Bash using a captured ESLint result.
@@ -36,7 +72,7 @@ function runPreflightLintClassifier(exitCode: number, output: string) {
     classifierStart >= 0 && classifierEnd > classifierStart,
     "production ESLint classifier must be located",
   );
-  return spawnSync(
+  return runWithFileStreams(
     "bash",
     [
       "-c",
@@ -56,26 +92,18 @@ exit "$failures"
       "preflight-eslint-fixture",
       String(exitCode),
     ],
-    {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-      input: output,
-    },
+    output,
   );
 }
 
 describe("preflight ESLint verdict", () => {
   it("fails on a real missing-config error even without lint diagnostic rows", () => {
-    const lint = spawnSync(
-      process.execPath,
-      [
-        "node_modules/eslint/bin/eslint.js",
-        "--config",
-        "test/fixtures/absent-preflight-eslint-config.mjs",
-        "src/cli",
-      ],
-      { cwd: repositoryRoot, encoding: "utf8" },
-    );
+    const lint = runWithFileStreams(process.execPath, [
+      "node_modules/eslint/bin/eslint.js",
+      "--config",
+      "test/fixtures/absent-preflight-eslint-config.mjs",
+      "src/cli",
+    ]);
     assert.equal(lint.status, 2, lint.stdout + lint.stderr);
     assert.match(lint.stdout + lint.stderr, /ENOENT/u);
     const result = runPreflightLintClassifier(

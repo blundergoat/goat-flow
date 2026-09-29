@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-09-26
+last_reviewed: 2026-09-28
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -163,7 +163,7 @@ last_reviewed: 2026-09-26
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 22 | **Latest occurrence:** 2026-09-25
+**Incident count:** 23 | **Latest occurrence:** 2026-09-28
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the system under test or the assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behaviour, run the fixture through the unchanged strict baseline so unrelated errors are absent, and keep every non-target value inside its passing bounds. Assert that every text substitution changed its fixture before using the result as simulated input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. For an invalid-state case, name and trigger the exact production predicate; arbitrary content is not invalid when the implementation treats its bytes as opaque. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
@@ -211,6 +211,8 @@ Read the full changed test file as well as the selected cases: the focused migra
 Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads inline and quoted hook toggles`, `MANAGED_HOOK_DESIRED_STATE_FIXTURES`).
 
 **Recurrence 2026-09-25 (policy directory fixture):** New directory-pathspec assertions passed in this checkout but failed in a disposable Git root that lacked `src/cli`. Moving the assertions into a temporary repository first used a relative dispatcher path, then omitted the policy store, so they failed before classifying the target commands. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_git_directory_pathspecs`) now stages its own tree, copies the complete policy fixture, and resolves the selected dispatcher absolutely. Both full corpora passed from a disposable Git root after correction.
+
+**Recurrence 2026-09-28:** M02's byte-preservation assertions tried to read the dependency symlink as a file because Git's directory-only ignore rule did not exclude it. Add `/node_modules` to the disposable checkout's local exclude file before collecting fixture paths. The corrected focused suite reported 15 passes and zero failures. Evidence: `test/unit/check-touched.test.ts` (search: `A dependency symlink is not matched by Git`, `snapshot`).
 
 ---
 

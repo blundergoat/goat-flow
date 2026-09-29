@@ -1053,22 +1053,45 @@ export function runLauncherWithPayload(
   payload: string,
   env: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof spawnSync> {
-  const payloadPath = join(
-    tmpdir(),
-    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
-  );
-  writeFileSync(payloadPath, payload);
-  const fileDescriptor = openSync(payloadPath, "r");
+  return runPayloadProcess("bash", ["-c", command], cwd, payload, env);
+}
+
+/** Spawn the requested launcher with finite stdin and private output files.
+ * Remove the capture directory after reading diagnostics; keep status and error metadata unchanged.
+ */
+function runPayloadProcess(
+  command: string,
+  args: string[],
+  cwd: string,
+  payload: string,
+  env: NodeJS.ProcessEnv,
+): ReturnType<typeof spawnSync> {
+  const directory = mkdtempSync(join(tmpdir(), "goat-flow-hook-payload-"));
+  const descriptors: number[] = [];
   try {
-    return spawnSync("bash", ["-c", command], {
+    const inputPath = join(directory, "stdin");
+    const stdoutPath = join(directory, "stdout");
+    const stderrPath = join(directory, "stderr");
+    writeFileSync(inputPath, payload, { flag: "wx", mode: 0o600 });
+    for (const [path, flags] of [
+      [inputPath, "r"],
+      [stdoutPath, "wx"],
+      [stderrPath, "wx"],
+    ]) {
+      descriptors.push(openSync(path, flags, 0o600));
+    }
+    const result = spawnSync(command, args, {
       cwd,
       encoding: "utf8",
       env,
-      stdio: [fileDescriptor, "pipe", "pipe"],
+      stdio: descriptors,
     });
+    const stdout = readFileSync(stdoutPath, "utf8");
+    const stderr = readFileSync(stderrPath, "utf8");
+    return { ...result, stdout, stderr, output: [null, stdout, stderr] };
   } finally {
-    closeSync(fileDescriptor);
-    rmSync(payloadPath, { force: true });
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
   }
 }
 
@@ -1087,23 +1110,7 @@ export function runClaudeLauncher(
   payload = CLAUDE_SAFE_PAYLOAD,
   env: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof spawnSync> {
-  const payloadPath = join(
-    tmpdir(),
-    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
-  );
-  writeFileSync(payloadPath, payload);
-  const fileDescriptor = openSync(payloadPath, "r");
-  try {
-    return spawnSync(handler.command, handler.args, {
-      cwd,
-      encoding: "utf8",
-      env,
-      stdio: [fileDescriptor, "pipe", "pipe"],
-    });
-  } finally {
-    closeSync(fileDescriptor);
-    rmSync(payloadPath, { force: true });
-  }
+  return runPayloadProcess(handler.command, handler.args, cwd, payload, env);
 }
 
 /** Assert the registered handler allows a benign payload from this cwd.
@@ -1144,23 +1151,13 @@ export function runCodexLauncher(
     command: handler.command,
     commandWindows: handler.commandWindows,
   });
-  const payloadPath = join(
-    tmpdir(),
-    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
+  return runPayloadProcess(
+    spawnDescriptor.command,
+    spawnDescriptor.args,
+    cwd,
+    payload,
+    { ...env, ...spawnDescriptor.env },
   );
-  writeFileSync(payloadPath, payload);
-  const fileDescriptor = openSync(payloadPath, "r");
-  try {
-    return spawnSync(spawnDescriptor.command, spawnDescriptor.args, {
-      cwd,
-      encoding: "utf8",
-      env: { ...env, ...spawnDescriptor.env },
-      stdio: [fileDescriptor, "pipe", "pipe"],
-    });
-  } finally {
-    closeSync(fileDescriptor);
-    rmSync(payloadPath, { force: true });
-  }
 }
 
 /**

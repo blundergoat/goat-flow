@@ -3,7 +3,6 @@
  * receipt persistence, final Actual derivation, and non-authoritative events.
  * Authors' Start, Stop, Status, finalize, and discard journeys run against real files.
  */
-import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -24,10 +23,12 @@ import {
   allocateTimingMinutes,
   applyPlanTimeTransition,
 } from "../../src/cli/plans-time.js";
-import { canonicalMilestoneBody } from "./plans-check.helpers.js";
+import {
+  canonicalMilestoneBody,
+  runPlansCommand,
+} from "./plans-check.helpers.js";
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
-const CLI_PATH = join(REPOSITORY_ROOT, "src", "cli", "cli.ts");
 
 /** Receipt fields that must remain singular when a user resolves or merges milestone edits. */
 const DUPLICATE_RECEIPT_AUTHORITY_CASES = [
@@ -105,11 +106,7 @@ function rewriteTimingFixtureStatus(
  * @returns the finished process result, including stdout the user would have seen
  */
 function runPlans(...args: string[]) {
-  return spawnSync(
-    process.execPath,
-    ["--import", "tsx", CLI_PATH, "plans", ...args],
-    { cwd: REPOSITORY_ROOT, encoding: "utf-8" },
-  );
+  return runPlansCommand(...args);
 }
 
 /** Render the same readable UTC/epoch cell users see inside a timing receipt. */

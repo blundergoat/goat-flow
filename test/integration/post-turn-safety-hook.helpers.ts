@@ -16,6 +16,7 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -277,12 +278,7 @@ function runHookProcess(
 ): ReturnType<typeof spawnSync> {
   // A direct run has no provider payload, so closed stdin lets scanning start immediately.
   if (stdinPayload === undefined) {
-    return spawnSync("bash", [HOOK_PATH, ...hookArguments], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, ...env },
-    });
+    return captureHookOutput(root, hookArguments, env, "ignore");
   }
 
   const payloadDirectory = mkdtempSync(
@@ -292,15 +288,41 @@ function runHookProcess(
   writeFileSync(payloadPath, stdinPayload);
   const payloadFileDescriptor = openSync(payloadPath, "r");
   try {
-    return spawnSync("bash", [HOOK_PATH, ...hookArguments], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: [payloadFileDescriptor, "pipe", "pipe"],
-      env: { ...process.env, ...env },
-    });
+    return captureHookOutput(root, hookArguments, env, payloadFileDescriptor);
   } finally {
     closeSync(payloadFileDescriptor);
     rmSync(payloadDirectory, { recursive: true, force: true });
+  }
+}
+
+/** Spawn the real hook with caller-owned stdin; capture and remove private output files. */
+function captureHookOutput(
+  root: string,
+  hookArguments: string[],
+  env: Record<string, string> | undefined,
+  stdin: number | "ignore",
+) {
+  const directory = mkdtempSync(join(tmpdir(), "goat-post-turn-output-"));
+  const stdoutPath = join(directory, "stdout");
+  const stderrPath = join(directory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    for (const path of [stdoutPath, stderrPath])
+      descriptors.push(openSync(path, "wx", 0o600));
+    const result = spawnSync("bash", [HOOK_PATH, ...hookArguments], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: [stdin, ...descriptors],
+      env: { ...process.env, ...env },
+    });
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
   }
 }
 

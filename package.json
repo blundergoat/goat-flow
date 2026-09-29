@@ -61,6 +61,7 @@
     "skill-quality:snapshot": "node --import tsx --input-type=module -e \"import { writeFileSync } from 'node:fs'; import { scoreAllArtifacts } from './src/cli/quality/skill-quality.ts'; const fixture = Object.fromEntries(scoreAllArtifacts(process.cwd()).map((report) => { const pct = Math.round((report.totalScore / report.profileMax) * 100); return [report.artifact.id, { minPct: Math.max(0, pct - 2), maxPct: Math.min(100, pct + 2), recommendation: report.recommendation, subtype: report.subtype }]; })); writeFileSync('test/fixtures/skill-quality/expected-scores.json', JSON.stringify(fixture, null, 2) + '\\n');\"",
     "gruff-ts": "gruff-ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.dashboard.json --noEmit",
+    "check:touched": "node scripts/check-touched.mjs",
     "check:node-pty": "node scripts/warn-node-pty.mjs",
     "goat-flow:cli": "node dist/cli/cli.js",
     "audit": "node dist/cli/cli.js audit .",

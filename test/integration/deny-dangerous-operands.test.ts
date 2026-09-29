@@ -3,6 +3,7 @@
  * Every command is inert text, replayed through --check and provider-shaped stdin.
  */
 import assert from "node:assert/strict";
+import { runHookWithPayload } from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,20 +31,16 @@ interface ParserBoundaryCase {
 
 /** Spawn the fixture hook to classify command text; the requested action never executes. */
 function classify(command: string, hook: PolicyHook, isProviderInput: boolean) {
-  return spawnSync(
-    "bash",
-    [
+  if (isProviderInput)
+    return runHookWithPayload(
       resolve(hooks, `${hook}.sh`),
-      ...(isProviderInput ? [] : ["--check", command]),
-    ],
-    {
-      cwd: fixture,
-      encoding: "utf8",
-      input: isProviderInput
-        ? JSON.stringify({ tool_name: "Bash", tool_input: { command } })
-        : undefined,
-    },
-  );
+      fixture,
+      JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
+    );
+  return spawnSync("bash", [resolve(hooks, `${hook}.sh`), "--check", command], {
+    cwd: fixture,
+    encoding: "utf8",
+  });
 }
 
 describe("wrapper option and curl file-operand regressions", () => {

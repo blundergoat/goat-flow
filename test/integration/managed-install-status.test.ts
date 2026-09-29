@@ -6,7 +6,16 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
@@ -58,17 +67,34 @@ interface StatusJson {
   };
 }
 
-/** Side effect: spawns status through the public TypeScript CLI entry point and captures its process result. */
+/** Spawn the public status CLI, capture its output in private files, then remove those files. */
 function runStatus(projectPath: string, format: "json" | "text" | "markdown") {
-  return spawnSync(
-    process.execPath,
-    ["--import", "tsx", CLI_ENTRY, "status", projectPath, "--format", format],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: "utf-8",
-      timeout: 30_000,
-    },
-  );
+  const directory = mkdtempSync(join(tmpdir(), "goat-install-status-output-"));
+  const stdoutPath = join(directory, "stdout");
+  const stderrPath = join(directory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    for (const path of [stdoutPath, stderrPath])
+      descriptors.push(openSync(path, "wx", 0o600));
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_ENTRY, "status", projectPath, "--format", format],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf-8",
+        timeout: 30_000,
+        stdio: ["ignore", ...descriptors],
+      },
+    );
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 /** Parse status JSON and require the managed evidence envelope. */

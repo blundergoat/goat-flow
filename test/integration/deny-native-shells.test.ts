@@ -5,7 +5,10 @@
  * Harmless controls preserve investigation workflows that need to display those same words.
  */
 import assert from "node:assert/strict";
-import { checkInstalledPolicy } from "../helpers/check-installed-policy.js";
+import {
+  checkInstalledPolicy,
+  runHookWithPayload,
+} from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -37,11 +40,11 @@ function checkProposedCommand(policy: string, command: string, tool?: string) {
       fixture,
       command,
     );
-  return spawnSync("bash", [resolve(hooks, `${policy}.sh`)], {
-    cwd: fixture,
-    encoding: "utf8",
-    input: JSON.stringify({ tool_name: tool, tool_input: { command } }),
-  });
+  return runHookWithPayload(
+    resolve(hooks, `${policy}.sh`),
+    fixture,
+    JSON.stringify({ tool_name: tool, tool_input: { command } }),
+  );
 }
 
 const hosts = [

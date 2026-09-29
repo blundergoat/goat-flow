@@ -4,7 +4,6 @@
  * against written milestones, so failures match what plan authors see in the
  * terminal before implementation begins.
  */
-import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -18,8 +17,7 @@ import {
 } from "../../src/cli/plans-check-summary.js";
 import { parseMilestoneMarkdown } from "../../src/cli/plans-export.js";
 import {
-  PROJECT_ROOT,
-  CLI_PATH,
+  runPlansCommand,
   runPlansCheck,
   assertSourceLabelledErrors,
   writeCheckFixture,
@@ -994,11 +992,7 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
   });
 
   it("rejects --strict outside plans check", () => {
-    const result = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "plans", "export", ".", "--strict"],
-      { cwd: PROJECT_ROOT, encoding: "utf-8" },
-    );
+    const result = runPlansCommand("export", ".", "--strict");
 
     assert.equal(result.status, 2);
     assert.match(result.stderr, /--strict is only valid for plans check/u);

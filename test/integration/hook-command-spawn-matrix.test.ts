@@ -5,7 +5,10 @@
  * Windows CI runs this file at the package-minimum Node to lock ADR-053.
  */
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import {
+  spawnSync,
+  type SpawnSyncOptionsWithStringEncoding,
+} from "node:child_process";
 import {
   chmodSync,
   closeSync,
@@ -67,6 +70,57 @@ const ENV_CANARY = "goat-flow-canary";
 
 const disposableParents: string[] = [];
 
+/** Capture exact handler bytes through private files, retaining the child's process metadata. */
+function runWithFileStreams(
+  command: string,
+  args: string[],
+  options: SpawnSyncOptionsWithStringEncoding,
+  payload?: string,
+) {
+  const directory = mkdtempSync(join(tmpdir(), "goat-spawn-matrix-streams-"));
+  const stdoutPath = join(directory, "stdout");
+  const stderrPath = join(directory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    let stdin: number | "ignore" = "ignore";
+    if (payload !== undefined) {
+      const inputPath = join(directory, "stdin");
+      writeFileSync(inputPath, payload, { flag: "wx", mode: 0o600 });
+      stdin = openSync(inputPath, "r");
+      descriptors.push(stdin);
+    }
+    const stdout = openSync(stdoutPath, "wx", 0o600);
+    descriptors.push(stdout);
+    const stderr = openSync(stderrPath, "wx", 0o600);
+    descriptors.push(stderr);
+    const result = spawnSync(command, args, {
+      ...options,
+      stdio: [stdin, stdout, stderr],
+    });
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+/** Require successful Git setup even when completed children carry sandbox EPERM metadata. */
+function initializeGit(projectRoot: string): void {
+  const result = runWithFileStreams("git", ["init", "-q", projectRoot], {
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  assert.equal(result.signal, null);
+  assert.ok(
+    !result.error || ("code" in result.error && result.error.code === "EPERM"),
+    result.error?.message,
+  );
+}
+
 /** Remove every fixture tree after the suite so hostile-named roots never linger. */
 after(() => {
   // Each recorded parent is a suite-owned temporary directory, never a user workspace.
@@ -110,7 +164,7 @@ function createRegisteredHostileProject(
   }
   // A fake secret proves the block response without ever exposing real content.
   writeFileSync(join(projectRoot, ".env"), `${ENV_CANARY}\n`);
-  execFileSync("git", ["init", "-q", projectRoot]);
+  initializeGit(projectRoot);
   installShippedHookFiles(projectRoot);
 
   // Register through the public writer so the fixture rows equal user rows.
@@ -286,13 +340,17 @@ function runRegisteredHandler(
     environment.CLAUDE_PROJECT_DIR = providerProjectDirectory;
   }
   // The public writer owns this executable and argv; fixture payloads reach stdin only.
-  return spawnSync(selected.command, selected.args, {
-    cwd,
-    encoding: "utf8",
-    env: environment,
-    input: payload,
-    timeout: 60_000,
-  });
+  return runWithFileStreams(
+    selected.command,
+    selected.args,
+    {
+      cwd,
+      encoding: "utf8",
+      env: environment,
+      timeout: 60_000,
+    },
+    payload,
+  );
 }
 
 /**
@@ -315,8 +373,8 @@ function runRegisteredCodexHandler(
     env: { ...(options.environment ?? process.env), ...selected.env },
     timeout: 60_000,
   };
-  // Piped requests reproduce the provider's direct payload delivery to its configured command.
-  if ((options.stdin ?? "pipe") === "pipe") {
+  // Explicit pipe variants retain the Windows transport regression; ordinary replays need finite EOF.
+  if (options.stdin === "pipe") {
     return spawnSync(selected.command, selected.args, {
       ...spawnOptions,
       input: payload,
@@ -324,23 +382,12 @@ function runRegisteredCodexHandler(
     });
   }
 
-  const payloadDirectory = mkdtempSync(
-    join(tmpdir(), "goat-flow-codex-matrix-"),
+  return runWithFileStreams(
+    selected.command,
+    selected.args,
+    spawnOptions,
+    payload,
   );
-  const payloadPath = join(payloadDirectory, "payload.json");
-  let payloadDescriptor: number | null = null;
-  try {
-    writeFileSync(payloadPath, payload, { mode: 0o600 });
-    payloadDescriptor = openSync(payloadPath, "r");
-    return spawnSync(selected.command, selected.args, {
-      ...spawnOptions,
-      stdio: [payloadDescriptor, "pipe", "pipe"],
-    });
-  } finally {
-    // Close an opened payload file after replay so the fixture does not retain resources across cases.
-    if (payloadDescriptor !== null) closeSync(payloadDescriptor);
-    rmSync(payloadDirectory, { recursive: true, force: true });
-  }
 }
 
 /** Render one captured result for assertion failures. */
@@ -901,12 +948,16 @@ describe("retained policy registrations", () => {
         0,
       );
       const selected = agentHookSpawnDescriptor({ form: "argv", ...saved });
-      const noBash = spawnSync(process.execPath, selected.args, {
-        cwd: root,
-        encoding: "utf8",
-        input: denyPayload(blockedCommand),
-        env: { ...process.env, PATH: "" },
-      });
+      const noBash = runWithFileStreams(
+        process.execPath,
+        selected.args,
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: { ...process.env, PATH: "" },
+        },
+        denyPayload(blockedCommand),
+      );
       assert.equal(noBash.status, 0, handlerDiagnostics(noBash));
     });
 
@@ -1015,7 +1066,7 @@ function createParentWithChildInstall(
   const childRoot = join(parentRoot, "child");
   mkdirSync(join(childRoot, ".claude"), { recursive: true });
   writeFileSync(join(childRoot, ".claude", "settings.json"), "{}\n");
-  execFileSync("git", ["init", "-q", childRoot]);
+  initializeGit(childRoot);
   installShippedHookFiles(childRoot);
   // A registered child models a sibling install whose older runtime must not answer for the parent's session.
   if (childRegistration === "registered") {

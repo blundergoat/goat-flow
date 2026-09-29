@@ -102,18 +102,19 @@ describe("documented shell-lint command", () => {
     );
     assert.ok(installSection.length > 0);
     // Exercise only dependency setup; the package manager is a test double, so no software is installed.
-    const result = spawnSync("bash", ["-s"], {
+    const fixture = [
+      "set -euo pipefail",
+      "OSTYPE=msys",
+      'info() { printf "%s\\n" "$1"; }',
+      'warn() { printf "%s\\n" "$1"; }',
+      'winget.exe() { printf "winget-arg:%s\\n" "$@"; }',
+      'command() { case "$*" in "-v shellcheck"|"-v apt-get"|"-v brew") return 1;; esac; builtin command "$@"; }',
+      installSection,
+    ].join("\n");
+    // Pass the fixed script as an argument so the fixture does not wait for pipe EOF.
+    const result = spawnSync("bash", ["-c", fixture], {
       cwd: PROJECT_ROOT,
       encoding: "utf8",
-      input: [
-        "set -euo pipefail",
-        "OSTYPE=msys",
-        'info() { printf "%s\\n" "$1"; }',
-        'warn() { printf "%s\\n" "$1"; }',
-        'winget.exe() { printf "winget-arg:%s\\n" "$@"; }',
-        'command() { case "$*" in "-v shellcheck"|"-v apt-get"|"-v brew") return 1;; esac; builtin command "$@"; }',
-        installSection,
-      ].join("\n"),
     });
     assert.equal(result.status, 0, result.stderr);
     assert.match(
@@ -156,7 +157,11 @@ describe("documented shell-lint command", () => {
     const command = publishedShellcheckCommand("CLAUDE.md");
     const probe = spawnSync("shellcheck", ["--version"], { encoding: "utf8" });
     // Treat a missing analyzer as inconclusive rather than passing: the claim is unproven, not satisfied.
-    if (probe.error) {
+    if (
+      probe.status !== 0 ||
+      probe.signal !== null ||
+      (probe.error && !("code" in probe.error && probe.error.code === "EPERM"))
+    ) {
       assert.fail(
         "shellcheck is not installed, so the documented command cannot be verified; install it (scripts/setup-initial.sh) and re-run",
       );

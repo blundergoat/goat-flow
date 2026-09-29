@@ -7,8 +7,10 @@ import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  closeSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -135,21 +137,40 @@ describe("plans check: bounded project history", () => {
   });
 });
 
-/** Resolve tsx at the test owner so the CLI can be invoked from another project's working directory. */
+/** Spawn the CLI from either project's working directory, resolving tsx at the test owner.
+ * Capture diagnostics in private files and remove them after the child exits.
+ */
 function checkHistory(plan: string, cwd = PROJECT_ROOT) {
-  return spawnSync(
-    process.execPath,
-    [
-      "--import",
-      import.meta.resolve("tsx"),
-      CLI_PATH,
-      "plans",
-      "check",
-      plan,
-      "--strict",
-    ],
-    { cwd, encoding: "utf8" },
-  );
+  const directory = mkdtempSync(join(tmpdir(), "goat-plan-history-output-"));
+  const stdoutPath = join(directory, "stdout");
+  const stderrPath = join(directory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    for (const path of [stdoutPath, stderrPath]) {
+      descriptors.push(openSync(path, "wx", 0o600));
+    }
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        import.meta.resolve("tsx"),
+        CLI_PATH,
+        "plans",
+        "check",
+        plan,
+        "--strict",
+      ],
+      { cwd, encoding: "utf8", stdio: ["ignore", ...descriptors] },
+    );
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 /** Select through real parsing and bounded filesystem discovery, with no injected samples. */

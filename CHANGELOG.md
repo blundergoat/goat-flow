@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Added
+
+- **Changed-file checks for contributors** - `npm run check:touched` runs applicable formatting, lint, type, quality and guidance checks on working-tree changes, including deletion and rename triggers, with per-check timings and a failing exit status when a check fails; owning tests and preflight remain required.
+- **Invisible-control detection** - Changed text checks report literal invisible controls by file, position and code point, with escaped diagnostic filenames and no rewrites; visible Unicode, emoji, joining characters and leading BOMs stay valid.
+
+### Fixed
+
+- **Scoped cleanup recovery** - Unsafe `rm -r` denials explain how to remove already-approved literal file targets and empty directories while preserving secret restrictions and confirmation requirements.
+- **Changed-file diagnostics** - `check:touched` preserves tool output and recognizes completed commands when a sandbox attaches `EPERM` metadata.
+- **Guidance-test execution** - Dispatcher and review fixtures accept completed Git results in managed sandboxes, and the ShellCheck setup fixture avoids a stalled script-input pipe.
+- **CLI test output** - Help, plan, quality, redaction, install-status, hook-recovery, hook-registration and claim-recovery tests preserve child-process output in managed sandboxes while retaining their exit and output assertions.
+- **Test input delivery** - Policy, saved-handler, Gruff, quality-save and redaction tests use finite stdin files to prevent hangs in managed sandboxes while preserving their assertions and explicit Windows pipe cases. The preflight ESLint-verdict fixture also supplies finite input.
+- **Gruff warning gate** - The ratchet preserves analyzer JSON in managed sandboxes and checks completed process status before interpreting `EPERM` metadata; warning, debt and coverage rules remain enforced.
+- **Post-turn hook registration** - Valid Git projects remain eligible when a managed sandbox attaches `EPERM` metadata to a successful root lookup; failed lookups still leave the hook unregistered.
+
+### Security
+
+- **Block abbreviated forced Git cleanup** - The Git write guard recognizes `git clean --f`, `--fo`, `--for`, `--forc` and bundled `-f`, including aliases, without mistaking exclude patterns or paths after `--` for force flags.
+- **Keep denial messages free of unsafe option text** - Unrecognized Git global-option denials no longer echo supplied tokens, keeping embedded display controls out of terminal and provider messages.
+
 ## v1.17.0 - 2026-09-28
 
 ### Added

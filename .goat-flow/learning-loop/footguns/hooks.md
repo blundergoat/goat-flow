@@ -163,6 +163,8 @@ last_reviewed: 2026-09-28
 
 **Recheck 2026-09-28:** Injecting the fixed text plus a stray U+202E into the test helper produced zero assertion failures; injecting the whole unsafe token made its failure diagnostic echo U+202E. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `block copy should match fixed text`, `omit forbidden command data`) now rejects extra text in fixed-message cases and keeps rejected data out of diagnostics. Nine output-mutation checks covered valid text, stray controls and complete tokens for U+202E, U+200B and U+001B; only valid fixed output was accepted, and no tested control appeared in diagnostics.
 
+**Related output boundary, 2026-09-28:** M02's `scripts/check-touched.mjs` (search: `function printable`) escaped C0 and bidi controls but left C1 controls unchanged. Executing the actual formatter with U+0085, U+009B and U+009D returned those same raw code points; `runUnicodeCheck` uses it to print filenames. When diagnostics need supplied text, escape C1 controls as well. `test/unit/check-touched.test.ts` (search: `fails on Unicode controls with printable filenames`) now covers these filename characters. The full CLI regression passed after the verifier distinguished completed `EPERM` metadata from failed launches and captured child output through private files. The earlier launch-blocked diagnosis was incorrect; the existing lesson in `.goat-flow/learning-loop/lessons/hook-probe-testing.md` (search: `Codex sandbox hook probes must distinguish direct Bash from Node child-process`) owns that distinction.
+
 ---
 
 ## Resolved Entries

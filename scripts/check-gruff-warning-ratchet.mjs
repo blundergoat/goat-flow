@@ -8,7 +8,15 @@
  * Exit codes: 0 debt unchanged or reduced, 1 policy or manifest failure, 2 analyzer could not run.
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import {
+  closeSync,
+  fstatSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
@@ -49,6 +57,49 @@ function resolveAnalyzerLaunchCommand() {
 }
 
 /**
+ * Capture the installed analyzer's output in private files, then remove them.
+ * Each stream is checked against 64 MiB after exit and before decoding; process metadata is returned unchanged.
+ *
+ * @param command - resolved installed entrypoint or the Node fixture executable
+ * @param args - literal analyzer arguments, never a shell program
+ * @returns process metadata and decoded output for the gate's completion and schema checks
+ */
+function captureAnalyzerOutput(command, args) {
+  const captureDirectory = mkdtempSync(
+    join(tmpdir(), "goat-gruff-ratchet-output-"),
+  );
+  const stdoutPath = join(captureDirectory, "stdout");
+  const stderrPath = join(captureDirectory, "stderr");
+  const descriptors = [];
+  try {
+    for (const path of [stdoutPath, stderrPath]) {
+      descriptors.push(openSync(path, "wx", 0o600));
+    }
+    const result = spawnSync(command, args, {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      shell: false,
+      stdio: ["ignore", ...descriptors],
+    });
+    if (
+      descriptors.some(
+        (descriptor) => fstatSync(descriptor).size > 64 * 1024 * 1024,
+      )
+    ) {
+      throw new Error("analyzer output exceeded 64 MiB");
+    }
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(captureDirectory, { recursive: true, force: true });
+  }
+}
+
+/**
  * Scan the whole repository once and hand back the analyzer's JSON report.
  * This is the evidence every comparison reads, so it asks for `--fail-on none`: ordinary findings are
  * this gate's subject matter and must not look like the analyzer breaking.
@@ -69,20 +120,26 @@ function scanRepositoryWithAnalyzer() {
     };
   }
   const { command, prefixArgs } = launchCommand;
-  const analyzerRun = spawnSync(
-    command,
-    [...prefixArgs, "analyse", "--format=json", "--fail-on", "none"],
-    {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      shell: false,
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
-  // The analyzer never started - for example `npm ci` has not run in a fresh clone.
-  if (analyzerRun.error) {
+  let analyzerRun;
+  try {
+    analyzerRun = captureAnalyzerOutput(command, [
+      ...prefixArgs,
+      "analyse",
+      "--format=json",
+      "--fail-on",
+      "none",
+    ]);
+  } catch (error) {
     return {
-      failure: `analyzer failure: spawn failed (${analyzerRun.error.message})`,
+      failure: `analyzer failure: output capture failed (${error.message})`,
+    };
+  }
+  // EPERM can accompany a completed child; every other launch error remains fatal.
+  const completed =
+    typeof analyzerRun.status === "number" && analyzerRun.signal === null;
+  if (!completed || (analyzerRun.error && analyzerRun.error.code !== "EPERM")) {
+    return {
+      failure: `analyzer failure: spawn failed (${analyzerRun.error?.message ?? analyzerRun.signal ?? "no exit status"})`,
     };
   }
   // The analyzer ran but gave up, so its own first line explains more than a debt diff would.

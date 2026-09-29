@@ -4,11 +4,11 @@
  * These contracts check fixture provenance, route coverage, required fields, and permitted alternatives.
  * They validate the stored corpus; live model qualification requires its own run.
  */
-import { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { getSkillNames } from "../../src/cli/constants.js";
+import { readGit } from "../../src/cli/review-validate-anchors.js";
 import {
   readMarkdownSection,
   readProjectFile,
@@ -186,10 +186,8 @@ function liveRouteMapIntents(): string[] {
 // Side effects: spawns a read-only Git query to verify clone-valid provenance paths.
 function trackedProjectPaths(): Set<string> {
   return new Set(
-    execFileSync("git", ["ls-files", "-z"], {
-      cwd: REPOSITORY_ROOT,
-      encoding: "utf8",
-    })
+    readGit(REPOSITORY_ROOT, ["ls-files", "-z"])
+      .toString("utf8")
       .split("\0")
       .filter(Boolean),
   );

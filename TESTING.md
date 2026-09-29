@@ -9,6 +9,7 @@ npm test                          # Fast suite; excludes slow, dashboard, and pe
 npm run test:slow                 # Builds first, then the slow suite at concurrency 1
 npm run test:full                 # Fast then slow; run this before a release
 npm run typecheck                 # Type-check src/cli and src/dashboard
+npm run check:touched             # Read-only static checks selected by changed paths
 npx eslint src/cli src/dashboard  # Lint
 bash scripts/preflight-checks.sh  # Full preflight gate (includes all of the above)
 ```
@@ -17,6 +18,22 @@ bash scripts/preflight-checks.sh  # Full preflight gate (includes all of the abo
 dashboard, audit-drift, and a few known-heavy unit files to `test:slow` so local
 iteration stays quick. A change that touches the dashboard server, the installer,
 or drift detection is only covered once `test:slow` has run.
+
+`npm run check:touched` reads working-tree content for staged, unstaged and
+untracked changes against HEAD; it does not independently certify staged bytes.
+Deleted paths and both rename paths still select project checks. Prettier and
+ESLint receive existing files in their configured scope. Source TypeScript changes
+also run both TypeScript projects and the whole-repository Gruff warning ratchet;
+package/configuration changes trigger typechecking. Guidance changes run the
+contract suite (including word budgets) and `stats --check`.
+
+The command also checks changed UTF-8 text for invisible controls, excluding
+generated and binary content. It preserves leading BOMs, visible Unicode, emoji
+and joining characters; intentional controls in fixtures must use source escapes
+or `String.fromCodePoint`. Each check reports PASS, FAIL or SKIP and elapsed time.
+Any failure exits 1, and no check autofixes files. Guidance checks may take longer
+than ordinary source checks. Owning test suites and full preflight remain required;
+Knip runs in preflight. The full trigger table is in `scripts/check-touched.mjs`.
 
 ## Test structure
 

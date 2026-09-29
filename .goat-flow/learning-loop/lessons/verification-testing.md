@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-09-27
+last_reviewed: 2026-09-29
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md); process-lifecycle and delegated-run tests are [verification-testing-process.md](verification-testing-process.md).
@@ -243,7 +243,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: A documentation pass can push a file past a size gate it was written to enforce
 
 **Status:** active | **Created:** 2026-08-07
-**Incident count:** 12 | **Latest occurrence:** 2026-09-14
+**Incident count:** 13 | **Latest occurrence:** 2026-09-29
 **Merged:** 2026-09-05 - absorbed three file-length recurrences (2026-08-09 x2, 2026-08-28) from the Gruff comment-fixes lesson in `.goat-flow/learning-loop/lessons/verification-gruff.md`; same mechanism, different gate.
 
 **Prevention:** Before adding comments, contract cases, or learning text to a file within about 20 percent of its size threshold, measure its headroom with the gate's own counter and plan the split first; `wc -l` and a word count are not the gate. Split by responsibility. Never accept the new finding: an oversized file created by the change that added the gate is what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
@@ -265,6 +265,8 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 **Recurrence 2026-09-10:** New critique persistence assertions took `test/contract/skill-hardening-skills-2.test.ts` above Gruff's 1,000-substantive-line threshold; `scripts/check-gruff-warning-ratchet.mjs` rejected the narrowed 1,018-line draft. Rewinding the test draft, extending the existing host-owned producer check and grouping the existing redactor-owner assertions removed the size finding without dropping an earlier obligation. Evidence: the cases `keeps goat-critique host-owned so human gates cannot auto-convert` and `redacts goat-critique persistence before disk and preserves the human gate`; the final targeted Gruff run reported zero findings.
 
 **Recurrence 2026-09-14:** M03 history tests raised the forecast owner to 1,045 substantive lines. User-approved `test/unit/plans-check-history.test.ts` (search: `bounded project history`) retained those cases; the original owner was restored. Run scoped lint during each batch too: six new complexity errors needed two bounded corrections before passing.
+
+**Recurrence 2026-09-29:** A managed-process repair added capture and cleanup logic to the nearly full registrar before measuring its remaining headroom. Its 17-case behavioral suite passed, but Gruff reported 1020 substantive lines against the 1000-line limit. The approved extraction moved the three path checks into `src/cli/server/hook-scan-paths.ts` (search: `gitTopLevel`, `physicalDirectory`, `relativePathEscapesRoot`); scoped analysis then reported zero errors. The two learning references to moved symbols were repaired too. Measure the formatted gate result before proposing a patch, not after behavior alone appears correct.
 
 ---
 

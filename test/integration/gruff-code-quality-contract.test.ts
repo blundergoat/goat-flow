@@ -10,14 +10,18 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CLEAN_GRUFF_CONTRACT_ENVELOPE,
@@ -42,6 +46,47 @@ const HOOK_RUNNER = join(
 );
 
 after(cleanupHookTestDirs);
+
+/**
+ * Run the real provider launcher with finite input and private output captures.
+ * Creates and removes temporary files around the Node and Bash child processes.
+ *
+ * @param payload - exact provider JSON, including intentionally malformed fixture shapes
+ * @param responseMode - provider adaptation contract passed to the launcher
+ * @returns unchanged process metadata plus captured provider feedback
+ */
+function runProviderLauncher(payload: string, responseMode: string) {
+  const captureDirectory = mkdtempSync(join(tmpdir(), "goat-gruff-launcher-"));
+  const payloadPath = join(captureDirectory, "stdin");
+  const stdoutPath = join(captureDirectory, "stdout");
+  const stderrPath = join(captureDirectory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    writeFileSync(payloadPath, payload, { flag: "wx", mode: 0o600 });
+    // Nested Bash readers need EOF; Node-owned input pipes can leave them waiting.
+    descriptors.push(openSync(payloadPath, "r"));
+    for (const path of [stdoutPath, stderrPath]) {
+      descriptors.push(openSync(path, "wx", 0o600));
+    }
+    const result = spawnSync(
+      process.execPath,
+      [HOOK_RUNNER, "workflow/hooks/gruff-code-quality.sh", responseMode],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+        stdio: descriptors,
+      },
+    );
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(captureDirectory, { recursive: true, force: true });
+  }
+}
 
 describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   it("routes naming guidance to the naming and placement owner", () => {
@@ -384,14 +429,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     // Side effects: starts Node and Bash child processes without editing project files.
     it(`silently ignores a valid non-edit ${benignPostToolEvent.displayName}`, () => {
       const responseMode = `${benignPostToolEvent.provider}:gruff:goat-flow.hook-result.v1:post-tool:1:75000`;
-      const result = spawnSync(
-        process.execPath,
-        [HOOK_RUNNER, "workflow/hooks/gruff-code-quality.sh", responseMode],
-        {
-          cwd: PROJECT_ROOT,
-          input: JSON.stringify(benignPostToolEvent.payload),
-          encoding: "utf8",
-        },
+      const result = runProviderLauncher(
+        JSON.stringify(benignPostToolEvent.payload),
+        responseMode,
       );
 
       assert.equal(result.status, 0, result.stderr);
@@ -403,18 +443,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   // Fixture purpose: keeps missing tool identity visible while valid named non-edits no-op.
   // Side effects: starts Node and Bash child processes without editing project files.
   it("reports a malformed migrated payload as incomplete", () => {
-    const result = spawnSync(
-      process.execPath,
-      [
-        HOOK_RUNNER,
-        "workflow/hooks/gruff-code-quality.sh",
-        "claude:gruff:goat-flow.hook-result.v1:post-tool:1:75000",
-      ],
-      {
-        cwd: PROJECT_ROOT,
-        input: '{"tool_input":{"command":"pwd"}}',
-        encoding: "utf8",
-      },
+    const result = runProviderLauncher(
+      '{"tool_input":{"command":"pwd"}}',
+      "claude:gruff:goat-flow.hook-result.v1:post-tool:1:75000",
     );
 
     assert.equal(result.status, 0, result.stderr);

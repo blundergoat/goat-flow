@@ -5,8 +5,9 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
+  closeSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -76,15 +77,37 @@ function assertRefutedCandidateError(
 
 /** Spawns the public source CLI saver with one raw stdin body. */
 function runQualitySaveText(projectPath: string, input: string) {
-  return spawnSync(
-    process.execPath,
-    ["--import", "tsx", "src/cli/cli.ts", "quality", "save", projectPath],
-    {
-      cwd: REPOSITORY_ROOT,
-      encoding: "utf8",
-      input,
-    },
-  );
+  return runQualityCommand(["save", projectPath], input);
+}
+
+/** Spawns the real quality CLI with private input/output files and removes them after reading its diagnostics. */
+function runQualityCommand(args: string[], input = "") {
+  const directory = mkdtempSync(join(tmpdir(), "goat-quality-command-"));
+  const descriptors: number[] = [];
+  try {
+    const inputPath = join(directory, "stdin");
+    const stdoutPath = join(directory, "stdout");
+    const stderrPath = join(directory, "stderr");
+    writeFileSync(inputPath, input, { flag: "wx", mode: 0o600 });
+    for (const [path, flags] of [
+      [inputPath, "r"],
+      [stdoutPath, "wx"],
+      [stderrPath, "wx"],
+    ]) {
+      descriptors.push(openSync(path, flags, 0o600));
+    }
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli/cli.ts", "quality", ...args],
+      { cwd: REPOSITORY_ROOT, encoding: "utf8", stdio: descriptors },
+    );
+    const stdout = readFileSync(stdoutPath, "utf8");
+    const stderr = readFileSync(stderrPath, "utf8");
+    return { ...result, stdout, stderr, output: [null, stdout, stderr] };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 /** Run the public source CLI saver with one in-memory report body. */
@@ -100,7 +123,15 @@ function runQualitySave(projectPath: string, report: unknown) {
  */
 function makeIgnoredQualityRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
-  execFileSync("git", ["-C", root, "init", "--quiet"]);
+  const result = spawnSync("git", ["-C", root, "init", "--quiet"], {
+    stdio: "ignore",
+  });
+  assert.equal(result.status, 0, result.error?.message);
+  assert.equal(result.signal, null);
+  assert.ok(
+    !result.error || ("code" in result.error && result.error.code === "EPERM"),
+    result.error?.message,
+  );
   writeFileSync(join(root, ".gitignore"), ".goat-flow/logs/quality/*.json\n");
   return root;
 }
@@ -548,14 +579,7 @@ describe("quality refuted candidates", () => {
 
 /** Spawns the public source CLI validator against one saved report path. */
 function runQualityValidate(reportPath: string) {
-  return spawnSync(
-    process.execPath,
-    ["--import", "tsx", "src/cli/cli.ts", "quality", "validate", reportPath],
-    {
-      cwd: REPOSITORY_ROOT,
-      encoding: "utf8",
-    },
-  );
+  return runQualityCommand(["validate", reportPath]);
 }
 
 /**

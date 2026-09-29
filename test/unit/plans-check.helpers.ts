@@ -11,7 +11,16 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { PlanForecastRecord } from "../../src/cli/plans-forecast-context.js";
 
@@ -153,18 +162,51 @@ export function writeRegisteredHistory(
   return directory;
 }
 
-/** Spawns the real CLI so parser, dispatch, and report rendering stay integrated.
+/** Run the read-only plan checker through the real CLI.
  *
- * @param args - CLI arguments exactly as an author would type them after `plans`
- * @returns the finished process with stdout/stderr strings, so a test asserts on the
- *   same text the author reads; the CLI never runs interactively here
+ * @param args - arguments entered after `plans check`; empty exercises its usage error
+ * @returns process metadata and the diagnostics shown to the plan author
  */
 export function runPlansCheck(...args: string[]) {
-  return spawnSync(
-    process.execPath,
-    ["--import", "tsx", CLI_PATH, "plans", "check", ...args],
-    { cwd: PROJECT_ROOT, encoding: "utf-8" },
+  return runPlansCommand("check", ...args);
+}
+
+/** Spawn a plans subcommand with private output files, then remove those files.
+ *
+ * @param args - CLI arguments exactly as an author would type them after `plans`
+ * @returns unchanged process metadata with captured stdout and stderr, including usage errors
+ */
+export function runPlansCommand(...args: string[]) {
+  // File captures retain diagnostics when managed child-process pipes return no output.
+  const captureDirectory = mkdtempSync(
+    join(tmpdir(), "goat-plans-check-output-"),
   );
+  const stdoutPath = join(captureDirectory, "stdout");
+  const stderrPath = join(captureDirectory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    for (const path of [stdoutPath, stderrPath]) {
+      descriptors.push(openSync(path, "wx", 0o600));
+    }
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "plans", ...args],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf-8",
+        stdio: ["ignore", ...descriptors],
+      },
+    );
+    // Invalid-plan fixtures need the real nonzero status as well as the diagnostic.
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(captureDirectory, { recursive: true, force: true });
+  }
 }
 
 /** Require every failure to identify one milestone or the whole plan.
