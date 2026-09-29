@@ -1,6 +1,6 @@
 ---
 category: skill-guidance
-last_reviewed: 2026-09-14
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Editing shipped skill and playbook guidance: behavioural wording, authority alignment, contract caps, and load-budget signals. Skill candidacy and runtime authoring traps live in [skill-authoring.md](skill-authoring.md); mirror sync lives in [skills.md](skills.md).
@@ -38,7 +38,7 @@ node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8").replace(/^--
 rg -n "<name>|<distinctive heading or phrase>" test/contract/skill-hardening-*.test.ts
 ```
 
-For a closed vocabulary or reconciliation equation, also grep every label and total across skills, references, receipts, docs, and release prose, and contract which equation applies to each selector or change state; independent literal-presence checks can preserve two contradictory owners. Restore pinned phrases verbatim after any compression, take compensating words from prose no assertion covers, run the relevant skill-hardening contracts before preflight, and mirror the result to every installed copy in the same turn.
+For a closed vocabulary or reconciliation equation, also grep every label and total across skills, references, receipts, docs, and release prose, and contract which equation applies to each selector or change state; independent literal-presence checks can preserve two contradictory owners. Restore pinned phrases verbatim after any compression, take compensating words from prose no assertion covers, and mirror the result to every installed copy in the same turn. After skill or playbook edits, run `npm run check:touched` for guidance contracts and `stats --check` before preflight; for docs-only edits, run the relevant contracts directly.
 
 **Symptoms:** A playbook edit clears local checks, then preflight rejects its body budget, or a compensating compression breaks exact-phrase contracts.
 

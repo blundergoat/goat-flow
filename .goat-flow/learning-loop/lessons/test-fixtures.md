@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-09-28
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -88,7 +88,7 @@ last_reviewed: 2026-09-28
 **Caught at:** VERIFY
 **Incident count:** 18 | **Latest occurrence:** 2026-09-13
 
-**Prevention:** For parser refactors, verify in this order: (1) print or exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity or size analysis, then (5) freeze writes and run the full suite; any later write invalidates that result. Match heuristics to behaviour patterns such as `grep ... | while read ... [ ! -e ]`, not keywords in step names. Grep the old diagnostic across tests and include the producer's own unit file in RED and GREEN proof whenever a parser message changes. For skill wording, include shared-surface contracts before compressing required rules to fit a budget. Exercise literal protocol markers, effective Git configuration, decimal rounding, and unsupported checkout states before accepting a byte-authority parser.
+**Prevention:** For parser refactors, verify in this order: (1) print or exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npm run check:touched` and inspect its selections; changed `src/*.ts` triggers typecheck, file-scoped ESLint, and the Gruff ratchet, (4) measure whole-file complexity and size headroom directly, then (5) freeze writes and run the full suite; any later write invalidates that result. Match heuristics to behaviour patterns such as `grep ... | while read ... [ ! -e ]`, not keywords in step names. Grep the old diagnostic across tests and include the producer's own unit file in RED and GREEN proof whenever a parser message changes. For skill wording, include shared-surface contracts before compressing required rules to fit a budget. Exercise literal protocol markers, effective Git configuration, decimal rounding, and unsupported checkout states before accepting a byte-authority parser.
 
 **What happened:** The first pass on the workflow `run:` parser read the wrong regex capture group and used a router heuristic that matched only commands containing the word `router`; the focused regression suite and `tsc` both failed before the broader run finished.
 
