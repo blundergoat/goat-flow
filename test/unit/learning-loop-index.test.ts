@@ -401,6 +401,28 @@ This unlabelled prose must keep the paragraph visible.
     );
   });
 
+  it("keeps prevention first when repeat entries carry severity and enforcement metadata", () => {
+    for (const [bucket, heading] of [
+      ["footguns", "## Footgun: Guarded repeat"],
+      ["lessons", "## Lesson: Guarded repeat"],
+    ] as const) {
+      const firstBody = firstLearningEntryBodyParagraph({
+        bucket,
+        content: `${heading}
+
+**Status:** active | **Created:** 2026-09-29
+**Severity:** SECURITY
+**Enforced-by:** \`test/integration/deny-git-graphql.test.ts\` (search: \`GraphQL read-only policy\`)
+
+**Prevention:** Keep the verified guard in place.`,
+      });
+      assert.equal(
+        firstBody,
+        "**Prevention:** Keep the verified guard in place.",
+      );
+    }
+  });
+
   it("keeps extracted facts identical when Prevention moves before the incident narrative", () => {
     const ruleFirstFacts = extractOrderedLessonFacts(true);
     const narrativeFirstFacts = extractOrderedLessonFacts(false);

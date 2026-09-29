@@ -24,6 +24,7 @@ last_reviewed: 2026-08-11
 ## Lesson: Blindly applying review feedback without verifying findings
 
 **Status:** active | **Created:** 2026-04-11
+**Severity:** CORRECTNESS
 **Incident count:** 2 | **Latest occurrence:** 2026-07-19
 
 **Prevention:**
@@ -43,6 +44,7 @@ last_reviewed: 2026-08-11
 ## Lesson: 14 self-dogfooding bugs survived 9 rounds of critique and 17 milestones
 
 **Status:** active | **Created:** 2026-04-11
+**Severity:** CORRECTNESS
 **Incident count:** 2 | **Latest occurrence:** 2026-07-19
 **Decision changed:** Multi-phase skill contracts must extract and compare the producing phase and its output template; whole-file phrase presence is insufficient.
 

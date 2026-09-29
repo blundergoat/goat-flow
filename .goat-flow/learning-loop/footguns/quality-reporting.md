@@ -8,6 +8,7 @@ last_reviewed: 2026-09-21
 ## Footgun: Quality reviews disappear when the agent skips the final JSON write
 
 **Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Test the prompt's complete persistence transport at realistic report size; a saver that works only below an upstream hook limit is unavailable in practice.
 **Trigger phase:** VERIFY
 **Incident count:** 2
@@ -42,6 +43,7 @@ last_reviewed: 2026-09-21
 ## Footgun: Pre-release prompts can resolve an older global CLI
 
 **Status:** active | **Created:** 2026-07-17 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Framework-checkout commands use the source CLI (or a freshly built local CLI) and verify its version instead of trusting a bare PATH binary; generated write instructions retain the package-identity-gated source fallback.
 **Trigger phase:** READ
 **Caught at:** ACT
@@ -80,6 +82,7 @@ last_reviewed: 2026-09-21
 ## Footgun: Path validation does not pin a later pathname write
 
 **Status:** active | **Created:** 2026-08-27 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Allocate an empty destination exclusively, revalidate its ancestry and descriptor/path identity, then write sensitive bytes through the pinned descriptor.
 **Trigger phase:** ACT
 **Caught at:** VERIFY

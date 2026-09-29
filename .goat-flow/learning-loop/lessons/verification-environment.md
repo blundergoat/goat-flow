@@ -32,6 +32,7 @@ last_reviewed: 2026-09-05
 ## Lesson: A full-suite result is not attributable when another session is mutating the tree
 
 **Status:** active | **Created:** 2026-08-18
+**Severity:** CORRECTNESS
 **Decision changed:** In a checkout another session or verification command is writing to, prove attribution from the change set and the failure message before reporting a suite result as yours or as pre-existing.
 **Trigger phase:** VERIFY
 **Incident count:** 4 | **Latest occurrence:** 2026-08-27

@@ -19,6 +19,7 @@ last_reviewed: 2026-09-28
 ## Lesson: OTP tests must exercise npm's configuration precedence
 
 **Status:** active | **Created:** 2026-09-28 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Verify credential configuration through npm's real parser instead of having a test shim read one assumed environment variable.
 **Incident count:** 2
 **Latest occurrence:** 2026-09-28

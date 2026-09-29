@@ -35,6 +35,7 @@ last_reviewed: 2026-09-21
 ## Lesson: New subcommands need parser headroom before the first GREEN refactor
 
 **Status:** active | **Created:** 2026-07-13
+**Severity:** INTEGRATION
 **Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -66,6 +67,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Required CLI choices need omission tests
 
 **Status:** active | **Created:** 2026-07-13
+**Severity:** CORRECTNESS
 **Decision changed:** Test valid, invalid, omitted, and explicit fallback forms; preserve invocation shape when omission selects a fallback.
 **Trigger phase:** ACT
 **Caught at:** VERIFY

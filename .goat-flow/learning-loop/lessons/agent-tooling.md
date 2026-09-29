@@ -8,6 +8,7 @@ last_reviewed: 2026-09-29
 ## Lesson: Confused install-copy path pair for a directory move
 
 **Created:** 2026-04-18
+**Severity:** CORRECTNESS
 **Updated:** 2026-08-16
 **Decision changed:** Resolve the exact workflow source from `workflow/manifest.json` or `rg --files`, then set and verify the installed executable mode explicitly when a copy crosses filesystems.
 **Trigger phase:** READ
@@ -29,6 +30,7 @@ last_reviewed: 2026-09-29
 ## Lesson: When deny hook blocks a command, use the unblocked equivalent
 
 **Created:** 2026-03-28
+**Severity:** INTEGRATION
 **Updated:** 2026-09-29
 **Decision changed:** After a guard rejects cleanup syntax, keep every destructive target literal and use the narrowest permitted file and directory operations.
 **Trigger phase:** ACT
@@ -96,6 +98,7 @@ For read-only reconciliation, run Git and checksum commands directly and compare
 ## Lesson: Line-number evidence in footguns/lessons creates silent maintenance debt
 
 **Created:** 2026-04-24
+**Severity:** INTEGRATION
 
 **Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
 

@@ -46,6 +46,7 @@ Evidence: `src/cli/review-validate-anchors.ts` (search: `key.toUpperCase().start
 ## Lesson: Cache-behaviour tests need observable contracts
 
 **Status:** active | **Created:** 2026-05-20
+**Severity:** INTEGRATION
 **Decision changed:** Tests observe a boundary-level signal or, when instrumenting a shared API, filter calls to the exact resource identity under test; read-caching fixtures are rebuilt after backing files change.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -65,6 +66,7 @@ Evidence: `src/cli/review-validate-anchors.ts` (search: `key.toUpperCase().start
 ## Lesson: Contract tests pin doctrine wording and path semantics
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 **Incident count:** 24 | **Latest occurrence:** 2026-09-26
 
 **Prevention:** Before changing prose, a path, or an adjacent command, search the tests and durable semantic anchors for the exact old text; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest. When fixture size feeds a derived assertion, recompute it with the production formula after every fixture edit. Update a contract only when product semantics change. Before drafting in a near-cap skill, measure the current word budget and pay for additions from unpinned text; before quoting a budget or score outcome, measure the exact sizes with the function the gate uses and state the margin.
@@ -154,6 +156,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Mid-implementation proof gates split edit batches
 
 **Status:** active | **Created:** 2026-08-23
+**Severity:** INTEGRATION
 **Decision changed:** Stop each mutation batch at a declared mid-implementation proof and record its result before applying later-surface edits.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -174,6 +177,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Split transient preflight test failures from task regressions
 
 **Status:** active | **Created:** 2026-04-26
+**Severity:** CORRECTNESS
 
 **Prevention:** When preflight fails in the test phase after an unrelated gate fix, rerun the named failing test area and then the exact suite command directly before changing task files again. Preflight selects `test:fast` when available and runs the selected command once; a nonzero exit still fails. Coverage remains an explicit release check. Anchors: `scripts/preflight-checks.sh` (search: `test:fast`) and `test/integration/preflight-test-diagnostics.test.ts` (search: `selects only`). If release-scale TAP can exceed the caller's output limit, capture the first run to a fresh disposable path so the failing case survives beside the summary. Report the split explicitly: which gate was fixed, which direct suite passed, and whether the preflight failure reproduced.
 
@@ -204,6 +208,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Coverage classification by filename misjudges in both directions
 
 **Status:** active | **Created:** 2026-06-14
+**Severity:** INTEGRATION
 **Decision changed:** Search the whole test tree and classify each named behaviour or invariant; a file-level label cannot promote uncovered siblings.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -230,6 +235,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Depth headings do not create runtime stop boundaries
 
 **Status:** active | **Created:** 2026-07-12
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-03
 
 **Prevention:** Every branch and nested requirement group needs an explicit stop, continue, or applicability rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-security/SKILL.md` (search: `Proportional Quick finding gate`), `workflow/skills/goat-security/SKILL.md` (search: `Exhaustive inventory gate`), `workflow/skills/goat-security/references/common-threats.md` (search: `For Proportional Quick`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-security-1.test.ts` (search: `Quick Scan out of Full-only specialist work`), `test/contract/skill-hardening-security-1.test.ts` (search: `allows only observed trusted-component Quick risks`), `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
@@ -243,6 +249,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: A documentation pass can push a file past a size gate it was written to enforce
 
 **Status:** active | **Created:** 2026-08-07
+**Severity:** INTEGRATION
 **Incident count:** 13 | **Latest occurrence:** 2026-09-29
 **Merged:** 2026-09-05 - absorbed three file-length recurrences (2026-08-09 x2, 2026-08-28) from the Gruff comment-fixes lesson in `.goat-flow/learning-loop/lessons/verification-gruff.md`; same mechanism, different gate.
 
@@ -273,6 +280,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: A failed multi-file patch can preserve earlier edits
 
 **Status:** active | **Created:** 2026-08-09
+**Severity:** CORRECTNESS
 **Decision changed:** Inspect every target after a failed multi-file patch; never assume the operation was atomic.
 **Trigger phase:** ACT
 **Incident count:** 2 | **Latest occurrence:** 2026-08-09
@@ -294,6 +302,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Preserve repository-owned verification flags
 
 **Status:** active | **Created:** 2026-09-14 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-09-14
 
 **Prevention:** Read the owning command before running a tool directly. Bare Knip exhausted its default heap; the repository's 5120 MB and `--no-gitignore` invocation passed. Source: `scripts/preflight-checks.sh` (search: `knip_command=(`). Do not report the failed invocation as a code failure.

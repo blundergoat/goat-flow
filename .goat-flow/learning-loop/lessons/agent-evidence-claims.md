@@ -22,6 +22,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Agent cited gitignored content as evidence in committed docs
 
 **Status:** active | **Created:** 2026-05-11
+**Severity:** INTEGRATION
 **Decision changed:** Before citing a local file as durable evidence, verify that Git tracks it or cite the committed detector or source that supports the claim.
 **Incident count:** 5 | **Latest occurrence:** 2026-09-03
 
@@ -77,6 +78,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Absence claims need untruncated searches
 
 **Status:** active | **Created:** 2026-07-03 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
 **Incident count:** 7 | **Latest occurrence:** 2026-09-11
 
 **Prevention:** Before claiming a pattern is absent, rerun the exact single pattern with no `head` or `tail` truncation, or count with `grep -c`. For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Derive an exact-count claim from the widest search it implies, `git grep` over the tracked tree, before pinning it into a stop condition. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
@@ -120,6 +122,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 ## Lesson: Final verification gates need supported scopes and captured logs
 
 **Status:** active | **Created:** 2026-05-19
+**Severity:** CORRECTNESS
 **Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove.
 **Trigger phase:** VERIFY
 **Incident count:** 28 | **Latest occurrence:** 2026-09-18
@@ -209,6 +212,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 ## Lesson: Calling text a duplicate is a claim that its rule survives elsewhere
 
 **Status:** active | **Created:** 2026-09-08
+**Severity:** CORRECTNESS
 **Decision changed:** Before cutting a sentence as redundant, name the exact surviving location, confirm every reader who needed the rule loads that location first, and add or re-point a contract assertion there before the cut.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -242,6 +246,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 ## Lesson: A run record is read from the session's command outputs, not recalled
 
 **Status:** active | **Created:** 2026-09-19
+**Severity:** CORRECTNESS
 **Decision changed:** Before writing which harness, model and effort ran a piece of work, search the session for the requester's model and effort commands and copy what their outputs say.
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY

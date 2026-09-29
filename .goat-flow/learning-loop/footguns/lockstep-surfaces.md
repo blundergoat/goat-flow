@@ -27,6 +27,7 @@ last_reviewed: 2026-09-16
 ## Footgun: Flipping a doctrine in one playbook leaves siblings citing the old stance
 
 **Status:** active | **Created:** 2026-05-29 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-08-16
 
 **Prevention:** When you flip or extract a doctrine, grep sibling playbooks, instruction files, reference docs, and the full test tree for the old stance's exact wording and for every file that cites the changed owner by name, then reconcile them in one change. Grep the actual old phrase, not a guessed token: the first pass missed "Default to writing no comments" by grepping for "default-no-comment". Before paraphrasing a semantic anchor, find any contract outside the focused suite that pins it. A doc that says `X says "..."` must match X, and a qualifier's grammatical scope needs a contract test, because keyword presence cannot distinguish "A or B with Q" from "A, or B with Q".
@@ -54,6 +55,7 @@ last_reviewed: 2026-09-16
 ## Footgun: Hook additions and renames cross runtime, dashboard, and audit surfaces
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-09-16
 
 **Prevention:** When adding, renaming, deleting, or moving policy ownership between hooks, update the whole lock-step list: canonical scripts, central self-test, registry entry, config default, installer copy list, the generated desired-state contract in `scripts/generate-managed-hook-desired-state.mjs`, managed installation and retirement in `src/cli/server/hook-managed-installation.ts`, scenario mapping in `src/cli/hook-verification-contracts.ts`, launch runtime and provider adapters in `workflow/hooks/hook-launch-runtime.mjs` and `workflow/hooks/hook-provider-adapters.mjs`, manifest `hooks[]`, per-agent config templates, installed mirrors, audit fact extraction, preflight self-test, parity, and runtime smoke, packaged-install coverage in `test/integration/packaged-hook-install.test.ts`, dashboard view and API when the response shape changes, CLI help, docs, code-map, architecture, changelog, and tests. Then grep the old hook id and run a runtime-shaped smoke through an installed hook.
@@ -70,6 +72,7 @@ last_reviewed: 2026-09-16
 ## Footgun: Adding a skill-playbook requires lock-step updates across 13+ surfaces
 
 **Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-08-24
 
 **Prevention:** Discover the enumeration set by grepping an existing sibling's filename (for example `writing-human-facing-prose.md`) across the tree and triaging every hit as enumeration or incidental; treat any test that names the sibling as an enumeration surface until its assertions prove otherwise. Then run `bash scripts/preflight-checks.sh`, which must name the new playbook in parity rows, and `npm test`, where `preamble-sync.test.ts` must include it. If the playbook documents a CLI-only package, run `npx knip --no-progress` and add `ignoreDependencies` only after real npm-script or shell usage still leaves Knip blind.

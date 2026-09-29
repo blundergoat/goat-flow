@@ -8,6 +8,7 @@ last_reviewed: 2026-09-26
 ## Lesson: Bash case patterns need syntax proof for template delimiters
 
 **Status:** active | **Created:** 2026-06-19
+**Severity:** INTEGRATION
 **Decision changed:** Treat Bash glob literals as shell syntax, not inert pattern text; run both parser and static-analysis checks before copying a hook edit into its mirrors.
 **Incident count:** 2 | **Latest occurrence:** 2026-08-28
 
@@ -42,6 +43,7 @@ last_reviewed: 2026-09-26
 ## Lesson: Keep generated Bash regexes out of inline conditionals
 
 **Status:** active | **Created:** 2026-05-27
+**Severity:** INTEGRATION
 **Decision changed:** Treat every shell-quoted embedded program and its comments as part of the outer shell grammar; run syntax proof before mirror fanout.
 **Incident count:** 6 | **Latest occurrence:** 2026-09-26
 
@@ -64,6 +66,7 @@ last_reviewed: 2026-09-26
 ## Lesson: Dynamic hook helpers need explicit ShellCheck handling
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Trace SC2329 callers before suppression and run the exact published lint command with the analyzer version under test.
 **Incident count:** 4 | **Latest occurrence:** 2026-09-21
 
@@ -82,6 +85,7 @@ last_reviewed: 2026-09-26
 ## Lesson: Shared hook helpers need missing-dependency runtime tests
 
 **Status:** active | **Created:** 2026-05-27
+**Severity:** INTEGRATION
 
 **Prevention:** Any Bash hook that sources a shared helper must guard the source path explicitly and include a self-test that runs the hook from a temp directory without the helper. The expected result is a fail-closed guardrail message, never exit 127. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `deny_dangerous_unavailable`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`).
 

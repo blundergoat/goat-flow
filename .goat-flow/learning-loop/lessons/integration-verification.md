@@ -84,6 +84,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Repeated doc claims need grep verification after the first patch
 
 **Status:** active | **Created:** 2026-04-21
+**Severity:** INTEGRATION
 
 **Prevention:**
 1. For duplicated release-note bullets or summary sections, assume the same claim may appear more than once and verify with `rg`, not by eyeballing one section.
@@ -100,6 +101,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Copilot instruction line caps count trailing newlines
 
 **Status:** active | **Created:** 2026-04-25
+**Severity:** INTEGRATION
 
 **Incident count:** 2 | **Latest occurrence:** 2026-08-14
 

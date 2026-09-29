@@ -22,6 +22,7 @@ last_reviewed: 2026-09-05
 ## Lesson: A mockup is the spec, and parity is a layer-by-layer diff
 
 **Status:** active | **Created:** 2026-04-05
+**Severity:** CORRECTNESS
 **Decision changed:** Treat a supplied mockup as a binding spec and diff it across all four layers before calling UI work done, rather than reproducing its general look.
 **Incident count:** 3 | **Latest occurrence:** 2026-04-26
 
@@ -55,6 +56,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Check browser tooling before blaming source when rendered CSS disagrees
 
 **Status:** active | **Created:** 2026-04-26
+**Severity:** CORRECTNESS
 **Decision changed:** When a visual bug survives a source-level fix that should have worked, capture the rendered computed styles before editing again; ask a person only when no browser tool is available.
 **Trigger phase:** READ
 **Incident count:** 2 | **Latest occurrence:** 2026-04-27

@@ -20,6 +20,7 @@ last_reviewed: 2026-09-28
 ## Lesson: Directory targets can break Node's test runner
 
 **Status:** active | **Created:** 2026-06-11
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-08-29
 
 **Prevention:** For suite-wide verification, use `node scripts/run-tests.mjs fast` or the matching npm script from `package.json`. Use `node --import tsx --test <specific-file.test.ts>` only for focused files. Treat `ERR_MODULE_NOT_FOUND` on a test directory or `index.json` as an invocation-shape failure before diagnosing product code. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`).
@@ -47,6 +48,7 @@ last_reviewed: 2026-09-28
 ## Lesson: Test suite must exercise the published invocation path
 
 **Status:** active | **Created:** 2026-04-24
+**Severity:** INTEGRATION
 **Trigger phase:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Run the packed public command and capture its complete output instead of inferring entry-point behavior or presentation from source and package metadata.
@@ -81,6 +83,7 @@ last_reviewed: 2026-09-28
 ## Lesson: Focused TypeScript tests need verified paths and the `tsx` loader
 
 **Status:** active | **Created:** 2026-04-29 | **Incident count:** 5 | **Latest occurrence:** 2026-08-21
+**Severity:** INTEGRATION
 
 **Prevention:** Resolve focused paths with `find test -type f -name '<pattern>'` rather than a shell glob or ripgrep, then use `node --import tsx --test <specific-file.test.ts>` as declared by `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`). When a spawned Node process names `tsx` as a package import, keep its cwd inside the dependency tree or pass a resolved loader location; a source entry point at an absolute path does not relocate package resolution. Before using the runner across Windows and WSL, verify that the runtime platform matches both the installed native dependencies and any subprocess paths in the suite. For WSL tests that require POSIX shell paths, keep the Linux runtime and use `ESBUILD_BINARY_PATH` only with a platform-correct binary from a same-version, same-lockfile dependency tree. Before treating a source/dist parity failure as a code regression, run the repository gate that rebuilds ignored `dist/` output (`scripts/preflight-checks.sh`, search: `Typecheck + build (dist/ produced)`) and rerun the test. A missing target, source-resolution error, native-package mismatch, stale ignored build artifact, or cross-platform subprocess failure is an invocation failure until the resolved command also fails.
 
@@ -101,6 +104,7 @@ last_reviewed: 2026-09-28
 ## Lesson: `git archive` is not a clean-clone proof when tests require `.git`
 
 **Status:** active | **Created:** 2026-06-01
+**Severity:** INTEGRATION
 
 **Prevention:** For "clean checkout" proofs, use a real clone when the test suite includes hooks, audit checks, or git-root discovery. Use `git archive` only for tests that are explicitly gitless. If an archive run fails with `deny-dangerous-self-test.sh --self-test=smoke failed`, rerun in a real clone before changing hook logic. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `git rev-parse --show-toplevel`), `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_allow shell "echo safe"`), `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `passes when the installed deny hook matches the canonical template`), `package.json` (search: `"test:fast"`).
 
@@ -115,6 +119,7 @@ last_reviewed: 2026-09-28
 ## Lesson: `npx vitest` is not this repo's runner and trips on `_temp/stryker-tmp` sandboxes
 
 **Status:** active | **Created:** 2026-06-14
+**Severity:** INTEGRATION
 
 **Prevention:** Use `node scripts/run-tests.mjs fast` (or `npm test`) for suite runs and `node --import tsx --test <specific-file.test.ts>` for focused files. Do not use `npx vitest` here. Read `No test suite found` originating from a `_temp/stryker-tmp/sandbox-*` path as a wrong-runner signal, not a product failure. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), and `.gitignore` (search: `_temp`).
 
@@ -142,6 +147,7 @@ last_reviewed: 2026-09-28
 ## Lesson: Node test filters must precede explicit test paths
 
 **Status:** active | **Created:** 2026-08-01
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-09-28
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/test-snapshots.md`; argument order for the runner belongs with the other invocation-shape entries.
 

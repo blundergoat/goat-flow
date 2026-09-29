@@ -82,6 +82,7 @@ last_reviewed: 2026-09-28
 ## Lesson: Workflow parser refactors need both fixture coverage and typecheck
 
 **Status:** active | **Created:** 2026-04-03 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's relationships, and lock one grammar with focused fixtures; negative mutations target a unique semantic substring; shipped path examples label placeholders explicitly and verifiers recognise the placeholder grammar rather than one literal token; at first behavioural GREEN, check whole-file complexity and headroom before adding branches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -160,6 +161,7 @@ last_reviewed: 2026-09-28
 ## Lesson: Isolated fixtures must create every dependency they assert
 
 **Status:** active | **Created:** 2026-04-27
+**Severity:** CORRECTNESS
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY

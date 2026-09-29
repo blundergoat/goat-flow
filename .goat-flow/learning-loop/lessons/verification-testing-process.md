@@ -8,6 +8,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Timeout completion needs a deadline independent of child close
 
 **Status:** active | **Created:** 2026-07-12
+**Severity:** CORRECTNESS
 **Decision changed:** Treat a timeout response as incomplete proof until the host-facing call also returns within its wall-clock bound.
 **Trigger phase:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-09
@@ -26,6 +27,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Real-timer terminal smoke tests need isolated verification
 
 **Status:** active | **Created:** 2026-05-30
+**Severity:** CORRECTNESS
 **Decision changed:** Process-lifecycle tests wait for an observable ready state before sending termination signals; elapsed time alone is never readiness.
 **Trigger phase:** VERIFY
 **Incident count:** 6 | **Latest occurrence:** 2026-09-19

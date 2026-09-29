@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-09-25
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-25
 ## Lesson: Permission wildcards must stay separate from escaped literal paths
 
 **Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
+**Severity:** CORRECTNESS
 **Decision changed:** Build permission patterns by escaping the literal directory first, then append deliberate wildcard grammar and assert the serialized rule. | **Trigger phase:** ACT
 
 **Prevention:** Pass only literal filesystem components through path escaping. Append reviewed permission wildcards afterward, then assert every server-owned filename family in the serialized deny rules. Evidence anchors: `src/cli/server/terminal-reporting-profile.ts` (search: `stagingServerFileDenies`), `test/unit/terminal-spawn.test.ts` (search: `launches Claude reporting sessions with a restrictive settings overlay`).
@@ -23,6 +24,7 @@ last_reviewed: 2026-09-25
 ## Lesson: Input/output alias guards must compare resolved filesystem paths
 
 **Status:** active | **Created:** 2026-08-05 | **Incident count:** 3 | **Latest occurrence:** 2026-09-25
+**Severity:** CORRECTNESS
 **Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** ACT
 **Caught at:** VERIFY
 
@@ -41,6 +43,7 @@ last_reviewed: 2026-09-25
 ## Lesson: RegExp constructor assertions need a real escape helper
 
 **Status:** active | **Created:** 2026-05-28
+**Severity:** CORRECTNESS
 
 **Incident count:** 2 | **Latest occurrence:** 2026-08-01
 
@@ -55,6 +58,7 @@ last_reviewed: 2026-09-25
 ## Lesson: Harness fixture counts must match the reported unit
 
 **Status:** active | **Created:** 2026-05-25
+**Severity:** CORRECTNESS
 **Incident count:** 3 | **Latest occurrence:** 2026-08-26
 
 **Prevention:** Name and assert the reported unit explicitly: profiles, unique files, unique identifiers, representations, findings, or checks. Normalize before counting identities, and assert representation cardinality separately when case or separator variants are part of the fixture. When multiple agents share one instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
@@ -82,6 +86,7 @@ last_reviewed: 2026-09-25
 ## Lesson: Behavior-scope changes need assertion updates before the first focused run
 
 **Status:** active | **Created:** 2026-05-04
+**Severity:** INTEGRATION
 **Incident count:** 8 | **Latest occurrence:** 2026-09-07
 
 **Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; include install/round-trip suites when generated config shape changes. For every replaced sentence, grep its opening fragment as well as its changed terms, because an assertion may parse a sentence by its opener without naming the words being changed. Update those assertions with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
@@ -111,6 +116,7 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 ## Lesson: New validators must run against the live repo before closeout
 
 **Status:** active | **Created:** 2026-04-29
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-08-05
 
 **Prevention:** After adding any validator that scans a project-wide artifact directory, run it against the live repository before the milestone gate and budget time for the live cleanup it exposes.
@@ -132,6 +138,7 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 ## Lesson: Heading regexes can silently truncate router-table checks
 
 **Status:** active | **Created:** 2026-04-03 | **Last recurrence:** 2026-07-18
+**Severity:** CORRECTNESS
 
 **Prevention:** For markdown section extraction, prefer a line-based parser that tracks fenced-code state over multiline heading regexes with `$`. When the invariant is file-wide, assert against the full document instead of a section helper. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
 
@@ -144,6 +151,7 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 ## Lesson: Path normalization can invalidate later path-shape heuristics
 
 **Status:** active | **Created:** 2026-04-03 | **Incident count:** 2 | **Latest occurrence:** 2026-09-04
+**Severity:** CORRECTNESS
 **Decision changed:** Exact path checks use token or segment boundaries plus a longer-lookalike negative control, never raw substring containment. | **Trigger phase:** ACT | **Caught at:** VERIFY
 
 **Prevention:** When a parser normalizes or extracts paths, downstream checks must use shape tests that still hold afterward, such as segment-boundary regexes (`/\/skills(?:\/|$)/`). When a validator claims exact identity, add a longer-lookalike negative control and reject raw substring containment. Evidence anchors: `src/cli/audit/skill-docs-contract.ts` (search: `textReferencesProjectPath`), `test/unit/audit-command/main.test.ts` (search: `Retired policy copy`).
@@ -174,11 +182,12 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 ## Lesson: Aggregate metadata counts can mask invalid individual entries
 
 **Status:** active | **Created:** 2026-07-17
+**Severity:** CORRECTNESS
 **Decision changed:** Schema-health and evidence gates validate every parsed value and required relation independently before aggregating counts or declaring presence.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-07-17
+**Incident count:** 4
+**Latest occurrence:** 2026-09-30
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/test-snapshots.md`; this is a counting contract between a check and what it reports, which this bucket owns.
 
 **Prevention:** Split structured Markdown into entries first, classify only frontmatter, Status-line, typed, or label-shaped standalone declarations, validate each value against its documented vocabulary, validate ordering and ownership relations explicitly, reduce each entry to at most one valid schema result, then aggregate. Pair empty-input fixtures with semantic near-misses: duplicate or unknown values, negated pressure and failure claims, explicit absence presented as evidence, placeholders presented as evidence, fields in the wrong section, labels on the wrong side of a boundary, and non-file paths. Keep the existing negative fixtures for duplicate-masks-missing, multiple labels in one value, legacy labels, wrong casing, a canonical label followed by narrative `**Evidence:**` content, and the blocking `stats --check` result. Diagnostic text must not contain the aggregator's `; ` delimiter. Evidence anchors: `src/cli/facts/shared/learning-loop.ts` (search: `getEvidenceLabelDiagnostic`) separates taxonomy metadata from prose and emits the bucket error; `src/cli/stats/stats.ts` (search: `evidence-label`) maps it to a stable rule; `test/integration/stats-command.test.ts` (search: `exactly one canonical evidence label`) locks parsing and enforcement.
@@ -190,6 +199,8 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 **Recurrence 2026-07-17:** The first `skill new --red-log` gate counted any three comma-separated tokens as pressures, accepted `fail` inside `did not fail`, accepted `- none` as a verbatim rationalisation, and searched later GREEN sections for fields missing from RED. In the same review, the shipped-scenario contract checked only that an illustrative label existed, so moving it below `## Assumption Tracking` still satisfied the test. The focused suite and full preflight both passed before adversarial probes reproduced the two semantic bypasses. Evidence anchors: `src/cli/skill-author-red-log.ts` (search: `documentedPressureCount`) now validates the isolated RED section; `test/integration/skill-author.test.ts` (search: `rejects RED receipts whose fields describe success instead of failure`) locks the near-miss; `test/contract/skill-hardening-shared-3.test.ts` (search: `scenario label must immediately precede the assumption block`) locks the required ordering relation.
 
 **Recurrence 2026-07-17 (quality recheck):** A follow-up RED-log probe used every canonical token only inside explicit negations: `no time pressure`, `failed? no`, and `none observed because it complied`. The gate still accepted the receipt and wrote a discoverable skill because each field validator recognized tokens without validating the field's asserted meaning. The first literal fix blocked that receipt, but an immediate boundary probe reproduced the same bypass with label-prefixed absence claims: `time: no pressure`, `failed: false`, and `No rationalisation occurred`. The pressure validator now rejects a directly negated detail after a canonical label, the outcome validator rejects directly negated failure classifications, and the rationalisation validator rejects prose that explicitly reports absence. Evidence anchors: `src/cli/skill-author.ts` (search: `startsWithNegatedAssertion` and `isAbsentRationalisation`), `test/integration/skill-author.test.ts` (search: `rejects negated RED evidence that includes canonical tokens` and `rejects alternate absence claims after canonical RED labels`), and the paired acceptance control (search: `accepts positive pressure details and a substantive no-prefixed rationalisation`).
+
+**Recurrence 2026-09-30:** M03 read optional `Enforced-by` from the whole rendered entry. A temporary-project probe with the label only in incident prose returned a non-null enforcement link, removing an unguarded repeat from the text action list. A second probe found that a body label adjacent to the metadata block still let a later `Enforced-by` line through. `src/cli/facts/shared/learning-loop.ts` (search: `firstEntryMetadataBlock`) now stops at the first prose field, including an adjacent `Prevention` label; `test/integration/stats-command-graduation.test.ts` (search: `keeps metadata-shaped incident prose out of severity and enforcement`) covers both visible results.
 
 ## Lesson: Permission migrations must recognize already complete pairs
 

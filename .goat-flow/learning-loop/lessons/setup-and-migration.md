@@ -8,6 +8,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Packaged install smoke is not a completed setup audit
 
 **Status:** active | **Created:** 2026-08-03
+**Severity:** INTEGRATION
 **Decision changed:** Release probes verify deterministic installation and adapted-project audit as separate stages.
 **Trigger phase:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-09-05
@@ -26,6 +27,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Skill edits must fan out to all four installed mirrors, and removed anchors cascade
 
 **Status:** active | **Created:** 2026-07-18
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-09-10
 
 **Prevention:** Treat one canonical skill edit as a four-target fan-out, `workflow/skills/` plus the `.claude/`, `.agents/`, and `.github/` mirrors, and verify with `goat-flow audit . --check-drift`. After deleting or renaming any anchored function, run `goat-flow stats . --check`, rewrite the citing footgun and lesson anchors as dated resolved-history prose, then re-check bucket size. Evidence anchors: `test/unit/support-bundle.test.ts` (search: `emits clean JSON through the CLI`), `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `removed 2026-07-18`).
@@ -91,6 +93,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Removing a concept requires full-repo grep, not just code grep
 
 **Status:** active | **Created:** 2026-03-22
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-19
 
 **Prevention:** After removing or renaming a concept, search the entire tracked repository with `git grep -l` rather than a curated directory list, then run both `stats --check` and the harness audit, because they cover different surfaces and neither validates search anchors inside ADRs.

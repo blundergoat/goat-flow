@@ -8,6 +8,7 @@ last_reviewed: 2026-09-14
 ## Footgun: Linter or security-scanner output can pressure rewrites of load-bearing skill language
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 **Decision changed:** Treat forceful wording as a behavioural-control candidate, not an untouchable string: preserve or replace it according to behavioural evidence, then update every durable anchor.
 **Trigger phase:** READ | **Caught at:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-08-29
 
@@ -24,6 +25,7 @@ last_reviewed: 2026-09-14
 ## Footgun: Playbook content edits collide with the ADR-023 word cap and exact-phrase contract assertions
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Measure the body budget and inventory phrase-pinning contracts, vocabulary consumers, and reconciliation owners before adding or compressing shipped skill guidance.
 **Trigger phase:** READ
 **Caught at:** ACT
@@ -84,6 +86,7 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 ## Footgun: goat-plan surface additions collide with near-full word-budget contract caps
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Measure the current per-file budgets and preserve existing rules; shorten only new wording unless the user approves a semantic change.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY

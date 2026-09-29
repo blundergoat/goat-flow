@@ -25,6 +25,7 @@ last_reviewed: 2026-09-18
 ## Lesson: Audit check skip semantics need both unit and integration fixture updates
 
 **Status:** active | **Created:** 2026-05-20
+**Severity:** INTEGRATION
 
 **Prevention:** When changing an audit check from optional/skippable to mandatory, grep for both the check id and `skip?.` before verification. Update unit report expectations and integration `BuildCheck` assertions in the same edit, then run `npm run typecheck` before `npm test`. Evidence anchors: `src/cli/audit/check-goat-flow.ts` (search: `instruction-file-skill-docs-pointer`), `test/integration/audit-build.test.ts` (search: `fails when the project has no shared reference/playbook pack`).
 
@@ -39,6 +40,7 @@ last_reviewed: 2026-09-18
 ## Lesson: Additive audit report fields need renderer defaults
 
 **Status:** active | **Created:** 2026-05-17
+**Severity:** INTEGRATION
 
 **Prevention:** When adding fields to `AuditReport` or other shared CLI/dashboard payloads, grep for direct renderer/reader fixture construction and either update every fixture or make consumers default missing additive fields. Evidence anchors: `src/cli/audit/render.ts` (search: `Array.isArray(report.enforcement)`), `test/contract/command-phrases.test.ts` (search: `renderAuditText does not mention scan`).
 
@@ -72,6 +74,7 @@ last_reviewed: 2026-09-18
 ## Lesson: Audit fixture expectations must follow detector semantics
 
 **Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+**Severity:** CORRECTNESS
 
 **Prevention:** For fixture-driven audit tests, reproduce the failing audit/check output first, capture the current check ids, then update test assertions and fixture metadata together. A healthy virtual filesystem must also satisfy every newly enforced content invariant; existence-only stubs are no longer healthy after a content detector lands. Do not trust older expected ids or fixture bodies after check-contract work. M12 recurrence anchor: `test/fixtures/projects/index.ts` (search: "healthyPlaybook").
 
@@ -137,6 +140,7 @@ last_reviewed: 2026-09-18
 ## Lesson: Verify the capture mode and output contract before encoding assessment evidence
 
 **Status:** active | **Created:** 2026-09-13
+**Severity:** INTEGRATION
 **Decision changed:** Run the documented capture shape and inspect the produced fields before prescribing it or asserting its terminal labels.
 **Trigger phase:** ACT | **Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-09-18

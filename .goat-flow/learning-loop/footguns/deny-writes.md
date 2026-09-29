@@ -11,6 +11,7 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: Git push deny checks must normalize shell wrappers and control bodies
 
 **Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Incident count:** 5 | **Latest occurrence:** 2026-09-27
 
 **Prevention:**
@@ -37,6 +38,7 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: Git publication policy omitted the http-push verb
 
 **Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Check lower-level remote-ref writers against `is_git_publication_target` when changing the publication guard; test direct and alias forms beside a read-only Git control.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -61,6 +63,7 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: Direct Git helper executables bypassed the shared Git parser
 
 **Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Treat `git-<verb>` executable names as Git commands in both repository policy and hosted-command inspection.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -83,6 +86,7 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: Git alias expansions bypass every guarded form the parser does not record
 
 **Status:** active | **Created:** 2026-09-15 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Every guarded Git class reads the recorded alias expansions as well as the visible subcommand, and an unrecognised first word resolves through one bounded `git config --get alias.<word>` lookup before classification.
 **Trigger phase:** ACT
 **hallucination-risk:** high
@@ -128,6 +132,7 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 ## Footgun: The Git commit guard lists verbs by name, so an unlisted history writer passes
 
 **Status:** active | **Created:** 2026-09-23 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Classify history writers in one set; grant exact non-writing modes only after checking the alias expansion and appended arguments.
 **Trigger phase:** ACT
 **hallucination-risk:** high

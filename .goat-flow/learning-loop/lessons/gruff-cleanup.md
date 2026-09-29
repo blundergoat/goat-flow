@@ -18,6 +18,7 @@ last_reviewed: 2026-09-18
 ## Lesson: Do not convert a fix request into threshold tuning
 
 **Status:** active | **Created:** 2026-05-30
+**Severity:** INTEGRATION
 **Decision changed:** Re-run the analyzer after each candidate fix and restore the original code when the edit only trades one advisory for another.
 **Incident count:** 4 | **Latest occurrence:** 2026-09-12
 
@@ -46,6 +47,7 @@ last_reviewed: 2026-09-18
 ## Lesson: Gruff error-behavior comments need rule vocabulary
 
 **Status:** active | **Created:** 2026-06-10
+**Severity:** INTEGRATION
 
 **Incident count:** 5 | **Latest occurrence:** 2026-09-05
 
@@ -80,6 +82,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 ## Lesson: Do not leave generated gruff defaults after an init probe
 
 **Status:** active | **Created:** 2026-06-09
+**Severity:** INTEGRATION
 
 **Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, merge current generated defaults with the still-supported project tuning before broad verification; do not revive rules removed by the installed version. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedAbbreviations:`), `.gruff-ts.yaml` (search: `acceptedBooleanNames:`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
 
@@ -102,6 +105,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 ## Lesson: Confirm gruff unused-import findings before deleting imports
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** CORRECTNESS
 
 **Incident count:** 3 | **Latest occurrence:** 2026-08-06
 
@@ -116,6 +120,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 ## Lesson: Run cheap style gates before expensive gruff verification
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 
 **Incident count:** 9 | **Latest occurrence:** 2026-09-18
 
@@ -143,6 +148,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 ## Lesson: Gruff cleanup automation must fit the hook surface
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-05
 
 **Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).

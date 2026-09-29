@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-09-28
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. Scanner blind spots live in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -22,6 +22,7 @@ last_reviewed: 2026-09-28
 ## Footgun: Registered Stop hooks can be dead config behind agent trust gates
 
 **Status:** active | **Created:** 2026-06-13 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-09-18
 **Decision changed:** Treat project-layer trust, hook-handler trust, and live model delivery as separate gates before enabling a registration.
 **Trigger phase:** VERIFY
@@ -41,6 +42,7 @@ last_reviewed: 2026-09-28
 ## Footgun: Launcher-owned failures can bypass provider feedback adapters
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Exercise launcher-owned timeout and invalid-output branches through source and packed consumers before registering model-visible feedback.
 **Trigger phase:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-09-25
@@ -118,6 +120,7 @@ last_reviewed: 2026-09-28
 ## Footgun: Copilot combines native and Claude project hook registrations
 
 **Status:** active | **Created:** 2026-08-23 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Treat repository `.claude/settings.json` as a Copilot hook source too; keep real Copilot policy only in its native config, give managed Claude rows explicit inert shell routes, and make descriptor readers prefer structured exec operands over those routes.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -134,6 +137,7 @@ last_reviewed: 2026-09-28
 ## Footgun: Claude policy denials echo the whole launcher command into agent context
 
 **Status:** active | **Created:** 2026-09-23 | **Evidence:** ACTUAL_MEASURED
+**Severity:** PERFORMANCE
 **Decision changed:** Count each Claude policy denial as roughly 1.5K tokens of context, and keep Claude policy rows on exit-2 denials until a JSON deny is proven to block on malformed output.
 **Trigger phase:** ACT
 **Incident count:** 2 | **Latest occurrence:** 2026-09-23

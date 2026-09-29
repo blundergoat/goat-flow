@@ -20,6 +20,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Slow verification can expose unrelated dashboard doc drift
 
 **Status:** active | **Created:** 2026-05-09
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-05-18
 
 **Prevention:** When `npm run test:slow` or preflight fails during unrelated verification, separate task-local regressions from repo-wide drift before changing code. For dashboard view drift, compare `workflow/manifest.json` (search: `dashboard_views`) against `.goat-flow/architecture.md` (search: `Page views`), then rerun both `bash scripts/preflight-checks.sh` and `npm run test:slow` after the doc correction.
@@ -37,6 +38,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Classic dashboard script splits need Knip ignore coverage
 
 **Status:** active | **Created:** 2026-04-21
+**Severity:** INTEGRATION
 **Decision changed:** Register a new dashboard classic script in `knip.json` and `src/dashboard/index.html` in the change that creates it, and run the repository Knip command before trusting preflight.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -56,6 +58,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Dashboard asset tests can read stale dist copies
 
 **Status:** active | **Created:** 2026-04-25
+**Severity:** INTEGRATION
 **Decision changed:** Keep generated-asset checks in the after-build suite; source contracts must run without `dist`. Clean the build when an asset is renamed or removed.
 **Trigger phase:** ACT
 **Caught at:** VERIFY

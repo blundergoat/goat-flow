@@ -8,6 +8,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Reference-pack wording fixes must check word budget immediately
 
 **Status:** active | **Created:** 2026-05-19
+**Severity:** INTEGRATION
 
 **Decision changed:** Run the canonical word-budget contract immediately after every skill or shared-reference wording edit.
 
@@ -57,6 +58,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Skill compaction must preserve indexed semantic anchors
 
 **Status:** active | **Created:** 2026-07-12
+**Severity:** INTEGRATION
 
 **Decision changed:** Preserve skill decision rules before optimizing word-count headroom; retain semantic anchors and verify meaning as well as contracts.
 
@@ -115,6 +117,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 ## Lesson: Source-regex dashboard tests must tolerate formatter reflow
 
 **Status:** active | **Created:** 2026-05-11
+**Severity:** INTEGRATION
 
 **Prevention:** After changing source-grep tests for dashboard classic scripts, run Prettier before the focused test rerun. If a regex only protects structure, make whitespace flexible enough for formatter reflow or use a small VM helper test instead.
 
@@ -136,6 +139,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 ## Lesson: Config mergers must preserve user-visible serialization
 
 **Status:** active | **Created:** 2026-08-12 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 
 **Decision changed:** Compare both parsed state and serialized output when replacing migration logic, and seed compatibility proof through the predecessor producer when it remains callable.
 
@@ -160,6 +164,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 ## Lesson: Retire shared contract vocabulary only after predecessor consumers migrate
 
 **Status:** active | **Created:** 2026-08-27
+**Severity:** INTEGRATION
 
 **Decision changed:** Stop emitting predecessor-only values at the new boundary first; narrow a shared type only after every producer and consumer has migrated.
 
@@ -180,6 +185,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 ## Lesson: Regressions caught too late - tests run at milestone granularity, not edit granularity
 
 **Status:** active | **Created:** 2026-04-05
+**Severity:** INTEGRATION
 
 **Prevention:**
 1. Consider an optional post-write hook that runs the project's test command after file changes (configured via `config.yaml`, off by default)
@@ -214,6 +220,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 ## Lesson: Filtered manifest ids still need explicit indexed-lookup proof in TypeScript
 
 **Status:** active | **Created:** 2026-04-21
+**Severity:** INTEGRATION
 
 **Prevention:**
 1. After refactoring manifest/registry code that filters ids and then indexes a `Record`, run `npm run typecheck` even if the focused unit tests already pass.
@@ -235,6 +242,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 ## Lesson: Semantic prose contracts must bind to the owned section
 
 **Status:** active | **Created:** 2026-08-14
+**Severity:** INTEGRATION
 
 **Decision changed:** Make semantic wording assertions case-insensitive unless casing is the contract, and bound shared files to the exact owned section, object, or fence.
 

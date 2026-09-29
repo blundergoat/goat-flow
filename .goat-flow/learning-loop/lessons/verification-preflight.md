@@ -8,6 +8,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Preflight PASS output still needs exit-status proof
 
 **Status:** active | **Created:** 2026-06-07
+**Severity:** CORRECTNESS
 **Incident count:** 3 | **Latest occurrence:** 2026-09-26
 
 **Prevention:** When a shell gate has an EXIT trap or report renderer, capture both its summary and `$?` before treating it as final evidence; a green report line is not sufficient if the process status disagrees. End no-op-safe renderer helpers with `return 0`, make zero-match parser pipelines explicit with `|| true`, and keep the closeout an explicit error-count branch. Evidence anchors: `scripts/preflight-checks.sh` (search: `_emit_section_row`), `scripts/preflight-checks.sh` (search: `if [[ "$errors" -gt 0 ]]; then`).
@@ -40,6 +41,7 @@ last_reviewed: 2026-09-19
 ## Lesson: New dependency-audit gates need a baseline audit first
 
 **Status:** active | **Created:** 2026-05-21
+**Severity:** SECURITY
 **Decision changed:** Prove the current dependency tree and bound the registry call before trusting an audit gate; adjacent integration tests use a local protocol endpoint while release proof stays live.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -71,6 +73,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Shared hook refactors need both hook-local proof and repo-wide preflight
 
 **Status:** active | **Created:** 2026-04-21
+**Severity:** INTEGRATION
 **Decision changed:** Update fixture assumptions and exact diagnostics with a hook contract, then use the edit tool's native patch grammar before mirror fanout.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -99,6 +102,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Hook renames must include learning-loop and router-table drift
 
 **Status:** active | **Created:** 2026-05-25
+**Severity:** INTEGRATION
 **Decision changed:** Before accepting a file or symbol rename, grep durable references and ignored working plans for the old name, then run `stats --check`.
 **Trigger phase:** VERIFY
 **Incident count:** 7 | **Latest occurrence:** 2026-09-04
@@ -121,6 +125,7 @@ last_reviewed: 2026-09-19
 ## Lesson: New harness checks need count locks and provenance date proof
 
 **Status:** active | **Created:** 2026-05-16 | **Merged during:** M11 learning-loop consolidation
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-06-08
 
 **Prevention:** After adding or removing any audit check, grep for `registered build and harness checks`, `HARNESS_CHECKS.length`, the old total, and the new check id across `test/`, `docs/`, the instruction files, `.goat-flow/` orientation docs (`glossary.md`, `code-map.md`), and learning-loop anchors. Then run a JSON audit parse printing the new check's `id`, `type`, `impact`, and `provenance.verified_on`. Re-run full preflight until clean: its `Doc/code drift` and `Learning-loop schema` checks are the only gates that catch the doc and anchor cascade, and fixing one count string can break an anchor that searched for it.
@@ -137,6 +142,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Learning-loop content gates need tracked, durable paths
 
 **Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+**Severity:** INTEGRATION
 **Incident count:** 6 | **Latest occurrence:** 2026-08-10
 
 **Prevention:** Before closing add, rename, delete, or learning-loop edits, run both a tracked-state check (`git status --short`, `git ls-files --error-unmatch <path>`) and the relevant old-pattern grep, including source-owned provenance and detector metadata rather than Markdown alone. Use an ignore-bypassing search when ignored `.goat-flow` workspace state is the target. In durable artifacts cite committed repo files, public URLs, or prose descriptions for external paths, and never backtick a fake repo-local example; when documenting a deleted path, name the old filename in prose rather than writing it as if it resolves. Evidence anchors: `src/cli/audit/harness/check-context.ts` (search: `boundary-guidance-present`), `src/cli/audit/harness/check-verification.ts` (search: `evidence-before-claims`).
@@ -167,6 +173,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Verification grep patterns must not carry Markdown backticks into Bash
 
 **Status:** active | **Created:** 2026-06-07
+**Severity:** INTEGRATION
 **Decision changed:** Validate persisted anchors with the literal search shape a future agent will run.
 **Trigger phase:** VERIFY
 **Incident count:** 13 | **Latest occurrence:** 2026-08-28

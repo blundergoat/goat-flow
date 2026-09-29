@@ -24,6 +24,7 @@ last_reviewed: 2026-09-12
 ## Footgun: Release-version bumps can break skill-rename work through stale fixtures and hardcoded current-version routing
 
 **Status:** active | **Created:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-08-26
 
 **Prevention:** Treat version-sensitive helpers as rename scope: update classifiers, config fixtures, quality snapshot ids and bands, installer version discovery, and setup-routing tests before trusting `npm test`.

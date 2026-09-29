@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-09-27
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Hook test coverage strategy and provider evidence - what a self-test actually exercises, which support layer a capture proves, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -19,6 +19,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Prove hook capability before marking an agent unsupported
 
 **Status:** active | **Created:** 2026-05-26
+**Severity:** INTEGRATION
 **Decision changed:** Treat provider input, command execution, result delivery, and model visibility as separate support gates.
 **Trigger phase:** VERIFY
 **Incident count:** 10 | **Latest occurrence:** 2026-09-18
@@ -59,6 +60,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Secret-scanner tests must not embed literal secret-shaped fixtures
 
 **Status:** active | **Created:** 2026-06-12
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-09-04
 
 **Prevention:** In secret-scanner tests and shipped self-tests, build secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner while the committed source holds no contiguous token or private-key pattern. Apply the same rule to harmless structural fixtures the repository scanner classifies as REVIEW, and never add a waiver that could hide a real credential. After adding or editing scanner fixtures, run the scanner against the current repo, not only temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`), `workflow/hooks/post-turn-safety.sh` (search: `synthetic_assignment_prefix`), `test/unit/plans-check-structure.test.ts` (search: `BANNED_IDENTIFIER_CASES`), `test/unit/redact-command.test.ts` (search: `TEST_BEARER_INPUT`).
@@ -92,6 +94,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Exact hook-copy assertions must derive from owned policy text
 
 **Status:** active | **Created:** 2026-08-24
+**Severity:** INTEGRATION
 **Decision changed:** Before adding an exact block-copy assertion, read the source-owned block reason or capture attributed classifier output; never infer the expected fragment from the command.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -110,6 +113,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Manual hook matrices must avoid live-guard self-interference
 
 **Status:** active | **Created:** 2026-06-03
+**Severity:** INTEGRATION
 **Decision changed:** Split all-in-one shell verification into bounded direct commands, and feed hook payloads from a temporary file when the live shell guard inspects the outer command.
 **Trigger phase:** VERIFY
 **Incident count:** 8 | **Latest occurrence:** 2026-09-12
@@ -145,6 +149,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Codex hook commands must use the git-root wrapper shape
 
 **Status:** active | **Created:** 2026-05-27
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-08-22
 
 **Prevention:** Generate Codex hook commands through the root-resolving Node bootstrap: it resolves the active git root, loads `run-with-bash.mjs`, passes the selected hook as an argument, and starts the launcher with that root as cwd. Codex deliberately receives no `CLAUDE_PROJECT_DIR` fallback. On Windows, wrap the same bootstrap in the provider's `commandWindows` override: transport the generated source as Base64, restore `[Environment]::CurrentDirectory` with `Set-Location -LiteralPath`, invoke `node.exe`, propagate `$LASTEXITCODE`, and preserve `Path` and `PATHEXT` in minimal replay environments. Test the exact generated override from a hostile-named path with safe, blocked, and canary inputs. Which events that registration actually delivers is a separate question owned by `.goat-flow/learning-loop/lessons/hook-testing.md` (search: `Prove hook capability before marking an agent unsupported`). Evidence anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `run-with-bash.mjs`), `.codex/hooks.json` (search: `run-with-bash.mjs`), `src/cli/server/agent-hook-command.ts` (search: `codexWindowsHookCommand`), `test/integration/hook-command-spawn-matrix.test.ts` (search: `Windows override`).
@@ -161,6 +166,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Contract fixtures need a real payload for each branch they model
 
 **Status:** active | **Created:** 2026-09-19
+**Severity:** INTEGRATION
 **Decision changed:** Before writing a fixture for an analyzer error or refusal branch, capture that branch from a real executable; a measured clean envelope does not measure its error fields.
 **Trigger phase:** ACT
 **Caught at:** VERIFY

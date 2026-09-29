@@ -8,6 +8,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Git status cannot prove milestone work disappeared after HEAD moves
 
 **Status:** active | **Created:** 2026-08-09
+**Severity:** CORRECTNESS
 **Decision changed:** Compare the recorded baseline tree, current HEAD, and file hashes before attempting recovery when a changed path disappears from `git status`.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -26,6 +27,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Activate prerequisites before the numerically next milestone
 
 **Status:** active | **Created:** 2026-07-13
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-09-03
 
 **Prevention:** Before changing milestone status or deriving proof, read every declared prerequisite and named evidence owner. Recompute mutable counts at the named revision and current worktree; never use a historical endpoint as the live expectation. Run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs) and put rationale in narrative fields.
@@ -42,6 +44,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Final human gates belong in Proof, not implementation Tasks
 
 **Status:** active | **Created:** 2026-08-01
+**Severity:** INTEGRATION
 **Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked, separate agent handoff work from human execution, prefix each open human-owned Proof item with `[HUMAN]`, and assign it zero agent minutes.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -63,6 +66,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Estimates written as durations inflate several-fold; estimates counted from work units do not
 
 **Status:** active | **Created:** 2026-08-02
+**Severity:** CORRECTNESS
 **Decision changed:** Derive an estimate by counting task, proof, and admin units, then converting once; never write an hours figure first and decompose backwards from it.
 **Trigger phase:** SCOPE
 **Incident count:** 5 | **Latest occurrence:** 2026-08-23
@@ -94,6 +98,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 ## Lesson: Phase totals must be derivable from phase breakdowns
 
 **Status:** active | **Created:** 2026-05-01
+**Severity:** CORRECTNESS
 **Decision changed:** Run the plan arithmetic gate immediately after writing estimates, then independently derive every ISSUE-level roll-up from the validated milestone headlines.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -119,6 +124,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 ## Lesson: Milestone task sections contain estimated work, not evidence notes
 
 **Status:** active | **Created:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Reserve Tasks for estimated implementation checkboxes and keep each `(est: ...)` entry at the end of its item.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -145,6 +151,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 ## Lesson: Milestone plans need exporter-contract verification before handoff
 
 **Status:** active | **Created:** 2026-07-17
+**Severity:** INTEGRATION
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient.
 **Trigger phase:** VERIFY
 **Incident count:** 12 | **Latest occurrence:** 2026-09-27
@@ -173,6 +180,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 ## Lesson: A milestone added to an existing train must be wired into its terminal node and ISSUE bands
 
 **Status:** active | **Created:** 2026-08-23
+**Severity:** INTEGRATION
 **Decision changed:** When goat-plan File-Write adds a milestone to a plan directory that already has a terminal release milestone, the same batch adds the new ID to that node's `Depends on` and re-derives the ISSUE task band and totals; a milestone file alone is not "in the plan".
 **Trigger phase:** SCOPE
 **Caught at:** ACT

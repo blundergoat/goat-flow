@@ -47,6 +47,7 @@ last_reviewed: 2026-08-24
 ## Lesson: Audit check tests should assert the public failure field
 
 **Status:** active | **Created:** 2026-05-06
+**Severity:** INTEGRATION
 **Decision changed:** Assert each public result field according to its declared role before matching prose.
 **Trigger phase:** ACT
 **Caught at:** VERIFY

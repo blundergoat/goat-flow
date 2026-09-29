@@ -6,6 +6,7 @@ last_reviewed: 2026-09-18
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
 
 **Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-08-04
 
 **Prevention:** When adding or tightening path validation, classify paths before checking existence: committed setup and doc files must resolve, while gitignored local-state paths are valid navigation vocabulary. Classify exceptional policy paths before generic skip predicates. Keep `scripts/check-path-integrity.sh` and `doc-paths-resolve` on the same local-state exemption policy, and never let a basename fallback search untracked trees, because a fallback is only as trustworthy as the tree it searches.
@@ -21,6 +22,7 @@ last_reviewed: 2026-09-18
 ## Footgun: Playbooks reference goat-flow repo-internal files absent from consumer installs
 
 **Status:** active | **Created:** 2026-05-29 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-07-14
 
 **Prevention:** Keep playbook rules self-contained; reference only installed siblings and the consumer's instruction files, and move goat-flow-specific commands, scans, and ADR pointers into goat-flow's own instruction files. Before declaring a playbook or shipped skill done, grep it for `\.goat-flow/(decisions|lessons|patterns|footguns)|src/cli|scripts/|ADR-|check-(drift|goat-flow)|stats --check|DESIGN_TARGET` and confirm any `scripts/...` path it names is listed in `workflow/manifest.json`; otherwise genericize it. Triage each hit: a reference to a learning-loop directory the consumer is meant to populate is portable, because `workflow/install-goat-flow.sh` (search: `for dir in .goat-flow/learning-loop/footguns`) seeds those directories, and only a specific goat-flow-authored file or ADR number is dead.
@@ -34,6 +36,7 @@ last_reviewed: 2026-09-18
 ## Footgun: Agent capability metadata goes stale when upstream docs add hooks
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Re-check each provider, event, and result channel instead of carrying agent-level support forward.
 **Trigger phase:** READ
 **Incident count:** 4 | **Latest occurrence:** 2026-08-23
@@ -49,6 +52,7 @@ last_reviewed: 2026-09-18
 ## Footgun: Active footgun Symptoms paragraph drifts after the underlying bug is fixed
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** When a behavior fix changes evidence cited by an active footgun, update or resolve that entry in the same change.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -68,6 +72,7 @@ last_reviewed: 2026-09-18
 ## Footgun: Cross-reference fragility across docs
 
 **Status:** active | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Stage a rename before registering its destination; search all tracked files, not only Markdown, for old paths.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -89,6 +94,7 @@ last_reviewed: 2026-09-18
 ## Footgun: Consolidating a rule stated several ways deletes the riders only one variant carried
 
 **Status:** active | **Created:** 2026-08-18 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Before merging divergent statements of one rule, list every distinct clause across all variants, not only the clause they disagree about. Merge on the conflict, then re-add each rider the merged text dropped.
 **Trigger phase:** ACT
 **Incident count:** 2
@@ -121,6 +127,7 @@ last_reviewed: 2026-09-18
 ## Footgun: Version bump checks do not cover synthetic project config strings
 
 **Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
 **Prevention:** Derive fanout from manifest ownership. After every bump, search tracked release surfaces for literal and regex-escaped old versions, capture the release snapshot, run packed-byte canaries, and run the full suite.

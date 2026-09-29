@@ -25,6 +25,7 @@ last_reviewed: 2026-09-29
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently drops `.goat-flow/` subtrees, committed or ignored
 
 **Status:** active | **Created:** 2026-06-13
+**Severity:** CORRECTNESS
 **Decision changed:** Treat a zero-hit recursive search under `.goat-flow/` as unproven until a known-positive control passes with the same command; use `command grep` for any sweep that must reach ignored plans or logs, and classify a negative search by its exit status rather than by empty output.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -73,6 +74,7 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 ## Lesson: Hook tests should feed stdin through files when child `cat` must see EOF
 
 **Status:** active | **Created:** 2026-06-13
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-28
 
 **Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only descriptor or shell redirection rather than the runner's `input` option. Capture hook stderr explicitly when the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runLauncherWithPayload`).

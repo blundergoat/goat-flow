@@ -283,6 +283,74 @@ function countRecurrenceLabels(entryContent: string): number {
   }).length;
 }
 
+/** Metadata labels permitted before the first prose field in a footgun or lesson entry. */
+const GRADUATION_METADATA_LABELS = new Set([
+  "Status",
+  "Created",
+  "Updated",
+  "Resolved",
+  "Related",
+  "Decision changed",
+  "Trigger phase",
+  "Caught at",
+  "Incident count",
+  "Latest occurrence",
+  "Severity",
+  "Enforced-by",
+  "Reason",
+  "Corrected",
+  "Dependency note",
+  "Depends on",
+  "hallucination-risk",
+  "Last recurrence",
+  "Recurrences",
+  "Merged",
+  "Merged during",
+]);
+
+/** Read optional fields only before body prose, even when it follows metadata directly. */
+function firstEntryMetadataBlock(section: string): string {
+  const lines = section.split(/\r?\n/);
+  const metadataLines: string[] = [];
+  let index = 1;
+  while (index < lines.length && lines[index]?.trim() === "") index++;
+  for (; index < lines.length; index++) {
+    const line = lines[index] ?? "";
+    const label = line.match(/^\*\*([^*\r\n]+):\*\*/)?.[1];
+    if (label === undefined || !GRADUATION_METADATA_LABELS.has(label)) break;
+    metadataLines.push(line);
+  }
+  return metadataLines.join("\n");
+}
+
+/** Recognize only the published severity tiers; malformed optional metadata stays unclassified. */
+function parseGraduationSeverity(
+  metadataBlock: string,
+): GraduationCandidate["severity"] {
+  const severityValue = metadataBlock
+    .match(/^\*\*Severity:\*\*[ \t]*([^\r\n]*)/m)?.[1]
+    ?.trim();
+  switch (severityValue) {
+    case "SECURITY":
+    case "CORRECTNESS":
+    case "INTEGRATION":
+    case "PERFORMANCE":
+    case "STYLE":
+      return severityValue;
+    default:
+      return null;
+  }
+}
+
+/** Read a nonempty enforcement citation from the entry's leading metadata block. */
+function parseGraduationEnforcement(metadataBlock: string): string | null {
+  return (
+    metadataBlock
+      .match(/^\*\*Enforced-by:\*\*[ \t]*([^\r\n]*)/m)?.[1]
+      ?.trim() || null
+  );
+}
+
 /**
  * Collect feedback-loop graduation candidates from one bucket body.
  *
@@ -309,6 +377,7 @@ function collectGraduationCandidates(body: string): GraduationCandidate[] {
       observedIncidentCount,
     );
     if (incidentCount < 2) continue;
+    const metadataBlock = firstEntryMetadataBlock(section);
     candidates.push({
       title: heading[1].trim(),
       recurrenceCount,
@@ -317,6 +386,9 @@ function collectGraduationCandidates(body: string): GraduationCandidate[] {
       hasIncidentCountDivergence:
         declaredIncidentCount !== null &&
         declaredIncidentCount < observedIncidentCount,
+      severity: parseGraduationSeverity(metadataBlock),
+      rank: null,
+      enforcedBy: parseGraduationEnforcement(metadataBlock),
     });
   }
   return candidates;

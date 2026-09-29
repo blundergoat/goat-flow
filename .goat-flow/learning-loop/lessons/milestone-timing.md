@@ -8,6 +8,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Actual time must come from prospective active-time segments
 
 **Status:** active | **Created:** 2026-08-02
+**Severity:** CORRECTNESS
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -44,6 +45,7 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 ## Lesson: A running receipt makes a wrong category split look measured
 
 **Status:** active | **Created:** 2026-08-02 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
 **Decision changed:** Switch category at each work boundary; correct timestamps cannot make an inaccurate category split measured evidence.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -72,6 +74,7 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 ## Lesson: Activate a milestone before starting its timing receipt
 
 **Status:** active | **Created:** 2026-08-14
+**Severity:** INTEGRATION
 **Decision changed:** Activate before timing starts, stop before an inactive handoff, never move a pending or terminal milestone backward only to time acceptance administration, and remove the active receipt schema before resetting to `not-started`.
 **Trigger phase:** ACT
 **Incident count:** 11 | **Latest occurrence:** 2026-09-06
@@ -95,6 +98,7 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 ## Lesson: Finalized timing receipts require their parsed summaries
 
 **Status:** active | **Created:** 2026-08-14 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
 **Decision changed:** Finalize milestone timing through the plans-time command; when repairing a receipt manually, reconcile both summary lines before claiming measured Actual.
 **Trigger phase:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-09-16

@@ -8,6 +8,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
 **Status:** active | **Created:** 2026-05-25
+**Severity:** INTEGRATION
 **Decision changed:** Treat a human-readable comment, boolean name, or compact test as unfinished until the targeted analyzer accepts the exact source shape; read the installed rule before a second rewrite.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -40,6 +41,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff doc comments can expose hidden complexity warnings
 
 **Status:** active | **Created:** 2026-05-30
+**Severity:** INTEGRATION
 **Decision changed:** After any docs batch, analyzer upgrade, or conflict resolution, run the full-scan warning count and the ratchet before the lint gate, even while build and typecheck are green.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -70,6 +72,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Keep the binary path returned by the gruff availability check
 
 **Status:** active | **Created:** 2026-08-03
+**Severity:** INTEGRATION
 **Decision changed:** Run later Gruff commands through the exact `$found` path instead of guessing a global install location.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -86,6 +89,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff-driven direct imports must preserve facade proof
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-05-31
 
 **Prevention:** When direct imports are needed to prove a nearby implementation module, keep the stable facade exports exercised with explicit alignment assertions in existing nearby tests. For endpoint arrays without a sort contract, select records by semantic identifier before asserting fields. Evidence anchors: `src/cli/audit/audit.ts` (search: `createAuditFactsView`), `src/cli/quality/skill-quality.ts` (search: `scoreAllArtifacts`), `test/integration/dashboard-tasks-api.test.ts` (search: `milestoneByFilename`).
@@ -101,6 +105,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff side-effect comments must name the side effect
 
 **Status:** active | **Created:** 2026-05-30 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-09-12
 
 **Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, name the side effect in plain maintainer language (`Writes`, `Spawns`, `filesystem`) instead of a generic purpose sentence, and do not swap that verb for a synonym later. If the finding remains, read the installed rule before another rewrite. After a large docs batch, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
@@ -119,6 +124,7 @@ last_reviewed: 2026-09-19
 ## Lesson: A source comment can be a cited learning-loop anchor, so rewording it breaks the audit
 
 **Status:** active | **Created:** 2026-08-18
+**Severity:** INTEGRATION
 **Decision changed:** Before rewording an existing comment during a docs pass, grep the learning loop for that exact string; a cited comment is a durable artifact, not free text.
 **Trigger phase:** READ
 **Caught at:** VERIFY

@@ -55,6 +55,7 @@ last_reviewed: 2026-08-31
 ## Lesson: Test-file rename sweeps need a focused test rerun
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 **Decision changed:** Anchor a local test rename to its unique test case, then inspect the exact diff and symbol occurrences before running that file.
 **Trigger phase:** ACT
 **Incident count:** 6 | **Latest occurrence:** 2026-08-31
@@ -93,6 +94,7 @@ Evidence anchor: `test/unit/learning-loop-context.test.ts` (search: `recomputes 
 ## Lesson: Mechanical extractions need generated-name and owner audits
 
 **Status:** active | **Created:** 2026-08-10
+**Severity:** CORRECTNESS
 **Decision changed:** Use identifier boundaries and classify every extracted symbol as shared, moved, or owner-local.
 **Trigger phase:** ACT
 **Incident count:** 2 | **Latest occurrence:** 2026-08-10

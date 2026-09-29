@@ -20,6 +20,7 @@ last_reviewed: 2026-09-29
 ## Lesson: Copilot JSON hook probes must use Copilot-shaped payloads
 
 **Status:** active | **Created:** 2026-06-07 | **Incident count:** 2 | **Latest occurrence:** 2026-09-27
+**Severity:** INTEGRATION
 
 **Decision changed:** Copy the provider's exact event shape and serialize command text at every JSON layer before interpreting a probe result.
 **Trigger phase:** ACT | **Caught at:** VERIFY
@@ -45,6 +46,7 @@ Evidence: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh`
 ## Lesson: Codex sandbox hook probes must distinguish direct Bash from Node child-process
 
 **Status:** active | **Created:** 2026-06-05 | **Incident count:** 6 | **Latest occurrence:** 2026-09-29
+**Severity:** INTEGRATION
 
 **Decision changed:** Reproduce hook failures through the exact parent/child process boundary. For hosted-only timeouts, vary the child environment and stdin transport independently before changing launcher policy or deadlines.
 
@@ -77,6 +79,7 @@ The approved server follow-up restored all 17 managed-divergence cases with priv
 ## Lesson: Configured hook smoke must verify the registered guard path
 
 **Status:** active | **Created:** 2026-05-27 | **Incident count:** 10 | **Latest occurrence:** 2026-08-16
+**Severity:** INTEGRATION
 
 **Decision changed:** Treat configured replay as a safe-and-dangerous semantic matrix, and make mocks identify the command boundary rather than infer it from call order.
 
@@ -111,6 +114,7 @@ The approved server follow-up restored all 17 managed-divergence cases with priv
 ## Lesson: Hook parser regressions need false-positive grammar probes
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 9 | **Latest occurrence:** 2026-09-27
 
 **Decision changed:** Test native conditions and both branches before replacing broad word matching with executable-verb checks.

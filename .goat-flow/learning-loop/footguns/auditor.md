@@ -34,6 +34,7 @@ last_reviewed: 2026-09-21
 ## Footgun: Missing directories can false-pass when harness checks use `listDir()` as an existence test
 
 **Status:** active | **Created:** 2026-05-05 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Incident count:** 2 | **Latest occurrence:** 2026-07-12
 
 **Prevention:** When a check promises directory storage, require both `exists(path)` and `isReadableDirectory(path)` before using `listDir()`. Use `listDir()` alone only when missing, unreadable, and empty intentionally mean the same thing.
@@ -78,6 +79,7 @@ last_reviewed: 2026-09-21
 ## Footgun: Version checks that test inequality without direction prescribe a downgrade
 
 **Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Any version comparison that drives user-facing remediation or a file write must branch on direction, not on `!==`.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -97,6 +99,7 @@ last_reviewed: 2026-09-21
 ## Footgun: Windows Bash selection can turn unreadable paths into false syntax errors
 
 **Status:** active | **Created:** 2026-09-21 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Select native Bash for native Windows paths and distinguish shell launch or file-access failure from a Bash parse verdict.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
