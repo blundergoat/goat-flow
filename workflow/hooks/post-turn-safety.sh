@@ -370,7 +370,8 @@ resolve_stop_reentry_root_without_git() {
 # project would otherwise overwrite each other's record, and a clean result in either would
 # delete the sibling's, leaving both to keep blocking instead of reaching the second-Stop exit.
 set_stop_state_paths() {
-  stop_state_directory="$1/.goat-flow/scratchpad"
+  stop_state_relative_directory=".goat-flow/scratchpad"
+  stop_state_directory="$1/$stop_state_relative_directory"
   # The fingerprint is validated hex, so a bounded slice is always a safe filename component.
   local session_key="${stop_session_fingerprint:0:32}"
   # A direct user run parses no session and still needs one stable owner-local path.
@@ -437,8 +438,9 @@ write_stop_reentry_state() {
   if [ -L "$repository_root/.goat-flow" ] || [ -L "$stop_state_directory" ]; then
     return 1
   fi
-  # Create the private state directory only inside the verified project root.
-  if ! (umask 077 && mkdir -p "$stop_state_directory"); then
+  # Create the private state directory only inside the verified project root. The path stays relative to that root because
+  # Git Bash refuses `mkdir -p` on an absolute //wsl.localhost path even when the directory already exists.
+  if ! (cd "$repository_root" 2>/dev/null && umask 077 && mkdir -p "$stop_state_relative_directory"); then
     return 1
   fi
   # Existing state may be replaced only when it is a regular file owned by this user.
@@ -538,6 +540,23 @@ finish_repository_root_failure() {
     return 2
   fi
   finish_infrastructure_failure "$managed_root" "$failure_identity"
+}
+
+# Tell the user why Git withheld the repository root, naming the one cause only they can clear.
+# Git refuses a checkout it treats as owned by another account, such as a \\wsl.localhost path opened from Windows.
+report_repository_root_failure() {
+  local root_lookup_error=""
+
+  post_turn_result_detail="The selected Git repository root could not be opened"
+  printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+  root_lookup_error="$(LC_ALL=C git rev-parse --show-toplevel 2>&1 >/dev/null)"
+  # Trusting a refused checkout is the user's decision, so the result names that step instead of a generic failure.
+  case "$root_lookup_error" in
+    *"dubious ownership"*)
+      post_turn_result_detail="Git refused this repository for dubious ownership; the user must add it to Git safe.directory before the scan can run"
+      printf 'post-turn-safety: %s.\n' "$post_turn_result_detail" >&2
+      ;;
+  esac
 }
 
 # Scan only the explicit Git roots configured for a managed non-Git controller.
@@ -2001,8 +2020,7 @@ fallback_main() {
 
   # Without a Git root, the hook cannot identify the project changes for this turn.
   if ! root=$(git rev-parse --show-toplevel 2>/dev/null) || [ -z "$root" ]; then
-    post_turn_result_detail="The selected Git repository root could not be opened"
-    printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+    report_repository_root_failure
     finish_repository_root_failure "fallback:git repository root unavailable"
     return $?
   fi
@@ -3231,8 +3249,7 @@ main() {
   local head_status
   # Without a Git root, the hook cannot identify the project changes for this turn.
   if ! root="$(repo_root)" || [ -z "$root" ]; then
-    post_turn_result_detail="The selected Git repository root could not be opened"
-    printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+    report_repository_root_failure
     finish_repository_root_failure "native:git repository root unavailable"
     return $?
   fi

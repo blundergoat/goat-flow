@@ -17,6 +17,7 @@
 - **Test input delivery** - Policy, saved-handler, Gruff, quality-save and redaction tests use finite stdin files to prevent hangs in managed sandboxes while preserving their assertions and explicit Windows pipe cases. The preflight ESLint-verdict fixture also supplies finite input.
 - **Gruff warning gate** - The ratchet preserves analyzer JSON in managed sandboxes and checks completed process status before interpreting `EPERM` metadata; warning, debt and coverage rules remain enforced.
 - **Post-turn hook registration** - Valid Git projects remain eligible when a managed sandbox attaches `EPERM` metadata to a successful root lookup; failed lookups still leave the hook unregistered.
+- **Post-turn hook on Windows checkouts of WSL projects** - When Git for Windows refuses a `\\wsl.localhost` checkout, the Stop result names the dubious-ownership cause and the `safe.directory` remedy, blocks once, then ends the turn instead of re-prompting the agent indefinitely.
 
 ### Security
 

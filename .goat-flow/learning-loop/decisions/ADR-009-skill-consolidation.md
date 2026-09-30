@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-06
-**Updated:** 2026-09-05 - condensed. Earlier amendments absorbed the rulings from now-removed ADR-002 (goat-preflight), ADR-016 (dispatcher counting), ADR-017 (9-to-6 consolidation), ADR-018 (goat-verify), ADR-019 (renames), and ADR-050 (goat-audit), and enrolled goat-clarity on 2026-08-20.
+**Updated:** 2026-09-30 - recorded GROW and cc-thinking-skills adoption rulings. The 2026-09-05 amendment condensed this record. Earlier amendments absorbed the rulings from now-removed ADR-002 (goat-preflight), ADR-016 (dispatcher counting), ADR-017 (9-to-6 consolidation), ADR-018 (goat-verify), ADR-019 (renames), and ADR-050 (goat-audit), and enrolled goat-clarity on 2026-08-20.
 
 ## Context
 
@@ -34,6 +34,13 @@ Current canonical set, 8 total: `/goat`, `/goat-debug`, `/goat-plan`, `/goat-rev
 `goat-security` also gained Compliance and Dependency-audit modes in the 9-to-6 pass. Installed skills are never deleted from consumer projects when they leave the expected list.
 
 Rejecting `goat-verify` carried four obligations, all shipped: a `## Proof Gate` section in `workflow/skills/reference/skill-preamble.md` and its installed copy (Identify, Run fresh, Read, Verify, Cite), asserted by `test/integration/preamble-sync.test.ts`; routing hygiene so the dispatcher says "verification planning" and `goat-qa` declares `**NEVER:** Run or write tests, verify fixes, review code, or certify merges`; a one-line Proof Gate reference at each skill's handoff or gate; and targeted imports into `goat-debug` (boundary instrumentation in D1, the Causation / Necessity / Sufficiency gate and 5-Whys in D2, the 3-fix abort rule and rerun-original-repro requirement in D4). Per-skill gates stay heterogeneous by design; a generic numeric confidence gate was rejected because a score is itself a hedge.
+
+### Adoption rulings
+
+| Decision and reason | Evidence | Reconsider when |
+| --- | --- | --- |
+| **GROW diagnostic package and fixed question order:** Do not add a GROW skill or require its fixed intake order. Keep the prior-attempt-and-outcome question in goat-debug; choose the next question at a real decision fork. This adds no distinct artifact, gate, or failure mode beyond the existing debug workflow. | `workflow/skills/goat-debug/SKILL.md` (search: `what was already tried with its outcome`); `.goat-flow/skill-docs/skill-conventions.md` (search: `one decision-bearing question at a time`); `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `A skill must have at least one`) | A source-grounded skill trial shows a distinct GROW artifact or failure mode, or repeated intake failures trace to adaptive question choice; a human then reviews skill membership or ordering. |
+| **cc-thinking-skills catalog:** Do not import the `thinking-*` catalog as canonical skills. Keep positive/negative/ambiguous routing cases in the current corpus and cost-aware admission in existing conventions; catalog membership alone does not meet ADR-009's skill criteria, while each new skill adds routing and maintenance work. | `test/fixtures/dispatcher-routing/cases.jsonl` (search: `"type":"ambiguous"`); `.goat-flow/skill-docs/skill-conventions.md` (search: `rough admission control`); `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `Adding a canonical skill costs`) | A named candidate demonstrates a distinct artifact, gate, failure mode, or structured output in reproducible model/provider trials, and a human approves its membership. |
 
 ### Renames
 

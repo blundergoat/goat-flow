@@ -169,6 +169,24 @@ last_reviewed: 2026-09-30
 
 **Related output boundary, 2026-09-28:** M02's `scripts/check-touched.mjs` (search: `function printable`) escaped C0 and bidi controls but left C1 controls unchanged. Executing the actual formatter with U+0085, U+009B and U+009D returned those same raw code points; `runUnicodeCheck` uses it to print filenames. When diagnostics need supplied text, escape C1 controls as well. `test/unit/check-touched.test.ts` (search: `fails on Unicode controls with printable filenames`) now covers these filename characters. The full CLI regression passed after the verifier distinguished completed `EPERM` metadata from failed launches and captured child output through private files. The earlier launch-blocked diagnosis was incorrect; the existing lesson in `.goat-flow/learning-loop/lessons/hook-probe-testing.md` (search: `Codex sandbox hook probes must distinguish direct Bash from Node child-process`) owns that distinction.
 
+## Footgun: Absolute `mkdir -p` under Git Bash on a WSL network path leaves the Stop re-entry guard without state
+
+**Status:** active | **Created:** 2026-09-30 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Whether a hook may create or confirm a directory by absolute path - on a `//wsl.localhost` path it cannot, so enter the verified root and create the directory by relative path.
+**Trigger phase:** ACT
+**Enforced-by:** `test/integration/hook-provider-contracts.test.ts` (search: `mkdir refuses absolute paths`, `names dubious ownership`)
+
+**Prevention:**
+1. In hook scripts, `cd` into the verified root and run `mkdir -p` on a relative path. Do not pass `mkdir -p` an absolute path that can be a `//wsl.localhost` path.
+2. Treat a guard that ends a provider loop as unproven on Windows until its state write has run under Git Bash against a `//wsl.localhost` root.
+3. When a Git lookup fails, carry Git's stated reason into the hook result.
+
+**Symptoms:** Codex Desktop on Windows, working in a checkout under `\\wsl.localhost\<distro>\`, re-fired the Stop hook 2,152 times in one chat between 2026-09-29 18:29 and 2026-09-30 18:56 AEST. Each round delivered `post-turn-safety: INCOMPLETE` with `The selected Git repository root could not be opened`, and no `post-turn-safety-reentry-v1-*.state` file appeared in `.goat-flow/scratchpad/`.
+
+**Why it happens:** Git for Windows rejected the checkout with `detected dubious ownership` because `safe.directory` had no entry for it, so the scan had no root. `write_stop_reentry_state` then ran `mkdir -p` on the absolute state directory. Under Git Bash that call fails with `cannot create directory '//wsl.localhost': Read-only file system` and returns 1 even when the directory already exists, so the guard never stored its record and blocked every Stop. The generic result text hid Git's reason, and the Codex agent reported a faulty hook rather than the missing `safe.directory` entry.
+
+**Evidence:** Measured 2026-09-30 with Git for Windows 2.56.0 and Git Bash bash 5.3.15 against a WSL2 path. Absolute `mkdir -p` returned 1 for a missing directory and for an existing one; the same call by relative path from inside the root returned 0 for both. Exclusive write, `chmod`, `mv`, and `[ -O ]` succeeded on the same path. Through the registered Codex Stop command the old hook returned `decision: block` on three consecutive Stops; the fixed hook returned block, an empty response, then block, and the block reads `Git refused this repository for dubious ownership`. Codex sets `stop_hook_active` after a Stop block (openai/codex `codex-rs/core/src/session/turn.rs`, read 2026-09-30). Current anchors: `workflow/hooks/post-turn-safety.sh` (search: `stop_state_relative_directory`) and (search: `report_repository_root_failure`). `workflow/hooks/gruff-code-quality.sh` (search: `health marker could not be stored`) has the same call shape; its failure branch only repeats a health line (read, not measured).
+
 ---
 
 ## Resolved Entries
