@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-09-27
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
@@ -154,7 +154,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Severity:** INTEGRATION
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient.
 **Trigger phase:** VERIFY
-**Incident count:** 12 | **Latest occurrence:** 2026-09-27
+**Incident count:** 13 | **Latest occurrence:** 2026-09-30
 
 **Prevention:** After the final write, run `goat-flow plans check <plan-directory> --strict`, require warning-free exporter records, and check cited paths/anchors. Keep one live metadata value; fence history. Current strict plans require a numeric effort split even when runtime is unknown; label the forecast provisional and name the measurement/reforecast checkpoint rather than omitting required fields. Exercise compact/expanded fixtures through `parseMilestoneMarkdown` and plan commands against prepared disposable paths. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Preserve Status, Scope, Tasks, Proof, Exit/Exit criteria and Stop/rescope; compact Stop/rescope belongs inside Exit. Anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`; `readStopMarkdown`), `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
@@ -174,6 +174,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-09-12:** After M70 passed, an acceptance note repeated Actual metadata. The next check rejected it; a prose receipt label restored one live field. `src/cli/plans-effort.ts` (search: `multiple Actual values supplied`).
 
 **Recurrence 2026-09-27:** A release replan replaced two uncertain numeric forecasts with unestimated status. Strict validation rejected both with `strict mode requires an Effort estimate with a product/proof/other split`. Restore the current-format estimate fields, count bulk work explicitly, and disclose unmeasured runtime without inventing timing evidence. Source: `src/cli/plans-check.ts` (search: `strict mode requires an Effort estimate with a product/proof/other split`). Evidence: ACTUAL_MEASURED.
+
+**Recurrence 2026-09-30:** An execution note began with `Scope:` beneath a milestone that already had `## Scope`. Strict checking rejected the two representations; changing the note label to `Execution class:` restored exit 0. Keep parser-owned field labels out of narrative notes, even outside the header. Source: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`); rejection coverage: `test/unit/plans-check-structure.test.ts` (search: `strict mode rejects conflicting canonical and legacy aliases`). Evidence: ACTUAL_MEASURED.
 
 ---
 

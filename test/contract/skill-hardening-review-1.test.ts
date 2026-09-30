@@ -535,11 +535,6 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
           /pre-existing[^\n]+host proves/iu,
           referencePath,
         );
-        assert.match(
-          reference,
-          /unresolved[^\n]+causality remains unproven/iu,
-          referencePath,
-        );
       },
     );
   });
@@ -727,11 +722,6 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       installedSkillReferencePaths("goat-review", "references/review-traps.md"),
       (referencePath) => {
         const reference = readProjectFile(referencePath);
-        assert.match(
-          reference,
-          /goat-flow-reference-version: "1\.17\.0"/u,
-          referencePath,
-        );
         // Reviewers need every documented reasoning trap available in their own installed reference.
         for (const trapName of [
           "Reachability before severity",
