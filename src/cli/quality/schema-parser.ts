@@ -7,6 +7,8 @@
  * The parser keeps legacy-read options explicit while current emissions stay strict.
  */
 import { isAbsolute } from "node:path";
+import { getPackageVersion } from "../paths.js";
+import { getQualityRubricId } from "./rubric.js";
 import { KNOWN_AGENT_IDS } from "../agents/registry.js";
 import {
   QUALITY_AUDIT_STATUSES,
@@ -691,7 +693,7 @@ function parseReportIdentity(
     raw.goat_flow_version,
     "report.goat_flow_version",
   );
-  // The version anchors how the user interprets report shape and scoring rules.
+  // The version records which goat-flow release produced the report.
   if (!version.ok) return version;
   const agent = expectEnumValue(raw.agent, "report.agent", KNOWN_AGENT_IDS);
   // Unknown agents cannot be grouped under the dashboard runner tabs.
@@ -1058,5 +1060,21 @@ export function parseQualityReport(
   const result = parseReportInternal(raw, options);
   // Surface the exact parser error so the caller can show one actionable message.
   if (!result.ok) return result;
+  if (options.requireCurrentFields === true) {
+    const version = getPackageVersion();
+    if (result.report.goat_flow_version !== version) {
+      return {
+        ok: false,
+        error: `report.goat_flow_version must match goat-flow v${version}.`,
+      };
+    }
+    const mode = result.report.quality_mode ?? "agent-setup";
+    if (result.report.rubric_version !== getQualityRubricId(mode)) {
+      return {
+        ok: false,
+        error: `report.rubric_version must match the current ${mode} rubric id.`,
+      };
+    }
+  }
   return { ok: true, report: result.report };
 }

@@ -307,6 +307,84 @@ it("forwards the selected quality report owner to Claude and Codex", () => {
   );
 });
 
+it("renders supplied system deltas and hides missing comparisons without adjacent-row arithmetic", () => {
+  const view = readFileSync(QUALITY_VIEW_PATH, "utf8");
+  const card = view.slice(
+    view.indexOf("System score"),
+    view.indexOf("System score") + 1100,
+  );
+  const show = card.match(/x-show="([^"]+)"/u)?.[1];
+  const text = card.match(/x-text="([^"]*systemDelta[^"]*)"/u)?.[1];
+  assert.ok(show && text);
+  for (const [delta, expected] of [
+    [7, " (+7)"],
+    [0, " (0)"],
+    [-3, " (-3)"],
+  ] as const) {
+    const context = createContext({
+      qualityHistoryRows: [
+        { systemTotal: 85, systemDelta: delta },
+        { systemTotal: 10, systemDelta: null },
+      ],
+    });
+    assert.equal(Boolean(runInContext(show, context)), true);
+    assert.equal(runInContext(text, context), expected);
+  }
+  for (const rows of [[], [{ systemTotal: 85, systemDelta: null }]]) {
+    assert.equal(
+      Boolean(runInContext(show, createContext({ qualityHistoryRows: rows }))),
+      false,
+    );
+  }
+});
+
+it("decodes system comparisons and preserves older-server rows with null deltas", () => {
+  const source = readFileSync(
+    resolve(PROJECT_ROOT, "src/dashboard/dashboard-model-readers.ts"),
+    "utf8",
+  );
+  const context = createContext({
+    isRecord: (raw: unknown) =>
+      typeof raw === "object" && raw !== null && !Array.isArray(raw),
+    readString: (raw: unknown) => (typeof raw === "string" ? raw : ""),
+    readRunnerId: (raw: unknown) => (raw === "claude" ? raw : null),
+  });
+  runInContext(
+    transpileModule(source, {
+      compilerOptions: { target: ScriptTarget.ES2022 },
+    }).outputText,
+    context,
+  );
+  const row = {
+    id: "saved-run",
+    date: "2026-09-30",
+    agent: "claude",
+    setupTotal: 80,
+    systemTotal: 85,
+    setupDelta: null,
+    blockerCount: 0,
+    majorCount: 0,
+    minorCount: 0,
+  };
+  context.row = row;
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).systemDelta", context),
+    null,
+  );
+  context.row = { ...row, systemDelta: 7 };
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).systemDelta", context),
+    7,
+  );
+  context.row = { ...row, systemDelta: null };
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).systemDelta", context),
+    null,
+  );
+  context.row = { ...row, systemDelta: "7" };
+  assert.equal(runInContext("readQualityHistoryRow(row)", context), null);
+});
+
 /** Build one concern score fixture with the Home summary fields populated. */
 function concern(
   status: "pass" | "fail",

@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   closeSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -24,6 +25,7 @@ import { join, resolve } from "node:path";
 import { CLIError } from "../../src/cli/cli-error.js";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
 import { parseQualityReport } from "../../src/cli/quality/schema.js";
 import { makeCurrentQualityReport as currentQualityReport } from "../fixtures/quality-report.js";
@@ -615,6 +617,38 @@ function legacyQualityReport(projectPath: string) {
 }
 
 describe("quality validate", () => {
+  for (const [name, override] of [
+    ["old package version", { goat_flow_version: "0.0.1" }],
+    ["package-semver rubric", { rubric_version: getPackageVersion() }],
+    [
+      "another mode's rubric",
+      { rubric_version: getQualityRubricId("harness") },
+    ],
+  ] as const) {
+    it(`labels ${name} legacy-compatible and rejects saving the same bytes`, () => {
+      const error = Object.keys(override)[0]!;
+      const root = makeIgnoredQualityRoot();
+      const report = { ...currentQualityReport(root), ...override };
+      const fixture = writeQualityReportFixture(report);
+      try {
+        const validated = runQualityValidate(fixture.reportPath);
+        assert.equal(validated.status, 0, validated.stderr);
+        assert.equal(
+          validated.stdout.trim(),
+          `OK LEGACY-COMPATIBLE ${fixture.reportPath}`,
+        );
+        assert.ok(validated.stderr.includes(`report.${error} must match`));
+        const saved = runQualitySave(root, report);
+        assert.equal(saved.status, CLI_USAGE_EXIT_CODE);
+        assert.ok(saved.stderr.includes(`report.${error} must match`));
+        assert.equal(existsSync(join(root, ".goat-flow/logs/quality")), false);
+      } finally {
+        rmSync(fixture.directory, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+
   it("gives a current report an unqualified receipt", () => {
     const fixture = writeQualityReportFixture(
       currentQualityReport(resolve("quality-validate-current")),

@@ -110,6 +110,7 @@ interface QualityHistoryRow {
   setupTotal: number;
   systemTotal: number;
   setupDelta: number | null;
+  systemDelta: number | null;
   blockerCount: number;
   majorCount: number;
   minorCount: number;
@@ -429,7 +430,6 @@ interface QualityModeOption {
   source: "api" | "preset" | "registry";
   presetId?: string | undefined;
   targetScope: string;
-  prompt?: string | undefined;
 }
 
 // ---------------------------------------------------------------------------

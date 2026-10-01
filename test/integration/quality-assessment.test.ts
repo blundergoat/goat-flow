@@ -4,6 +4,7 @@
  * These fixtures exercise the real parser, redacted saver, history loader, and comparison output.
  * Legacy reports remain readable; new evidence limits must survive without changing rubric scores.
  */
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -52,7 +53,7 @@ function makeAssessmentReport(
     run_date: "2026-09-13",
     audit_status: "pass",
     scope: "consumer",
-    rubric_version: getPackageVersion(),
+    rubric_version: getQualityRubricId("harness"),
     quality_mode: "harness",
     prior_report_id: null,
     assessment_context: {
@@ -359,21 +360,4 @@ describe("quality assessment prompt consistency", () => {
       assert.match(prompt, /qualification-gap/u);
     });
   }
-
-  it("keeps the browser fallback aligned with the shared report evidence contract", () => {
-    const source = readFileSync(
-      resolve(
-        import.meta.dirname,
-        "../../src/dashboard/dashboard-setup-quality.ts",
-      ),
-      "utf8",
-    );
-    assert.match(source, /"improvements": \[\]/u);
-    assert.match(
-      source,
-      /"workspace_snapshot": \{ "start": null, "end": null \}/u,
-    );
-    assert.match(source, /same completed tool call/u);
-    assert.match(source, /not launcher attestation/u);
-  });
 });

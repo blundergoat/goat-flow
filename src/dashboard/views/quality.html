@@ -435,8 +435,8 @@
                   <span x-text="qualityHistoryLatest.systemTotal + '%'"></span>
                   <span
                     class="gf-text-muted"
-                    x-show="qualityHistoryRows.length > 1"
-                    x-text="(() => { const d = qualityHistoryRows[0].systemTotal - qualityHistoryRows[1].systemTotal; return d > 0 ? ' (+' + d + ')' : ' (' + d + ')'; })()"
+                    x-show="qualityHistoryRows[0] && qualityHistoryRows[0].systemDelta !== null"
+                    x-text="qualityHistoryRows[0].systemDelta > 0 ? ' (+' + qualityHistoryRows[0].systemDelta + ')' : ' (' + qualityHistoryRows[0].systemDelta + ')'"
                   ></span>
                 </div>
               </div>

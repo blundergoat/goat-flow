@@ -8,6 +8,7 @@
  * interval itself is unref'd and cleared by dispose, which the leak-sensitive terminal
  * test lesson requires this suite to prove.
  */
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { after, describe, it } from "node:test";
 import type { TestContext } from "node:test";
@@ -87,7 +88,7 @@ function validReport(projectRoot: string): string {
     run_date: "2026-07-31",
     audit_status: "pass",
     scope: "framework-self",
-    rubric_version: PACKAGE_VERSION,
+    rubric_version: getQualityRubricId("skills"),
     quality_mode: "skills",
     prior_report_id: null,
     assessment_context: {

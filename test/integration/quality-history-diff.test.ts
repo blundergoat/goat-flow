@@ -19,6 +19,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
@@ -71,6 +72,72 @@ function runCLI(
 }
 
 describe("quality history and diff CLI", () => {
+  it("retains legacy fields and suppresses setup/system deltas at the new rubric boundary", () => {
+    const root = makeTempProject();
+    const ids = [
+      "2026-04-01-0900-claude-aaaaa",
+      "2026-04-15-1000-claude-bbbbb",
+      "2026-04-29-1100-claude-ccccc",
+    ];
+    for (const [index, id] of ids.entries()) {
+      const report = JSON.parse(
+        readFileSync(join(FIXTURE_DIR, `${id}.json`), "utf8"),
+      );
+      if (index === 1) report.rubric_version = "1.17.0";
+      if (index === 2)
+        report.rubric_version = getQualityRubricId("agent-setup");
+      writeFileSync(
+        join(root, ".goat-flow/logs/quality", `${id}.json`),
+        JSON.stringify(report),
+      );
+    }
+    const history = runCLI(root, [
+      "quality",
+      "history",
+      "--agent",
+      "claude",
+      "--format",
+      "json",
+    ]);
+    assert.equal(history.status, 0, history.stderr);
+    const payload = JSON.parse(history.stdout);
+    assert.deepEqual(
+      payload.deltas.map(
+        (row: { setup_delta: number | null; system_delta: number | null }) => [
+          row.setup_delta,
+          row.system_delta,
+        ],
+      ),
+      [
+        [null, null],
+        [10, 5],
+        [null, null],
+      ],
+    );
+    assert.equal(payload.reports[1].report.rubric_version, "1.17.0");
+    assert.equal(
+      Object.hasOwn(payload.reports[2].report, "rubric_version"),
+      false,
+    );
+    const diff = runCLI(root, [
+      "quality",
+      "diff",
+      `${ids[0]}:${ids[1]}`,
+      "--format",
+      "json",
+    ]);
+    assert.equal(diff.status, 0, diff.stderr);
+    const warnings: string[] = JSON.parse(diff.stdout).comparisonWarnings;
+    assert.equal(
+      warnings.filter((w) => w.startsWith("Legacy rubric")).length,
+      1,
+    );
+    assert.equal(
+      warnings.some((w) => w.startsWith("Assessment rubric")),
+      false,
+    );
+  });
+
   // Fixture writes three saved reports because history and explicit diff selection need chronological data.
   it("renders history text and filtered history/diff json from saved reports", () => {
     const root = makeTempProject();

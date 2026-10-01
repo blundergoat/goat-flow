@@ -8,6 +8,27 @@ import type { QualityMode } from "../quality/schema.js";
 
 type FocusedQualityMode = Exclude<QualityMode, "agent-setup">;
 
+/** Shared scoring rule emitted in every contract and included in rubric identity. */
+export const QUALITY_SCORE_RULE =
+  "- `scores.*` axis values must be integers from 0 through 25 and each four-axis sum must equal its `total` exactly (out of 100).";
+
+/**
+ * Collect only static ratings and score rules, excluding persistence and run context.
+ * @param mode - selected scoring family
+ * @returns ratings, anchors and shared numeric rule used to fingerprint the rubric
+ */
+export function qualityScoringText(mode: QualityMode): string {
+  const lines: string[] = [];
+  if (mode === "agent-setup") appendRatingSections(lines);
+  else appendFocusedRatingSections(lines, mode);
+  const ratingsStart = lines.indexOf("### Ratings");
+  const closingStart = lines.findIndex((line) => line.startsWith("### Top 5"));
+  return [
+    ...lines.slice(ratingsStart, closingStart < 0 ? undefined : closingStart),
+    QUALITY_SCORE_RULE,
+  ].join("\n");
+}
+
 const FOCUSED_ASSESSMENT_SCOPE_LABELS: Record<FocusedQualityMode, string> = {
   process: "framework process",
   harness: "selected target harness",
@@ -271,7 +292,9 @@ export function appendFocusedRatingSections(
   );
   lines.push("");
   lines.push("### Rating bands");
-  lines.push("Use exact 25 / 20 / 15 / 10 / 5 / 0 increments only:");
+  lines.push(
+    "Use integer scores from 0 through 25. The anchors below retain their meanings; intermediate integers express evidence between adjacent anchors, not one-point measurement accuracy:",
+  );
   lines.push(
     `- Setup / Accuracy: 25 = all ${assessmentScopeLabel} claims verify; 20 = 1-2 minor drift points; 15 = one hot-path factual error; 10 = multiple hot-path errors; 5 = a load-bearing claim is wrong; 0 = the assessed scope is materially fabricated.`,
   );
@@ -308,7 +331,9 @@ export function appendFocusedRatingSections(
  */
 function appendRatingBands(lines: string[]): void {
   lines.push("### Rating bands");
-  lines.push("Use exact 25 / 20 / 15 / 10 / 5 / 0 increments only:");
+  lines.push(
+    "Use integer scores from 0 through 25. The anchors below retain their meanings; intermediate integers express evidence between adjacent anchors, not one-point measurement accuracy:",
+  );
   lines.push(
     "- Setup / Accuracy: 25 = all fact-checked claims verify; 20 = 1-2 minor drift points; 15 = one hot-path factual error; 10 = multiple hot-path errors; 5 = instruction file materially misstates the project; 0 = fabricated or wrong project. A hot-path factual error is a claim an agent would act on and fail (wrong command, wrong path, wrong count); a minor drift point is a stale-but-harmless description.",
   );

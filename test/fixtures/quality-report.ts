@@ -1,4 +1,5 @@
 /** Current quality-report fixture for schema and persistence regressions. */
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import { makeQualityScoreRationale } from "./quality-score-rationale.js";
 
@@ -19,7 +20,7 @@ export function makeCurrentQualityReport(
     run_date: "2026-07-31",
     audit_status: "pass",
     scope: "framework-self",
-    rubric_version: version,
+    rubric_version: getQualityRubricId("skills"),
     quality_mode: "skills",
     prior_report_id: null,
     assessment_context: {

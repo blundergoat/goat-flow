@@ -69,8 +69,8 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 **Quality evaluates:**
 - Do the configured validation commands actually run and produce meaningful output?
-- Does the generated post-turn hook run literal validation commands (lint, typecheck, shellcheck), or just exit 0?
-- Does the hook report failures honestly, or swallow them with `|| true`?
+- Does the default post-turn safety hook scan changed content and report its safety findings honestly? It does not claim builds, tests, linters or typecheckers ran.
+- If the project opts into automatic validation, do those commands run and report failures honestly, without swallowing them with `|| true`? Evaluate execution evidence separately from whether the selected checks are sufficient. A missing project-validation Stop hook is not a setup defect.
 
 ### 4. Recovery
 

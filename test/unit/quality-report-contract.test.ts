@@ -3,8 +3,9 @@
  * Use when prompt composition changes so a report launched from one screen is not weaker than another.
  *
  * It keeps report fields, audit limits, score calibration, and save instructions consistent across every mode.
- * The dashboard mirror stays source-pinned because its classic script cannot import the CLI builder.
+ * Dashboard launch contracts are produced by the same CLI composer through the quality API.
  */
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -17,7 +18,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { CLIError } from "../../src/cli/cli-error.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import { composeQuality } from "../../src/cli/prompt/compose-quality.js";
@@ -872,7 +872,7 @@ describe("quality report contract: cross-variant boundaries", () => {
       );
       assert.ok(
         promptWithPriorReport.includes(
-          "Prior refuted candidates (do not repeat unless evidence or contract changed)",
+          "Prior refuted candidates (4800-character budget; claims to re-check before repeating)",
         ),
         `${qualityMode}: missing prior refutation continuity`,
       );
@@ -885,8 +885,8 @@ describe("quality report contract: cross-variant boundaries", () => {
     });
   }
 
-  // Five rows prove the prompt shows its three-row allowance and reports the two omitted rows.
-  it("bounds prior refutation context to three candidates", () => {
+  // Five short refutations fit the text budget without sending the assessor to scored history.
+  it("retains more than three short prior refutations without a raw-report pointer", () => {
     const priorReport = makePriorQualityReport("skills");
     priorReport.report.refuted_candidates = Array.from(
       { length: 5 },
@@ -907,16 +907,10 @@ describe("quality report contract: cross-variant boundaries", () => {
 
     assert.ok(prompt.includes("Refuted claim 1"));
     assert.ok(prompt.includes("Refuted claim 3"));
-    assert.equal(prompt.includes("Refuted claim 4"), false);
-    assert.ok(
-      prompt.includes(
-        "2 additional prior refuted candidate(s) omitted from this bounded preview.",
-      ),
-    );
-    assert.ok(
-      prompt.includes(JSON.stringify(priorReport.path)),
-      "omitted refutations need an exact safe retrieval path",
-    );
+    assert.ok(prompt.includes("Refuted claim 5"));
+    assert.equal(prompt.includes("omitted from this bounded preview"), false);
+    assert.equal(prompt.includes(priorReport.path), false);
+    assert.equal(prompt.includes("Read the complete refutation ledger"), false);
   });
 });
 
@@ -966,7 +960,7 @@ describe("quality report contract: rejected persistence", () => {
       run_date: "2026-08-28",
       audit_status: "pass",
       scope: "framework-self",
-      rubric_version: version,
+      rubric_version: getQualityRubricId("skills"),
       prior_report_id: null,
       assessment_context: {
         project_revision: "a".repeat(40),
@@ -1011,27 +1005,5 @@ describe("quality report contract: rejected persistence", () => {
       // For example, a simulated partial write can throw before cleanup, so the test-owned temporary project must still be removed.
       rmSync(projectRoot, { recursive: true, force: true });
     }
-  });
-});
-
-describe("quality report contract: dashboard mirror", () => {
-  const dashboardSource = readFileSync(
-    fileURLToPath(
-      new URL(
-        "../../src/dashboard/dashboard-setup-quality.ts",
-        import.meta.url,
-      ),
-    ),
-    "utf-8",
-  );
-
-  it("dashboard prompt source mirrors the required fields and enums", () => {
-    assertCarriesContract("dashboard", dashboardSource);
-  });
-
-  it("dashboard prompt source keeps pre-release PATH skew out of findings", () => {
-    assert.ok(dashboardSource.includes(SAVER_VERSION_CLASSIFICATION));
-    assert.ok(dashboardSource.includes(PATH_SKEW_CLASSIFICATION));
-    assert.ok(dashboardSource.includes(VERSION_FINDING_AUTHORITY));
   });
 });

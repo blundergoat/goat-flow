@@ -8,6 +8,10 @@
 - **Changed-file checks for contributors** - `npm run check:touched` runs applicable formatting, lint, type, quality and guidance checks on working-tree changes, including deletion and rename triggers, with per-check timings and a failing exit status when a check fails; owning tests and preflight remain required.
 - **Invisible-control detection** - Changed text checks report literal invisible controls by file, position and code point, with escaped diagnostic filenames and no rewrites; visible Unicode, emoji, joining characters and leading BOMs stay valid.
 
+### Changed
+
+- **Quality score comparisons** - Reruns omit prior scores, accept integer axes from 0 to 25, and show history deltas only within the same rubric.
+
 ### Fixed
 
 - **Scoped cleanup recovery** - Unsafe `rm -r` denials explain how to remove already-approved literal file targets and empty directories while preserving secret restrictions and confirmation requirements.

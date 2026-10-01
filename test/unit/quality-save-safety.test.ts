@@ -2,6 +2,7 @@
  * Regression coverage for descriptor-bound quality report persistence.
  * This fixture mutates only a temporary project root and never the assessed checkout.
  */
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
@@ -34,7 +35,7 @@ function currentQualityReport(projectRoot: string) {
     run_date: "2026-08-29",
     audit_status: "pass",
     scope: "framework-self",
-    rubric_version: version,
+    rubric_version: getQualityRubricId("skills"),
     quality_mode: "skills",
     prior_report_id: null,
     assessment_context: {

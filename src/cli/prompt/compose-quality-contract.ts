@@ -3,11 +3,13 @@
  *
  * The prompt names accepted fields, evidence obligations, and the persistence route so the resulting report can be saved and reopened.
  *
- * Shared schema constants and contract tests keep the CLI instructions and browser fallback aligned with validation.
+ * Shared schema constants and contract tests keep CLI and dashboard launches aligned with validation.
  */
 import type { AgentId } from "../types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
 import { getPackageVersion } from "../paths.js";
+import { getQualityRubricId } from "../quality/rubric.js";
+import { QUALITY_SCORE_RULE } from "./compose-quality-static-sections.js";
 import { QUALITY_REPORT_KIND, type QualityMode } from "../quality/schema.js";
 import {
   QUALITY_EVIDENCE_METHODS,
@@ -138,7 +140,9 @@ export function appendQualityReportContract(
   lines.push(`  "run_date": ${jsonString(input.runDate)},`);
   lines.push(`  "audit_status": ${jsonString(input.auditStatus)},`);
   lines.push(`  "scope": ${jsonString(inferQualityScope(input.projectPath))},`);
-  lines.push(`  "rubric_version": ${jsonString(getPackageVersion())},`);
+  lines.push(
+    `  "rubric_version": ${jsonString(getQualityRubricId(input.qualityMode))},`,
+  );
   lines.push(`  "quality_mode": ${jsonString(input.qualityMode)},`);
   lines.push(
     `  "prior_report_id": ${input.priorReport ? jsonString(input.priorReport.id) : "null"},`,
@@ -238,9 +242,7 @@ function appendReportJsonRules(
   pushFull: (...texts: string[]) => void,
 ): void {
   lines.push("JSON rules:");
-  lines.push(
-    "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",
-  );
+  lines.push(QUALITY_SCORE_RULE);
   lines.push(
     `- Every score axis requires \`evidence\` and \`deduction\` as non-empty single-line strings of ${QUALITY_SCORE_RATIONALE_MAX_CHARACTERS} characters or fewer.`,
   );
@@ -288,8 +290,8 @@ function appendReportJsonRules(
     "- `scope` is REQUIRED at top level: `framework-self` when the target is the goat-flow repo itself, otherwise `consumer` (copy the template value above).",
   );
   pushVariant(
-    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getPackageVersion()}"\`). The Rating bands section above is the rubric - future readers use this version tag to trace which band anchors produced your scores.`,
-    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getPackageVersion()}"\`).`,
+    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getQualityRubricId(input.qualityMode)}"\`). It identifies this mode's scoring text and prior-context policy.`,
+    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getQualityRubricId(input.qualityMode)}"\`).`,
   );
   lines.push(
     `- \`quality_mode\` is REQUIRED for new reports generated from this prompt. Use \`${jsonString(input.qualityMode)}\` for this ${qualityModeLabel(input.qualityMode)} assessment.`,

@@ -20,6 +20,7 @@ import {
   type QualityHistoryEntry,
 } from "./history.js";
 import { isRealCalendarDate } from "./schema-parser.js";
+import { isLegacyQualityRubric, qualityReportRubricId } from "./rubric.js";
 
 /**
  * Rank a finding severity for user-facing sort order.
@@ -215,11 +216,19 @@ function assessmentComparisonWarnings(
 ): string[] {
   const warnings: string[] = [];
   // A new rubric or project scope changes what a score means, even when both runs used the same agent.
-  const targetFields = ["rubric_version", "scope", "project_path"] as const;
+  const targetFields = ["scope", "project_path"] as const;
   // A changed rubric or project scope prevents the score delta from measuring the same target.
-  if (targetFields.some((field) => olderReport[field] !== newerReport[field])) {
+  if (
+    qualityReportRubricId(olderReport) !== qualityReportRubricId(newerReport) ||
+    targetFields.some((field) => olderReport[field] !== newerReport[field])
+  ) {
     warnings.push(
       "Assessment rubric, scope, or project differs; score deltas do not measure the same assessment target.",
+    );
+  }
+  if ([olderReport, newerReport].some(isLegacyQualityRubric)) {
+    warnings.push(
+      "Legacy rubric identity is unavailable; historical package versions share one segment but do not establish unchanged scoring rules.",
     );
   }
   const olderContext = olderReport.assessment_context;

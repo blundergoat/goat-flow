@@ -281,9 +281,15 @@ function readQualityResult(rawResult: unknown): QualityResult {
   };
 }
 
+/** Read a supplied system comparison; null covers older servers, while undefined rejects an invalid value. */
+function readQualitySystemDelta(raw: unknown): number | null | undefined {
+  if (raw === undefined || raw === null) return null;
+  return typeof raw === "number" ? raw : undefined;
+}
+
 /**
  * Decode one saved review for the Quality history table; null omits rows with missing identity or score fields.
- * A null setup delta means no comparison is available for its trend chip, while totals remain independently usable.
+ * Null deltas mean no comparable baseline is available; totals remain independently usable.
  */
 function readQualityHistoryRow(rawRow: unknown): QualityHistoryRow | null {
   // Malformed history entries cannot become rows in the saved-review comparison.
@@ -291,6 +297,7 @@ function readQualityHistoryRow(rawRow: unknown): QualityHistoryRow | null {
   const id = readString(rawRow.id);
   const date = readString(rawRow.date);
   const agent = readRunnerId(rawRow.agent);
+  const systemDelta = readQualitySystemDelta(rawRow.systemDelta);
   // History needs identifiable reviews, numeric totals and severities, and an explicit number-or-null comparison delta.
   if (
     !id ||
@@ -299,6 +306,7 @@ function readQualityHistoryRow(rawRow: unknown): QualityHistoryRow | null {
     typeof rawRow.setupTotal !== "number" ||
     typeof rawRow.systemTotal !== "number" ||
     (rawRow.setupDelta !== null && typeof rawRow.setupDelta !== "number") ||
+    systemDelta === undefined ||
     typeof rawRow.blockerCount !== "number" ||
     typeof rawRow.majorCount !== "number" ||
     typeof rawRow.minorCount !== "number"
@@ -312,6 +320,8 @@ function readQualityHistoryRow(rawRow: unknown): QualityHistoryRow | null {
     setupTotal: rawRow.setupTotal,
     systemTotal: rawRow.systemTotal,
     setupDelta: rawRow.setupDelta,
+    // Older servers omit this field; do not invent a comparison from adjacent totals.
+    systemDelta,
     blockerCount: rawRow.blockerCount,
     majorCount: rawRow.majorCount,
     minorCount: rawRow.minorCount,

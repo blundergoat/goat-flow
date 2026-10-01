@@ -17,6 +17,7 @@ import type {
 } from "./schema.js";
 import { parseQualityReport } from "./schema.js";
 import { attachFindingIds } from "./ids.js";
+import { qualityReportRubricId } from "./rubric.js";
 import { KNOWN_AGENT_IDS } from "../agents/registry.js";
 
 const QUALITY_HISTORY_FILENAME = new RegExp(
@@ -43,6 +44,7 @@ export interface QualityHistoryRow {
   setupTotal: number;
   systemTotal: number;
   setupDelta: number | null;
+  systemDelta: number | null;
   blockerCount: number;
   majorCount: number;
   minorCount: number;
@@ -547,7 +549,7 @@ export function selectQualityHistoryEntries(
 }
 
 /**
- * Build display rows with same-agent, same-mode setup deltas.
+ * Build display rows with same-agent, same-mode and same-rubric deltas.
  *
  * Deltas are only ever taken against the previous run by the same agent in the same mode, because comparing across either one is not a like-for-like
  * contract and would show the user movement that never happened.
@@ -579,7 +581,12 @@ export function buildQualityHistoryRows(
           candidate.agent === entry.agent &&
           entryQualityMode(candidate) === entryMode,
       );
-    const previousSetup = previousSameAgent?.report.scores.setup.total ?? null;
+    const comparable =
+      previousSameAgent &&
+      qualityReportRubricId(previousSameAgent.report) ===
+        qualityReportRubricId(entry.report)
+        ? previousSameAgent
+        : null;
     return {
       id: entry.id,
       date: entry.report.run_date,
@@ -588,9 +595,15 @@ export function buildQualityHistoryRows(
       setupTotal: entry.report.scores.setup.total,
       systemTotal: entry.report.scores.system.total,
       setupDelta:
-        previousSetup === null
+        comparable === null
           ? null
-          : entry.report.scores.setup.total - previousSetup,
+          : entry.report.scores.setup.total -
+            comparable.report.scores.setup.total,
+      systemDelta:
+        comparable === null
+          ? null
+          : entry.report.scores.system.total -
+            comparable.report.scores.system.total,
       blockerCount: countSeverity(entry.report, "BLOCKER"),
       majorCount: countSeverity(entry.report, "MAJOR"),
       minorCount: countSeverity(entry.report, "MINOR"),

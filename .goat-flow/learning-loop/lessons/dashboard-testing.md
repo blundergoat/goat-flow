@@ -42,7 +42,7 @@ last_reviewed: 2026-09-21
 **Decision changed:** Register a new dashboard classic script in `knip.json` and `src/dashboard/index.html` in the change that creates it, and run the repository Knip command before trusting preflight.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-04-25
+**Incident count:** 3 | **Latest occurrence:** 2026-10-01
 **Merged:** 2026-09-05 - absorbed "Dashboard classic scripts need Knip registration" (2026-04-25); one root cause, HTML-loaded scripts are invisible to the module graph.
 
 **Prevention:** When adding a `src/dashboard/*.ts` classic script, update `src/dashboard/index.html`, add the built asset smoke, and register the source file in `knip.json` in the same change. Run the repository Knip command before relying on preflight; dashboard typecheck and asset tests cannot see reachability. After adding optional decoder branches, run `npx eslint src/cli src/dashboard` rather than treating `npm run typecheck` as enough. Evidence anchors: `knip.json` (search: `dashboard-custom-prompts.ts`), `src/cli/server/decoders.ts` (search: `decodeOptionalStringField`).
@@ -52,6 +52,8 @@ last_reviewed: 2026-09-21
 **Root cause:** The dashboard frontend intentionally uses classic scripts (`x-data="app()"`) and shared browser globals, so Knip follows module imports and never sees HTML script-tag reachability; `knip.json` is the only place that records the intent.
 
 **Recurrence 2026-04-25:** M03 added `src/dashboard/dashboard-custom-prompts.ts` and loaded it from the HTML shell; focused tests and typecheck passed, but the installer round-trip preflight reported the file unused, and the same run caught an ESLint complexity error in `src/cli/server/decoders.ts` after the terminal-create payload grew another optional field.
+
+**Recurrence 2026-10-01:** M07 removed tests for an unreachable quality-template copy. That also removed the last statically recognized test reference to `dashboard-setup-quality.ts`; the HTML shell and classic-script callers still load and use the live helper. Full preflight then reported the file unused. Register existing HTML-loaded scripts when pruning their last module-graph reference, not only when creating them. Evidence: `src/dashboard/index.html` (search: `dashboard-setup-quality.js`), `src/dashboard/dashboard-app-prompts-audit-fragments.ts` (search: `dashboardQualityModes`), and `knip.json` (search: `dashboard-setup-quality.ts`).
 
 ---
 

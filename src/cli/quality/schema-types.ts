@@ -58,7 +58,10 @@ export const QUALITY_IMPROVEMENT_CATEGORIES = [
 ] as const;
 /** The five-item limit bounds the work a history reader scans and matches the prompt's Top 5 Improvements. */
 export const QUALITY_MAX_IMPROVEMENTS = 5;
-export const QUALITY_SCORE_VALUES = [0, 5, 10, 15, 20, 25] as const;
+export const QUALITY_SCORE_VALUES = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+  22, 23, 24, 25,
+] as const;
 export const QUALITY_SETUP_SCORE_AXES = [
   "accuracy",
   "relevance",
@@ -101,7 +104,7 @@ type QualityWorktreeState = (typeof QUALITY_WORKTREE_STATES)[number];
 type QualityGroundingStatus = (typeof QUALITY_GROUNDING_STATUSES)[number];
 type QualityScoreConfidence = (typeof QUALITY_SCORE_CONFIDENCES)[number];
 /**
- * A single rubric axis score, constrained to the fixed 0-25 five-point band so totals stay comparable across reports.
+ * A single rubric axis score, constrained to integers from 0 through 25.
  * Values outside this set are rejected by the schema parser.
  */
 export type QualityAxisScore = (typeof QUALITY_SCORE_VALUES)[number];
