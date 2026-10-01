@@ -679,7 +679,7 @@ describe("quality report contract: CLI surfaces", () => {
       );
       assert.match(
         writeBlock,
-        /<insert the complete report object as one JSON line here>/u,
+        /<insert the complete report object here>/u,
         `${qualityMode}: missing in-memory report placeholder`,
       );
       assert.match(
@@ -707,32 +707,54 @@ describe("quality report contract: CLI surfaces", () => {
   it("sends a thorough report block through the actual deny hook", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
     const writeBlock = extractReportWriteBlock(prompt);
-    const reportObject = JSON.stringify(
-      Object.fromEntries(
-        Array.from({ length: 60 }, (_, index) => [
-          `field_${index}`,
-          `value_${index}_${"x".repeat(400)}`,
-        ]),
-      ),
+    const reportObject = Object.fromEntries(
+      Array.from({ length: 60 }, (_, index) => [
+        `field_${index}`,
+        `value_${index}_${"x".repeat(400)}`,
+      ]),
     );
-    const realisticBlock = writeBlock.replace(
-      "<insert the complete report object as one JSON line here>",
-      reportObject,
-    );
-    assert.ok(
-      realisticBlock.length > 16_384,
-      "fixture must exercise the large-command policy branch",
-    );
-    const hookResult = spawnSync(
-      "bash",
-      [".goat-flow/hooks/deny-dangerous.sh", "--check", realisticBlock],
-      {
-        cwd: REPOSITORY_ROOT,
-        encoding: "utf-8",
-      },
-    );
-
-    assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+    for (const indent of [undefined, 2]) {
+      const realisticBlock = writeBlock.replace(
+        "<insert the complete report object here>",
+        JSON.stringify(reportObject, null, indent),
+      );
+      assert.ok(
+        realisticBlock.length > 16_384,
+        "exercise the large-command policy branch",
+      );
+      for (const hook of ["deny-dangerous", "deny-git-mutations"]) {
+        const hookPath = `.goat-flow/hooks/${hook}.sh`;
+        const blocks = [
+          [realisticBlock, 0],
+          [
+            realisticBlock.replace(
+              "goat-flow quality save",
+              "node --import tsx src/cli/cli.ts quality save",
+            ),
+            0,
+          ],
+          [realisticBlock.replace("<<'JSON'", "<<JSON"), 2],
+          [
+            realisticBlock.replace(
+              /goat-flow quality save [^\n]+/u,
+              "cat <<'JSON'",
+            ),
+            2,
+          ],
+        ] as const;
+        for (const [block, expected] of blocks) {
+          const result = spawnSync("bash", [hookPath, "--check", block], {
+            cwd: REPOSITORY_ROOT,
+            encoding: "utf-8",
+          });
+          assert.equal(
+            result.status,
+            expected,
+            `${hook}, indent=${indent}: ${result.stderr}`,
+          );
+        }
+      }
+    }
   });
 
   it("matches goat-clarity's declared target-selector count", () => {
@@ -785,7 +807,9 @@ describe("quality report contract: CLI surfaces", () => {
       ),
     );
     assert.equal(
-      fresh.includes("materially matches a prior finding by type/file/line"),
+      fresh.includes(
+        "materially matches a prior finding by root cause and affected behavior",
+      ),
       false,
     );
     // Minimal-but-complete history entry: the prior-context section reads
@@ -805,7 +829,7 @@ describe("quality report contract: CLI surfaces", () => {
     assert.ok(withPrior.includes("a prior severity is not evidence"));
     assert.ok(
       withPrior.includes(
-        "materially matches a prior finding by type/file/line",
+        "materially matches a prior finding by root cause and affected behavior",
       ),
     );
     assert.ok(

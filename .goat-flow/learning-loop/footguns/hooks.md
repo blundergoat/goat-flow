@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-01
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. Scanner blind spots live in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -181,13 +181,24 @@ last_reviewed: 2026-09-30
 2. Treat a guard that ends a provider loop as unproven on Windows until its state write has run under Git Bash against a `//wsl.localhost` root.
 3. When a Git lookup fails, carry Git's stated reason into the hook result.
 
-**Symptoms:** Codex Desktop on Windows, working in a checkout under `\\wsl.localhost\<distro>\`, re-fired the Stop hook 2,152 times in one chat between 2026-09-29 18:29 and 2026-09-30 18:56 AEST. Each round delivered `post-turn-safety: INCOMPLETE` with `The selected Git repository root could not be opened`, and no `post-turn-safety-reentry-v1-*.state` file appeared in `.goat-flow/scratchpad/`.
+**Symptoms:** Codex Desktop on Windows re-fired Stop 2,152 times in a WSL checkout between 2026-09-29 18:29 and 2026-09-30 18:56 AEST. Each invocation reported `post-turn-safety: INCOMPLETE` with `The selected Git repository root could not be opened`; no re-entry state file appeared.
 
-**Why it happens:** Git for Windows rejected the checkout with `detected dubious ownership` because `safe.directory` had no entry for it, so the scan had no root. `write_stop_reentry_state` then ran `mkdir -p` on the absolute state directory. Under Git Bash that call fails with `cannot create directory '//wsl.localhost': Read-only file system` and returns 1 even when the directory already exists, so the guard never stored its record and blocked every Stop. The generic result text hid Git's reason, and the Codex agent reported a faulty hook rather than the missing `safe.directory` entry.
+**Why it happens:** Git rejected the checkout for dubious ownership because `safe.directory` lacked an entry. The Stop state writer then passed an absolute WSL network path to `mkdir -p`, which failed even for an existing directory. Without stored state, every Stop blocked again, while generic output hid Git's reason.
 
-**Evidence:** Measured 2026-09-30 with Git for Windows 2.56.0 and Git Bash bash 5.3.15 against a WSL2 path. Absolute `mkdir -p` returned 1 for a missing directory and for an existing one; the same call by relative path from inside the root returned 0 for both. Exclusive write, `chmod`, `mv`, and `[ -O ]` succeeded on the same path. Through the registered Codex Stop command the old hook returned `decision: block` on three consecutive Stops; the fixed hook returned block, an empty response, then block, and the block reads `Git refused this repository for dubious ownership`. Codex sets `stop_hook_active` after a Stop block (openai/codex `codex-rs/core/src/session/turn.rs`, read 2026-09-30). Current anchors: `workflow/hooks/post-turn-safety.sh` (search: `stop_state_relative_directory`) and (search: `report_repository_root_failure`). `workflow/hooks/gruff-code-quality.sh` (search: `health marker could not be stored`) has the same call shape; its failure branch only repeats a health line (read, not measured).
+**Evidence:** Measured 2026-09-30 with Git for Windows 2.56.0 and Git Bash 5.3.15 against WSL2. Absolute creation returned 1 (`Read-only file system`) for missing and existing directories; relative creation returned 0 for both. Exclusive write, `chmod`, `mv`, and `[ -O ]` succeeded there. The registered Codex Stop command changed from three consecutive blocks to block, empty response, block, with the diagnostic `Git refused this repository for dubious ownership`. Owners: `workflow/hooks/post-turn-safety.sh` (search: `stop_state_relative_directory`, `report_repository_root_failure`).
+
+**Related Gruff failure, 2026-10-01:** An absolute-mkdir-rejecting shim reproduced the lost health marker. Relative creation now preserves deduplication: `workflow/hooks/gruff-code-quality.sh` (search: `announce_verified_health`), `test/integration/gruff-code-quality-contract.test.ts` (search: `deduplicates verified health when mkdir refuses absolute paths`). This is fixture proof, not fresh native or provider proof.
 
 ---
+
+## Footgun: Health-marker IO can abort analysis
+
+**Status:** active | **Created:** 2026-10-01 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Guard optional marker reads and writes.
+
+**Prevention:** Use `cat`; Bash's `$(<file)` can exit even inside `if`.
+
+**Evidence:** `workflow/hooks/gruff-code-quality.sh` (search: `announce_verified_health`) exited 1 with empty stdout after valid analysis when its marker was unreadable or obstructed by a directory.
 
 ## Resolved Entries
 

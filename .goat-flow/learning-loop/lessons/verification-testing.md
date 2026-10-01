@@ -1,47 +1,11 @@
 ---
 category: verification-testing
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-01
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md); process-lifecycle and delegated-run tests are [verification-testing-process.md](verification-testing-process.md).
 
-## Lesson: Windows environment filters need mixed-case native proof
-
-**Status:** active | **Created:** 2026-09-27 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Verify environment-key filtering on Windows with both uppercase and mixed-case keys before claiming isolation.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** Match environment keys without regard to case when a supported platform treats them that way.
-Run a native process with uppercase and mixed-case inputs; a Linux-only assertion cannot establish Windows environment isolation.
-From WSL, check existing native executables before leaving that proof unresolved because they are absent from the shell's PATH.
-
-**What happened:** The Git reader removed uppercase trace keys, and its regression used only uppercase names.
-A native Windows reproduction created both trace files with `git_trace` and `Git_Trace2_Event`, while uppercase controls created neither.
-Normalizing key case before filtering left both destinations absent in the same native reproduction.
-
-The first expanded test hid its cases in a loop inside one test; Gruff caught that shape, and named cases made platform coverage visible.
-
-**Root cause:** The filter and fixture both assumed case-sensitive names, hiding a supported platform's different contract.
-Evidence: `src/cli/review-validate-anchors.ts` (search: `key.toUpperCase().startsWith("GIT_")`) and
-`test/integration/review-validate-git-env.test.ts` (search: `traceEnvironmentCases`).
-
----
-
-## Lesson: File-mode tests must account for the runner's umask
-
-**Status:** active | **Created:** 2026-09-26 | **Evidence:** OBSERVED
-**Decision changed:** Check the permissions of a created file against the requested mode after the runner's umask is applied.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** Keep test-output capture from changing the environment inherited by the test process. For a newly created file, compare its mode with the requested mode masked by `process.umask()`. Evidence anchors: `test/unit/safe-exec.test.ts` (search: `applies caller-selected replacement permissions under the process umask`), `src/cli/server/safe-exec.ts` (search: `openSync(tempPath, "wx", fileMode)`).
-
-**What happened:** A full `npm test` run inherited `umask 077` from its output-capture wrapper and failed one existing permission assertion: the created file had mode `0600` while the test expected `0640`. The focused case passed under the normal `0022` mask and reproduced the failure under `0077`.
-
-**Root cause:** The assertion assumed a fixed process umask, and the proof wrapper changed that umask before starting the suite.
-
----
+Related evidence moved intact to [platform-verification.md](platform-verification.md).
 
 ## Lesson: Cache-behaviour tests need observable contracts
 
@@ -67,7 +31,7 @@ Evidence: `src/cli/review-validate-anchors.ts` (search: `key.toUpperCase().start
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** OBSERVED
 **Severity:** INTEGRATION
-**Incident count:** 24 | **Latest occurrence:** 2026-09-26
+**Incident count:** 25 | **Latest occurrence:** 2026-10-01
 
 **Prevention:** Before changing prose, a path, or an adjacent command, search the tests and durable semantic anchors for the exact old text; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest. When fixture size feeds a derived assertion, recompute it with the production formula after every fixture edit. Update a contract only when product semantics change. Before drafting in a near-cap skill, measure the current word budget and pay for additions from unpinned text; before quoting a budget or score outcome, measure the exact sizes with the function the gate uses and state the margin.
 
@@ -152,6 +116,10 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
   `.gruff-ts.yaml` (search: `size.file-length`).
 
 - **Recurrence 2026-09-26:** Documenting the recovery guard changed the architecture claim path and the manifest's claim recovery wording. The full fast suite failed its local-data contract, which pins both phrases. Restoring the claim contract and adding guard detail beside it passed the focused contract. `test/contract/local-data-contract.test.ts` (search: `registers path-write claims as transient fail-closed coordination`), `.goat-flow/architecture.md` (search: `Local coordination state`), `workflow/manifest.json` (search: `exclusive path-write coordination`).
+
+**Recurrence 2026-10-01:** A new Gruff test guessed the result label as `clean` instead of the observed `pass`, and native launch fixtures put `call` and `start` outside the explicit cmd body. The first assertions failed before proving the intended regressions. Read the result vocabulary and interpreter boundary before extending a fixture. For native WSL-to-cmd probes, inspect the transported bytes: argv quoting inserted backslashes into a quoted echo control, while stdin preserved the intended command and established the literal-caret result. A quality-diff wording change also left a row-integrity assertion matching the old prefix; preserve its control-character invariant while updating the displayed text. Owners: `test/integration/gruff-code-quality-contract.test.ts` (search: `deduplicates verified health when mkdir refuses absolute paths`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `cmd caret-obfuscated publication`), and `test/unit/quality-diff-delta-tag.test.ts` (search: `keeps line-feed and carriage-return summaries on their own rows`).
+
+---
 
 ## Lesson: Mid-implementation proof gates split edit batches
 

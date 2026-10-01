@@ -36,6 +36,7 @@ import {
   sampleGruffEditPayload,
   writeContractGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
+import { withCommandShim } from "./post-turn-safety-hook.helpers.js";
 
 const PROJECT_ROOT = join(import.meta.dirname, "..", "..");
 const HOOK_RUNNER = join(
@@ -732,7 +733,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   });
 
   // Writes session health markers so repeated user edits receive one useful process notice.
-  it("deduplicates verified health while re-announcing malformed and reused session state", () => {
+  it("deduplicates verified health while tolerating malformed, unwritable and reused session state", () => {
     const failedProjectRoot = makeEditedGruffContractProject("", {
       exitStatus: 7,
       standardError: "dependency crashed",
@@ -752,12 +753,15 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     const projectRoot = makeEditedGruffContractProject(
       CLEAN_GRUFF_CONTRACT_ENVELOPE,
     );
-    const firstResult = runMigratedHook(
-      projectRoot,
-      sampleGruffEditPayload("same-session"),
-      "/usr/bin:/bin",
-      { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-09" },
-    );
+    // Hold provider identity fixed while varying marker state and day.
+    const runHealthCheck = (day = "2026-08-09") =>
+      runMigratedHook(
+        projectRoot,
+        sampleGruffEditPayload("same-session"),
+        "/usr/bin:/bin",
+        { GRUFF_CODE_QUALITY_HEALTH_DAY: day },
+      );
+    const firstResult = runHealthCheck();
     readMigratedGruffResult(firstResult);
     assert.match(firstResult.stderr, /verified analyzer exchange/u);
     const markerDirectoryPath = join(
@@ -771,12 +775,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     );
     assert.equal(firstMarkerNames.length, 1);
 
-    const repeatedResult = runMigratedHook(
-      projectRoot,
-      sampleGruffEditPayload("same-session"),
-      "/usr/bin:/bin",
-      { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-09" },
-    );
+    const repeatedResult = runHealthCheck();
     readMigratedGruffResult(repeatedResult);
     assert.doesNotMatch(repeatedResult.stderr, /verified analyzer exchange/u);
 
@@ -784,23 +783,68 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       join(markerDirectoryPath, firstMarkerNames[0]),
       "malformed\n",
     );
-    const malformedResult = runMigratedHook(
-      projectRoot,
-      sampleGruffEditPayload("same-session"),
-      "/usr/bin:/bin",
-      { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-09" },
-    );
+    const malformedResult = runHealthCheck();
     readMigratedGruffResult(malformedResult);
     assert.match(malformedResult.stderr, /verified analyzer exchange/u);
 
-    const reusedSessionResult = runMigratedHook(
-      projectRoot,
-      sampleGruffEditPayload("same-session"),
-      "/usr/bin:/bin",
-      { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-10" },
+    const markerPath = join(markerDirectoryPath, firstMarkerNames[0]);
+    // Unreadable state cannot discard analysis; privileged hosts may still read it.
+    chmodSync(markerPath, 0o200);
+    assert.equal(readMigratedGruffResult(runHealthCheck()).outcome, "pass");
+    chmodSync(markerPath, 0o600);
+
+    // An obstructed marker cannot discard the completed analyzer result.
+    rmSync(markerPath);
+    mkdirSync(markerPath);
+    const unwritableResult = runHealthCheck();
+    assert.equal(readMigratedGruffResult(unwritableResult).outcome, "pass");
+    assert.match(unwritableResult.stderr, /health marker could not be stored/u);
+    assert.doesNotMatch(
+      unwritableResult.stderr,
+      /health is current for this session/u,
     );
+
+    const reusedSessionResult = runHealthCheck("2026-08-10");
     readMigratedGruffResult(reusedSessionResult);
     assert.match(reusedSessionResult.stderr, /verified analyzer exchange/u);
+  });
+
+  // Reproduce Git Bash's rejection of absolute mkdir paths while relative creation works.
+  it("deduplicates verified health when mkdir refuses absolute paths", () => {
+    const projectRoot = makeEditedGruffContractProject(
+      CLEAN_GRUFF_CONTRACT_ENVELOPE,
+    );
+    withCommandShim(
+      "mkdir",
+      [
+        'for argument in "$@"; do',
+        '  case "$argument" in /*) exit 1 ;; esac',
+        "done",
+      ].join("\n"),
+      (environment) => {
+        // Repeat the same provider session to exercise marker persistence and reuse.
+        const runHealthCheck = () =>
+          runMigratedHook(
+            projectRoot,
+            sampleGruffEditPayload("relative-health-session"),
+            environment.PATH,
+            { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-10-01" },
+          );
+        const first = runHealthCheck();
+        assert.equal(readMigratedGruffResult(first).outcome, "pass");
+        assert.match(first.stderr, /health is current for this session/u);
+        assert.doesNotMatch(first.stderr, /health marker could not be stored/u);
+        const repeated = runHealthCheck();
+        assert.equal(readMigratedGruffResult(repeated).outcome, "pass");
+        assert.doesNotMatch(repeated.stderr, /verified analyzer exchange/u);
+        assert.equal(
+          readdirSync(join(projectRoot, ".goat-flow", "logs", "events")).filter(
+            (name) => name.startsWith(".gruff-hook-health."),
+          ).length,
+          1,
+        );
+      },
+    );
   });
 
   // Fixture purpose: writes two analyzer fixtures and runs TypeScript, Python, then TypeScript

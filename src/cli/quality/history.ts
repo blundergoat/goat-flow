@@ -64,15 +64,15 @@ export interface QualityDiffFindingRow {
 }
 
 /**
- * One finding where the agent's self-reported `delta_tag` contradicts the deterministic id-based diff class.
+ * One finding where the agent's self-reported `delta_tag` differs from the deterministic exact-ID diff class.
  *
- * Surfaced as a methodology signal: the agent either found a real continuity the id algorithm missed, or tagged sloppily - either way the user should
+ * Surfaced as a methodology signal: semantic continuity may survive a changed ID, or the tag may be mistaken; the user should
  * see it, not have it silently ignored.
  */
 export interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
   /** What the agent claimed when writing the report. */
   agentTag: "new" | "persisted";
-  /** What the positional-id diff derived for the same finding. */
+  /** What the exact-ID diff derived for the same finding. */
   deterministic: "new" | "persisted";
 }
 
@@ -80,7 +80,7 @@ export interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
  * Diff result for two same-agent, same-mode quality-history entries.
  *
  * Use when a user asks which findings appeared, disappeared, or carried forward between runs.
- * Invariant: both entries must be comparable before these buckets are rendered to the CLI.
+ * Invariant: entries share an agent and mode; other comparability limits are reported as warnings.
  */
 export interface QualityDiffResult {
   from: QualityHistoryEntry;
@@ -97,8 +97,7 @@ export interface QualityDiffResult {
    * The bucket is a pure id set difference, so a finding lands here when the defect was repaired, when the newer run never examined that artifact,
    * and when its id shifted for encoding a line number.
    *
-   * A degraded run is the worst case: a report generated without prior-report context carries `prior_report_id: null`, nothing can be tagged
-   * `persisted`, and every earlier finding reads as absent.
+   * Prior-report context controls assessor tags, not these buckets: matching IDs persist even when `prior_report_id` is null.
    *
    * Treat this as a prompt to re-check each cited artifact, never as evidence for closing remediation work.
    */
@@ -107,7 +106,7 @@ export interface QualityDiffResult {
   persisted: QualityDiffFindingRow[];
   stuck: QualityDiffFindingRow[];
   /**
-   * Agent-vs-deterministic `delta_tag` contradictions.
+   * Differences between semantic `delta_tag` claims and exact-ID matching.
    *
    * Only populated when this diff's source report IS the baseline the newer report was tagged against (`to.report.prior_report_id === from.id`) -
    * against any other pair the agent's tags describe a different comparison and disagreement would be noise.
@@ -422,6 +421,7 @@ export function loadQualityHistoryWindow(
  * Load and validate one quality-history file.
  * It swallows a malformed or unreadable file into a warning so one bad report never hides the rest of a user's history.
  *
+ * @param projectPath - selected project root constraining the history file read
  * @param dir - quality log directory; missing directories must be checked by callers first
  * @param filename - history filename to read; empty names produce a bad file path
  * @param parsedName - filename-derived metadata; missing fields would make the entry unusable

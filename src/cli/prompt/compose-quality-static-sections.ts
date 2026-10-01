@@ -22,7 +22,9 @@ export function qualityScoringText(mode: QualityMode): string {
   if (mode === "agent-setup") appendRatingSections(lines);
   else appendFocusedRatingSections(lines, mode);
   const ratingsStart = lines.indexOf("### Ratings");
-  const closingStart = lines.findIndex((line) => line.startsWith("### Top 5"));
+  const closingStart = lines.findIndex(
+    (line) => line === "### Prioritized Improvements",
+  );
   return [
     ...lines.slice(ratingsStart, closingStart < 0 ? undefined : closingStart),
     QUALITY_SCORE_RULE,
@@ -62,13 +64,13 @@ export function appendRules(lines: string[]): void {
     "- **Standards bind their audience.** Before reporting that the framework violates its own stated standard, identify who the standard binds (agent output, human workflow, or CI) and check the decisions INDEX for an accepted ADR that already resolves the tension. A human-workflow convention does not by itself prove a framework self-violation; identify the agent-facing mechanism or quality gate that makes it relevant.",
   );
   lines.push(
-    '- **Evidence-based only.** No fabricated line numbers - say "approximate" or cite file without a line number. No padding, no softened findings.',
+    '- **Evidence-based only.** No fabricated line numbers - say "approximate" or cite file without a line number. Use proportionate severity and allow zero findings; do not pad the report.',
   );
   lines.push(
     '- **Content over existence.** Do not reduce the review to "does the file exist?" - check whether the CONTENT is correct, specific, and useful for THIS project.',
   );
   lines.push(
-    "- **Command output wins.** If a command's output contradicts a doc, the command wins.",
+    "- **Interpret command evidence.** Retain the completed command, exit status, scope, and relevant output. Apply the command's exit-code semantics before calling it a failure; distinguish expected differences from broken checks. Runtime output can disprove documentation only for the behavior actually exercised.",
   );
   lines.push(
     "- **Judge the current state.** Not what it was, not what it could be. What it IS right now.",
@@ -157,7 +159,7 @@ export function appendSkillTesting(lines: string[]): void {
   );
   lines.push("");
   lines.push(
-    "For each skill report: (a) what worked, (b) what was confusing or failed, (c) what was useless ceremony. Cite file + semantic anchor where possible.",
+    "For each skill report: (a) what worked, (b) what was confusing or failed, (c) any evidenced avoidable cost (or None). State the method and evidence limit; static inspection is not a live skill trial. Cite file + semantic anchor where possible.",
   );
   lines.push(
     "If any reporting-only skill attempts to edit tracked files or implement code, stop that probe immediately and report it as a finding. For `/goat-clarity`, stop on any write outside its disposable frozen target or any mutation of the assessed checkout.",
@@ -359,21 +361,25 @@ function appendRatingBands(lines: string[]): void {
     "- System / Learnability: 25 = fast to understand and apply; 20 = small onboarding tax; 15 = moderate study required; 10 = confusing structure; 5 = hard to learn; 0 = effectively opaque.",
   );
   lines.push("");
-  lines.push("### Top 5 Improvements");
+  lines.push("### Prioritized Improvements");
   lines.push(
     'Do NOT recommend adding quick/lite/reduced modes to any skill. Skill mode decisions (e.g. goat-critique being full-delegated-only) are ADR-decided architectural choices, not gaps to fill. See ADR-021, "goat-critique is a core feature, full delegated mode only".',
   );
-  lines.push("For each:");
+  lines.push(
+    "Recommend up to five supported improvements; fewer or none is valid. Consolidate findings sharing one root cause and fix. For each:",
+  );
   lines.push("1. What to change");
   lines.push("2. Evidence from your testing (cite file + semantic anchor)");
-  lines.push("3. Expected impact on the ratings");
+  lines.push(
+    "3. User benefit, tradeoff, and verification that would demonstrate the benefit",
+  );
   lines.push("");
   lines.push("### Refuted Candidates");
   lines.push(
     "List every candidate finding you tested and excluded, why it was excluded, and the source anchor or command result that disproved it. Write `None` when no candidate was ruled out.",
   );
   lines.push(
-    "Keep these candidates out of Findings and Top 5 Improvements; the ledger exists so the user and later reviewers do not repeat disproved work.",
+    "Keep these candidates out of Findings and Prioritized Improvements; the ledger exists so the user and later reviewers do not repeat disproved work.",
   );
   lines.push("");
   lines.push("### What You Did Not Verify");
@@ -393,6 +399,6 @@ export function appendClosing(lines: string[]): void {
   lines.push("---");
   lines.push("");
   lines.push(
-    "**IMPORTANT:** Respond with the full prose assessment (Pre-check Results through What You Did Not Verify). Write the JSON report to the file path described above. Then end your reply with the one-line confirmation. Do not edit any tracked file. Do not emit the JSON as a fenced block in your reply.",
+    "**IMPORTANT:** Respond with a concise prose assessment covering Pre-check Results through What You Did Not Verify. Lead with the supported findings and best improvements; summarize clean checks and skill coverage without repeating every saved JSON field. Write the JSON report to the file path described above. Then end your reply with the one-line confirmation. Do not edit any tracked file. Do not emit the JSON as a fenced block in your reply.",
   );
 }

@@ -322,7 +322,7 @@ function appendReportJsonRules(
   // that rule here so no surface restates (and drifts) it.
   if (input.priorReport) {
     lines.push(
-      '- `delta_tag` is REQUIRED on every current finding and must be either `"new"` or `"persisted"`. `resolved` belongs in derived diff output, not the current finding list.',
+      '- `delta_tag` is REQUIRED on every current finding and must be either `"new"` or `"persisted"`. `absent` belongs in derived diff output, not the current finding list; absence is not proof of resolution.',
     );
   } else {
     lines.push(
@@ -330,7 +330,7 @@ function appendReportJsonRules(
     );
   }
   pushVariant(
-    "- Do NOT include an `id` field. The CLI attaches positional finding ids deterministically when the report is loaded.",
+    "- Do NOT include an `id` field. The CLI derives finding IDs deterministically from finding fields when the report is loaded; they do not establish semantic identity across rewrites.",
     "- Do NOT include an `id` field.",
   );
   pushVariant(
@@ -363,13 +363,13 @@ function appendReportJsonRules(
     "If the PATH executable is missing or does not match, do not use it. In the framework checkout, use the source fallback after its version matches the report version.",
   );
   lines.push(
-    "Minify the completed report object to one JSON line between the quoted delimiters. Multi-line heredoc bodies can be mistaken for chained shell commands by safety hooks.",
+    "Place the completed report object between the quoted delimiters. Minified and pretty-printed JSON are both supported by the bounded quality-save transport; keep the delimiter quoted so report text stays inert.",
   );
   lines.push("");
   lines.push("```bash");
   lines.push(
     `goat-flow quality save ${shellSingleQuote(input.projectPath)} <<'JSON'`,
-    "<insert the complete report object as one JSON line here>",
+    "<insert the complete report object here>",
     "JSON",
   );
   lines.push("```");
@@ -379,7 +379,7 @@ function appendReportJsonRules(
   lines.push("```bash");
   lines.push(
     `node --import tsx src/cli/cli.ts quality save ${shellSingleQuote(input.projectPath)} <<'JSON'`,
-    "<insert the complete report object as one JSON line here>",
+    "<insert the complete report object here>",
     "JSON",
   );
   lines.push("```");

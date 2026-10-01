@@ -1341,6 +1341,19 @@ run_full() {
   expect_allow shell 'cmd /c "@echo Ready"' 'cmd echo-suppressed output'
   expect_block git 'cmd //c "echo a\& git.exe push origin main"' 'cmd backslash is not an escape'
   expect_allow git 'cmd //c "echo a ^& git.exe push origin main"' 'cmd caret escapes an ampersand'
+  # Carets escape command and path letters too; outer Bash quotes do not become cmd quotes.
+  for cmd_prefix in '' 'call ' 'start /b '; do
+    expect_block git "cmd //c \"${cmd_prefix}g^it pu^sh origin main\"" 'cmd caret-obfuscated publication'
+    expect_block git "cmd //c \"${cmd_prefix}gh pr me^rge 12\"" 'cmd caret-obfuscated PR merge'
+    expect_block shell "cmd //c \"${cmd_prefix}r^d /s /q C:/goat-probe-target\"" 'cmd caret-obfuscated deletion'
+    expect_block paths "cmd //c \"${cmd_prefix}type .e^nv\"" 'cmd caret-obfuscated secret path'
+    expect_allow git "cmd //c \"${cmd_prefix}g^it sta^tus --short\"" 'cmd caret-obfuscated inspection'
+    expect_allow shell "cmd //c \"${cmd_prefix}echo r^d /s /q example\"" 'cmd caret-obfuscated printed deletion'
+  done
+  expect_block git 'cmd //c git pu^sh origin main' 'cmd unquoted caret publication'
+  expect_allow git 'cmd //c "echo a ^| g^it pu^sh origin main"' 'cmd escaped pipe stays literal'
+  expect_allow git 'cmd //c "echo a ^& g^it pu^sh origin main"' 'cmd escaped ampersand stays literal after word normalization'
+  expect_allow git 'cmd //c "git pu^^sh origin main"' 'cmd doubled caret stays literal'
   expect_block git "cmd //c \"echo ' & git.exe push origin main & echo '\"" 'cmd single quotes do not quote'
   expect_block git 'cmd //e:on //c "git.exe push origin main"' 'cmd Git Bash switch before publication'
   expect_allow git 'cmd //e:on //c "git.exe status --short"' 'cmd Git Bash switch before inspection'

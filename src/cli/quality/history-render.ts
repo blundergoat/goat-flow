@@ -248,20 +248,20 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
   renderSection("Persisted", diff.persisted);
   renderSection("Stuck", diff.stuck);
 
-  // Agent-vs-deterministic contradictions only render when present - most
+  // Semantic tags and exact-ID differences only render when present - most
   // diffs agree, and an always-on empty section would bury the real four.
   if (diff.deltaTagDisagreements.length > 0) {
     lines.push(
-      `Delta-tag disagreements (${diff.deltaTagDisagreements.length}) - agent's claimed delta_tag vs the deterministic id diff:`,
+      `Assessor tags and exact-ID matches differ (${diff.deltaTagDisagreements.length}):`,
     );
     // Show each mismatch so the maintainer can recheck the assessor's continuity claim.
     for (const row of diff.deltaTagDisagreements) {
       lines.push(
-        `${row.id} | ${row.severity} | agent said "${row.agentTag}", deterministic diff says "${row.deterministic}" | ${flattenSummary(row.summary)}`,
+        `${row.id} | ${row.severity} | assessor tagged "${row.agentTag}", exact-ID diff says "${row.deterministic}" | ${flattenSummary(row.summary)}`,
       );
     }
     lines.push(
-      "Positional finding ids stay the source of truth; treat disagreements as a methodology signal about the agent's continuity claims.",
+      "Exact-ID classes describe matching report records, not semantic continuity. A rewritten summary or location can change the ID. Recheck the cited evidence before treating either classification as a fix or a new issue.",
     );
     lines.push("");
   }

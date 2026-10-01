@@ -247,12 +247,12 @@ describe("quality rubric identity and integer scores", () => {
       const text = qualityScoringText(qualityMode);
       assert.match(
         id,
-        new RegExp(`^quality-${qualityMode}-r1-[a-f0-9]{64}$`, "u"),
+        new RegExp(`^quality-${qualityMode}-r2-[a-f0-9]{64}$`, "u"),
       );
       assert.ok(id.endsWith(createHash("sha256").update(text).digest("hex")));
       assert.doesNotMatch(
         text,
-        /Persist through|goat_flow_version|project_path|Prior report context|Top 5 Improvements/u,
+        /Persist through|goat_flow_version|project_path|Prior report context|Prioritized Improvements/u,
       );
       ids.add(id);
       for (const persistence of ["bounded-saver", "staged-draft"] as const) {

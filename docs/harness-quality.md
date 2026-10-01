@@ -14,7 +14,7 @@ The generated prompt asks an agent to judge whether the harness is usable, not j
 2. **Concern-by-concern analysis** - for each of the 5 harness concerns (Context, Constraints, Verification, Recovery, Feedback Loop), assess what works, what fails or is weak, and provide file or semantic-anchor evidence
 3. **False positive and false negative risks** - identify where a structural PASS hides a real gap, and where a FAIL is misleading
 4. **Refuted candidates** - preserve suspected findings the assessor tested and ruled out, with the reason and source or command evidence
-5. **Top 5 improvements** - prioritize actionable fixes with evidence and verification commands
+5. **Up to five supported improvements** - prioritize actionable fixes with evidence and verification commands
 
 Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality marked (OBSERVED vs INFERRED). The prompt embeds the current audit results so the agent knows what's already passing or failing.
 
@@ -31,6 +31,8 @@ npx @blundergoat/goat-flow@latest quality diff --agent claude
 ```
 
 Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. New reports record run provenance under `assessment_context`, require a `refuted_candidates` array that may be empty, and include `score_rationale` for all eight setup and system axes. Each rationale row has non-empty, single-line `evidence` and `deduction` text capped at 240 characters per field. Each refuted row explains what claim was excluded and the source or command evidence that disproved it, keeping it separate from actionable findings.
+
+Assessments may report zero findings or fewer than five improvements. Recommendations should address supported root causes and explain user benefit, tradeoffs, and verification. Static inspection establishes documented behavior; it does not establish live enforcement or measured productivity. The report must retain that distinction and any unverified work. Rubric revision 2 marks this guidance change; older reports remain readable, with history score deltas withheld across rubric boundaries and diff warnings identifying the mismatch.
 
 New prompts also retain up to five categorized `improvements` and before/after `workspace_snapshot` fingerprints. Runtime findings require the actual command, exit code, and result summary. History shows saved recommendations; diff exposes `comparisonWarnings` for missing or differing provenance without changing scores. Missing legacy recommendations mean they were not recorded, not that none existed. See the [quality save contract](cli.md#goat-flow-quality-save-project) for fields, bounds, and capture limits.
 
@@ -88,7 +90,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 **Quality evaluates:**
 - Are footgun and lesson entries from real incidents, or synthetic?
 - Do recent incidents appear in the learning loop, or are recurring failures missing from the record?
-- Are active/resolved statuses accurate? An "active" footgun describing fixed behavior is stale.
+- Are statuses accurate under the bucket README definitions? A repaired incident can still document an active structural trap; verify whether the underlying trap still applies.
 - Do semantic-anchor references in entries still resolve in the current code?
 
 ---

@@ -4,13 +4,13 @@ import { qualityScoringText } from "../prompt/compose-quality-static-sections.js
 import type { QualityMode, QualityReport } from "./schema-types.js";
 
 // Bump when prior-context policy changes, even if static scoring text does not.
-const QUALITY_RUBRIC_REVISION = 1;
+const QUALITY_RUBRIC_REVISION = 2;
 
 /**
  * Name the current mode's scoring text and prior-context policy revision.
  *
  * @param mode - assessment family whose scores are compared
- * @returns non-semver id stable across releases with unchanged scoring text
+ * @returns non-semver id stable while scoring text and the policy revision are unchanged
  */
 export function getQualityRubricId(mode: QualityMode): string {
   const digest = createHash("sha256")

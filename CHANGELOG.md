@@ -10,10 +10,14 @@
 
 ### Changed
 
+- **Quality assessments distinguish evidence from inference** - Prompts accept zero findings, prioritize up to five supported improvements by user benefit, and separate static inspection from runtime proof. Rubric revision 2 prevents score deltas across the guidance change; finding comparisons distinguish assessor continuity claims from exact-ID matches.
 - **Quality score comparisons** - Reruns omit prior scores, accept integer axes from 0 to 25, and show history deltas only within the same rubric.
 
 ### Fixed
 
+- **Cmd caret escapes retain command policy** - Escaped executable, verb and path words receive the same deny checks as plain spellings while escaped operators stay literal.
+- **Gruff health notices deduplicate on WSL network paths** - Health-marker directories are created relative to the verified project root, avoiding Git Bash absolute-path failures.
+- **Gruff preserves completed analysis when health state is inaccessible** - Unreadable or unwritable markers no longer discard the result.
 - **Scoped cleanup recovery** - Unsafe `rm -r` denials explain how to remove already-approved literal file targets and empty directories while preserving secret restrictions and confirmation requirements.
 - **Changed-file diagnostics** - `check:touched` preserves tool output and recognizes completed commands when a sandbox attaches `EPERM` metadata.
 - **Guidance-test execution** - Dispatcher and review fixtures accept completed Git results in managed sandboxes, and the ShellCheck setup fixture avoids a stalled script-input pipe.
