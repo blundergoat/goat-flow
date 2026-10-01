@@ -12,6 +12,7 @@ import { getQualityRubricId } from "../quality/rubric.js";
 import { QUALITY_SCORE_RULE } from "./compose-quality-static-sections.js";
 import { QUALITY_REPORT_KIND, type QualityMode } from "../quality/schema.js";
 import {
+  QUALITY_CONCERNS,
   QUALITY_EVIDENCE_METHODS,
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
@@ -203,7 +204,7 @@ export function appendQualityReportContract(
   if (full) {
     lines.push("    {");
     lines.push(
-      `      "type": "${sampleType}", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null,`,
+      `      "type": "${sampleType}", "concern": "context", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null,`,
     );
     lines.push(
       `      "summary": "One-line finding summary", "detail": "Why it matters; include a semantic anchor when the evidence should survive as a durable learning-loop artifact.", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta}`,
@@ -211,11 +212,12 @@ export function appendQualityReportContract(
     lines.push("    }");
   } else {
     lines.push(
-      `    { "type": "${sampleType}", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta} }`,
+      `    { "type": "${sampleType}", "concern": "context", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta} }`,
     );
   }
   lines.push("  ],");
   lines.push('  "refuted_candidates": [],');
+  lines.push('  "fixes": [],');
   lines.push('  "improvements": []');
   lines.push("}");
   lines.push("```");
@@ -242,6 +244,7 @@ function appendReportJsonRules(
   pushFull: (...texts: string[]) => void,
 ): void {
   lines.push("JSON rules:");
+  appendConcernAndFixRules(lines);
   lines.push(QUALITY_SCORE_RULE);
   lines.push(
     `- Every score axis requires \`evidence\` and \`deduction\` as non-empty single-line strings of ${QUALITY_SCORE_RATIONALE_MAX_CHARACTERS} characters or fewer.`,
@@ -394,6 +397,18 @@ function appendReportJsonRules(
   lines.push("");
   lines.push(
     "**End of response:** After `OK`, confirm with one line using that exact path: `Wrote quality report to <absolute-report-path>`. Do not include the JSON inline.",
+  );
+}
+
+/** Give every assessment mode the same concern and attributed-fix evidence contract. */
+function appendConcernAndFixRules(lines: string[]): void {
+  lines.push(
+    `- Each current finding requires exactly one primary \`concern\`: ${backtickList(QUALITY_CONCERNS)}. Choose the affected harness responsibility; a hook bypass belongs to constraints. Do not duplicate one defect across concern rows or change axis scores merely because of its concern. Counts describe reported findings in this run, not all open defects; legacy omissions remain unclassified.`,
+    '- Optional `fixes` contains at most 20 assessor-verified correction claims. Recheck the original problem and explain how the evidence proves its correction. A "Fixed at" prefix, disappearance from a later report, passing command or existing link alone does not prove a fix. Do not open prior scored reports; use the score-free prior finding IDs and claims supplied in this prompt. Omit a fix record when the exact prior identity or proof is unavailable.',
+    '- Each fix has `prior_report_id`, `finding_id`, `conclusion: "assessor-verified"`, `explanation`, `target`, and `evidence`. Attribution is this report\'s agent and saved report ID. Use null for unavailable claim fields; incomplete or unresolved records remain unconfirmed. Do not supply `reference_check`: the saver derives it. Record one claim per exact prior report/finding pair; distinct findings may share a proof artifact.',
+    '- A committed target is `{ "kind": "commit", "revision": <full commit ID> }`. A workspace target is `{ "kind": "workspace-snapshot", "fingerprint": <review fingerprint>, "capture": { "file": <retained project-relative review capture>, "sha256": <its SHA-256> } }`. Reuse evidence from normal work; do not create a separate tracking workflow. HEAD alone never identifies an uncommitted fix.',
+    "- Fix `evidence` has `method`, `file`, `sha256`, and `summary`. Runtime behavior requires `runtime-probe` or `mixed` evidence with the recorded `command` and `exit_code`, referring to retained reproduction/test output. Interpret that output against the original failure; an exit code alone is insufficient. Static source/document corrections may use `static-analysis` with an exact `anchor` when the file proves the whole claim. For committed static evidence, hash the file bytes at the target revision; workspace static evidence must match the retained capture inventory. Use project-relative paths and full lowercase SHA-256 digests.",
+    '- The CLI validates record shape and references; it does not certify the correction or run saved commands. Historical records retain their original conclusion and target if a reference is lost, with "evidence unavailable; not reverified". Unconfirmed claims are not verified fixes.',
   );
 }
 

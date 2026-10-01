@@ -9,6 +9,63 @@ import type { AgentId } from "../types.js";
 
 export const QUALITY_REPORT_KIND = "goat-flow-quality-report";
 
+export const QUALITY_CONCERNS = [
+  "context",
+  "constraints",
+  "verification",
+  "recovery",
+  "feedback-loop",
+] as const;
+/** One primary harness concern; legacy findings may omit it. */
+type QualityConcern = (typeof QUALITY_CONCERNS)[number];
+/** Counts describe one report's findings, never an inventory of all open defects. */
+export type QualityConcernCounts = Record<
+  QualityConcern | "unclassified",
+  number
+>;
+
+/** A retained file's exact bytes, read only within the selected project. */
+export interface QualityEvidenceReference {
+  file: string;
+  sha256: string;
+}
+
+/** A committed revision or a retained review capture identifies the verified source. */
+export type QualityFixTarget =
+  | { kind: "commit"; revision: string }
+  | {
+      kind: "workspace-snapshot";
+      fingerprint: string;
+      capture: QualityEvidenceReference;
+    };
+
+/** The assessor supplies the proof; the CLI checks its references without executing commands. */
+export interface QualityFixEvidence extends QualityEvidenceReference {
+  method: QualityEvidenceMethod;
+  summary: string;
+  anchor?: string;
+  command?: string;
+  exit_code?: number;
+}
+
+/** Persisted admission result, separate from later reference availability. */
+export interface QualityFixReferenceCheck {
+  status: "confirmed" | "unconfirmed";
+  reason: string;
+}
+
+/** Attribution is the containing report's agent and saved report ID. Missing proof stays unconfirmed. */
+export interface QualityFix {
+  prior_report_id: string | null;
+  finding_id: string | null;
+  conclusion: "assessor-verified";
+  explanation: string | null;
+  target: QualityFixTarget | null;
+  evidence: QualityFixEvidence | null;
+  /** Written by save, never accepted as proof from an incoming report. */
+  reference_check?: QualityFixReferenceCheck;
+}
+
 export const QUALITY_FINDING_TYPES = [
   "setup_quality",
   "skill_flaw",
@@ -95,8 +152,8 @@ export type QualityScope = (typeof QUALITY_SCOPES)[number];
 /** Quality workflow mode used to keep history and diffs within comparable report families. */
 export type QualityMode = (typeof QUALITY_MODES)[number];
 /**
- * Whether a finding first appeared in this report (`new`) or carried over from the prior same-agent report (`persisted`).
- * Computed during history comparison; null on findings with no prior context.
+ * The assessor's claim that a finding is new or persists from prior same-agent context.
+ * History compares these claims with exact-ID matches; null means no claim was recorded.
  */
 export type QualityDeltaTag = (typeof QUALITY_DELTA_TAGS)[number];
 type QualityAuditStatus = (typeof QUALITY_AUDIT_STATUSES)[number];
@@ -178,6 +235,7 @@ export interface QualityImprovement {
 
 /** One current agent-emitted quality finding before deterministic IDs are attached. */
 export interface QualityFinding {
+  concern?: QualityConcern;
   type: QualityFindingType;
   severity: QualityFindingSeverity;
   file: string | null;
@@ -265,6 +323,8 @@ export interface QualityReport {
   score_rationale?: QualityScoreRationale;
   /** Ordered recommendations; omission means the older report did not preserve this section. */
   improvements?: QualityImprovement[];
+  /** Optional attributed corrections; omission means the report did not record them. */
+  fixes?: QualityFix[];
   findings: QualityFinding[];
   refuted_candidates: QualityRefutedCandidate[];
 }

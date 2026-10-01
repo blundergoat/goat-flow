@@ -12,6 +12,7 @@ import { getQualityRubricId } from "./rubric.js";
 import { KNOWN_AGENT_IDS } from "../agents/registry.js";
 import {
   QUALITY_AUDIT_STATUSES,
+  QUALITY_CONCERNS,
   QUALITY_DELTA_TAGS,
   QUALITY_EVIDENCE_METHODS,
   QUALITY_EVIDENCE_QUALITIES,
@@ -51,6 +52,7 @@ import {
 } from "./schema-expectations.js";
 import { parseReportRefutedCandidates } from "./schema-refuted-candidates.js";
 import { parseQualityScoreRationale } from "./schema-score-rationale.js";
+import { parseQualityFixes } from "./schema-fixes.js";
 import {
   parseAssessmentContext,
   parseQualityImprovements,
@@ -595,6 +597,17 @@ function parseFindingDeltaTag(
   return { ok: true, value: parsedDeltaTag.value };
 }
 
+/** Keep missing legacy concern assignments distinct from required current classifications. */
+function parseFindingConcern(
+  raw: unknown,
+  path: string,
+  options: QualityReportParseOptions,
+) {
+  if (raw === undefined && !options.requireCurrentFields)
+    return { ok: true as const, value: undefined };
+  return expectEnumValue(raw, `${path}.concern`, QUALITY_CONCERNS);
+}
+
 /**
  * Validate one finding before it can appear in a saved report.
  * The schema rejects unknown fields and author-supplied IDs; repair messages identify the exact field to correct.
@@ -613,6 +626,7 @@ function parseFinding(
   // A finding must be an object so the UI can render a stable issue row.
   if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
   const allowedKeys = [
+    "concern",
     "type",
     "severity",
     "file",
@@ -648,8 +662,11 @@ function parseFinding(
   const deltaTag = parseFindingDeltaTag(raw, path);
   // An invalid delta label would mislead the reader comparing this run with its baseline.
   if (!deltaTag.ok) return deltaTag;
+  const concern = parseFindingConcern(raw.concern, path, options);
+  if (!concern.ok) return concern;
 
   const findingBase: QualityFinding = {
+    ...(concern.value === undefined ? {} : { concern: concern.value }),
     type: core.value.type,
     severity: core.value.severity,
     file: core.value.file,
@@ -794,6 +811,7 @@ function optionalReportFields(fields: {
   assessmentContext: QualityAssessmentContext | undefined;
   scoreRationale: QualityScoreRationale | undefined;
   improvements: QualityReport["improvements"];
+  fixes: QualityReport["fixes"];
 }): Partial<QualityReport> {
   return {
     ...(fields.scope !== undefined ? { scope: fields.scope } : {}),
@@ -815,6 +833,7 @@ function optionalReportFields(fields: {
     ...(fields.improvements !== undefined
       ? { improvements: fields.improvements }
       : {}),
+    ...(fields.fixes === undefined ? {} : { fixes: fields.fixes }),
   };
 }
 
@@ -877,6 +896,7 @@ function parseReportCollections(
   findings: QualityFinding[];
   refutedCandidates: QualityRefutedCandidate[];
   improvements: QualityReport["improvements"];
+  fixes: QualityReport["fixes"];
 }> {
   const findings = parseReportFindings(
     rawReport.findings,
@@ -894,12 +914,18 @@ function parseReportCollections(
   );
   // Reject malformed recommendations before save can silently lose a maintainer's next steps.
   if (!improvements.ok) return improvements;
+  const fixes = parseQualityFixes(
+    rawReport.fixes,
+    options.requireCurrentFields === true,
+  );
+  if (!fixes.ok) return fixes;
   return {
     ok: true,
     value: {
       findings: findings.value,
       refutedCandidates: refutedCandidates.value,
       improvements: improvements.value,
+      fixes: fixes.value,
     },
   };
 }
@@ -940,6 +966,7 @@ function parseReportInternal(
       "improvements",
       "findings",
       "refuted_candidates",
+      "fixes",
     ],
     "report",
   );
@@ -1031,6 +1058,7 @@ function parseReportInternal(
       assessmentContext: assessmentContext.value,
       scoreRationale: scoring.value.scoreRationale,
       improvements: reportCollections.value.improvements,
+      fixes: reportCollections.value.fixes,
     }),
     scores: scoring.value.scores,
   };

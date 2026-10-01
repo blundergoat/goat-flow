@@ -154,6 +154,7 @@ describe("quality assessment evidence", () => {
   it("requires runtime results for new findings but accepts historical omissions", () => {
     const report = makeAssessmentReport();
     const finding = {
+      concern: "verification",
       type: "framework_flaw",
       severity: "MAJOR",
       file: "scripts/preflight-checks.sh",

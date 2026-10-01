@@ -31,6 +31,7 @@ import type { ParsedCLI } from "../cli-types.js";
 import { scrubDurableText } from "../evidence/redaction.js";
 import { getPackageVersion } from "../paths.js";
 import { parseQualityReport } from "./schema.js";
+import { confirmQualityFixReferences } from "./fix-references.js";
 
 type CLIErrorConstructor = new (message: string, exitCode: number) => Error;
 
@@ -104,6 +105,8 @@ async function handleQualityHistorySubcommand(
             id: entry.id,
             path: entry.path,
             report: entry.report,
+            concernCounts: entry.concernCounts,
+            fixRecords: entry.fixRecords,
           })),
           deltas: rows.map((row) => ({
             id: row.id,
@@ -860,7 +863,11 @@ export function persistQualityReportText(
     deps,
   );
 
-  const serializedReport = `${JSON.stringify(parsed.report, null, 2)}\n`;
+  const admittedReport = confirmQualityFixReferences(
+    projectRoot,
+    parsed.report,
+  );
+  const serializedReport = `${JSON.stringify(admittedReport, null, 2)}\n`;
   return writeQualityReport(
     projectRoot,
     parsed.report.agent,

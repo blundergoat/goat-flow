@@ -19,6 +19,12 @@ import { parseQualityReport } from "./schema.js";
 import { attachFindingIds } from "./ids.js";
 import { qualityReportRubricId } from "./rubric.js";
 import { KNOWN_AGENT_IDS } from "../agents/registry.js";
+import {
+  countQualityConcerns,
+  describeQualityFixes,
+  type QualityFixView,
+} from "./fix-references.js";
+import type { QualityConcernCounts } from "./schema-types.js";
 
 const QUALITY_HISTORY_FILENAME = new RegExp(
   `^(\\d{4}-\\d{2}-\\d{2})-(\\d{4})-(${KNOWN_AGENT_IDS.join("|")})-([a-z0-9]{5})\\.json$`,
@@ -33,6 +39,10 @@ export interface QualityHistoryEntry {
   agent: AgentId;
   randomId: string;
   report: SavedQualityReport;
+  /** Per-report counts; omitted only by older in-memory callers. */
+  concernCounts?: QualityConcernCounts;
+  /** Current availability beside each immutable saved conclusion. */
+  fixRecords?: QualityFixView[];
 }
 
 /** Display row for history tables after same-agent deltas have been calculated. */
@@ -53,6 +63,7 @@ export interface QualityHistoryRow {
    * Lets the dashboard distinguish runtime-probe runs from static-only runs.
    */
   evidenceMethods: SavedQualityFinding["evidence_method"][];
+  concernCounts?: QualityConcernCounts;
 }
 
 /** Finding summary row shared by absent, new, persisted, and stuck diff sections. */
@@ -358,6 +369,12 @@ export function loadQualityHistory(projectPath: string): {
       agent: parsedName.agent,
       randomId: parsedName.randomId,
       report: withIds.report,
+      concernCounts: countQualityConcerns(withIds.report),
+      fixRecords: describeQualityFixes(
+        projectPath,
+        withIds.report,
+        filename.replace(/\.json$/, ""),
+      ),
     });
   }
 
@@ -473,6 +490,12 @@ function tryParseHistoryFile(
       agent: parsedName.agent,
       randomId: parsedName.randomId,
       report: withIds.report,
+      concernCounts: countQualityConcerns(withIds.report),
+      fixRecords: describeQualityFixes(
+        projectPath,
+        withIds.report,
+        filename.replace(/\.json$/, ""),
+      ),
     },
     warning: null,
   };
@@ -607,6 +630,7 @@ export function buildQualityHistoryRows(
       blockerCount: countSeverity(entry.report, "BLOCKER"),
       majorCount: countSeverity(entry.report, "MAJOR"),
       minorCount: countSeverity(entry.report, "MINOR"),
+      concernCounts: countQualityConcerns(entry.report),
       evidenceMethods: Array.from(
         new Set(
           entry.report.findings.map((finding) => finding.evidence_method),

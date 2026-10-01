@@ -7,6 +7,7 @@
  */
 import type { AgentId } from "../types.js";
 import type { QualityMode } from "./schema.js";
+import { countQualityConcerns, type QualityFixView } from "./fix-references.js";
 import type {
   QualityDiffFindingRow,
   QualityDiffResult,
@@ -17,6 +18,8 @@ import {
   QUALITY_SETUP_SCORE_AXES,
   QUALITY_SYSTEM_SCORE_AXES,
   type QualityScoreAxisRationale,
+  type QualityFixEvidence,
+  type QualityFixTarget,
 } from "./schema-types.js";
 
 /**
@@ -78,6 +81,7 @@ function appendReportScoreRationale(
   label: "Report" | "From" | "To",
 ): void {
   lines.push(`${label} ${entry.id}`);
+  appendConcernAndFixEvidence(lines, entry);
   const context = entry.report.assessment_context;
   // Show recorded coverage before the scores so the reader can assess their evidence limits.
   if (context) {
@@ -126,6 +130,64 @@ function appendReportScoreRationale(
     (axis) => entry.report.scores.system[axis],
     rationale.system,
   );
+}
+
+/** Display report-local counts and attributed proof without treating absence as resolution. */
+function appendConcernAndFixEvidence(
+  lines: string[],
+  entry: QualityHistoryEntry,
+): void {
+  const counts = entry.concernCounts ?? countQualityConcerns(entry.report);
+  lines.push(
+    `  reported findings by concern: ${Object.entries(counts)
+      .map(([concern, count]) => `${concern} ${count}`)
+      .join(", ")} (not all open defects)`,
+  );
+  if (entry.report.fixes === undefined) {
+    lines.push("  fix evidence unavailable (not recorded)");
+    return;
+  }
+  if (entry.report.fixes.length === 0)
+    lines.push("  fix evidence: none recorded");
+  for (const record of entry.fixRecords ?? []) appendFixRecord(lines, record);
+}
+
+/** Keep uncommitted evidence visibly separate from a fixing commit. */
+function fixTargetLabel(target: QualityFixTarget | null): string {
+  if (!target) return "target unavailable";
+  return target.kind === "commit"
+    ? `committed ${target.revision}`
+    : `workspace snapshot ${target.fingerprint}`;
+}
+
+/** Show the original method and result without executing or reinterpreting it. */
+function appendFixEvidence(
+  lines: string[],
+  evidence: QualityFixEvidence | null,
+): void {
+  if (!evidence) return;
+  lines.push(
+    `    ${evidence.method}: ${evidence.file} (sha256 ${evidence.sha256}); ${evidence.summary}`,
+  );
+  if (evidence.anchor) lines.push(`    anchor: ${evidence.anchor}`);
+  if (evidence.command)
+    lines.push(
+      `    recorded command: ${evidence.command}; exit ${evidence.exit_code ?? "unavailable"}`,
+    );
+}
+
+/** Keep assessor attribution and current availability beside the immutable correction claim. */
+function appendFixRecord(lines: string[], record: QualityFixView): void {
+  const { fix } = record;
+  lines.push(
+    `  ${record.status}: ${fix.prior_report_id ?? "unknown report"}#${fix.finding_id ?? "unknown finding"} | ${fixTargetLabel(fix.target)}`,
+  );
+  lines.push(
+    `    assessor: ${record.assessor.agent} in ${record.assessor.report_id}; original conclusion: ${fix.conclusion}`,
+  );
+  if (fix.explanation) lines.push(`    correction: ${fix.explanation}`);
+  appendFixEvidence(lines, fix.evidence);
+  if (record.warning) lines.push(`    ${record.warning}`);
 }
 
 /**

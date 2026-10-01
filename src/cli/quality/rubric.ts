@@ -4,7 +4,7 @@ import { qualityScoringText } from "../prompt/compose-quality-static-sections.js
 import type { QualityMode, QualityReport } from "./schema-types.js";
 
 // Bump when prior-context policy changes, even if static scoring text does not.
-const QUALITY_RUBRIC_REVISION = 2;
+const QUALITY_RUBRIC_REVISION = 3;
 
 /**
  * Name the current mode's scoring text and prior-context policy revision.

@@ -50,6 +50,7 @@ export function makeCurrentQualityReport(
     score_rationale: makeQualityScoreRationale(),
     findings: [
       {
+        concern: "verification",
         type: "setup_quality",
         severity: "MINOR",
         file: null,

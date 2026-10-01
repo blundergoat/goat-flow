@@ -10,14 +10,28 @@ import assert from "node:assert/strict";
 import {
   mkdtempSync,
   mkdirSync,
+  existsSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { CLIError } from "../../src/cli/cli-error.js";
+import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
+import { parseQualityReport } from "../../src/cli/quality/schema.js";
+import type {
+  QualityFix,
+  QualityReport,
+} from "../../src/cli/quality/schema-types.js";
+import { attachFindingIds } from "../../src/cli/quality/ids.js";
+import { captureReviewSnapshot } from "../../src/cli/review-validate-authority.js";
+import { taggedHash } from "../../src/cli/review-validate-common.js";
+import { makeCurrentQualityReport } from "../fixtures/quality-report.js";
 import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 
@@ -35,6 +49,109 @@ const FIXTURE_DIR = resolve(
   "quality-history",
 );
 const disposables: string[] = [];
+
+/** Hash retained fixture bytes exactly as a report author does for evidence references. */
+function digest(text: string | Buffer): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+/** Build real Git objects, saved findings and a review capture in a disposable project. */
+function makeFixProject(
+  source: string | Buffer = "export const corrected = true;\n",
+) {
+  const root = makeTempProject();
+  // Plumbing creates only fixture objects; no user repository or branch is changed.
+  const git = (args: string[], input?: string | Buffer) =>
+    execFileSync("git", ["-C", root, ...args], {
+      encoding: "utf8",
+      input,
+      stdio: ["pipe", "pipe", "ignore"],
+    }).trim();
+  git(["init", "-b", "main"]);
+  writeFileSync(join(root, ".gitignore"), ".goat-flow/logs/\n");
+  writeFileSync(join(root, "rule.ts"), source);
+  const blob = git(["hash-object", "-w", "--stdin"], source);
+  const tree = git(["mktree"], `100644 blob ${blob}\trule.ts\n`);
+  const revision = git([
+    "-c",
+    "user.name=Fixture",
+    "-c",
+    "user.email=fixture@example.test",
+    "commit-tree",
+    tree,
+    "-m",
+    "Fixture",
+  ]);
+  git(["update-ref", "refs/heads/main", revision]);
+  const raw = makeCurrentQualityReport(root, "Fixture evidence");
+  raw.findings[0].concern = "constraints";
+  const parsed = parseQualityReport(raw);
+  assert.ok(parsed.ok);
+  const report = parsed.report;
+  const prior: QualityReport = {
+    ...report,
+    findings: [
+      report.findings[0],
+      { ...report.findings[0], summary: "Another finding" },
+    ],
+  };
+  const priorId = "2026-09-01-0900-claude-aaaaa";
+  const priorPath = join(root, ".goat-flow/logs/quality", `${priorId}.json`);
+  const priorBytes = JSON.stringify(prior);
+  writeFileSync(priorPath, priorBytes);
+  const withIds = attachFindingIds(prior);
+  assert.ok(withIds.ok);
+  const capture = captureReviewSnapshot(
+    JSON.stringify({
+      schema: "goat-review-request/v1",
+      source: { kind: "paths", paths: [{ path: "rule.ts", from: "live" }] },
+    }),
+    root,
+  );
+  const captureText = JSON.stringify(capture);
+  const captureFile = ".goat-flow/logs/capture.json";
+  writeFileSync(join(root, captureFile), captureText);
+  const fix: QualityFix = {
+    prior_report_id: priorId,
+    finding_id: withIds.report.findings[0].id,
+    conclusion: "assessor-verified",
+    explanation:
+      "The source now contains the corrected declaration cited by the original finding.",
+    target: { kind: "commit", revision },
+    evidence: {
+      method: "static-analysis",
+      file: "rule.ts",
+      sha256: digest(source),
+      summary: "The declaration is corrected.",
+      anchor: "corrected = true",
+    },
+  };
+  return {
+    root,
+    report,
+    fix,
+    priorPath,
+    priorBytes,
+    capture,
+    captureFile,
+    captureText,
+    findingIds: withIds.report.findings.map((finding) => finding.id),
+  };
+}
+
+/** Save through the same redaction, reference validation and exclusive writer used by the CLI. */
+function saveFixReport(
+  fixture: ReturnType<typeof makeFixProject>,
+  fixes: QualityFix[],
+): string {
+  return persistQualityReportText(
+    {
+      projectPath: fixture.root,
+      rawText: JSON.stringify({ ...fixture.report, fixes }),
+    },
+    { CLIError },
+  );
+}
 
 after(() => {
   for (const dir of disposables) {
@@ -72,6 +189,409 @@ function runCLI(
 }
 
 describe("quality history and diff CLI", () => {
+  it("accepts prior reports saved through project aliases and rejects another project", () => {
+    const fixture = makeFixProject();
+    const alias = join(makeTempProject(), "selected");
+    symlinkSync(
+      fixture.root,
+      alias,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const prior = JSON.parse(fixture.priorBytes);
+    const aliasedPrior = JSON.stringify({ ...prior, project_path: alias });
+    writeFileSync(fixture.priorPath, aliasedPrior);
+    const saved = saveFixReport(fixture, [fixture.fix]);
+    const savedBytes = readFileSync(saved, "utf8");
+    assert.equal(
+      JSON.parse(savedBytes).fixes[0].reference_check.status,
+      "confirmed",
+    );
+    const history = runCLI(fixture.root, ["quality", "history", "--all"]);
+    assert.equal(history.status, 0, history.stderr);
+    const current = JSON.parse(history.stdout).reports.find(
+      (entry: { path: string }) => entry.path === saved,
+    );
+    assert.equal(current.fixRecords[0].evidence_availability, "available");
+    assert.equal(readFileSync(fixture.priorPath, "utf8"), aliasedPrior);
+    assert.equal(readFileSync(saved, "utf8"), savedBytes);
+
+    const foreignPrior = JSON.stringify({
+      ...prior,
+      project_path: makeTempProject(),
+    });
+    writeFileSync(fixture.priorPath, foreignPrior);
+    const rejected = saveFixReport(fixture, [fixture.fix]);
+    assert.equal(
+      JSON.parse(readFileSync(rejected, "utf8")).fixes[0].reference_check
+        .status,
+      "unconfirmed",
+    );
+    assert.equal(readFileSync(fixture.priorPath, "utf8"), foreignPrior);
+  });
+
+  // The result appears after admission; history must not rewrite or promote that admission.
+  it("reports restored references as available without promoting an unconfirmed fix", () => {
+    const fixture = makeFixProject();
+    const proofFile = ".goat-flow/logs/restored-result.txt";
+    const proof = "original reproduction and control results\n";
+    const fix: QualityFix = {
+      ...fixture.fix,
+      evidence: {
+        method: "runtime-probe",
+        file: proofFile,
+        sha256: digest(proof),
+        summary: "Retained reproduction and control results.",
+        command: "fixture probe",
+        exit_code: 0,
+      },
+    };
+    const saved = saveFixReport(fixture, [fix]);
+    const savedBytes = readFileSync(saved, "utf8");
+    assert.equal(
+      JSON.parse(savedBytes).fixes[0].reference_check.status,
+      "unconfirmed",
+    );
+    writeFileSync(join(fixture.root, proofFile), proof);
+    const history = runCLI(fixture.root, ["quality", "history", "--all"]);
+    assert.equal(history.status, 0, history.stderr);
+    const current = JSON.parse(history.stdout).reports.find(
+      (entry: { path: string }) => entry.path === saved,
+    );
+    assert.equal(current.fixRecords[0].status, "unconfirmed");
+    assert.equal(current.fixRecords[0].evidence_availability, "available");
+    assert.equal(current.fixRecords[0].fix.conclusion, "assessor-verified");
+    assert.equal(readFileSync(saved, "utf8"), savedBytes);
+    assert.equal(readFileSync(fixture.priorPath, "utf8"), fixture.priorBytes);
+  });
+
+  it("rejects a workspace capture missing source identity even when its hashes match", () => {
+    const fixture = makeFixProject();
+    const {
+      fingerprint: _fingerprint,
+      source: _source,
+      ...unsigned
+    } = fixture.capture.authority;
+    const fingerprint = taggedHash("authority", unsigned);
+    const malformed = JSON.stringify({ ...unsigned, fingerprint });
+    writeFileSync(join(fixture.root, fixture.captureFile), malformed);
+    const proofFile = ".goat-flow/logs/result.txt";
+    const proof = "retained reproduction results\n";
+    writeFileSync(join(fixture.root, proofFile), proof);
+    const saved = saveFixReport(fixture, [
+      {
+        ...fixture.fix,
+        target: {
+          kind: "workspace-snapshot",
+          fingerprint,
+          capture: { file: fixture.captureFile, sha256: digest(malformed) },
+        },
+        evidence: {
+          method: "runtime-probe",
+          file: proofFile,
+          sha256: digest(proof),
+          summary: "Retained reproduction results.",
+          command: "fixture probe",
+          exit_code: 0,
+        },
+      },
+    ]);
+    assert.equal(
+      JSON.parse(readFileSync(saved, "utf8")).fixes[0].reference_check.status,
+      "unconfirmed",
+    );
+  });
+
+  it("hashes original evidence bytes before decoding Git source or runtime output", () => {
+    const source = Buffer.concat([
+      Buffer.from("export const corrected = true;\n"),
+      Buffer.from([0xff]),
+    ]);
+    const fixture = makeFixProject(source);
+    assert.ok(fixture.fix.evidence);
+    const proofFile = ".goat-flow/logs/result.txt";
+    writeFileSync(join(fixture.root, proofFile), source);
+    const runtimeFix: QualityFix = {
+      ...fixture.fix,
+      evidence: {
+        method: "runtime-probe",
+        file: proofFile,
+        sha256: digest(source),
+        summary: "Original failure and control results retained.",
+        command: "fixture probe",
+        exit_code: 0,
+      },
+    };
+    for (const fix of [fixture.fix, runtimeFix]) {
+      const saved = JSON.parse(
+        readFileSync(saveFixReport(fixture, [fix]), "utf8"),
+      );
+      assert.equal(
+        saved.fixes[0].reference_check.status,
+        "confirmed",
+        fix.evidence?.method,
+      );
+      assert.ok(fix.evidence);
+      const normalized = {
+        ...fix,
+        evidence: { ...fix.evidence, sha256: digest(source.toString("utf8")) },
+      };
+      const rejected = JSON.parse(
+        readFileSync(saveFixReport(fixture, [normalized]), "utf8"),
+      );
+      assert.equal(
+        rejected.fixes[0].reference_check.status,
+        "unconfirmed",
+        fix.evidence.method,
+      );
+    }
+  });
+
+  it("shows concern counts and committed proof at its recorded revision without rewriting history", () => {
+    const fixture = makeFixProject();
+    const saved = saveFixReport(fixture, [fixture.fix]);
+    const savedBytes = readFileSync(saved, "utf8");
+    writeFileSync(
+      join(fixture.root, "rule.ts"),
+      "export const laterEdit = true;\n",
+    );
+    const history = runCLI(fixture.root, [
+      "quality",
+      "history",
+      "--all",
+      "--format",
+      "json",
+    ]);
+    assert.equal(history.status, 0, history.stderr);
+    const current = JSON.parse(history.stdout).reports.find(
+      (entry: { path: string }) => entry.path === saved,
+    );
+    assert.equal(current.concernCounts.constraints, 1);
+    assert.equal(current.concernCounts.unclassified, 0);
+    assert.equal(current.fixRecords[0].status, "assessor-verified");
+    assert.equal(current.fixRecords[0].evidence_availability, "available");
+    assert.deepEqual(current.fixRecords[0].assessor, {
+      agent: "claude",
+      report_id: current.id,
+    });
+    const diff = runCLI(fixture.root, [
+      "quality",
+      "diff",
+      `${fixture.fix.prior_report_id}:${current.id}`,
+      "--format",
+      "json",
+    ]);
+    assert.equal(diff.status, 0, diff.stderr);
+    assert.equal(JSON.parse(diff.stdout).to.concernCounts.constraints, 1);
+    const text = runCLI(fixture.root, [
+      "quality",
+      "diff",
+      `${fixture.fix.prior_report_id}:${current.id}`,
+      "--format",
+      "text",
+    ]);
+    assert.equal(text.status, 0, text.stderr);
+    assert.match(
+      text.stdout,
+      /reported findings by concern:.*constraints 1.*not all open defects/u,
+    );
+    assert.match(text.stdout, /assessor-verified:.*committed/u);
+    assert.equal(readFileSync(fixture.priorPath, "utf8"), fixture.priorBytes);
+    assert.equal(readFileSync(saved, "utf8"), savedBytes);
+  });
+
+  it("binds workspace static proof to captured bytes and retains the conclusion after those bytes change", () => {
+    const fixture = makeFixProject();
+    const fix: QualityFix = {
+      ...fixture.fix,
+      target: {
+        kind: "workspace-snapshot",
+        fingerprint: fixture.capture.authority.fingerprint,
+        capture: {
+          file: fixture.captureFile,
+          sha256: digest(fixture.captureText),
+        },
+      },
+    };
+    const saved = saveFixReport(fixture, [fix]);
+    const savedBytes = readFileSync(saved, "utf8");
+    assert.equal(
+      JSON.parse(savedBytes).fixes[0].reference_check.status,
+      "confirmed",
+    );
+    const changedSource = "export const corrected = false;\n";
+    writeFileSync(join(fixture.root, "rule.ts"), changedSource);
+    assert.ok(fix.evidence);
+    const mismatched = saveFixReport(fixture, [
+      {
+        ...fix,
+        evidence: {
+          ...fix.evidence,
+          sha256: digest(changedSource),
+          anchor: "corrected = false",
+        },
+      },
+    ]);
+    assert.equal(
+      JSON.parse(readFileSync(mismatched, "utf8")).fixes[0].reference_check
+        .status,
+      "unconfirmed",
+    );
+    const history = runCLI(fixture.root, [
+      "quality",
+      "history",
+      "--all",
+      "--format",
+      "json",
+    ]);
+    assert.equal(history.status, 0, history.stderr);
+    const current = JSON.parse(history.stdout).reports.find(
+      (entry: { path: string }) => entry.path === saved,
+    );
+    assert.equal(current.fixRecords[0].status, "assessor-verified");
+    assert.equal(
+      current.fixRecords[0].warning,
+      "evidence unavailable; not reverified",
+    );
+    assert.equal(readFileSync(saved, "utf8"), savedBytes);
+  });
+
+  for (const lostReference of ["capture", "evidence"] as const) {
+    it(`retains workspace conclusions after ${lostReference} loss without executing saved commands`, () => {
+      const fixture = makeFixProject();
+      const proofFile = ".goat-flow/logs/reproduction.txt";
+      const proof = "reproduction: prior failure absent; control passes\n";
+      writeFileSync(join(fixture.root, proofFile), proof);
+      const marker = join(fixture.root, "COMMAND_MUST_NOT_RUN");
+      const fix: QualityFix = {
+        ...fixture.fix,
+        target: {
+          kind: "workspace-snapshot",
+          fingerprint: fixture.capture.authority.fingerprint,
+          capture: {
+            file: fixture.captureFile,
+            sha256: digest(fixture.captureText),
+          },
+        },
+        evidence: {
+          method: "runtime-probe",
+          file: proofFile,
+          sha256: digest(proof),
+          summary: "Original failure is absent and control passes.",
+          command: `node -e "require('fs').writeFileSync('${marker}', 'bad')"`,
+          exit_code: 0,
+        },
+      };
+      const saved = saveFixReport(fixture, [fix]);
+      const savedBytes = readFileSync(saved, "utf8");
+      assert.equal(
+        JSON.parse(savedBytes).fixes[0].reference_check.status,
+        "confirmed",
+      );
+      const before = runCLI(fixture.root, [
+        "quality",
+        "history",
+        "--all",
+        "--format",
+        "text",
+      ]);
+      assert.equal(before.status, 0, before.stderr);
+      assert.match(before.stdout, /workspace snapshot/u);
+      assert.doesNotMatch(
+        before.stdout,
+        /evidence unavailable; not reverified/u,
+      );
+      rmSync(
+        join(
+          fixture.root,
+          lostReference === "capture" ? fixture.captureFile : proofFile,
+        ),
+      );
+      const after = runCLI(fixture.root, [
+        "quality",
+        "history",
+        "--all",
+        "--format",
+        "json",
+      ]);
+      assert.equal(after.status, 0, after.stderr);
+      const current = JSON.parse(after.stdout).reports.find(
+        (entry: { path: string }) => entry.path === saved,
+      );
+      assert.equal(current.fixRecords[0].status, "assessor-verified");
+      assert.equal(
+        current.fixRecords[0].warning,
+        "evidence unavailable; not reverified",
+      );
+      const text = runCLI(fixture.root, [
+        "quality",
+        "history",
+        "--all",
+        "--format",
+        "text",
+      ]);
+      assert.equal(text.status, 0, text.stderr);
+      assert.match(text.stdout, /evidence unavailable; not reverified/u);
+      assert.equal(existsSync(marker), false);
+      assert.equal(readFileSync(saved, "utf8"), savedBytes);
+      assert.equal(readFileSync(fixture.priorPath, "utf8"), fixture.priorBytes);
+    });
+  }
+
+  it("keeps unsupported claims unconfirmed and allows shared proof for distinct findings", () => {
+    const fixture = makeFixProject();
+    const evidence = fixture.fix.evidence;
+    assert.ok(evidence);
+    const unsupported: QualityFix[] = [
+      { ...fixture.fix, prior_report_id: "2026-09-01-0900-claude-miss1" },
+      { ...fixture.fix, finding_id: "missing-finding" },
+      { ...fixture.fix, target: null },
+      { ...fixture.fix, evidence: null },
+      { ...fixture.fix, explanation: null },
+      { ...fixture.fix, evidence: { ...evidence, anchor: undefined } },
+      { ...fixture.fix, evidence: { ...evidence, file: "../rule.ts" } },
+      {
+        ...fixture.fix,
+        evidence: { ...evidence, sha256: "0".repeat(64) },
+      },
+      {
+        ...fixture.fix,
+        evidence: { ...evidence, method: "runtime-probe" },
+      },
+    ];
+    for (const claim of unsupported) {
+      const saved = JSON.parse(
+        readFileSync(saveFixReport(fixture, [claim]), "utf8"),
+      );
+      assert.equal(
+        saved.fixes[0].reference_check.status,
+        "unconfirmed",
+        JSON.stringify(claim),
+      );
+      assert.equal(saved.fixes[0].conclusion, "assessor-verified");
+    }
+    const duplicates = JSON.parse(
+      readFileSync(saveFixReport(fixture, [fixture.fix, fixture.fix]), "utf8"),
+    );
+    assert.deepEqual(
+      duplicates.fixes.map((fix: QualityFix) => fix.reference_check?.status),
+      ["unconfirmed", "unconfirmed"],
+    );
+    const shared = JSON.parse(
+      readFileSync(
+        saveFixReport(fixture, [
+          fixture.fix,
+          { ...fixture.fix, finding_id: fixture.findingIds[1] },
+        ]),
+        "utf8",
+      ),
+    );
+    assert.deepEqual(
+      shared.fixes.map((fix: QualityFix) => fix.reference_check?.status),
+      ["confirmed", "confirmed"],
+    );
+    assert.equal(readFileSync(fixture.priorPath, "utf8"), fixture.priorBytes);
+  });
+
   it("retains legacy fields and suppresses setup/system deltas at the new rubric boundary", () => {
     const root = makeTempProject();
     const ids = [

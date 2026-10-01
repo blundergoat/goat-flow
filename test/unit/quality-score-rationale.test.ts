@@ -247,7 +247,7 @@ describe("quality rubric identity and integer scores", () => {
       const text = qualityScoringText(qualityMode);
       assert.match(
         id,
-        new RegExp(`^quality-${qualityMode}-r2-[a-f0-9]{64}$`, "u"),
+        new RegExp(`^quality-${qualityMode}-r3-[a-f0-9]{64}$`, "u"),
       );
       assert.ok(id.endsWith(createHash("sha256").update(text).digest("hex")));
       assert.doesNotMatch(

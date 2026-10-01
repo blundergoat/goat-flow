@@ -23,6 +23,10 @@ import { CLIError } from "../../src/cli/cli-error.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
 import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
+import { makeCurrentQualityReport } from "../fixtures/quality-report.js";
+import { parseQualityReport } from "../../src/cli/quality/schema.js";
+import { QUALITY_CONCERNS } from "../../src/cli/quality/schema-types.js";
+import { countQualityConcerns } from "../../src/cli/quality/fix-references.js";
 
 /** Build the smallest current report accepted by the persistence contract. */
 function currentQualityReport(projectRoot: string) {
@@ -150,5 +154,95 @@ describe("quality save safety", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe("quality concerns and fix record parsing", () => {
+  it("requires one current concern and retains unclassified legacy findings", () => {
+    const report = makeCurrentQualityReport(
+      "/tmp/quality-concerns",
+      "Observed test evidence",
+    );
+    for (const concern of QUALITY_CONCERNS) {
+      report.findings[0].concern = concern;
+      assert.equal(parseQualityReport(report).ok, true, concern);
+    }
+    const { concern: _concern, ...legacyFinding } = report.findings[0];
+    const legacy = { ...report, findings: [legacyFinding] };
+    assert.equal(parseQualityReport(legacy).ok, false);
+    const parsedLegacy = parseQualityReport(legacy, {
+      requireCurrentFields: false,
+    });
+    assert.ok(parsedLegacy.ok);
+    assert.equal(countQualityConcerns(parsedLegacy.report).unclassified, 1);
+    assert.equal(
+      parseQualityReport({
+        ...report,
+        findings: [{ ...legacyFinding, concern: "unknown" }],
+      }).ok,
+      false,
+    );
+  });
+
+  it("parses both fixed targets, retains missing proof and discards incoming admission claims", () => {
+    const report = makeCurrentQualityReport(
+      "/tmp/quality-fixes",
+      "Observed test evidence",
+    );
+    const capture = {
+      file: ".goat-flow/logs/review/capture.json",
+      sha256: "a".repeat(64),
+    };
+    const targets = [
+      { kind: "commit", revision: "a".repeat(40) },
+      {
+        kind: "workspace-snapshot",
+        fingerprint: `review-v1:sha256:${"b".repeat(64)}`,
+        capture,
+      },
+    ];
+    for (const target of targets) {
+      const parsed = parseQualityReport({
+        ...report,
+        fixes: [
+          {
+            conclusion: "assessor-verified",
+            target,
+            reference_check: {
+              status: "confirmed",
+              reason: "Untrusted supplied status",
+            },
+          },
+        ],
+      });
+      assert.ok(parsed.ok);
+      assert.deepEqual(parsed.report.fixes?.[0], {
+        conclusion: "assessor-verified",
+        target,
+        prior_report_id: null,
+        finding_id: null,
+        explanation: null,
+        evidence: null,
+      });
+    }
+    assert.equal(
+      parseQualityReport({
+        ...report,
+        fixes: [
+          {
+            conclusion: "assessor-verified",
+            target: { kind: "commit", revision: "HEAD" },
+          },
+        ],
+      }).ok,
+      false,
+    );
+    assert.equal(
+      parseQualityReport({
+        ...report,
+        fixes: [{ conclusion: "assessor-verified", unexpected: true }],
+      }).ok,
+      false,
+    );
   });
 });

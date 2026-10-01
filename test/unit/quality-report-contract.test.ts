@@ -55,6 +55,7 @@ const REQUIRED_TOP_LEVEL_FIELDS = [
 
 /** Per-finding fields every contract render must require or demonstrate. */
 const REQUIRED_FINDING_FIELDS = [
+  "concern",
   "evidence_quality",
   "evidence_method",
   "delta_tag",
@@ -328,6 +329,14 @@ function makeLimitedAuditReport(): NonNullable<QualityInput["auditReport"]> {
  * Use for each launch surface so users cannot receive a weaker schema, evidence vocabulary, or saver contract.
  */
 function assertCarriesContract(surface: string, text: string): void {
+  for (const guidance of [
+    "Recheck the original problem and explain how the evidence proves its correction",
+    "Do not duplicate one defect across concern rows",
+    "does not certify the correction or run saved commands",
+    "evidence unavailable; not reverified",
+  ]) {
+    assert.ok(text.includes(guidance), `${surface}: missing ${guidance}`);
+  }
   // Every top-level field the schema parser requires must appear in the shape.
   for (const field of REQUIRED_TOP_LEVEL_FIELDS) {
     assert.ok(text.includes(field), `${surface}: missing ${field}`);
