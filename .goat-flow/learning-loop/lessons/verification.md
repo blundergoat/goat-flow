@@ -1,18 +1,18 @@
 ---
 category: verification
-last_reviewed: 2026-09-21
+last_reviewed: 2026-10-02
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, [verification-gruff.md](verification-gruff.md) for the analyzer, [verification-environment.md](verification-environment.md) for whether the build, tree, or sandbox you measured is the one your claim is about, [milestone-accounting.md](milestone-accounting.md) for plan arithmetic, [milestone-timing.md](milestone-timing.md) for timing receipts, and [skill-trial-evidence.md](skill-trial-evidence.md) for skill-trial baselines and scoring.
 
 ## Lesson: A plan's named defect is a claim to verify, not a finding to implement
 
-**Status:** active | **Created:** 2026-08-30
+**Status:** active | **Created:** 2026-08-30 | **Evidence:** OBSERVED
 **Severity:** CORRECTNESS
 **Decision changed:** Reproduce a planned defect against live code before building the fix or the abstraction it implies, even when the milestone, a critique, and a runtime spot-check all assert it.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-30
+**Incident count:** 3 | **Latest occurrence:** 2026-10-02
 
 **Prevention:** Treat every defect a plan names as a RED to reproduce first. When the claim is about which of two inputs a component uses, read the caller that supplies them before designing anything, because parameter names do not carry the contract. If the RED passes against unchanged code, stop and record a refutation rather than adjusting the test until it fails; keep the passing case as a control and re-derive the real defect from the same evidence.
 
@@ -23,6 +23,8 @@ last_reviewed: 2026-09-21
 **Evidence:** The replacement control case passed against unchanged route code, and a real defect surfaced from the same reading: `ctx.validatedPath` substitutes the server default for an empty value, so a request sending no target still rendered one. Anchors: `src/dashboard/dashboard-setup-quality.ts` (search: `function dashboardQualityReportProjectPath`), `src/cli/server/dashboard-quality-routes.ts` (search: `const requestedTarget`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `names a selected target only when the request sent one`).
 
 **Recurrence 2026-08-30 (delegated runner):** An M68 C5 cross-harness runner closed its assessment by reporting that the shipped `quality save` heredoc is unusable because the command parser rejects any heredoc containing an object-literal opener as expansion obfuscation, and supplied a reproduction. All three checks disagreed: the reproduction ran clean, a search for that diagnostic across both hook trees returned nothing, and the hook admits exactly that form. The runner hit a real failure and misattributed its cause; recording it unverified would have entered a phantom contract defect into a release gate's evidence. Anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `large_quality_save_heredoc_is_bounded_data`).
+
+**Recurrence 2026-10-02 (Stop result boundaries):** Reviewing M13, the agent initially treated empty final provider output as a missing managed-child envelope. A current-runtime check returned `childEnvelopeState=valid`, `providerStdoutBytes=0` and `emptyChildEnvelopeState=invalid`: these are different boundaries. Clarify acceptance wording instead of adding an empty-child success exception. Evidence: `workflow/hooks/hook-provider-adapters.mjs` (search: `decodeHookResultOutput`, `adaptCleanResult`) and `workflow/hooks/post-turn-safety.sh` (search: `emit_post_turn_hook_result`).
 
 ---
 
@@ -154,7 +156,7 @@ Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
 **Severity:** CORRECTNESS
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 19 | **Latest occurrence:** 2026-09-21
+**Incident count:** 20 | **Latest occurrence:** 2026-10-02
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -193,6 +195,8 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 **Recurrence 2026-09-14 (resume):** `collectRemainingCutoffProblems` rejected mixed timestamp precision; align forecast/timer resolution and preserve corrections. A trial again guessed a missing directory; expose the saved target before command proof. Owner: `src/cli/plans-forecast-context.ts`.
 
 **Recurrence 2026-09-21 (manifest metadata probe):** A one-off check used the guessed key `directory_semantics` and threw before inspecting the approved description. Reading `workflow/manifest.json` (search: `directory_purposes`) supplied the real key; the corrected probe verified the policy owner and required every other parsed manifest value to match HEAD. Read the owning JSON object before writing a field assertion, and distinguish a broken probe from a product failure.
+
+**Recurrence 2026-10-02 (Node diagnostic flag):** During quality-history verification, the agent guessed `--test-isolation=none`; Node exited 9 with `node: bad option: --test-isolation=none` before executing the test. The installed `node --help` exposed `--experimental-test-isolation`, and the corrected diagnostic reported listener `EPERM` with ten cancelled tests. Check installed flag spelling before changing test execution mode; neither a rejected command nor cancelled tests proves the product contract. Evidence: `scripts/run-tests.mjs` (search: `const testRunnerArguments`) and `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `computes rerun spread beyond the requested history window and keeps filters`).
 
 ---
 

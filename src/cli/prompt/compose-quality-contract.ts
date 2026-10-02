@@ -156,7 +156,10 @@ export function appendQualityReportContract(
     '    "unverified_probes": ["runtime grounding not yet recorded"],',
   );
   lines.push('    "score_confidence": "low",');
-  lines.push('    "workspace_snapshot": { "start": null, "end": null }');
+  lines.push('    "workspace_snapshot": { "start": null, "end": null },');
+  lines.push(
+    '    "assessment_identity": { "model": null, "tool_version": null, "prompt_sha256": null, "settings_sha256": null, "capture": "unknown", "fixed_input_protocol": null }',
+  );
   lines.push("  },");
   lines.push('  "scores": {');
   lines.push(
@@ -244,6 +247,9 @@ function appendReportJsonRules(
   pushFull: (...texts: string[]) => void,
 ): void {
   lines.push("JSON rules:");
+  lines.push(
+    "- Retain `assessment_context.assessment_identity` for this assessment. Copy available launch metadata supplied separately by the transport (Claude CLI context or `GOAT_QUALITY_ASSESSMENT_IDENTITY` in the initial Codex session); never dump the environment or settings. That record fingerprints the exact user-prompt UTF-8 body, excluding terminal framing and the metadata carrier itself. Use it only for the initial matching prompt, never a later pasted or edited prompt. Otherwise record directly observed model/tool identity with `capture: assessor-reported`; unavailable fields stay null. Never infer model or settings from the agent name, defaults, or current save-time state. Keep `fixed_input_protocol` null unless a recorded frozen-input study supplies it. Available identity alone does not establish a controlled rerun.",
+  );
   appendConcernAndFixRules(lines);
   lines.push(QUALITY_SCORE_RULE);
   lines.push(

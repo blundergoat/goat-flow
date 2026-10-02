@@ -9,6 +9,7 @@ import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
@@ -97,6 +98,36 @@ const ASSESSMENT_CONTEXT_GUIDANCE = [
 ] as const;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 const QUALITY_MODES = ["agent-setup", "process", "harness", "skills"] as const;
+
+it("fingerprints each final prompt beside its body, including persistence and prior context", () => {
+  for (const qualityMode of QUALITY_MODES) {
+    const input: QualityInput = {
+      agent: "claude",
+      projectPath: REPOSITORY_ROOT,
+      auditReport: null,
+      qualityMode,
+      runDate: "2026-10-02",
+    };
+    const manual = composeQuality(input);
+    const staged = composeQuality({ ...input, persistence: "staged-draft" });
+    for (const payload of [manual, staged]) {
+      assert.equal(
+        payload.promptSha256,
+        createHash("sha256").update(payload.prompt, "utf8").digest("hex"),
+      );
+      assert.equal(
+        payload.prompt.includes(payload.promptSha256 ?? "missing"),
+        false,
+      );
+      assert.match(payload.prompt, /"assessment_identity"/);
+      assert.match(
+        payload.prompt,
+        /available launch metadata supplied separately/,
+      );
+    }
+    assert.notEqual(manual.promptSha256, staged.promptSha256);
+  }
+});
 const FOCUSED_QUALITY_MODES = ["process", "harness", "skills"] as const;
 const STAGED_DRAFT_MODES = ["skills", "harness", "agent-setup"] as const;
 /** Validity rubric shown only in the full agent-setup assessment. */
@@ -979,7 +1010,9 @@ describe("quality report contract: rejected persistence", () => {
   // Fixture purpose: writes partial bytes, throws, and proves cleanup removes only that owned filesystem path.
   it("removes an owned allocation when report writing fails", () => {
     const projectRoot = mkdtempSync(resolve(tmpdir(), "quality-rejected-"));
-    execFileSync("git", ["-C", projectRoot, "init", "--quiet"]);
+    execFileSync("git", ["-C", projectRoot, "init", "--quiet"], {
+      stdio: "ignore",
+    });
     writeFileSync(
       resolve(projectRoot, ".gitignore"),
       ".goat-flow/logs/quality/*.json\n",

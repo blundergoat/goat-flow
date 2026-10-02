@@ -58,6 +58,8 @@ export interface QualityPayload {
   auditStatus: "pass" | "fail" | "unavailable";
   auditSummary: string;
   prompt: string;
+  /** SHA-256 of the final user-prompt UTF-8 bytes; delivery metadata stays outside that body. */
+  promptSha256?: string;
 }
 
 /**

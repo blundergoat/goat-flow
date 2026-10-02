@@ -103,7 +103,16 @@ interface QualityResult {
 }
 
 /** One row in the quality-history trend table from `/api/quality/history`. */
+/** Descriptive statistics supplied by saved history, with legacy evidence labelled. */
+interface QualityRepeatSpread {
+  kind: "controlled" | "observational";
+  sampleSize: number;
+  setup: { median: number; min: number; max: number; range: number };
+  system: { median: number; min: number; max: number; range: number };
+}
+
 interface QualityHistoryRow {
+  repeatSpread?: QualityRepeatSpread | null;
   id: string;
   date: string;
   agent: RunnerId;

@@ -85,7 +85,9 @@ describe("quality save safety", () => {
    */
   it("fails closed when the allocated report parent moves during writing", (t) => {
     const projectRoot = mkdtempSync(resolve(tmpdir(), "quality-relocated-"));
-    execFileSync("git", ["-C", projectRoot, "init", "--quiet"]);
+    execFileSync("git", ["-C", projectRoot, "init", "--quiet"], {
+      stdio: "ignore",
+    });
     writeFileSync(
       resolve(projectRoot, ".gitignore"),
       ".goat-flow/logs/quality/*.json\n",

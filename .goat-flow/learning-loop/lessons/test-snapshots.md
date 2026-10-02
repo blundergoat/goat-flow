@@ -1,6 +1,6 @@
 ---
 category: test-snapshots
-last_reviewed: 2026-08-24
+last_reviewed: 2026-10-02
 ---
 
 **Scope:** Keeping asserted values true - snapshot files and tables, metadata contracts beyond the typed shape, and which field a check should assert. Building the fixtures themselves is [test-fixtures.md](test-fixtures.md); choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); getting a checker's own counting right is [verification-validators.md](verification-validators.md).
@@ -76,5 +76,22 @@ last_reviewed: 2026-08-24
 **Resolution:** Gruff 0.4.0 no longer exposes `test-quality.setup-bloat`; `gruff-ts list-rules test-quality.setup-bloat` reports an unknown rule. Do not recreate its stale config block merely to preserve historical evidence.
 
 **Prevention:** Keep fixture construction visible when it explains the behavioural contract. If a current rule reports excessive setup, assess each test against that rule's live options; extract reusable builders only when they clarify the SUT call and assertion.
+
+---
+
+## Lesson: Shared launch-command changes need every literal expectation synchronized
+
+**Status:** active | **Created:** 2026-10-02 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
+**Decision changed:** Before verifying a shared launch-command change, search every test level for the old command text and include all dependent expectations in the write scope.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-10-02
+
+**Prevention:** Search the full test tree for the previous shared command or cleanup operand list before editing its owner. Read each matching assertion, preserve its launch and cleanup contract, and update dependent expectations together. A dependent file outside the write list needs a scope decision before mutation. Run the owning suites and full repository gate after changing the literals. Evidence anchors: `src/cli/server/terminal-spawn.ts` (search: `POSIX_PROMPT_ENV_CLEANUP`), `test/unit/terminal-spawn.test.ts` (search: `carries exact prompt identity beside the bytes`), and `test/smoke/dashboard-endpoints.test.ts` (search: `builds a POSIX PTY launch that returns to the interactive shell`).
+
+**What happened:** M09 added `GOAT_QUALITY_ASSESSMENT_IDENTITY` to the shared POSIX environment cleanup and updated the adjacent unit coverage. Three smoke cases still pinned the preceding shell string. The 2026-10-02 `npm test` run completed with `# tests 3686`, `# pass 3676`, `# fail 3`; preflight reported the same three assertion failures. The literal diffs all showed the added cleanup operand. After explicit scope approval, only those three expectations changed. Their reduced reproduction reports `# pass 3`, `# fail 0`, and the owning smoke/spawn suites report `# pass 39`, `# fail 0`, both exit 0. The original failure and correction evidence are retained under `/tmp/goat-m09-current-suite.NURXa7.log` and `/tmp/goat-m09-approved.aAq32s/`.
+
+**Root cause:** The agent treated the adjacent unit suite as the full set of command consumers and missed literal expectations in the smoke owner. File-level evidence: `test/smoke/dashboard-endpoints.test.ts` (search: `launches Codex on POSIX with an explicit preflight-capable sandbox`; search: `injects POSIX launch prompts through PTY input instead of runner flags`).
 
 ---

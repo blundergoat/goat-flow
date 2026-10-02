@@ -39,6 +39,14 @@ function currentReport(scoreRationale: unknown = makeQualityScoreRationale()) {
       grounding_status: "complete",
       unverified_probes: [],
       score_confidence: "high",
+      assessment_identity: {
+        model: null,
+        tool_version: null,
+        prompt_sha256: null,
+        settings_sha256: null,
+        capture: "unknown",
+        fixed_input_protocol: null,
+      },
       workspace_snapshot: {
         start: `review-v1:sha256:${"a".repeat(64)}`,
         end: `review-v1:sha256:${"a".repeat(64)}`,

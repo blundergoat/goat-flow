@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-02
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
@@ -28,9 +28,9 @@ last_reviewed: 2026-09-30
 
 **Status:** active | **Created:** 2026-07-13
 **Severity:** INTEGRATION
-**Incident count:** 4 | **Latest occurrence:** 2026-09-03
+**Incident count:** 5 | **Latest occurrence:** 2026-10-02
 
-**Prevention:** Before changing milestone status or deriving proof, read every declared prerequisite and named evidence owner. Recompute mutable counts at the named revision and current worktree; never use a historical endpoint as the live expectation. Run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs) and put rationale in narrative fields.
+**Prevention:** Before changing milestone status or deriving proof, read every declared prerequisite and named evidence owner. Record authorized activation before checking implementation tasks; a checked task contradicts `not-started`. Recompute mutable counts at the named revision and current worktree; never use a historical endpoint as the live expectation. Run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs) and put rationale in narrative fields.
 
 **What happened:** After M05 approval, M06 was marked in progress before its dependency header was read; a later parent-plan run started final evidence while four semantic prerequisites were unfinished, then amended `Depends on` with explanatory prose that strict validation rejected. Those lifecycle incidents live only in gitignored plans.
 
@@ -38,6 +38,7 @@ last_reviewed: 2026-09-30
 
 **Recurrence 2026-08-28:** M37's timing receipt was paused for the PR #61 follow-up while its status stayed `in-progress`, so strict validation reported two active milestones when M58 reached `human-verification-pending`; marking M37 `blocked` with a current-state reason made the hold machine-readable. `src/cli/plans-check-structure.ts` (search: `multiple active milestones`).
 **Recurrence 2026-09-03:** Closing the final lesson lane reused M08's 121-footgun baseline without reopening its evidence; the live index returned 123 because the bulk-rewrite correction added row 122 and the inherited-`SECONDS` incident added row 123. `.goat-flow/learning-loop/footguns/learning-loop-extraction.md` (search: `Bulk learning-loop rewrites can duplicate entries`), `.goat-flow/learning-loop/footguns/hooks.md` (search: `Bash SECONDS can inherit a parent offset`).
+**Recurrence 2026-10-02:** A resume inventory task was checked before its milestone header changed from `not-started`, despite an accepted prerequisite and explicit start approval. Strict validation rejected the contradictory state; recording authorized activation resolved it before source work. `src/cli/plans-check.ts` (search: `not-started milestone has checked implementation tasks`).
 
 ---
 
@@ -199,3 +200,19 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-09-07:** Closing a milestone is the same class. M24 reached `complete` in its own file while the ISSUE.md How-row still read not-started and on hold, the summary row said it remained on hold, and the Remaining-work band still counted its 58 minutes; the pre-handover recheck of M25-M27 caught it, so acceptance now re-derives the How-row, summary row, and bands with the milestone file.
 
 **Recurrence 2026-09-09:** The shipped ISSUE headline was 6-9h against 4-8h bands. CLI ignores ISSUE; evidence: `test/integration/goat-plan-templates.test.ts` (search: `plans check leaves ISSUE arithmetic`).
+
+---
+
+## Lesson: Recover capped study counts from independent attempt receipts
+
+**Status:** active | **Created:** 2026-10-02 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
+**Decision changed:** Treat a study's shared manifest as a derived index; recover consumed attempts from individual launch/result records before considering another call.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Retain one independent record per attempted launch, including its identity, actual argv, status, duration and reported usage. Keep shared manifest writes sequential, or use the complete claim-and-content guard in ADR-048. Reconcile every registered slot and assert the consumed cap from those records; a hard-coded pass message is not a count. Preserve failed attempts and missing fields; never reconstruct lost metadata as observed evidence or spend an extra call because an aggregate counter was lost.
+
+**What happened:** M09's temporary controller overlapped Claude and Codex launches. A later completion wrote a stale manifest copy, resetting two consumed Codex slots to registered despite four surviving failure receipts. An initial pass message inspected only the stale manifest's listed completions. Reading all independent receipts recovered exactly two spent slots per agent; the remaining launches ran sequentially. Lost Codex argv fields stayed explicitly unavailable, and no extra call or successful score was invented. This accounting incident is local workflow evidence, not a shipped runtime defect.
+
+**Evidence:** The local M09 milestone records the measured incident under `Receipt reconciliation caught a controller error`; ignored plan notes are not committed proof. The shipped guard's authority is `.goat-flow/learning-loop/decisions/ADR-048-concurrent-session-detection.md` (search: `complete read, validate, and replace operation`), implemented by `src/cli/path-write-claim.ts` (search: `acquirePathWriteClaims`).

@@ -7,6 +7,7 @@
  */
 import type { AgentId } from "../types.js";
 import type { QualityMode } from "./schema.js";
+import type { QualityRepeatSpread } from "./repeat-spread.js";
 import { countQualityConcerns, type QualityFixView } from "./fix-references.js";
 import type {
   QualityDiffFindingRow,
@@ -37,6 +38,16 @@ function formatDelta(delta: number | null): string {
   // A lower saved score retains its minus sign to show the drop.
   if (delta < 0) return ` (${delta})`;
   return " (+0)";
+}
+
+/** Show descriptive score variation without interpreting the adjacent change. */
+function formatSpread(
+  spread: QualityRepeatSpread | null | undefined,
+  score: "setup" | "system",
+): string {
+  if (!spread) return "no comparable reruns";
+  const values = spread[score];
+  return `${spread.kind} reruns n=${spread.sampleSize}; median ${values.median}/100; range ${values.min}-${values.max}/100 (span ${values.range})`;
 }
 
 /**
@@ -228,8 +239,8 @@ export function renderQualityHistoryText(
         row.date,
         row.agent,
         row.qualityMode,
-        `${row.setupTotal}${formatDelta(row.setupDelta)}`,
-        String(row.systemTotal),
+        `${row.setupTotal}${formatDelta(row.setupDelta)} [${formatSpread(row.repeatSpread, "setup")}]`,
+        `${row.systemTotal}${formatDelta(row.systemDelta)} [${formatSpread(row.repeatSpread, "system")}]`,
         String(row.blockerCount),
         String(row.majorCount),
         String(row.minorCount),
@@ -273,6 +284,7 @@ function flattenSummary(summary: string): string {
 export function renderQualityDiffText(diff: QualityDiffResult): string {
   const header = `Setup ${diff.from.report.scores.setup.total}/100 → ${diff.to.report.scores.setup.total}/100 (${diff.setupDelta >= 0 ? `+${diff.setupDelta}` : diff.setupDelta}). System ${diff.from.report.scores.system.total}/100 → ${diff.to.report.scores.system.total}/100 (${diff.systemDelta >= 0 ? `+${diff.systemDelta}` : diff.systemDelta}).`;
   const lines = [header];
+  appendDiffSpread(lines, diff);
   // Comparison warnings belong beside the deltas, before readers mistake score movement for proof of improvement.
   for (const warning of diff.comparisonWarnings ?? [])
     lines.push(`Comparison limit: ${warning}`);
@@ -332,4 +344,13 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
     "Stuck counter resets on history gaps. For strict persistence tracking, ensure at least one quality run lands within every 30-day window.",
   );
   return lines.join("\n");
+}
+
+/** Keep both groups beside the delta; they may describe different unchanged-input samples. */
+function appendDiffSpread(lines: string[], diff: QualityDiffResult): void {
+  for (const side of ["from", "to"] as const) {
+    lines.push(
+      `${side === "from" ? "From" : "To"} rerun spread: setup ${formatSpread(diff.repeatSpread?.[side], "setup")}; system ${formatSpread(diff.repeatSpread?.[side], "system")}`,
+    );
+  }
 }

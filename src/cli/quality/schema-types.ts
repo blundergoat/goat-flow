@@ -208,6 +208,17 @@ export interface QualityScoreRationale {
   >;
 }
 
+/** Compact assessment-time identity. Nulls name unavailable evidence, never defaults. */
+export interface QualityAssessmentIdentity {
+  model: string | null;
+  tool_version: string | null;
+  prompt_sha256: string | null;
+  settings_sha256: string | null;
+  capture: "launch-observed" | "assessor-reported" | "unknown";
+  /** Fingerprint of the recorded fixed-input protocol; identity alone does not establish control. */
+  fixed_input_protocol: string | null;
+}
+
 /** Evidence coverage and workspace provenance needed to compare independently produced reports. */
 export interface QualityAssessmentContext {
   /** Git revision assessed, or null when the target is not Git-backed or the revision was unavailable. */
@@ -222,6 +233,7 @@ export interface QualityAssessmentContext {
   score_confidence: QualityScoreConfidence;
   /** Assessor-copied review snapshot fingerprints; null means capture was unavailable, not unchanged. */
   workspace_snapshot?: { start: string | null; end: string | null };
+  assessment_identity?: QualityAssessmentIdentity;
 }
 
 /** A bounded proposed action, kept separate from the report's current defect list. */

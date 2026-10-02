@@ -383,6 +383,73 @@ it("decodes system comparisons and preserves older-server rows with null deltas"
   );
   context.row = { ...row, systemDelta: "7" };
   assert.equal(runInContext("readQualityHistoryRow(row)", context), null);
+  const repeatSpread = {
+    kind: "observational",
+    sampleSize: 3,
+    setup: { median: 80, min: 75, max: 90, range: 15 },
+    system: { median: 20, min: 10, max: 25, range: 15 },
+  };
+  context.row = { ...row, repeatSpread };
+  assert.equal(
+    runInContext(
+      "JSON.stringify(readQualityHistoryRow(row).repeatSpread)",
+      context,
+    ),
+    JSON.stringify(repeatSpread),
+  );
+  context.row = { ...row, repeatSpread: { ...repeatSpread, sampleSize: 1 } };
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).repeatSpread", context),
+    null,
+  );
+  context.row = { ...row };
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).repeatSpread", context),
+    null,
+  );
+});
+
+it("renders rerun statistics and unavailable spread beside unchanged percentage totals", () => {
+  const view = readFileSync(QUALITY_VIEW_PATH, "utf8");
+  for (const binding of [
+    "qualityHistoryLatest.setupTotal + '%'",
+    "qualityHistoryLatest.systemTotal + '%'",
+    "row.setupTotal + '%'",
+    "row.systemTotal + '%'",
+  ])
+    assert.ok(view.includes(binding), binding);
+  const expressions = [
+    ...view.matchAll(/x-text="([^"]*repeatSpread[^"]*)"/gu),
+  ].map((match) => match[1] ?? "");
+  assert.equal(expressions.length, 4);
+  const row = {
+    repeatSpread: {
+      kind: "observational",
+      sampleSize: 3,
+      setup: { median: 80, min: 75, max: 90, range: 15 },
+      system: { median: 20, min: 10, max: 25, range: 15 },
+    },
+  };
+  for (const expression of expressions) {
+    const rendered = runInContext(
+      expression,
+      createContext({ row, qualityHistoryRows: [row] }),
+    );
+    assert.match(
+      String(rendered),
+      /observational reruns n=3; median (80|20)\/100; range (75-90|10-25)\/100/,
+    );
+    assert.equal(
+      runInContext(
+        expression,
+        createContext({
+          row: { repeatSpread: null },
+          qualityHistoryRows: [{ repeatSpread: null }],
+        }),
+      ),
+      "no comparable reruns",
+    );
+  }
 });
 
 /** Build one concern score fixture with the Home summary fields populated. */

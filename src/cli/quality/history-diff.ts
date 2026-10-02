@@ -21,6 +21,7 @@ import {
 } from "./history.js";
 import { isRealCalendarDate } from "./schema-parser.js";
 import { isLegacyQualityRubric, qualityReportRubricId } from "./rubric.js";
+import { buildQualityRepeatSpreads } from "./repeat-spread.js";
 
 /**
  * Rank a finding severity for user-facing sort order.
@@ -513,9 +514,14 @@ export function buildQualityDiff(
           })
           .sort(diffRowSort);
 
+  const spreads = buildQualityRepeatSpreads(entries);
   return {
     ok: true,
     diff: {
+      repeatSpread: {
+        from: spreads.get(sourceEntry.id) ?? null,
+        to: spreads.get(targetEntry.id) ?? null,
+      },
       from: sourceEntry,
       to: targetEntry,
       comparisonWarnings: assessmentComparisonWarnings(

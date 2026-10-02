@@ -375,7 +375,7 @@ describe("terminal exports", () => {
     assert.equal(launchSpec.shell, "/bin/zsh");
     assert.deepStrictEqual(launchSpec.args, [
       "-c",
-      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
+      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS GOAT_QUALITY_ASSESSMENT_IDENTITY; exec "$SHELL" -i',
     ]);
     assert.equal(launchSpec.env.GOAT_PROMPT, undefined);
     assert.equal(launchSpec.initialInput, null);
@@ -394,7 +394,7 @@ describe("terminal exports", () => {
     assert.equal(launchSpec.shell, "/bin/bash");
     assert.deepStrictEqual(launchSpec.args, [
       "-c",
-      '"$GOAT_RUNNER" --sandbox danger-full-access; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
+      '"$GOAT_RUNNER" --sandbox danger-full-access; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS GOAT_QUALITY_ASSESSMENT_IDENTITY; exec "$SHELL" -i',
     ]);
     assert.equal(launchSpec.env.GOAT_RUNNER, "/usr/local/bin/codex");
     assert.equal(launchSpec.initialInput, null);
@@ -412,7 +412,7 @@ describe("terminal exports", () => {
     assert.equal(launchSpec.shell, "/bin/bash");
     assert.deepStrictEqual(launchSpec.args, [
       "-c",
-      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
+      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS GOAT_QUALITY_ASSESSMENT_IDENTITY; exec "$SHELL" -i',
     ]);
     assert.equal(launchSpec.env.GOAT_PROMPT, undefined);
     assert.equal(launchSpec.initialInput, "\x1b[200~audit target\x1b[201~\r");

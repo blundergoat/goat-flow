@@ -419,6 +419,11 @@
                     x-show="qualityHistoryRows[0] && qualityHistoryRows[0].setupDelta !== null"
                     x-text="qualityHistoryRows[0].setupDelta > 0 ? ' (+' + qualityHistoryRows[0].setupDelta + ')' : ' (' + qualityHistoryRows[0].setupDelta + ')'"
                   ></span>
+                  <div
+                    class="gf-text-muted"
+                    style="font-size: 10px"
+                    x-text="qualityHistoryRows[0] && qualityHistoryRows[0].repeatSpread ? qualityHistoryRows[0].repeatSpread.kind + ' reruns n=' + qualityHistoryRows[0].repeatSpread.sampleSize + '; median ' + qualityHistoryRows[0].repeatSpread.setup.median + '/100; range ' + qualityHistoryRows[0].repeatSpread.setup.min + '-' + qualityHistoryRows[0].repeatSpread.setup.max + '/100' : 'no comparable reruns'"
+                  ></div>
                 </div>
               </div>
               <div class="gf-card" style="padding: 10px 12px">
@@ -438,6 +443,11 @@
                     x-show="qualityHistoryRows[0] && qualityHistoryRows[0].systemDelta !== null"
                     x-text="qualityHistoryRows[0].systemDelta > 0 ? ' (+' + qualityHistoryRows[0].systemDelta + ')' : ' (' + qualityHistoryRows[0].systemDelta + ')'"
                   ></span>
+                  <div
+                    class="gf-text-muted"
+                    style="font-size: 10px"
+                    x-text="qualityHistoryRows[0] && qualityHistoryRows[0].repeatSpread ? qualityHistoryRows[0].repeatSpread.kind + ' reruns n=' + qualityHistoryRows[0].repeatSpread.sampleSize + '; median ' + qualityHistoryRows[0].repeatSpread.system.median + '/100; range ' + qualityHistoryRows[0].repeatSpread.system.min + '-' + qualityHistoryRows[0].repeatSpread.system.max + '/100' : 'no comparable reruns'"
+                  ></div>
                 </div>
               </div>
               <div class="gf-card" style="padding: 10px 12px">
@@ -503,12 +513,25 @@
                           x-show="row.setupDelta !== null"
                           x-text="row.setupDelta > 0 ? ' (+' + row.setupDelta + ')' : ' (' + row.setupDelta + ')'"
                         ></span>
+                        <div
+                          class="gf-text-muted"
+                          style="font-size: 10px"
+                          x-text="row.repeatSpread ? row.repeatSpread.kind + ' reruns n=' + row.repeatSpread.sampleSize + '; median ' + row.repeatSpread.setup.median + '/100; range ' + row.repeatSpread.setup.min + '-' + row.repeatSpread.setup.max + '/100' : 'no comparable reruns'"
+                        ></div>
                       </td>
-                      <td
-                        style="padding: 8px 10px"
-                        class="gf-text-primary"
-                        x-text="row.systemTotal + '%'"
-                      ></td>
+                      <td style="padding: 8px 10px" class="gf-text-primary">
+                        <span x-text="row.systemTotal + '%'"></span>
+                        <span
+                          class="gf-text-muted"
+                          x-show="row.systemDelta !== null"
+                          x-text="row.systemDelta > 0 ? ' (+' + row.systemDelta + ')' : ' (' + row.systemDelta + ')' "
+                        ></span>
+                        <div
+                          class="gf-text-muted"
+                          style="font-size: 10px"
+                          x-text="row.repeatSpread ? row.repeatSpread.kind + ' reruns n=' + row.repeatSpread.sampleSize + '; median ' + row.repeatSpread.system.median + '/100; range ' + row.repeatSpread.system.min + '-' + row.repeatSpread.system.max + '/100' : 'no comparable reruns'"
+                        ></div>
+                      </td>
                       <td
                         style="padding: 8px 10px; color: #f87171"
                         x-text="row.blockerCount"

@@ -287,6 +287,48 @@ function readQualitySystemDelta(raw: unknown): number | null | undefined {
   return typeof raw === "number" ? raw : undefined;
 }
 
+/** Invalid statistics remain unavailable without hiding the report's saved totals. */
+function readQualityRepeatSpread(raw: unknown): QualityRepeatSpread | null {
+  if (
+    !isRecord(raw) ||
+    (raw.kind !== "controlled" && raw.kind !== "observational") ||
+    !Number.isInteger(raw.sampleSize) ||
+    typeof raw.sampleSize !== "number" ||
+    raw.sampleSize < 2
+  )
+    return null;
+  const setup = readQualitySpreadScore(raw.setup);
+  const system = readQualitySpreadScore(raw.system);
+  if (!setup || !system) return null;
+  return { kind: raw.kind, sampleSize: raw.sampleSize, setup, system };
+}
+
+/** Only finite scores on the saved 0-100 scale can contribute descriptive statistics. */
+function readQualitySpreadNumber(raw: unknown): number | null {
+  return typeof raw === "number" &&
+    Number.isFinite(raw) &&
+    raw >= 0 &&
+    raw <= 100
+    ? raw
+    : null;
+}
+
+/** Reject inconsistent medians or extrema instead of presenting unverified spread. */
+function readQualitySpreadScore(
+  raw: unknown,
+): QualityRepeatSpread["setup"] | null {
+  if (!isRecord(raw)) return null;
+  const median = readQualitySpreadNumber(raw.median);
+  const min = readQualitySpreadNumber(raw.min);
+  const max = readQualitySpreadNumber(raw.max);
+  const range = readQualitySpreadNumber(raw.range);
+  if (median === null || min === null || max === null || range === null)
+    return null;
+  if (min > max || median < min || median > max || range !== max - min)
+    return null;
+  return { median, min, max, range };
+}
+
 /**
  * Decode one saved review for the Quality history table; null omits rows with missing identity or score fields.
  * Null deltas mean no comparable baseline is available; totals remain independently usable.
@@ -322,6 +364,7 @@ function readQualityHistoryRow(rawRow: unknown): QualityHistoryRow | null {
     setupDelta: rawRow.setupDelta,
     // Older servers omit this field; do not invent a comparison from adjacent totals.
     systemDelta,
+    repeatSpread: readQualityRepeatSpread(rawRow.repeatSpread),
     blockerCount: rawRow.blockerCount,
     majorCount: rawRow.majorCount,
     minorCount: rawRow.minorCount,

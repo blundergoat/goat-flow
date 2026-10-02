@@ -112,6 +112,7 @@ async function handleQualityHistorySubcommand(
             id: row.id,
             setup_delta: row.setupDelta,
             system_delta: row.systemDelta,
+            repeat_spread: row.repeatSpread,
           })),
         },
         null,

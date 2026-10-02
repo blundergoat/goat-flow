@@ -148,7 +148,7 @@ describe("quality draft capture", () => {
   function makeRoot(ignoreRules: string | null = QUALITY_IGNORE_RULES): string {
     const root = mkdtempSync(join(tmpdir(), "goat-quality-capture-"));
     roots.push(root);
-    execFileSync("git", ["-C", root, "init", "--quiet"]);
+    execFileSync("git", ["-C", root, "init", "--quiet"], { stdio: "ignore" });
     if (ignoreRules !== null) {
       writeFileSync(join(root, ".gitignore"), ignoreRules);
     }
@@ -195,6 +195,46 @@ describe("quality draft capture", () => {
       (receipt.reportPath ?? "").replaceAll("\\", "/"),
       /\.goat-flow\/logs\/quality\/\d{4}-\d{2}-\d{2}-\d{4}-claude-[0-9a-f]{5}\.json$/u,
     );
+  });
+
+  it("preserves each draft's assessment identity through shared delayed capture", async () => {
+    const root = makeRoot();
+    const staging = ensureQualityDraftStagingDirectory(root);
+    const identities = ["first-model-fixture", "second-model-fixture"].map(
+      (model) => ({
+        model,
+        tool_version: "captured-version-fixture",
+        prompt_sha256: model.startsWith("first")
+          ? "a".repeat(64)
+          : "b".repeat(64),
+        settings_sha256: "c".repeat(64),
+        capture: "launch-observed",
+        fixed_input_protocol: "d".repeat(64),
+      }),
+    );
+    for (const [index, identity] of identities.entries()) {
+      const report = JSON.parse(validReport(root));
+      report.assessment_context.assessment_identity = identity;
+      writeFileSync(
+        join(staging, `goat-quality-draft-claude-identity${index}.json`),
+        JSON.stringify(report),
+      );
+    }
+    // Drafts predate capture startup; both holders share the physical root's poller.
+    const first = makeCapture(root);
+    const second = makeCapture(root);
+    await first.processNow();
+    for (const [index, identity] of identities.entries()) {
+      const receipt = readReceipt(second.stagingDir, `identity${index}`);
+      assert.equal(receipt.ok, true);
+      const persisted = JSON.parse(
+        readFileSync(receipt.reportPath ?? "", "utf8"),
+      );
+      assert.deepEqual(
+        persisted.assessment_context.assessment_identity,
+        identity,
+      );
+    }
   });
 
   it("disables the mtime gate when the stability window is zero", async () => {
@@ -715,7 +755,9 @@ describe("quality draft capture", () => {
       const realRoot = join(parent, "real");
       const aliasRoot = join(parent, "alias");
       mkdirSync(realRoot);
-      execFileSync("git", ["-C", realRoot, "init", "--quiet"]);
+      execFileSync("git", ["-C", realRoot, "init", "--quiet"], {
+        stdio: "ignore",
+      });
       writeFileSync(join(realRoot, ".gitignore"), QUALITY_IGNORE_RULES);
       symlinkSync(realRoot, aliasRoot, "dir");
       const first = makeCapture(realRoot);

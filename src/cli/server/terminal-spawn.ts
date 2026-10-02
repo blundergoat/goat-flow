@@ -11,6 +11,8 @@
  * cryptically.
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import type { QualityAssessmentIdentity } from "../quality/schema-types.js";
 import { extname } from "node:path";
 import type { WebSocket } from "ws";
 import type { Runner, ServerMessage, TerminalAccessMode } from "./types.js";
@@ -39,6 +41,8 @@ export interface TerminalSpawnSpec {
 
 /** Extra access and workspace context needed for runner-specific launch policy. */
 export interface TerminalSpawnOptions {
+  /** Version observed from this launch's actual binary, never from the selected assessment agent. */
+  toolVersion?: string | null;
   accessMode?: TerminalAccessMode;
   projectPath?: string;
   targetPath?: string;
@@ -54,16 +58,16 @@ const WINDOWS_RUNNER_EXTENSION_PRIORITY = [
 ] as const;
 const WINDOWS_TERMINAL_SHELL = "powershell.exe";
 const POSIX_PROMPT_ENV_CLEANUP =
-  "unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS";
+  "unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS GOAT_QUALITY_ASSESSMENT_IDENTITY";
 const WINDOWS_PROMPT_ENV_CLEANUP =
-  "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CODEX_REPORTING_PROFILE -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CLAUDE_REPORTING_SETTINGS -ErrorAction SilentlyContinue";
+  "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CODEX_REPORTING_PROFILE -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CLAUDE_REPORTING_SETTINGS -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_QUALITY_ASSESSMENT_IDENTITY -ErrorAction SilentlyContinue";
 const CODEX_DASHBOARD_ARGS = "--sandbox danger-full-access";
 const CODEX_REPORTING_DEFAULT_PERMISSION = `default_permissions="${CODEX_REPORTING_PROFILE_NAME}"`;
 const CODEX_REPORTING_APPROVAL_ARGS = "--ask-for-approval never";
 const CLAUDE_REPORTING_ARGS =
-  '--setting-sources= --settings "$GOAT_CLAUDE_REPORTING_SETTINGS" --permission-mode dontAsk';
+  '--setting-sources= --settings "$GOAT_CLAUDE_REPORTING_SETTINGS" --permission-mode dontAsk --append-system-prompt "$GOAT_QUALITY_ASSESSMENT_IDENTITY"';
 const WINDOWS_CLAUDE_REPORTING_ARGS =
-  "--setting-sources= --settings $env:GOAT_CLAUDE_REPORTING_SETTINGS --permission-mode dontAsk";
+  "--setting-sources= --settings $env:GOAT_CLAUDE_REPORTING_SETTINGS --permission-mode dontAsk --append-system-prompt $env:GOAT_QUALITY_ASSESSMENT_IDENTITY";
 /**
  * Wrap a launch prompt so the runner receives it as one paste, not as typing.
  * Use when the dashboard opens a terminal with a prompt already filled in, so the agent sees the whole instruction at once instead of reacting to it
@@ -217,6 +221,9 @@ export function buildTerminalSpawnSpec(
     environment,
     options,
   );
+  env.GOAT_QUALITY_ASSESSMENT_IDENTITY = JSON.stringify(
+    terminalAssessmentIdentity(prompt, options.toolVersion),
+  );
   const initialInput = hasPrompt ? formatInitialPromptInput(prompt) : null;
 
   // Windows reporting closes with its runner, while a normal workspace keeps PowerShell available.
@@ -250,6 +257,24 @@ export function buildTerminalSpawnSpec(
       SHELL: shell,
     },
     initialInput,
+  };
+}
+
+/** Metadata stays outside the prompt's byte boundary; unresolved effective settings remain unknown. */
+function terminalAssessmentIdentity(
+  prompt: string,
+  toolVersion: string | null | undefined,
+): QualityAssessmentIdentity {
+  const hasPrompt = prompt.length > 0;
+  return {
+    model: null,
+    tool_version: toolVersion ?? null,
+    prompt_sha256: hasPrompt
+      ? createHash("sha256").update(prompt, "utf8").digest("hex")
+      : null,
+    settings_sha256: null,
+    capture: hasPrompt ? "launch-observed" : "unknown",
+    fixed_input_protocol: null,
   };
 }
 

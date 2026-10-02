@@ -25,6 +25,10 @@ import {
   type QualityFixView,
 } from "./fix-references.js";
 import type { QualityConcernCounts } from "./schema-types.js";
+import {
+  buildQualityRepeatSpreads,
+  type QualityRepeatSpread,
+} from "./repeat-spread.js";
 
 const QUALITY_HISTORY_FILENAME = new RegExp(
   `^(\\d{4}-\\d{2}-\\d{2})-(\\d{4})-(${KNOWN_AGENT_IDS.join("|")})-([a-z0-9]{5})\\.json$`,
@@ -47,6 +51,7 @@ export interface QualityHistoryEntry {
 
 /** Display row for history tables after same-agent deltas have been calculated. */
 export interface QualityHistoryRow {
+  repeatSpread?: QualityRepeatSpread | null;
   id: string;
   date: string;
   agent: AgentId;
@@ -94,6 +99,10 @@ export interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
  * Invariant: entries share an agent and mode; other comparability limits are reported as warnings.
  */
 export interface QualityDiffResult {
+  repeatSpread?: {
+    from: QualityRepeatSpread | null;
+    to: QualityRepeatSpread | null;
+  };
   from: QualityHistoryEntry;
   to: QualityHistoryEntry;
   setupDelta: number;
@@ -594,6 +603,7 @@ export function buildQualityHistoryRows(
     limit: null,
     qualityMode: options.qualityMode ?? null,
   });
+  const spreads = buildQualityRepeatSpreads(filtered);
   const rows = filtered.map((entry, index) => {
     const entryMode = entryQualityMode(entry);
     // Find the next older same-agent/same-mode run so the visible row can show a delta.
@@ -613,6 +623,7 @@ export function buildQualityHistoryRows(
     return {
       id: entry.id,
       date: entry.report.run_date,
+      repeatSpread: spreads.get(entry.id) ?? null,
       agent: entry.agent,
       qualityMode: entryQualityMode(entry),
       setupTotal: entry.report.scores.setup.total,

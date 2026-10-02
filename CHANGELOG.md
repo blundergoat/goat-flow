@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Quality rerun spread** - History, diff and the dashboard show sample size, median and range, with controlled and observational groups labelled.
 - **Ranked repeat problems in `stats`** - Text and Markdown show ten unguarded candidates across lessons and footguns, ordered by incident severity and frequency with remainder counts. JSON keeps every candidate, its rank, and any verified enforcement link; existing checks stay report-only.
 - **Changed-file checks for contributors** - `npm run check:touched` runs applicable formatting, lint, type, quality and guidance checks on working-tree changes, including deletion and rename triggers, with per-check timings and a failing exit status when a check fails; owning tests and preflight remain required.
 - **Invisible-control detection** - Changed text checks report literal invisible controls by file, position and code point, with escaped diagnostic filenames and no rewrites; visible Unicode, emoji, joining characters and leading BOMs stay valid.

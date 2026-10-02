@@ -15,11 +15,13 @@ import {
   rmSync,
   symlinkSync,
   writeFileSync,
+  closeSync,
+  openSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { spawnSync, execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { CLIError } from "../../src/cli/cli-error.js";
 import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
@@ -61,12 +63,11 @@ function makeFixProject(
 ) {
   const root = makeTempProject();
   // Plumbing creates only fixture objects; no user repository or branch is changed.
-  const git = (args: string[], input?: string | Buffer) =>
-    execFileSync("git", ["-C", root, ...args], {
-      encoding: "utf8",
-      input,
-      stdio: ["pipe", "pipe", "ignore"],
-    }).trim();
+  const git = (args: string[], input?: string | Buffer) => {
+    const result = captureProcess("git", ["-C", root, ...args], root, input);
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
   git(["init", "-b", "main"]);
   writeFileSync(join(root, ".gitignore"), ".goat-flow/logs/\n");
   writeFileSync(join(root, "rule.ts"), source);
@@ -167,25 +168,58 @@ function makeTempProject(): string {
   return root;
 }
 
+/** Run a real child with private finite input/output files; failed launches retain a failing status. */
+function captureProcess(
+  binary: string,
+  args: string[],
+  cwd: string,
+  input?: string | Buffer,
+) {
+  const capture = mkdtempSync(join(tmpdir(), "quality-history-output-"));
+  disposables.push(capture);
+  const descriptors: number[] = [];
+  try {
+    let stdin: number | "ignore" = "ignore";
+    if (input !== undefined) {
+      writeFileSync(join(capture, "stdin"), input, { flag: "wx", mode: 0o600 });
+      stdin = openSync(join(capture, "stdin"), "r");
+      descriptors.push(stdin);
+    }
+    const stdout = openSync(join(capture, "stdout"), "wx", 0o600);
+    descriptors.push(stdout);
+    const stderr = openSync(join(capture, "stderr"), "wx", 0o600);
+    descriptors.push(stderr);
+    const result = spawnSync(binary, args, {
+      cwd,
+      timeout: 20000,
+      stdio: [stdin, stdout, stderr],
+    });
+    const completed =
+      result.status !== null &&
+      result.signal === null &&
+      (!result.error || result.error.code === "EPERM");
+    return {
+      status: completed ? result.status : null,
+      stdout: readFileSync(join(capture, "stdout"), "utf8"),
+      stderr:
+        readFileSync(join(capture, "stderr"), "utf8") +
+        (completed ? "" : String(result.error ?? result.signal)),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+  }
+}
+
 // Spawns the real CLI so the suite asserts on the output a user sees, not on an internal call.
 function runCLI(
   cwd: string,
   args: string[],
 ): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(
+  return captureProcess(
     process.execPath,
     ["--import", TSX_LOADER_URL, CLI_PATH, ...args],
-    {
-      cwd,
-      encoding: "utf-8",
-      timeout: 20000,
-    },
+    cwd,
   );
-  return {
-    status: result.status,
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
-  };
 }
 
 describe("quality history and diff CLI", () => {
@@ -728,7 +762,7 @@ describe("quality history and diff CLI", () => {
     assert.equal(history.status, 0, history.stderr);
     assert.match(
       history.stdout,
-      /2026-04-29 \| claude \| agent-setup \| 85 \(\+5\) \| 80 \| 1 \| 1 \| 0/,
+      /2026-04-29 \| claude \| agent-setup \| 85 \(\+5\) \[no comparable reruns\] \| 80 \(\+5\) \[no comparable reruns\] \| 1 \| 1 \| 0/,
     );
     assert.match(history.stdout, /Use `--all` to lift the 20-run default/i);
     assert.match(history.stdout, /Score rationale/u);

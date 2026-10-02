@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 import {
   buildTerminalSpawnSpec,
@@ -31,6 +32,40 @@ const QUOTED_MULTILINE_PROMPT = [
 ].join("\n");
 
 describe("buildTerminalSpawnSpec", () => {
+  it("carries exact prompt identity beside the bytes without inherited identity or guessed settings", () => {
+    for (const platform of ["linux", "win32"] as const) {
+      const spec = buildTerminalSpawnSpec(
+        "claude",
+        "/usr/local/bin/claude",
+        QUOTED_MULTILINE_PROMPT,
+        { GOAT_QUALITY_ASSESSMENT_IDENTITY: "stale-metadata" },
+        platform,
+        {
+          accessMode: "reporting",
+          toolVersion: "cli-version-fixture",
+          projectPath: process.cwd(),
+        },
+      );
+      const identity = JSON.parse(
+        spec.env.GOAT_QUALITY_ASSESSMENT_IDENTITY ?? "",
+      );
+      assert.equal(
+        identity.prompt_sha256,
+        createHash("sha256").update(QUOTED_MULTILINE_PROMPT).digest("hex"),
+      );
+      assert.equal(identity.tool_version, "cli-version-fixture");
+      assert.equal(identity.model, null);
+      assert.equal(identity.settings_sha256, null);
+      assert.equal(identity.fixed_input_protocol, null);
+      assert.equal(identity.capture, "launch-observed");
+      assert.equal(
+        spec.initialInput,
+        `\x1b[200~${QUOTED_MULTILINE_PROMPT}\x1b[201~\r`,
+      );
+      assert.match(spec.args.join("\n"), /--append-system-prompt/);
+      assert.match(spec.args.join("\n"), /GOAT_QUALITY_ASSESSMENT_IDENTITY/);
+    }
+  });
   it("keeps multiline prompts out of Windows PowerShell argv and env", () => {
     const spec = buildTerminalSpawnSpec(
       "claude",
@@ -438,8 +473,12 @@ describe("buildTerminalSpawnSpec", () => {
         "# Plans\n",
       );
       writeFileSync(join(tempRoot, ".gitignore"), "dist/\n");
-      execFileSync("git", ["-C", tempRoot, "init", "--quiet"]);
-      execFileSync("git", ["-C", tempRoot, "add", ".gitignore"]);
+      execFileSync("git", ["-C", tempRoot, "init", "--quiet"], {
+        stdio: "ignore",
+      });
+      execFileSync("git", ["-C", tempRoot, "add", ".gitignore"], {
+        stdio: "ignore",
+      });
 
       const spec = buildTerminalSpawnSpec(
         "codex",
@@ -476,19 +515,22 @@ describe("buildTerminalSpawnSpec", () => {
         mkdirSync(join(rootPath, "dist"), { recursive: true });
         writeFileSync(join(rootPath, ".gitignore"), "dist/\n");
         writeFileSync(join(rootPath, "dist/local.txt"), "ignored\n");
-        execFileSync("git", ["-C", rootPath, "init", "--quiet"]);
-        execFileSync("git", ["-C", rootPath, "add", ".gitignore"]);
+        execFileSync("git", ["-C", rootPath, "init", "--quiet"], {
+          stdio: "ignore",
+        });
+        execFileSync("git", ["-C", rootPath, "add", ".gitignore"], {
+          stdio: "ignore",
+        });
       }
       writeFileSync(
         join(controllerPath, ".goat-flow/logs/quality/custom.md"),
         "tracked\n",
       );
-      execFileSync("git", [
-        "-C",
-        controllerPath,
-        "add",
-        ".goat-flow/logs/quality/custom.md",
-      ]);
+      execFileSync(
+        "git",
+        ["-C", controllerPath, "add", ".goat-flow/logs/quality/custom.md"],
+        { stdio: "ignore" },
+      );
 
       const ownerByQualityMode = [
         ["process", controllerPath],
