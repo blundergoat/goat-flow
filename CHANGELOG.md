@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- **Recall warns about stale citations** - Text and JSON identify missing, moved or gitignored evidence without hiding entries or changing their order.
 - **Cmd caret escapes retain command policy** - Escaped executable, verb and path words receive the same deny checks as plain spellings while escaped operators stay literal.
 - **Gruff health notices deduplicate on WSL network paths** - Health-marker directories are created relative to the verified project root, avoiding Git Bash absolute-path failures.
 - **Gruff preserves completed analysis when health state is inaccessible** - Unreadable or unwritable markers no longer discard the result.

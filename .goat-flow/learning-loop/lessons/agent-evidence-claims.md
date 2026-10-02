@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-10-01
+last_reviewed: 2026-10-02
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -81,7 +81,7 @@ Related evidence moved intact to [evidence-attribution.md](evidence-attribution.
 
 **Status:** active | **Created:** 2026-07-03 | **Evidence:** OBSERVED
 **Severity:** CORRECTNESS
-**Incident count:** 7 | **Latest occurrence:** 2026-09-11
+**Incident count:** 8 | **Latest occurrence:** 2026-10-02
 
 **Prevention:** Before claiming a pattern is absent, rerun the exact single pattern with no `head` or `tail` truncation, or count with `grep -c`. For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Derive an exact-count claim from the widest search it implies, `git grep` over the tracked tree, before pinning it into a stop condition. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
 
@@ -98,6 +98,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 - **Recurrence 2026-09-09:** M50's all-copy baseline JSON and lessons INDEX captures exceeded output budgets. Bounded fifty-line reads and exact character counts recovered them before source edits; failed captures earned no baseline credit. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
 - **Recurrence 2026-09-11:** M42 guidance and drift captures truncated; M43 repeated the problem and printed full export rows after treating an array as an object. Complete in-memory parsing recovered the evidence. DG-03 also lost required input when five file reads shared one response despite large budgets; that attempt was invalidated. Emit each complete input separately and distinguish command success from evidence delivery. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `## Proof Gate`); affected guidance: `workflow/skills/goat-debug/SKILL.md` (search: `Post-Fix Verification`).
 - **Recurrence 2026-09-11 (M39):** Combined source reads, context JSON and a full plan export exceeded capture budgets; increasing the export budget still failed. Parsing the complete export inside the command process and emitting scalar assertions recovered its 72-record graph. Filename guesses also missed existing inputs. An oversized preparation command was rejected by the 16 KB hook before execution. Discover exact paths, keep commands inspectable, reconcile capture lengths and retain rejected attempts separately. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`, `## Proof Gate`); export owner: `src/cli/plans-export.ts` (search: `loadPlanExportRecords`).
+- **Recurrence 2026-10-02:** Recall closeout notes stated 650 test lines before final measurement; `wc -l` measured 653. A learning draft then emitted its full 34 KB bucket and exceeded the tool capture budget; bounded patch-only output recovered the proposal. Measure final bytes before exact-count claims, and keep full draft state in memory while emitting only the reviewed patch. `test/unit/learning-loop-recall.test.ts` (search: `recall citation freshness`); capture contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
 
 ---
 

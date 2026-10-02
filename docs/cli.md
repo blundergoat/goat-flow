@@ -227,6 +227,10 @@ List active learning-loop entries whose `(search: ...)` evidence anchors cite th
 
 Recall prints each matching entry's source path, heading, status, matching citations, and `Decision changed` guidance when present. It never inlines entry bodies or writes output files. Results are ordered by source path and heading, capped at 25 entries, and report the number of additional matches instead of truncating silently.
 
+JSON keeps `matchedPaths` and adds `matchedCitations`, whose items contain `filePath`, `needle`, `status` (`valid` or `stale`) and `reason`. Stale reasons are `missing-file`, `missing-needle` and `gitignored-path`; valid citations have a null reason. Each match also includes `hasStaleCitations`, which covers only citations matching the requested operands. A valid citation means its literal text is present, not that its claim is true.
+
+Text output marks each stale citation with its reason and asks you to reread the source before relying on `Decision changed`. Stale entries keep their existing order and count toward the same result limit; valid text output keeps its current shape.
+
 ```bash
 npx @blundergoat/goat-flow@latest recall src/cli/server/terminal.ts
 npx @blundergoat/goat-flow@latest recall src/cli src/dashboard --format json
