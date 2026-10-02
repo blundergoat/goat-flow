@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-02
 ---
 
 **Scope:** Hook test coverage strategy and provider evidence - what a self-test actually exercises, which support layer a capture proves, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -116,9 +116,9 @@ last_reviewed: 2026-09-30
 **Severity:** INTEGRATION
 **Decision changed:** Split all-in-one shell verification into bounded direct commands, and feed hook payloads from a temporary file when the live shell guard inspects the outer command.
 **Trigger phase:** VERIFY
-**Incident count:** 8 | **Latest occurrence:** 2026-09-12
+**Incident count:** 9 | **Latest occurrence:** 2026-10-02
 
-**Prevention:** For manual guardrail matrices, run one direct case at a time or create a temporary harness file with a plain invocation command. Construct secret-path payloads from variables when the outer live guard would otherwise see them, prefer here-strings or file redirection over `printf | bash hook`, and record temp roots in the parent shell before using command substitution. Use the interpreter returned by `command -v python3 || command -v python` rather than assuming a `python` shim. Keep large captured output out of executable command text; capture and parse it locally as data, and use stdin when a classifier probe exceeds the operating system’s argument limit. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command has more than 50 chained segments`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`), `.goat-flow/learning-loop/lessons/verification-scanners.md` (search: `Temp cleanup must satisfy destructive-command hooks`).
+**Prevention:** For manual guardrail matrices, run one direct case at a time or create a temporary harness file with a plain invocation command. Construct secret-path payloads from variables when the outer live guard would otherwise see them, prefer here-strings or file redirection over `printf | bash hook`, and record temp roots in the parent shell before using command substitution. Use the interpreter returned by `command -v python3 || command -v python` rather than assuming a `python` shim. Keep large captured output out of executable command text; capture and parse it locally as data, and use stdin when data exceeds the hook command-size ceiling or the operating system’s argument limit. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command has more than 50 chained segments`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`), `.goat-flow/learning-loop/lessons/verification-scanners.md` (search: `Temp cleanup must satisfy destructive-command hooks`).
 
 **What happened:** During a manual pass over the canonical deny and Gruff hooks, the first all-in-one harness was blocked by the active PreToolUse guard for having more than 50 chained segments. Smaller batches then tripped the same guard with command substitution, a fixed `printf | bash hook` payload replay, and literal `.env.example` strings in the outer command, while a temporary Gruff harness leaked temp directories because root creation happened inside command substitutions.
 
@@ -133,6 +133,20 @@ last_reviewed: 2026-09-30
 **Recurrence 2026-09-11:** Saving critique records from in-memory heredocs into the redactor tripped the 50-segment guard three times: semicolons and pipe characters inside the heredoc body count as chained segments, and a 13 KB body trips the count even without them while a 7 KB body passes. Scrubbing each half into the project scratchpad with the redactor and then concatenating the scrubbed halves through the redactor into the create-only record kept every raw draft off disk and preserved the record schema. Evidence: workflow/hooks/deny-dangerous/guard-runtime.sh (search: chained segments).
 
 **Recurrence 2026-09-12:** M39 evidence persistence embedded a complete test transcript in a Python heredoc and exceeded the live guard’s command-size ceiling before execution. Capturing subprocess output locally kept the outer command bounded. A later classifier probe exceeded the OS argument-size limit; structured stdin reached both policies and established unchanged allow/block boundaries. The user approved clearer rejection wording, with all parser limits retained. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `large_quality_save_heredoc_is_bounded_data`, `Command is too large for policy inspection`).
+
+
+**Recurrence 2026-10-02:** M12 protocol persistence embedded a 15,750-character draft in an executable Python heredoc and was rejected before execution.
+The rejection directed file or stdin input; sending the same in-memory draft directly to the matched redactor's stdin saved the protocol.
+No raw staging file or hook-limit change was used. An inline Python comparison wrapper was separately rejected for its shell-execution primitive.
+
+A reviewed fixture entry with JSON stdin completed the six direct/observer stream and exit comparisons before the live session.
+The final live control then included `test ! -e` for a protected secret-shaped path, so the existing generic secret scan denied the entire request.
+Keep allowed controls free of protected operands; inspect fixture absence independently rather than treating metadata checks as policy-exempt.
+The missing valid allowed-after control left this capture inconclusive; current-runtime support remains unverified.
+
+Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`);
+`workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`);
+`workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `check_secret_segment`).
 
 ---
 
