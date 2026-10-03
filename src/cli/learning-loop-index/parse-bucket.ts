@@ -420,8 +420,10 @@ function parseEntryFileSections(
 ): ActiveLearningLoopSection[] {
   const { body } = parseMarkdownFrontmatter(file.content);
   const resolvedAt = findResolvedEntriesHeadingIndex(body);
-  return splitEntrySections(body, HEADING_KIND[bucket])
-    .filter((section) => resolvedAt === -1 || section.start < resolvedAt)
+  // Resolved history belongs to no active entry; cut it off before splitting so the last active section cannot absorb its reading cost or
+  // its citations, which recall would otherwise attribute to that entry.
+  const activeBody = resolvedAt === -1 ? body : body.slice(0, resolvedAt);
+  return splitEntrySections(activeBody, HEADING_KIND[bucket])
     .filter(
       (section) => entryStatus(section.content).toLowerCase() !== "resolved",
     )

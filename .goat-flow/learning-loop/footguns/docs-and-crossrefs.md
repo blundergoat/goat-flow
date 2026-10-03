@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-03
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -170,6 +170,23 @@ The follow-up M05 review found a second symptom in `.goat-flow/learning-loop/dec
 **Why it happens:** Prose guesses paths from agent names, but Antigravity and Codex share `.agents/skills/`, so name-based inference is wrong by default for those agents, and the audit verifies existence only.
 
 **Evidence:** `workflow/manifest.json` (search: `"skills_dir"`) has four entries and three distinct paths; `docs/audit-and-quality.md` (search: `satellite agents' skill dirs`) previously named `.gemini/skills/`, which never existed; `src/cli/audit/harness/check-context.ts` (search: `extractBacktickPaths`) is existence-only; `.goat-flow/learning-loop/decisions/ADR-020-add-copilot-cli.md` (search: `Canonical agents`) records the four-agent identity of Claude, Codex, Antigravity, and Copilot.
+
+---
+
+## Footgun: A one-sided merge can revert a fix while its lesson keeps citing it
+
+**Status:** active | **Created:** 2026-10-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** When a learning-loop anchor goes stale after a merge, diff the cited file against both merge parents before editing the entry; restore dropped code rather than rewriting the entry to match it.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Check each cited file the merge touched. If both sides changed it since `git merge-base <parent1> <parent2>` and `git diff <parent> <merge> -- <file>` is empty for one parent, the merge kept that parent's copy wholesale. Re-merge the dropped commit with `git merge-file` against the merge base, keep both sides' tests, and run the restored tests against the merge result to confirm they catch the loss.
+
+**Symptoms:** `goat-flow stats --check` reports `stale-ref` for anchors that exist on one branch, and audit fails "Feedback loop directories exist". The audit's fix text says to update the entry. Doing that would leave the lesson describing safeguards the code no longer has.
+
+**Why it happens:** Code, its tests, and the lesson citing them merge independently. Taking one side for the conflicted script and test drops the other branch's fix, while the lesson bucket merges cleanly with both branches' text. The kept script and test come from the same commit, so only the stale anchor disagrees.
+
+**Evidence:** Merge `46bc6d10` (main into dev, 2026-10-03) kept `scripts/npm-publish.sh` and `test/integration/npm-publish.test.ts` exactly as main's `9984a303` had them. That dropped dev-only `0f65374c`: browser login with the inherited OTP cleared, a direct `configure_token_from_env` call so a failed `mktemp` stops publishing, and `--dry-run=false` on the confirmed publish. `.goat-flow/learning-loop/lessons/npm-publishing.md` still cited all three, and `stats --check` reported three stale refs. Re-merging `0f65374c` onto the merge result (5 conflict hunks per file) restored them alongside main's CI fast path. Run against the merge result's script, the restored suite failed 12 of 17: a failed `mktemp` still exited 0, and with input matching the old prompts the confirmed publish resolved `publish-dry-run:true`. Against the restored script, `test/integration/npm-publish.test.ts` (search: `performs the confirmed publish despite inherited dry-run settings`) and the rest of the suite passed 17 of 17, and the stale refs cleared.
 
 ---
 

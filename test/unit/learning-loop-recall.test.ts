@@ -119,6 +119,10 @@ last_reviewed: 2026-08-24
 
 ## Resolved Entries
 
+> Historical record. These lessons are no longer active.
+
+- **Prose-style resolved lesson** (resolved 2026-08-25) - \`src/core/file.ts\` (search: \`export const coreMarker\`) was cited by history that must not attach to the entry above.
+
 ## Lesson: Resolved position is excluded
 
 **Status:** active | **Created:** 2026-08-24

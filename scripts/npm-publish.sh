@@ -8,8 +8,8 @@
 #   bash scripts/npm-publish.sh [--full]
 #
 # Behavior:
-#   1) reads package.json version, stops if npm already has it, and selects
-#      interactive 2FA or a bypass token
+#   1) reads package.json version, stops if npm already has it, and logs in
+#      through npm's browser flow (or uses a bypass token when explicitly selected)
 #   2) runs `npm run publish:check` once - the single expensive gate
 #      (versions, instruction parity, build, package links, fast + slow tests).
 #      When GitHub CI's push run already passed for HEAD and the working tree
@@ -19,7 +19,7 @@
 #      shasum
 #   4) asks for manual confirmation, re-probes the shasum so the approved
 #      bytes are provably what ships, then publishes with --ignore-scripts.
-#      A failed interactive 2FA attempt can be retried without repeating checks
+#      A cancelled browser authentication can be retried without repeating checks
 #      (prepublishOnly already ran as step 2; rerunning it would repeat
 #      the full release check against an unchanged tree)
 #
@@ -31,13 +31,12 @@
 #   - node, npm, git
 #   - gh logged in to GitHub, only for the CI-verified quick check
 #   - package.json and build/test scripts configured for the project
-#   - npm authentication from `npm login`, npm user config, NPM_TOKEN, or
+#   - Browser access to npm for login and passkey verification.
+#   - For token-only publishing, use a granular token with package publish
+#     permission and Bypass 2FA enabled, from npm user config, NPM_TOKEN, or
 #     NODE_AUTH_TOKEN. This script treats the latter two as token aliases;
-#     NPM_TOKEN wins if both are set. Environment tokens are placed in a
-#     temporary npm config that is removed on exit.
-#   - For interactive 2FA, enable account 2FA for authorization and writes.
-#     For token-only publishing, use a granular token with package publish
-#     permission and Bypass 2FA enabled. Never commit a token-bearing .npmrc.
+#     NPM_TOKEN wins if both are set. In token mode, environment tokens use
+#     a temporary npm config that is removed on exit. Never commit tokens.
 set -euo pipefail
 
 PACKAGE_NAME="@blundergoat/goat-flow"
@@ -67,14 +66,12 @@ print_auth_instructions() {
   printf 'Error: %s\n' "$reason" >&2
   cat >&2 <<'EOF'
 
-Interactive 2FA: enable "authorization and writes" for your npm account,
-  then run `npm login --auth-type=web` and rerun this script without token
-  environment overrides:
+Browser login (default): rerun the script and choose option 1. Follow npm's
+  browser link and use your passkey/security key. Do not use account recovery
+  codes to publish. npm may request browser verification again when publishing.
 
-    env -u NPM_TOKEN -u NODE_AUTH_TOKEN bash scripts/npm-publish.sh
-
-  After the release check, type a fresh authenticator code, or press Enter
-  without typing anything to approve in a browser (passkey or security key).
+If npm reports an account suspension or security hold, stop and follow npm's
+  account instructions. Retrying authentication cannot clear that hold.
 
 Token-only publishing: create a granular token with "Read and write (publish
   and stage)" for @blundergoat/goat-flow and "Bypass 2FA" enabled. Set it as
@@ -95,7 +92,7 @@ configure_token_from_env() {
     token_source="NODE_AUTH_TOKEN"
     token_value="$NODE_AUTH_TOKEN"
   else
-    return 1
+    return 0
   fi
 
   TEMP_NPMRC=$(mktemp)
@@ -166,11 +163,38 @@ ci_verified_head() {
 }
 
 verify_publish_auth() {
-  local npm_user
+  local npm_user auth_choice
 
   echo "--- Auth check ---"
-  if configure_token_from_env; then
-    echo "Using ${AUTH_SOURCE} via temporary npm config."
+  echo "Choose how this publish will satisfy npm's 2FA requirement:"
+  echo "  1) Log in through the browser with your passkey/security key (default)"
+  echo "  2) Use a token with Bypass 2FA enabled"
+  read -rp "Authentication method [1/2, default 1]: " auth_choice
+  case "$auth_choice" in
+    "" | 1) AUTH_MODE="web" ;;
+    2) AUTH_MODE="token" ;;
+    *) printf 'Error: choose 1 or 2.\n' >&2; exit 1 ;;
+  esac
+
+  if [[ "$AUTH_MODE" == "web" ]]; then
+    echo "Follow npm's browser link and use your passkey/security key."
+    echo "Do not use account recovery codes to publish."
+    # An inherited OTP forces npm into legacy auth, even with auth-type=web.
+    # Clear it explicitly and keep npm attached to the terminal for browser auth.
+    if ! npm login --auth-type=web --otp= --registry="$REGISTRY_URL"; then
+      print_auth_instructions "npm browser login failed. See npm's error above."
+      exit 1
+    fi
+    AUTH_SOURCE="npm web login"
+  else
+    echo "NPM_TOKEN and NODE_AUTH_TOKEN are aliases for the same npm token; NPM_TOKEN takes priority."
+    # Calling this inside an `if` disables errexit throughout the function,
+    # allowing failed temp-file creation or writes to fall through to publishing.
+    configure_token_from_env
+    if [[ -n "$AUTH_SOURCE" ]]; then
+      echo "Using ${AUTH_SOURCE} via temporary npm config."
+    fi
+    echo "The token must have publish permission for ${PACKAGE_NAME} and Bypass 2FA enabled."
   fi
 
   if ! npm_user=$(npm whoami --registry="$REGISTRY_URL"); then
@@ -179,29 +203,13 @@ verify_publish_auth() {
   fi
 
   echo "Logged in as: ${npm_user}"
-
   echo "Credential source: ${AUTH_SOURCE:-npm config or npm login}"
-  echo "This script accepts NPM_TOKEN or NODE_AUTH_TOKEN for the same npm token; NPM_TOKEN takes priority."
-  echo "Choose how this publish will satisfy npm's 2FA requirement:"
-  echo "  1) Use interactive 2FA after the release check: authenticator code or browser login (default)"
-  echo "  2) Use a token with Bypass 2FA enabled"
-  read -rp "Authentication method [1/2, default 1]: " auth_choice
-  case "$auth_choice" in
-    "" | 1) AUTH_MODE="otp" ;;
-    2) AUTH_MODE="token" ;;
-    *) printf 'Error: choose 1 or 2.\n' >&2; exit 1 ;;
-  esac
-
-  if [[ "$AUTH_MODE" == "token" ]]; then
-    echo "The token must have publish permission for ${PACKAGE_NAME} and Bypass 2FA enabled."
-    echo ""
-    return 0
-  fi
-
   # Profile reads are a separate capability from package publishing. A failed
   # profile lookup cannot establish whether this credential can publish.
   echo "npm will verify publishing permission and 2FA when publishing."
-  echo "After the release check, type an authenticator code, or press Enter to approve in a browser."
+  if [[ "$AUTH_MODE" == "web" ]]; then
+    echo "npm may open another browser verification prompt after the release check."
+  fi
   echo ""
 }
 
@@ -250,7 +258,7 @@ if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
   exit 0
 fi
 
-# Retry only the publish request after an OTP failure. Every attempt rechecks
+# Retry only the publish request after cancelled browser auth. Every attempt rechecks
 # the approved tarball; changed bytes require a fresh full release check.
 while true; do
   current_shasum=$(pack_shasum)
@@ -260,33 +268,19 @@ while true; do
     exit 1
   fi
 
-  if [[ "$AUTH_MODE" == "otp" ]]; then
-    echo ""
-    echo "npm 2FA:"
-    echo "  - Authenticator app: type the current code (hidden as you type), then press Enter."
-    echo "  - Browser login, passkey, or security key: press Enter without typing anything."
-    echo "    npm then prints an \"Authenticate your account at\" URL. Open it and approve;"
-    echo "    if no browser opens, copy the URL into one. The publish continues after approval."
-    read -rsp "2FA code, or Enter for browser login: " otp
-    printf '\n'
-    if [[ -n "$otp" ]]; then
-      # npm normalizes both environment spellings; keep them consistent so an
-      # inherited lowercase setting cannot override the freshly entered code.
-      if NPM_CONFIG_OTP="$otp" npm_config_otp="$otp" npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"; then
-        break
-      fi
-    elif npm publish --otp= --ignore-scripts --access public --registry="$REGISTRY_URL"; then
-      # The empty CLI flag also clears an OTP stored in npm config files.
-      break
-    fi
-    otp=""
-    read -rp "Publish failed. If the error above was a rejected code or an unapproved browser login, retry 2FA? (y/N) " retry
-    if [[ "$retry" != "y" && "$retry" != "Y" ]]; then
-      exit 1
-    fi
-  else
-    npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"
+  # npm owns the browser challenge. Do not capture or pipe this command:
+  # npm requires an interactive terminal to start its authentication flow.
+  if npm publish --otp= --dry-run=false --ignore-scripts --access public --registry="$REGISTRY_URL"; then
     break
+  fi
+
+  echo "Publish failed. If npm reports a suspension or security hold, stop; retries cannot clear it." >&2
+  if [[ "$AUTH_MODE" != "web" ]]; then
+    exit 1
+  fi
+  read -rp "If you cancelled browser authentication, retry publishing? (y/N) " retry
+  if [[ "$retry" != "y" && "$retry" != "Y" ]]; then
+    exit 1
   fi
 done
 echo ""
