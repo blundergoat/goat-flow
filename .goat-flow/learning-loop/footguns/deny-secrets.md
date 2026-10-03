@@ -10,6 +10,7 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 ## Footgun: Credential output needs a command gate even when no secret path appears
 
 **Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Check commands that print stored credentials before treating a path-free CLI invocation as a safe read.
 **Trigger phase:** ACT
 **hallucination-risk:** high
@@ -30,6 +31,7 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 ## Footgun: Secret-path matching must distinguish search data from file operands
 
 **Status:** active | **Created:** 2026-08-17 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Incident count:** 4 | **Latest occurrence:** 2026-09-27
 **Decision changed:** Exempt protected text only after command parsing proves that it is literal or search data, and keep every remaining file operand under the secret-path matcher.
 
@@ -55,6 +57,7 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 ## Footgun: Extension-based secret checks can confuse filenames with query syntax
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Incident count:** 3 | **Latest occurrence:** 2026-08-19
 
 **Prevention:**

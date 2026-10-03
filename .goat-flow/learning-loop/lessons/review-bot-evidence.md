@@ -8,6 +8,7 @@ last_reviewed: 2026-09-25
 ## Lesson: Reproduce review findings through the production parser before mutating parsed fixtures
 
 **Status:** active | **Created:** 2026-09-21 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Serialize suspect input and run the production parser before testing a downstream consumer's response to it.
 **Trigger phase:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-09-25

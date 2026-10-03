@@ -36,6 +36,46 @@ import {
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "../..");
 const V1_16_0_COMMIT = "839fc59624034408e632617af0f8e9e273c37a49";
 
+/** Spawns the fixture command with private stream files, then closes and removes every capture. */
+function runWithFileStreams(
+  command: string,
+  args: string[],
+  options: import("node:child_process").SpawnSyncOptionsWithStringEncoding,
+  payload?: string,
+) {
+  const directory = fs.mkdtempSync(
+    join(tmpdir(), "goat-hook-recovery-streams-"),
+  );
+  const stdoutPath = join(directory, "stdout");
+  const stderrPath = join(directory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    let stdin: number | "ignore" = "ignore";
+    if (payload !== undefined) {
+      const inputPath = join(directory, "stdin");
+      fs.writeFileSync(inputPath, payload, { flag: "wx", mode: 0o600 });
+      stdin = fs.openSync(inputPath, "r");
+      descriptors.push(stdin);
+    }
+    const stdout = fs.openSync(stdoutPath, "wx", 0o600);
+    descriptors.push(stdout);
+    const stderr = fs.openSync(stderrPath, "wx", 0o600);
+    descriptors.push(stderr);
+    const result = spawnSync(command, args, {
+      ...options,
+      stdio: [stdin, stdout, stderr],
+    });
+    return {
+      ...result,
+      stdout: fs.readFileSync(stdoutPath, "utf8"),
+      stderr: fs.readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) fs.closeSync(descriptor);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+}
+
 /**
  * Install the complete pinned v1.16.0 package into a disposable Codex project before reviewing its upgrade.
  * Writes only beneath the test workspace; package dependencies stay outside the target project.
@@ -106,16 +146,20 @@ function replaySavedCodexCommand(
   proposedCommand: string,
 ) {
   const launch = agentHookSpawnDescriptor({ form: "shell", command });
-  return spawnSync(launch.command, launch.args, {
-    cwd: projectPath,
-    env: { ...process.env, ...launch.env },
-    encoding: "utf8",
-    input: JSON.stringify({
+  return runWithFileStreams(
+    launch.command,
+    launch.args,
+    {
+      cwd: projectPath,
+      env: { ...process.env, ...launch.env },
+      encoding: "utf8",
+      timeout: 30_000,
+    },
+    JSON.stringify({
       tool_name: "Bash",
       tool_input: { command: proposedCommand },
     }),
-    timeout: 30_000,
-  });
+  );
 }
 
 /**
@@ -141,7 +185,7 @@ function savedCodexPolicyCommand(projectPath: string, hookId: string): string {
 }
 
 /**
- * Create a temporary installed project with old ownership bytes; the caller removes it after the test.
+ * Writes a temporary installed project with old ownership bytes; the caller removes it after the test.
  * A pristine fixture records those bytes; a diverged fixture leaves the prior hash so the user must also approve replacing a local edit.
  */
 function mixedPolicyProject(isPristine: boolean): string {
@@ -194,7 +238,7 @@ function projectFiles(projectPath: string): Record<string, string> {
 }
 
 /**
- * Capture the server response shown when Sync requires the user's review.
+ * Capture the server response shown when Sync requires the user's review; a missing refusal throws an assertion error.
  *
  * @returns structured refusal details; missing details or successful Sync fail the test because consent was not enforced
  */
@@ -443,7 +487,7 @@ describe("hook sync migration and claim recovery", () => {
       "--agent",
       "codex",
     ];
-    const preview = spawnSync(
+    const preview = runWithFileStreams(
       process.execPath,
       [...installArgs, "--dry-run", "--format", "json"],
       {
@@ -601,7 +645,7 @@ describe("hook sync migration and claim recovery", () => {
               pathWriteClaimInspectCommand(projectPath, targetPath),
             ),
           );
-          const inspection = spawnSync(
+          const inspection = runWithFileStreams(
             process.execPath,
             [
               "--import",

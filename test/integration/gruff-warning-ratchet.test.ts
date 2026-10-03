@@ -14,7 +14,13 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -27,6 +33,42 @@ const FAKE_ANALYZER = join(
   "gruff-ratchet",
   "fake-gruff-analyzer.mjs",
 );
+
+/**
+ * Start the real checker with private output files and remove them after capture.
+ *
+ * @param environment - installed-analyzer environment or the fixture's explicit overrides
+ * @param timeout - optional limit retained for the installed analyzer smoke case
+ * @returns unchanged process metadata and the gate's complete stdout/stderr
+ */
+function runChecker(environment: NodeJS.ProcessEnv, timeout?: number) {
+  const captureDirectory = mkdtempSync(
+    join(tmpdir(), "goat-ratchet-checker-output-"),
+  );
+  const stdoutPath = join(captureDirectory, "stdout");
+  const stderrPath = join(captureDirectory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    for (const path of [stdoutPath, stderrPath]) {
+      descriptors.push(openSync(path, "wx", 0o600));
+    }
+    const result = spawnSync(process.execPath, [CHECKER], {
+      cwd: REPO_ROOT,
+      env: environment,
+      encoding: "utf8",
+      timeout,
+      stdio: ["ignore", ...descriptors],
+    });
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(captureDirectory, { recursive: true, force: true });
+  }
+}
 
 /**
  * Reviewed-debt manifest fixture mirroring the real baseline shape.
@@ -159,14 +201,13 @@ describe("gruff warning ratchet", () => {
       const environment = { ...process.env };
       delete environment.GOAT_FLOW_GRUFF_RATCHET_ANALYZER_BIN;
       delete environment.GOAT_FLOW_GRUFF_RATCHET_BASELINE;
-      const run = spawnSync(process.execPath, [CHECKER], {
-        cwd: REPO_ROOT,
-        env: environment,
-        encoding: "utf8",
-        timeout: 120_000,
-      });
-      assert.ifError(run.error);
-      assert.equal(run.status, 0, run.stderr);
+      const run = runChecker(environment, 120_000);
+      assert.equal(run.status, 0, run.stderr || run.error?.message);
+      assert.equal(run.signal, null);
+      assert.ok(
+        !run.error || ("code" in run.error && run.error.code === "EPERM"),
+        run.error?.message,
+      );
       assert.match(
         run.stdout,
         /gruff warning ratchet:.*analysedFiles \d+ >= floor \d+/u,
@@ -208,17 +249,13 @@ describe("gruff warning ratchet", () => {
     const stdout =
       options.rawStdout ??
       `${JSON.stringify(options.scan ?? scanFixture(), null, 2)}\n`;
-    const result = spawnSync(process.execPath, [CHECKER], {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        GOAT_FLOW_GRUFF_RATCHET_ANALYZER_BIN: FAKE_ANALYZER,
-        GOAT_FLOW_GRUFF_RATCHET_BASELINE: baselinePath,
-        FAKE_GRUFF_STDOUT: stdout,
-        FAKE_GRUFF_STDERR: options.analyzerStderr ?? "",
-        FAKE_GRUFF_EXIT: String(options.analyzerExit ?? 0),
-      },
+    const result = runChecker({
+      ...process.env,
+      GOAT_FLOW_GRUFF_RATCHET_ANALYZER_BIN: FAKE_ANALYZER,
+      GOAT_FLOW_GRUFF_RATCHET_BASELINE: baselinePath,
+      FAKE_GRUFF_STDOUT: stdout,
+      FAKE_GRUFF_STDERR: options.analyzerStderr ?? "",
+      FAKE_GRUFF_EXIT: String(options.analyzerExit ?? 0),
     });
     return {
       status: result.status,

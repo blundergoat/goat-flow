@@ -27,6 +27,8 @@ category: verification
 
 ## Lesson: [Short title]
 **Created:** YYYY-MM-DD
+**Severity:** SECURITY | CORRECTNESS | INTEGRATION | PERFORMANCE | STYLE (optional; only when incident evidence supports it)
+**Enforced-by:** `path/to/verified-guard` (search: `semantic anchor`) (optional)
 **Decision changed:** [the future agent decision this evidence changes]
 **Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **Caught at:** READ | SCOPE | ACT | VERIFY (optional; use only when different)
@@ -53,6 +55,8 @@ RULES:
 - A failed command or check alone is neither a harness failure nor grounds for a lesson; log one only when an agent decision caused the failure or mishandled its result
 - Prefer one concrete lesson per entry over a vague umbrella statement
 - Keep the Prevention action-oriented and enforceable
+- For repeat entries, classify severity from the recorded impact, never from incident count; leave it absent if impact is unclear. SECURITY covers secret exposure or safety-control bypass, CORRECTNESS wrong results or data loss, INTEGRATION broken contracts or cross-surface drift, PERFORMANCE measured time or resource cost, and STYLE naming or readability alone.
+- Add Enforced-by only for a shipped hook, deny rule, audit check, or contract or integration test verified against the failure; cite its real path and semantic anchor. The link removes the entry from the human stats action list, not from complete JSON. Resolve it only after human review confirms the guard makes recurrence mechanically impossible.
 - `Trigger phase` names the earliest phase where retrieval can prevent the failure, not where the failure surfaced; use optional `Caught at` when those phases differ
 - Real example: `Isolated fixtures must create every dependency they assert` uses `Trigger phase: ACT` because fixture construction prevents the failure and `Caught at: VERIFY` because the missing dependency surfaced during proof
 - Use the current repo format, not a temporary AI-generated placeholder

@@ -8,6 +8,7 @@ last_reviewed: 2026-08-15
 ## Lesson: Dashboard readers must preserve fields used by score logic
 
 **Status:** active | **Created:** 2026-05-01
+**Severity:** CORRECTNESS
 
 **Prevention:** When dashboard views derive percentages from API fields, add a regression that proves both the reader and the rendered summary preserve score-only warnings. Browser evidence must check summary cards, concern rows, and the "All checks passing" label because those are separate computations. Verify the rendered dashboard against the built `dist/` assets, not source only. Evidence anchors: `src/dashboard/dashboard-readers.ts` (search: `rawCheck.type`), `test/unit/dashboard-readers.test.ts` (search: `preserves harness check type so metric failures can be shown as non-gating score evidence`), `test/unit/dashboard-home.test.ts` (search: `surfaces score-only metric warnings`).
 
@@ -22,6 +23,7 @@ last_reviewed: 2026-08-15
 ## Lesson: VM helper tests need same-realm assertions
 
 **Status:** active | **Created:** 2026-04-25
+**Severity:** CORRECTNESS
 
 **Prevention:** When testing browser classic-script helpers through `node:vm`, normalize VM-produced arrays/objects with host constructors before strict structural assertions, or compare scalar fields. Evidence anchor: `test/unit/dashboard-custom-prompts.test.ts` (search: `Array.from(helpers.dashboardValidateCustomPromptDraft(ctx))`).
 

@@ -1,6 +1,6 @@
 ---
 category: deny-github
-last_reviewed: 2026-09-27
+last_reviewed: 2026-09-30
 ---
 
 GitHub CLI and API write-policy traps, including allowed conversation comments and proven GraphQL reads.
@@ -10,6 +10,7 @@ Sibling buckets: `deny-writes.md`, `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: GitHub CLI comments bypassed shared-system write guardrails
 
 **Status:** active | **Created:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Incident count:** 6 | **Latest occurrence:** 2026-09-27
 
 **Prevention:**
@@ -45,6 +46,8 @@ Sibling buckets: `deny-writes.md`, `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: HTTP method alone cannot classify GraphQL reads and writes
 
 **Status:** active | **Created:** 2026-09-20 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
+**Enforced-by:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_api_write`); `test/integration/deny-git-graphql.test.ts` (search: `GraphQL read-only policy`)
 **Decision changed:** Prove the literal GraphQL operation before applying the REST method rule, and verify the saved installed launcher as well as the classifier.
 **Trigger phase:** ACT
 **hallucination-risk:** high

@@ -1,6 +1,6 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-09-12
+last_reviewed: 2026-09-29
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
@@ -25,6 +25,7 @@ last_reviewed: 2026-09-12
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently drops `.goat-flow/` subtrees, committed or ignored
 
 **Status:** active | **Created:** 2026-06-13
+**Severity:** CORRECTNESS
 **Decision changed:** Treat a zero-hit recursive search under `.goat-flow/` as unproven until a known-positive control passes with the same command; use `command grep` for any sweep that must reach ignored plans or logs, and classify a negative search by its exit status rather than by empty output.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -73,7 +74,8 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 ## Lesson: Hook tests should feed stdin through files when child `cat` must see EOF
 
 **Status:** active | **Created:** 2026-06-13
-**Incident count:** 2 | **Latest occurrence:** 2026-06-14
+**Severity:** INTEGRATION
+**Incident count:** 3 | **Latest occurrence:** 2026-09-28
 
 **Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only descriptor or shell redirection rather than the runner's `input` option. Capture hook stderr explicitly when the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runLauncherWithPayload`).
 
@@ -82,6 +84,12 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 **Root cause:** The runner's `input` option was assumed equivalent to a real stdin file for hook scripts. In this environment it is not reliable for hooks that read all of stdin with `cat`, which makes correct hook behaviour look like a product hang.
 
 **Recurrence 2026-06-14:** A Codex workspace-terminal `bash scripts/preflight-checks.sh` run reached the test phase and then stayed silent; process inspection showed the only remaining workers were `test/integration/gruff-code-quality-contract.test.ts` and `test/integration/gruff-code-quality-smoke.test.ts`, each blocked under the hook at its stdin read, because the shared helper still passed the payload through the runner's `input` option and needed the same file-redirection fix.
+
+**Recurrence 2026-09-28:** M02 verification stalled in the provider-payload policy tests. A finite input file restored the unchanged 134-case operands corpus. The shared `test/helpers/check-installed-policy.ts` helper (search: `runHookWithPayload`) now supplies a private read-only descriptor and closes and removes it after each call. Owning runs passed all 134 operands, 215 policy, 118 GraphQL and 124 native-shell cases without changing their assertions. Evidence: `test/integration/deny-dangerous-operands.test.ts` (search: `classify`), `test/integration/deny-dangerous-policy.test.ts` (search: `runStdinPolicyCheck`), `test/integration/deny-git-graphql.test.ts` and `test/integration/deny-native-shells.test.ts` (search: `runHookWithPayload`). The same finite-input repair later restored all 30 cases in `test/integration/gruff-code-quality-contract.test.ts` (search: `runProviderLauncher`); its real Node launcher and provider feedback assertions remain in place. The 2026-09-29 continuation applied finite input and private output captures to `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `deliveredContext`); all 12 original cases passed, including the three saved-handler feedback cases that had stalled.
+
+The same continuation reached saved Codex replay and the preflight ESLint verdict fixture. The first handler-matrix repair left two Codex cases failing because their separate helper still defaulted to pipe input. Finite input restored 27 passing cases; the three Windows-only skips and explicit Windows pipe variants remain unchanged. The full hook-sync recovery suite passed all 12 cases after the same replay repair and private CLI output capture. The ESLint verdict suite had exceeded 20 seconds; finite input then restored both original cases. Evidence: `test/integration/hook-command-spawn-matrix.test.ts` (search: `runRegisteredCodexHandler`), `test/integration/hook-sync-recovery.test.ts` (search: `replaySavedCodexCommand`) and `test/integration/preflight-eslint.test.ts` (search: `runPreflightLintClassifier`). Inspect each process helper separately; one repaired transport does not cover every caller in the file.
+
+The later quality-save and redaction fixtures stalled for 25 and 20 seconds respectively while their CLI readers waited for stdin EOF. Private finite input and output captures restored all 47 quality-subcommand and 23 redaction cases, preserving the real CLI, raw input bytes and safety assertions. The redaction file contained both a shared helper and one separate inline spawn; both required repair. Evidence: `test/unit/quality-subcommands.test.ts` (search: `runQualityCommand`) and `test/unit/redact-command.test.ts` (search: `runRedact`, `writes only scrubbed stdin to an explicit output file`).
 
 ---
 

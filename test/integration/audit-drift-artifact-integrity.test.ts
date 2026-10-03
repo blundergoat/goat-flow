@@ -603,7 +603,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
-  // Creates and removes a temporary project whose doc names a valid transient marker normally absent outside an active writer.
+  // Writes and removes a temporary project whose doc names a transient writer marker; the claim check must not report that marker missing.
   it("accepts an absent path-write claim reference", () => {
     const fixtureRoot = setupFixture();
     try {
@@ -633,7 +633,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
-  // Filesystem side effects: creates and removes a project without install state; content lint accepts lifecycle paths clean checkouts lack.
+  // Filesystem side effects: creates and removes a project without install state; content lint must accept lifecycle paths clean checkouts lack.
   it("accepts absent managed install-state lifecycle references", () => {
     const fixtureRoot = setupFixture();
     try {

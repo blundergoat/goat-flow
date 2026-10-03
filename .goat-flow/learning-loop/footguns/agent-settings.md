@@ -34,6 +34,7 @@ last_reviewed: 2026-09-05
 ## Footgun: Re-adding a removed agent tool (MultiEdit) reprints "matches no known tool" every launch
 
 **Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-07-16
 
 **Prevention:**

@@ -175,6 +175,12 @@ describe("ADR-023 word budget tiers", () => {
         "goat-clarity",
         "references/target-scope-and-evidence.md",
       ),
+      ...[
+        "references/milestone-examples.md",
+        "references/issue-format.md",
+      ].flatMap((referencePath) =>
+        installedSkillReferencePaths("goat-plan", referencePath),
+      ),
     ].map((referencePath) => ({
       referencePath,
       userFacingWordCount: countSkillBodyWords(referencePath),
@@ -194,16 +200,6 @@ describe("ADR-023 word budget tiers", () => {
       .join("\n");
 
     assert.deepEqual(overBudgetReferenceFiles, [], overBudgetFailureMessage);
-  });
-
-  it("progressive reference cap rejects at 3000 words or above", () => {
-    // Boundary examples show users that 2999 is allowed while 3000 is rejected.
-    const progressiveBudgetBoundaryResults = [
-      PROGRESSIVE_CAP - 1,
-      PROGRESSIVE_CAP,
-    ].map((userFacingWordCount) => userFacingWordCount < PROGRESSIVE_CAP);
-
-    assert.deepEqual(progressiveBudgetBoundaryResults, [true, false]);
   });
 
   it("M02 playbooks stay within their rollout budgets", () => {

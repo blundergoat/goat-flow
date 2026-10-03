@@ -163,7 +163,7 @@ describe("plans check: parallel lanes", () => {
     assert.doesNotMatch(legacy.stdout, /^active:|\(cap /mu);
   });
 
-  /** A second lane never satisfies a prerequisite that is still in progress. */
+  /** Writes lane fixtures proving a second lane never satisfies a prerequisite that is still in progress. */
   it("keeps dependencies blocking across lanes while non-strict mode remains advisory", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-lane-dependency-"));
     try {
@@ -298,7 +298,7 @@ const BANNED_IDENTIFIER_CASES = [
 
 describe("plans check: structure, identity, and dependencies", () => {
   /**
-   * Fixture purpose: reject malformed Lane fields without changing default-mode reports.
+   * Fixture purpose: reject malformed Lane fields; default-mode reports must stay unchanged.
    * Process/filesystem side effects: runs the CLI against temporary plans and removes them afterward.
    */
   it("rejects invalid and duplicate Lane declarations only in strict mode", () => {

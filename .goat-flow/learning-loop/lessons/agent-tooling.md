@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-09-04
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-04
 ## Lesson: Confused install-copy path pair for a directory move
 
 **Created:** 2026-04-18
+**Severity:** CORRECTNESS
 **Updated:** 2026-08-16
 **Decision changed:** Resolve the exact workflow source from `workflow/manifest.json` or `rg --files`, then set and verify the installed executable mode explicitly when a copy crosses filesystems.
 **Trigger phase:** READ
@@ -29,12 +30,15 @@ last_reviewed: 2026-09-04
 ## Lesson: When deny hook blocks a command, use the unblocked equivalent
 
 **Created:** 2026-03-28
-**Updated:** 2026-09-04
+**Severity:** INTEGRATION
+**Updated:** 2026-09-30
 **Decision changed:** After a guard rejects cleanup syntax, keep every destructive target literal and use the narrowest permitted file and directory operations.
 **Trigger phase:** ACT
-**Incident count:** 10 | **Latest occurrence:** 2026-09-04
+**Incident count:** 12 | **Latest occurrence:** 2026-09-30
 
 **Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves. This entry owns recovery after a block; authoring a search pattern that avoids the block is `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`).
+
+For read-only reconciliation, run Git and checksum commands directly and compare their returned data without an interpreter that launches shell commands.
 
 **What happened:** Agent needed to delete `.github/skills/goat-onboard/` and `.github/skills/goat-reflect/`. Used `rm -rf`, blocked by the destructive-shell guard. Instead of `rm file && rmdir dir` (not blocked), it asked the user to delete manually - wasting a round trip on something trivially solvable.
 
@@ -52,6 +56,8 @@ last_reviewed: 2026-09-04
 - **Recurrence 2026-08-22:** Planning reads hit both the command-segment cap and backtick classification. Smaller read batches and an inspected file-backed draft avoided both rejected shapes. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and (search: `Command has more than 50 chained segments`).
 - **Recurrence 2026-09-03:** An approved disposable-worktree cleanup used recursive removal through a validated shell variable, so PreToolUse rejected the whole batch before execution. The corrected command named the worktree literally, removed the four remaining files individually, and used `rmdir` for the two empty directories. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`).
 - **Recurrence 2026-09-04:** Two M15 read-only diagnostics were rejected before execution: a double-quoted search embedded Markdown backticks, and an inline Node wrapper referenced `spawnSync`. Literal-safe search terms and a direct CLI-to-`jq` pipeline produced the same evidence without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-09-29:** M02 closeout put Git status and checksum reconciliation inside a Python `-c` helper using `subprocess.check_output`; PreToolUse rejected the helper before execution. Direct `git status`, `git diff --cached --binary` and `sha256sum` commands, compared in the orchestration layer, verified unchanged intake bytes and staging without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-09-30:** M04 inventory piped `stats --format json` into an inline Node summarizer, and the `Pipe to interpreter` guard rejected it before execution. Writing the CLI JSON to a temporary file and feeding that file to the summarizer preserved the read-only count check. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`).
 
 ---
 
@@ -93,6 +99,7 @@ last_reviewed: 2026-09-04
 ## Lesson: Line-number evidence in footguns/lessons creates silent maintenance debt
 
 **Created:** 2026-04-24
+**Severity:** INTEGRATION
 
 **Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
 

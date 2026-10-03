@@ -27,7 +27,7 @@ afterEach(() => {
   }
 });
 
-// Write fixture files and their parent directories inside the temporary project.
+// Writes fixture files and their parent directories inside the temporary project.
 function writeFixture(directory: string, path: string, content: string) {
   const destination = join(directory, path);
   mkdirSync(dirname(destination), { recursive: true });
@@ -68,7 +68,7 @@ function createFixture() {
   return directory;
 }
 
-// Spawn Bash on production manifest discovery and policy checks, replacing only the report renderer.
+// Spawns Bash on production manifest discovery and policy checks, replacing only the report renderer.
 function runPolicySection(directory: string) {
   const source = readFileSync(
     join(repositoryRoot, "scripts/preflight-checks.sh"),
@@ -119,7 +119,7 @@ describe("preflight deny-policy deduplication", () => {
     assert.match(result.stdout, /runtime matches workflow\/hooks/u);
   });
 
-  // Write or remove one runtime member per case; equal entrypoints alone cannot authorize reuse.
+  // Writes or removes one runtime member per case; equal entrypoints alone cannot authorize reuse.
   it("rejects entrypoint, shared-runtime, corpus and GraphQL drift before executing suites", () => {
     const cases = [
       ["deny-dangerous.sh", "change"],
@@ -180,7 +180,7 @@ describe("preflight deny-policy deduplication", () => {
     assert.match(result.stdout, /PASS .*deny-git-mutations\.sh/u);
   });
 
-  // Execute the published command against complete, incomplete and consumer-only fixture trees.
+  // Spawns the published command against complete, incomplete and consumer-only fixture trees; each must get its documented verdict.
   it("requires complete canonical runtime in the documented verification command", () => {
     const playbook = readFileSync(
       join(repositoryRoot, "workflow/skills/playbooks/hook-policy-testing.md"),
@@ -213,8 +213,12 @@ describe("preflight deny-policy deduplication", () => {
       );
       const runs = join(directory, "full-suite-runs");
       if (state === "missing-entrypoint") {
-        assert.match(result.stderr, /workflow\/hooks\/deny-dangerous\.sh/u);
-        assert.equal(existsSync(runs), false);
+        assert.match(
+          result.stderr,
+          /workflow\/hooks\/deny-dangerous\.sh/u,
+          `fixture ${state}`,
+        );
+        assert.equal(existsSync(runs), false, `fixture ${state}`);
       } else {
         assert.deepEqual(
           readFileSync(runs, "utf8").trim().split("\n").sort(),
@@ -223,6 +227,7 @@ describe("preflight deny-policy deduplication", () => {
               (policy) => `${installedDirectory}/${policy}.sh --self-test=full`,
             )
             .sort(),
+          `fixture ${state}`,
         );
       }
     }

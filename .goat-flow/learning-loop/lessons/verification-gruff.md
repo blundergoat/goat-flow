@@ -8,6 +8,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
 **Status:** active | **Created:** 2026-05-25
+**Severity:** INTEGRATION
 **Decision changed:** Treat a human-readable comment, boolean name, or compact test as unfinished until the targeted analyzer accepts the exact source shape; read the installed rule before a second rewrite.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -40,6 +41,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff doc comments can expose hidden complexity warnings
 
 **Status:** active | **Created:** 2026-05-30
+**Severity:** INTEGRATION
 **Decision changed:** After any docs batch, analyzer upgrade, or conflict resolution, run the full-scan warning count and the ratchet before the lint gate, even while build and typecheck are green.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -70,6 +72,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Keep the binary path returned by the gruff availability check
 
 **Status:** active | **Created:** 2026-08-03
+**Severity:** INTEGRATION
 **Decision changed:** Run later Gruff commands through the exact `$found` path instead of guessing a global install location.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -86,6 +89,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff-driven direct imports must preserve facade proof
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-05-31
 
 **Prevention:** When direct imports are needed to prove a nearby implementation module, keep the stable facade exports exercised with explicit alignment assertions in existing nearby tests. For endpoint arrays without a sort contract, select records by semantic identifier before asserting fields. Evidence anchors: `src/cli/audit/audit.ts` (search: `createAuditFactsView`), `src/cli/quality/skill-quality.ts` (search: `scoreAllArtifacts`), `test/integration/dashboard-tasks-api.test.ts` (search: `milestoneByFilename`).
@@ -101,6 +105,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff side-effect comments must name the side effect
 
 **Status:** active | **Created:** 2026-05-30 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-09-12
 
 **Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, name the side effect in plain maintainer language (`Writes`, `Spawns`, `filesystem`) instead of a generic purpose sentence, and do not swap that verb for a synonym later. If the finding remains, read the installed rule before another rewrite. After a large docs batch, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
@@ -119,12 +124,13 @@ last_reviewed: 2026-09-19
 ## Lesson: A source comment can be a cited learning-loop anchor, so rewording it breaks the audit
 
 **Status:** active | **Created:** 2026-08-18
+**Severity:** INTEGRATION
 **Decision changed:** Before rewording an existing comment during a docs pass, grep the learning loop for that exact string; a cited comment is a durable artifact, not free text.
 **Trigger phase:** READ
 **Caught at:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-09-19
+**Incident count:** 5 | **Latest occurrence:** 2026-10-03
 
-**Prevention:** When a docs pass rewords an existing comment, keep the cited substring intact and add the analyzer vocabulary in a second sentence. Run `stats --check` or the harness audit after any batch that rewrites existing comments, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).
+**Prevention:** When a docs pass rewords an existing comment, keep the cited substring intact and add the analyzer vocabulary in a second sentence. Before rewording, search the learning loop for the file's path to list every anchor it cites; matching is case-sensitive. Run `stats --check` or the harness audit after any batch that rewrites existing comments, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).
 
 **What happened:** Rewriting "Write canonical skill stubs" to "Writes canonical skill stubs" in `test/integration/audit-drift.helpers.ts` cleared `docs.missing-side-effect-doc`, passed typecheck, and then failed `test/unit/support-bundle.test.ts` ("emits clean JSON through the CLI", expected exit 0, got 1): the diagnostics bundle embeds the harness audit, whose `feedback-loop-active` check runs `stats --check`, which found this bucket citing the old wording as a search anchor. One letter in a test-helper comment failed a CLI contract three layers away.
 
@@ -135,6 +141,8 @@ last_reviewed: 2026-09-19
 **Recurrence 2026-09-19:** To keep the migrations test file under Gruff's 1000-line error, a milestone moved its disabled-hook cases into `test/integration/setup-install-write-set.test.ts` (search: `keeps disabled hooks installed and inert`). A pattern entry cited the old file with that case title, so `stats --check` reported a stale reference after the five changed test files had passed. The repaired anchor keeps the old path and cites that file's own suite title: `test/integration/setup-install-migrations.test.ts` (search: `setup --apply installer upgrade migrations`). Moving code, not only rewording it, needs the same search of cited text first.
 
 **Recurrence 2026-09-19 (renamed function):** A milestone renamed the hook function that projects analyzer results, because it now reads two contract versions. The focused tests, shellcheck and `npm test` passed, then preflight failed two rows on one cause: `stats --check` reported `stale-ref` and the content audit reported `stale-semantic-anchor`, both for a footgun that searched for the old name. The anchor now names the current function: `workflow/hooks/gruff-code-quality.sh` (search: `hook_contract_report`). The M19 recurrence above already said to search cited text before moving code; a rename needs the same search.
+
+**Recurrence 2026-10-03:** A comment pass reworded the `src/cli/hooks-configured-runtime-evidence.ts` header and lowercased "Shared report contracts", which `lessons/naming.md` cites. Step 0 had retrieved this lesson, but the phrase searches before editing covered other headers, not this one. `stats --check` reported the stale reference after Prettier, typecheck and the Gruff identity comparison had passed. Evidence anchor: `src/cli/hooks-configured-runtime-evidence.ts` (search: `Shared report contracts`).
 
 ---
 

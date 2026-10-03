@@ -1,6 +1,6 @@
 ---
 category: verification-scanners
-last_reviewed: 2026-09-20
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Proving a guard, scanner, or parser actually guards - block-and-allow pairs, false-positive probes, parser-shape fixtures per claimed file family, and self-test fanout. What a test must assert generally is [verification-testing.md](verification-testing.md); Gruff specifics are [verification-gruff.md](verification-gruff.md); Markdown formatting reaching a shell argument is [verification-preflight.md](verification-preflight.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
 
 **Status:** active | **Created:** 2026-06-03
+**Severity:** SECURITY
 **Decision changed:** Verify fallback and optimized hook paths against the same adversarial repository configuration, not only the same payload.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -28,6 +29,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Security parser fixes need focused parser proof
 
 **Status:** active | **Created:** 2026-05-30 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-09-20
 
 **Prevention:** For security changes that parse shell or agent-config command strings, run the focused parser and contract tests immediately, avoid dynamic regex construction when a literal token scan is enough, run `goat-flow stats --check` after renaming test anchors that learning-loop artifacts cite, and let current type and lint evidence override stale lesson text. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `extractConfiguredScriptPath`), `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
@@ -73,6 +75,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Temp cleanup must satisfy destructive-command hooks
 
 **Status:** active | **Created:** 2026-05-08
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-08-27
 
 **Prevention:** For verification scratch space, prefer non-recursive cleanup (`rm -f` known files, then `rmdir`) or an explicit literal temp path that satisfies the hook. Do not combine validation and variable-scoped `rm -rf` in the same command, and do not place recursive removal in an `EXIT` trap inside the same shell program: the guard classifies the whole program before `mktemp` runs, so the validation never happens. Keeping a printed temp directory as disposable evidence is preferable to coupling proof to cleanup. Evidence anchor: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `embedded variable recursive rm`).
@@ -100,6 +103,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Scanner hardening must test block and allow cases together
 
 **Status:** active | **Created:** 2026-06-14
+**Severity:** SECURITY
 **Incident count:** 4 | **Latest occurrence:** 2026-08-09
 
 **Prevention:** For credential-scanner changes, run a matrix including must-block misses and must-allow placeholder assignments after each parser edit. Parse and normalize the assignment key first, classify it second, and expect a broader key match to require explicit placeholder allowlist proof. Capture regex matches into locals before calling helpers, because a helper can overwrite `BASH_REMATCH`. Compare normalized findings across the full block-and-allow corpus rather than treating a few equal exit codes as parity, and inventory every external command, redirection, and direct content read before treating named reproductions as completeness proof. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_env_assignment`), `test/integration/post-turn-safety-hook.test.ts` (search: `blocks exported credential assignments`), `test/integration/post-turn-safety-hook.test.ts` (search: `allows safe placeholders in env examples`).
@@ -117,6 +121,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Scanner scope gates need parser-shape fixtures for each claimed file family
 
 **Status:** active | **Created:** 2026-06-14
+**Severity:** SECURITY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-24
 
 **Prevention:** When a scanner scope gate lists file families, add at least one block fixture for each family whose syntax differs from the default parser shape. For Dockerfiles, probe `ARG KEY=value` and `ENV KEY=value`, the space forms `ARG KEY value` and `ENV KEY value`, and multi-assignment `ENV SAFE=x API_TOKEN=...`; for config key classifiers, probe snake_case, uppercase, and camelCase or PascalCase credential names plus excluded suffixes such as `tokenCount`, `secretName`, and `clientSecretId`. When adding a token family, pair its positive examples with ambiguous shorthand sharing its punctuation. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_env_assignment_file`), `test/integration/post-turn-safety-hook.test.ts` (search: `blocks Dockerfile ARG and ENV credential assignments`).

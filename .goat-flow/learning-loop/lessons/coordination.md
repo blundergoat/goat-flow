@@ -8,6 +8,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
+**Severity:** CORRECTNESS
 **Decision changed:** Test platform-specific admission through injected discovery results, not shared process globals.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -58,6 +59,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Verification phases must cross-reference between artifacts, not just check each internally
 
 **Status:** active | **Created:** 2026-05-01
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-08-17
 
 **Prevention:** Add "programme document claims match per-plan deliverables" as a verification check. When an artifact changes owner, grep both the old path and its old prose label across every touched artifact; cross-document consistency is the gap between internal-file verification and audit completeness.

@@ -1,6 +1,6 @@
 ---
 category: skill-guidance
-last_reviewed: 2026-09-14
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Editing shipped skill and playbook guidance: behavioural wording, authority alignment, contract caps, and load-budget signals. Skill candidacy and runtime authoring traps live in [skill-authoring.md](skill-authoring.md); mirror sync lives in [skills.md](skills.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-14
 ## Footgun: Linter or security-scanner output can pressure rewrites of load-bearing skill language
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 **Decision changed:** Treat forceful wording as a behavioural-control candidate, not an untouchable string: preserve or replace it according to behavioural evidence, then update every durable anchor.
 **Trigger phase:** READ | **Caught at:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-08-29
 
@@ -24,6 +25,7 @@ last_reviewed: 2026-09-14
 ## Footgun: Playbook content edits collide with the ADR-023 word cap and exact-phrase contract assertions
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Measure the body budget and inventory phrase-pinning contracts, vocabulary consumers, and reconciliation owners before adding or compressing shipped skill guidance.
 **Trigger phase:** READ
 **Caught at:** ACT
@@ -36,7 +38,7 @@ node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8").replace(/^--
 rg -n "<name>|<distinctive heading or phrase>" test/contract/skill-hardening-*.test.ts
 ```
 
-For a closed vocabulary or reconciliation equation, also grep every label and total across skills, references, receipts, docs, and release prose, and contract which equation applies to each selector or change state; independent literal-presence checks can preserve two contradictory owners. Restore pinned phrases verbatim after any compression, take compensating words from prose no assertion covers, run the relevant skill-hardening contracts before preflight, and mirror the result to every installed copy in the same turn.
+For a closed vocabulary or reconciliation equation, also grep every label and total across skills, references, receipts, docs, and release prose, and contract which equation applies to each selector or change state; independent literal-presence checks can preserve two contradictory owners. Restore pinned phrases verbatim after any compression, take compensating words from prose no assertion covers, and mirror the result to every installed copy in the same turn. After skill or playbook edits, run `npm run check:touched` for guidance contracts and `stats --check` before preflight; for docs-only edits, run the relevant contracts directly.
 
 **Symptoms:** A playbook edit clears local checks, then preflight rejects its body budget, or a compensating compression breaks exact-phrase contracts.
 
@@ -84,6 +86,7 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 ## Footgun: goat-plan surface additions collide with near-full word-budget contract caps
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Measure the current per-file budgets and preserve existing rules; shorten only new wording unless the user approves a semantic change.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -93,7 +96,7 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 
 **Symptoms:** A small approved addition to goat-plan's SKILL.md or reference files passes every phrase-pinning assertion and the mirror byte-identical check, then fails `keeps the redesigned goat-plan canonical surface within its tighter budget`.
 
-**Why it happens:** Earlier redesign budgets capped both the skill body and the combined three-file surface, leaving only one word of headroom at 2099/2100 and 4499/4500 before 2026-08-15. Useful additions then competed with existing controls. Those special caps were replaced on 2026-09-14: `test/contract/skill-hardening-plan-2.test.ts` (search: `keeps canonical goat-plan files within the standard per-file budgets`) now enforces a body below 2500 words and each reference below 3000, without an aggregate cap. `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) owns frontmatter exclusion. The earlier assertion names and numbers below describe historical incidents.
+**Why it happens:** Earlier redesign budgets capped both the skill body and the combined three-file surface, leaving only one word of headroom at 2099/2100 and 4499/4500 before 2026-08-15. Useful additions then competed with existing controls. Those special caps were replaced on 2026-09-14 with a body below 2500 words and each reference below 3000, without an aggregate cap. Since the 2026-09-30 consolidation, `test/contract/skill-hardening-contracts.test.ts` owns both checks (search: `functional skills stay within the 2500-word cap across all mirrors`; `progressive reference packs stay within the 3000-word cap per file`), including the installed plan-reference copies. `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) owns frontmatter exclusion. The earlier assertion names and numbers below describe historical incidents.
 
 **Incident ledger:**
 - **2026-08-15:** adding two template sections plus one SKILL.md sentence (97 words) tipped both caps to 2117/2100 and 4596/4500; the user approved raising them to 2150/4650.
@@ -133,6 +136,8 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 **Why it happens:** The skill's output template sits inside a fenced block, so `<canonical JSON>` carries no backticks there, while every other literal in the skill does; authors wrap the JSON to match. The parenthetical `(source coverage: <k>/<n> exactly once)` reads as an instruction to state coverage once, but the words are part of the regex. The template names `Gate authority` without showing the no-gate record, so an empty object looks honest. `src/cli/review-validate-common.ts` (search: `FULL_REVIEW_SIZE_VALUE`) and (search: `function readIntegrityJson`) own the first two; `src/cli/review-validate-verdict.ts` (search: `exactly one nonempty explanation per emitted flag`) owns the last.
 
 **Evidence:** On 2026-09-07, twelve isolated goat-review runs across six cases all wrapped JSON rows in code spans and all dropped the literal `exactly once`; none emitted the `goat-review-gates/v1` record. Scored by reading, four format classes looked fixed. `review validate-draft` on one produced report returned 12 violations, and stripping only the code spans cleared two of them. Three confirmation runs against the corrected root then produced zero violations in the corrected classes, while two of them still carried prose inside canonical rows and one defended zero findings as bullets under the Findings heading; both shapes are recorded here and left for the next review-skill wording pass rather than edited without a run behind them. The root now states each rule once: `workflow/skills/goat-review/SKILL.md` (search: `**JSON rows:**`), (search: `literal "exactly once"`), and (search: `**Gate authority:**`), pinned by `test/contract/skill-hardening-review-2.test.ts` (search: `bare canonical JSON, never code spans`).
+
+**Recurrence 2026-09-30:** An M06 review draft used the wrong bundle name/extension, counted five ledger refutations as finding evidence, omitted the literal bold `Decision:` row, and claimed `confident` despite `gates-not-run`. Draft validation returned four violations, then one remaining bundle violation. Reading the executable grammar and correcting the declarations produced `review validate-draft: PASS (persistence unverified)` and `review validate: PASS`. Use `goat-review-bundle.<random>.diff`, count visible finding evidence only, and derive conclusion/verdict from the emitted flags. Owners: `src/cli/review-validate-common.ts` (search: `REVIEW_BUNDLE_PATH`; `Decision:`), `src/cli/review-validate-verdict.ts` (search: `conclusionForDegradationFlags`), and `src/cli/review-validate-sections.ts` (search: `Evidence claims`).
 
 ## Footgun: The review degradation vocabulary has no honest token for an unavailable authority producer
 

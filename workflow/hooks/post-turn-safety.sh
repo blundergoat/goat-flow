@@ -3,34 +3,14 @@
 # post-turn-safety.sh
 # goat-flow-hook-version: 1.17.0
 #
-# Purpose:
-#   Universal Stop-event safety guard for supported agents. This hook checks
-#   changed text content for built-in safety hazards that goat-flow can evaluate
-#   without knowing the target project's language stack or validation commands.
+# Scan changed user text for built-in safety hazards at the end of an agent turn.
 #
-# Runtime contract:
-#   This is not project validation. It does not run tests, builds, linters, or
-#   formatters, and it must not claim that the project passed validation. It
-#   blocks only high-confidence safety hazards in changed content.
+# Use this content check alongside project tests, builds and linters; it never claims those checks passed.
+# Direct runs exit 0 when clean, 2 for findings or incomplete work, and 1 for host unavailability.
+# Managed runs return a structured outcome for the provider adapter, including blocks and incomplete coverage.
 #
-# Exit codes:
-#   0  clean scan, no findings
-#   1  reserved for host-level hook unavailability
-#   2  findings blocked, or the scan could not complete
-#
-# Bash 4+ performance architecture (Windows Git Bash ships fork costs 10-40x
-# Linux, so its optimized scan must not spawn per line or per file):
-#   1. Path sets come from the same `git diff --name-only -z` / `git ls-files -z`
-#      plumbing as before, but content is read through one batched
-#      `git diff --unified=0` per pass instead of one diff process per path.
-#   2. A grep pre-filter (a provable superset of every scan_line trigger, see
-#      the *_RE definitions) selects candidate lines; only matched lines reach
-#      the per-line bash analysis.
-#   3. Its string helpers are pure bash (no sed/tr/subshell forks).
-#   4. External commands are chunked to stay inside Windows' command-line
-#      length limit; total process count is O(passes), not O(files or lines).
-# The Bash 3 compatibility path favors coverage on stock macOS and remains
-# bounded by the same wall-clock, file-size, and output limits.
+# Bash 4+ batches diffs and candidate lines to avoid slow per-file or per-line process creation in Git Bash.
+# Bash 3 compatibility preserves the same coverage and wall-clock, file-size and output limits on stock macOS.
 
 set -uo pipefail
 shopt -s extglob
@@ -65,6 +45,7 @@ post_turn_result_record_error=0
 post_turn_result_detail=""
 post_turn_result_reason_override=""
 bounded_reentry_ended=0
+post_turn_infrastructure_failure=0
 stop_payload_present=0
 stop_session_fingerprint=""
 stop_hook_active=0
@@ -137,8 +118,14 @@ emit_post_turn_hook_result() {
 
   # A record-write failure makes detailed provider feedback unavailable even if scanning continued.
   if [ "$post_turn_result_record_error" -ne 0 ]; then
-    result_outcome="unavailable"
-    result_reason_code="hook-unavailable"
+    # A known hazard stays blocking even when its detailed record could not be retained.
+    if [ "$observed_finding_count" -gt 0 ]; then
+      result_outcome="block"
+      result_reason_code="policy-blocked"
+    else
+      result_outcome="unavailable"
+      result_reason_code="hook-unavailable"
+    fi
     result_detail="Hook result details could not be retained for provider delivery"
   # One verified repeat ends the provider cycle but remains explicitly incomplete for the user.
   elif [ "$bounded_reentry_ended" -ne 0 ]; then
@@ -185,8 +172,15 @@ emit_post_turn_hook_result() {
     POST_TURN_RESULT_SKIPPED_UNITS="$skipped_scan_units" \
     POST_TURN_RESULT_DETAIL="$result_detail" \
     POST_TURN_RESULT_DURATION_MS="$result_duration_ms" \
-    node -e '
-const { existsSync, readFileSync } = require("node:fs");
+    POST_TURN_RESULT_INFRASTRUCTURE_FAILURE="$post_turn_infrastructure_failure" \
+    POST_TURN_RESULT_DETECTED_FINDINGS="$observed_finding_count" \
+    POST_TURN_SCANNER_PATH="${BASH_SOURCE[0]}" \
+    node --input-type=module -e '
+const { existsSync, readFileSync } = await import("node:fs");
+const { dirname, join, resolve } = await import("node:path");
+const { pathToFileURL } = await import("node:url");
+// Windows Node resolves either separator, so a controller child launched with a backslash path still finds its sibling runtime.
+const { compactHookResultEnvelope } = await import(pathToFileURL(join(dirname(resolve(process.env.POST_TURN_SCANNER_PATH)), "hook-launch-runtime.mjs")).href);
 const recordsPath = process.env.POST_TURN_RESULT_RECORDS_PATH ?? "";
 let resultOutcome = process.env.POST_TURN_RESULT_OUTCOME;
 let resultReasonCode = process.env.POST_TURN_RESULT_REASON_CODE;
@@ -207,8 +201,11 @@ try {
   }
 } catch {
   // For example, cleanup software may remove the temporary records file before Stop finishes.
-  resultOutcome = "unavailable";
-  resultReasonCode = "hook-unavailable";
+  // Lost detail cannot downgrade a hazard the scanner already confirmed.
+  if (resultOutcome !== "block") {
+    resultOutcome = "unavailable";
+    resultReasonCode = "hook-unavailable";
+  }
   resultDetail = "Hook result details could not be read for provider delivery";
   userVisibleFindings = [];
 }
@@ -235,6 +232,11 @@ const resultEnvelope = {
   },
   reasonCode: resultReasonCode,
   findings: userVisibleFindings,
+  ...(Number(process.env.POST_TURN_RESULT_DETECTED_FINDINGS) > 0 ? { summary: {
+    detectedFindings: Math.max(Number(process.env.POST_TURN_RESULT_DETECTED_FINDINGS), userVisibleFindings.length),
+    envelopeOmittedFindings: Math.max(0, Number(process.env.POST_TURN_RESULT_DETECTED_FINDINGS) - userVisibleFindings.length),
+    presentationOmittedFindings: 0,
+  } } : {}),
   execution: {
     hookVersion: process.env.POST_TURN_HOOK_VERSION,
     provider: providerIdentifier,
@@ -242,9 +244,10 @@ const resultEnvelope = {
     adapterName: `${providerIdentifier}-${hookEvent}`,
     adapterVersion: process.env.GOAT_FLOW_HOOK_ADAPTER_VERSION ?? "1",
     durationMs: Number(process.env.POST_TURN_RESULT_DURATION_MS),
+    ...(process.env.POST_TURN_RESULT_INFRASTRUCTURE_FAILURE === "1" ? { failureClass: "infrastructure" } : {}),
   },
 };
-process.stdout.write(`${JSON.stringify(resultEnvelope)}\n`);
+process.stdout.write(`${JSON.stringify(compactHookResultEnvelope(resultEnvelope))}\n`);
 '
 }
 
@@ -291,8 +294,8 @@ read_stop_context() {
   while IFS= read -r stop_payload_line || [ -n "$stop_payload_line" ]; do
     stop_payload_json="${stop_payload_json}${stop_payload_json:+$'\n'}${stop_payload_line}"
     # Oversized provider input cannot be trusted as the user's Stop event.
-    if [ "${#stop_payload_json}" -gt 65536 ]; then
-      stop_payload_error="payload exceeds 65536 bytes"
+    if [ "${#stop_payload_json}" -gt 1048576 ]; then
+      stop_payload_error="payload exceeds 1048576 bytes"
       return 1
     fi
   done
@@ -351,6 +354,7 @@ resolve_stop_reentry_root_without_git() {
   if [ "$stop_payload_present" -eq 0 ] || [ -z "$stop_session_fingerprint" ]; then
     return 1
   fi
+  # A vanished working directory cannot own recovery state for this session.
   if ! managed_root="$(pwd -P 2>/dev/null)" || [ -z "$managed_root" ]; then
     return 1
   fi
@@ -364,13 +368,12 @@ resolve_stop_reentry_root_without_git() {
   printf '%s\n' "$managed_root"
 }
 
-# Resolve the ignored owner-local state file used to bound a repeated Stop failure.
-# The path contains hashes only, so it never stores the user's session ID or changed content.
-# The record is session-specific, so the filename must be too: two sessions working in one
-# project would otherwise overwrite each other's record, and a clean result in either would
-# delete the sibling's, leaving both to keep blocking instead of reaching the second-Stop exit.
+# Resolve the ignored state path for scanner-owned legacy Stop recovery.
+#
+# Store hashes rather than session IDs or user content; session-specific names keep one session from replacing another recovery record.
 set_stop_state_paths() {
-  stop_state_directory="$1/.goat-flow/scratchpad"
+  stop_state_relative_directory=".goat-flow/scratchpad"
+  stop_state_directory="$1/$stop_state_relative_directory"
   # The fingerprint is validated hex, so a bounded slice is always a safe filename component.
   local session_key="${stop_session_fingerprint:0:32}"
   # A direct user run parses no session and still needs one stable owner-local path.
@@ -437,8 +440,9 @@ write_stop_reentry_state() {
   if [ -L "$repository_root/.goat-flow" ] || [ -L "$stop_state_directory" ]; then
     return 1
   fi
-  # Create the private state directory only inside the verified project root.
-  if ! (umask 077 && mkdir -p "$stop_state_directory"); then
+  # Create the private state directory only inside the verified project root. The path stays relative to that root because
+  # Git Bash refuses `mkdir -p` on an absolute //wsl.localhost path even when the directory already exists.
+  if ! (cd "$repository_root" 2>/dev/null && umask 077 && mkdir -p "$stop_state_relative_directory"); then
     return 1
   fi
   # Existing state may be replaced only when it is a regular file owned by this user.
@@ -504,6 +508,12 @@ stop_reentry_state_matches() {
 finish_infrastructure_failure() {
   local repository_root="$1"
   local failure_identity="$2"
+  post_turn_infrastructure_failure=1
+
+  # The verified launcher owns this turn allowance; the scanner reports its fresh infrastructure outcome without resetting state.
+  if [ "${GOAT_FLOW_STOP_RECOVERY_OWNER:-}" = "launcher" ]; then
+    return 2
+  fi
 
   # Direct runs and invalid provider context have no safe identity for re-entry handling.
   if [ "$stop_payload_present" -eq 0 ] || [ -z "$stop_session_fingerprint" ]; then
@@ -534,50 +544,63 @@ finish_repository_root_failure() {
   local failure_identity="$1"
   local managed_root=""
 
+  # An unverified launch root cannot authorize legacy recovery for the user.
   if ! managed_root="$(resolve_stop_reentry_root_without_git)"; then
     return 2
   fi
   finish_infrastructure_failure "$managed_root" "$failure_identity"
 }
 
-# Scan only the explicit Git roots configured for a managed non-Git controller.
-# Each child emits the existing provider-neutral envelope, so aggregation never parses human stderr
-# or reimplements detector decisions. Exit 3 means the complete configured root contract could not
-# be established and preserves the bounded single-project root failure below.
-run_controller_child_scans() {
-  local controller_root=""
-  local controller_result=""
-  local controller_status=0
-  local hook_script="${BASH_SOURCE[0]}"
+# Tell the user why Git withheld the repository root, naming the one cause only they can clear.
+# Git refuses a checkout it treats as owned by another account, such as a \\wsl.localhost path opened from Windows.
+report_repository_root_failure() {
+  local root_lookup_error=""
 
-  # A child whose Git commands fail must report that failure instead of recursively widening scope.
-  if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then
-    return 3
-  fi
-  if ! command -v node >/dev/null 2>&1 || \
-    ! controller_root="$(pwd -P 2>/dev/null)" || [ -z "$controller_root" ]; then
-    return 3
-  fi
+  post_turn_result_detail="The selected Git repository root could not be opened"
+  printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+  root_lookup_error="$(LC_ALL=C git rev-parse --show-toplevel 2>&1 >/dev/null)"
+  # Trusting a refused checkout is the user's decision, so the result names that step instead of a generic failure.
+  case "$root_lookup_error" in
+    *"dubious ownership"*)
+      post_turn_result_detail="Git refused this repository for dubious ownership; the user must add it to Git safe.directory before the scan can run"
+      printf 'post-turn-safety: %s.\n' "$post_turn_result_detail" >&2
+      ;;
+  esac
+}
 
-  # shellcheck disable=SC2016 # Literal JavaScript must not expand shell or provider text.
-  controller_result="$(
-    GOAT_FLOW_CONTROLLER_PARENT_MIGRATED="$post_turn_migrated_result_mode" \
-      GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT="$stop_session_fingerprint" \
-      GOAT_FLOW_CONTROLLER_STOP_ACTIVE="$stop_hook_active" \
-      POST_TURN_HOOK_VERSION="$post_turn_hook_version" \
-      node -e '
-const { readFileSync, realpathSync, statSync } = require("node:fs");
-const { spawnSync } = require("node:child_process");
-const path = require("node:path");
+# Run the controller program for the given root and scanner path, printing its result envelope; exit 3 means no valid root list exists.
+#
+# The program reaches Node on stdin through a quoted heredoc, so provider text never expands in it and Windows' command-line limit never applies.
+# A function body keeps that heredoc out of `$(...)`, whose parsing differs across the Bash versions this scanner supports.
+run_controller_program() {
+  GOAT_FLOW_CONTROLLER_PARENT_MIGRATED="$post_turn_migrated_result_mode" \
+    GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT="$stop_session_fingerprint" \
+    GOAT_FLOW_CONTROLLER_STOP_ACTIVE="$stop_hook_active" \
+    POST_TURN_HOOK_VERSION="$post_turn_hook_version" \
+    node --input-type=module - "$1" "$2" <<'GOAT_FLOW_CONTROLLER_PROGRAM'
+const { readFileSync, realpathSync, statSync } = await import("node:fs");
+const { spawn, spawnSync } = await import("node:child_process");
+const path = await import("node:path");
+const { pathToFileURL } = await import("node:url");
 
-const hookScript = path.resolve(process.argv[1], process.argv[2]);
-const controllerRoot = realpathSync(process.argv[1]);
+// Node reads this program from stdin, so its two arguments follow the "-" script marker in process.argv.
+const [controllerRootArgument, hookScriptArgument] = process.argv.slice(2);
+const hookScript = path.resolve(controllerRootArgument, hookScriptArgument);
+// Bash accepts forward slashes on every host, and each child derives its sibling runtime path from this argument.
+const bashScriptArgument = hookScript.replace(/\\/gu, "/");
+const controllerRoot = realpathSync(controllerRootArgument);
 const startedAt = Date.now();
 const resultSchema = "goat-flow.hook-result.v1";
 const provider = process.env.GOAT_FLOW_HOOK_PROVIDER || "claude";
 const hookVersion = process.env.POST_TURN_HOOK_VERSION || "unknown";
 const adapterVersion = process.env.GOAT_FLOW_HOOK_ADAPTER_VERSION || "1";
 const parentMigrated = process.env.GOAT_FLOW_CONTROLLER_PARENT_MIGRATED === "1";
+const managedRuntime = parentMigrated
+  ? await import(pathToFileURL(path.join(path.dirname(hookScript), "hook-launch-runtime.mjs")).href)
+  : null;
+const managedLauncher = parentMigrated
+  ? await import(pathToFileURL(path.join(path.dirname(hookScript), "run-with-bash.mjs")).href)
+  : null;
 const sessionFingerprint = process.env.GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT || "";
 const stopHookActive = process.env.GOAT_FLOW_CONTROLLER_STOP_ACTIVE === "1";
 const configuredSeconds = Number(process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS || "60");
@@ -587,6 +610,7 @@ const maximumMilliseconds = Number.isInteger(configuredSeconds) && configuredSec
 const allowedOutcomes = new Set(["pass", "block", "advisory", "incomplete", "unavailable"]);
 const allowedCoverage = new Set(["complete", "partial", "none"]);
 
+// Represent a declared repository that could not be scanned, preserving unavailable coverage for the user.
 function syntheticResult(reasonCode, message) {
   return {
     schema: resultSchema,
@@ -606,21 +630,33 @@ function syntheticResult(reasonCode, message) {
       adapterName: `${provider}-turn-stop`,
       adapterVersion,
       durationMs: 0,
+      ...(["hook-unavailable", "execution-timeout"].includes(reasonCode) ? { failureClass: "infrastructure" } : {}),
     },
   };
 }
 
+// Accept only the expected scanner contract before a child can contribute coverage or findings.
 function validChildResult(value) {
+  // Empty or non-object output cannot describe a completed repository scan.
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  // A response from another hook or event cannot establish this repository coverage.
   if (value.schema !== resultSchema || value.hookId !== "post-turn-safety" || value.event !== "turn-stop") return false;
+  // Unknown decisions or missing reasons cannot explain the result to the user.
   if (!allowedOutcomes.has(value.outcome) || typeof value.reasonCode !== "string") return false;
   const coverage = value.coverage;
+  // Missing coverage facts cannot turn an unscanned repository into completed work.
   if (coverage === null || typeof coverage !== "object" || Array.isArray(coverage)) return false;
+  // Coverage must use the same complete, partial or unavailable states shown to the user.
   if (!allowedCoverage.has(coverage.status)) return false;
+  // Repository counts must describe whole scan units, not fractional or missing work.
   if (![coverage.attemptedUnits, coverage.completedUnits, coverage.skippedUnits].every(Number.isInteger)) return false;
+  // This child owns one declared repository and cannot claim negative completed or skipped work.
   if (coverage.attemptedUnits !== 1 || coverage.completedUnits < 0 || coverage.skippedUnits < 0) return false;
+  // Completed and skipped coverage cannot exceed the single repository assigned to this child.
   if (coverage.completedUnits + coverage.skippedUnits > coverage.attemptedUnits) return false;
+  // The child must supply a bounded finding list before its details reach provider feedback.
   if (!Array.isArray(value.findings) || value.findings.length > 20) return false;
+  // Each retained finding needs a readable code, message and any supplied target.
   if (!value.findings.every((finding) => finding !== null && typeof finding === "object" && !Array.isArray(finding) &&
     typeof finding.code === "string" && finding.code.trim().length > 0 &&
     typeof finding.message === "string" && finding.message.trim().length > 0 &&
@@ -630,28 +666,36 @@ function validChildResult(value) {
     execution.provider === provider && execution.hookVersion === hookVersion;
 }
 
+// Name the declared repository beside each finding so the user knows which project needs repair.
 function prefixTarget(childName, target) {
+  // A project-level finding needs only its declared repository name.
   if (typeof target !== "string" || target === "project") return childName;
   return `${childName}/${target}`;
 }
 
 const singleQuote = String.fromCharCode(39);
 
+// Remove actual YAML comments while preserving hash characters inside quoted root names.
 function stripYamlComment(text) {
   let inSingle = false;
   let inDouble = false;
   let escaped = false;
+  // Walk the saved root text so quoted folder names retain their literal characters.
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
+    // An escaped character belongs to the saved value rather than changing its quote boundaries.
     if (escaped) {
       escaped = false;
       continue;
     }
+    // A backslash inside double quotes escapes the next character in the configured name.
     if (inDouble && character === "\\") {
       escaped = true;
       continue;
     }
+    // Single quotes delimit a saved string unless they are inside a double-quoted value.
     if (!inDouble && character === singleQuote) {
+      // Doubled single quotes represent a literal quote in the configured folder name.
       if (inSingle && text[index + 1] === singleQuote) {
         index += 1;
         continue;
@@ -659,10 +703,12 @@ function stripYamlComment(text) {
       inSingle = !inSingle;
       continue;
     }
+    // Double quotes delimit a saved string unless they occur inside a single-quoted value.
     if (!inSingle && character === "\"") {
       inDouble = !inDouble;
       continue;
     }
+    // Only an unquoted comment marker ends the saved configuration value.
     if (!inSingle && !inDouble && character === "#" &&
       (index === 0 || /\s/u.test(text[index - 1]))) {
       return text.slice(0, index).trimEnd();
@@ -671,28 +717,36 @@ function stripYamlComment(text) {
   return text.trimEnd();
 }
 
+// Read one configured root name; null means the saved value cannot identify a repository.
 function yamlStringScalar(rawValue) {
   const value = stripYamlComment(rawValue).trim();
+  // An empty value cannot name a repository for the controller to scan.
   if (value.length === 0) return null;
+  // A single-quoted root keeps its literal name, including doubled quote characters.
   if (value.startsWith(singleQuote) && value.endsWith(singleQuote)) {
     return value.slice(1, -1).split(singleQuote + singleQuote).join(singleQuote);
   }
+  // A double-quoted root uses JSON-compatible escapes before becoming a path.
   if (value.startsWith("\"") && value.endsWith("\"")) {
     try {
       const decoded = JSON.parse(value);
       return typeof decoded === "string" ? decoded : null;
     } catch {
+      // A saved double-quoted root with an invalid escape cannot identify a repository to scan.
       return null;
     }
   }
+  // YAML nulls, booleans and numbers cannot silently become user repository names.
   if (/^(?:null|~|true|false)$/iu.test(value) || /^[-+]?\d+(?:\.\d+)?$/u.test(value)) {
     return null;
   }
   return value;
 }
 
+// Read the requested configuration key without treating unrelated settings as scan roots.
 function yamlMappingValue(line, expectedKey) {
   const separatorIndex = line.indexOf(":");
+  // A line without a mapping separator does not declare the requested setting.
   if (separatorIndex < 0) return null;
   const parsedKey = yamlStringScalar(line.slice(0, separatorIndex));
   return parsedKey === expectedKey
@@ -700,30 +754,38 @@ function yamlMappingValue(line, expectedKey) {
     : null;
 }
 
+// Read an inline list of explicit root names; an empty list declares no scan coverage.
 function yamlFlowStringList(rawValue) {
   const value = stripYamlComment(rawValue).trim();
+  // Only a complete inline list can establish the configured repository set.
   if (!value.startsWith("[") || !value.endsWith("]")) return null;
   const body = value.slice(1, -1);
+  // Empty brackets explicitly name no repositories.
   if (body.trim().length === 0) return [];
   const rawItems = [];
   let item = "";
   let inSingle = false;
   let inDouble = false;
   let escaped = false;
+  // Preserve quoted values while locating the list or mapping boundaries in the saved configuration.
   for (let index = 0; index < body.length; index += 1) {
     const character = body[index];
+    // An escaped character belongs to the saved value rather than changing its quote boundaries.
     if (escaped) {
       item += character;
       escaped = false;
       continue;
     }
+    // A backslash inside double quotes escapes the next character in the configured name.
     if (inDouble && character === "\\") {
       item += character;
       escaped = true;
       continue;
     }
+    // Single quotes delimit a saved string unless they are inside a double-quoted value.
     if (!inDouble && character === singleQuote) {
       item += character;
+      // Keep a doubled quote inside this configured root instead of ending its value.
       if (inSingle && body[index + 1] === singleQuote) {
         item += body[index + 1];
         index += 1;
@@ -732,11 +794,13 @@ function yamlFlowStringList(rawValue) {
       inSingle = !inSingle;
       continue;
     }
+    // Double quotes delimit a saved string unless they occur inside a single-quoted value.
     if (!inSingle && character === "\"") {
       item += character;
       inDouble = !inDouble;
       continue;
     }
+    // An unquoted comma separates configured roots rather than belonging to a folder name.
     if (!inSingle && !inDouble && character === ",") {
       rawItems.push(item);
       item = "";
@@ -744,6 +808,7 @@ function yamlFlowStringList(rawValue) {
     }
     item += character;
   }
+  // An unfinished quoted value leaves the root list unresolved instead of partly scanning it.
   if (inSingle || inDouble || escaped) return null;
   rawItems.push(item);
   const parsedItems = rawItems.map(yamlStringScalar);
@@ -752,11 +817,10 @@ function yamlFlowStringList(rawValue) {
     : null;
 }
 
-// Return the raw value text for one key of a single-line flow mapping, or null when the
-// text is not a balanced flow mapping. Registration accepts these shapes, so the runtime
-// parser must read them too instead of silently dropping configured child scans.
+// Read one supported inline setting; null means the saved mapping cannot establish scan coverage.
 function yamlFlowMappingValue(rawValue, expectedKey) {
   const value = stripYamlComment(rawValue).trim();
+  // An incomplete inline mapping cannot establish the hook configuration.
   if (!value.startsWith("{") || !value.endsWith("}")) return null;
   const body = value.slice(1, -1);
   const rawEntries = [];
@@ -765,20 +829,25 @@ function yamlFlowMappingValue(rawValue, expectedKey) {
   let inSingle = false;
   let inDouble = false;
   let escaped = false;
+  // Preserve quoted values while locating the list or mapping boundaries in the saved configuration.
   for (let index = 0; index < body.length; index += 1) {
     const character = body[index];
+    // An escaped character belongs to the saved value rather than changing its quote boundaries.
     if (escaped) {
       entry += character;
       escaped = false;
       continue;
     }
+    // A backslash inside double quotes escapes the next character in the configured name.
     if (inDouble && character === "\\") {
       entry += character;
       escaped = true;
       continue;
     }
+    // Single quotes delimit a saved string unless they are inside a double-quoted value.
     if (!inDouble && character === singleQuote) {
       entry += character;
+      // Keep a doubled quote inside this configured root instead of ending its value.
       if (inSingle && body[index + 1] === singleQuote) {
         entry += body[index + 1];
         index += 1;
@@ -787,15 +856,21 @@ function yamlFlowMappingValue(rawValue, expectedKey) {
       inSingle = !inSingle;
       continue;
     }
+    // Double quotes delimit a saved string unless they occur inside a single-quoted value.
     if (!inSingle && character === "\"") {
       entry += character;
       inDouble = !inDouble;
       continue;
     }
+    // Only unquoted structure can open, close or separate nested configuration fields.
     if (!inSingle && !inDouble) {
+      // A nested mapping or list keeps its fields within the same saved entry.
       if (character === "{" || character === "[") depth += 1;
+      // A matching closer returns parsing to the enclosing hook setting.
       if (character === "}" || character === "]") depth -= 1;
+      // An unmatched closer makes the saved hook mapping unusable.
       if (depth < 0) return null;
+      // Only a top-level comma separates hook settings in this mapping.
       if (character === "," && depth === 0) {
         rawEntries.push(entry);
         entry = "";
@@ -804,78 +879,101 @@ function yamlFlowMappingValue(rawValue, expectedKey) {
     }
     entry += character;
   }
+  // Unbalanced quotes or nesting cannot silently select a partial hook configuration.
   if (inSingle || inDouble || escaped || depth !== 0) return null;
   rawEntries.push(entry);
+  // Inspect each saved mapping entry until the requested hook setting is found.
   for (const rawEntry of rawEntries) {
     let separatorIndex = -1;
     let keySingle = false;
     let keyDouble = false;
     let keyEscaped = false;
+    // Locate the real key/value separator without splitting punctuation inside a quoted key.
     for (let index = 0; index < rawEntry.length; index += 1) {
       const character = rawEntry[index];
+      // An escaped key character remains literal and cannot end its quoted setting name.
       if (keyEscaped) {
         keyEscaped = false;
         continue;
       }
+      // An escape inside a double-quoted setting name keeps the next character literal.
       if (keyDouble && character === "\\") {
         keyEscaped = true;
         continue;
       }
+      // Single quotes delimit a setting name outside double quotes.
       if (!keyDouble && character === singleQuote) {
         keySingle = !keySingle;
         continue;
       }
+      // Double quotes delimit a setting name outside single quotes.
       if (!keySingle && character === "\"") {
         keyDouble = !keyDouble;
         continue;
       }
+      // Quoted punctuation belongs to the setting name rather than YAML structure.
       if (keySingle || keyDouble) continue;
+      // Nested structure before a separator cannot identify this setting name.
       if (character === "{" || character === "[") break;
+      // The unquoted colon identifies where this saved setting value begins.
       if (character === ":") {
         separatorIndex = index;
         break;
       }
     }
+    // Entries without a setting separator cannot name the requested hook option.
     if (separatorIndex < 0) continue;
     const parsedKey = yamlStringScalar(rawEntry.slice(0, separatorIndex));
+    // Return only the requested setting so unrelated hook options cannot become scan roots.
     if (parsedKey === expectedKey) return rawEntry.slice(separatorIndex + 1).trim();
   }
   return null;
 }
 
+// Read block indentation; tabs leave the saved root configuration unsupported.
 function lineIndent(line) {
+  // Tab indentation cannot establish a supported hook or root-list boundary.
   if (line.includes("\t")) return -1;
   return line.length - line.trimStart().length;
 }
 
+// Resolve only the explicit post-turn root list before the controller scans any user repository.
 function configuredScanRoots() {
   let configText;
   try {
     configText = readFileSync(path.join(controllerRoot, ".goat-flow", "config.yaml"), "utf8");
   } catch {
+    // A removed or unreadable config file leaves the controller without declared repository coverage.
     return null;
   }
   const lines = configText.replace(/\r\n?/gu, "\n").split("\n");
   let hooksInlineValue = null;
   const hooksIndex = lines.findIndex((line) => {
+    // Only the top-level hooks setting owns controller scan configuration.
     if (lineIndent(line) !== 0) return false;
     const value = yamlMappingValue(stripYamlComment(line).trim(), "hooks");
+    // Unrelated or malformed top-level entries cannot establish the hook table.
     if (value === null) return false;
     hooksInlineValue = value;
     return true;
   });
+  // No hooks table means the controller has no declared scan scope.
   if (hooksIndex < 0) return null;
   // A flow-style hooks mapping carries the whole hook table on one line.
   if (hooksInlineValue !== "") {
     const hookValue = yamlFlowMappingValue(hooksInlineValue, "post-turn-safety");
+    // An absent post-turn entry cannot establish any configured repository coverage.
     if (hookValue === null) return null;
     const rootsValue = yamlFlowMappingValue(hookValue, "scan-roots");
+    // A missing or malformed root setting cannot authorize a partial scan.
     if (rootsValue === null) return null;
     return yamlFlowStringList(rootsValue);
   }
   let hooksEnd = lines.length;
+  // Find the end of the hooks block without consuming another user configuration section.
   for (let index = hooksIndex + 1; index < lines.length; index += 1) {
     const cleanLine = stripYamlComment(lines[index]);
+    // The next top-level setting ends the hook table.
     if (cleanLine.trim().length > 0 && lineIndent(lines[index]) <= 0) {
       hooksEnd = index;
       break;
@@ -884,14 +982,18 @@ function configuredScanRoots() {
   let hookIndex = -1;
   let hookIndent = -1;
   let hookInlineValue = null;
+  // Locate the post-turn setting within the declared hooks block.
   for (let index = hooksIndex + 1; index < hooksEnd; index += 1) {
     const indent = lineIndent(lines[index]);
+    // A line outside the hooks indentation cannot configure this safety hook.
     if (indent <= 0) continue;
     const value = yamlMappingValue(
       stripYamlComment(lines[index]).trim(),
       "post-turn-safety",
     );
+    // Other hook settings do not name the post-turn scan roots.
     if (value === null) continue;
+    // An empty mapping value introduces an indented post-turn configuration block.
     if (value === "") {
       hookIndex = index;
       hookIndent = indent;
@@ -903,27 +1005,39 @@ function configuredScanRoots() {
   // A flow-style hook entry keeps its scan roots inline beneath a block hooks mapping.
   if (hookIndex < 0 && hookInlineValue !== null) {
     const rootsValue = yamlFlowMappingValue(hookInlineValue, "scan-roots");
+    // A missing or malformed root setting cannot authorize a partial scan.
     if (rootsValue === null) return null;
     return yamlFlowStringList(rootsValue);
   }
+  // No usable post-turn entry means the repository set remains undeclared.
   if (hookIndex < 0) return null;
+  // Find the explicit scan-roots value within this post-turn configuration.
   for (let index = hookIndex + 1; index < hooksEnd; index += 1) {
     const cleanLine = stripYamlComment(lines[index]);
     const trimmedLine = cleanLine.trim();
+    // Blank or comment-only lines do not add repositories to coverage.
     if (trimmedLine.length === 0) continue;
     const indent = lineIndent(lines[index]);
+    // Returning to the parent indentation ends this safety-hook setting.
     if (indent <= hookIndent) break;
     const inlineValue = yamlMappingValue(trimmedLine, "scan-roots");
+    // Only scan-roots defines the repository scope; other options stay separate.
     if (inlineValue === null) continue;
+    // An inline root list must be fully valid before any declared project can be scanned.
     if (inlineValue.length > 0) return yamlFlowStringList(inlineValue);
     const roots = [];
+    // Read every block-list root so coverage matches the whole saved repository set.
     for (let rootIndex = index + 1; rootIndex < hooksEnd; rootIndex += 1) {
       const rootLine = stripYamlComment(lines[rootIndex]);
+      // Empty list spacing cannot invent another repository.
       if (rootLine.trim().length === 0) continue;
+      // A sibling setting ends this explicit root list.
       if (lineIndent(lines[rootIndex]) <= indent) break;
       const itemMatch = /^-\s+(.+)$/u.exec(rootLine.trim());
+      // A malformed list item leaves scope unresolved instead of silently skipping a project.
       if (!itemMatch) return null;
       const root = yamlStringScalar(itemMatch[1]);
+      // Every listed root needs a usable name before the controller can claim its scope.
       if (root === null) return null;
       roots.push(root);
     }
@@ -933,27 +1047,34 @@ function configuredScanRoots() {
 }
 
 const configuredRoots = configuredScanRoots();
+// Missing or empty roots leave controller coverage unavailable; the caller handles root recovery.
 if (!Array.isArray(configuredRoots) || configuredRoots.length === 0) process.exit(3);
 
 const scanUnits = [];
+// Verify each declared repository stays inside the selected controller workspace.
 for (const configuredRoot of configuredRoots) {
+  // Empty or absolute paths cannot redirect this controller scan outside its selected workspace.
   if (configuredRoot.length === 0 || path.isAbsolute(configuredRoot) ||
     /^[A-Za-z]:[\\/]/u.test(configuredRoot) || /^\\\\/u.test(configuredRoot)) {
     process.exit(3);
   }
   const childPath = path.resolve(controllerRoot, configuredRoot);
   const lexicalRelative = path.relative(controllerRoot, childPath);
+  // Parent traversal cannot widen the user-approved repository set.
   if (lexicalRelative === ".." || lexicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(lexicalRelative)) {
     process.exit(3);
   }
   let childRealPath;
   try {
     childRealPath = realpathSync(childPath);
+    // A listed file cannot stand in for a repository directory.
     if (!statSync(childRealPath).isDirectory()) process.exit(3);
   } catch {
+    // A configured repository may have been removed or become unreadable before this Stop scan.
     process.exit(3);
   }
   const physicalRelative = path.relative(controllerRoot, childRealPath);
+  // Linked paths must also remain physically inside the selected workspace.
   if (physicalRelative === ".." || physicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(physicalRelative)) {
     process.exit(3);
   }
@@ -962,6 +1083,7 @@ for (const configuredRoot of configuredRoots) {
     timeout: Math.min(maximumMilliseconds, 5000),
     windowsHide: true,
   });
+  // Failed Git lookup cannot establish scanned coverage for this configured root.
   if (rootLookup.error || rootLookup.status !== 0 || typeof rootLookup.stdout !== "string" || rootLookup.stdout.trim().length === 0) {
     process.exit(3);
   }
@@ -969,8 +1091,10 @@ for (const configuredRoot of configuredRoots) {
   try {
     gitRoot = realpathSync(rootLookup.stdout.trim());
   } catch {
+    // A repository moved after Git lookup cannot establish a verified root for this scan.
     process.exit(3);
   }
+  // Each root must name a whole Git repository rather than part of a different checkout.
   if (gitRoot !== childRealPath) process.exit(3);
   scanUnits.push({
     name: physicalRelative.split(path.sep).join("/"),
@@ -982,13 +1106,16 @@ const childPayload = sessionFingerprint.length > 0
   ? JSON.stringify({ session_id: sessionFingerprint, hook_event_name: "Stop", stop_hook_active: stopHookActive })
   : "";
 const childResults = [];
+// Preserve declared repository order while giving every root a result or coverage failure.
 for (const scanUnit of scanUnits) {
+  // A root already refused during setup retains its unavailable result without starting a scanner.
   if (scanUnit.failure) {
     childResults.push({ name: scanUnit.name, result: scanUnit.failure });
     continue;
   }
   const elapsedMilliseconds = Date.now() - startedAt;
   const remainingMilliseconds = maximumMilliseconds - elapsedMilliseconds;
+  // The shared deadline leaves this repository unscanned and must remain visible as incomplete work.
   if (remainingMilliseconds <= 0) {
     childResults.push({ name: scanUnit.name, result: syntheticResult("execution-timeout", "Controller safety-scan budget expired before this child ran") });
     continue;
@@ -1003,33 +1130,57 @@ for (const scanUnit of scanUnits) {
     GOAT_FLOW_POST_TURN_CONTROLLER_CHILD: "1",
     GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: String(Math.max(1, Math.ceil(remainingMilliseconds / 1000))),
   };
-  const childExecution = spawnSync("bash", [hookScript], {
-    cwd: scanUnit.root,
-    encoding: "utf8",
-    input: childPayload,
-    env: childEnvironment,
-    timeout: remainingMilliseconds,
-    windowsHide: true,
-    maxBuffer: 20_000,
-  });
-  if (childExecution.error) {
-    const reasonCode = childExecution.error.code === "ETIMEDOUT" ? "execution-timeout" : "hook-unavailable";
+  let childExecution;
+  // Managed controller children use the same independent byte and tree-cleanup contracts as the outer launcher.
+  if (managedRuntime !== null) {
+    const child = spawn("bash", [bashScriptArgument], {
+      cwd: scanUnit.root, env: childEnvironment, detached: process.platform !== "win32",
+      stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
+    });
+    child.stdin.on("error", () => {
+      // A child may finish before reading its Stop context; its status and envelope still decide the user result.
+    });
+    child.stdin.end(childPayload);
+    childExecution = await managedRuntime.captureHookProcessUntilDeadline(child,
+      { ...childEnvironment, GOAT_FLOW_HOOK_PROVIDER_MODE: "managed" }, remainingMilliseconds, process.platform,
+      managedRuntime.appendBoundedHookOutput, managedLauncher.stopHookProcessTree);
+    // Retained child diagnostics stay visible without allowing their excess to discard a completed finding.
+    if (childExecution.stderr.length > 0) process.stderr.write(childExecution.stderr);
+  } else {
+    childExecution = spawnSync("bash", [bashScriptArgument], {
+      cwd: scanUnit.root, encoding: "utf8", input: childPayload, env: childEnvironment,
+      timeout: remainingMilliseconds, windowsHide: true, maxBuffer: 65_536,
+    });
+  }
+  // An unfinished, flooded or unstarted child has no complete result to aggregate, even if JSON appeared first.
+  if (childExecution.error || childExecution.launchError || childExecution.timedOut || childExecution.hasExceededOutputLimit) {
+    const reasonCode = childExecution.timedOut || childExecution.error?.code === "ETIMEDOUT" ? "execution-timeout" : "hook-unavailable";
     const message = reasonCode === "execution-timeout"
       ? "Child safety scan exceeded the controller deadline"
       : "Child safety scan could not start";
-    childResults.push({ name: scanUnit.name, result: syntheticResult(reasonCode, message) });
+    const failure = syntheticResult(reasonCode, message);
+    // Aborted child counts are lower bounds; they explain the lost coverage without copying arbitrary output into findings.
+    if (childExecution.output) failure.execution.output = childExecution.output;
+    childResults.push({ name: scanUnit.name, result: failure });
     continue;
   }
   let childResult;
   try {
     childResult = JSON.parse((childExecution.stdout || "").trim());
   } catch {
+    // A child that emits empty or partial JSON cannot report a completed repository scan.
     childResult = null;
   }
-  if (childExecution.status !== 0 || !validChildResult(childResult)) {
-    childResults.push({ name: scanUnit.name, result: syntheticResult("hook-unavailable", "Child safety scan did not return a valid result") });
+  // A failed or malformed child cannot contribute a clean repository result.
+  if (childExecution.status !== 0 || childExecution.hasInvalidUtf8Output || !validChildResult(childResult)) {
+    const failure = syntheticResult("hook-unavailable", "Child safety scan did not return a valid result");
+    // A completed but invalid envelope still has measurable stream totals, while coverage remains unavailable.
+    if (childExecution.output) failure.execution.output = childExecution.output;
+    childResults.push({ name: scanUnit.name, result: failure });
     continue;
   }
+  // Valid child findings retain their raw-byte measurements so the aggregate can disclose diagnostic truncation.
+  if (childExecution.output) childResult.execution.output = childExecution.output;
   childResults.push({ name: scanUnit.name, result: childResult });
 }
 
@@ -1038,14 +1189,27 @@ const coverage = childResults.reduce((total, child) => ({
   completedUnits: total.completedUnits + child.result.coverage.completedUnits,
   skippedUnits: total.skippedUnits + child.result.coverage.skippedUnits,
 }), { attemptedUnits: 0, completedUnits: 0, skippedUnits: 0 });
+const childOutputMeasurements = childResults.map((child) => child.result.execution.output).filter(Boolean);
+// Shared runtime limits keep a future budget change from invalidating every controller aggregate.
+const childOutput = managedRuntime !== null && childOutputMeasurements.length > 0 ? {
+  envelopeLimitBytes: managedRuntime.HOOK_RESULT_ENVELOPE_LIMIT_BYTES, stderrRetentionLimitBytes: managedRuntime.HOOK_STDERR_RETENTION_LIMIT_BYTES,
+  stderrFloodLimitBytes: managedRuntime.HOOK_STDERR_FLOOD_LIMIT_BYTES, providerLimitBytes: managedRuntime.HOOK_RESULT_OUTPUT_LIMIT_BYTES,
+  stdoutBytes: childOutputMeasurements.reduce((total, output) => total + output.stdoutBytes, 0),
+  stderrBytes: childOutputMeasurements.reduce((total, output) => total + output.stderrBytes, 0),
+  areByteCountsExact: childOutputMeasurements.length === scanUnits.length && childOutputMeasurements.every((output) => output.areByteCountsExact),
+  isStderrTruncated: childOutputMeasurements.some((output) => output.isStderrTruncated),
+} : null;
 const coverageStatus = coverage.completedUnits === coverage.attemptedUnits && coverage.skippedUnits === 0
   ? "complete"
   : coverage.completedUnits === 0 ? "none" : "partial";
 const nonPassResults = childResults.filter((child) => child.result.outcome !== "pass");
 const everyNonPassBounded = nonPassResults.length > 0 && nonPassResults.every((child) =>
   child.result.outcome === "incomplete" && child.result.reasonCode === "bounded-reentry-ended");
+const everyNonPassInfrastructure = nonPassResults.length > 0 && nonPassResults.every((child) =>
+  ["incomplete", "unavailable"].includes(child.result.outcome) && child.result.execution.failureClass === "infrastructure");
 let outcome = "pass";
 let reasonCode = "completed-clean";
+// A genuine child finding determines the controller block even when another root was unavailable.
 if (childResults.some((child) => child.result.outcome === "block")) {
   outcome = "block";
   reasonCode = "policy-blocked";
@@ -1060,7 +1224,8 @@ if (childResults.some((child) => child.result.outcome === "block")) {
 }
 // The retained window must include what decided the aggregate outcome, so findings from
 // outcome-deciding children fill the cap first and the rest keep their deterministic order.
-const collectedFindings = childResults.flatMap((child) => child.result.findings.map((finding) => ({
+const findingChildren = outcome === "block" ? childResults.filter((child) => child.result.outcome === "block") : childResults;
+const collectedFindings = findingChildren.flatMap((child) => child.result.findings.map((finding) => ({
   isDecisive: child.result.outcome === outcome,
   finding: {
     code: finding.code,
@@ -1080,6 +1245,11 @@ const aggregateResult = {
   coverage: { status: coverageStatus, ...coverage },
   reasonCode,
   findings,
+  ...(outcome === "block" ? { summary: {
+    detectedFindings: findingChildren.reduce((total, child) => total + (child.result.summary?.detectedFindings ?? child.result.findings.length), 0),
+    envelopeOmittedFindings: findingChildren.reduce((total, child) => total + (child.result.summary?.envelopeOmittedFindings ?? 0), 0) + collectedFindings.length - findings.length,
+    presentationOmittedFindings: 0,
+  } } : {}),
   execution: {
     hookVersion,
     provider,
@@ -1087,32 +1257,60 @@ const aggregateResult = {
     adapterName: `${provider}-turn-stop`,
     adapterVersion,
     durationMs: Date.now() - startedAt,
+    ...(everyNonPassInfrastructure ? { failureClass: "infrastructure" } : {}),
+    ...(childOutput === null ? {} : { childOutput }),
   },
 };
 
+// Managed callers receive one structured aggregate for the provider adapter.
 if (parentMigrated) {
-  process.stdout.write(`${JSON.stringify(aggregateResult)}\n`);
+  const { compactHookResultEnvelope } = await import(pathToFileURL(path.join(path.dirname(hookScript), "hook-launch-runtime.mjs")).href);
+  process.stdout.write(`${JSON.stringify(compactHookResultEnvelope(aggregateResult))}\n`);
   process.exit(0);
 }
+// Complete clean legacy coverage ends without a terminal warning.
 if (outcome === "pass") process.exit(0);
+// Direct terminal users receive each retained finding with its declared repository target.
 for (const finding of findings) {
   process.stderr.write(`post-turn-safety: ${finding.target}: ${finding.message}\n`);
 }
-// A legacy host has no adapter to read `bounded-reentry-ended`, so the controller must end the
-// exhausted cycle itself. Without this the turn can never stop: every later Stop repeats the same
-// unchanged child failure, while the single-project path ends that cycle after one replay.
+// End an exhausted legacy cycle here because this host has no structured-result adapter.
+// The unchanged child failure remains incomplete; later Stop callbacks must not renew its retry.
 if (reasonCode === "bounded-reentry-ended") {
   process.stderr.write("post-turn-safety: ending repeated Stop after unchanged infrastructure failure; no clean scan was recorded.\n");
   process.exit(0);
 }
+// A known hazard needs content repair; other non-clean outcomes keep their incomplete-scan explanation.
 if (outcome === "block") {
   process.stderr.write("post-turn-safety: fix or remove the flagged changed content before stopping.\n");
 } else {
   process.stderr.write("post-turn-safety: controller scan incomplete.\n");
 }
 process.exit(2);
-' "$controller_root" "$hook_script"
-  )"
+GOAT_FLOW_CONTROLLER_PROGRAM
+}
+
+# Scan only the explicit Git roots configured for a managed non-Git controller.
+#
+# Children return structured results so aggregation preserves detector decisions without parsing terminal text.
+# Exit 3 means root configuration could not be established; the caller then applies its infrastructure recovery contract.
+run_controller_child_scans() {
+  local controller_root=""
+  local controller_result=""
+  local controller_status=0
+  local hook_script="${BASH_SOURCE[0]}"
+
+  # A child whose Git commands fail must report that failure instead of recursively widening scope.
+  if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then
+    return 3
+  fi
+  # Missing Node or an inaccessible controller directory leaves its child scope unresolved.
+  if ! command -v node >/dev/null 2>&1 || \
+    ! controller_root="$(pwd -P 2>/dev/null)" || [ -z "$controller_root" ]; then
+    return 3
+  fi
+
+  controller_result="$(run_controller_program "$controller_root" "$hook_script")"
   controller_status=$?
 
   # An absent or invalid explicit list leaves the bounded fail-closed Git-root path authoritative.
@@ -1121,6 +1319,7 @@ process.exit(2);
   fi
   # Once child scope is established, stale single-root failure state cannot affect this topology.
   clear_stop_reentry_state "$controller_root" >/dev/null 2>&1
+  # A nonempty controller envelope carries the declared child outcomes to the launcher.
   if [ -n "$controller_result" ]; then
     printf '%s\n' "$controller_result"
   fi
@@ -1298,8 +1497,8 @@ $path|$family
 "
   fallback_findings=$((fallback_findings + 1))
   record_post_turn_result_finding "safety-hazard" "Blocked $family in changed content" "$path"
-  # The output cap keeps a large edit readable while the final count stays honest.
-  if [ "$fallback_findings" -le "$fallback_max_findings" ]; then
+  # Direct terminal use shows capped findings; managed mode keeps them in JSON without duplicate diagnostics.
+  if [ "$post_turn_migrated_result_mode" -eq 0 ] && [ "$fallback_findings" -le "$fallback_max_findings" ]; then
     printf 'post-turn-safety: %s in %s (Bash 3 compatibility scan).\n' "$family" "$path" >&2
   fi
 }
@@ -2001,8 +2200,7 @@ fallback_main() {
 
   # Without a Git root, the hook cannot identify the project changes for this turn.
   if ! root=$(git rev-parse --show-toplevel 2>/dev/null) || [ -z "$root" ]; then
-    post_turn_result_detail="The selected Git repository root could not be opened"
-    printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+    report_repository_root_failure
     finish_repository_root_failure "fallback:git repository root unavailable"
     return $?
   fi
@@ -2142,6 +2340,7 @@ if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" != 1 ] && \
   ! current_directory_is_git_top_level; then
   run_controller_child_scans
   controller_scan_status=$?
+  # Established child scope owns this result and must not fall back to scanning another project.
   if [ "$controller_scan_status" -ne 3 ]; then
     exit "$controller_scan_status"
   fi
@@ -2573,8 +2772,8 @@ $fingerprint
 "
   findings=$((findings + 1))
   record_post_turn_result_finding "safety-hazard" "Blocked $family in changed content" "$path"
-  # The output cap keeps a large edit readable while the final count stays honest.
-  if [ "$findings" -le "$MAX_FINDINGS" ]; then
+  # Direct terminal use shows capped findings; managed mode keeps them in JSON without duplicate diagnostics.
+  if [ "$post_turn_migrated_result_mode" -eq 0 ] && [ "$findings" -le "$MAX_FINDINGS" ]; then
     printf 'post-turn-safety: blocked %s in %s\n' "$family" "$path" >&2
   fi
 }
@@ -2697,41 +2896,13 @@ scan_line() {
 
 # --- grep pre-filter patterns -------------------------------------------------
 #
-# Only lines matching one of these patterns reach scan_line. Each pattern is a
-# strict superset of the corresponding scan_line trigger, so pre-filtering can
-# never drop a line the full analysis would have flagged:
+# Keep every detector candidate while filtering ordinary user text before scan_line.
 #
-#   ^diff --git , ^+++    In the diff stream: file-section starts and +++ path
-#                         headers, needed for path attribution. In a --unified=0
-#                         stream a line starting "diff --git " can only be a
-#                         real section start (added lines render as "+diff...",
-#                         removed as "--diff...", and no context lines exist),
-#                         so a "+++ b/..." header is accepted only directly
-#                         after one; content that merely looks like a header
-#                         (e.g. an added line "++ b/x") is skipped exactly like
-#                         the original per-line reader skipped "+++"* lines.
-#   <<<<<<< , =======, >>>>>>>   The only three line shapes that can advance,
-#                         complete, or reset the merge-conflict state machine
-#                         (case arms "<<<<<<< "*, exact "=======", ">>>>>>> "*).
-#                         Lines matching none of them leave the state untouched,
-#                         so skipping them cannot change conflict detection.
-#   -----BEGIN            Required literal substring of the private-key regex.
-#   (AKIA|ASIA)[A-Z0-9]{16} and the gh/github_pat/npm/xox token patterns are
-#                         the detector regexes themselves (trivially supersets).
-#   sk-[A-Za-z0-9][A-Za-z0-9_-]{31,}   Required by both API-token branches.
-#   token|secret|password|api[-_]?key|private[-_]?key  (case-insensitive, env
-#                         files only): every accepting arm of is_credential_key
-#                         contains one of the stems token/secret/password/
-#                         api_key/apikey/private_key/secret_key in the
-#                         normalized key. Normalization only lowercases, maps
-#                         "-" to "_", and inserts underscores; it never removes
-#                         or reorders characters, so the raw line must contain
-#                         the stem letters contiguously (any case) with at most
-#                         one "-"/"_" inside the api/private+key stems. The
-#                         same holds for Dockerfile ARG/ENV findings, which
-#                         also require an is_credential_key key on the line.
-#                         Placeholder values only suppress findings, so they
-#                         need no pre-filter clause.
+# - Diff section and path headers retain file attribution; zero-context added text cannot masquerade as a section header.
+# - All three merge-conflict marker shapes remain visible; other lines cannot change conflict detection state.
+# - Token patterns match the detectors; private keys also retain their required -----BEGIN header.
+# - Config stems retain every is_credential_key candidate: normalization changes case or separators without removing stem letters.
+# - Dockerfile assignments use the same credential labels; placeholder values suppress findings and need no extra candidate pattern.
 TOKEN_BODY_RE="-----BEGIN|${AWS_TOKEN_RE}|${GITHUB_LEGACY_TOKEN_RE}|${GITHUB_FINE_GRAINED_TOKEN_RE}|${NPM_TOKEN_RE}|${SLACK_TOKEN_RE}|${API_TOKEN_RE}"
 STEM_BODY_RE='token|secret|password|api[-_]?key|private[-_]?key'
 DIFF_GLOBAL_RE="^diff --git |^\\+\\+\\+ |^\\+<<<<<<< |^\\+={7}[[:cntrl:]]?\$|^\\+>>>>>>> |^\\+.*(${TOKEN_BODY_RE})"
@@ -3017,12 +3188,10 @@ scan_diff_stream() {
   done
 }
 
-# Runs one batched --unified=0 diff over a chunked path list and scans the
-# stream. Prefix/quotepath settings are pinned so header parsing stays stable
-# under any user diff config; content and path selection semantics match the
-# original per-path `git diff` calls (same pathspec set, same flags).
+# Count paths completed by the current batch for truthful scan coverage.
 DIFF_FILES_DONE=0
 # Stream one worktree or staged path batch and preserve per-path user coverage.
+# Pin diff prefixes and quoting so personal Git settings cannot change finding attribution.
 run_diff_batch() {
   local mode="$1"
   shift
@@ -3231,12 +3400,12 @@ main() {
   local head_status
   # Without a Git root, the hook cannot identify the project changes for this turn.
   if ! root="$(repo_root)" || [ -z "$root" ]; then
-    post_turn_result_detail="The selected Git repository root could not be opened"
-    printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+    report_repository_root_failure
     finish_repository_root_failure "native:git repository root unavailable"
     return $?
   fi
 
+  # A removed or inaccessible repository cannot be scanned or presented as completed coverage.
   if ! cd "$root" 2>/dev/null; then
     post_turn_result_detail="The selected Git repository root could not be entered"
     printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
@@ -3345,13 +3514,9 @@ main() {
     fi
   fi
 
-  # Pass 2: staged changes. When the index entry equals the worktree file
-  # (path absent from `git diff --name-only`) and pass 1 scanned that path,
-  # the --cached diff is byte-identical to the pass-1 diff, so every finding it
-  # could produce was already reported (report_finding dedupes on path+family);
-  # such paths are safely skipped. Paths whose index differs from the worktree
-  # (including staged-then-reverted and staged-then-edited states) are always
-  # scanned, as is everything when HEAD is unborn.
+  # Skip staged content only when it matches worktree content already scanned in pass one, so no finding is lost.
+  #
+  # Always scan staged files that differ from the worktree, including reverted edits, and all staged paths before the first commit.
   if ((BAIL == 0)) && ((${#cached_paths[@]} > 0)); then
     local -A dirty_vs_index=()
     # A committed baseline can skip staged content already identical to pass one.

@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-09-21
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and the static gates a touched TypeScript file must pass before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -20,6 +20,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Repo-wide gates inherit checkout debt outside the change set
 
 **Status:** active | **Created:** 2026-04-18
+**Severity:** INTEGRATION
 **Decision changed:** Attribute each file a repo-wide gate rejects to the change set or to baseline debt before touching task code, and repair the real checkout rather than a temp clone.
 **Trigger phase:** VERIFY
 **Incident count:** 6 | **Latest occurrence:** 2026-09-21
@@ -41,13 +42,14 @@ last_reviewed: 2026-09-21
 ## Lesson: Run Prettier, ESLint, Knip, and Gruff on touched TypeScript before claiming a focused GREEN
 
 **Status:** active | **Created:** 2026-04-25
+**Severity:** INTEGRATION
 **Decision changed:** After the first focused GREEN on any TypeScript change, run the repository formatter, file-scoped ESLint, the exact Knip command, and targeted Gruff before any suite, preflight, or completion claim; a receipt without their literal output is incomplete.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 68 | **Latest occurrence:** 2026-09-20
+**Incident count:** 69 | **Latest occurrence:** 2026-09-29
 **Merged:** 2026-09-05 - renamed from "New tests need formatter gate before verification claims"; absorbed "Slow installer round-trip catches prompt/test lint debt" (2026-04-26, 5 incidents), "Format touched TypeScript tests before repo-wide preflight" (2026-04-30), "Preflight TypeScript gates include Knip binary policy and touched-test formatting" (2026-06-07, 28 incidents), and "Format patched hook test fixtures before full preflight" (2026-06-02, 2 incidents) from `.goat-flow/learning-loop/lessons/hook-testing.md`, plus five touched-file recurrences previously logged under the attribution lesson above and one 2026-08-09 static-gate recurrence from `.goat-flow/learning-loop/lessons/verification-gruff.md`; the count is the sum of the declared totals.
 
-**Prevention:** After the first focused GREEN that touches TypeScript, and before any suite, preflight, or completion claim, run these in order and quote each result: (1) `npx prettier --check <touched paths>` or `npm run format:check`; (2) file-scoped ESLint on touched `src/` files, since `test/**` sits outside the lint project; (3) the exact Knip command from `scripts/preflight-checks.sh` (search: `knip_command=(`), never an invented `npm run knip` or a bare `npx knip`, which exhausts the default heap; (4) targeted Gruff on the touched files. Keep helpers module-private until a current consumer imports them, and reference child-process fixtures with `fileURLToPath(new URL(...))` so Knip can see them, as in `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`). When a later gate fails, fix it, rerun that gate, then restart the sequence; every earlier proof is stale. A milestone that edits `src/` lists `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` in its Commands table. For goat-clarity, freeze the check and write commands before mutation; anchors `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`) and `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
+**Prevention:** After the first focused GREEN that touches TypeScript, and before any later aggregate suite, preflight, or completion claim, run `npm run check:touched` and quote each selected result. It checks touched formatting; for changed `src/*.ts`, it also runs file-scoped ESLint, typecheck, and the repository Gruff ratchet. `test/**` sits outside the lint project. Then run and quote the exact Knip command from `scripts/preflight-checks.sh` (search: `knip_command=(`), never an invented `npm run knip` or a bare `npx knip`, which exhausts the default heap; run targeted Gruff on the touched files too. Keep helpers module-private until a current consumer imports them, and reference child-process fixtures with `fileURLToPath(new URL(...))` so Knip can see them, as in `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`). When a later gate fails, fix it, rerun that gate, then restart the sequence; every earlier proof is stale. A milestone that edits `src/` lists `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` in its Commands table. For goat-clarity, freeze the check and write commands before mutation; anchors `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`) and `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
 
 **What happened:** Focused tests and typecheck pass, then Prettier, ESLint complexity, Knip, or Gruff fails later in preflight or inside the installer round-trip fixture, and every earlier proof goes stale. The first case was M01's security-preset test, green before scoped Prettier rejected the new test file; evidence anchors `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`) and `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
 
@@ -82,6 +84,8 @@ last_reviewed: 2026-09-21
 **Recurrence 2026-09-04:** M15's release proof skipped repo-wide ESLint and Knip; the installer fixture's preflight found complexity 11/13/11 in claim reporting, command dispatch, and CLI parsing plus an unused exported recovery report. The first parser helper typed both branches as the claims-only return and rejected the intentional `null`, which typecheck caught, and Gruff rejected "converts known claim errors" until the docblock stated that it throws `CLIError`. `src/cli/claims-command.ts` (search: `throws CLIError for known claim errors`), `src/cli/cli-parser.ts` (search: `parseOptionalClaimsPositionals`).
 **Recurrence 2026-09-20:** Forecast-accuracy M08's growth tests reported `# pass 4` and the milestone moved on to docs. The clarity pass's scoped Prettier check then rejected the new test file, and foreground preflight found the new summary renderer at ESLint complexity 14; splitting it into a tally, a predicate and a renderer cleared it, and every earlier proof had to be repeated. `src/cli/plans-check-summary.ts` (search: `function tallyUnitGrowth`), `test/unit/plans-check-growth.test.ts` (search: `plans check: work added after forecasts`).
 **Release recurrence 2026-08-09 (different mechanism, kept for the suite failure):** Hook notes gained a dated release heading before that release's manifest snapshot existed, so the full suite failed; keep notes under `Unreleased` until release identity and snapshot propagate together. `CHANGELOG.md` (search: `## Unreleased`), `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
+
+**Recurrence 2026-09-29:** M03's stats integration tests and typecheck were green before scoped ESLint found `collectGraduationCandidates` at complexity 18 against a limit of 10. Extracting optional-metadata readers brought the function within the limit; the focused suite and lint were rerun. Evidence: `src/cli/facts/shared/learning-loop.ts` (search: `function collectGraduationCandidates`).
 
 Knip handling: run it with the repository gate's heap and traversal flags, `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) and `.goat-flow/learning-loop/footguns/preflight-plumbing.md` (search: `Knip's \`ignore\` cannot shrink`); a default `npx knip` out-of-memory abort is not the gate result. Binary policy lives in `knip.json` (search: `ignoreBinaries`).
 

@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-09-20
+last_reviewed: 2026-10-03
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts: evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-20
 ## Footgun: Prose after the last checklist row silently strips that row's estimate
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Keep machine-parsed checklist sections contiguous, leave `(est: ...)` as each row's final token, and put explanatory prose and tables under their own headings outside the checklist.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -32,6 +33,7 @@ last_reviewed: 2026-09-20
 ## Footgun: Strict validation of a new evidence artifact retroactively fails finished plans
 
 **Status:** active | **Created:** 2026-08-02 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Gate an evidence artifact's shape on whether something claims authority from it, not on its mere presence.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -54,6 +56,7 @@ last_reviewed: 2026-09-20
 ## Footgun: Markdown proof gates can promote hidden examples into authority
 
 **Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Validate structural evidence against rendered Markdown semantics and exact documented field values, then pair every exclusion fixture with a visible-content control.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -116,6 +119,7 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 ## Footgun: A partial reforecast fails strict validation, and integer estimates cannot express sub-minute unit rates
 
 **Status:** active | **Created:** 2026-08-19 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Reforecast every estimate line together, then reconcile the derived `ISSUE.md` bands the checker never reads; when the advice says the likely is floored at 1.00 min/unit, copy the floored rates and name the measured rate in `source:`.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -143,6 +147,7 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 ## Footgun: An approved scope can name a file whose size budget cannot accept one more line
 
 **Status:** active | **Created:** 2026-08-30 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Measure every file a milestone names as the owner of added cases against its configured size gate during planning, and record the headroom, before that scope is approved alongside a no-new-files constraint.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -180,6 +185,7 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 ## Footgun: A handoff that ticks a narrowed task only after gate acceptance collides with the checker, which closes every gate state to open tasks
 
 **Status:** active | **Created:** 2026-09-11 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 **Decision changed:** Hold a milestone with a human-pending scope narrowing at `in-progress` for its gate, say so in the closeout note, and tick the narrowed task and complete the milestone in one transition after acceptance; do not try `testing-gate` or `human-verification-pending` with the task open.
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
@@ -203,11 +209,13 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Before adding a `##` heading to a milestone, check that it does not begin with Objective, Scope, Proof, Stop / rescope or another section name followed by a space. Run `plans check <plan-dir> --strict` after adding any heading.
+**Prevention:** Before adding a `##` heading to a milestone, check that it does not begin with Objective, Scope, Proof, Stop / rescope or another section name followed by a space. Write the stop condition once: either a dedicated `## Stop / rescope` section or a compact `Stop/rescope if` line under Exit, never both. Run `plans check <plan-dir> --strict` after adding any heading.
 
 **Symptoms:** On 2026-09-19 a milestone gained a `## Scope revision` section to record an approved scope change. `plans check --strict` then failed with `error: M26-slow-suite-contract-alignment.md: conflicting scope representations`, and renaming the heading to `## Forecast revision 2026-09-19` cleared it. A scratch copy reproduced it: the same milestone file without the heading lacked that error, and appending `## Scope revision` added it.
 
 **Why it happens:** `src/cli/plans-export.ts` (search: `function readMilestoneSectionMatches`) matches a section when its heading equals an alias or starts with the alias and a space. More than one match is reported as a conflict (search: `function readFieldOrSectionMarkdown`). Objective, Scope, Proof and Stop / rescope all read through this helper.
+
+**Recurrence 2026-10-03:** Two new Standard milestones in the 1.18.0 follow-up wave kept a dedicated `## Stop / rescope` section and also ended Exit with a compact `Stop/rescope if` line. `plans check --strict` failed with `conflicting stop representations` for both, and folding each section into its Exit line cleared it. `src/cli/plans-export.ts` (search: `function hasStopRepresentationConflict`) counts a dedicated stop section plus an Exit stop line as a conflict.
 
 ## Resolved Entries
 

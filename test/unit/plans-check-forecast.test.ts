@@ -4,7 +4,6 @@
  * against written milestones, so failures match what plan authors see in the
  * terminal before implementation begins.
  */
-import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -18,8 +17,7 @@ import {
 } from "../../src/cli/plans-check-summary.js";
 import { parseMilestoneMarkdown } from "../../src/cli/plans-export.js";
 import {
-  PROJECT_ROOT,
-  CLI_PATH,
+  runPlansCommand,
   runPlansCheck,
   assertSourceLabelledErrors,
   writeCheckFixture,
@@ -145,6 +143,7 @@ describe("plans check: configured forecast bands", () => {
     ];
     const wide = renderCalibrationSummary(records, [10, 90]);
     const narrow = renderCalibrationSummary([...records].reverse(), [20, 80]);
+    // Keep only the per-milestone `rule sample:` lines, so each band compares its samples without the surrounding report.
     const samples = (lines: string[]) =>
       lines.filter((line) => line.startsWith("rule sample:"));
     assert.deepEqual(samples(wide), [
@@ -259,16 +258,19 @@ describe("plans check: calibration eligibility", () => {
         lines.includes(
           `calibration exclusion: M01-sample.md - both pools: ${reason}`,
         ),
+        `exclusion ${reason}`,
       );
       assert.ok(
         lines.includes(
           "calibration: uncalibrated - 0 of 3 eligible measured samples",
         ),
+        `exclusion ${reason}`,
       );
       assert.ok(
         lines.includes(
           "work-unit calibration: uncalibrated - 0 of 3 eligible measured samples with countable bases",
         ),
+        `exclusion ${reason}`,
       );
     }
   });
@@ -281,25 +283,30 @@ describe("plans check: calibration eligibility", () => {
         lines.includes(
           "calibration: uncalibrated - 1 of 3 eligible measured samples",
         ),
+        `${seconds}s receipt`,
       );
       assert.ok(
         lines.includes(
           "work-unit calibration: uncalibrated - 1 of 3 eligible measured samples with countable bases",
         ),
+        `${seconds}s receipt`,
       );
       assert.equal(
         lines.some((line) => line.startsWith("calibration note:")),
         seconds === 20,
+        `${seconds}s receipt`,
       );
       if (seconds === 20)
         assert.ok(
           lines.includes(
             "calibration note: M01-sample.md - 20s raw rounds to 0 min; estimate-ratio eligible; work-unit eligible",
           ),
+          `${seconds}s receipt`,
         );
       assert.doesNotMatch(
         lines.join("\n"),
         /late timer|invalid receipt|fabricated/iu,
+        `${seconds}s receipt`,
       );
     }
   });
@@ -994,11 +1001,7 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
   });
 
   it("rejects --strict outside plans check", () => {
-    const result = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "plans", "export", ".", "--strict"],
-      { cwd: PROJECT_ROOT, encoding: "utf-8" },
-    );
+    const result = runPlansCommand("export", ".", "--strict");
 
     assert.equal(result.status, 2);
     assert.match(result.stderr, /--strict is only valid for plans check/u);

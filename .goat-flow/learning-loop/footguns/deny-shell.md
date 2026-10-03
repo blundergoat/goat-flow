@@ -10,6 +10,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 ## Footgun: Command-segment splitter must track substitution depth, not just quotes
 
 **Status:** active | **Created:** 2026-06-06 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Incident count:** 4 | **Latest occurrence:** 2026-09-24
 
 **Prevention:**
@@ -46,6 +47,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 ## Footgun: Heredoc masking can hide executable shell lines
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Incident count:** 7 | **Latest occurrence:** 2026-06-07
 
 **Prevention:**
@@ -81,6 +83,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 ## Footgun: Shell substitution scanners must be quote-aware inside the substitution body
 
 **Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-18
 
 **Prevention:**
@@ -99,6 +102,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 ## Footgun: Splitting a monolithic guardrail can drop parser coverage while preserving the headline checks
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Reports must use sibling-aware hook facts; a split hook's dispatcher can hide shipped denies.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -166,6 +170,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 ## Footgun: One language-neutral primitive list misses each interpreter's own execution spellings
 
 **Status:** active | **Created:** 2026-09-16 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** The inline interpreter guard keeps its shared dotted-primitive list and adds per-interpreter matching on the program with its string literals removed; the receiver-method and template-literal exemptions belong to JavaScript only.
 **Trigger phase:** ACT
 **hallucination-risk:** high

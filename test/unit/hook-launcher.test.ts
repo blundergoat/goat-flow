@@ -1,8 +1,8 @@
 /**
- * How managed hooks behave after an agent launches them: deadlines bound the user's wait,
- * response modes stay stable, and unsafe script shapes fail closed.
- * Every case runs the canonical launcher against a disposable project so the result matches
- * what an agent and user would see without touching a real project.
+ * Protect the outcome users receive after a managed hook starts.
+ *
+ * Use this suite to keep deadlines, response modes and unsafe-path refusals consistent.
+ * Every case launches the canonical runtime in a disposable project without touching real user files.
  */
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
@@ -29,7 +29,7 @@ import {
   resolveHookLaunchTimeoutMs,
 } from "../../workflow/hooks/hook-launch-runtime.mjs";
 import {
-  HOOK_RESULT_OUTPUT_LIMIT_BYTES,
+  HOOK_RESULT_ENVELOPE_LIMIT_BYTES,
   HOOK_RESULT_SCHEMA,
 } from "../../workflow/hooks/hook-provider-adapters.mjs";
 
@@ -253,7 +253,8 @@ describe("hook launcher script validation", () => {
     const hookOutput = new PassThrough({ highWaterMark: 128 * 1024 });
     const hostOutput = new Writable({
       highWaterMark: 1,
-      // Hold the first destination write open so Node exposes the relay's pause behavior.
+      // Hold the first destination write open because the relay must pause while its host waits for this callback.
+      // Side effect: writes are retained in this disposable stream until the test releases the pending callback.
       write(_chunk, _encoding, callback) {
         finishPendingWrite = callback;
       },
@@ -432,13 +433,13 @@ describe("hook launcher script validation", () => {
   });
 
   // Fixture purpose: bound flooded stdout. Side effects: starts and stops one script.
-  it("stops migrated child output beyond the shared result limit", () => {
+  it("stops migrated child output beyond the envelope limit", () => {
     withTempProject((fixtureProjectPath) => {
       const hookScriptRelativePath = ".goat-flow/hooks/oversized-result.sh";
       const managedHookDirectoryPath =
         createManagedHookDirectory(fixtureProjectPath);
       const oversizedHookOutput = "x".repeat(
-        HOOK_RESULT_OUTPUT_LIMIT_BYTES + 1,
+        HOOK_RESULT_ENVELOPE_LIMIT_BYTES + 1,
       );
       writeFileSync(
         join(managedHookDirectoryPath, "oversized-result.sh"),
@@ -465,13 +466,17 @@ describe("hook launcher script validation", () => {
       assert.notEqual(modelVisibleContext, "");
       assert.match(modelVisibleContext, /gruff-code-quality: UNAVAILABLE/iu);
       assert.match(modelVisibleContext, /adapter-delivery-failed/iu);
-      assert.match(modelVisibleContext, /exceeded the 10000-byte limit/iu);
+      assert.match(
+        modelVisibleContext,
+        /exceeded the 65536-byte envelope limit/iu,
+      );
       assert.equal(launcherResult.stderr, "");
     });
   });
 
   // A saved off choice must reach the provider without launching the deliberately failing script or requiring Bash.
   for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    // Each host needs its own allow response after the user saves this policy as off.
     for (const responseMode of ["policy", "antigravity", "copilot"]) {
       it(`returns the provider allow response when ${hookId} is off in ${responseMode}`, () => {
         withTempProject((root) => {
@@ -501,12 +506,16 @@ describe("hook launcher script validation", () => {
     }
   }
 
+  // Both policies must identify themselves when startup or execution fails.
   for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    // The refusal must reach each host through its supported feedback channel.
     for (const responseMode of ["policy", "antigravity", "copilot"]) {
+      // A partial install and a stalled child both need actionable repair feedback.
       for (const failure of ["missing script", "deadline"]) {
         it(`attributes ${failure} to ${hookId} in ${responseMode}`, () => {
           withTempProject((root) => {
             const hookDirectory = createManagedHookDirectory(root);
+            // A deliberately slow fixture reproduces the wait a user sees when a hook stalls.
             if (failure === "deadline") {
               writeFileSync(
                 join(hookDirectory, `${hookId}.sh`),
@@ -538,6 +547,7 @@ describe("hook launcher script validation", () => {
               reason,
               failure === "deadline" ? /exceeded its deadline/u : /not found/u,
             );
+            // JSON hosts must receive an explicit deny, while the legacy host uses its exit status and stderr.
             if (responseMode !== "policy") {
               const response = JSON.parse(result.stdout);
               assert.equal(
@@ -552,6 +562,7 @@ describe("hook launcher script validation", () => {
     }
   }
 
+  // A runtime fault or missing child command cannot let the user's shell operation continue.
   for (const childStatus of [1, 127]) {
     it(`denies an incomplete policy result with exit ${childStatus}`, () => {
       withTempProject((root) => {
@@ -560,6 +571,7 @@ describe("hook launcher script validation", () => {
           join(hookDirectory, "deny-git-mutations.sh"),
           `#!/usr/bin/env bash\nprintf 'partial policy output\\n'\nprintf 'runtime fault\\n' >&2\nexit ${childStatus}\n`,
         );
+        // Every host must reject partial output from this failed policy child.
         for (const responseMode of ["policy", "antigravity", "copilot"]) {
           const result = runLauncherProcess(
             root,
@@ -583,6 +595,7 @@ describe("hook launcher script validation", () => {
           );
           assert.doesNotMatch(result.stdout, /partial policy output/u);
           assert.doesNotMatch(result.stderr, /runtime fault/u);
+          // Structured hosts need their actual deny field, beyond a readable error message.
           if (responseMode !== "policy") {
             const response = JSON.parse(result.stdout);
             assert.equal(
@@ -692,6 +705,7 @@ describe("hook launcher script validation", () => {
 
   // `export VAR=` and an oversized value are ordinary shell states; either one used to wedge every tool call.
   const usableNonLoweringTimeoutValues = ["", "25001", "99999999999999999999"];
+  // Empty or larger user overrides must preserve the host ceiling and still let a quick valid hook finish.
   for (const usableTimeoutMilliseconds of usableNonLoweringTimeoutValues) {
     /** Starts a disposable quick hook to prove an empty or oversized override still runs the policy hook. */
     it(`accepts policy timeout override ${JSON.stringify(usableTimeoutMilliseconds)} without blocking the command`, () => {

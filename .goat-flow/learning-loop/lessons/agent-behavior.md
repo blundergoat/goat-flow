@@ -78,6 +78,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 ## Lesson: Retrieval terms must name the concrete failure class
 
 **Created:** 2026-04-18
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-09-25
 
 **Prevention:** Build the first retrieval query from target area + symptom + named file/tool, not from milestone names or architecture abstractions. If the first pass is abstract, reword toward the concrete failure class before concluding a miss.
@@ -117,6 +118,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 ## Lesson: Quality assessors can reopen ADR-settled skill modes
 
 **Status:** active | **Created:** 2026-05-27 | **Incident count:** 2 | **Latest occurrence:** 2026-08-29
+**Severity:** INTEGRATION
 **Decision changed:** Treat any ADR-settled constraint - skill mode, tool-call ceiling, or sub-agent budget - as decided until the decisions INDEX says otherwise, and search that index by the disputed mechanism before filing the finding.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -134,6 +136,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 ## Lesson: End-of-task rules must be treated as deliverables
 
 **Status:** active | **Created:** 2026-04-08 | **Merged during:** M11 learning-loop consolidation
+**Severity:** INTEGRATION
 
 **Prevention:** Make closing gates part of the deliverable, not an optional afterword. Separate executor and human proof into distinct rows: close automated evidence before promotion and mark each remaining human-owned row with leading `[human]`. After completing milestone tasks, run the named testing gate and strict plan validation before lifecycle promotion. Report what was done and stop; do not make commits, pushes, PRs, staging commands, or follow-on Git write workflows the default next action. Coding agents never run `git commit` or `git push`, even when asked; hand those operations back to the user. If asked "what's next" after verified work, default to non-mutating options: review the diff, inspect a file, or wait for the requested handoff. Providing a suggested commit message is allowed only when asked for one.
 
@@ -150,6 +153,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 ## Lesson: Fresh-eyes critique reruns need section-only evidence after a leak-scan discard
 
 **Status:** active | **Created:** 2026-04-24 | **Merged during:** M11 learning-loop consolidation
+**Severity:** INTEGRATION
 
 **Prevention:** When rerunning a fresh-eyes critique after leak-scan discard, instruct the sub-agent to cite section titles or neutral labels only. Do not include repository-local paths in the output unless the phase permits them.
 
@@ -182,6 +186,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 ## Lesson: A written repair list is a diagnosis, not a proof; check its stated contradiction against the bytes
 
 **Status:** active | **Created:** 2026-09-08
+**Severity:** CORRECTNESS
 **Decision changed:** Before deleting a value, clause or field that a handoff, review or issue says is contradictory, quote both sides of the alleged contradiction from the current bytes and check they sit on the same axis. Two rules on independent axes cannot contradict, and the "contradictory" item is often the only thing enforcing a third rule.
 **Trigger phase:** READ
 **Caught at:** VERIFY

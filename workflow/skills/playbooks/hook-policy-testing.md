@@ -141,6 +141,19 @@ The exact wrapper matters. For example, a user may ask an agent to inspect a
 release script containing `bash -lc`; the recursive command body must still be
 classified rather than trusted as inert wrapper text.
 
+### Windows host grammar and state paths
+
+Read the native-host rows in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` when available; consumers use the installed counterpart. The measured caret regression and its controls are anchored by `cmd caret-obfuscated publication` and `cmd escaped ampersand stays literal after word normalization`.
+
+| Surface | Required paired checks |
+| --- | --- |
+| cmd | Caret escapes in executable, verb and path words; literal carets inside cmd double quotes; escaped operators stay data; `call` and `start` inside the cmd body |
+| PowerShell | Host quoting, backtick escapes, conditionals and script blocks; distinguish a generic substitution denial from proof of native parsing |
+| WSL | Default-shell interpretation versus direct-exec options; preserve the distinction between operators and literal arguments |
+| Git Bash on a WSL network path | Missing and existing state directories; create relative paths from the verified root; prove repeated calls reuse stored state |
+
+For native execution claims, use harmless probes on the named host and record its version. Never execute protected payloads: classify them with the hook. An unavailable native host leaves platform execution unverified even when the classifier corpus passes. Gruff health markers have a separate regression in `test/integration/gruff-code-quality-contract.test.ts` (search: `deduplicates verified health when mkdir refuses absolute paths`); that fault-injection test does not prove live provider delivery.
+
 ### 4. Verify installed policy and available canonical source
 
 The two entrypoints, shared parser/policy modules, self-test corpus and GraphQL helpers form one

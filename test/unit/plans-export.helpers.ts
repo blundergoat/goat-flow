@@ -8,10 +8,10 @@
  * The link builders skip rather than fail where the platform cannot create links, so the
  * write-protection suites stay honest on filesystems that cannot express the attack.
  */
-import { spawnSync } from "node:child_process";
 import type { TestContext } from "node:test";
 import { linkSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { runPlansCommand } from "./plans-check.helpers.js";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 export const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
@@ -80,11 +80,7 @@ export function writePlanFixture(
  *   text the author reads in their terminal
  */
 export function runPlansExport(...args: string[]) {
-  return spawnSync(
-    process.execPath,
-    ["--import", "tsx", CLI_PATH, "plans", "export", ...args],
-    { cwd: PROJECT_ROOT, encoding: "utf-8" },
-  );
+  return runPlansCommand("export", ...args);
 }
 
 /**

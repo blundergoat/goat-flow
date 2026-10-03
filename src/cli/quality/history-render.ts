@@ -7,6 +7,8 @@
  */
 import type { AgentId } from "../types.js";
 import type { QualityMode } from "./schema.js";
+import type { QualityRepeatSpread } from "./repeat-spread.js";
+import { countQualityConcerns, type QualityFixView } from "./fix-references.js";
 import type {
   QualityDiffFindingRow,
   QualityDiffResult,
@@ -17,6 +19,8 @@ import {
   QUALITY_SETUP_SCORE_AXES,
   QUALITY_SYSTEM_SCORE_AXES,
   type QualityScoreAxisRationale,
+  type QualityFixEvidence,
+  type QualityFixTarget,
 } from "./schema-types.js";
 
 /**
@@ -34,6 +38,16 @@ function formatDelta(delta: number | null): string {
   // A lower saved score retains its minus sign to show the drop.
   if (delta < 0) return ` (${delta})`;
   return " (+0)";
+}
+
+/** Show descriptive score variation without interpreting the adjacent change. */
+function formatSpread(
+  spread: QualityRepeatSpread | null | undefined,
+  score: "setup" | "system",
+): string {
+  if (!spread) return "no comparable reruns";
+  const values = spread[score];
+  return `${spread.kind} reruns n=${spread.sampleSize}; median ${values.median}/100; range ${values.min}-${values.max}/100 (span ${values.range})`;
 }
 
 /**
@@ -78,6 +92,7 @@ function appendReportScoreRationale(
   label: "Report" | "From" | "To",
 ): void {
   lines.push(`${label} ${entry.id}`);
+  appendConcernAndFixEvidence(lines, entry);
   const context = entry.report.assessment_context;
   // Show recorded coverage before the scores so the reader can assess their evidence limits.
   if (context) {
@@ -128,6 +143,64 @@ function appendReportScoreRationale(
   );
 }
 
+/** Display report-local counts and attributed proof without treating absence as resolution. */
+function appendConcernAndFixEvidence(
+  lines: string[],
+  entry: QualityHistoryEntry,
+): void {
+  const counts = entry.concernCounts ?? countQualityConcerns(entry.report);
+  lines.push(
+    `  reported findings by concern: ${Object.entries(counts)
+      .map(([concern, count]) => `${concern} ${count}`)
+      .join(", ")} (not all open defects)`,
+  );
+  if (entry.report.fixes === undefined) {
+    lines.push("  fix evidence unavailable (not recorded)");
+    return;
+  }
+  if (entry.report.fixes.length === 0)
+    lines.push("  fix evidence: none recorded");
+  for (const record of entry.fixRecords ?? []) appendFixRecord(lines, record);
+}
+
+/** Keep uncommitted evidence visibly separate from a fixing commit; a workspace snapshot shows its capture fingerprint. */
+function fixTargetLabel(target: QualityFixTarget | null): string {
+  if (!target) return "target unavailable";
+  return target.kind === "commit"
+    ? `committed ${target.revision}`
+    : `workspace snapshot ${target.fingerprint}`;
+}
+
+/** Show the original method and result without executing or reinterpreting it. */
+function appendFixEvidence(
+  lines: string[],
+  evidence: QualityFixEvidence | null,
+): void {
+  if (!evidence) return;
+  lines.push(
+    `    ${evidence.method}: ${evidence.file} (sha256 ${evidence.sha256}); ${evidence.summary}`,
+  );
+  if (evidence.anchor) lines.push(`    anchor: ${evidence.anchor}`);
+  if (evidence.command)
+    lines.push(
+      `    recorded command: ${evidence.command}; exit ${evidence.exit_code ?? "unavailable"}`,
+    );
+}
+
+/** Keep assessor attribution and current availability beside the immutable correction claim. */
+function appendFixRecord(lines: string[], record: QualityFixView): void {
+  const { fix } = record;
+  lines.push(
+    `  ${record.status}: ${fix.prior_report_id ?? "unknown report"}#${fix.finding_id ?? "unknown finding"} | ${fixTargetLabel(fix.target)}`,
+  );
+  lines.push(
+    `    assessor: ${record.assessor.agent} in ${record.assessor.report_id}; original conclusion: ${fix.conclusion}`,
+  );
+  if (fix.explanation) lines.push(`    correction: ${fix.explanation}`);
+  appendFixEvidence(lines, fix.evidence);
+  if (record.warning) lines.push(`    ${record.warning}`);
+}
+
 /**
  * Render quality-history rows for CLI text output.
  *
@@ -166,8 +239,8 @@ export function renderQualityHistoryText(
         row.date,
         row.agent,
         row.qualityMode,
-        `${row.setupTotal}${formatDelta(row.setupDelta)}`,
-        String(row.systemTotal),
+        `${row.setupTotal}${formatDelta(row.setupDelta)} [${formatSpread(row.repeatSpread, "setup")}]`,
+        `${row.systemTotal}${formatDelta(row.systemDelta)} [${formatSpread(row.repeatSpread, "system")}]`,
         String(row.blockerCount),
         String(row.majorCount),
         String(row.minorCount),
@@ -211,6 +284,7 @@ function flattenSummary(summary: string): string {
 export function renderQualityDiffText(diff: QualityDiffResult): string {
   const header = `Setup ${diff.from.report.scores.setup.total}/100 → ${diff.to.report.scores.setup.total}/100 (${diff.setupDelta >= 0 ? `+${diff.setupDelta}` : diff.setupDelta}). System ${diff.from.report.scores.system.total}/100 → ${diff.to.report.scores.system.total}/100 (${diff.systemDelta >= 0 ? `+${diff.systemDelta}` : diff.systemDelta}).`;
   const lines = [header];
+  appendDiffSpread(lines, diff);
   // Comparison warnings belong beside the deltas, before readers mistake score movement for proof of improvement.
   for (const warning of diff.comparisonWarnings ?? [])
     lines.push(`Comparison limit: ${warning}`);
@@ -248,20 +322,20 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
   renderSection("Persisted", diff.persisted);
   renderSection("Stuck", diff.stuck);
 
-  // Agent-vs-deterministic contradictions only render when present - most
+  // Semantic tags and exact-ID differences only render when present - most
   // diffs agree, and an always-on empty section would bury the real four.
   if (diff.deltaTagDisagreements.length > 0) {
     lines.push(
-      `Delta-tag disagreements (${diff.deltaTagDisagreements.length}) - agent's claimed delta_tag vs the deterministic id diff:`,
+      `Assessor tags and exact-ID matches differ (${diff.deltaTagDisagreements.length}):`,
     );
     // Show each mismatch so the maintainer can recheck the assessor's continuity claim.
     for (const row of diff.deltaTagDisagreements) {
       lines.push(
-        `${row.id} | ${row.severity} | agent said "${row.agentTag}", deterministic diff says "${row.deterministic}" | ${flattenSummary(row.summary)}`,
+        `${row.id} | ${row.severity} | assessor tagged "${row.agentTag}", exact-ID diff says "${row.deterministic}" | ${flattenSummary(row.summary)}`,
       );
     }
     lines.push(
-      "Positional finding ids stay the source of truth; treat disagreements as a methodology signal about the agent's continuity claims.",
+      "Exact-ID classes describe matching report records, not semantic continuity. A rewritten summary or location can change the ID. Recheck the cited evidence before treating either classification as a fix or a new issue.",
     );
     lines.push("");
   }
@@ -270,4 +344,13 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
     "Stuck counter resets on history gaps. For strict persistence tracking, ensure at least one quality run lands within every 30-day window.",
   );
   return lines.join("\n");
+}
+
+/** Keep both groups beside the delta; they may describe different unchanged-input samples. */
+function appendDiffSpread(lines: string[], diff: QualityDiffResult): void {
+  for (const side of ["from", "to"] as const) {
+    lines.push(
+      `${side === "from" ? "From" : "To"} rerun spread: setup ${formatSpread(diff.repeatSpread?.[side], "setup")}; system ${formatSpread(diff.repeatSpread?.[side], "system")}`,
+    );
+  }
 }

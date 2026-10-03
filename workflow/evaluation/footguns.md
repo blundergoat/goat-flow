@@ -43,6 +43,8 @@ last_reviewed: YYYY-MM-DD
 
 ## Footgun: [descriptive title]
 **Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>
+**Severity:** SECURITY | CORRECTNESS | INTEGRATION | PERFORMANCE | STYLE (optional; only when incident evidence supports it)
+**Enforced-by:** `path/to/verified-guard` (search: `semantic anchor`) (optional)
 **Decision changed:** [the future READ/SCOPE/ACT/VERIFY decision this changes]
 **Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **Caught at:** READ | SCOPE | ACT | VERIFY (optional; use only when different)
@@ -64,6 +66,8 @@ RULES:
 - Do NOT include generic advice like "write tests" or "review carefully"
 - Every footgun must be SPECIFIC to THIS codebase
 - New entries should describe the smallest useful trap, not a vague theme
+- For repeat entries, classify severity from the recorded impact, never from incident count; leave it absent if impact is unclear. SECURITY covers secret exposure or safety-control bypass, CORRECTNESS wrong results or data loss, INTEGRATION broken contracts or cross-surface drift, PERFORMANCE measured time or resource cost, and STYLE naming or readability alone.
+- Add Enforced-by only for a shipped hook, deny rule, audit check, or contract or integration test verified against the failure; cite its real path and semantic anchor. The link removes the entry from the human stats action list, not from complete JSON. Resolve it only after human review confirms the guard makes recurrence mechanically impossible.
 - If two entries are actually the same trap, merge them instead of creating
   near-duplicate titles
 - `Trigger phase` names the earliest phase where retrieval can prevent the failure, not where the failure surfaced; use optional `Caught at` when those phases differ

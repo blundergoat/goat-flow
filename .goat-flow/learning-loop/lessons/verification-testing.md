@@ -1,71 +1,37 @@
 ---
 category: verification-testing
-last_reviewed: 2026-09-27
+last_reviewed: 2026-10-01
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md); process-lifecycle and delegated-run tests are [verification-testing-process.md](verification-testing-process.md).
 
-## Lesson: Windows environment filters need mixed-case native proof
-
-**Status:** active | **Created:** 2026-09-27 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Verify environment-key filtering on Windows with both uppercase and mixed-case keys before claiming isolation.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** Match environment keys without regard to case when a supported platform treats them that way.
-Run a native process with uppercase and mixed-case inputs; a Linux-only assertion cannot establish Windows environment isolation.
-From WSL, check existing native executables before leaving that proof unresolved because they are absent from the shell's PATH.
-
-**What happened:** The Git reader removed uppercase trace keys, and its regression used only uppercase names.
-A native Windows reproduction created both trace files with `git_trace` and `Git_Trace2_Event`, while uppercase controls created neither.
-Normalizing key case before filtering left both destinations absent in the same native reproduction.
-
-The first expanded test hid its cases in a loop inside one test; Gruff caught that shape, and named cases made platform coverage visible.
-
-**Root cause:** The filter and fixture both assumed case-sensitive names, hiding a supported platform's different contract.
-Evidence: `src/cli/review-validate-anchors.ts` (search: `key.toUpperCase().startsWith("GIT_")`) and
-`test/integration/review-validate-git-env.test.ts` (search: `traceEnvironmentCases`).
-
----
-
-## Lesson: File-mode tests must account for the runner's umask
-
-**Status:** active | **Created:** 2026-09-26 | **Evidence:** OBSERVED
-**Decision changed:** Check the permissions of a created file against the requested mode after the runner's umask is applied.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** Keep test-output capture from changing the environment inherited by the test process. For a newly created file, compare its mode with the requested mode masked by `process.umask()`. Evidence anchors: `test/unit/safe-exec.test.ts` (search: `applies caller-selected replacement permissions under the process umask`), `src/cli/server/safe-exec.ts` (search: `openSync(tempPath, "wx", fileMode)`).
-
-**What happened:** A full `npm test` run inherited `umask 077` from its output-capture wrapper and failed one existing permission assertion: the created file had mode `0600` while the test expected `0640`. The focused case passed under the normal `0022` mask and reproduced the failure under `0077`.
-
-**Root cause:** The assertion assumed a fixed process umask, and the proof wrapper changed that umask before starting the suite.
-
----
+Related evidence moved intact to [platform-verification.md](platform-verification.md).
 
 ## Lesson: Cache-behaviour tests need observable contracts
 
 **Status:** active | **Created:** 2026-05-20
+**Severity:** INTEGRATION
 **Decision changed:** Tests observe a boundary-level signal or, when instrumenting a shared API, filter calls to the exact resource identity under test; read-caching fixtures are rebuilt after backing files change.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-08-27
 
-**Prevention:** For server cache behaviour, expose a narrow response or debug contract or inject the dependency, then assert at the route boundary. When a fixture uses `createFS`, write its final state before the first consumer call, or build a fresh filesystem and audit context after each mutation. When a test must instrument a shared API, first capture the resources the system under test selects, then count only calls involving that identity set. Avoid timing ratios and late monkeypatches of already-imported helpers. Evidence anchors: `src/cli/server/dashboard-quality-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
+**Prevention:** Assert cache behavior through a response, debug contract or injected dependency. Finish `createFS` fixtures before the first read, or rebuild their audit context after mutation. Instrument shared APIs only after selecting the relevant resource identities; count calls to those resources. Avoid timing ratios and late monkeypatches of imported helpers. Owners: `src/cli/server/dashboard-quality-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
 
-**What happened:** A counter-based replacement for a flaky Quality cache timing assertion monkeypatched `child_process.execFileSync` to observe deny-hook self-test executions, but the route imports `execFileSync` as a named binding before the patch, so the counter stayed at zero and the focused dashboard integration test failed although the product behaviour was correct.
+**What happened:** Replacing a flaky Quality-cache timing assertion with an `execFileSync` counter failed: the route had already imported the named binding, so the monkeypatch observed zero self-tests despite correct behavior.
 
-**Root cause:** The tests assumed their observation mechanism represented the behaviour under test; imported Node builtins, cached filesystem adapters, and unfiltered process-wide mocks hide or overcount the relevant event.
+**Root cause:** Imported bindings, cached adapters and process-wide mocks hide or overcount the selected event.
 
-**Recurrence 2026-08-26:** A Windows hook-audit regression changed `.codex/hooks.json` after its first `checkHookRuntimeSmoke` call and expected the same audit context to observe the empty `commandWindows`; `createFS` had cached the first read, so the assertion exercised stale bytes. Fresh disposable audit contexts per scenario produced the intended proof. `src/cli/facts/fs.ts` (search: `createCachedReadFile`), `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `selects any present Codex Windows override`).
-**Recurrence 2026-08-27:** A descriptor-lifetime test monkeypatched `fs.closeSync` and counted every close in the process, seeing nine before claim release when only two claim descriptors mattered. Recording descriptors from `.claim` opens with `"wx"` and filtering close observations to that set produced the intended assertion. `test/unit/path-write-claim.test.ts` (search: `acquires canonical target order and owner-releases every marker`).
+**Recurrence 2026-08-26:** Mutating `.codex/hooks.json` after `checkHookRuntimeSmoke` left `createFS` reading cached bytes instead of the empty `commandWindows`. Fresh contexts restored proof. `src/cli/facts/fs.ts` (search: `createCachedReadFile`), `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `selects any present Codex Windows override`).
+**Recurrence 2026-08-27:** A `closeSync` counter saw nine process-wide closes instead of two claim descriptors. Filtering descriptors from `.claim` opens with `"wx"` restored the assertion. `test/unit/path-write-claim.test.ts` (search: `acquires canonical target order and owner-releases every marker`).
 
 ---
 
 ## Lesson: Contract tests pin doctrine wording and path semantics
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** OBSERVED
-**Incident count:** 24 | **Latest occurrence:** 2026-09-26
+**Severity:** INTEGRATION
+**Incident count:** 26 | **Latest occurrence:** 2026-10-01
 
 **Prevention:** Before changing prose, a path, or an adjacent command, search the tests and durable semantic anchors for the exact old text; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest. When fixture size feeds a derived assertion, recompute it with the production formula after every fixture edit. Update a contract only when product semantics change. Before drafting in a near-cap skill, measure the current word budget and pay for additions from unpinned text; before quoting a budget or score outcome, measure the exact sizes with the function the gate uses and state the margin.
 
@@ -151,9 +117,16 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 - **Recurrence 2026-09-26:** Documenting the recovery guard changed the architecture claim path and the manifest's claim recovery wording. The full fast suite failed its local-data contract, which pins both phrases. Restoring the claim contract and adding guard detail beside it passed the focused contract. `test/contract/local-data-contract.test.ts` (search: `registers path-write claims as transient fail-closed coordination`), `.goat-flow/architecture.md` (search: `Local coordination state`), `workflow/manifest.json` (search: `exclusive path-write coordination`).
 
+**Recurrence 2026-10-01:** A new Gruff test guessed the result label as `clean` instead of the observed `pass`, and native launch fixtures put `call` and `start` outside the explicit cmd body. The first assertions failed before proving the intended regressions. Read the result vocabulary and interpreter boundary before extending a fixture. For native WSL-to-cmd probes, inspect the transported bytes: argv quoting inserted backslashes into a quoted echo control, while stdin preserved the intended command and established the literal-caret result. A quality-diff wording change also left a row-integrity assertion matching the old prefix; preserve its control-character invariant while updating the displayed text. Owners: `test/integration/gruff-code-quality-contract.test.ts` (search: `deduplicates verified health when mkdir refuses absolute paths`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `cmd caret-obfuscated publication`), and `test/unit/quality-diff-delta-tag.test.ts` (search: `keeps line-feed and carriage-return summaries on their own rows`).
+
+---
+
+**Recurrence 2026-10-01 (M08):** Three text assertions failed against the CLI's default JSON output. Read format defaults; explicit `--format text` restored the suite. `test/integration/quality-history-diff.test.ts` (search: `retains workspace conclusions`).
+
 ## Lesson: Mid-implementation proof gates split edit batches
 
 **Status:** active | **Created:** 2026-08-23
+**Severity:** INTEGRATION
 **Decision changed:** Stop each mutation batch at a declared mid-implementation proof and record its result before applying later-surface edits.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -174,6 +147,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Split transient preflight test failures from task regressions
 
 **Status:** active | **Created:** 2026-04-26
+**Severity:** CORRECTNESS
 
 **Prevention:** When preflight fails in the test phase after an unrelated gate fix, rerun the named failing test area and then the exact suite command directly before changing task files again. Preflight selects `test:fast` when available and runs the selected command once; a nonzero exit still fails. Coverage remains an explicit release check. Anchors: `scripts/preflight-checks.sh` (search: `test:fast`) and `test/integration/preflight-test-diagnostics.test.ts` (search: `selects only`). If release-scale TAP can exceed the caller's output limit, capture the first run to a fresh disposable path so the failing case survives beside the summary. Report the split explicitly: which gate was fixed, which direct suite passed, and whether the preflight failure reproduced.
 
@@ -204,6 +178,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Coverage classification by filename misjudges in both directions
 
 **Status:** active | **Created:** 2026-06-14
+**Severity:** INTEGRATION
 **Decision changed:** Search the whole test tree and classify each named behaviour or invariant; a file-level label cannot promote uncovered siblings.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -230,6 +205,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Depth headings do not create runtime stop boundaries
 
 **Status:** active | **Created:** 2026-07-12
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-03
 
 **Prevention:** Every branch and nested requirement group needs an explicit stop, continue, or applicability rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-security/SKILL.md` (search: `Proportional Quick finding gate`), `workflow/skills/goat-security/SKILL.md` (search: `Exhaustive inventory gate`), `workflow/skills/goat-security/references/common-threats.md` (search: `For Proportional Quick`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-security-1.test.ts` (search: `Quick Scan out of Full-only specialist work`), `test/contract/skill-hardening-security-1.test.ts` (search: `allows only observed trusted-component Quick risks`), `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
@@ -243,7 +219,8 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: A documentation pass can push a file past a size gate it was written to enforce
 
 **Status:** active | **Created:** 2026-08-07
-**Incident count:** 12 | **Latest occurrence:** 2026-09-14
+**Severity:** INTEGRATION
+**Incident count:** 13 | **Latest occurrence:** 2026-09-29
 **Merged:** 2026-09-05 - absorbed three file-length recurrences (2026-08-09 x2, 2026-08-28) from the Gruff comment-fixes lesson in `.goat-flow/learning-loop/lessons/verification-gruff.md`; same mechanism, different gate.
 
 **Prevention:** Before adding comments, contract cases, or learning text to a file within about 20 percent of its size threshold, measure its headroom with the gate's own counter and plan the split first; `wc -l` and a word count are not the gate. Split by responsibility. Never accept the new finding: an oversized file created by the change that added the gate is what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
@@ -266,11 +243,14 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 **Recurrence 2026-09-14:** M03 history tests raised the forecast owner to 1,045 substantive lines. User-approved `test/unit/plans-check-history.test.ts` (search: `bounded project history`) retained those cases; the original owner was restored. Run scoped lint during each batch too: six new complexity errors needed two bounded corrections before passing.
 
+**Recurrence 2026-09-29:** A managed-process repair added capture and cleanup logic to the nearly full registrar before measuring its remaining headroom. Its 17-case behavioral suite passed, but Gruff reported 1020 substantive lines against the 1000-line limit. The approved extraction moved the three path checks into `src/cli/server/hook-scan-paths.ts` (search: `gitTopLevel`, `physicalDirectory`, `relativePathEscapesRoot`); scoped analysis then reported zero errors. The two learning references to moved symbols were repaired too. Measure the formatted gate result before proposing a patch, not after behavior alone appears correct.
+
 ---
 
 ## Lesson: A failed multi-file patch can preserve earlier edits
 
 **Status:** active | **Created:** 2026-08-09
+**Severity:** CORRECTNESS
 **Decision changed:** Inspect every target after a failed multi-file patch; never assume the operation was atomic.
 **Trigger phase:** ACT
 **Incident count:** 2 | **Latest occurrence:** 2026-08-09
@@ -286,14 +266,31 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Hash evidence bytes before decoding text
 
 **Status:** active | **Created:** 2026-09-14 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
+**Incident count:** 2 | **Latest occurrence:** 2026-10-01
 
 **Prevention:** Hash the file buffer before decoding. Malformed UTF-8 changed the hash in `src/cli/plans-forecast-history.ts` (search: `readHistoryPlan`); the raw-buffer correction passed the same reproduction. `test/unit/plans-check-history.test.ts` (search: `Buffer.from([0xff])`) preserves that case.
+
+**Recurrence 2026-10-01:** M08 rejected a raw hash after decoding `0xff`. `test/integration/quality-history-diff.test.ts` (search: `hashes original evidence bytes`) failed before correction. `src/cli/project-file.ts` (search: `readProjectFileBytes`) supplies guarded bytes to `src/cli/quality/fix-references.ts` (search: `function sha256`); Git output also stays raw until hashed.
+
+## Lesson: Exercise reference identity and availability independently
+
+**Status:** active | **Created:** 2026-10-01 | **Evidence:** ACTUAL_MEASURED
+**Trigger phase:** ACT | **Caught at:** VERIFY
+**Decision changed:** Test identity, availability and artifact formats before delivery.
+
+**Prevention:** Pair accepted project aliases with a foreign-project control. Restore evidence without changing saved admission. Check metadata alongside hashes.
+
+M08 rejected an alias, hid restored evidence and admitted a capture without source identity. Each regression failed before correction and passed afterward. Requiring canonical JSON then broke three workspace cases; hashes already bind artifact bytes. Evidence: `test/integration/quality-history-diff.test.ts` (search: `project aliases`, `restored references`, `missing source identity`, `binds workspace static proof`).
 
 ## Lesson: Preserve repository-owned verification flags
 
 **Status:** active | **Created:** 2026-09-14 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 2 | **Latest occurrence:** 2026-09-14
+**Severity:** INTEGRATION
+**Incident count:** 3 | **Latest occurrence:** 2026-10-01
 
 **Prevention:** Read the owning command before running a tool directly. Bare Knip exhausted its default heap; the repository's 5120 MB and `--no-gitignore` invocation passed. Source: `scripts/preflight-checks.sh` (search: `knip_command=(`). Do not report the failed invocation as a code failure.
+
+**Recurrence 2026-10-01:** Preflight found an unused export after scoped checks passed. Keeping `QualityConcern` private fixed it. Run the preflight-owned Knip gate too; `check:touched` omits it. `src/cli/quality/schema-types.ts` (search: `type QualityConcern =`).
 
 **Recurrence 2026-09-14:** M04 tried nonexistent `tsconfig.cli.json`; `package.json` (search: `"typecheck"`) owns the two-project check.

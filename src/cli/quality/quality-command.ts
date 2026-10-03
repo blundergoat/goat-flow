@@ -31,6 +31,7 @@ import type { ParsedCLI } from "../cli-types.js";
 import { scrubDurableText } from "../evidence/redaction.js";
 import { getPackageVersion } from "../paths.js";
 import { parseQualityReport } from "./schema.js";
+import { confirmQualityFixReferences } from "./fix-references.js";
 
 type CLIErrorConstructor = new (message: string, exitCode: number) => Error;
 
@@ -104,10 +105,14 @@ async function handleQualityHistorySubcommand(
             id: entry.id,
             path: entry.path,
             report: entry.report,
+            concernCounts: entry.concernCounts,
+            fixRecords: entry.fixRecords,
           })),
           deltas: rows.map((row) => ({
             id: row.id,
             setup_delta: row.setupDelta,
+            system_delta: row.systemDelta,
+            repeat_spread: row.repeatSpread,
           })),
         },
         null,
@@ -740,10 +745,10 @@ function resolveSelectedProjectRoot(
 }
 
 /**
- * Reject a report that belongs to another project or another goat-flow version.
+ * Reject a report that belongs to another project or another goat-flow version; the first mismatch throws a usage error.
  *
  * Ownership is checked against the realpath of both sides so a symlinked or relative `project_path` cannot smuggle a report into a different
- * project's history; version equality keeps saved reports comparable across `quality history` and `quality diff`.
+ * project's history. Version equality requires new saves to come from the installed release; rubric ids govern score comparisons.
  *
  * @param report - the report's own project path and version fields
  * @param projectRoot - realpath of the selected project the caller named
@@ -753,8 +758,6 @@ function assertReportOwnership(
   report: {
     projectPath: string;
     goatFlowVersion: string;
-    /** Optional on older parsed reports; a missing value fails the match below. */
-    rubricVersion: string | undefined;
   },
   projectRoot: string,
   deps: Pick<QualityCommandDeps, "CLIError">,
@@ -775,7 +778,7 @@ function assertReportOwnership(
     );
   }
   const version = getPackageVersion();
-  if (report.goatFlowVersion !== version || report.rubricVersion !== version) {
+  if (report.goatFlowVersion !== version) {
     throw new deps.CLIError(
       `quality save: report version must match goat-flow v${version}.`,
       2,
@@ -856,13 +859,16 @@ export function persistQualityReportText(
     {
       projectPath: parsed.report.project_path,
       goatFlowVersion: parsed.report.goat_flow_version,
-      rubricVersion: parsed.report.rubric_version,
     },
     projectRoot,
     deps,
   );
 
-  const serializedReport = `${JSON.stringify(parsed.report, null, 2)}\n`;
+  const admittedReport = confirmQualityFixReferences(
+    projectRoot,
+    parsed.report,
+  );
+  const serializedReport = `${JSON.stringify(admittedReport, null, 2)}\n`;
   return writeQualityReport(
     projectRoot,
     parsed.report.agent,

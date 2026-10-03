@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-09-27
+last_reviewed: 2026-10-01
 ---
 
 Git command-policy traps: publication, remote locks, history changes, aliases and commands hosted by Git.
@@ -11,7 +11,8 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: Git push deny checks must normalize shell wrappers and control bodies
 
 **Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 5 | **Latest occurrence:** 2026-09-27
+**Severity:** SECURITY
+**Incident count:** 6 | **Latest occurrence:** 2026-10-01
 
 **Prevention:**
 1. Normalize to the command word before calling `is_git_push`, and read "command word" as every unquoting layer the target program applies, not only the shell's. Do not add one-off regexes for the latest bypass.
@@ -32,11 +33,14 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 
 **Recurrence 2026-09-27:** In text mode a stage denial printed its `BLOCKED:` line and exited 2 inside the pipeline subshell; the parent returned that status to the runtime tail, which added `Policy hook unavailable: … could not evaluate the command. Re-run goat-flow setup.` A publication verb after a `cat` pipe printed both lines under `--check` and through the Claude PreToolUse launcher; at top level it printed one. The Git-hosted sites already exited on a child status of 2; the pipeline loop did not. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `wrapper_pipeline_status`) now applies that rule, and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `pipeline-stage publication copy`) pins one-line denials via the forbidden-reason argument of `expect_block_message`; exit-only rows had passed with two lines.
 
+**Recurrence 2026-10-01:** The classifier allowed `cmd //c git pu^sh origin main`, escaped executable letters, a caret-obfuscated PR merge, deletion and secret path. Cmd removes those word escapes outside its double quotes. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Decode cmd word escapes`) now normalizes word characters while retaining syntax escapes for later passes. The full corpus adds block/allow pairs under `cmd caret-obfuscated publication` and `cmd escaped ampersand stays literal after word normalization` in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh`. Probe the installed store: both entrypoints load it, so invoking the workflow entrypoint alone does not exercise an unsynced candidate.
+
 ---
 
 ## Footgun: Git publication policy omitted the http-push verb
 
 **Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Check lower-level remote-ref writers against `is_git_publication_target` when changing the publication guard; test direct and alias forms beside a read-only Git control.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -61,6 +65,7 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: Direct Git helper executables bypassed the shared Git parser
 
 **Status:** active | **Created:** 2026-09-25 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Treat `git-<verb>` executable names as Git commands in both repository policy and hosted-command inspection.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -83,6 +88,7 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: Git alias expansions bypass every guarded form the parser does not record
 
 **Status:** active | **Created:** 2026-09-15 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Every guarded Git class reads the recorded alias expansions as well as the visible subcommand, and an unrecognised first word resolves through one bounded `git config --get alias.<word>` lookup before classification.
 **Trigger phase:** ACT
 **hallucination-risk:** high
@@ -128,10 +134,11 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 ## Footgun: The Git commit guard lists verbs by name, so an unlisted history writer passes
 
 **Status:** active | **Created:** 2026-09-23 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Decision changed:** Classify history writers in one set; grant exact non-writing modes only after checking the alias expansion and appended arguments.
 **Trigger phase:** ACT
 **hallucination-risk:** high
-**Incident count:** 12 | **Latest occurrence:** 2026-09-27
+**Incident count:** 13 | **Latest occurrence:** 2026-09-28
 
 **Prevention:**
 1. When a Git command can create, rewrite or move history, including notes refs, add it to `__goat_git_history_verbs` in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_commit_target`) with a denied corpus case and a neighbouring allowed control.
@@ -169,6 +176,8 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Recurrence 2026-09-25 (stash history):** `git stash push`, `save`, `create`, `store`, `pop` and `branch` all passed the installed classifier. `git stash -h` identifies their commit, ref or branch effects; `pop` also removes a stash entry. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_stash_preserves_history`) now guards those modes, including the default push and aliases, while retaining `list`, `show`, `apply` and usage. The shared corpus (search: `stash history mode`) failed on the write forms before repair and passed afterward. No stash command was executed.
 
 **Recurrence 2026-09-27:** LFS import/export and import `--no-rewrite` exited 0 despite history writes. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_lfs_write_target`) guards them. The shared corpus (search: `LFS migration import writes history`) retains info/help. Recheck caught quoted `--help` messages falsely blamed on aliases; `git_history_block_reason` now uses original arguments. Probes classified text; no migration ran.
+
+**Recurrence 2026-09-28 (forced clean):** The installed classifier allowed `git clean --for -d`, `git clean --forc`, `git clean -d --fo -x` and `git clean --f -d`, but denied `git clean -efolder` and `git clean -- --force`. A prefix-only substitution also risks reading exclusion patterns as flags. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Original words let clean consume`) passes original direct and alias words to `git_option_present`; clean consumes separated and quoted exclusion values and stops at `--`. Existing string callers keep their grammar. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `clean force prefix for`, `clean quoted exclude value preserves words`, `clean alias force after quoted exclude value`) failed before repair and passed in the complete candidate hook store. Plain dry runs stay allowed; a dry run with force stays denied. Probes classified text without running cleanup.
 
 ## Resolved Entries
 

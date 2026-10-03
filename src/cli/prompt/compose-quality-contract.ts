@@ -3,13 +3,16 @@
  *
  * The prompt names accepted fields, evidence obligations, and the persistence route so the resulting report can be saved and reopened.
  *
- * Shared schema constants and contract tests keep the CLI instructions and browser fallback aligned with validation.
+ * Shared schema constants and contract tests keep CLI and dashboard launches aligned with validation.
  */
 import type { AgentId } from "../types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
 import { getPackageVersion } from "../paths.js";
+import { getQualityRubricId } from "../quality/rubric.js";
+import { QUALITY_SCORE_RULE } from "./compose-quality-static-sections.js";
 import { QUALITY_REPORT_KIND, type QualityMode } from "../quality/schema.js";
 import {
+  QUALITY_CONCERNS,
   QUALITY_EVIDENCE_METHODS,
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
@@ -138,7 +141,9 @@ export function appendQualityReportContract(
   lines.push(`  "run_date": ${jsonString(input.runDate)},`);
   lines.push(`  "audit_status": ${jsonString(input.auditStatus)},`);
   lines.push(`  "scope": ${jsonString(inferQualityScope(input.projectPath))},`);
-  lines.push(`  "rubric_version": ${jsonString(getPackageVersion())},`);
+  lines.push(
+    `  "rubric_version": ${jsonString(getQualityRubricId(input.qualityMode))},`,
+  );
   lines.push(`  "quality_mode": ${jsonString(input.qualityMode)},`);
   lines.push(
     `  "prior_report_id": ${input.priorReport ? jsonString(input.priorReport.id) : "null"},`,
@@ -151,7 +156,10 @@ export function appendQualityReportContract(
     '    "unverified_probes": ["runtime grounding not yet recorded"],',
   );
   lines.push('    "score_confidence": "low",');
-  lines.push('    "workspace_snapshot": { "start": null, "end": null }');
+  lines.push('    "workspace_snapshot": { "start": null, "end": null },');
+  lines.push(
+    '    "assessment_identity": { "model": null, "tool_version": null, "prompt_sha256": null, "settings_sha256": null, "capture": "unknown", "fixed_input_protocol": null }',
+  );
   lines.push("  },");
   lines.push('  "scores": {');
   lines.push(
@@ -199,7 +207,7 @@ export function appendQualityReportContract(
   if (full) {
     lines.push("    {");
     lines.push(
-      `      "type": "${sampleType}", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null,`,
+      `      "type": "${sampleType}", "concern": "context", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null,`,
     );
     lines.push(
       `      "summary": "One-line finding summary", "detail": "Why it matters; include a semantic anchor when the evidence should survive as a durable learning-loop artifact.", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta}`,
@@ -207,11 +215,12 @@ export function appendQualityReportContract(
     lines.push("    }");
   } else {
     lines.push(
-      `    { "type": "${sampleType}", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta} }`,
+      `    { "type": "${sampleType}", "concern": "context", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta} }`,
     );
   }
   lines.push("  ],");
   lines.push('  "refuted_candidates": [],');
+  lines.push('  "fixes": [],');
   lines.push('  "improvements": []');
   lines.push("}");
   lines.push("```");
@@ -239,8 +248,10 @@ function appendReportJsonRules(
 ): void {
   lines.push("JSON rules:");
   lines.push(
-    "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",
+    "- Retain `assessment_context.assessment_identity` for this assessment. Copy available launch metadata supplied separately by the transport (Claude CLI context or `GOAT_QUALITY_ASSESSMENT_IDENTITY` in the initial Codex session); never dump the environment or settings. That record fingerprints the exact user-prompt UTF-8 body, excluding terminal framing and the metadata carrier itself. Use it only for the initial matching prompt, never a later pasted or edited prompt. Otherwise record directly observed model/tool identity with `capture: assessor-reported`; unavailable fields stay null. Never infer model or settings from the agent name, defaults, or current save-time state. Keep `fixed_input_protocol` null unless a recorded frozen-input study supplies it. Available identity alone does not establish a controlled rerun.",
   );
+  appendConcernAndFixRules(lines);
+  lines.push(QUALITY_SCORE_RULE);
   lines.push(
     `- Every score axis requires \`evidence\` and \`deduction\` as non-empty single-line strings of ${QUALITY_SCORE_RATIONALE_MAX_CHARACTERS} characters or fewer.`,
   );
@@ -288,8 +299,8 @@ function appendReportJsonRules(
     "- `scope` is REQUIRED at top level: `framework-self` when the target is the goat-flow repo itself, otherwise `consumer` (copy the template value above).",
   );
   pushVariant(
-    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getPackageVersion()}"\`). The Rating bands section above is the rubric - future readers use this version tag to trace which band anchors produced your scores.`,
-    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getPackageVersion()}"\`).`,
+    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getQualityRubricId(input.qualityMode)}"\`). It identifies this mode's scoring text and prior-context policy.`,
+    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getQualityRubricId(input.qualityMode)}"\`).`,
   );
   lines.push(
     `- \`quality_mode\` is REQUIRED for new reports generated from this prompt. Use \`${jsonString(input.qualityMode)}\` for this ${qualityModeLabel(input.qualityMode)} assessment.`,
@@ -320,7 +331,7 @@ function appendReportJsonRules(
   // that rule here so no surface restates (and drifts) it.
   if (input.priorReport) {
     lines.push(
-      '- `delta_tag` is REQUIRED on every current finding and must be either `"new"` or `"persisted"`. `resolved` belongs in derived diff output, not the current finding list.',
+      '- `delta_tag` is REQUIRED on every current finding and must be either `"new"` or `"persisted"`. `absent` belongs in derived diff output, not the current finding list; absence is not proof of resolution.',
     );
   } else {
     lines.push(
@@ -328,7 +339,7 @@ function appendReportJsonRules(
     );
   }
   pushVariant(
-    "- Do NOT include an `id` field. The CLI attaches positional finding ids deterministically when the report is loaded.",
+    "- Do NOT include an `id` field. The CLI derives finding IDs deterministically from finding fields when the report is loaded; they do not establish semantic identity across rewrites.",
     "- Do NOT include an `id` field.",
   );
   pushVariant(
@@ -361,13 +372,13 @@ function appendReportJsonRules(
     "If the PATH executable is missing or does not match, do not use it. In the framework checkout, use the source fallback after its version matches the report version.",
   );
   lines.push(
-    "Minify the completed report object to one JSON line between the quoted delimiters. Multi-line heredoc bodies can be mistaken for chained shell commands by safety hooks.",
+    "Place the completed report object between the quoted delimiters. Minified and pretty-printed JSON are both supported by the bounded quality-save transport; keep the delimiter quoted so report text stays inert.",
   );
   lines.push("");
   lines.push("```bash");
   lines.push(
     `goat-flow quality save ${shellSingleQuote(input.projectPath)} <<'JSON'`,
-    "<insert the complete report object as one JSON line here>",
+    "<insert the complete report object here>",
     "JSON",
   );
   lines.push("```");
@@ -377,7 +388,7 @@ function appendReportJsonRules(
   lines.push("```bash");
   lines.push(
     `node --import tsx src/cli/cli.ts quality save ${shellSingleQuote(input.projectPath)} <<'JSON'`,
-    "<insert the complete report object as one JSON line here>",
+    "<insert the complete report object here>",
     "JSON",
   );
   lines.push("```");
@@ -392,6 +403,18 @@ function appendReportJsonRules(
   lines.push("");
   lines.push(
     "**End of response:** After `OK`, confirm with one line using that exact path: `Wrote quality report to <absolute-report-path>`. Do not include the JSON inline.",
+  );
+}
+
+/** Give every assessment mode the same concern and attributed-fix evidence contract. */
+function appendConcernAndFixRules(lines: string[]): void {
+  lines.push(
+    `- Each current finding requires exactly one primary \`concern\`: ${backtickList(QUALITY_CONCERNS)}. Choose the affected harness responsibility; a hook bypass belongs to constraints. Do not duplicate one defect across concern rows or change axis scores merely because of its concern. Counts describe reported findings in this run, not all open defects; legacy omissions remain unclassified.`,
+    '- Optional `fixes` contains at most 20 assessor-verified correction claims. Recheck the original problem and explain how the evidence proves its correction. A "Fixed at" prefix, disappearance from a later report, passing command or existing link alone does not prove a fix. Do not open prior scored reports; use the score-free prior finding IDs and claims supplied in this prompt. Omit a fix record when the exact prior identity or proof is unavailable.',
+    '- Each fix has `prior_report_id`, `finding_id`, `conclusion: "assessor-verified"`, `explanation`, `target`, and `evidence`. Attribution is this report\'s agent and saved report ID. Use null for unavailable claim fields; incomplete or unresolved records remain unconfirmed. Do not supply `reference_check`: the saver derives it. Record one claim per exact prior report/finding pair; distinct findings may share a proof artifact.',
+    '- A committed target is `{ "kind": "commit", "revision": <full commit ID> }`. A workspace target is `{ "kind": "workspace-snapshot", "fingerprint": <review fingerprint>, "capture": { "file": <retained project-relative review capture>, "sha256": <its SHA-256> } }`. Reuse evidence from normal work; do not create a separate tracking workflow. HEAD alone never identifies an uncommitted fix.',
+    "- Fix `evidence` has `method`, `file`, `sha256`, and `summary`. Runtime behavior requires `runtime-probe` or `mixed` evidence with the recorded `command` and `exit_code`, referring to retained reproduction/test output. Interpret that output against the original failure; an exit code alone is insufficient. Static source/document corrections may use `static-analysis` with an exact `anchor` when the file proves the whole claim. For committed static evidence, hash the file bytes at the target revision; workspace static evidence must match the retained capture inventory. Use project-relative paths and full lowercase SHA-256 digests.",
+    '- The CLI validates record shape and references; it does not certify the correction or run saved commands. Historical records retain their original conclusion and target if a reference is lost, with "evidence unavailable; not reverified". Unconfirmed claims are not verified fixes.',
   );
 }
 

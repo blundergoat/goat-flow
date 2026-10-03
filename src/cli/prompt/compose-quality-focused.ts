@@ -56,7 +56,7 @@ function focusedQualityModePrompt(
       "",
       "Use INDEX-first retrieval for .goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md. Do not broad-load those directories.",
       "",
-      "Assessment checklist: Pre-check Results; Findings ordered by severity; What works; What is weak or ceremonial; Contradictions and false paths; Top 5 improvements; What was not verified. Use this checklist to decide the saved JSON scores and findings. Each saved finding's detail/evidence fields must include action type, exact file or semantic-anchor evidence, why it matters, and a verification command that would prove the fix.",
+      "Assessment checklist: Pre-check Results; Findings ordered by severity; What works; What is weak or ceremonial; Contradictions and false paths; Up to 5 supported improvements; What was not verified. Use this checklist to decide the saved JSON scores and findings. Each saved finding's detail/evidence fields must include action type, exact file or semantic-anchor evidence, why it matters, and a verification command that would prove the fix.",
     ].join("\n");
   }
 
@@ -69,9 +69,9 @@ function focusedQualityModePrompt(
       "",
       "Method rule: prefer live skill invocation only when the runner supports it safely. Run a mutation-capable workflow only against a disposable copy of current project evidence with a frozen write boundary; never let a quality probe edit the assessed checkout. If live invocation or delegated/sub-agent calls are unavailable, perform a file-grounded protocol run against SKILL.md and label the evidence limit. Never present a dry run as three-pass pressure evidence.",
       "",
-      "For each skill, output exactly these fields: Method used; Evidence limit; Worked; Failed/confusing; Useless ceremony; RED scenario; GREEN result; minimal REFACTOR; Verification command or grep that would prove the fix. Do not stop after one skill and do not ask which skill.",
+      "For each skill, output exactly these fields: Method used; Evidence limit; Worked; Failed/confusing; Evidenced avoidable cost (or None); RED scenario; GREEN result; minimal REFACTOR; Verification command or grep that would prove the fix. Do not stop after one skill and do not ask which skill.",
       "",
-      "After the eight sections, output: Cross-skill patterns; Top 5 skill/system improvements with file or semantic-anchor evidence and expected impact; What was not tested. Prioritize actionable improvements over praise.",
+      "After the eight sections, output: Cross-skill patterns; Up to 5 supported skill/system improvements with file or semantic-anchor evidence and expected impact; What was not tested. Prioritize actionable improvements by user benefit; fewer or none is valid. Static analysis does not establish live enforcement or measured productivity.",
     ].join("\n");
   }
 
@@ -88,7 +88,7 @@ function focusedQualityModePrompt(
     "",
     "Read next: target instruction files, local agent settings/hooks, .goat-flow/config.yaml when present, .goat-flow/skill-docs/ and .goat-flow/skill-docs/playbooks/ when present, controlling-workspace harness code under src/cli/audit/harness/, and any dashboard terminal/runner context text that affects selected-target execution.",
     "",
-    "Output sections: Harness Scorecard; Findings ordered by severity; Concern-by-concern analysis; False positive and false negative risks; Top 5 improvements; What was not verified. For each deterministic harness concern (Context, Constraints, Verification, Recovery, Feedback Loop), state what works, what fails or is weak, exact file or semantic-anchor evidence, and a verification command that would prove the fix.",
+    "Output sections: Harness Scorecard; Findings ordered by severity; Concern-by-concern analysis; False positive and false negative risks; Up to 5 supported improvements; What was not verified. For each deterministic harness concern (Context, Constraints, Verification, Recovery, Feedback Loop), state what works, what fails or is weak, exact file or semantic-anchor evidence, and a verification command that would prove the fix.",
     "",
     "Do not treat a structural PASS as quality PASS. If a score or check claims completeness, verify what behavior it actually proves.",
   ].join("\n");

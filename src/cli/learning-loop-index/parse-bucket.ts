@@ -99,6 +99,8 @@ const ENTRY_METADATA_LEAD_LABELS: Record<IndexBucket, ReadonlySet<string>> = {
     "Caught at",
     "Incident count",
     "Latest occurrence",
+    "Severity",
+    "Enforced-by",
     "Reason",
     "Corrected",
     "Dependency note",
@@ -116,6 +118,8 @@ const ENTRY_METADATA_LEAD_LABELS: Record<IndexBucket, ReadonlySet<string>> = {
     "Caught at",
     "Incident count",
     "Latest occurrence",
+    "Severity",
+    "Enforced-by",
     "Last recurrence",
     "Recurrences",
     "Reason",
@@ -147,6 +151,8 @@ const INLINE_ENTRY_METADATA_LABELS = new Set([
   "Caught at",
   "Incident count",
   "Latest occurrence",
+  "Severity",
+  "Enforced-by",
   "Last recurrence",
   "Recurrences",
   "Reason",
@@ -414,8 +420,10 @@ function parseEntryFileSections(
 ): ActiveLearningLoopSection[] {
   const { body } = parseMarkdownFrontmatter(file.content);
   const resolvedAt = findResolvedEntriesHeadingIndex(body);
-  return splitEntrySections(body, HEADING_KIND[bucket])
-    .filter((section) => resolvedAt === -1 || section.start < resolvedAt)
+  // Resolved history belongs to no active entry; cut it off before splitting so the last active section cannot absorb its reading cost or
+  // its citations, which recall would otherwise attribute to that entry.
+  const activeBody = resolvedAt === -1 ? body : body.slice(0, resolvedAt);
+  return splitEntrySections(activeBody, HEADING_KIND[bucket])
     .filter(
       (section) => entryStatus(section.content).toLowerCase() !== "resolved",
     )

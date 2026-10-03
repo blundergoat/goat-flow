@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-09-18
+last_reviewed: 2026-10-03
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
@@ -18,8 +18,9 @@ last_reviewed: 2026-09-18
 ## Lesson: Do not convert a fix request into threshold tuning
 
 **Status:** active | **Created:** 2026-05-30
+**Severity:** INTEGRATION
 **Decision changed:** Re-run the analyzer after each candidate fix and restore the original code when the edit only trades one advisory for another.
-**Incident count:** 4 | **Latest occurrence:** 2026-09-12
+**Incident count:** 5 | **Latest occurrence:** 2026-10-03
 
 **Prevention:** For gruff cleanup, classify the action before editing: FIX code, IGNORE paths, BASELINE accepted debt, or TUNE config. After each edit, compare rule identities as well as the total; a lower or unchanged count can still hide rule substitution. If the user asks to "fix" a rule cluster, do not tune thresholds or other rule numbers unless they explicitly approve that policy change. If a finding cannot be fixed safely in the current scope, stop and say so instead of making the analyzer quieter. Evidence anchors: `.gruff-ts.yaml` (search: `size.file-length`), `CHANGELOG.md` (search: `gruff-ts size cleanup`).
 
@@ -32,6 +33,10 @@ last_reviewed: 2026-09-18
 **Recurrence 2026-09-06:** The Git-hook split review added four installer YAML cases to a test file near its size limit. Two sizing edits still left `size.file-length` findings, and preflight failed after the focused behavior checks passed. I rewound my test-file edits to the user's staged baseline, then replaced the existing flow-map case with one compact five-case table. The original choice and formatting assertions remain, with repeat-install checks for every case; the four reproduced failures now pass. The scoped analyzer reports `0 error` and `0 warning` without a threshold change. Check the file's applicable size gate before the expensive suite, and rewind after two unsuccessful corrections. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `legacyHookChoices`) and `.gruff-ts.yaml` (search: `size.file-length`).
 
 **Recurrence 2026-09-12:** M66 removed the unused catch binding and void expression from src/dashboard/dashboard-app-project-terminal-fragments.ts (search: copyTextToClipboard). Clipboard ESLint already exited 0 on the baseline, but the requested cleanup introduced waste.swallowed-catch. Reading the installed analyzer's hasIntentionalCatchRationale showed that a non-fatal recovery explanation is supported. Clarifying the textarea-fallback comment removed the warning while preserving its statements and control flow. Compare analyzer identities after catch cleanup rather than adding dummy expressions or retuning warnings.
+
+**Recurrence 2026-10-03:** A new best-effort cleanup helper in the hook launcher tripped `waste.swallowed-catch` with an empty catch, then `waste.useless-return` when the catch ended in a bare `return`.
+Returning the removed-record count from both the catch and the normal path satisfied both rules without changing behaviour, so a value-bearing return is the third option before `SKIP-CODEBASE`.
+Evidence: `workflow/hooks/hook-launch-runtime.mjs` (search: `pruneStaleStopRecoveryRecords`).
 
 ## Lesson: Gruff JSON captures must not go through noisy npm output
 
@@ -46,6 +51,7 @@ last_reviewed: 2026-09-18
 ## Lesson: Gruff error-behavior comments need rule vocabulary
 
 **Status:** active | **Created:** 2026-06-10
+**Severity:** INTEGRATION
 
 **Incident count:** 5 | **Latest occurrence:** 2026-09-05
 
@@ -80,6 +86,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 ## Lesson: Do not leave generated gruff defaults after an init probe
 
 **Status:** active | **Created:** 2026-06-09
+**Severity:** INTEGRATION
 
 **Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, merge current generated defaults with the still-supported project tuning before broad verification; do not revive rules removed by the installed version. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedAbbreviations:`), `.gruff-ts.yaml` (search: `acceptedBooleanNames:`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
 
@@ -102,6 +109,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 ## Lesson: Confirm gruff unused-import findings before deleting imports
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** CORRECTNESS
 
 **Incident count:** 3 | **Latest occurrence:** 2026-08-06
 
@@ -116,6 +124,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 ## Lesson: Run cheap style gates before expensive gruff verification
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 
 **Incident count:** 9 | **Latest occurrence:** 2026-09-18
 
@@ -143,6 +152,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 ## Lesson: Gruff cleanup automation must fit the hook surface
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-05
 
 **Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
@@ -158,3 +168,35 @@ Using a single-quoted plain search pattern let the read-only check run safely. E
 **Recurrence 2026-09-05:** Clarity-pass commands containing serialized source exceeded the hook's 16 KB command limit and were rejected before writes.
 Smaller patches and verification commands that read the selected files directly completed the work within the enforced limit.
 Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `16384`).
+
+## Lesson: Check Gruff file-length headroom before growing a large test file
+
+**Status:** active | **Created:** 2026-10-03
+**Severity:** INTEGRATION
+
+**Incident count:** 2 | **Latest occurrence:** 2026-10-03
+**Decision changed:** Before adding a test or assertion messages to a large test file, compare its substantive line count with Gruff's 1,000-line `size.file-length` limit and leave room for Prettier wrapping.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Run `bash scripts/gruff-ts.sh analyse <file>` before editing a test file near 950 substantive lines. Comments do not count, but a one-line assertion that gains a message wraps to five lines once it passes Prettier's print width; prefer a short existing variable as the label, or put a new test in the smaller suite that owns the same contract. Evidence anchors: `test/unit/hooks-runtime-evidence.test.ts` (search: `fails a Codex Stop hook that never delivers a scan`) and `test/unit/review-validate.test.ts` (search: `validateReviewReport(short, root).violations, [], flag`).
+
+**What happened:** Two edits on 2026-10-03 pushed test files past Gruff's 1,000-line limit, an error-level finding that fails the warning ratchet. A new Codex Stop test pushed `test/integration/hook-effective-state.test.ts` to 1,017 substantive lines, so the test moved to the smaller hooks runtime evidence suite. Case labels on loop assertions then pushed `test/unit/review-validate.test.ts` to 1,006, and one-line labels brought it back under the limit.
+
+**Root cause:** I sized each edit by its intent rather than by the lines Prettier would produce.
+
+## Lesson: Check each Gruff-driven comment against the code it describes
+
+**Status:** active | **Created:** 2026-10-03
+**Severity:** CORRECTNESS
+
+**Incident count:** 1 | **Latest occurrence:** 2026-10-03
+**Decision changed:** After writing a clause to clear a Gruff documentation finding, reread the code it describes and confirm its subject, branch and scope before moving on.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Check three things against the function body: the subject (the check throws, not the proof it reads), the branch (an explicit early return is not the catch) and the scope (one sorted list is not every result). When no truthful wording carries the rule's vocabulary, leave the advisory open. Evidence anchors: `src/cli/server/hook-runtime-proof.ts` (search: `missing or redirected files return null`) and `src/cli/review-validate-authority.ts` (search: `resolved paths keep a stable sorted order`).
+
+**What happened:** A 2026-10-03 Gruff sweep across 95 files added rule vocabulary and purpose comments. Two independent read-only reviews and my own read-through then found 12 claims the code did not support. `managedPolicyRuntimeIdentity` said its catch swallowed redirected files, but an explicit trust check returns null first; `copyOfficial` documented `hookIds` as "listed in a stable order" although the method sorts them itself; `selectPaths` said its results were sorted when only the resolved path list is. Gruff, Prettier, typecheck and the owning tests all passed with these comments in place.
+
+**Root cause:** I checked each new word against the rule's vocabulary instead of against the code the clause described.

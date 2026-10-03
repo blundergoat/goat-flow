@@ -138,7 +138,7 @@ expect_block() {
   fi
 }
 
-# Assert representative stderr copy names the policy scope and the denied reason.
+# Assert representative stderr copy; pass `exact` as argument seven for a complete fixed message.
 expect_block_message() {
   local hook="$1"
   local command="$2"
@@ -161,8 +161,12 @@ expect_block_message() {
     record_fail "$hook should block $label for copy check (exit=$status)"
     return
   fi
-  # The denial must explain the expected policy reason so the maintainer can act on the block.
-  if [[ "$output" != *"BLOCKED: Policy $expected_scope:"* || "$output" != *"$expected_reason"* ]]; then
+  # Fixed messages must reject extra command data, including fragments of an unsafe token.
+  if [[ "${7:-}" == exact ]]; then
+    if [[ "$output" != "BLOCKED: Policy $expected_scope: $expected_reason" ]]; then
+      record_fail "$hook block copy should match fixed text for $label"
+    fi
+  elif [[ "$output" != *"BLOCKED: Policy $expected_scope:"* || "$output" != *"$expected_reason"* ]]; then
     record_fail "$hook should identify policy and reason for $label"
   fi
   # Retired block wording would obscure the policy responsible for the denied request.
@@ -170,7 +174,7 @@ expect_block_message() {
     record_fail "$hook block copy should not use legacy Guard wording for $label"
   fi
   if [[ -n "$forbidden_reason" && "$output" == *"$forbidden_reason"* ]]; then
-    record_fail "$hook block copy should not include $forbidden_reason for $label"
+    record_fail "$hook block copy should omit forbidden command data for $label"
   fi
 }
 
@@ -212,6 +216,7 @@ expect_copilot_block() {
   local hook="$1"
   local command="$2"
   local label="$3"
+  local expected_reason="${4:-}"
   selected_hook "$hook" || {
     record_skip
     return
@@ -232,6 +237,10 @@ expect_copilot_block() {
   # Retired block wording would obscure the policy responsible for the denied request.
   if [[ "$output" != *"Policy "* || "$output" == *"Guard "* ]]; then
     record_fail "$hook Copilot payload should identify policy without legacy Guard wording for $label"
+  fi
+  # Fixed denial copy must not carry command data through the provider's JSON encoding.
+  if [[ -n "$expected_reason" ]] && ! provider_json_matches "$output" permissionDecisionReason "$expected_reason"; then
+    record_fail "$hook provider reason should match fixed text for $label"
   fi
 }
 
@@ -296,6 +305,7 @@ expect_antigravity_block() {
   local hook="$1"
   local command="$2"
   local label="$3"
+  local expected_reason="${4:-}"
   selected_hook "$hook" || {
     record_skip
     return
@@ -316,6 +326,10 @@ expect_antigravity_block() {
   # Retired block wording would obscure the policy responsible for the denied request.
   if [[ "$output" != *"Policy "* || "$output" == *"Guard "* ]]; then
     record_fail "$hook Antigravity payload should identify policy without legacy Guard wording for $label"
+  fi
+  # Fixed denial copy must not carry command data through the provider's JSON encoding.
+  if [[ -n "$expected_reason" ]] && ! provider_json_matches "$output" reason "$expected_reason"; then
+    record_fail "$hook provider reason should match fixed text for $label"
   fi
 }
 
@@ -785,6 +799,13 @@ run_smoke() {
     fi
   done
   expect_block_message shell "rm -rf /" "rm -rf copy" "destructive" "rm -r without safe scoping"
+  local cleanup_reason="rm -r without safe scoping. Only for already-approved deletion: use rm on each reviewed literal file, then rmdir on the empty directory. Confirm targets before deleting 5+ files; secret and human-only restrictions still apply."
+  expect_block_message shell 'rm -r "$target"' "approved cleanup recovery copy" "destructive" "$cleanup_reason" '$target' exact
+  expect_copilot_block shell 'rm -r "$target"' "Copilot approved cleanup recovery" "Policy destructive: $cleanup_reason"
+  expect_antigravity_block shell 'rm -r "$target"' "Antigravity approved cleanup recovery" "Policy destructive: $cleanup_reason"
+  expect_allow shell 'rm ./reviewed.txt' "reviewed literal file recovery"
+  expect_allow shell 'rmdir ./reviewed-dir' "empty literal directory recovery"
+  expect_block paths 'rm .env' "cleanup recovery preserves secret restriction"
   expect_block_message paths "cat .env" ".env read copy" "secret" "Use a checked-in example or ask the user for sanitized fields"
   expect_block_message git "git push origin main" "git publication copy" "repository" "Git publication is not allowed"
   expect_block git "git -C /tmp push origin main" "git -C push"
@@ -1320,6 +1341,19 @@ run_full() {
   expect_allow shell 'cmd /c "@echo Ready"' 'cmd echo-suppressed output'
   expect_block git 'cmd //c "echo a\& git.exe push origin main"' 'cmd backslash is not an escape'
   expect_allow git 'cmd //c "echo a ^& git.exe push origin main"' 'cmd caret escapes an ampersand'
+  # Carets escape command and path letters too; outer Bash quotes do not become cmd quotes.
+  for cmd_prefix in '' 'call ' 'start /b '; do
+    expect_block git "cmd //c \"${cmd_prefix}g^it pu^sh origin main\"" 'cmd caret-obfuscated publication'
+    expect_block git "cmd //c \"${cmd_prefix}gh pr me^rge 12\"" 'cmd caret-obfuscated PR merge'
+    expect_block shell "cmd //c \"${cmd_prefix}r^d /s /q C:/goat-probe-target\"" 'cmd caret-obfuscated deletion'
+    expect_block paths "cmd //c \"${cmd_prefix}type .e^nv\"" 'cmd caret-obfuscated secret path'
+    expect_allow git "cmd //c \"${cmd_prefix}g^it sta^tus --short\"" 'cmd caret-obfuscated inspection'
+    expect_allow shell "cmd //c \"${cmd_prefix}echo r^d /s /q example\"" 'cmd caret-obfuscated printed deletion'
+  done
+  expect_block git 'cmd //c git pu^sh origin main' 'cmd unquoted caret publication'
+  expect_allow git 'cmd //c "echo a ^| g^it pu^sh origin main"' 'cmd escaped pipe stays literal'
+  expect_allow git 'cmd //c "echo a ^& g^it pu^sh origin main"' 'cmd escaped ampersand stays literal after word normalization'
+  expect_allow git 'cmd //c "git pu^^sh origin main"' 'cmd doubled caret stays literal'
   expect_block git "cmd //c \"echo ' & git.exe push origin main & echo '\"" 'cmd single quotes do not quote'
   expect_block git 'cmd //e:on //c "git.exe push origin main"' 'cmd Git Bash switch before publication'
   expect_allow git 'cmd //e:on //c "git.exe status --short"' 'cmd Git Bash switch before inspection'
@@ -1830,6 +1864,27 @@ run_full() {
   expect_block git "echo x | git reset --hard HEAD" "piped git reset hard"
   expect_block git "git -C . reset --hard" "git -C reset hard"
   expect_block git "git clean -fd" "git clean force"
+  expect_block git "git clean --for -d" "clean force prefix for"
+  expect_block git "git clean --forc" "clean force prefix forc"
+  expect_block git "git clean -d --fo -x" "clean force prefix fo between flags"
+  expect_block git "git clean --f -d" "clean force prefix f"
+  expect_block git "git clean -qdf" "clean force at bundle end"
+  expect_block git "git clean -dfq" "clean force inside bundle"
+  expect_block git "git clean -nf" "clean force keeps conservative dry-run policy"
+  expect_block git "git clean -e --for --forc" "clean force after separated exclude value"
+  expect_block git 'git clean --exclude "--for --fo" --f' "clean force after quoted exclude value"
+  expect_block git "git -c alias.cl=clean cl --for" "clean alias with appended force prefix"
+  expect_allow git "git clean -ndx" "clean plain dry-run"
+  expect_allow git "git status --short" "clean fix preserves status"
+  expect_allow git "git clean -- --force" "clean force spelling after option separator"
+  expect_allow git "git clean -efolder" "clean attached exclude value owns f"
+  expect_allow git "git clean -qe --for" "clean bundled exclude consumes next word"
+  expect_allow git "git clean -e --for" "clean separated short exclude value"
+  expect_allow git "git clean --exclude --for" "clean separated long exclude value"
+  expect_allow git "git clean --ex=--for" "clean abbreviated attached exclude value"
+  expect_allow git 'git clean --ex "--for --fo"' "clean quoted exclude value preserves words"
+  expect_allow git 'git -c "alias.cl=clean --exclude \"--for --fo\"" cl' "clean alias quoted exclude value"
+  expect_block git 'git -c "alias.cl=clean --exclude \"--for --fo\"" cl --f' "clean alias force after quoted exclude value"
   expect_block git "printf x | xargs git clean -fd" "xargs git clean force"
   expect_block git "git send-pack origin main" "git send-pack"
   expect_block git "git http-push --force https://example.invalid/repo.git main" "git http-push publication"
@@ -1982,7 +2037,21 @@ run_full() {
   expect_block git "git --attr-source HEAD push origin main" "attr-source value hides publication"
   expect_block git "git --attr-source HEAD commit -m x" "attr-source value hides commit"
   expect_block git "git --shallow-file /dev/null reset --hard" "shallow-file value hides hard reset"
-  expect_block_message git "git --made-up-option HEAD status" "unlisted global option" "repository" "Unrecognised Git global option --made-up-option"
+  local unknown_option_reason="Unrecognised Git global option: the hook cannot tell which Git command runs. Drop the option or ask the user to run the command manually."
+  expect_block_message git "git --made-up-option HEAD status" "unlisted global option" "repository" "$unknown_option_reason" "--made-up-option" exact
+  # Construct display controls so the source and failure labels remain printable.
+  local display_control option_data display_label
+  for display_label in bidi zero-width escape; do
+    case "$display_label" in
+      bidi) display_control=$'\u202e' ;;
+      zero-width) display_control=$'\u200b' ;;
+      escape) display_control=$'\033' ;;
+    esac
+    option_data="--unknown${display_control}option"
+    expect_block_message git "git $option_data status" "unknown option $display_label" "repository" "$unknown_option_reason" "$option_data" exact
+    expect_copilot_block git "git $option_data status" "Copilot unknown option $display_label" "Policy repository: $unknown_option_reason"
+    expect_antigravity_block git "git $option_data status" "Antigravity unknown option $display_label" "Policy repository: $unknown_option_reason"
+  done
   expect_allow git "git --attr-source HEAD status" "attr-source with a read-only command"
   expect_allow git "git --no-optional-locks status" "listed global flag"
   expect_allow git "git -P log --oneline" "short no-pager flag"

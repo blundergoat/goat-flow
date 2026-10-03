@@ -24,7 +24,7 @@ import {
 
 describe("plans check: lifecycle states and timing receipts", () => {
   /**
-   * Fixture purpose: Lane metadata preserves inactive lifecycle states and report bytes.
+   * Fixture purpose: Lane metadata must preserve inactive lifecycle states and report bytes.
    * Process/filesystem side effects: runs the CLI against temporary plans and removes them afterward.
    */
   it("preserves inactive lifecycle behavior with declared Lane metadata", () => {
@@ -88,7 +88,7 @@ describe("plans check: lifecycle states and timing receipts", () => {
     }
   });
 
-  /** All execution and review states consume slots, including pending human verification. */
+  /** Writes plans in every execution and review state; each consumes a slot, including pending human verification. */
   it("counts in-progress, testing-gate, and human-verification-pending across lanes", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-active-states-"));
     try {

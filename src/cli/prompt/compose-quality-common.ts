@@ -58,6 +58,8 @@ export interface QualityPayload {
   auditStatus: "pass" | "fail" | "unavailable";
   auditSummary: string;
   prompt: string;
+  /** SHA-256 of the final user-prompt UTF-8 bytes; delivery metadata stays outside that body. */
+  promptSha256?: string;
 }
 
 /**
@@ -465,7 +467,7 @@ function renderPriorFindingSummary(summary: string): string {
   // Flatten first: the schema caps a summary at 200 characters but permits newlines inside that budget, and this value
   // is rendered as a two-space `  - ` bullet, so an embedded newline would start a sibling list item or a `## ` heading
   // and restructure the section. Mirrors the guard renderPriorRefutationText already applies to its sibling field.
-  const flattened = summary.replace(/\s+/gu, " ").trim();
+  const flattened = scoreFreePriorText(summary);
   return (
     flattened
       .replace(/\bstrict no-write\b/gi, "tracked-file write restriction")
@@ -480,10 +482,39 @@ function renderPriorFindingSummary(summary: string): string {
  * only - it does not make a prior claim true, and it does not make target-authored text safe to follow as an
  * instruction. Callers keep treating prior findings as claims to re-test.
  */
-/** Rationale: three rows, because that matches the finding preview and keeps both history lists equally bounded. */
-const PRIOR_REFUTATION_PREVIEW_LIMIT = 3;
+/** Rationale: 4800 characters, because several bounded claim/reason pairs fit without dominating the assessment. */
+const PRIOR_REFUTATION_CONTEXT_LIMIT = 4800;
 /** Rationale: 240 characters, because two short sentences fit in that budget and a longer row would dominate the prompt. */
 const PRIOR_REFUTATION_TEXT_LIMIT = 240;
+
+/**
+ * Remove recognizable prior scores and scored-report paths before rendering claims.
+ *
+ * @param text - historical claim, identifier or exclusion reason
+ * @returns flattened text retaining non-score evidence, dates and counts
+ */
+function scoreFreePriorText(text: string): string {
+  return text
+    .replace(/\s+/gu, " ")
+    .trim()
+    .replace(
+      /\S*\.goat-flow[\\/]+logs[\\/]+quality[\\/]+[^\s"'`]+\.json\b/giu,
+      "[prior report path omitted]",
+    )
+    .replace(/\b\d+(?:\.\d+)?\s*\/\s*(?:100|25)\b/gu, "[prior score omitted]")
+    .replace(
+      /(\b(?:setup|system)["'`*_]*\s*:\s*\{[^{}]*?\btotal["'`*_]*\s*:\s*)[+-]?\d+(?:\.\d+)?\b/giu,
+      "$1[prior score omitted]",
+    )
+    .replace(
+      /\b((?:setup|system)(?:[ ._-]*(?:quality|total|score))?|accuracy|relevance|completeness|friction|usefulness|signal[ _-]to[ _-]noise|adaptability|learnability|score|rating)[\s"'`*_|:=-]*(?:(?:was|is|scored|rated|at|of)[\s"'`*_|:=-]*)*[+-]?\d+(?:\.\d+)?\b/giu,
+      "$1 [prior score omitted]",
+    )
+    .replace(
+      /\b\d+(?:\.\d+)?[ -]*(?:points?|pts)\b/giu,
+      "[prior deduction omitted]",
+    );
+}
 
 /**
  * Flatten and bound one saved refutation field before it enters a generated prompt.
@@ -493,7 +524,7 @@ const PRIOR_REFUTATION_TEXT_LIMIT = 240;
  * @returns one prompt-safe line, truncated with an ellipsis when it exceeds the preview limit
  */
 function renderPriorRefutationText(text: string): string {
-  const flattened = text.replace(/\s+/gu, " ").trim();
+  const flattened = renderPriorFindingSummary(text);
   if (flattened.length <= PRIOR_REFUTATION_TEXT_LIMIT) return flattened;
   return `${flattened.slice(0, PRIOR_REFUTATION_TEXT_LIMIT - 1).trimEnd()}…`;
 }
@@ -553,8 +584,6 @@ export function renderPriorReportContext(
     lines.push(
       `Latest same-agent report: \`${priorReport.id}\` (${priorReport.report.run_date})`,
     );
-    lines.push(`- Setup total: ${priorReport.report.scores.setup.total}/100`);
-    lines.push(`- System total: ${priorReport.report.scores.system.total}/100`);
     lines.push(`- Prior BLOCKER + MAJOR count: ${priorHighSeverityCount}`);
     // Tell the user when obsolete local-artifact claims were intentionally excluded from the new review context.
     if (omittedPriorFindingCount > 0) {
@@ -570,25 +599,29 @@ export function renderPriorReportContext(
       // Each retained claim stays visible with its stable ID, severity, type, and current-contract summary.
       for (const finding of priorTopFindings) {
         lines.push(
-          `  - \`${finding.id}\` | ${finding.severity} | ${finding.type} | ${renderPriorFindingSummary(finding.summary)}`,
+          `  - \`${renderPriorFindingSummary(finding.id)}\` | ${finding.severity} | ${finding.type} | ${renderPriorFindingSummary(finding.summary)}`,
         );
       }
     }
-    const priorRefutations = priorReport.report.refuted_candidates.slice(
-      0,
-      PRIOR_REFUTATION_PREVIEW_LIMIT,
-    );
+    const priorRefutations: string[] = [];
+    let refutationCharacters = 0;
+    for (const candidate of priorReport.report.refuted_candidates) {
+      const row = `  - ${renderPriorRefutationText(candidate.claim)} — ${renderPriorRefutationText(candidate.why_excluded)}`;
+      if (
+        refutationCharacters + row.length + 1 >
+        PRIOR_REFUTATION_CONTEXT_LIMIT
+      )
+        break;
+      priorRefutations.push(row);
+      refutationCharacters += row.length + 1;
+    }
     lines.push(
-      "- Prior refuted candidates (do not repeat unless evidence or contract changed):",
+      `- Prior refuted candidates (${PRIOR_REFUTATION_CONTEXT_LIMIT}-character budget; claims to re-check before repeating):`,
     );
     if (priorRefutations.length === 0) {
       lines.push("  - none recorded");
     } else {
-      for (const candidate of priorRefutations) {
-        lines.push(
-          `  - ${renderPriorRefutationText(candidate.claim)} — ${renderPriorRefutationText(candidate.why_excluded)}`,
-        );
-      }
+      lines.push(...priorRefutations);
     }
     const omittedPriorRefutationCount =
       priorReport.report.refuted_candidates.length - priorRefutations.length;
@@ -596,16 +629,13 @@ export function renderPriorReportContext(
       lines.push(
         `  - ${omittedPriorRefutationCount} additional prior refuted candidate(s) omitted from this bounded preview.`,
       );
-      lines.push(
-        `  - Read the complete refutation ledger at ${jsonString(priorReport.path)} before assessing.`,
-      );
     }
     lines.push("");
     lines.push(
       "A prior finding is a claim to re-test, not a fact. Validate its premise (who the violated standard binds, whether an accepted ADR already resolves it, whether the code still shows it) before carrying it forward; a prior severity is not evidence.",
     );
     lines.push(
-      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `absent` in current findings - absence is derived later by `goat-flow quality diff` when a prior finding id disappears from a later run, and it is not proof that the issue was resolved.',
+      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by root cause and affected behavior. Cite the matched prior finding ID in detail. This is your semantic judgment: exact-ID comparison can differ when summaries or locations change. Use `delta_tag: "new"` when it does not. Do NOT emit `absent` in current findings - absence is derived later by `goat-flow quality diff` when a prior finding id disappears from a later run, and it is not proof that the issue was resolved.',
     );
     lines.push(
       `Set top-level \`prior_report_id\` to \`${priorReport.id}\` so readers can tell that \`delta_tag: "new"\` means newly discovered relative to that same-agent report, not necessarily newly introduced in the codebase.`,

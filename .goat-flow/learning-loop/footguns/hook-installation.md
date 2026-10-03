@@ -8,6 +8,7 @@ last_reviewed: 2026-09-25
 ## Footgun: Hook toggles can scaffold uninstalled agent surfaces
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-09-25
 
 **Prevention:**
@@ -33,6 +34,7 @@ Keep legacy detection provider-specific and cleanup separate: `src/cli/server/ho
 ## Footgun: Hook recovery guidance can drift from the public CLI
 
 **Status:** active | **Created:** 2026-09-06 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-17
 **Decision changed:** Reuse the public claim-inspection command builder and preserve recovery guidance in every hook error consumer.
 
@@ -75,6 +77,7 @@ Public-install convergence requires a separate replay after Sync and saved-handl
 ## Footgun: Hook command strings can fail before guard code starts
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 8 | **Latest occurrence:** 2026-08-27
 
 **Prevention:**
@@ -152,6 +155,7 @@ Evidence: `test/integration/hook-sync-recovery.test.ts` (search: `recovers a ful
 ## Footgun: Hook launchers fail closed when the shell cwd is outside any git repo, wedging every Bash
 
 **Status:** active | **Created:** 2026-06-04 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-08-09
 
 **Prevention:**
@@ -217,6 +221,7 @@ Evidence: `test/integration/hook-sync-recovery.test.ts` (search: `recovers a ful
 ## Footgun: Fixed hook indentation can reparent existing YAML settings
 
 **Status:** active | **Created:** 2026-09-05 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Infer the existing sibling indentation before inserting a hook into a block mapping.
 **Trigger phase:** ACT
 **Caught at:** VERIFY

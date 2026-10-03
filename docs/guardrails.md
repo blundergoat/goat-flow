@@ -48,6 +48,12 @@ The launcher can report these failures only after Node starts. A host that canno
 
 For shell-context problems, distinguish the hook's launcher from the command being inspected. A PowerShell registration describes how the hook starts, not which shell will interpret the proposed command. Use the provider's captured command fields and established tool-shell context when diagnosing grammar. Missing context leaves the case unresolved; it does not justify stripping escapes or relaxing a denial.
 
+## Windows command grammar
+
+Explicit `cmd /c` and `cmd //c` bodies use cmd quoting and escapes; PowerShell bodies use PowerShell grammar, and WSL wrappers distinguish shell interpretation from direct execution. The shared corpus covers these hosts, launch prefixes, and paired read-only controls. A host's launcher language does not establish the proposed command's language.
+
+Cmd caret escapes in command and path words must reach the same policy as their plain spelling. Escaped operators must stay literal, and cmd double quotes retain literal carets. Linux classifier tests establish parser decisions; they do not establish native Windows execution or live provider delivery. See the hook-policy-testing playbook for the grammar and platform checks.
+
 ## Recovering an older installation
 
 On the newer dashboard's Hooks page, select the affected project and use **Sync official hooks** before changing an incompatible policy installation.

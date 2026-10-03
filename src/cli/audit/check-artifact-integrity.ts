@@ -277,8 +277,8 @@ function checkSkillIdentities(templateRoot: string): DriftFinding[] {
 }
 
 /**
- * Report canonical or installed skill Markdown omitted from the manifest's declared file set.
- * Compare both sides because undeclared source is not shipped and leftover installed guidance can outlive a rename.
+ * Reports canonical or installed skill Markdown omitted from the manifest's declared file set.
+ * Compares both sides because undeclared source is not shipped and leftover installed guidance can outlive a rename.
  *
  * @param fs - audited project filesystem; empty mirrors produce no stale-file findings
  * @param templateRoot - package or fixture root; empty resolves source paths from the current working directory
@@ -341,8 +341,8 @@ function checkSkillFileSets(
 }
 
 /**
- * Report shared source and installed Markdown absent from the explicit mirror map.
- * Preserve marked user-owned playbooks so local extensions do not appear as stale package guidance.
+ * Reports shared source and installed Markdown absent from the explicit mirror map.
+ * Skips marked user-owned playbooks so local extensions do not appear as stale package guidance.
  *
  * @param fs - audited project filesystem; an empty installed tree yields no stale extras
  * @param templateRoot - package or fixture root; empty resolves source paths from the current working directory

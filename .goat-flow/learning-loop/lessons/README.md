@@ -36,6 +36,10 @@ Inside a bucket, add entries as `## Lesson:` or `## Pattern:` blocks. Each entry
 
 When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`. Record each new incident with the canonical `**Recurrence YYYY-MM-DD:**` prose label. Recurrence prose records individual evidence; Incident count records the total. Keep both current; neither suppresses the other. Legacy one-entry files still work during migration, but category buckets with the frontmatter contract are the preferred and audited format.
 
+For an active entry with two or more incidents, add optional `**Severity:**` when the incident evidence supports a tier: `SECURITY` for secret exposure or a safety-control bypass; `CORRECTNESS` for wrong behaviour, results or lost data; `INTEGRATION` for a broken contract or cross-surface drift; `PERFORMANCE` for measured time or resource cost; `STYLE` for naming or readability alone. The report ranks them in that order, then by effective incident count. Frequency does not determine severity. Leave the field absent when impact cannot be established; the report counts it as unclassified and ranks it after known tiers.
+
+Add optional `**Enforced-by:**` only after verifying a shipped hook, deny rule, audit check, or contract or integration test against the entry's failure. Cite the real path and a grep-friendly semantic anchor. A path that merely exists is not enforcement evidence. A linked entry remains in the complete stats JSON but leaves the human action list; linking does not resolve it automatically. Human review decides when a guard makes the mistake mechanically impossible and the entry can become `resolved`.
+
 Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
 
 ## Editing Contract-Pinned Guidance

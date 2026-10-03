@@ -107,7 +107,7 @@ function createClaudeProject(): string {
 }
 
 /**
- * Create the smallest Codex project whose generated handlers can be replayed on Windows.
+ * Create the smallest Codex project whose generated handlers the local host can replay.
  * Side effects: creates and writes one disposable project removed by suite cleanup.
  */
 function createCodexProject(): string {
@@ -937,6 +937,7 @@ describe("effective hook state", () => {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "effective",
+        `policy ${hookId}`,
       );
     }
     const sharedPath = join(
@@ -952,6 +953,7 @@ describe("effective hook state", () => {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "installation-stale",
+        `policy ${hookId}`,
       );
     }
     let confirmationIdentity: string | undefined;
@@ -975,6 +977,7 @@ describe("effective hook state", () => {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "scenario-unverified",
+        `policy ${hookId}`,
       );
     }
     assert.equal(verify("git-mutations-hook").status, "pass");
@@ -1062,44 +1065,41 @@ describe("effective hook state", () => {
     );
   });
 
-  it(
-    "replays Codex Stop results without upgrading stale provider proof",
-    { skip: process.platform !== "win32" },
-    (testContext) => {
-      // Local replay cannot renew a capture after its published deadline.
-      testContext.mock.timers.enable({
-        apis: ["Date"],
-        now: new Date("2026-10-17T00:00:00.001Z"),
-      });
-      const projectPath = createCodexProject();
-      initializeDisposableGitProject(projectPath);
-      mkdirSync(join(projectPath, "src"), { recursive: true });
-      writeFileSync(
-        join(projectPath, "src", "example.txt"),
-        ["<<<<<<< HEAD", "left", "=======", "right", ">>>>>>> branch", ""].join(
-          "\n",
-        ),
-      );
-      syncHookStates(projectPath);
+  // Writes a merge-conflict file so the valid Stop probe has a real finding; a clock past the capture deadline keeps provider proof stale.
+  it("replays Codex Stop results without upgrading stale provider proof", (testContext) => {
+    // Local replay cannot renew a capture after its published deadline.
+    testContext.mock.timers.enable({
+      apis: ["Date"],
+      now: new Date("2026-10-17T00:00:00.001Z"),
+    });
+    const projectPath = createCodexProject();
+    initializeDisposableGitProject(projectPath);
+    mkdirSync(join(projectPath, "src"), { recursive: true });
+    writeFileSync(
+      join(projectPath, "src", "example.txt"),
+      ["<<<<<<< HEAD", "left", "=======", "right", ">>>>>>> branch", ""].join(
+        "\n",
+      ),
+    );
+    syncHookStates(projectPath);
 
-      const report = verifyManagedConfiguredHook({
-        projectPath,
-        agent: "codex",
-        scenarioGroup: "post-turn-hook",
-        isTargetUntrusted: false,
-      });
+    const report = verifyManagedConfiguredHook({
+      projectPath,
+      agent: "codex",
+      scenarioGroup: "post-turn-hook",
+      isTargetUntrusted: false,
+    });
 
-      assert.equal(report.status, "pass", JSON.stringify(report, null, 2));
-      assert.deepEqual(
-        report.scenarios.map((scenario) => scenario.observed),
-        ["finding", "incomplete"],
-      );
-      assert.deepEqual(
-        codexHookState(projectPath, "post-turn-safety").effectiveState,
-        { status: "provider-capture-stale", severity: "warning" },
-      );
-    },
-  );
+    assert.equal(report.status, "pass", JSON.stringify(report, null, 2));
+    assert.deepEqual(
+      report.scenarios.map((scenario) => scenario.observed),
+      ["finding", "incomplete"],
+    );
+    assert.deepEqual(
+      codexHookState(projectPath, "post-turn-safety").effectiveState,
+      { status: "provider-capture-stale", severity: "warning" },
+    );
+  });
 
   // An edited source without a Gruff config is unavailable and malformed input is incomplete, while a non-source edit stays quiet.
   it("replays incomplete, quiet, and unavailable Gruff results through its configured command", () => {
@@ -1131,7 +1131,7 @@ describe("effective hook state", () => {
   });
 });
 
-// Write an incompatible launcher in a disposable project; an off request must preserve both saved config and launcher bytes.
+// Writes an incompatible launcher in a disposable project; an off request must preserve both saved config and launcher bytes.
 it("refuses off before changing an incompatible launcher and preserves all config bytes", () => {
   const root = createClaudeProject();
   syncHookStates(root);

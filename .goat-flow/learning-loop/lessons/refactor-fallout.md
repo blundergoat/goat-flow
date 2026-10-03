@@ -8,6 +8,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Rename sweeps into test/ skip typecheck entirely
 
 **Status:** active | **Created:** 2026-08-19
+**Severity:** CORRECTNESS
 **Incident count:** 3 | **Latest occurrence:** 2026-09-19
 
 **Prevention:** After a rename sweep that touches `test/`, run the suites owning the renamed files before trusting typecheck; for the slow suite that is `npm run test:slow:ci -- --shard=<i>/5` on the shard holding those files. When a declaration or call site is renamed, check that the declared return type and every reader moved with it. Evidence anchors: `tsconfig.json` (search: `"exclude"`), `test/integration/dashboard-server.helpers.ts` (search: `export function assertAuditScope`), `test/integration/dashboard-audit-api.test.ts` (search: `ms: elapsedMs`), `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `only treats image file drag items`).
@@ -33,6 +34,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Size refactors must preserve browser script load graphs in tests
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 **Decision changed:** After splitting or extracting from a dashboard classic script, update the HTML load order, every VM helper source list, and every source-shape assertion in the same patch, then run the focused VM suites before expanding the refactor.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -51,6 +53,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Split tests must import their former shared scope explicitly
 
 **Status:** active | **Created:** 2026-05-31 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-12
 
 **Prevention:** After splitting any test file, run the whole new file glob rather than one renamed slice, and add explicit imports before trusting the split even when the old parent imported the same helpers. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `export {`), `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `COPILOT_GRUFF_HOOK_ENTRY`).
@@ -66,6 +69,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Parameterized matrix tests need named cases with direct assertions
 
 **Status:** active | **Created:** 2026-07-13
+**Severity:** INTEGRATION
 **Decision changed:** Generate one named test per matrix value and keep the assertion in that test callback; shared helpers return evidence instead of hiding assertions.
 **Trigger phase:** ACT
 **Caught at:** VERIFY

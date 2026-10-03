@@ -17,7 +17,18 @@ import type {
 } from "./schema.js";
 import { parseQualityReport } from "./schema.js";
 import { attachFindingIds } from "./ids.js";
+import { isSameQualityAssessmentTarget } from "./rubric.js";
 import { KNOWN_AGENT_IDS } from "../agents/registry.js";
+import {
+  countQualityConcerns,
+  describeQualityFixes,
+  type QualityFixView,
+} from "./fix-references.js";
+import type { QualityConcernCounts } from "./schema-types.js";
+import {
+  buildQualityRepeatSpreads,
+  type QualityRepeatSpread,
+} from "./repeat-spread.js";
 
 const QUALITY_HISTORY_FILENAME = new RegExp(
   `^(\\d{4}-\\d{2}-\\d{2})-(\\d{4})-(${KNOWN_AGENT_IDS.join("|")})-([a-z0-9]{5})\\.json$`,
@@ -32,10 +43,15 @@ export interface QualityHistoryEntry {
   agent: AgentId;
   randomId: string;
   report: SavedQualityReport;
+  /** Per-report counts; omitted only by older in-memory callers. */
+  concernCounts?: QualityConcernCounts;
+  /** Current availability beside each immutable saved conclusion. */
+  fixRecords?: QualityFixView[];
 }
 
 /** Display row for history tables after same-agent deltas have been calculated. */
 export interface QualityHistoryRow {
+  repeatSpread?: QualityRepeatSpread | null;
   id: string;
   date: string;
   agent: AgentId;
@@ -43,6 +59,7 @@ export interface QualityHistoryRow {
   setupTotal: number;
   systemTotal: number;
   setupDelta: number | null;
+  systemDelta: number | null;
   blockerCount: number;
   majorCount: number;
   minorCount: number;
@@ -51,6 +68,7 @@ export interface QualityHistoryRow {
    * Lets the dashboard distinguish runtime-probe runs from static-only runs.
    */
   evidenceMethods: SavedQualityFinding["evidence_method"][];
+  concernCounts?: QualityConcernCounts;
 }
 
 /** Finding summary row shared by absent, new, persisted, and stuck diff sections. */
@@ -62,15 +80,15 @@ export interface QualityDiffFindingRow {
 }
 
 /**
- * One finding where the agent's self-reported `delta_tag` contradicts the deterministic id-based diff class.
+ * One finding where the agent's self-reported `delta_tag` differs from the deterministic exact-ID diff class.
  *
- * Surfaced as a methodology signal: the agent either found a real continuity the id algorithm missed, or tagged sloppily - either way the user should
+ * Surfaced as a methodology signal: semantic continuity may survive a changed ID, or the tag may be mistaken; the user should
  * see it, not have it silently ignored.
  */
 export interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
   /** What the agent claimed when writing the report. */
   agentTag: "new" | "persisted";
-  /** What the positional-id diff derived for the same finding. */
+  /** What the exact-ID diff derived for the same finding. */
   deterministic: "new" | "persisted";
 }
 
@@ -78,9 +96,13 @@ export interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
  * Diff result for two same-agent, same-mode quality-history entries.
  *
  * Use when a user asks which findings appeared, disappeared, or carried forward between runs.
- * Invariant: both entries must be comparable before these buckets are rendered to the CLI.
+ * Invariant: entries share an agent and mode; other comparability limits are reported as warnings.
  */
 export interface QualityDiffResult {
+  repeatSpread?: {
+    from: QualityRepeatSpread | null;
+    to: QualityRepeatSpread | null;
+  };
   from: QualityHistoryEntry;
   to: QualityHistoryEntry;
   setupDelta: number;
@@ -95,8 +117,7 @@ export interface QualityDiffResult {
    * The bucket is a pure id set difference, so a finding lands here when the defect was repaired, when the newer run never examined that artifact,
    * and when its id shifted for encoding a line number.
    *
-   * A degraded run is the worst case: a report generated without prior-report context carries `prior_report_id: null`, nothing can be tagged
-   * `persisted`, and every earlier finding reads as absent.
+   * Prior-report context controls assessor tags, not these buckets: matching IDs persist even when `prior_report_id` is null.
    *
    * Treat this as a prompt to re-check each cited artifact, never as evidence for closing remediation work.
    */
@@ -105,7 +126,7 @@ export interface QualityDiffResult {
   persisted: QualityDiffFindingRow[];
   stuck: QualityDiffFindingRow[];
   /**
-   * Agent-vs-deterministic `delta_tag` contradictions.
+   * Differences between semantic `delta_tag` claims and exact-ID matching.
    *
    * Only populated when this diff's source report IS the baseline the newer report was tagged against (`to.report.prior_report_id === from.id`) -
    * against any other pair the agent's tags describe a different comparison and disagreement would be noise.
@@ -357,6 +378,12 @@ export function loadQualityHistory(projectPath: string): {
       agent: parsedName.agent,
       randomId: parsedName.randomId,
       report: withIds.report,
+      concernCounts: countQualityConcerns(withIds.report),
+      fixRecords: describeQualityFixes(
+        projectPath,
+        withIds.report,
+        filename.replace(/\.json$/, ""),
+      ),
     });
   }
 
@@ -420,6 +447,7 @@ export function loadQualityHistoryWindow(
  * Load and validate one quality-history file.
  * It swallows a malformed or unreadable file into a warning so one bad report never hides the rest of a user's history.
  *
+ * @param projectPath - selected project root constraining the history file read
  * @param dir - quality log directory; missing directories must be checked by callers first
  * @param filename - history filename to read; empty names produce a bad file path
  * @param parsedName - filename-derived metadata; missing fields would make the entry unusable
@@ -471,6 +499,12 @@ function tryParseHistoryFile(
       agent: parsedName.agent,
       randomId: parsedName.randomId,
       report: withIds.report,
+      concernCounts: countQualityConcerns(withIds.report),
+      fixRecords: describeQualityFixes(
+        projectPath,
+        withIds.report,
+        filename.replace(/\.json$/, ""),
+      ),
     },
     warning: null,
   };
@@ -547,10 +581,10 @@ export function selectQualityHistoryEntries(
 }
 
 /**
- * Build display rows with same-agent, same-mode setup deltas.
+ * Build display rows whose score deltas compare each run with the same agent's previous run in the same mode, rubric and scope.
  *
- * Deltas are only ever taken against the previous run by the same agent in the same mode, because comparing across either one is not a like-for-like
- * contract and would show the user movement that never happened.
+ * Deltas must only be taken against the previous run by the same agent in the same mode, and only when that run scored the same assessment target
+ * (rubric and scope), because any other comparison is not like-for-like and would show the user movement that never happened.
  *
  * @param entries - pre-sorted quality-history entries; empty entries produce no history rows
  * @param options - filter and limit options; `null` limit means return every matching row
@@ -569,6 +603,7 @@ export function buildQualityHistoryRows(
     limit: null,
     qualityMode: options.qualityMode ?? null,
   });
+  const spreads = buildQualityRepeatSpreads(filtered);
   const rows = filtered.map((entry, index) => {
     const entryMode = entryQualityMode(entry);
     // Find the next older same-agent/same-mode run so the visible row can show a delta.
@@ -579,21 +614,33 @@ export function buildQualityHistoryRows(
           candidate.agent === entry.agent &&
           entryQualityMode(candidate) === entryMode,
       );
-    const previousSetup = previousSameAgent?.report.scores.setup.total ?? null;
+    const comparable =
+      previousSameAgent &&
+      isSameQualityAssessmentTarget(previousSameAgent.report, entry.report)
+        ? previousSameAgent
+        : null;
     return {
       id: entry.id,
       date: entry.report.run_date,
+      repeatSpread: spreads.get(entry.id) ?? null,
       agent: entry.agent,
       qualityMode: entryQualityMode(entry),
       setupTotal: entry.report.scores.setup.total,
       systemTotal: entry.report.scores.system.total,
       setupDelta:
-        previousSetup === null
+        comparable === null
           ? null
-          : entry.report.scores.setup.total - previousSetup,
+          : entry.report.scores.setup.total -
+            comparable.report.scores.setup.total,
+      systemDelta:
+        comparable === null
+          ? null
+          : entry.report.scores.system.total -
+            comparable.report.scores.system.total,
       blockerCount: countSeverity(entry.report, "BLOCKER"),
       majorCount: countSeverity(entry.report, "MAJOR"),
       minorCount: countSeverity(entry.report, "MINOR"),
+      concernCounts: countQualityConcerns(entry.report),
       evidenceMethods: Array.from(
         new Set(
           entry.report.findings.map((finding) => finding.evidence_method),

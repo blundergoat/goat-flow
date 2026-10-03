@@ -193,7 +193,7 @@ describe("plans export: forecast context", () => {
     }
   });
   /** Regression contract: stripping a selector must not expose a hidden heading or task.
-   * Uses temporary plans and real checker/export processes; removes only those fixtures. */
+   * Writes temporary plans and spawns real checker/export processes; removes only those fixtures. */
   it("keeps multiline comments attached to forecast methods hidden", () => {
     const document = forecastDocumentFixture();
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-comment-"));
@@ -229,7 +229,7 @@ describe("plans export: forecast context", () => {
   });
 
   /** Regression contract: equal counts cannot substitute a reopened or replacement task for saved residual work.
-   * Uses real checker processes on temporary plans, with progress and appended-revision controls. */
+   * Spawns real checker processes on temporary plans, with progress and appended-revision controls. */
   it("binds remaining work to saved identities before accepting matching totals", () => {
     const document = remainingForecastFixture();
     const body = forecastBodyFixture(document, true);
@@ -259,14 +259,23 @@ describe("plans export: forecast context", () => {
       .replace("- [ ] Export context.", "- [x] Export context.");
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-identity-"));
     try {
-      for (const invalid of [reopened, replacement, duplicated]) {
+      for (const [variant, invalid] of [
+        ["reopened", reopened],
+        ["replacement", replacement],
+        ["duplicated", duplicated],
+      ] as const) {
         const parsed = parseMilestoneMarkdown(invalid, "M01-context.md");
-        assert.equal(parsed.forecastContext?.method, null);
+        assert.equal(parsed.forecastContext?.method, null, `${variant} body`);
         assert.match(
           parsed.warnings.join("\n"),
           /live work items must uniquely match/u,
+          `${variant} body`,
         );
-        assert.deepEqual(parsed.forecastContext?.document, document);
+        assert.deepEqual(
+          parsed.forecastContext?.document,
+          document,
+          `${variant} body`,
+        );
         writePlanFixture(root, invalid, "M01-context.md");
         for (const flags of [[], ["--strict"]]) {
           const checked = runPlansCheck(root, ...flags);
@@ -274,20 +283,26 @@ describe("plans export: forecast context", () => {
           assert.match(
             checked.stdout + checked.stderr,
             /live work items must uniquely match/u,
+            `${variant} body ${flags.join(" ")}`,
           );
         }
       }
-      for (const valid of [
-        body,
-        body.replaceAll("- [ ]", "- [x]"),
-        validRevision,
-      ]) {
+      for (const [variant, valid] of [
+        ["open tasks", body],
+        ["all tasks checked", body.replaceAll("- [ ]", "- [x]")],
+        ["valid revision", validRevision],
+      ] as const) {
         const parsed = parseMilestoneMarkdown(valid, "M01-context.md");
-        assert.deepEqual(parsed.warnings, []);
-        assert.equal(parsed.forecastContext?.method, "contextual-v1");
+        assert.deepEqual(parsed.warnings, [], `${variant} body`);
+        assert.equal(
+          parsed.forecastContext?.method,
+          "contextual-v1",
+          `${variant} body`,
+        );
         assert.deepEqual(
           parsed.forecastContext.document?.records[0],
           document.records[0],
+          `${variant} body`,
         );
         writePlanFixture(root, valid, "M01-context.md");
         const checked = runPlansCheck(root, "--strict");
@@ -506,6 +521,7 @@ describe("plans export: forecast context", () => {
         assert.match(
           result.stdout,
           /forecast context: Forecast method has an unsupported value/u,
+          `flags ${flags.join(" ")}`,
         );
       }
     } finally {
@@ -576,7 +592,7 @@ describe("plans export: forecast context", () => {
     );
   });
 
-  /** Fixture purpose: nested context and rejected raw input cross the same readable redaction boundary.
+  /** Fixture purpose: nested context and rejected raw input must cross the same readable redaction boundary.
    * Filesystem/process side effects: writes temporary fixtures and runs both CLI previews. */
   it("scrubs context strings in JSON and Markdown while preserving numerical inputs", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-redaction-"));
@@ -600,8 +616,15 @@ describe("plans export: forecast context", () => {
         for (const format of ["json", "markdown"]) {
           const result = runPlansExport(root, "--format", format);
           assert.equal(result.status, 0, result.stderr);
-          assert.ok(!result.stdout.includes(marker));
-          assert.match(result.stdout, /\[REDACTED:token\]/u);
+          assert.ok(
+            !result.stdout.includes(marker),
+            `schema ${schemaVersion} ${format}`,
+          );
+          assert.match(
+            result.stdout,
+            /\[REDACTED:token\]/u,
+            `schema ${schemaVersion} ${format}`,
+          );
           const exported =
             format === "json"
               ? JSON.parse(result.stdout)[0]
@@ -630,6 +653,7 @@ describe("plans export: forecast context", () => {
             assert.equal(
               parsed.forecastContext?.document?.records[0]?.range.likelyMinutes,
               6,
+              `schema ${schemaVersion} ${format}`,
             );
           }
         }

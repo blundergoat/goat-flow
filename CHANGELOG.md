@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### Added
+
+- **Quality rerun spread** - History, diff and the dashboard show sample size, median and range, with controlled and observational groups labelled and kept apart by assessment scope.
+- **Ranked repeat problems in `stats`** - Text and Markdown show ten unguarded candidates across lessons and footguns, ordered by incident severity and frequency with remainder counts. JSON keeps every candidate, its rank, and any verified enforcement link; existing checks stay report-only.
+- **Changed-file checks for contributors** - `npm run check:touched` runs applicable formatting, lint, type, quality and guidance checks on working-tree changes, including deletion and rename triggers, with per-check timings and a failing exit status when a check fails; owning tests and preflight remain required.
+- **Invisible-control detection** - Changed text checks report literal invisible controls by file, position and code point, with escaped diagnostic filenames and no rewrites; visible Unicode, emoji, joining characters and leading BOMs stay valid.
+
+### Changed
+
+- **BREAKING: new quality findings require a concern** - Add `concern` using `context`, `constraints`, `verification`, `recovery`, or `feedback-loop`; history and diff count missing legacy values as unclassified. Optional assessor-verified fixes retain committed or captured workspace evidence and warn when references disappear. Shipped prompts supply the new rubric revision 3 contract; older saved reports remain readable.
+- **Quality assessments distinguish evidence from inference** - Prompts accept zero findings, prioritize up to five supported improvements by user benefit, and separate static inspection from runtime proof; finding comparisons distinguish assessor continuity claims from exact-ID matches.
+- **Quality score comparisons** - Reruns omit prior scores, accept integer axes from 0 to 25, and show history deltas only within the same rubric and scope.
+
+### Fixed
+
+- **Recall warns about stale citations** - Text and JSON identify missing, moved or gitignored evidence without hiding entries or changing their order.
+- **Recall and indexes skip resolved history** - `goat-flow recall` no longer returns the last active entry for citations under `## Resolved Entries`, and its INDEX reading cost excludes them.
+- **Cmd caret escapes retain command policy** - Escaped executable, verb and path words receive the same deny checks as plain spellings while escaped operators stay literal.
+- **Gruff health notices deduplicate on WSL network paths** - Health-marker directories are created relative to the verified project root, avoiding Git Bash absolute-path failures.
+- **Gruff preserves completed analysis when health state is inaccessible** - Unreadable or unwritable markers no longer discard the result.
+- **Scoped cleanup recovery** - Unsafe `rm -r` denials explain how to remove already-approved literal file targets and empty directories while preserving secret restrictions and confirmation requirements.
+- **Changed-file diagnostics** - `check:touched` preserves tool output and recognizes completed commands when a sandbox attaches `EPERM` metadata.
+- **Guidance-test execution** - Dispatcher and review fixtures accept completed Git results in managed sandboxes, and the ShellCheck setup fixture avoids a stalled script-input pipe.
+- **CLI test output** - Help, plan, quality, redaction, install-status, hook-recovery, hook-registration and claim-recovery tests preserve child-process output in managed sandboxes while retaining their exit and output assertions.
+- **Test input delivery** - Policy, saved-handler, Gruff, quality-save and redaction tests use finite stdin files to prevent hangs in managed sandboxes while preserving their assertions and explicit Windows pipe cases. The preflight ESLint-verdict fixture also supplies finite input.
+- **Gruff warning gate** - The ratchet preserves analyzer JSON in managed sandboxes and checks completed process status before interpreting `EPERM` metadata; warning, debt and coverage rules remain enforced.
+- **Post-turn hook registration** - Valid Git projects remain eligible when a managed sandbox attaches `EPERM` metadata to a successful root lookup; failed lookups still leave the hook unregistered.
+- **Post-turn hook on Windows checkouts of WSL projects** - When Git for Windows refuses a `\\wsl.localhost` checkout, the Stop result names the dubious-ownership cause and the `safe.directory` remedy, blocks once, then ends the turn instead of re-prompting the agent indefinitely.
+- **Codex Stop retries a failed safety scan once per turn** - When the scan cannot run, the hook blocks once, on native Windows too, then ends the turn with a visible "no clean scan" warning; findings, skipped content and malformed input still block.
+- **`hooks verify` no longer passes a Stop hook that did not scan** - The `post-turn-hook` scenario reports a blocking unavailable reply or a "no clean scan was recorded" warning as unavailable instead of clean or as a safety finding.
+
+### Security
+
+- **Block abbreviated forced Git cleanup** - The Git write guard recognizes `git clean --f`, `--fo`, `--for`, `--forc` and bundled `-f`, including aliases, without mistaking exclude patterns or paths after `--` for force flags.
+- **Keep denial messages free of unsafe option text** - Unrecognized Git global-option denials no longer echo supplied tokens, keeping embedded display controls out of terminal and provider messages.
+
 ## v1.17.0 - 2026-09-28
 
 ### Added

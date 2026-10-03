@@ -928,7 +928,7 @@ describe("hook-only shared history upgrades", () => {
       assert.notEqual(
         priorReference.generation,
         hookRow.generation,
-        "hook sync leaves the old full-install receipt stale",
+        `${version}: hook sync leaves the old full-install receipt stale`,
       );
       previousGeneration = hookRow.generation;
     }

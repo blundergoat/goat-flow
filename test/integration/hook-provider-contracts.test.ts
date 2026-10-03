@@ -700,6 +700,127 @@ describe("hook provider contracts", () => {
       });
     }
 
+    // Git Bash refuses `mkdir -p` on an absolute //wsl.localhost path even when the directory exists.
+    //
+    // A state directory created by absolute path therefore never stores the record that ends the repeated Stop.
+    // This case writes a managed hook copy and re-entry state while hook subprocesses run behind a mkdir shim.
+    it("bounds a managed non-Git Stop root when mkdir refuses absolute paths", () => {
+      const projectRoot = makeRoot();
+      const sessionIdentifier = "absolute-mkdir-refused-session";
+      const managedEnvironment = {
+        GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
+        GOAT_FLOW_HOOK_PROVIDER: "codex",
+        GOAT_FLOW_HOOK_EVENT: "turn-stop",
+        GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+        GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
+      };
+
+      writeFile(
+        projectRoot,
+        ".goat-flow/hooks/post-turn-safety.sh",
+        readFileSync(HOOK_PATH, "utf8"),
+      );
+
+      withCommandShim(
+        "mkdir",
+        [
+          'for argument in "$@"; do',
+          '  case "$argument" in',
+          "    /*)",
+          '      printf "mkdir: cannot create directory \'%s\': Read-only file system\\n" "$argument" >&2',
+          "      exit 1",
+          "      ;;",
+          "  esac",
+          "done",
+        ].join("\n"),
+        (commandShimEnvironment) => {
+          const firstResult = runHook(
+            projectRoot,
+            { ...managedEnvironment, ...commandShimEnvironment },
+            buildStopPayload(sessionIdentifier, false),
+          );
+          assert.equal(firstResult.status, 0, firstResult.stderr);
+          assert.equal(
+            JSON.parse(firstResult.stdout).reasonCode,
+            "coverage-incomplete",
+          );
+
+          const reentryResult = runHook(
+            projectRoot,
+            { ...managedEnvironment, ...commandShimEnvironment },
+            buildStopPayload(sessionIdentifier, true),
+          );
+          assert.equal(reentryResult.status, 0, reentryResult.stderr);
+          assert.equal(
+            JSON.parse(reentryResult.stdout).reasonCode,
+            "bounded-reentry-ended",
+            reentryResult.stderr,
+          );
+        },
+      );
+    });
+
+    // Git refuses a checkout owned by another account, which Git for Windows reports for a \\wsl.localhost checkout by default.
+    //
+    // The generic root failure hid that cause from the agent, so the result names it and the remedy only the user can apply.
+    // Each scanner has its own root lookup, so both are run behind a git shim that refuses every lookup.
+    for (const scannerVariant of STOP_SCANNER_VARIANTS) {
+      // This case writes a managed hook copy and re-entry state while hook subprocesses run behind a git shim.
+      it(`names dubious ownership when Git refuses the root with the ${scannerVariant.displayName}`, () => {
+        const forceBash3Fallback = scannerVariant.forceBash3Fallback;
+        const projectRoot = makeRoot();
+        const managedEnvironment = {
+          GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
+          GOAT_FLOW_HOOK_PROVIDER: "codex",
+          GOAT_FLOW_HOOK_EVENT: "turn-stop",
+          GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+          GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
+          [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+        };
+
+        writeFile(
+          projectRoot,
+          ".goat-flow/hooks/post-turn-safety.sh",
+          readFileSync(HOOK_PATH, "utf8"),
+        );
+
+        withCommandShim(
+          "git",
+          [
+            'for argument in "$@"; do',
+            '  if [ "$argument" = rev-parse ]; then',
+            '    printf "fatal: detected dubious ownership in repository at \'%s\'\\n" "$PWD" >&2',
+            "    exit 128",
+            "  fi",
+            "done",
+          ].join("\n"),
+          (commandShimEnvironment) => {
+            const refusedResult = runHook(
+              projectRoot,
+              { ...managedEnvironment, ...commandShimEnvironment },
+              buildStopPayload(
+                `dubious-ownership-session-${forceBash3Fallback}`,
+                false,
+              ),
+            );
+            assert.equal(refusedResult.status, 0, refusedResult.stderr);
+            const refusedEnvelope = JSON.parse(refusedResult.stdout);
+            assert.equal(refusedEnvelope.outcome, "incomplete");
+            assert.equal(refusedEnvelope.reasonCode, "coverage-incomplete");
+            assert.match(
+              refusedEnvelope.findings[0].message,
+              /dubious ownership/u,
+            );
+            assert.match(
+              refusedEnvelope.findings[0].message,
+              /safe\.directory/u,
+            );
+            assert.match(refusedResult.stderr, /dubious ownership/u);
+          },
+        );
+      });
+    }
+
     // Each named case creates a temporary Git repo and runs the selected shell scanner.
     for (const scannerVariant of STOP_SCANNER_VARIANTS) {
       // This case writes user files and re-entry state while hook subprocesses exercise recovery.

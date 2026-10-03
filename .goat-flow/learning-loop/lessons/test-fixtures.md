@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-09-26
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -82,12 +82,13 @@ last_reviewed: 2026-09-26
 ## Lesson: Workflow parser refactors need both fixture coverage and typecheck
 
 **Status:** active | **Created:** 2026-04-03 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's relationships, and lock one grammar with focused fixtures; negative mutations target a unique semantic substring; shipped path examples label placeholders explicitly and verifiers recognise the placeholder grammar rather than one literal token; at first behavioural GREEN, check whole-file complexity and headroom before adding branches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **Incident count:** 18 | **Latest occurrence:** 2026-09-13
 
-**Prevention:** For parser refactors, verify in this order: (1) print or exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity or size analysis, then (5) freeze writes and run the full suite; any later write invalidates that result. Match heuristics to behaviour patterns such as `grep ... | while read ... [ ! -e ]`, not keywords in step names. Grep the old diagnostic across tests and include the producer's own unit file in RED and GREEN proof whenever a parser message changes. For skill wording, include shared-surface contracts before compressing required rules to fit a budget. Exercise literal protocol markers, effective Git configuration, decimal rounding, and unsupported checkout states before accepting a byte-authority parser.
+**Prevention:** For parser refactors, verify in this order: (1) print or exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npm run check:touched` and inspect its selections; changed `src/*.ts` triggers typecheck, file-scoped ESLint, and the Gruff ratchet, (4) measure whole-file complexity and size headroom directly, then (5) freeze writes and run the full suite; any later write invalidates that result. Match heuristics to behaviour patterns such as `grep ... | while read ... [ ! -e ]`, not keywords in step names. Grep the old diagnostic across tests and include the producer's own unit file in RED and GREEN proof whenever a parser message changes. For skill wording, include shared-surface contracts before compressing required rules to fit a budget. Exercise literal protocol markers, effective Git configuration, decimal rounding, and unsupported checkout states before accepting a byte-authority parser.
 
 **What happened:** The first pass on the workflow `run:` parser read the wrong regex capture group and used a router heuristic that matched only commands containing the word `router`; the focused regression suite and `tsc` both failed before the broader run finished.
 
@@ -160,10 +161,11 @@ last_reviewed: 2026-09-26
 ## Lesson: Isolated fixtures must create every dependency they assert
 
 **Status:** active | **Created:** 2026-04-27
+**Severity:** CORRECTNESS
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 22 | **Latest occurrence:** 2026-09-25
+**Incident count:** 23 | **Latest occurrence:** 2026-09-28
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the system under test or the assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behaviour, run the fixture through the unchanged strict baseline so unrelated errors are absent, and keep every non-target value inside its passing bounds. Assert that every text substitution changed its fixture before using the result as simulated input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. For an invalid-state case, name and trigger the exact production predicate; arbitrary content is not invalid when the implementation treats its bytes as opaque. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
@@ -211,6 +213,8 @@ Read the full changed test file as well as the selected cases: the focused migra
 Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads inline and quoted hook toggles`, `MANAGED_HOOK_DESIRED_STATE_FIXTURES`).
 
 **Recurrence 2026-09-25 (policy directory fixture):** New directory-pathspec assertions passed in this checkout but failed in a disposable Git root that lacked `src/cli`. Moving the assertions into a temporary repository first used a relative dispatcher path, then omitted the policy store, so they failed before classifying the target commands. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_git_directory_pathspecs`) now stages its own tree, copies the complete policy fixture, and resolves the selected dispatcher absolutely. Both full corpora passed from a disposable Git root after correction.
+
+**Recurrence 2026-09-28:** M02's byte-preservation assertions tried to read the dependency symlink as a file because Git's directory-only ignore rule did not exclude it. Add `/node_modules` to the disposable checkout's local exclude file before collecting fixture paths. The corrected focused suite reported 15 passes and zero failures. Evidence: `test/unit/check-touched.test.ts` (search: `A dependency symlink is not matched by Git`, `snapshot`).
 
 ---
 

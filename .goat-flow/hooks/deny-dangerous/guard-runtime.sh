@@ -2643,7 +2643,12 @@ split_command_segments_into() {
     # Outside single quotes, the host's escape character protects the user's next character; cmd's caret is plain text inside double quotes.
     if [[ "$in_single_quote" -eq 0 && "$command_character" == "$host_escape_character" ]] &&
        [[ "$host_escape_character" != '^' || "$in_double_quote" -eq 0 ]]; then
-      current_policy_stage+="$command_character"
+      # Decode cmd word escapes for policy matching. Keep syntax escapes intact:
+      # later pipeline/conditional passes must not turn literal operators into commands.
+      next_command_character="${developer_command:command_index+1:1}"
+      if [[ "$host_escape_character" != '^' || ! "$next_command_character" =~ [[:alnum:]_./:-] ]]; then
+        current_policy_stage+="$command_character"
+      fi
       previous_character_escaped=1
       continue
     fi

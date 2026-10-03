@@ -1,9 +1,11 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-09-19
+last_reviewed: 2026-10-02
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
+
+Related evidence moved intact to [evidence-attribution.md](evidence-attribution.md).
 
 ## Lesson: A config change that fails to fix a symptom is not proof of the mechanism
 
@@ -22,6 +24,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Agent cited gitignored content as evidence in committed docs
 
 **Status:** active | **Created:** 2026-05-11
+**Severity:** INTEGRATION
 **Decision changed:** Before citing a local file as durable evidence, verify that Git tracks it or cite the committed detector or source that supports the claim.
 **Incident count:** 5 | **Latest occurrence:** 2026-09-03
 
@@ -77,7 +80,8 @@ last_reviewed: 2026-09-19
 ## Lesson: Absence claims need untruncated searches
 
 **Status:** active | **Created:** 2026-07-03 | **Evidence:** OBSERVED
-**Incident count:** 7 | **Latest occurrence:** 2026-09-11
+**Severity:** CORRECTNESS
+**Incident count:** 8 | **Latest occurrence:** 2026-10-02
 
 **Prevention:** Before claiming a pattern is absent, rerun the exact single pattern with no `head` or `tail` truncation, or count with `grep -c`. For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Derive an exact-count claim from the widest search it implies, `git grep` over the tracked tree, before pinning it into a stop condition. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
 
@@ -94,6 +98,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 - **Recurrence 2026-09-09:** M50's all-copy baseline JSON and lessons INDEX captures exceeded output budgets. Bounded fifty-line reads and exact character counts recovered them before source edits; failed captures earned no baseline credit. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
 - **Recurrence 2026-09-11:** M42 guidance and drift captures truncated; M43 repeated the problem and printed full export rows after treating an array as an object. Complete in-memory parsing recovered the evidence. DG-03 also lost required input when five file reads shared one response despite large budgets; that attempt was invalidated. Emit each complete input separately and distinguish command success from evidence delivery. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `## Proof Gate`); affected guidance: `workflow/skills/goat-debug/SKILL.md` (search: `Post-Fix Verification`).
 - **Recurrence 2026-09-11 (M39):** Combined source reads, context JSON and a full plan export exceeded capture budgets; increasing the export budget still failed. Parsing the complete export inside the command process and emitting scalar assertions recovered its 72-record graph. Filename guesses also missed existing inputs. An oversized preparation command was rejected by the 16 KB hook before execution. Discover exact paths, keep commands inspectable, reconcile capture lengths and retain rejected attempts separately. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`, `## Proof Gate`); export owner: `src/cli/plans-export.ts` (search: `loadPlanExportRecords`).
+- **Recurrence 2026-10-02:** Recall closeout notes stated 650 test lines before final measurement; `wc -l` measured 653. A learning draft then emitted its full 34 KB bucket and exceeded the tool capture budget; bounded patch-only output recovered the proposal. Measure final bytes before exact-count claims, and keep full draft state in memory while emitting only the reviewed patch. `test/unit/learning-loop-recall.test.ts` (search: `recall citation freshness`); capture contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
 
 ---
 
@@ -120,11 +125,12 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 ## Lesson: Final verification gates need supported scopes and captured logs
 
 **Status:** active | **Created:** 2026-05-19
+**Severity:** CORRECTNESS
 **Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove.
 **Trigger phase:** VERIFY
 **Incident count:** 28 | **Latest occurrence:** 2026-09-18
 
-**Prevention:** Run supported format, lint, Knip, and test gates with captured output, one command per gate. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`).
+**Prevention:** Run `npm run check:touched` for its supported format, source lint, typecheck, Gruff, and guidance scopes; capture every selected check's result line. Run the repository-owned Knip and owning test gates separately with captured output. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`).
 
 **What happened:** Several closeouts sent ignored tests or workflow `.mjs` files to TypeScript-only ESLint, and one ran `npm test` beside expensive checks and lost the failing block; a captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
 
@@ -178,37 +184,10 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 
 ---
 
-## Lesson: Naming the component that satisfies a rule is a claim about its code
-
-**Status:** active | **Created:** 2026-09-07
-**Decision changed:** Before writing that a named tool provides a guarantee, read that tool's implementation, including its failure paths, and claim only the property its code establishes.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** Correcting an unreachable instruction usually means naming the component that really performs the work. That rewrite silently converts a requirement into an assertion about an implementation, so it needs the same evidence as any other claim: open the source, follow the success path and every rejection path, and describe only what you find. Never carry an adjective from the old requirement onto the new attribution. Describe outcome vocabularies in terms of end states an agent can observe, because a failure path that leaves a partial artifact will not match a state named after what the code intended to do.
-
-**What happened:** In 1.17.0 M45 the goat-security Persist Gate was corrected to name the redactor as the component performing the parent traversal, and the phrase "race-safe" was carried over from the requirement being replaced. Three independent reviewers found the redactor's parent walk is a pathname `lstat` sequence, not a descriptor-anchored one, and that the claim contradicted a sibling reference in the same skill forbidding exactly that substitution. The same reviewers found the new outcome vocabulary said "no artifact created" while a real rejection path leaves a zero-byte file at the destination, so an agent would report the artifact as skipped.
-
-**Root cause:** Attribution was treated as editorial phrasing rather than as a factual claim about code. Carrying an adjective across a rewrite is the specific move that hides the error, because the sentence still reads like the sentence that was approved. Evidence anchors: `src/cli/redact-command.ts` (search: `assertRedactDirectories`) walks parents with `lstatSync` by pathname, while `assertRedactAllocation` compares `fstatSync` against `lstatSync` before and after the write; `workflow/skills/goat-security/references/common-threats.md` (search: `MUST NOT emulate containment with a status check`) is the sibling rule the false claim contradicted.
-
----
-
-## Lesson: Reused evidence expires the moment you edit what it depended on
-
-**Status:** active | **Created:** 2026-09-07
-**Decision changed:** After every source edit, re-check which retained results read the file you changed, and mark those results stale before reusing them.
-**Trigger phase:** VERIFY
-**Caught at:** VERIFY
-
-**Prevention:** Reusing an earlier run to close a criterion is legitimate only while its inputs are unchanged, so record which files each reused run read. Before an evidence record is offered for approval, diff the session's writes against those input lists and re-run anything whose inputs moved. Treat a fix that broadens a rule as a candidate regression on every behaviour the narrow rule also protected, not only the one it targeted.
-
-**What happened:** In 1.17.0 M26 a shipped template reference said "do not combine templates from different phases", which was overriding the skill and causing a Standard test-plan response to drop its risk map. The fix replaced it with a mode-level ban plus an explicit Standard exception. The old rule had been categorical and had also kept Audit's gap report separate from its post-gate plan, because that reference holds two Audit phases; the replacement forbade only cross-mode combination and left Audit unprotected at render time. The same record had already closed the Audit gate criterion by reusing two earlier runs, and those runs had read the pre-fix reference. The reuse was sound when written and was invalidated by the later edit. A self-audit caught both, the rule was rewritten to ban combining any gate report with the plan that follows it and to name Audit explicitly, and an extra isolated run confirmed the Audit gate still holds.
-
-**Root cause:** Reuse was treated as a property of the earlier run rather than as a claim about the current tree. A narrow replacement for a broad rule silently drops whatever else the broad rule covered, and nothing in the change itself surfaces the loss. Recurrence is likeliest when one file governs several routes and a fix targets one of them. Evidence anchors: `workflow/skills/goat-qa/references/output-templates.md` (search: `never combine a gate report with the plan that follows it`), `test/contract/skill-hardening-skills-2.test.ts` (search: `lets an auto-released goat-qa gate carry both phases in one response`).
-
 ## Lesson: Calling text a duplicate is a claim that its rule survives elsewhere
 
 **Status:** active | **Created:** 2026-09-08
+**Severity:** CORRECTNESS
 **Decision changed:** Before cutting a sentence as redundant, name the exact surviving location, confirm every reader who needed the rule loads that location first, and add or re-point a contract assertion there before the cut.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -242,6 +221,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 ## Lesson: A run record is read from the session's command outputs, not recalled
 
 **Status:** active | **Created:** 2026-09-19
+**Severity:** CORRECTNESS
 **Decision changed:** Before writing which harness, model and effort ran a piece of work, search the session for the requester's model and effort commands and copy what their outputs say.
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY

@@ -8,6 +8,7 @@ last_reviewed: 2026-09-27
 ## Lesson: Test runners need CI-runtime reproduction when local Node is newer
 
 **Status:** active | **Created:** 2026-06-07 | **Incident count:** 4 | **Latest occurrence:** 2026-08-18
+**Severity:** INTEGRATION
 
 **Prevention:** When changing test infrastructure or platform-sensitive runtime code, reproduce the package's minimum supported Node path or the exact CI runner before treating local output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. For shell-wrapped binaries, put the alternate Node on `PATH`; do not pass the wrapper to Node. Timing overrides must define zero explicitly and include a future-timestamp fixture instead of assuming the filesystem clock never leads `Date.now()`. A Windows path comparison that decides ownership or containment must handle aliases by proven filesystem identity, not case and separators alone. Evidence anchors: `scripts/run-tests.mjs` (search: `--import`), `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`), and `test/unit/hook-registrar-surfaces.test.ts` (search: `uses directory identity when Windows aliases have different spellings`).
 
@@ -50,6 +51,7 @@ spawnSync(process.execPath, ["--import", TSX_LOADER_URL, CLI_PATH, ...args], ...
 ## Lesson: Windows test runs require explicit EPERM handling for symlink fixtures
 
 **Status:** active | **Created:** 2026-05-11 | **Trigger phase:** ACT | **Incident count:** 6 | **Latest occurrence:** 2026-09-27
+**Severity:** INTEGRATION
 **Caught at:** VERIFY
 
 **Prevention:**

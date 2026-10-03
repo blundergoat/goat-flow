@@ -228,7 +228,7 @@ function collectPlainLanguageCardinalityFindings(
 /**
  * Evaluate both reader-facing section roles from one parsed milestone.
  *
- * Default and strict checks share the same findings; complete milestones keep prose corrections advisory so archived plans remain readable.
+ * Default and strict checks must share the same findings; complete milestones keep prose corrections advisory so archived plans remain readable.
  * Structural errors still block, and malformed prose returns findings rather than interrupting the remaining checks.
  *
  * @param record - parsed milestone; an absent hidden section list means an older caller supplied no prose evidence

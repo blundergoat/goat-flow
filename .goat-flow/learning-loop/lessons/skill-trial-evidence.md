@@ -22,6 +22,7 @@ General evidence claims belong in [agent-evidence-claims.md](agent-evidence-clai
 ## Lesson: A structural gap in skill text is not evidence of a behavioural gap
 
 **Status:** active | **Created:** 2026-09-07 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
 **Decision changed:** Bind behavioural claims to an observed decision or action; neither missing wording nor correct recitation proves how an agent uses guidance. Run the baseline before sizing a behavioural correction.
 
 **Prevention:** Search the skill text for the route, then test the behaviour anyway. Score application on the report's own opened-file trace, never on detection alone, because a seeded defect can be reachable by another path. Keep the seeded rule out of the fixture's code comments; a docstring that states the invariant makes the defect generically discoverable and the fixture stops discriminating. If the baseline passes, record the KEEP and reduce the task to a pointer or nothing; the iron law forbids a new mandatory rule with no failing test behind it.
@@ -49,6 +50,7 @@ The approved selector-wide clarification then produced a replacement with all se
 ## Lesson: Evidence tooling is evidence, so run the fixture and re-derive every count
 
 **Status:** active | **Created:** 2026-09-07 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
 **Decision changed:** Execute every evaluation fixture and re-derive run counts from artifacts before any claim rests on them; a scorer and its fixtures are graded material, not scaffolding.
 **Incident count:** 10 | **Latest occurrence:** 2026-09-12
 **Trigger phase:** VERIFY
@@ -99,6 +101,7 @@ M63's preservation comparison then rejected its own prospectively advancing timi
 ## Lesson: Skill RED baselines must retain current owner guidance
 
 **Status:** active | **Created:** 2026-08-14
+**Severity:** CORRECTNESS
 **Decision changed:** Before treating an unskilled run as evidence for a new skill, include every current owner and classify each failure against those owners before crediting the candidate.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY

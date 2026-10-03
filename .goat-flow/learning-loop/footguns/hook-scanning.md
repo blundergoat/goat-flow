@@ -3,7 +3,7 @@ category: hook-scanning
 last_reviewed: 2026-09-05
 ---
 
-**Scope:** What a hook-driven scanner can and cannot see: changed-file enumeration, diff and rename detection, gitignore and gitattribute interactions, and language or block parsing. Hook registration, launcher runtime, and policy-module behaviour live in `hooks.md`; installation and per-agent config live in `hook-installation.md`.
+**Scope:** What a hook-driven scanner can and cannot see: changed-file enumeration, diff and rename detection, gitignore and gitattribute interactions, and language or block parsing. Hook registration, launcher runtime, and policy-module behaviour live in `hooks.md`; execution cost lives in `hook-performance.md`; installation and per-agent config live in `hook-installation.md`.
 
 ## Footgun: Destination-only Git pathspecs disguise renames as full-file additions
 
@@ -19,6 +19,7 @@ last_reviewed: 2026-09-05
 ## Footgun: Changed-range scoping makes a quality hook structurally blind to file-level rules
 
 **Status:** active | **Created:** 2026-08-05 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Keep edit-time attribution and release-time repository enforcement as separate layers: the hook reports findings attributable to touched files/ranges, while preflight owns a full-repository accepted-debt ratchet.
 **Trigger phase:** SCOPE
@@ -50,6 +51,7 @@ last_reviewed: 2026-09-05
 ## Footgun: Gitignored local artifacts make repository scans diverge between local and CI
 
 **Status:** active | **Created:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-09-04
 
 **Prevention:** A shared scan contract covers only files every environment can reproduce. Build declared generated artifacts before the scan in every environment, verify accepted-debt paths against tracked or deliberately generated inputs, and reproduce the gate from a clean tracked-tree fixture instead of trusting an existing developer build.

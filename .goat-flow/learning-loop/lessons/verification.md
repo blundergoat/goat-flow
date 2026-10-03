@@ -1,17 +1,18 @@
 ---
 category: verification
-last_reviewed: 2026-09-21
+last_reviewed: 2026-10-02
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, [verification-gruff.md](verification-gruff.md) for the analyzer, [verification-environment.md](verification-environment.md) for whether the build, tree, or sandbox you measured is the one your claim is about, [milestone-accounting.md](milestone-accounting.md) for plan arithmetic, [milestone-timing.md](milestone-timing.md) for timing receipts, and [skill-trial-evidence.md](skill-trial-evidence.md) for skill-trial baselines and scoring.
 
 ## Lesson: A plan's named defect is a claim to verify, not a finding to implement
 
-**Status:** active | **Created:** 2026-08-30
+**Status:** active | **Created:** 2026-08-30 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
 **Decision changed:** Reproduce a planned defect against live code before building the fix or the abstraction it implies, even when the milestone, a critique, and a runtime spot-check all assert it.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-30
+**Incident count:** 3 | **Latest occurrence:** 2026-10-02
 
 **Prevention:** Treat every defect a plan names as a RED to reproduce first. When the claim is about which of two inputs a component uses, read the caller that supplies them before designing anything, because parameter names do not carry the contract. If the RED passes against unchanged code, stop and record a refutation rather than adjusting the test until it fails; keep the passing case as a control and re-derive the real defect from the same evidence.
 
@@ -23,11 +24,14 @@ last_reviewed: 2026-09-21
 
 **Recurrence 2026-08-30 (delegated runner):** An M68 C5 cross-harness runner closed its assessment by reporting that the shipped `quality save` heredoc is unusable because the command parser rejects any heredoc containing an object-literal opener as expansion obfuscation, and supplied a reproduction. All three checks disagreed: the reproduction ran clean, a search for that diagnostic across both hook trees returned nothing, and the hook admits exactly that form. The runner hit a real failure and misattributed its cause; recording it unverified would have entered a phantom contract defect into a release gate's evidence. Anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `large_quality_save_heredoc_is_bounded_data`).
 
+**Recurrence 2026-10-02 (Stop result boundaries):** Reviewing M13, the agent initially treated empty final provider output as a missing managed-child envelope. A current-runtime check returned `childEnvelopeState=valid`, `providerStdoutBytes=0` and `emptyChildEnvelopeState=invalid`: these are different boundaries. Clarify acceptance wording instead of adding an empty-child success exception. Evidence: `workflow/hooks/hook-provider-adapters.mjs` (search: `decodeHookResultOutput`, `adaptCleanResult`) and `workflow/hooks/post-turn-safety.sh` (search: `emit_post_turn_hook_result`).
+
 ---
 
 ## Lesson: Read a validator's pattern before reshaping text to satisfy it
 
 **Status:** active | **Created:** 2026-08-18
+**Severity:** INTEGRATION
 **Decision changed:** On a validator rejection, open the assertion and read its pattern before editing the input a second time.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -57,6 +61,7 @@ Evidence: `src/cli/review-validate-authority.ts` (search: `reviewScopeLabels`).
 ## Lesson: I edited a dead code path because I assumed one implementation
 
 **Status:** active | **Created:** 2026-08-05
+**Severity:** CORRECTNESS
 **Decision changed:** Before changing behaviour in a script with capability detection, prove which branch actually executes for the installed tool.
 **Trigger phase:** READ
 **Caught at:** ACT
@@ -79,6 +84,7 @@ Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
 ## Lesson: Header-only edits leave bodies contradicting the new scope
 
 **Status:** active | **Created:** 2026-05-16
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-08-26
 
 **Prevention:** After adding or changing a milestone, re-read the whole file rather than the header: grep old-scope keywords, check the filename, compare every named field with its live schema, resolve shared write paths into dependency headers, and require every command to be literal or to name the task that creates it. A reforecast updates basis, range, headline split, and per-item estimates together before strict validation. After rewriting ISSUE bands, count nonblank lines against the format authority. Do not begin a supplemental heading with a canonical or legacy section alias, because the export parser matches heading prefixes. Re-verify time-sensitive platform premises against current primary documentation and the installed version. Run structural validation after the final prose addition and before timing finalization; it proves shape and arithmetic, not semantic executability. Evidence anchors: `.goat-flow/skill-docs/skill-conventions.md` (search: `Task Tracking`), `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`), `src/cli/quality/schema-types.ts` (search: `QUALITY_EVIDENCE_METHODS`), `workflow/skills/reference/skill-preamble.md` (search: `Report-Only Skill Contract`), `.agents/skills/goat-plan/references/issue-format.md` (search: `60 nonblank lines`), `src/cli/plans-export.ts` (search: `section.heading.startsWith`). External platform evidence: [Claude Code hooks reference](https://code.claude.com/docs/en/hooks) (search: `Hooks in skills and agents`).
@@ -109,6 +115,7 @@ Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
 ## Lesson: "Double check" means read the files, not re-run the tests
 
 **Status:** active | **Created:** 2026-03-22
+**Severity:** INTEGRATION
 **Decision changed:** A double-check includes strict artifact validation and a source-diff read after focused tests.
 **Trigger phase:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-08-23
@@ -127,6 +134,7 @@ Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
 ## Lesson: Agent doesn't tick milestone checkboxes (recurrence x4, unresolved)
 
 **Status:** active | **Created:** 2026-03-31
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-04-07
 **Recurrences:** M1 (2026-03-31), M29 (2026-04-04), M32 (2026-04-05), M08 (2026-04-07)
 
@@ -145,9 +153,10 @@ Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
 ## Lesson: Proof gates must distinguish execution, mode, and semantic outcome
 
 **Status:** active | **Created:** 2026-08-17 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 19 | **Latest occurrence:** 2026-09-21
+**Incident count:** 20 | **Latest occurrence:** 2026-10-02
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -187,11 +196,14 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 
 **Recurrence 2026-09-21 (manifest metadata probe):** A one-off check used the guessed key `directory_semantics` and threw before inspecting the approved description. Reading `workflow/manifest.json` (search: `directory_purposes`) supplied the real key; the corrected probe verified the policy owner and required every other parsed manifest value to match HEAD. Read the owning JSON object before writing a field assertion, and distinguish a broken probe from a product failure.
 
+**Recurrence 2026-10-02 (Node diagnostic flag):** During quality-history verification, the agent guessed `--test-isolation=none`; Node exited 9 with `node: bad option: --test-isolation=none` before executing the test. The installed `node --help` exposed `--experimental-test-isolation`, and the corrected diagnostic reported listener `EPERM` with ten cancelled tests. Check installed flag spelling before changing test execution mode; neither a rejected command nor cancelled tests proves the product contract. Evidence: `scripts/run-tests.mjs` (search: `const testRunnerArguments`) and `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `computes rerun spread beyond the requested history window and keeps filters`).
+
 ---
 
 ## Lesson: Focused installer migration tests must isolate the owning block
 
 **Status:** active | **Created:** 2026-08-26
+**Severity:** INTEGRATION
 **Decision changed:** For a focused installer migration test, execute the smallest production-owned block or helper that contains the migration; reserve the full installer round trip for its end-to-end gate.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -226,6 +238,7 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 ## Lesson: A shipped default was recommended from one plan's history before every plan was pooled
 
 **Status:** active | **Created:** 2026-09-20
+**Severity:** CORRECTNESS
 **Decision changed:** Before recommending a default, threshold or setting, measure it on every case it will govern, not on the sample already open, and state the sample's reach beside the number.
 **Trigger phase:** READ
 **Caught at:** VERIFY

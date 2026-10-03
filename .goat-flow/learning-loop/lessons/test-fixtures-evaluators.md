@@ -8,6 +8,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Pressure scenarios must isolate the rule under test
 
 **Status:** active | **Created:** 2026-07-12
+**Severity:** CORRECTNESS
 **Decision changed:** Validate every pressure fact and evaluator restriction against the loaded contract before launch; non-target constraints must not decide the result.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY

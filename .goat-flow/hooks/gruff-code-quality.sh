@@ -2512,7 +2512,8 @@ announce_verified_health() {
   health_day="${GRUFF_CODE_QUALITY_HEALTH_DAY:-$(date -u +%F)}"
   marker_directory="$root/.goat-flow/logs/events"
   # An unwritable event directory cannot weaken the analyzer result already produced.
-  if ! mkdir -p "$marker_directory" 2>/dev/null; then
+  # Relative creation also works when Git Bash rejects an absolute WSL network path.
+  if ! (cd "$root" && mkdir -p ".goat-flow/logs/events") 2>/dev/null; then
     printf 'gruff-code-quality: verified analyzer exchange (%s); health marker could not be stored.\n' "$binary" >&2
     return 0
   fi
@@ -2523,13 +2524,17 @@ announce_verified_health() {
     "$session_identifier" "$root" "$HOOK_VERSION" "$health_day" "$binary"
   current=""
   # A well-formed matching marker means this session already saw verified health today.
-  if [[ -f "$marker" ]]; then
-    current="$(<"$marker")"$'\n'
+  # cat keeps read errors catchable; Bash's optimized $(<file) can exit the shell.
+  if [[ -f "$marker" ]] && current="$(cat -- "$marker" 2>/dev/null)"$'\n'; then
     if [[ "$current" == "$expected" ]]; then
       return 0
     fi
   fi
-  printf '%s' "$expected" > "$marker"
+  # Marker persistence is optional; preserve the completed result if it fails.
+  if ! { printf '%s' "$expected" > "$marker"; } 2>/dev/null; then
+    printf 'gruff-code-quality: verified analyzer exchange (%s); health marker could not be stored.\n' "$binary" >&2
+    return 0
+  fi
   printf 'gruff-code-quality: verified analyzer exchange (%s); health is current for this session.\n' "$binary" >&2
 }
 

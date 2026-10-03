@@ -22,6 +22,7 @@ import {
   captureHookProcessUntilDeadline,
   describeInvalidHookLaunchTimeout,
   prepareProviderLauncherUnavailableDelivery,
+  readManagedStopContext,
   resolveHookLaunchTimeoutMs,
 } from "./hook-launch-runtime.mjs";
 
@@ -331,7 +332,7 @@ function reportUnavailable(hookResponseMode, userFacingReason, hookIdentifier) {
  * @param {object | null} launchContract - decoded managed contract, or null for legacy hooks
  * @param {string} hookIdentifier - entrypoint identity used to attribute policy startup failures
  *
- * @param {object} failure - reason code and user context, with optional child diagnostics and duration
+ * @param {object} failure - fixed classification and user explanation; absent child facts mean startup ended before useful scanning
  * @returns {number} Exit status the registered host treats as handled or blocked.
  */
 function reportLauncherUnavailable(
@@ -344,19 +345,19 @@ function reportLauncherUnavailable(
     userFacingReason,
     childStandardError = "",
     launcherDurationMs = 0,
+    stopContext = null,
+    outputMeasurement = undefined,
   },
 ) {
   // A migrated hook can translate launcher failure into the active provider's model response.
-  if (providerAdapterRuntime !== null && launchContract !== null) {
+  if (launchContract !== null && (providerAdapterRuntime !== null || stopContext !== null)) {
     const providerUnavailableDelivery =
       prepareProviderLauncherUnavailableDelivery(
         providerAdapterRuntime,
         launchContract,
         unavailableReasonCode,
         userFacingReason,
-        childStandardError,
-        launcherDurationMs,
-        hookIdentifier,
+        { childStandardError, launcherDurationMs, registeredHookIdentifier: hookIdentifier, stopContext, outputMeasurement },
       );
     // A valid provider response reaches the model instead of becoming plain terminal text.
     if (providerUnavailableDelivery.state === "delivered") {
@@ -444,6 +445,43 @@ function hookScriptShapeFailure(projectRoot, hookScriptPath) {
   return null;
 }
 
+/** Find descendant-owned POSIX groups before stopping a controller with detached child checks.
+ *
+ * Use the parent tree to exclude unrelated work; a failed bounded process lookup keeps the existing direct-group cleanup.
+ * Side effects: starts one bounded process lookup; no target is signalled until the cleanup caller receives the owned groups.
+ * @param {number} hookProcessId - Started Bash PID; a missing PID is rejected by the cleanup caller.
+ * @returns {number[]} Detached descendant group IDs, or an empty list when none can be established.
+ */
+function findDetachedHookProcessGroups(hookProcessId) {
+  const processLookup = spawnSync("ps", ["-e", "-o", "pid=,ppid=,pgid="], {
+    encoding: "utf8", timeout: 1000, maxBuffer: 262_144, windowsHide: true,
+  });
+  // An unavailable process listing must not prevent the user's original hook group from being stopped.
+  if (processLookup.status !== 0 || processLookup.error) return [];
+  const childrenByParent = new Map();
+  // Read parent relationships once so only processes started below this hook can enter cleanup.
+  for (const processRow of processLookup.stdout.trim().split("\n")) {
+    const [processId, parentId, groupId] = processRow.trim().split(/\s+/u).map(Number);
+    // Empty or incomplete rows cannot identify user work that this hook owns.
+    if (![processId, parentId, groupId].every((identity) => Number.isSafeInteger(identity) && identity > 0)) continue;
+    const siblings = childrenByParent.get(parentId) ?? [];
+    siblings.push({ processId, groupId });
+    childrenByParent.set(parentId, siblings);
+  }
+  const descendantIds = new Set([hookProcessId]);
+  const detachedGroups = new Set();
+  // Growing this set walks the owned parent tree without admitting a sibling project or its tools.
+  for (const parentId of descendantIds) {
+    // A parent with no listed children has no extra process group to stop.
+    for (const child of childrenByParent.get(parentId) ?? []) {
+      descendantIds.add(child.processId);
+      // A descendant group leader identifies a detached controller check that the outer Bash signal cannot reach.
+      if (child.groupId === child.processId) detachedGroups.add(child.groupId);
+    }
+  }
+  return [...detachedGroups].reverse();
+}
+
 /**
  * Stop a timed-out hook so child tools cannot keep the user's agent waiting.
  * Side effects: mutates process state by force-stopping the tree; errors recover after work ends.
@@ -454,7 +492,7 @@ function hookScriptShapeFailure(projectRoot, hookScriptPath) {
  * @param {NodeJS.ProcessEnv} hookEnvironment - Host folders; missing Windows roots use direct-process cleanup only.
  * @returns {void} No result; an already-finished process means the user's cleanup is complete.
  */
-function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
+export function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
   // A failed launch has no process tree to keep the user's agent waiting.
   if (!hookProcess.pid) {
     return;
@@ -484,7 +522,13 @@ function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
       }
       return;
     }
-    // POSIX descendants share the detached Bash group, so one signal ends the whole hook tree.
+    // A controller may start detached checks; stop those owned groups while their parent relationships still exist.
+    for (const detachedGroupId of findDetachedHookProcessGroups(hookProcess.pid)) {
+      try { process.kill(-detachedGroupId, "SIGKILL"); } catch {
+        // A child check may finish between the process snapshot and this cleanup signal; the outer group still needs stopping.
+      }
+    }
+    // Ordinary descendants share the detached outer Bash group and end with its final signal.
     process.kill(-hookProcess.pid, "SIGKILL");
   } catch {
     // For example, the hook may finish between the UI deadline and the cleanup signal.
@@ -516,7 +560,10 @@ export function relayLegacyHookOutput(hookOutputStream, hostOutputStream) {
  * @param {number} launchTimeout - Positive deadline in milliseconds; zero would time out immediately.
  * @param {NodeJS.Platform} hostPlatform - Active host used for process-tree cleanup.
  *
- * @param {Function | null} appendCapturedHookOutput - bounded policy or provider writer; null relays feedback streams.
+ * @param {object} captureOptions - stream ownership and accepted Stop bytes; no accepted input keeps legacy stdin relay.
+ * @param {Function | null} captureOptions.appendCapturedHookOutput - bounded writer; null relays feedback streams.
+ *
+ * @param {Buffer | null} captureOptions.acceptedStopInput - original validated payload; null lets the child inherit host stdin.
  * @returns {ReturnType<typeof captureHookProcessUntilDeadline>} Result for the user; empty streams mean legacy relay or no child output.
  */
 function runHookProcessUntilDeadline(
@@ -526,7 +573,7 @@ function runHookProcessUntilDeadline(
   hookEnvironment,
   launchTimeout,
   hostPlatform,
-  appendCapturedHookOutput,
+  { appendCapturedHookOutput, acceptedStopInput = null },
 ) {
   // A null writer keeps feedback hook output attached directly to the host.
   const shouldCaptureResult = appendCapturedHookOutput !== null;
@@ -541,10 +588,17 @@ function runHookProcessUntilDeadline(
       env: hookEnvironment,
       shell: false,
       // Launcher-owned pipes keep an escaped descendant from retaining provider-facing handles.
-      stdio: ["inherit", "pipe", "pipe"],
+      stdio: [acceptedStopInput === null ? "inherit" : "pipe", "pipe", "pipe"],
       windowsHide: true,
     },
   );
+  // Verified Stop context reaches the scanner byte-for-byte, including its original whitespace.
+  if (acceptedStopInput !== null) {
+    hookProcess.stdin.on("error", () => {
+      // A scanner may exit before reading stdin; its status and envelope still determine the user's response.
+    });
+    hookProcess.stdin.end(acceptedStopInput);
+  }
   // Legacy output stays live while the launcher retains ownership of the underlying handles.
   if (!shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
     relayLegacyHookOutput(hookProcess.stdout, process.stdout);
@@ -655,6 +709,7 @@ function renderLegacyPolicyExecution(
   hookExecution,
   hookIdentifier,
 ) {
+  // Excess output prevents a trustworthy policy decision and needs a visible refusal.
   if (hookExecution.hasExceededOutputLimit) {
     return reportUnavailable(
       hookResponseMode,
@@ -663,6 +718,7 @@ function renderLegacyPolicyExecution(
     );
   }
   const policyStatus = hookExecution.status;
+  // Only a valid allow or this host's explicit deny status can reach the user's command.
   if (
     policyStatus !== 0 &&
     !(hookResponseMode === "policy" && policyStatus === 2)
@@ -673,8 +729,10 @@ function renderLegacyPolicyExecution(
       hookIdentifier,
     );
   }
+  // Empty stdout is a valid quiet legacy response; forward only feedback the child actually produced.
   if (hookExecution.stdout.length > 0)
     process.stdout.write(hookExecution.stdout);
+  // Preserve an actual diagnostic or denial without adding empty terminal output.
   if (hookExecution.stderr.length > 0)
     process.stderr.write(hookExecution.stderr);
   return policyStatus;
@@ -691,6 +749,9 @@ function renderLegacyPolicyExecution(
  * @param {object} hookExecution - Completed process result with bounded output and status.
  *
  * @param {number} launchTimeout - Applied deadline in milliseconds for timeout evidence.
+ * @param {string} hookIdentifier - Affected entrypoint used to attribute startup or child failures.
+ *
+ * @param {object | null} stopContext - Verified explicit user cycle; null preserves the previous provider behavior.
  * @returns {number} Exit status the registered host treats as handled, blocked, or advisory.
  */
 function renderHookExecutionResult(
@@ -700,6 +761,7 @@ function renderHookExecutionResult(
   hookExecution,
   launchTimeout,
   hookIdentifier,
+  stopContext = null,
 ) {
   // A deadline means the hook tree was stopped before the user-facing response is rendered.
   if (hookExecution.timedOut) {
@@ -714,6 +776,8 @@ function renderHookExecutionResult(
           "hook exceeded its deadline; process-tree termination was requested",
         childStandardError: hookExecution.stderr,
         launcherDurationMs: launchTimeout,
+        stopContext,
+        outputMeasurement: hookExecution.output,
       },
     );
   }
@@ -728,6 +792,8 @@ function renderHookExecutionResult(
         unavailableReasonCode: "hook-unavailable",
         userFacingReason: "Bash could not start",
         childStandardError: hookExecution.stderr,
+        stopContext,
+        outputMeasurement: hookExecution.output,
       },
     );
   }
@@ -737,6 +803,7 @@ function renderHookExecutionResult(
       providerAdapterRuntime.prepareProviderHookResultDelivery(
         hookExecution,
         launchContract,
+        stopContext,
       );
     // An unavailable translation uses the registered fail-open or fail-closed policy.
     if (providerHookDelivery.state !== "delivered") {
@@ -749,6 +816,8 @@ function renderHookExecutionResult(
           unavailableReasonCode: "adapter-delivery-failed",
           userFacingReason: providerHookDelivery.reason,
           childStandardError: providerHookDelivery.stderr,
+          stopContext,
+          outputMeasurement: hookExecution.output,
         },
       );
     }
@@ -827,7 +896,13 @@ async function policyChoiceBeforeBash(
   return null;
 }
 
-/** Reject escaped script paths using physical identity when available; missing paths retain the lexical check. */
+/** Reject escaped script paths using physical identity when available.
+ *
+ * Error behavior: missing paths recover to the lexical containment check before startup reports the unavailable script.
+ * @param {string} projectRoot - Selected project; empty cannot identify a trusted launch boundary.
+ * @param {string} hookScriptPath - Requested script; an inaccessible path still receives a lexical escape check.
+ * @returns {string | null} Repair reason, or null when the script remains inside the selected project.
+ */
 function hookScriptContainmentFailure(projectRoot, hookScriptPath) {
   let containmentProjectRoot;
   let containmentHookScriptPath;
@@ -859,10 +934,33 @@ function hookScriptContainmentFailure(projectRoot, hookScriptPath) {
   return null;
 }
 
+/** Select Bash and its tool search path before the user's registered hook starts.
+ *
+ * Use native Git Bash on Windows; other hosts keep the normal Bash lookup and supplied environment.
+ * @param {NodeJS.Platform} hostPlatform - Active host; an empty value cannot select a native launcher.
+ * @param {NodeJS.ProcessEnv} hookEnvironment - Supplied hook settings; a missing PATH becomes an empty search suffix.
+ * @param {object} launchOptions - Optional test discovery overrides; absent settings repeat normal installation discovery.
+ * @returns {{executable: string | null, environment: NodeJS.ProcessEnv}} Bash and child environment; null means Git for Windows needs repair.
+ */
+function prepareBashForHookLaunch(hostPlatform, hookEnvironment, launchOptions) {
+  let executable = "bash";
+  // Native Windows must avoid the WSL shim and use a discovered Git Bash path.
+  if (hostPlatform === "win32") {
+    const candidates = launchOptions.windowsBashCandidates ?? discoverWindowsBashCandidates(launchOptions.discoveryOptions);
+    executable = pickWindowsBashPath(candidates);
+  }
+  // A discovered Git Bash needs its own bin folder first so the user's hook can resolve child tools.
+  if (executable !== null && executable !== "bash") {
+    const existingPath = hookEnvironment.PATH ?? "";
+    hookEnvironment = { ...process.env, ...hookEnvironment, PATH: `${dirname(executable)}${delimiter}${existingPath}` };
+  }
+  return { executable, environment: hookEnvironment };
+}
+
 /**
  * Run a managed project hook through Bash while preserving its host-facing result.
  *
- * Use when an agent event must reach the selected project's managed policy or feedback script.
+ * Use because startup and scanner failures must share the active host's response and recovery boundary.
  * Expected failures return host-specific status; unexpected host I/O rejects the promise so the agent can report a launcher fault.
  *
  * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
@@ -884,6 +982,27 @@ export async function runHookWithBash(
     ".sh",
   );
   const projectRoot = launchOptions.root ?? process.cwd();
+  let hookEnvironment = launchOptions.environment ?? process.env;
+  const stopContext = await readManagedStopContext(hookResponseMode, projectRoot);
+  let launchRuntime = stopContext === null ? null : await prepareHookLaunchRuntime(hookResponseMode, hookEnvironment);
+  const verifiedStopContract = stopContext === null ? null : {
+    providerIdentifier: "codex", responseKind: "post-turn", hookEvent: "turn-stop",
+    resultProtocol: "goat-flow.hook-result.v1", adapterVersion: "1", launcherDeadlineMs: 75_000,
+  };
+  /** Deliver a startup fault through the verified Stop allowance or the existing provider behavior.
+   * @param {string} reason - Practical startup problem; empty text would hide the repair needed.
+   * @param {string} reasonCode - Fixed classification; omitted means unavailable infrastructure.
+   * @returns {number} Provider status; no scanner starts on this path.
+   */
+  function reportStartupFailure(reason, reasonCode = "hook-unavailable") {
+    return reportLauncherUnavailable(hookResponseMode, launchRuntime?.providerAdapterRuntime ?? null,
+      launchRuntime?.launchContract ?? verifiedStopContract, hookIdentifier,
+      { unavailableReasonCode: reasonCode, userFacingReason: reason, stopContext });
+  }
+  // An invalid native Stop must remain blocking and cannot consume or exhaust a recovery allowance.
+  if (stopContext?.state === "invalid") {
+    return reportStartupFailure("Stop context is missing, oversized or invalid", "input-invalid");
+  }
   const hookScriptPath = resolve(projectRoot, hookScriptArgument);
   const containmentFailure = hookScriptContainmentFailure(
     projectRoot,
@@ -891,18 +1010,10 @@ export async function runHookWithBash(
   );
   // A script escaping the selected project is refused before the user's command can run.
   if (containmentFailure !== null)
-    return reportUnavailable(
-      hookResponseMode,
-      containmentFailure,
-      hookIdentifier,
-    );
+    return reportStartupFailure(containmentFailure);
   // For example, a partial install may register a hook whose script was never copied.
   if (!existsSync(hookScriptPath)) {
-    return reportUnavailable(
-      hookResponseMode,
-      "hook script was not found",
-      hookIdentifier,
-    );
+    return reportStartupFailure("hook script was not found");
   }
   const hookScriptShapeReason = hookScriptShapeFailure(
     projectRoot,
@@ -910,11 +1021,7 @@ export async function runHookWithBash(
   );
   // An unsafe hook-script path receives a repair response instead of executing a substituted policy script.
   if (hookScriptShapeReason !== null) {
-    return reportUnavailable(
-      hookResponseMode,
-      hookScriptShapeReason,
-      hookIdentifier,
-    );
+    return reportStartupFailure(hookScriptShapeReason);
   }
 
   const policyChoiceExit = await policyChoiceBeforeBash(
@@ -927,50 +1034,32 @@ export async function runHookWithBash(
 
   // Normal launches follow the host platform; tests can model native Windows.
   const hostPlatform = launchOptions.platform ?? process.platform;
-  let bashExecutable = "bash";
-  // Native Windows must avoid the WSL shim and use a discovered Git Bash path.
-  if (hostPlatform === "win32") {
-    // Tests can provide candidates; normal hooks repeat the install-time discovery.
-    const windowsBashCandidates =
-      launchOptions.windowsBashCandidates ??
-      discoverWindowsBashCandidates(launchOptions.discoveryOptions);
-    bashExecutable = pickWindowsBashPath(windowsBashCandidates);
-  }
+  const bashLaunch = prepareBashForHookLaunch(hostPlatform, hookEnvironment, launchOptions);
+  const bashExecutable = bashLaunch.executable;
+  hookEnvironment = bashLaunch.environment;
   // No native candidate means the user needs Git for Windows before hooks can run.
   if (bashExecutable === null) {
-    return reportUnavailable(
-      hookResponseMode,
-      "Windows-compatible Bash was not found; install Git for Windows",
-      hookIdentifier,
-    );
+    return reportStartupFailure("Windows-compatible Bash was not found; install Git for Windows");
   }
 
-  let hookEnvironment = launchOptions.environment ?? process.env;
-  // A discovered Git Bash needs its own bin folder first so child tools resolve consistently.
-  if (bashExecutable !== "bash") {
-    // A missing PATH is valid in a restricted agent host and starts as an empty suffix.
-    const existingPath = hookEnvironment.PATH ?? "";
-    hookEnvironment = {
-      ...process.env,
-      ...hookEnvironment,
-      PATH: `${dirname(bashExecutable)}${delimiter}${existingPath}`,
-    };
-  }
-  const launchRuntime = await prepareHookLaunchRuntime(
+  launchRuntime ??= await prepareHookLaunchRuntime(
     hookResponseMode,
     hookEnvironment,
   );
   // An unavailable provider adapter or launch runtime needs a startup refusal rather than partial policy enforcement.
   if (launchRuntime.failureReason !== null) {
-    return reportUnavailable(
-      hookResponseMode,
-      launchRuntime.failureReason,
-      hookIdentifier,
-    );
+    return reportStartupFailure(launchRuntime.failureReason);
   }
-  hookEnvironment = launchRuntime.hookEnvironment;
-  const { launchContract, providerAdapterRuntime, launchTimeout } =
+  hookEnvironment = { ...hookEnvironment, ...launchRuntime.hookEnvironment, PATH: hookEnvironment.PATH };
+  // Only validated native context delegates scanner infrastructure recovery to this launcher.
+  delete hookEnvironment.GOAT_FLOW_STOP_RECOVERY_OWNER;
+  // The scanner delegates retries only after this launcher verifies the user's native Stop context.
+  if (stopContext?.state === "valid") hookEnvironment.GOAT_FLOW_STOP_RECOVERY_OWNER = "launcher";
+  const { launchContract, providerAdapterRuntime } =
     launchRuntime;
+  const launchTimeout = Math.min(launchRuntime.launchTimeout, stopContext?.deadlineAt === undefined ? Infinity : stopContext.deadlineAt - Date.now());
+  // Reading Stop context is part of the same host deadline, not a second full wait before scanning.
+  if (launchTimeout <= 0) return reportStartupFailure("hook exceeded its deadline before the scanner could start", "execution-timeout");
   // Policy and migrated hooks capture bounded output; feedback hooks keep live streams.
   const appendCapturedHookOutput =
     providerAdapterRuntime?.appendBoundedHookOutput ??
@@ -984,7 +1073,7 @@ export async function runHookWithBash(
     hookEnvironment,
     launchTimeout,
     hostPlatform,
-    appendCapturedHookOutput,
+    { appendCapturedHookOutput, acceptedStopInput: stopContext?.acceptedInput ?? null },
   );
   return renderHookExecutionResult(
     hookResponseMode,
@@ -993,6 +1082,7 @@ export async function runHookWithBash(
     hookExecution,
     launchTimeout,
     hookIdentifier,
+    stopContext,
   );
 }
 

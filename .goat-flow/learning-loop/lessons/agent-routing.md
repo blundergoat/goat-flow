@@ -44,6 +44,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Don't overcomplicate clear requests - a spec is not ambiguous
 
 **Status:** active | **Created:** 2026-04-14
+**Severity:** CORRECTNESS
 **Incident count:** 2 | **Latest occurrence:** 2026-08-06
 
 **Prevention:** When the user gives a clear spec, implement it literally: add no scope and reinterpret nothing. A detailed mockup is the plan, so do not enter plan mode when the user has already said what to build, and never edit files in plan mode except the plan file. If you are unsure, ask one question rather than guessing across turns. Apply a numeric limit to the named unit: "each bullet at most 150 characters" means the complete bullet, on one line unless wrapping is explicitly requested.
@@ -71,6 +72,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Quality findings must respect local-state and reporting-only contracts
 
 **Status:** active | **Created:** 2026-04-22
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-07-17
 
 **Prevention:** Before reporting findings about `.goat-flow/plans/`, `.goat-flow/logs/`, scratchpad files, or other gitignored state, classify the artifact as committed knowledge or local session state; for local state, review behaviour and fallback handling rather than existence. In goat-flow reviews, read-only, reporting-only, no-write, and no-implementation all mean no committed-file changes and no implementation: gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state are not writes.

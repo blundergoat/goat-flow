@@ -206,7 +206,16 @@ Documentation and capture records expire after 30 days. They become stale earlie
 
 Every user-facing surface follows one effective-state chain: `desired` -> `provider-documented` -> `live-supported` -> `registered` -> `installed-current` -> `trusted` -> `observed-running` -> `result-delivered` -> `scenario-verified`. Disabled is neutral; absent, stale, unsupported, unregistered, outdated, unobserved, or unverified states are warnings; untrusted or observed-but-undelivered states are danger; only the complete chain is success.
 
-Hook results use `pass`, `block`, `advisory`, `incomplete`, or `unavailable`. A pass requires complete declared coverage, and findings are capped at 20 before the provider adapter runs. Adapters preserve blocks and never promote incomplete or unavailable work to pass. One exact repeated infrastructure failure may return a provider continuation only with `bounded-reentry-ended`; its neutral envelope remains incomplete so the user regains control without a false clean scan.
+Hook results use `pass`, `block`, `advisory`, `incomplete`, or `unavailable`. A pass requires complete declared coverage, and findings are capped at 20 before the provider adapter runs. Adapters preserve blocks and never promote incomplete or unavailable work to pass.
+
+A captured Stop lifecycle may spend at most one automatic infrastructure retry per verified explicit user cycle.
+If that allowance is exhausted, even when the infrastructure failure changes, return a visible nonblocking warning with an incomplete result.
+If recovery state cannot be read or safely persisted, return an unavailable warning without spending another retry or claiming exhaustion.
+
+These exceptions require validated Stop context and infrastructure classification; pass still requires complete declared coverage.
+Run the scan on every fresh invocation and preserve a known finding, declared coverage gap, malformed context or pre-tool denial.
+The terminal response must preserve another matching hook's block; warning-only Codex output omits `continue: false`.
+Providers without a verified lifecycle retain the existing exact-repeat exception: `bounded-reentry-ended` stays incomplete.
 
 For the current security model, a user-selected checkout is trusted executable content. Policy and Stop hook launchers resolve the Git root of the agent's working directory before the session project, so a `cd` into another complete managed checkout also selects it and runs its launcher and policy; Claude's Gruff handler checks the session project first (ADR-066). Project hooks protect against accidental and prompt-influenced agent actions; they are not a sandbox against a malicious branch, dependency, helper, or analyzer. Bringing hostile checkout content into scope requires a new decision that supersedes ADR-032, moves executable policy to a reviewed versioned installation, and gives project-local analyzers explicit provenance.
 
@@ -214,3 +223,4 @@ For the current security model, a user-selected checkout is trusted executable c
 
 - **Redundancy across docs** - The same concepts appear in multiple files (spec, layers, steps, rationale) for different audiences. This is intentional: each file serves a different reading path. The cost is maintenance burden on edits.
 - **CLI validates the methodology** - The auditor (`src/cli/`) runs audit checks against projects, confirming the workflow produces measurable results. The dashboard (`goat-flow dashboard .`) serves an HTML interface for audit results and guided setup.
+- **Workflow-graph runtime:** Do not add an executor that schedules goat-flow's work as a fixed graph. Milestone dependencies and `/goat` routing already express the current order, while the host retains approval and recovery decisions; a second scheduler would duplicate that authority without a demonstrated workflow need. Evidence: `workflow/skills/goat-plan/SKILL.md` (search: `Lane eligibility`); `workflow/skills/goat/SKILL.md` (search: `## Route Map`); `.goat-flow/architecture.md` (search: `Agent generates project-specific files`) Reconsider when: A recorded multi-step workflow repeatedly needs deterministic joins or recovery that milestone dependencies cannot express, and a human approves the authority and side-effect contract.

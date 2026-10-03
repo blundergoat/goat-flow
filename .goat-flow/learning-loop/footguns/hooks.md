@@ -1,9 +1,9 @@
 ---
 category: hooks
-last_reviewed: 2026-09-25
+last_reviewed: 2026-10-03
 ---
 
-**Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. Scanner blind spots live in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
+**Scope:** Hook runtime delivery, provider result adapters, Stop recovery, and policy-module correctness. Execution cost and performance live in [hook-performance.md](hook-performance.md); scanner blind spots in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
 
 ## Footgun: Codex config preservation can leave old permission profiles behind
 
@@ -22,6 +22,7 @@ last_reviewed: 2026-09-25
 ## Footgun: Registered Stop hooks can be dead config behind agent trust gates
 
 **Status:** active | **Created:** 2026-06-13 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-09-18
 **Decision changed:** Treat project-layer trust, hook-handler trust, and live model delivery as separate gates before enabling a registration.
 **Trigger phase:** VERIFY
@@ -41,14 +42,28 @@ last_reviewed: 2026-09-25
 ## Footgun: Launcher-owned failures can bypass provider feedback adapters
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Exercise launcher-owned timeout and invalid-output branches through source and packed consumers before registering model-visible feedback.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-09-25
+**Incident count:** 3 | **Latest occurrence:** 2026-10-03
 
 **Prevention:** Route every launcher-owned failure through the neutral unavailable envelope and provider adapter, and keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
 
 **Symptoms:** A migrated child result used the provider adapter, but the timeout and adapter-failure branches returned through the legacy unavailable reporter, so the terminal showed human stderr while Codex received empty stdout and a stopped analyzer looked silent to the model.
 **Recurrence 2026-09-25:** The disabled-policy shortcut exited before the provider adapter and returned empty stdout to Antigravity, which requires an explicit allow object. `workflow/hooks/run-with-bash.mjs` (search: `policyChoiceBeforeBash`) now emits that object without launching Bash; `test/unit/hook-launcher.test.ts` (search: `returns the provider allow response`) checks both policies and the Codex/Claude empty-success controls.
+
+**Recurrence 2026-10-03:** Launcher failures bypassed scanner-owned retry state and repeatedly blocked active Stop deliveries.
+Keep one launcher allowance per verified user turn across changing faults; findings still block.
+Evidence: `workflow/hooks/hook-launch-runtime.mjs` (search: `applyManagedStopRecovery`).
+
+## Footgun: One shared hook-output limit can erase a completed safety result
+
+**Status:** active | **Created:** 2026-10-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Verify separate byte budgets in controller children and the outer launcher.
+
+**Prevention:** Drain diagnostics separately; accept only normally completed, valid results. Floods and timeouts stay unavailable.
+**Symptoms:** A 6,274-byte result plus 5,047 diagnostic bytes exceeded the shared cap; controller stderr also erased a completed finding.
+Evidence: `test/integration/post-turn-launcher-recovery.test.ts` (search: `preserves controller child findings while draining ordinary diagnostic excess`).
 
 
 ## Footgun: Bash SECONDS can inherit a parent offset and invalidate hook result timing
@@ -78,46 +93,10 @@ last_reviewed: 2026-09-25
 
 **Why it happens:** The non-Git controller fan-out in `post-turn-safety.sh` computed `bounded-reentry-ended` correctly, but only the migrated branch acted on it. The provider adapter turns that reason into a clean stop while the legacy branch fell through to a blocking exit, and Claude registers its Stop hook with response mode `post-turn`, which the launcher classifies as legacy, so a controller whose children hit an unchanged infrastructure failure could never end the turn.
 
-## Footgun: Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash
-
-**Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Whether a hook may call out to `sed`/`tr`/`awk`/`grep`/`git` once per line, per key, or per file - on Windows that design cannot meet any realistic hook timeout, so batch or use bash builtins instead.
-**Trigger phase:** SCOPE
-**Caught at:** ACT
-
-**Prevention:**
-1. Keep per-line and per-key hook work in bash builtins: `${var,,}` instead of `tr`, `${var##+([[:space:]])}` instead of a trim `sed`, `[[ =~ ]]` capture instead of `sed -nE 's/.../\1/p'`, and return through a global rather than `$(...)` so the call does not fork.
-2. Batch git plumbing: one `git diff --unified=0 -- <paths>` with `+++ b/<path>` header attribution replaces one diff per file, `git cat-file --batch-check` replaces per-path `cat-file -s`, and `wc -c` and `grep -Il` accept many paths per call, chunked at about 64 paths for the Windows command-line limit.
-3. Put a cheap superset pre-filter in front of expensive per-line analysis and document why each pattern is a provable superset so the filter cannot silently narrow detection.
-4. Benchmark hooks on Windows Git Bash, not only Linux, and give any bounded-time hook its own wall-clock budget that reports an explicit incomplete-scan message with a non-zero exit under a runner timeout above that budget, so silent truncation is unreachable.
-
-**Symptoms:** A hook that is fast on Linux is unusable on Windows Git Bash, with `sys` time near half of wall clock and Claude Code parked on `running stop hook · 4m 40s`. Because the runner kills a hook past its timeout, a scan that cannot finish reports nothing and is indistinguishable from a clean pass.
-
-**Why it happens:** MSYS2 and Cygwin have no `fork()`; process creation is emulated, so every subshell or external command costs orders of magnitude more than on Linux, and `$(...)` counts even with no external binary. This does not generalise: removing forks from `deny-dangerous.sh` the same day made it slower, as the next entry records.
-
-**Evidence:** Measured 2026-08-01 on Windows 11 Pro 10.0.26200, Git Bash bash 5.3.15, NTFS: one forked pipeline costs about 44ms (200 pipelines = 8.852s) while 20,000 pure-bash loop iterations cost 0.151s, so one fork is worth roughly 2,900 bash operations. On the same workload (25 changed, 22 staged, 375 added lines across 10 env-assignment files, zero findings) the per-line `post-turn-safety.sh` ran 4m22.109s on Windows and 6.465s on Linux WSL2; the batched rewrite runs 0.655s and 0.027s. The pre-fix hot path spawned two `sed` per scanned line plus per-call helpers and one `git diff` per changed path. Current anchors: `workflow/hooks/post-turn-safety.sh` (search: `run_diff_batch`), (search: `gate_scannable_files`), and (search: `scan_content_files`).
-
-## Footgun: Policy modules must share one prepared command context
-
-**Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Whether each PreToolUse policy module may prepare its own segment context - it may not; preparation belongs to the dispatcher and adding a policy must not multiply parsing work.
-**Trigger phase:** SCOPE
-**Caught at:** ACT
-
-**Prevention:**
-1. Prepare segment context once in `check_segment`; policy modules consume the shared `CMD_*` and `HAS_*` values and never call `prepare_segment_context` themselves.
-2. Measure with an interleaved A/B, alternating old and new per round. A sequential run pays cold filesystem and git cache costs first, which produced a false 2x "improvement" for a build that was actually 2x slower, and a `$( )` count does not predict wall clock.
-3. This is security-critical parsing: any restructuring needs `--self-test=full` green plus a byte-exact verdict corpus before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
-
-**Symptoms:** Every Bash tool call carries a visible pause that scales with command complexity and the number of policy modules, and a `bash -x` trace shows more than one `prepare_segment_context` call for a simple command.
-
-**Why it happens:** When policy checks independently call `prepare_segment_context`, the shared tokenisers (`split_shell_words_into`, `normalize_command_candidate`, `normalize_leading_command_word`) walk the same command once per policy. The dominant term is not established: converting the hot tokenisers to fork-free `_into` forms plus memoization made the hook slower, 272 to 392ms simple and 309 to 729ms pipeline, while executing about 3.3x more traced operations with identical verdicts, and was reverted without the cause being identified. Do not repeat that attempt without new evidence.
-
-**Evidence:** 2026-08-01, Windows 11 Git Bash, interleaved A/B, 30 invocations per cell: 272ms per call for `--check='npm run typecheck'`, 309ms for a four-stage pipeline, 652ms for the JSON-stdin path, against about 50ms for a bare `bash empty.sh`; only 6 external processes per invocation against about 1,959 traced bash operations for a simple command. 2026-08-04 Linux interleaved A/B: hoisting preparation from three policy calls to one moved the simple-command median from 39.08ms to 30.99ms and the pipeline median from 102.62ms to 93.12ms, with a 15-case byte-exact verdict comparison at 0 mismatches and both corpora at 327/327. Anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Parse once per segment`).
-
 ## Footgun: Copilot combines native and Claude project hook registrations
 
 **Status:** active | **Created:** 2026-08-23 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Treat repository `.claude/settings.json` as a Copilot hook source too; keep real Copilot policy only in its native config, give managed Claude rows explicit inert shell routes, and make descriptor readers prefer structured exec operands over those routes.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -131,25 +110,70 @@ last_reviewed: 2026-09-25
 
 **Evidence:** **Recurrence 2026-08-25:** Copilot selected `command: "node"` from the structured Claude row without its `args`, so a safe `pwd` failed before policy startup with a Node syntax error. The accepted descriptor keeps Claude's `command` plus `args` and adds `bash: "exit 0"` and `powershell: "exit 0"`, making the cross-loaded copy inert while `.github/hooks/hooks.json` stays the sole managed Copilot policy source: `src/cli/server/agent-hook-command.ts` (search: `bash: "exit 0"`), `src/cli/server/agent-hook-writer.ts` (search: `handlerDescriptor.bash`), `test/unit/hooks-runtime-evidence.test.ts` (search: `requires Copilot native registration`). **Recurrence 2026-08-26:** the generic hook fact reader returned the top-level `bash: "exit 0"` before the structured `command` plus `args`, so the full harness audit reported both managed Claude hooks unregistered; `src/cli/facts/agent/hook-registration.ts` (search: `function readHookCommand`) now selects exec operands first, pinned by `test/unit/audit-command/hook-facts.test.ts` (search: `reads managed Claude exec operands before inert shell routes`).
 
-## Footgun: Claude policy denials echo the whole launcher command into agent context
+## Footgun: Raw option text in policy reasons can break display and provider JSON
 
-**Status:** active | **Created:** 2026-09-23 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Count each Claude policy denial as roughly 1.5K tokens of context, and keep Claude policy rows on exit-2 denials until a JSON deny is proven to block on malformed output.
+**Status:** active | **Created:** 2026-09-28 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Use fixed denial reasons for untrusted option data; pair recovery wording with existing authorization and provider-response assertions.
 **Trigger phase:** ACT
-**Incident count:** 2 | **Latest occurrence:** 2026-09-23
+
+**Prevention:** Keep unknown-option reasons fixed instead of echoing the token. Construct display controls in tests and assert the complete text message and decoded provider reason, not just a denial substring. Failure diagnostics must use printable case labels without interpolating rejected command data. Keep the provider's existing exit and decision protocol. A cleanup hint may describe individual literal file removal and empty-directory removal only for already-approved deletion; retain target-count confirmation, secret restrictions and human-only operations.
+
+**Symptoms:** The unknown Git option reason echoed U+202E, U+200B and U+001B through the classifier. The escape character also made Copilot and Antigravity responses fail JSON parsing. The unsafe-recursive-cleanup reason supplied only “Specify an explicit target path”, although the recorded literal-file and empty-directory recovery classified as allowed. Secret-file removal remained denied.
+
+**Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Unrecognised Git global option`) now supplies fixed text. `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Only for already-approved deletion`) limits recovery to the existing authority. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unknown option $display_label`, `approved cleanup recovery copy`, `cleanup recovery preserves secret restriction`) failed against the original reasons and passed in the complete candidate hook store for text, Copilot and Antigravity. The incident-backed recovery is owned by `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: `When deny hook blocks a command, use the unblocked equivalent`). No candidate deletion was executed. These are local classifier results, not live provider delivery evidence.
+
+**Recheck 2026-09-28:** Injecting the fixed text plus a stray U+202E into the test helper produced zero assertion failures; injecting the whole unsafe token made its failure diagnostic echo U+202E. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `block copy should match fixed text`, `omit forbidden command data`) now rejects extra text in fixed-message cases and keeps rejected data out of diagnostics. Nine output-mutation checks covered valid text, stray controls and complete tokens for U+202E, U+200B and U+001B; only valid fixed output was accepted, and no tested control appeared in diagnostics.
+
+**Related output boundary, 2026-09-28:** M02's `scripts/check-touched.mjs` (search: `function printable`) escaped C0 and bidi controls but left C1 controls unchanged. Executing the actual formatter with U+0085, U+009B and U+009D returned those same raw code points; `runUnicodeCheck` uses it to print filenames. When diagnostics need supplied text, escape C1 controls as well. `test/unit/check-touched.test.ts` (search: `fails on Unicode controls with printable filenames`) now covers these filename characters. The full CLI regression passed after the verifier distinguished completed `EPERM` metadata from failed launches and captured child output through private files. The earlier launch-blocked diagnosis was incorrect; the existing lesson in `.goat-flow/learning-loop/lessons/hook-probe-testing.md` (search: `Codex sandbox hook probes must distinguish direct Bash from Node child-process`) owns that distinction.
+
+## Footgun: Absolute `mkdir -p` under Git Bash on a WSL network path leaves the Stop re-entry guard without state
+
+**Status:** active | **Created:** 2026-09-30 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Whether a hook may create or confirm a directory by absolute path - on a `//wsl.localhost` path it cannot, so enter the verified root and create the directory by relative path.
+**Trigger phase:** ACT
+**Enforced-by:** `test/integration/hook-provider-contracts.test.ts` (search: `mkdir refuses absolute paths`, `names dubious ownership`)
 
 **Prevention:**
-1. When probing policy shapes the hook will deny, keep them out of Bash command text: write the payload to a file and pass it on stdin, as `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `Write the provider event to a gitignored JSON payload file`) describes, and keep chained commands under the 50-segment cap.
-2. Claude policy rows use exit `2` with a stderr reason. The launcher now converts unexpected nonzero child exits to a denial; a child reporting success still means allow. A JSON `permissionDecision` of `deny` on exit `0` would return only the reason, but missing or malformed JSON could then read as an allow. Before switching the response mode, capture a live denial and prove malformed output still blocks.
+1. In hook scripts, `cd` into the verified root and run `mkdir -p` on a relative path. Do not pass `mkdir -p` an absolute path that can be a `//wsl.localhost` path.
+2. Treat a guard that ends a provider loop as unproven on Windows until its state write has run under Git Bash against a `//wsl.localhost` root.
+3. When a Git lookup fails, carry Git's stated reason into the hook result.
 
-**Symptoms:** Claude Code reports an exit-2 denial as `PreToolUse:Bash hook error: [<command> <args>]: <stderr>`. Both PreToolUse rows in `.claude/settings.json` pass a 6,190-character inline bootstrap as `args[1]`, so each denial puts the whole bootstrap ahead of the one-line `BLOCKED:` reason. The two 2026-09-23 quality assessments hit it four times: a pipe-to-shell probe in the first, then a pipe-to-shell probe, a 50-segment chain and a scratch truncation in the second.
+**Symptoms:** Codex Desktop on Windows re-fired Stop 2,152 times in a WSL checkout between 2026-09-29 18:29 and 2026-09-30 18:56 AEST. Each invocation reported `post-turn-safety: INCOMPLETE` with `The selected Git repository root could not be opened`; no re-entry state file appeared.
 
-**Why it happens:** ADR-053 moved Claude registrations to exec-form `args` so no shell retokenizes the bootstrap, and its failure-mode comparison weighs transport only. The echo format for exit-2 denials is not in Claude Code's hooks documentation, which states only that a JSON deny feeds `permissionDecisionReason` back to Claude.
+**Why it happens:** Git rejected the checkout for dubious ownership because `safe.directory` lacked an entry. The Stop state writer then passed an absolute WSL network path to `mkdir -p`, which failed even for an existing directory. Without stored state, every Stop blocked again, while generic output hid Git's reason.
 
-**Evidence:** `src/cli/server/agent-hook-command.ts` (search: `structuredHookLaunchBootstrap`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `BLOCKED: Policy %s`), and the unused Claude deny shape in `workflow/hooks/hook-provider-adapters.mjs` (search: `Claude and Codex share the current hookSpecificOutput permission shape`).
+**Evidence:** Measured 2026-09-30 with Git for Windows 2.56.0 and Git Bash 5.3.15 against WSL2. Absolute creation returned 1 (`Read-only file system`) for missing and existing directories; relative creation returned 0 for both. Exclusive write, `chmod`, `mv`, and `[ -O ]` succeeded there. The registered Codex Stop command changed from three consecutive blocks to block, empty response, block, with the diagnostic `Git refused this repository for dubious ownership`. Owners: `workflow/hooks/post-turn-safety.sh` (search: `stop_state_relative_directory`, `report_repository_root_failure`).
 
+**Related Gruff failure, 2026-10-01:** An absolute-mkdir-rejecting shim reproduced the lost health marker. Relative creation now preserves deduplication: `workflow/hooks/gruff-code-quality.sh` (search: `announce_verified_health`), `test/integration/gruff-code-quality-contract.test.ts` (search: `deduplicates verified health when mkdir refuses absolute paths`). This is fixture proof, not fresh native or provider proof.
 
 ---
+
+## Footgun: Health-marker IO can abort analysis
+
+**Status:** active | **Created:** 2026-10-01 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Guard optional marker reads and writes.
+
+**Prevention:** Use `cat`; Bash's `$(<file)` can exit even inside `if`.
+
+**Evidence:** `workflow/hooks/gruff-code-quality.sh` (search: `announce_verified_health`) exited 1 with empty stdout after valid analysis when its marker was unreadable or obstructed by a directory.
+
+---
+
+## Footgun: Inline `node -e` programs in hook scripts must fit the Windows command line
+
+**Status:** active | **Created:** 2026-10-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Whether a hook may pass a growing program to Node as a `node -e` argument - it may not; feed a large program on stdin or keep it in a file.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Enforced-by:** `test/unit/hook-inline-node-programs.test.ts` (search: `keeps every inline node -e program in shipped hooks within the Windows command-line budget`)
+
+**Prevention:** Keep inline `node -e` programs small, because Git Bash passes them on the Windows command line, which Windows caps at 32,767 characters. Feed a large program to Node through a quoted heredoc inside a Bash function, as the post-turn controller does, so the heredoc stays out of `$(...)`.
+
+**Symptoms:** On native Windows, a Stop in a folder that is not a Git top level, including a WSL checkout over `\\wsl.localhost` when Git reports dubious ownership, failed with `node: Argument list too long` and `controller scan could not complete`. No scan ran and the `safe.directory` remedy never reached the user, while Linux CI stayed green.
+
+**Why it happens:** The post-turn controller program grew from 20,171 to 34,145 characters in one change. Code inside a Bash string is invisible to Gruff, ESLint and Prettier, so nothing measured it.
+
+**Evidence:** Measured 2026-10-03 with Windows Node v24.9.0 and Git Bash: the earlier scanner failed with `Argument list too long` in a `\\wsl.localhost` checkout and in an NTFS multi-repo workspace. The stdin version blocked once with the dubious-ownership remedy in the first and reported the child's conflict marker in the second. Owner: `workflow/hooks/post-turn-safety.sh` (search: `run_controller_program`).
 
 ## Resolved Entries
 

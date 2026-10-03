@@ -41,7 +41,7 @@ import {
 } from "../unit/review-validate.helpers.js";
 
 describe("review authority across real repository state", () => {
-  // Distinct HEAD, staged, and editor contents make the selected byte source observable; assertReviewResult also checks fixture mutation.
+  // Writes distinct HEAD, staged, and editor contents so the selected byte source is observable; assertReviewResult checks fixture mutation.
   it("uses staged bytes, refuses HEAD/live substitutions, and detects index drift", (test) => {
     const { root } = repository(test);
     writeFileSync(
@@ -73,7 +73,7 @@ describe("review authority across real repository state", () => {
     );
   });
 
-  // Deliberately different index states prove deletion remains reviewable while unresolved or incomplete staging is refused.
+  // Git writes deliberately different index states, proving deletion stays reviewable while unresolved or incomplete staging is refused.
   it("resolves deleted staged files from the old side and rejects unmerged, intent-to-add, and sparse entries", (test) => {
     const { root, base } = repository(test);
     git(root, ["update-index", "--force-remove", "src/example.ts"]);
@@ -138,8 +138,8 @@ describe("review authority across real repository state", () => {
         false,
         [{ old: "src/example.ts", new: "renamed.ts" }],
       ).authority;
-      assert.equal(snapshot.source.comparisonBase, base);
-      assert.equal(snapshot.source.targetTip, target);
+      assert.equal(snapshot.source.comparisonBase, base, `${kind} source`);
+      assert.equal(snapshot.source.targetTip, target, `${kind} source`);
       assertReviewResult(root, report(snapshot), "pass");
       assertReviewResult(
         root,
@@ -269,7 +269,7 @@ describe("review authority across real repository state", () => {
     });
   }
 
-  // Added, removed, and executable files distinguish a frozen whole-area selection from a deliberately bounded sample.
+  // Writes added, removed, and executable files that distinguish a frozen whole-area selection from a deliberately bounded sample.
   it("detects included membership drift while keeping an area sample bounded", (test) => {
     const { root } = repository(test);
     const worktree = capture(root, {
@@ -410,7 +410,7 @@ describe("review authority across real repository state", () => {
     assert.equal(mixed.checkout.reason, "incompatible-selected-views");
   });
 
-  // One delimiter-bearing filename exercises the actual Git, index, live-file, and Markdown boundaries together.
+  // Writes one delimiter-bearing filename that exercises the actual Git, index, live-file, and Markdown boundaries together.
   it("preserves special-character paths and escaped anchors literally on Git and live sides", (test) => {
     const { root } = repository(test);
     const path =
@@ -609,6 +609,7 @@ describe("review authority across real repository state", () => {
     );
   });
 
+  // Each case writes a file whose path or search text contains the anchor marker, which must stay literal evidence.
   it("keeps anchor markers inside ordinary evidence and path metadata literal", (test) => {
     const { root } = repository(test);
     // The reviewer can cite the marker itself or a filename containing it without introducing another escaped anchor.
@@ -680,7 +681,7 @@ describe("review authority across real repository state", () => {
 });
 
 describe("review snapshot CLI and gate provenance", () => {
-  // A real CLI process runs from the reviewed project, proving input selection, output refusal, and unchanged fixture state.
+  // Spawns a real CLI process from the reviewed project, proving input selection, output refusal, and unchanged fixture state.
   it("captures stdin and file requests, refuses --output, and leaves the project unchanged", (test) => {
     const { root } = repository(test);
     const request = JSON.stringify({
@@ -711,6 +712,7 @@ describe("review snapshot CLI and gate provenance", () => {
       assert.equal(
         result.stdout.trimEnd(),
         canonicalReviewJson(captureReviewSnapshot(request, root)),
+        `args ${JSON.stringify(args)}`,
       );
     }
     const output = join(root, "forbidden.json");

@@ -17,6 +17,7 @@ last_reviewed: 2026-09-16
 ## Lesson: Pre-write examples must not start from an unredacted disk file
 
 **Status:** active | **Created:** 2026-07-13
+**Severity:** SECURITY
 **Decision changed:** Version-check the redactor before writing any durable plan, decision, learning, or session text, and let its output create the destination.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -40,6 +41,7 @@ last_reviewed: 2026-09-16
 ## Lesson: Durable exports must redact metadata as well as body fields
 
 **Status:** active | **Created:** 2026-07-13 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Incident count:** 4 | **Latest occurrence:** 2026-09-18
 
 **Prevention:** Inventory every serialized field, including filenames, identifiers, labels, and warning text. Add a secret-shaped value outside the main body to every durable-export redaction test.

@@ -24,7 +24,7 @@ const PROBLEM =
 const BENEFIT =
   "Maintainers can copy valid examples and account for every required task before starting work.";
 
-/** Read one shipped fence without treating headings inside it as document sections. */
+/** Read one shipped fence without treating headings inside it as document sections, because those headings are example content. */
 function shippedFence(path: string, heading: string): string {
   const matches: string[] = [];
   let selected = false;
@@ -386,6 +386,7 @@ describe("shipped goat-plan templates", () => {
           assert.match(
             result.stdout,
             /Forecast basis requires a derived Forecast range/u,
+            `strict=${isStrict} basis=${basis} range=${range}`,
           );
         } else assert.equal(result.status, 0, result.stdout + result.stderr);
       }
@@ -468,7 +469,11 @@ describe("shipped goat-plan templates", () => {
           ),
         );
         assert.equal(stale.status, 1, stale.stdout);
-        assert.match(stale.stdout, /milestone must not include Status reason/u);
+        assert.match(
+          stale.stdout,
+          /milestone must not include Status reason/u,
+          `status ${status}`,
+        );
       }
       if (status === "superseded") {
         for (const successor of ["M01", "M99", "another milestone"]) {
@@ -478,7 +483,11 @@ describe("shipped goat-plan templates", () => {
             siblings,
           );
           assert.equal(invalid.status, 1, invalid.stdout);
-          assert.match(invalid.stdout, /superseded/u);
+          assert.match(
+            invalid.stdout,
+            /superseded/u,
+            `status ${status} successor ${successor}`,
+          );
         }
       }
     }

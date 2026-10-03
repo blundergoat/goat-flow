@@ -153,13 +153,19 @@ The `--mode` flag selects a focused quality assessment. Each mode generates a di
 
 `history` and `diff` compare within the same mode by default. Cross-mode comparison is not supported since the scoring rubrics differ.
 
-- `quality` composes a structured prompt with a bounded persistence contract. Positional finding IDs are computed at load time by `history` / `diff`.
+- `quality` composes a structured prompt with a bounded persistence contract. Finding IDs derived from locations and sometimes summary text are computed at load time by `history` / `diff`; they do not establish defect identity across runs.
 - `quality history` lists saved reports and same-agent setup/system score deltas. New reports also retain revision, worktree, grounding, unverified-probe, and score-confidence context so readers can identify non-comparable runs without changing the scores. Each of the eight score axes carries a compact `evidence` and `deduction` rationale; text output shows it beside the original `/25` value, while older reports are labeled `rationale unavailable (legacy report)`.
 - `quality diff` derives `absent`, `new`, `persisted`, and `stuck` from saved same-agent report ids, then shows each side's recorded score rationale without recalculating or averaging scores.
+
+Assessments may report zero findings or fewer than five improvements. Recommendations should address supported root causes and explain user benefit, tradeoffs, and verification. Static inspection establishes documented behavior; it does not establish live enforcement or measured productivity. The report must retain that distinction and any unverified work. Older reports remain readable, with history score deltas withheld across rubric boundaries and diff warnings identifying the mismatch.
+
+Rubric revision 3 adds one primary concern per finding and optional assessor-verified fix records. History and diff show per-report concern counts, with missing legacy concerns unclassified; these counts do not inventory all open defects. A fix binds an exact prior report/finding pair to its assessor, explanation, and committed or captured workspace evidence. The CLI checks references without certifying corrections or executing saved commands. If evidence disappears, the original conclusion remains with `evidence unavailable; not reverified`. Saved reports are never rewritten, and a disappearing finding alone is not a verified fix.
 
 New prompts also retain up to five categorized `improvements` and before/after `workspace_snapshot` fingerprints. Runtime findings require the actual command, exit code, and result summary. History shows saved recommendations; diff exposes `comparisonWarnings` for missing or differing provenance without changing scores. Missing legacy recommendations mean they were not recorded, not that none existed. See the [quality save contract](cli.md#goat-flow-quality-save-project) for fields, bounds, and capture limits.
 
 Score rationale makes an assessor's rating-band judgment inspectable; it does not turn subjective scores into deterministic measurements or make different agents' reports comparable. History and diff therefore continue to compare only the same agent and quality mode.
+
+History, diff and the dashboard show descriptive rerun sample size, median and range beside score changes. Groups use unchanged assessed bytes and the same rubric, scope and assessor inputs; statistics use full matching history before limiting displayed rows. Complete launch identity plus a recorded fixed-input protocol permits a controlled group. Older reports without assessment identity remain separately labelled observational. New incomplete identities and singleton groups show `no comparable reruns`; neither label changes saved scores or establishes a significance threshold. The [quality save contract](cli.md#goat-flow-quality-save-project) describes the compact identity fields and explicit unknowns.
 
 The two commands stay separated in storage as well as terminology: audit output goes to stdout or `--output`, while quality reports land in a gitignored log directory for local trend analysis.
 
