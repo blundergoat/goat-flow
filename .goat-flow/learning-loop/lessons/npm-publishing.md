@@ -1,6 +1,6 @@
 ---
 category: npm-publishing
-last_reviewed: 2026-09-28
+last_reviewed: 2026-10-03
 ---
 
 ## Lesson: A profile query is not a publishing capability check
@@ -59,3 +59,16 @@ last_reviewed: 2026-09-28
 **What happened:** The agent reviewed `scripts/npm-publish.sh` (search: `configure_token_from_env`) without testing filesystem failures. Its caller used `if configure_token_from_env`, so a failed `mktemp` did not stop the function. It continued through failed config writes, reported the token as selected, and reached publishing with a different or missing credential config.
 
 **Evidence:** `test/integration/npm-publish.test.ts` (search: `stops before authentication when temporary token config creation fails`) injected a failing `mktemp`. The original script completed the mocked publish with status 0. Calling setup directly made the same test exit 1 before `npm whoami`, release checks, or publishing. The existing `accepts one bypass token without asking for an OTP` case also verifies npm's selected config path and removal of the temporary config after success.
+
+## Lesson: Mock identifiers must not contain the secrets a leak assertion searches for
+
+**Status:** active | **Created:** 2026-10-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Before adding a mock value to a suite that asserts secrets never reach output, check it against those assertion patterns; prefer letters-only fixture IDs.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Run the existing no-leak assertions against every new string the script prints. A hex commit hash such as `0123456789abcdef...` contains the fixture OTP `123456`, and `9876543210` contains `654321`.
+
+**What happened:** The CI fast path added to `scripts/npm-publish.sh` (search: `ci_verified_head`) prints an abbreviated commit hash. The agent's mock HEAD was `0123456789abcdef0123456789abcdef01234567`, so the new `Running the full gate: CI for 01234567` line matched `/123456|654321/u`. Three tests that check 2FA codes never reach output failed, although no code leaked.
+
+**Evidence:** `test/integration/npm-publish.test.ts` (search: `MOCK_HEAD =`) failed 3 of 14 cases with `The input was expected to not match the regular expression /123456|654321/u`. A letters-only mock hash made all 14 pass without changing the script.
