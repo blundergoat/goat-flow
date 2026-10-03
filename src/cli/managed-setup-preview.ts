@@ -222,7 +222,7 @@ function legacyProvenanceAgents(state: ManagedInstallStateV2): AgentId[] {
 /**
  * Write one provider's migration marker atomically so older installers stop using its retired hash store.
  *
- * Writes and flushes a private temporary file, then renames it; unsafe paths or failed publication throw without replacing the prior marker.
+ * Writes and flushes a private temporary file, then renames it; an unsafe path or failed publication throws without replacing the prior marker.
  */
 function writeManagedInstallCutoverMarker(
   projectPath: string,

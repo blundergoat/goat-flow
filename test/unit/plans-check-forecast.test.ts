@@ -143,6 +143,7 @@ describe("plans check: configured forecast bands", () => {
     ];
     const wide = renderCalibrationSummary(records, [10, 90]);
     const narrow = renderCalibrationSummary([...records].reverse(), [20, 80]);
+    // Keep only the per-milestone `rule sample:` lines, so each band compares its samples without the surrounding report.
     const samples = (lines: string[]) =>
       lines.filter((line) => line.startsWith("rule sample:"));
     assert.deepEqual(samples(wide), [
@@ -257,16 +258,19 @@ describe("plans check: calibration eligibility", () => {
         lines.includes(
           `calibration exclusion: M01-sample.md - both pools: ${reason}`,
         ),
+        `exclusion ${reason}`,
       );
       assert.ok(
         lines.includes(
           "calibration: uncalibrated - 0 of 3 eligible measured samples",
         ),
+        `exclusion ${reason}`,
       );
       assert.ok(
         lines.includes(
           "work-unit calibration: uncalibrated - 0 of 3 eligible measured samples with countable bases",
         ),
+        `exclusion ${reason}`,
       );
     }
   });
@@ -279,25 +283,30 @@ describe("plans check: calibration eligibility", () => {
         lines.includes(
           "calibration: uncalibrated - 1 of 3 eligible measured samples",
         ),
+        `${seconds}s receipt`,
       );
       assert.ok(
         lines.includes(
           "work-unit calibration: uncalibrated - 1 of 3 eligible measured samples with countable bases",
         ),
+        `${seconds}s receipt`,
       );
       assert.equal(
         lines.some((line) => line.startsWith("calibration note:")),
         seconds === 20,
+        `${seconds}s receipt`,
       );
       if (seconds === 20)
         assert.ok(
           lines.includes(
             "calibration note: M01-sample.md - 20s raw rounds to 0 min; estimate-ratio eligible; work-unit eligible",
           ),
+          `${seconds}s receipt`,
         );
       assert.doesNotMatch(
         lines.join("\n"),
         /late timer|invalid receipt|fabricated/iu,
+        `${seconds}s receipt`,
       );
     }
   });

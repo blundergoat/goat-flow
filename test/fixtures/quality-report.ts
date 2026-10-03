@@ -5,7 +5,13 @@ import { makeQualityScoreRationale } from "./quality-score-rationale.js";
 
 const QUALITY_REPORT_TOKEN_FIXTURE = `ghp_${"abcdefghijklmnopqrstuvwxyz"}`;
 
-/** Build one current report accepted by the strict quality schema. */
+/**
+ * Build one current report accepted by the strict quality schema.
+ *
+ * @param projectPath - absolute project path recorded as the report's owner
+ * @param detail - the single finding's detail text; the default embeds a token-shaped string for redaction checks
+ * @returns a complete current-schema report object
+ */
 export function makeCurrentQualityReport(
   projectPath: string,
   detail = `Token fixture ${QUALITY_REPORT_TOKEN_FIXTURE}`,

@@ -745,7 +745,7 @@ function resolveSelectedProjectRoot(
 }
 
 /**
- * Reject a report that belongs to another project or another goat-flow version.
+ * Reject a report that belongs to another project or another goat-flow version; the first mismatch throws a usage error.
  *
  * Ownership is checked against the realpath of both sides so a symlinked or relative `project_path` cannot smuggle a report into a different
  * project's history. Version equality requires new saves to come from the installed release; rubric ids govern score comparisons.

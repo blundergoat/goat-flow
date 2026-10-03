@@ -158,6 +158,7 @@ describe("prior-score isolation", () => {
         assert.doesNotMatch(
           context,
           /\b(?:23|84|17|91|92|93|18|77|76|24|22|11|81|82|19)\b/u,
+          `${agent} ${qualityMode}`,
         );
         for (const retained of [
           "Claim remains",

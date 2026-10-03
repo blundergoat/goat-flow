@@ -19,7 +19,7 @@ import {
 } from "./plans-check.helpers.js";
 
 describe("plans check: effort arithmetic and plan shapes", () => {
-  /** Compares complete current stdout, stderr, and exit status across equivalent cap-one policies. */
+  /** Writes temporary plans and compares complete stdout, stderr, and exit status across equivalent cap-one policies. */
   it("reports the same cap-one transcript with omitted and explicit policy", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-golden-"));
     const expected = {
@@ -51,6 +51,7 @@ describe("plans check: effort arithmetic and plan shapes", () => {
               status: actual.status,
             },
             expected,
+            `lane=${withLane} flags=${flags.join(" ")}`,
           );
         }
       }

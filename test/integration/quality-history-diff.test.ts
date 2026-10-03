@@ -57,7 +57,7 @@ function digest(text: string | Buffer): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-/** Build real Git objects, saved findings and a review capture in a disposable project. */
+/** Writes real Git objects, saved findings and a review capture with its authority fingerprint into a disposable project. */
 function makeFixProject(
   source: string | Buffer = "export const corrected = true;\n",
 ) {
@@ -168,7 +168,7 @@ function makeTempProject(): string {
   return root;
 }
 
-/** Run a real child with private finite input/output files; failed launches retain a failing status. */
+/** Spawns a real child with private finite input/output files; failed launches retain a failing status. */
 function captureProcess(
   binary: string,
   args: string[],
@@ -263,7 +263,7 @@ describe("quality history and diff CLI", () => {
     assert.equal(readFileSync(fixture.priorPath, "utf8"), foreignPrior);
   });
 
-  // The result appears after admission; history must not rewrite or promote that admission.
+  // Writes the result file only after admission; history must not rewrite or promote that admission.
   it("reports restored references as available without promoting an unconfirmed fix", () => {
     const fixture = makeFixProject();
     const proofFile = ".goat-flow/logs/restored-result.txt";
@@ -298,6 +298,7 @@ describe("quality history and diff CLI", () => {
     assert.equal(readFileSync(fixture.priorPath, "utf8"), fixture.priorBytes);
   });
 
+  // Writes a capture re-fingerprinted after its source field was removed; it must still be rejected as fix evidence.
   it("rejects a workspace capture missing source identity even when its hashes match", () => {
     const fixture = makeFixProject();
     const {
@@ -380,6 +381,7 @@ describe("quality history and diff CLI", () => {
     }
   });
 
+  // Writes a later edit to the fixed file, which must not change how history shows the saved report's concern counts and committed proof.
   it("shows concern counts and committed proof at its recorded revision without rewriting history", () => {
     const fixture = makeFixProject();
     const saved = saveFixReport(fixture, [fixture.fix]);
@@ -433,6 +435,7 @@ describe("quality history and diff CLI", () => {
     assert.equal(readFileSync(saved, "utf8"), savedBytes);
   });
 
+  // Writes over the captured bytes after saving; workspace static proof stays bound to the capture, so the saved conclusion must not change.
   it("binds workspace static proof to captured bytes and retains the conclusion after those bytes change", () => {
     const fixture = makeFixProject();
     const fix: QualityFix = {
@@ -601,7 +604,11 @@ describe("quality history and diff CLI", () => {
         "unconfirmed",
         JSON.stringify(claim),
       );
-      assert.equal(saved.fixes[0].conclusion, "assessor-verified");
+      assert.equal(
+        saved.fixes[0].conclusion,
+        "assessor-verified",
+        `claim ${JSON.stringify(claim)}`,
+      );
     }
     const duplicates = JSON.parse(
       readFileSync(saveFixReport(fixture, [fixture.fix, fixture.fix]), "utf8"),
@@ -626,6 +633,7 @@ describe("quality history and diff CLI", () => {
     assert.equal(readFileSync(fixture.priorPath, "utf8"), fixture.priorBytes);
   });
 
+  // Writes three saved reports straddling a rubric change; deltas across that boundary are suppressed while legacy fields stay readable.
   it("retains legacy fields and suppresses setup/system deltas at the new rubric boundary", () => {
     const root = makeTempProject();
     const ids = [

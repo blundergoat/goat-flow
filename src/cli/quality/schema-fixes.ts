@@ -16,13 +16,13 @@ import {
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
-/** Throw the first field error for the public parser to convert into a checked result. */
+/** Throws the first field error for the public parser to convert into a checked result. */
 function requireValue<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(result.error);
   return result.value;
 }
 
-/** Reject unknown nested keys so retained claims cannot hide unsupported evidence fields. */
+/** Reject unknown nested keys so retained claims cannot hide unsupported evidence fields; throws on a non-object or an unknown key. */
 function objectFields(
   raw: unknown,
   path: string,
@@ -42,14 +42,14 @@ function optionalText(raw: unknown, path: string): string | null {
   return text;
 }
 
-/** Required evidence fields cannot masquerade as a usable empty reference. */
+/** Required evidence fields cannot masquerade as a usable empty reference; an absent or malformed field throws. */
 function requiredText(raw: unknown, path: string): string {
   const text = optionalText(raw, path);
   if (text === null) throw new Error(`${path} is required`);
   return text;
 }
 
-/** A retained file needs a path and exact digest; resolution belongs to the saver. */
+/** Parse a retained file's path and exact digest, leaving resolution to the saver; throws when either is missing or malformed. */
 function parseReference(
   raw: Record<string, unknown>,
   path: string,
@@ -88,7 +88,7 @@ function parseTarget(raw: unknown, path: string): QualityFixTarget | null {
   return { kind: "commit", revision };
 }
 
-/** Keep method-specific proof optional here so unsupported claims can be shown as unconfirmed. */
+/** Keep method-specific proof optional so unsupported claims show as unconfirmed; throws only on malformed text or a non-integer exit code. */
 function parseProofDetails(
   raw: Record<string, unknown>,
   path: string,

@@ -138,7 +138,7 @@ after(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-/** Keep saved report bytes in an isolated project owned by this test suite. */
+/** Writes an isolated temporary project that keeps saved report bytes owned by this test suite. */
 function makeTempProject(): string {
   const root = mkdtempSync(join(tmpdir(), "quality-assessment-persistence-"));
   mkdirSync(join(root, ".goat-flow/logs/quality"), { recursive: true });
@@ -146,7 +146,7 @@ function makeTempProject(): string {
   return root;
 }
 
-/** Current persistence fixtures need a Git-owned ignored destination; history-only fixtures do not. */
+/** Spawns `git init` and writes an ignore rule, because current persistence fixtures need a Git-owned ignored destination. */
 function makePersistenceProject(): string {
   const root = makeTempProject();
   execFileSync("git", ["-C", root, "init", "--quiet"], { stdio: "ignore" });
@@ -197,6 +197,7 @@ describe("quality assessment evidence", () => {
       assert.deepEqual(
         entry.report.assessment_context?.assessment_identity,
         identity,
+        `history entry ${entry.id}`,
       );
     const rows = buildQualityHistoryRows(history.entries, {
       agent: "claude",
@@ -266,7 +267,7 @@ describe("quality assessment evidence", () => {
     );
   });
 
-  // These saved pairs differ in one assessor input, so none may be pooled into controlled spread.
+  // Writes saved pairs that differ in one assessor input, so none may be pooled into controlled spread.
   it("keeps new unknowns outside legacy spread and separates assessor inputs", () => {
     const root = makeTempProject();
     const identity = {
@@ -341,6 +342,7 @@ describe("quality assessment evidence", () => {
               "unknown",
           ).length,
           1,
+          `case ${testCase.name}`,
         );
     }
     // Historical omission is not filled from the current launch or current defaults.
@@ -449,13 +451,14 @@ describe("quality assessment evidence", () => {
         JSON.stringify(withoutStableCapture),
       );
       const weakerHistory = loadQualityHistory(root);
-      assert.deepEqual(weakerHistory.warnings, []);
-      assert.equal(weakerHistory.entries.length, 3);
+      assert.deepEqual(weakerHistory.warnings, [], `capture start ${start}`);
+      assert.equal(weakerHistory.entries.length, 3, `capture start ${start}`);
       assert.ok(
         buildQualityHistoryRows(weakerHistory.entries, {
           agent: null,
           limit: null,
         }).every((row) => row.repeatSpread === null),
+        `capture start ${start}`,
       );
     }
   });

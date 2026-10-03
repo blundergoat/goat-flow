@@ -164,32 +164,38 @@ describe("plans time", () => {
           ),
         );
       }
-      const go = join(plan, "M18-go-precision.md");
-      const php = join(plan, "M19-php-precision.md");
+      const goMilestone = join(plan, "M18-go-precision.md");
+      const phpMilestone = join(plan, "M19-php-precision.md");
       applyPlanTimeTransition(
-        go,
+        goMilestone,
         { action: "start", category: "product" },
         100,
       );
-      applyPlanTimeTransition(php, { action: "start", category: "proof" }, 110);
-      const before = readFileSync(php, "utf-8");
+      applyPlanTimeTransition(
+        phpMilestone,
+        { action: "start", category: "proof" },
+        110,
+      );
+      const before = readFileSync(phpMilestone, "utf-8");
       assert.equal(
-        applyPlanTimeTransition(go, { action: "status" }, 120).receipt.state,
+        applyPlanTimeTransition(goMilestone, { action: "status" }, 120).receipt
+          .state,
         "active",
       );
       assert.equal(
-        applyPlanTimeTransition(php, { action: "status" }, 120).receipt.state,
+        applyPlanTimeTransition(phpMilestone, { action: "status" }, 120).receipt
+          .state,
         "active",
       );
       const goStop = applyPlanTimeTransition(
-        go,
+        goMilestone,
         { action: "stop", finalize: true, discardOpen: false },
         160,
       );
       assert.equal(goStop.receipt.summary?.totalSeconds, 60);
-      assert.equal(readFileSync(php, "utf-8"), before);
+      assert.equal(readFileSync(phpMilestone, "utf-8"), before);
       const phpStop = applyPlanTimeTransition(
-        php,
+        phpMilestone,
         { action: "stop", finalize: true, discardOpen: false },
         230,
       );

@@ -40,7 +40,7 @@ export interface QualityFixView {
   warning: string | null;
 }
 
-/** Reject escaping and secret-bearing paths before opening an assessor-supplied reference. */
+/** Reject escaping and secret-bearing paths before opening an assessor-supplied reference; throws on either. */
 function checkReferencePath(path: string): void {
   const parts = path.replace(/\\/gu, "/").split("/");
   if (
@@ -83,7 +83,7 @@ function readReference(
   return bytes.toString("utf8");
 }
 
-/** Spawn read-only Git object queries; process failures propagate to the unconfirmed-reference boundary. */
+/** Spawns read-only Git object queries; process failures propagate to the unconfirmed-reference boundary. */
 function readGit(projectRoot: string, args: string[]): Buffer {
   return execFileSync(
     "git",
@@ -97,7 +97,7 @@ function readGit(projectRoot: string, args: string[]): Buffer {
 }
 
 /**
- * Query Git for source bytes at the recorded commit, independently of today's checkout.
+ * Reads source bytes from Git at the recorded commit, independently of today's checkout.
  * Throws when the path is not a regular blob or its digest differs from the claim.
  */
 function readCommittedReference(
@@ -122,7 +122,7 @@ function readCommittedReference(
   return bytes.toString("utf8");
 }
 
-/** Require the exact prior report and finding; a summary match or absent later row is insufficient. */
+/** The prior report and finding must match exactly, because a summary match or absent later row is insufficient; a mismatch throws. */
 function checkPriorFinding(projectRoot: string, fix: QualityFix): void {
   const reportId = fix.prior_report_id;
   if (!reportId || !REPORT_ID.test(reportId) || !fix.finding_id)
@@ -149,7 +149,7 @@ function checkPriorFinding(projectRoot: string, fix: QualityFix): void {
     throw new Error("prior finding ID does not resolve");
 }
 
-/** Verify a retained capture's frozen metadata without recapturing today's workspace. */
+/** Verify a retained capture's frozen metadata and fingerprint without recapturing today's workspace; any invalid field throws. */
 function readWorkspaceCapture(
   projectRoot: string,
   target: Extract<
@@ -209,7 +209,7 @@ function readWorkspaceCapture(
   return capture;
 }
 
-/** Static proof must identify the exact captured source bytes; runtime proof names a retained result instead. */
+/** Static proof must identify the exact captured source bytes, or the check throws; runtime proof names a retained result instead. */
 function checkCapturedSource(
   capture: Record<string, unknown>,
   fix: QualityFix,
@@ -231,7 +231,7 @@ function checkCapturedSource(
     );
 }
 
-/** Enforce proof shape only; command success and matching text do not establish semantic correctness. */
+/** Enforce proof shape only (a missing field throws); command success and matching text do not establish semantic correctness. */
 function checkProofShape(fix: QualityFix): void {
   if (!fix.explanation || !fix.evidence || !fix.target)
     throw new Error("explanation, target and evidence are required");
@@ -246,7 +246,7 @@ function checkProofShape(fix: QualityFix): void {
   }
 }
 
-/** Check one complete claim's target and retained proof, leaving its interpretation with the assessor. */
+/** Check one complete claim's target and retained proof, leaving its interpretation with the assessor; throws when either is unavailable. */
 function checkTargetEvidence(projectRoot: string, fix: QualityFix): void {
   const target = fix.target;
   const evidence = fix.evidence;
@@ -272,7 +272,7 @@ function checkTargetEvidence(projectRoot: string, fix: QualityFix): void {
     throw new Error("evidence anchor is unavailable");
 }
 
-/** Return unconfirmed on any missing, unsafe or changed reference; never expose filesystem or Git diagnostics. */
+/** Return unconfirmed on any missing, unsafe or changed reference; the catch swallows filesystem and Git diagnostics so none reach the report. */
 function checkFix(
   projectRoot: string,
   fix: QualityFix,

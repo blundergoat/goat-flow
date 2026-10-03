@@ -57,8 +57,8 @@ function resolveAnalyzerLaunchCommand() {
 }
 
 /**
- * Capture the installed analyzer's output in private files, then remove them.
- * Each stream is checked against 64 MiB after exit and before decoding; process metadata is returned unchanged.
+ * Spawns the installed analyzer with its output in private files, then removes them.
+ * Each stream is checked against 64 MiB after exit and before decoding, and a larger one throws; process metadata is returned unchanged.
  *
  * @param command - resolved installed entrypoint or the Node fixture executable
  * @param args - literal analyzer arguments, never a shell program

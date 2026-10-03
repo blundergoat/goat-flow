@@ -27,7 +27,7 @@ import {
   runCliInstaller,
 } from "./setup-install.helpers.js";
 
-/** Create only the old policy surfaces needed to prove installer refusal happens before any target write. */
+/** Writes only the old policy surfaces needed to prove installer refusal happens before any target write. */
 function pendingPolicyUpgradeProject(): string {
   const projectPath = makeTempProject();
   mkdirSync(join(projectPath, ".goat-flow/hooks/deny-dangerous"), {
@@ -422,11 +422,15 @@ describe("installer dependency preflight", () => {
       assert.equal(result.status, 0, result.stderr || result.stdout);
       const config = readFileSync(join(root, ".codex/hooks.json"), "utf8");
       // Once the first config is captured, later setup must retain the same bytes.
-      if (previous !== undefined) assert.equal(config, previous);
+      if (previous !== undefined)
+        assert.equal(config, previous, `attempt ${attempt}`);
       previous = config;
       // Both policy launchers must be present and replay successfully after setup.
       for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
-        assert.ok(config.includes(`${hookId}.sh`));
+        assert.ok(
+          config.includes(`${hookId}.sh`),
+          `attempt ${attempt} ${hookId}`,
+        );
         const launch = spawnSync(
           process.execPath,
           [
@@ -441,13 +445,21 @@ describe("installer dependency preflight", () => {
           },
         );
         assert.equal(launch.status, 0, launch.stderr);
-        assert.equal(launch.stdout, "");
-        assert.equal(launch.stderr, "");
+        assert.equal(launch.stdout, "", `attempt ${attempt} ${hookId}`);
+        assert.equal(launch.stderr, "", `attempt ${attempt} ${hookId}`);
       }
-      assert.equal(existsSync(join(root, "node_modules")), false);
+      assert.equal(
+        existsSync(join(root, "node_modules")),
+        false,
+        `attempt ${attempt}`,
+      );
       // The installed choice reader and parser must exist before provider hooks can read the user's saved switches.
       for (const name of ["hook-policy-state.cjs", "vendor/js-yaml.cjs"])
-        assert.equal(existsSync(join(root, ".goat-flow/hooks", name)), true);
+        assert.equal(
+          existsSync(join(root, ".goat-flow/hooks", name)),
+          true,
+          `attempt ${attempt} ${name}`,
+        );
     }
   });
 

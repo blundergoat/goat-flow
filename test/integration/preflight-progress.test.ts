@@ -898,7 +898,7 @@ describe("preflight shell syntax", () => {
 
 describe("run-tests --shard grammar", () => {
   /**
-   * Spawn the real runner with an unknown mode: a shard value that passes the parser stops at mode dispatch with a different
+   * Spawns the real runner with an unknown mode: a shard value that passes the parser stops at mode dispatch with a different
    * error, so the probe can tell "accepted" from "rejected" without ever running a test file.
    */
   function probeShard(shardValue: string) {

@@ -327,13 +327,14 @@ it("renders supplied system deltas and hides missing comparisons without adjacen
         { systemTotal: 10, systemDelta: null },
       ],
     });
-    assert.equal(Boolean(runInContext(show, context)), true);
+    assert.equal(Boolean(runInContext(show, context)), true, `delta ${delta}`);
     assert.equal(runInContext(text, context), expected);
   }
   for (const rows of [[], [{ systemTotal: 85, systemDelta: null }]]) {
     assert.equal(
       Boolean(runInContext(show, createContext({ qualityHistoryRows: rows }))),
       false,
+      `rows ${JSON.stringify(rows)}`,
     );
   }
 });
@@ -438,6 +439,7 @@ it("renders rerun statistics and unavailable spread beside unchanged percentage 
     assert.match(
       String(rendered),
       /observational reruns n=3; median (80|20)\/100; range (75-90|10-25)\/100/,
+      `expression ${expression}`,
     );
     assert.equal(
       runInContext(
@@ -448,6 +450,7 @@ it("renders rerun statistics and unavailable spread beside unchanged percentage 
         }),
       ),
       "no comparable reruns",
+      `expression ${expression}`,
     );
   }
 });

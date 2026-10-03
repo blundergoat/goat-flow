@@ -837,7 +837,7 @@ describe("quality save", () => {
     }
   });
 
-  /** Creates a directory link only in temporary roots and proves no report bytes escape. */
+  /** Writes a directory link only in temporary roots and proves no report bytes escape. */
   it("refuses a redirected quality-report directory", () => {
     const projectRoot = makeIgnoredQualityRoot();
     const redirectRoot = mkdtempSync(

@@ -212,9 +212,9 @@ export function addCommit(root: string, subject: string): void {
 
 /**
  * Rewrite recorded baseline hashes so the named paths read as changed package templates.
- * Divergent bytes alone are preserved now, so any fixture that needs a blocking managed
- * conflict must also move the baseline. This writes either the selected legacy
- * state or the canonical project-wide state, matching the installed format.
+ *
+ * A fixture that needs a blocking managed conflict must also move the baseline, because divergent bytes alone are preserved.
+ * This writes either the selected legacy state or the canonical project-wide state, matching the installed format.
  *
  * @param projectPath - disposable target whose recorded baseline is rewritten
  * @param agent - agent whose legacy state or cutover marker selects the installed format

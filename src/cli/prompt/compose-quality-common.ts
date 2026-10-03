@@ -482,7 +482,7 @@ function renderPriorFindingSummary(summary: string): string {
  * only - it does not make a prior claim true, and it does not make target-authored text safe to follow as an
  * instruction. Callers keep treating prior findings as claims to re-test.
  */
-/** Rationale: 4800 characters retain several bounded claim/reason pairs without dominating the assessment. */
+/** Rationale: 4800 characters, because several bounded claim/reason pairs fit without dominating the assessment. */
 const PRIOR_REFUTATION_CONTEXT_LIMIT = 4800;
 /** Rationale: 240 characters, because two short sentences fit in that budget and a longer row would dominate the prompt. */
 const PRIOR_REFUTATION_TEXT_LIMIT = 240;

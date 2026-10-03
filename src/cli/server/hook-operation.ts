@@ -187,7 +187,7 @@ export class PreparedHookChange {
 
   /**
    * Capture the selected project's complete shared history before preparing any writes.
-   * Every provider marker participates in review identity; invalid history throws and requires install recovery.
+   * Every provider marker must participate in review identity; invalid history throws and requires install recovery.
    *
    * @param projectPath - selected project; missing or inaccessible roots refuse the action
    * @param intent - requested sync or explicit toggle, included in replacement confirmation
@@ -220,7 +220,7 @@ export class PreparedHookChange {
 
   /**
    * Capture a safe file's bytes and permissions for the user's pending hook action.
-   * Missing files remain create-only targets; unsafe paths, unreadable bytes or an intervening edit throw before apply.
+   * Missing files remain create-only targets; an unsafe path, unreadable bytes or an intervening edit throws before apply.
    *
    * @param path - registry-derived project-relative destination; empty or escaping paths are rejected
    * @returns captured bytes and permissions; null text means no file currently exists
@@ -298,7 +298,7 @@ export class PreparedHookChange {
    * @param path - managed hook destination
    * @param text - exact bundled script bytes decoded as UTF-8
    *
-   * @param hookIds - every hook sharing the file, for the user's replacement list
+   * @param hookIds - every hook sharing the file, in any order; the user's replacement list shows them in a stable sorted order
    * @param isEnabled - an enabled owner requires current bytes; false only fills a missing file
    */
   copyOfficial(
@@ -401,7 +401,7 @@ export class PreparedHookChange {
 
   /**
    * Bind the user's review to the project, action, complete destination set, permissions and incoming bundle.
-   * Equivalent sorted evidence yields the same identity; any relevant change requires a fresh review.
+   * Equivalent sorted evidence must yield the same identity; any relevant change requires a fresh review.
    */
   confirmationIdentity(): string {
     return contentHash(
@@ -432,7 +432,7 @@ export class PreparedHookChange {
 
   /**
    * List bundled replacements that would discard differing local bytes without matching pristine history.
-   * Missing or identical files need no review; absent baseline rows keep differing bytes explicitly unclassified.
+   * Missing or identical files need no review; absent baseline rows keep differing bytes unclassified, and hook IDs keep a stable order.
    */
   replacementConflicts(): HookReplacementConflict[] {
     return this.sortedDestinations().flatMap((destination) => {
@@ -463,7 +463,7 @@ export class PreparedHookChange {
 
   /**
    * Require separate, current consent before changing policy ownership or replacing the user's differing hook files.
-   * A supplied stale identity also refuses when the current conflict list is empty, so old approval cannot authorize a new action.
+   * A supplied stale identity must also refuse when the current conflict list is empty, so old approval cannot authorize a new action.
    *
    * @param confirmation - reviewed identity and separate consent choices; empty means an ordinary safe request
    * @throws a structured conflict before any destination changes
@@ -543,7 +543,7 @@ export class PreparedHookChange {
 
   /**
    * List changed destinations after a failed hook action, including partial history bootstrap.
-   * Unreadable targets are included for inspection; filesystem errors are caught so recovery can still identify their paths.
+   * Unreadable targets are included for inspection; the catch swallows filesystem errors so recovery can still identify their paths.
    */
   changedPaths(): string[] {
     return this.sortedDestinations()
@@ -569,8 +569,8 @@ export class PreparedHookChange {
   }
 
   /**
-   * Apply the reviewed files under claims, then publish only verified hook dependencies.
-   * I/O or publication failures throw a structured error with the changed paths and repair steps.
+   * Apply the reviewed files under claims in a stable destination order, then publish only verified hook dependencies.
+   * An I/O or publication failure throws a structured error with the changed paths and repair steps.
    */
   apply(): void {
     const officialFiles = this.sortedDestinations().flatMap((destination) =>
@@ -739,7 +739,7 @@ function acquireHookChangeClaims(change: PreparedHookChange) {
 
 /**
  * Run Sync or a toggle under the same cooperative write claims as public install.
- * Rebuild under claims before writing; thrown failures retain repair details, including any claims that could not be released.
+ * Rebuild under claims before writing; a failure throws with its repair details, including any claims that could not be released.
  *
  * @param prepare - server-owned inventory builder, rerun under claims before any destination write
  * @param confirmation - exact replacement approval; omitted for safe CLI or initial dashboard requests

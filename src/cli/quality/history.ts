@@ -583,7 +583,7 @@ export function selectQualityHistoryEntries(
 /**
  * Build display rows whose score deltas compare each run with the same agent's previous run in the same mode, rubric and scope.
  *
- * Deltas are only ever taken against the previous run by the same agent in the same mode, and only when that run scored the same assessment target
+ * Deltas must only be taken against the previous run by the same agent in the same mode, and only when that run scored the same assessment target
  * (rubric and scope), because any other comparison is not like-for-like and would show the user movement that never happened.
  *
  * @param entries - pre-sorted quality-history entries; empty entries produce no history rows

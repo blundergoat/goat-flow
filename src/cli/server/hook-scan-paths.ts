@@ -36,7 +36,7 @@ export function physicalDirectory(directoryPath: string): string | null {
 /**
  * Return the physical Git top-level for one directory.
  * Spawns one read-only Git process with a five-second deadline; private output files stay outside the selected project.
- * Capture, startup, timeout and non-work-tree failures return `null`; the 16 KiB limit is checked after exit.
+ * It swallows capture, startup, timeout and non-work-tree failures as `null`; the 16 KiB limit is checked after exit.
  *
  * @param directoryPath - existing directory Git should classify without modifying it
  * @returns physical work-tree root, or `null` when the bounded child process cannot prove one

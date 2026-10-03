@@ -58,7 +58,7 @@ import {
   writeHookFixtures,
 } from "./audit-drift.helpers.js";
 
-/** Spawn the fixture command with private stream files, then close and remove every capture. */
+/** Spawns the fixture command with private stream files, then closes and removes every capture. */
 function runWithFileStreams(
   command: string,
   args: string[],
@@ -514,7 +514,7 @@ describe("managed divergence messaging", () => {
 
 /**
  * Create a disposable project for a whole-operation refusal case, then remove it even when an assertion fails.
- * The callback can change only its fixture; this helper creates and deletes that temporary directory.
+ * The callback can change only its fixture; the helper itself writes nothing beyond creating and deleting that temporary directory.
  */
 function withAdmissionProject(scenario: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-hook-admission-"));

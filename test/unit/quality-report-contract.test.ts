@@ -114,18 +114,29 @@ it("fingerprints each final prompt beside its body, including persistence and pr
       assert.equal(
         payload.promptSha256,
         createHash("sha256").update(payload.prompt, "utf8").digest("hex"),
+        `${qualityMode} ${payload === manual ? "manual" : "staged"} payload`,
       );
       assert.equal(
         payload.prompt.includes(payload.promptSha256 ?? "missing"),
         false,
+        `${qualityMode} ${payload === manual ? "manual" : "staged"} payload`,
       );
-      assert.match(payload.prompt, /"assessment_identity"/);
+      assert.match(
+        payload.prompt,
+        /"assessment_identity"/,
+        `${qualityMode} ${payload === manual ? "manual" : "staged"} payload`,
+      );
       assert.match(
         payload.prompt,
         /available launch metadata supplied separately/,
+        `${qualityMode} ${payload === manual ? "manual" : "staged"} payload`,
       );
     }
-    assert.notEqual(manual.promptSha256, staged.promptSha256);
+    assert.notEqual(
+      manual.promptSha256,
+      staged.promptSha256,
+      `mode ${qualityMode}`,
+    );
   }
 });
 const FOCUSED_QUALITY_MODES = ["process", "harness", "skills"] as const;
@@ -760,7 +771,7 @@ describe("quality report contract: CLI surfaces", () => {
       );
       assert.ok(
         realisticBlock.length > 16_384,
-        "exercise the large-command policy branch",
+        `indent ${indent}: exercise the large-command policy branch`,
       );
       for (const hook of ["deny-dangerous", "deny-git-mutations"]) {
         const hookPath = `.goat-flow/hooks/${hook}.sh`;

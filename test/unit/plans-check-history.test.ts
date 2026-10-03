@@ -34,7 +34,7 @@ import {
 } from "./plans-check.helpers.js";
 
 describe("plans check: bounded project history", () => {
-  /** A real directory tree distinguishes the two admitted layers from nested scratch and archive content. */
+  /** Writes a real directory tree that distinguishes the two admitted layers from nested scratch and archive content. */
   it("discovers direct and done plans with portable identities, without recursing other containers", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-history-"));
     try {
@@ -80,6 +80,7 @@ describe("plans check: bounded project history", () => {
         assert.equal(
           source.sha256,
           createHash("sha256").update(bytes).digest("hex"),
+          `source ${source.id}`,
         );
       }
       assert.equal(
@@ -92,7 +93,7 @@ describe("plans check: bounded project history", () => {
     }
   });
 
-  /** File and directory links exercise separate containment checks; EPERM skips only unsupported fixture setup. */
+  /** Writes file and directory links that exercise separate containment checks; EPERM skips setup, and any other link error throws. */
   it("excludes directory and milestone symlinks, including a selected plan that escapes", (t) => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-history-links-"));
     try {
@@ -137,8 +138,8 @@ describe("plans check: bounded project history", () => {
   });
 });
 
-/** Spawn the CLI from either project's working directory, resolving tsx at the test owner.
- * Capture diagnostics in private files and remove them after the child exits.
+/** Spawns the CLI from either project's working directory, resolving tsx at the test owner.
+ * Captures diagnostics in private files and removes them after the child exits.
  */
 function checkHistory(plan: string, cwd = PROJECT_ROOT) {
   const directory = mkdtempSync(join(tmpdir(), "goat-plan-history-output-"));
@@ -186,7 +187,7 @@ function selectedHistory(
   );
 }
 
-/** Two separated spans expose the exact residual cutoff: 11 prior seconds, then 12 forecast seconds in completed fixtures. */
+/** Two separated spans must expose the exact residual cutoff: 11 prior seconds, then 12 forecast seconds in completed fixtures. */
 function remainingHistoryFixture(start: number, isComplete = true) {
   const fixture = registeredHistoryFixture(start, 23, isComplete);
   const revision = {
@@ -251,6 +252,7 @@ describe("plans check: registered history selection", () => {
     );
   });
 
+  // Writes a completed plan, which keeps its whole-work sample, and a plan whose scope was cancelled after issue, which must be excluded.
   it("preserves whole-work samples after completion but excludes cancelled scope", (t) => {
     const root = mkdtempSync(join(tmpdir(), "goat-history-removed-scope-"));
     t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -297,7 +299,7 @@ describe("plans check: registered history selection", () => {
       /whole-work scope was removed/u,
     );
   });
-  /** Whole and remaining forecasts share files but never share outcome denominators or the consumed receipt prefix. */
+  /** Writes whole and remaining forecasts that share files but never share outcome denominators or the consumed receipt prefix. */
   it("matches remaining scope to registered revisions and counts only seconds after their closed cutoff", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-history-remaining-"));
     try {
@@ -347,7 +349,10 @@ describe("plans check: registered history selection", () => {
     }
   });
 
-  /** Even matching frozen bytes outside the plan cannot enter through a linked evaluation directory or registration file. */
+  /**
+   * Writes links proving matching frozen bytes outside the plan cannot enter through a linked evaluation directory or registration file.
+   * EPERM skips the symlink setup, and any other link error throws.
+   */
   it("keeps symlinked registrations diagnostic-only", (t) => {
     const root = mkdtempSync(
       join(tmpdir(), "goat-flow-history-registration-links-"),
@@ -402,7 +407,7 @@ describe("plans check: registered history selection", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
-  /** Two projects and an external operand prove cwd independence, selected-only totals and read-only history through the CLI. */
+  /** Writes two projects and an external operand proving cwd independence, selected-only totals and read-only history through the CLI. */
   it("reuses three short sibling receipts for a fresh plan from either working directory and preserves legacy advice", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-history-cli-"));
     try {
@@ -471,7 +476,7 @@ describe("plans check: registered history selection", () => {
     }
   });
 
-  /** Each incompatible source has a distinct receipt, preventing duplicate handling from hiding the compatibility reason. */
+  /** Writes each incompatible source with a distinct receipt, so duplicate handling cannot hide the compatibility reason. */
   it("keeps unknown state, other work classes, other rubrics and tied or future completions out of matching", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-history-context-"));
     try {
@@ -537,7 +542,7 @@ describe("plans check: registered history selection", () => {
     }
   });
 
-  /** Mutations model invalid author-provided registrations; only the unchanged independently hashed snapshot remains eligible. */
+  /** Writes mutations modelling invalid author registrations; only the unchanged independently hashed snapshot must stay eligible. */
   it("excludes missing, malformed, conflicting, late and drifted registrations without failing the selected plan", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-history-registration-"));
     try {
@@ -626,7 +631,7 @@ describe("plans check: registered history selection", () => {
     }
   });
 
-  /** Copied spans and explicit identities represent the same work; independently timed equal-duration observations remain distinct. */
+  /** Writes copied spans and explicit identities for the same work; independently timed equal-duration observations remain distinct. */
   it("deduplicates shared receipt provenance and excludes every conflicting copy deterministically", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-history-copies-"));
     try {
@@ -675,7 +680,7 @@ describe("plans check: registered history selection", () => {
     }
   });
 
-  /** Damaged receipt and basis variants keep their own diagnostics while a valid short receipt remains usable. */
+  /** Writes damaged receipt and basis variants that keep their own diagnostics while a valid short receipt remains usable. */
   it("rejects malformed finalized claims, mismatched seconds and invalid units without importing lifecycle errors", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-history-integrity-"));
     try {

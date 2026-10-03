@@ -81,7 +81,7 @@ describe("quality save safety", () => {
    * Fixture purpose: relocates the allocated parent during descriptor-bound writing and proves the post-write identity gate rejects it.
    * Filesystem side effects: renames and replaces paths only inside the temporary project root.
    * Error behavior: skips only when the host denies the open-child rename with EPERM;
-   * other setup failures propagate.
+   * any other setup failure throws.
    */
   it("fails closed when the allocated report parent moves during writing", (t) => {
     const projectRoot = mkdtempSync(resolve(tmpdir(), "quality-relocated-"));
@@ -217,7 +217,7 @@ describe("quality concerns and fix record parsing", () => {
           },
         ],
       });
-      assert.ok(parsed.ok);
+      assert.ok(parsed.ok, `target ${target.kind}`);
       assert.deepEqual(parsed.report.fixes?.[0], {
         conclusion: "assessor-verified",
         target,

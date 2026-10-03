@@ -1056,8 +1056,8 @@ export function runLauncherWithPayload(
   return runPayloadProcess("bash", ["-c", command], cwd, payload, env);
 }
 
-/** Spawn the requested launcher with finite stdin and private output files.
- * Remove the capture directory after reading diagnostics; keep status and error metadata unchanged.
+/** Spawns the requested launcher with finite stdin and private output files.
+ * Removes the capture directory after reading diagnostics and keeps status and error metadata unchanged.
  */
 function runPayloadProcess(
   command: string,

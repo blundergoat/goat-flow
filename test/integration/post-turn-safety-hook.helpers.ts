@@ -295,7 +295,7 @@ function runHookProcess(
   }
 }
 
-/** Spawn the real hook with caller-owned stdin; capture and remove private output files. */
+/** Spawns the real hook with caller-owned stdin, then captures and removes private output files. */
 function captureHookOutput(
   root: string,
   hookArguments: string[],

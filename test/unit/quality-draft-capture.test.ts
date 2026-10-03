@@ -197,6 +197,7 @@ describe("quality draft capture", () => {
     );
   });
 
+  // Writes two drafts captured by one delayed batch; each must keep its own assessment identity instead of sharing one.
   it("preserves each draft's assessment identity through shared delayed capture", async () => {
     const root = makeRoot();
     const staging = ensureQualityDraftStagingDirectory(root);
@@ -226,7 +227,7 @@ describe("quality draft capture", () => {
     await first.processNow();
     for (const [index, identity] of identities.entries()) {
       const receipt = readReceipt(second.stagingDir, `identity${index}`);
-      assert.equal(receipt.ok, true);
+      assert.equal(receipt.ok, true, `draft ${index}`);
       const persisted = JSON.parse(
         readFileSync(receipt.reportPath ?? "", "utf8"),
       );

@@ -531,12 +531,17 @@ describe("recall citation freshness", () => {
         ]);
         const match = JSON.parse(formatLearningLoopRecall(result, "json"))
           .matches[0];
-        assert.equal(result.totalMatches, 1);
-        assert.equal(match.hasStaleCitations, true);
-        assert.equal(match.matchedCitations[0].reason, "missing-file");
+        assert.equal(result.totalMatches, 1, `operand ${operand}`);
+        assert.equal(match.hasStaleCitations, true, `operand ${operand}`);
+        assert.equal(
+          match.matchedCitations[0].reason,
+          "missing-file",
+          `operand ${operand}`,
+        );
         assert.match(
           formatLearningLoopRecall(result, "text"),
           /stale: missing-file/u,
+          `operand ${operand}`,
         );
       }
     } finally {

@@ -163,7 +163,7 @@ function appendConcernAndFixEvidence(
   for (const record of entry.fixRecords ?? []) appendFixRecord(lines, record);
 }
 
-/** Keep uncommitted evidence visibly separate from a fixing commit. */
+/** Keep uncommitted evidence visibly separate from a fixing commit; a workspace snapshot shows its capture fingerprint. */
 function fixTargetLabel(target: QualityFixTarget | null): string {
   if (!target) return "target unavailable";
   return target.kind === "commit"

@@ -313,7 +313,7 @@ function readBandCoverageSample(
 }
 
 /**
- * Count below/above using raw receipt minutes, keeping both endpoints inside.
+ * Count below/above using raw receipt minutes; a value on either endpoint must count as inside the range.
  * Empty cohorts have no percentage or width; these descriptive lines never promise future coverage.
  *
  * @param records - parsed milestones whose stored ranges remain unchanged
@@ -878,7 +878,7 @@ interface TimedWorkUnitSample extends WorkUnitCalibrationSample {
   completionEpoch: number;
 }
 
-/** Untimed eligible samples still count in the cohort, but cannot train or receive a replay prediction. */
+/** Untimed eligible samples must still count in the cohort, but cannot train or receive a replay prediction. */
 function collectReplaySamples(records: PlanExportRecord[]): {
   timed: TimedWorkUnitSample[];
   missing: string[];

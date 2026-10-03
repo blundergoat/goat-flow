@@ -620,7 +620,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   });
 
-  // A consumer already on the shipped template must not gain any line from a hook toggle, or the audit's order check fails.
+  // Writes a consumer already on the shipped template; a hook toggle must not add any line, or the audit's order check fails.
   it("leaves a template-spelled goat-flow gitignore byte-identical when enabling deny-dangerous", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".codex"), { recursive: true });

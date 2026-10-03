@@ -168,3 +168,35 @@ Using a single-quoted plain search pattern let the read-only check run safely. E
 **Recurrence 2026-09-05:** Clarity-pass commands containing serialized source exceeded the hook's 16 KB command limit and were rejected before writes.
 Smaller patches and verification commands that read the selected files directly completed the work within the enforced limit.
 Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `16384`).
+
+## Lesson: Check Gruff file-length headroom before growing a large test file
+
+**Status:** active | **Created:** 2026-10-03
+**Severity:** INTEGRATION
+
+**Incident count:** 2 | **Latest occurrence:** 2026-10-03
+**Decision changed:** Before adding a test or assertion messages to a large test file, compare its substantive line count with Gruff's 1,000-line `size.file-length` limit and leave room for Prettier wrapping.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Run `bash scripts/gruff-ts.sh analyse <file>` before editing a test file near 950 substantive lines. Comments do not count, but a one-line assertion that gains a message wraps to five lines once it passes Prettier's print width; prefer a short existing variable as the label, or put a new test in the smaller suite that owns the same contract. Evidence anchors: `test/unit/hooks-runtime-evidence.test.ts` (search: `fails a Codex Stop hook that never delivers a scan`) and `test/unit/review-validate.test.ts` (search: `validateReviewReport(short, root).violations, [], flag`).
+
+**What happened:** Two edits on 2026-10-03 pushed test files past Gruff's 1,000-line limit, an error-level finding that fails the warning ratchet. A new Codex Stop test pushed `test/integration/hook-effective-state.test.ts` to 1,017 substantive lines, so the test moved to the smaller hooks runtime evidence suite. Case labels on loop assertions then pushed `test/unit/review-validate.test.ts` to 1,006, and one-line labels brought it back under the limit.
+
+**Root cause:** I sized each edit by its intent rather than by the lines Prettier would produce.
+
+## Lesson: Check each Gruff-driven comment against the code it describes
+
+**Status:** active | **Created:** 2026-10-03
+**Severity:** CORRECTNESS
+
+**Incident count:** 1 | **Latest occurrence:** 2026-10-03
+**Decision changed:** After writing a clause to clear a Gruff documentation finding, reread the code it describes and confirm its subject, branch and scope before moving on.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Check three things against the function body: the subject (the check throws, not the proof it reads), the branch (an explicit early return is not the catch) and the scope (one sorted list is not every result). When no truthful wording carries the rule's vocabulary, leave the advisory open. Evidence anchors: `src/cli/server/hook-runtime-proof.ts` (search: `missing or redirected files return null`) and `src/cli/review-validate-authority.ts` (search: `resolved paths keep a stable sorted order`).
+
+**What happened:** A 2026-10-03 Gruff sweep across 95 files added rule vocabulary and purpose comments. Two independent read-only reviews and my own read-through then found 12 claims the code did not support. `managedPolicyRuntimeIdentity` said its catch swallowed redirected files, but an explicit trust check returns null first; `copyOfficial` documented `hookIds` as "listed in a stable order" although the method sorts them itself; `selectPaths` said its results were sorted when only the resolved path list is. Gruff, Prettier, typecheck and the owning tests all passed with these comments in place.
+
+**Root cause:** I checked each new word against the rule's vocabulary instead of against the code the clause described.

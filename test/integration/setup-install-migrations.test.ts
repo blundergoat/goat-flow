@@ -107,7 +107,7 @@ describe("setup --apply installer upgrade migrations", () => {
         );
         writeAgentHookState(root, agent, dangerous, true);
       }
-      // Replay only fixture-owned registered policy handlers; operands remain inert provider payloads.
+      // Spawns only fixture-owned registered policy handlers; operands remain inert provider payloads.
       const decisions = (command: string) =>
         profiles.map((agent) => {
           assert.ok(agent.hooksDir);

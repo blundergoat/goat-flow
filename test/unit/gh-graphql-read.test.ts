@@ -7,7 +7,9 @@ const require = createRequire(import.meta.url);
 const { classify } = require("../../workflow/hooks/gh-graphql-read.cjs") as {
   classify: (rawStage: unknown, args: unknown) => number;
 };
+// Single-quote one word for a shell, escaping any embedded single quote.
 const quote = (word: string): string => `'${word.replaceAll("'", "'\\''")}'`;
+// Classify argv as a real `gh api` call delivers it: quoted shell text beside the decoded words.
 const classifyArguments = (args: string[]): number =>
   classify(`gh api ${args.map(quote).join(" ")}`, args);
 

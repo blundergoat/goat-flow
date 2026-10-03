@@ -49,8 +49,8 @@ const HOOK_RUNNER = join(
 after(cleanupHookTestDirs);
 
 /**
- * Run the real provider launcher with finite input and private output captures.
- * Creates and removes temporary files around the Node and Bash child processes.
+ * Spawns the real provider launcher with finite input and private output captures.
+ * Writes and removes temporary files around the Node and Bash child processes.
  *
  * @param payload - exact provider JSON, including intentionally malformed fixture shapes
  * @param responseMode - provider adaptation contract passed to the launcher
@@ -944,6 +944,7 @@ function writeOwnerGruffConfig(
 }
 
 describe("gruff-code-quality hook resolves ownership from the edited file", () => {
+  // Writes a nested install that enables Gruff without an analyzer config; it must report the config missing, not borrow the parent's.
   it("does not borrow a parent analyzer config across a nested installation boundary", () => {
     const root = makeRoot();
     writeAnalysablePackage(root);

@@ -133,7 +133,7 @@ export function validateUniqueFindingIds(
 }
 
 /**
- * Reconcile integrity totals with visible findings and the refutation ledger claim.
+ * Integrity totals must reconcile with visible findings and the refutation ledger claim; each mismatch reports a violation.
  *
  * @param integrity - the parsed Review Integrity block; absent fields are reported individually rather than failing the whole block
  *
@@ -389,7 +389,7 @@ function validateUnresolvedFinding(
     );
 }
 
-/** Match the final refuted IDs to the declared count and to ledger contents whenever those contents are available. */
+/** The final refuted IDs must match the declared count, and also the ledger contents whenever those are available. */
 function validateRefutedIds(
   integrity: IntegrityResult,
   dispositions: Record<string, FinalDisposition>,
@@ -413,7 +413,7 @@ function validateRefutedIds(
     );
 }
 
-/** Match host-accepted refuter outcomes to their final IDs while keeping verified leads outside the submitted-ID counts. */
+/** Match host-accepted refuter outcomes to their final IDs, keeping verified leads outside submitted-ID counts; a mismatch reports a violation. */
 function validateRefuterOutcomes(
   integrity: IntegrityResult,
   definitions: FindingDefinition[],
@@ -557,7 +557,7 @@ function validateRefuterTags(
   }
 }
 
-/** Compare PR provenance counters and missed-ID lists with active findings only; historical tags remain historical context. */
+/** PR provenance counters and missed-ID lists must match active findings only; historical tags remain historical context. */
 function validateActiveProvenance(
   integrity: IntegrityResult,
   active: FindingDefinition[],
@@ -651,7 +651,7 @@ function validateAbsentPrProvenance(
     );
 }
 
-/** Match PR bot counters and missed-ID lists to surviving findings, excluding refuted history. */
+/** PR bot counters and missed-ID lists must match surviving findings, excluding refuted history. */
 function validatePrProvenanceCounts(
   field: IntegrityField,
   active: FindingDefinition[],
@@ -661,7 +661,7 @@ function validatePrProvenanceCounts(
   const match = field.value.match(
     /^overlap-confirmed=(\d+),\s*local-only=(\d+),\s*bot-only-locally-verified=(\d+),\s*disputed-match=(\d+);\s*automated findings the local review missed: ([^;]+);\s*local findings every bot missed: ([^;]+)$/u,
   );
-  // The explicit none marker means no surviving finding belongs in that missed-ID list.
+  // The explicit none marker means no surviving finding belongs in that missed-ID list; other lists compare in a stable sorted order.
   const listed = (text: string): string[] =>
     text === "none" ? [] : text.split(/,\s*/u).sort();
   // The four provenance totals and missed-finding lists must describe the active IDs readers can inspect.
@@ -1096,6 +1096,7 @@ export function validateAreaSampleBoundary(
 
 /**
  * Parse the final per-ID map; absence is retained for the narrow legacy inference checked after ledger reads.
+ * A malformed map reports a violation.
  *
  * @param fields - visible integrity rows; an omitted map retains the narrow legacy inference route
  *

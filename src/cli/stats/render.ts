@@ -95,7 +95,7 @@ function renderSectionText(
   return [header, summary, triggerPhases, ...lines, ""].join("\n");
 }
 
-/** Preserve the report-wide rank and every candidate before excluding guarded rows from display. */
+/** Preserve the report-wide rank order and every candidate before excluding guarded rows from display; equal ranks keep a stable order. */
 function graduationEntries(report: StatsReport): Array<{
   bucketPath: string;
   candidate: GraduationCandidate;

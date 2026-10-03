@@ -67,7 +67,7 @@ interface StatusJson {
   };
 }
 
-/** Spawn the public status CLI, capture its output in private files, then remove those files. */
+/** Spawns the public status CLI, captures its output in private files, then removes those files. */
 function runStatus(projectPath: string, format: "json" | "text" | "markdown") {
   const directory = mkdtempSync(join(tmpdir(), "goat-install-status-output-"));
   const stdoutPath = join(directory, "stdout");

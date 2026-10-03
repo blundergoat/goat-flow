@@ -257,10 +257,14 @@ describe("quality rubric identity and integer scores", () => {
         id,
         new RegExp(`^quality-${qualityMode}-r3-[a-f0-9]{64}$`, "u"),
       );
-      assert.ok(id.endsWith(createHash("sha256").update(text).digest("hex")));
+      assert.ok(
+        id.endsWith(createHash("sha256").update(text).digest("hex")),
+        `mode ${qualityMode}`,
+      );
       assert.doesNotMatch(
         text,
         /Persist through|goat_flow_version|project_path|Prior report context|Prioritized Improvements/u,
+        `mode ${qualityMode}`,
       );
       ids.add(id);
       for (const persistence of ["bounded-saver", "staged-draft"] as const) {
@@ -271,14 +275,17 @@ describe("quality rubric identity and integer scores", () => {
           runDate: "2026-09-30",
           persistence,
         }).prompt;
-        assert.ok(prompt.includes(`"rubric_version": "${id}"`));
+        assert.ok(
+          prompt.includes(`"rubric_version": "${id}"`),
+          `mode ${qualityMode} ${persistence}`,
+        );
       }
       const report = {
         ...currentReport(),
         quality_mode: qualityMode,
         rubric_version: id,
       };
-      assert.equal(parseQualityReport(report).ok, true);
+      assert.equal(parseQualityReport(report).ok, true, `mode ${qualityMode}`);
       assert.equal(
         parseQualityReport({
           ...report,
@@ -287,6 +294,7 @@ describe("quality rubric identity and integer scores", () => {
           ),
         }).ok,
         false,
+        `mode ${qualityMode}`,
       );
     }
     assert.equal(ids.size, 4);

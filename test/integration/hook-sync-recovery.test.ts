@@ -36,7 +36,7 @@ import {
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "../..");
 const V1_16_0_COMMIT = "839fc59624034408e632617af0f8e9e273c37a49";
 
-/** Spawn the fixture command with private stream files, then close and remove every capture. */
+/** Spawns the fixture command with private stream files, then closes and removes every capture. */
 function runWithFileStreams(
   command: string,
   args: string[],
@@ -185,7 +185,7 @@ function savedCodexPolicyCommand(projectPath: string, hookId: string): string {
 }
 
 /**
- * Create a temporary installed project with old ownership bytes; the caller removes it after the test.
+ * Writes a temporary installed project with old ownership bytes; the caller removes it after the test.
  * A pristine fixture records those bytes; a diverged fixture leaves the prior hash so the user must also approve replacing a local edit.
  */
 function mixedPolicyProject(isPristine: boolean): string {
@@ -238,7 +238,7 @@ function projectFiles(projectPath: string): Record<string, string> {
 }
 
 /**
- * Capture the server response shown when Sync requires the user's review.
+ * Capture the server response shown when Sync requires the user's review; a missing refusal throws an assertion error.
  *
  * @returns structured refusal details; missing details or successful Sync fail the test because consent was not enforced
  */

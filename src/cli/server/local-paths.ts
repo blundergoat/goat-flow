@@ -7,7 +7,7 @@
 import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
-// Allowed local-path use cases, each with a different filesystem trust boundary.
+/** Allowed local-path use cases, each with a different filesystem trust boundary. */
 export type LocalPathPurpose =
   "browse" | "project-read" | "terminal-cwd" | "write-local-state" | "upload";
 

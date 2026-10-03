@@ -937,6 +937,7 @@ describe("effective hook state", () => {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "effective",
+        `policy ${hookId}`,
       );
     }
     const sharedPath = join(
@@ -952,6 +953,7 @@ describe("effective hook state", () => {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "installation-stale",
+        `policy ${hookId}`,
       );
     }
     let confirmationIdentity: string | undefined;
@@ -975,6 +977,7 @@ describe("effective hook state", () => {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "scenario-unverified",
+        `policy ${hookId}`,
       );
     }
     assert.equal(verify("git-mutations-hook").status, "pass");
@@ -1062,6 +1065,7 @@ describe("effective hook state", () => {
     );
   });
 
+  // Writes a merge-conflict file so the valid Stop probe has a real finding; a clock past the capture deadline keeps provider proof stale.
   it("replays Codex Stop results without upgrading stale provider proof", (testContext) => {
     // Local replay cannot renew a capture after its published deadline.
     testContext.mock.timers.enable({
@@ -1127,7 +1131,7 @@ describe("effective hook state", () => {
   });
 });
 
-// Write an incompatible launcher in a disposable project; an off request must preserve both saved config and launcher bytes.
+// Writes an incompatible launcher in a disposable project; an off request must preserve both saved config and launcher bytes.
 it("refuses off before changing an incompatible launcher and preserves all config bytes", () => {
   const root = createClaudeProject();
   syncHookStates(root);

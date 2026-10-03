@@ -29,7 +29,7 @@ interface ParserBoundaryCase {
   expectedPolicyMessage?: RegExp;
 }
 
-/** Spawn the fixture hook to classify command text; the requested action never executes. */
+/** Spawns the fixture hook to classify command text; the requested action never executes. */
 function classify(command: string, hook: PolicyHook, isProviderInput: boolean) {
   if (isProviderInput)
     return runHookWithPayload(

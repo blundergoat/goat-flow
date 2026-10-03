@@ -88,7 +88,9 @@ async function waitForReady(
   outputDirectory: string,
 ): Promise<void> {
   await new Promise<void>((resolveReady, rejectReady) => {
+    // Reread stdout on every poll, because the child appends to it while the test waits.
     const stdout = () => readFileSync(join(outputDirectory, "stdout"), "utf8");
+    // Read stderr only when the wait fails, so the rejection shows the child's latest diagnostics.
     const stderr = () => readFileSync(join(outputDirectory, "stderr"), "utf8");
     const timeout = setTimeout(() => {
       clearInterval(poll);
@@ -405,7 +407,8 @@ describe("public abandoned path-write claim recovery", () => {
     if (projectRoot) rmSync(projectRoot, { recursive: true, force: true });
   });
 
-  // The fixture kills an owning child to reproduce the real crash residue. Invariant: only the inspected unchanged marker is removed; every stale or invalid route preserves current ownership.
+  // The fixture spawns and kills an owning child to reproduce the real crash residue.
+  // Invariant: only the inspected unchanged marker is removed; every stale or invalid route preserves current ownership.
   it("recovers only the inspected unchanged marker and refuses every stale or invalid route", async () => {
     const outputDirectory = mkdtempSync(
       join(tmpdir(), "goat-claim-owner-output-"),

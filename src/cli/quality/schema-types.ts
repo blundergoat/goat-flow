@@ -54,7 +54,7 @@ export interface QualityFixReferenceCheck {
   reason: string;
 }
 
-/** Attribution is the containing report's agent and saved report ID. Missing proof stays unconfirmed. */
+/** Persisted fix-claim schema: attribution is the containing report's agent and saved report ID, and missing proof stays unconfirmed. */
 export interface QualityFix {
   prior_report_id: string | null;
   finding_id: string | null;
@@ -208,7 +208,7 @@ export interface QualityScoreRationale {
   >;
 }
 
-/** Compact assessment-time identity. Nulls name unavailable evidence, never defaults. */
+/** Compact assessment-time identity schema; nulls name unavailable evidence, never defaults. */
 export interface QualityAssessmentIdentity {
   model: string | null;
   tool_version: string | null;

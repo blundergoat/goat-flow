@@ -156,7 +156,7 @@ function hookErrorStatus(ctx: DashboardRouteContext, err: unknown): number {
 
 /**
  * Read or sync all hook rows for the selected project.
- * Invalid bodies and refused writes return their error details before the browser offers any replacement.
+ * An invalid body or refused write reports its error details before the browser offers any replacement.
  */
 async function handleHookCollectionRequest(
   ctx: DashboardRouteContext,

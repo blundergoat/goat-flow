@@ -20,7 +20,7 @@ import { describe, it } from "node:test";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
-/** Spawn the real classifier or ESLint with finite input, then read and remove private capture files. */
+/** Spawns the real classifier or ESLint with finite input, then reads and removes private capture files. */
 function runWithFileStreams(command: string, args: string[], input = "") {
   const directory = mkdtempSync(join(tmpdir(), "goat-eslint-verdict-streams-"));
   const inputPath = join(directory, "stdin");

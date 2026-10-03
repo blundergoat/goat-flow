@@ -85,7 +85,7 @@ function processCompleted(result) {
   );
 }
 
-/** Run Git with private captures; throw on capture or command failure before accepting raw bytes. */
+/** Run Git with private captures; throws on a capture or command failure, so a failed run never supplies raw bytes. */
 function gitOutput(root, args) {
   const result = captureCommand(root, ["git", ...args]);
   if (processCompleted(result) && result.status === 0) return result.stdout;
@@ -123,7 +123,7 @@ export function parseNameStatus(output) {
 
 /**
  * Run read-only Git queries against HEAD, retaining statuses and rename endpoints.
- * Untracked files use status ?. Malformed records, Git and UTF-8 decoding errors throw.
+ * Untracked files use status ?. Throws on a malformed record, a Git failure or a UTF-8 decoding error.
  *
  * @param root - Git working-tree root used as the child processes' working directory.
  */
@@ -149,7 +149,7 @@ export function collectChangedPaths(root) {
   return changes;
 }
 
-/** Missing paths still trigger project checks, but cannot be file arguments. */
+/** Missing paths still trigger project checks but cannot be file arguments; any other filesystem error throws. */
 function isRegularFile(root, path) {
   try {
     return lstatSync(join(root, path)).isFile();
@@ -181,7 +181,7 @@ function excludesUnicode(path) {
 }
 
 /**
- * Select project checks from all changed paths; content lists contain only live files.
+ * Select project checks from all changed paths, sorted into a stable order; content lists contain only live files.
  *
  * @param root - Working-tree root used to check which paths still exist as regular files.
  * @param changes - Git status/path records, including deleted paths and both rename endpoints.
@@ -210,7 +210,7 @@ export function selectChecks(root, changes) {
 
 /**
  * Scan bytes without rewriting them; code-point positions locate controls for repair.
- * Invalid UTF-8, NUL-bearing binaries and generated headers are excluded from the count.
+ * Invalid UTF-8, NUL-bearing binaries and generated headers are excluded from the count because they are not hand-written text.
  *
  * @param root - Working-tree root containing the selected text candidates.
  * @param paths - Existing regular files relative to root; callers filter deleted paths first.
@@ -280,7 +280,7 @@ function packageCommand(root, name, args) {
   return [process.execPath, join(dirname(manifestPath), entry), ...args];
 }
 
-/** Windows npm shims need their Node entrypoint when shell execution is disabled. */
+/** Windows npm shims need their Node entrypoint when shell execution is disabled; this throws when no installed npm-cli.js is found. */
 function typecheckCommand() {
   if (process.platform !== "win32") return ["npm", "run", "typecheck"];
   const candidates = [
@@ -298,7 +298,7 @@ function typecheckCommand() {
   return [process.execPath, entry, "run", "typecheck"];
 }
 
-/** Include the word-budget owner once as part of the complete contract suite. */
+/** Include the word-budget owner once as part of the complete contract suite; throws when no contract test exists. */
 function contractCommand(root) {
   const tests = readdirSync(join(root, "test/contract"), { recursive: true })
     .filter((path) => path.endsWith(".test.ts"))
@@ -316,9 +316,10 @@ function contractCommand(root) {
 }
 
 /**
- * Capture tool output in private temporary files because managed pipes can lose child output.
- * Keep those files outside the working tree and remove them even when the tool or read fails.
- * Return raw bytes for strict Git filename decoding; each stream is limited to 32 MiB after exit.
+ * Spawns the tool with its output in private temporary files, because managed pipes can lose child output.
+ *
+ * Keeps those files outside the working tree and removes them even when the tool or read fails.
+ * Returns raw bytes for strict Git filename decoding; throws when the temporary folder is inside the repository or a stream is over 32 MiB at exit.
  */
 function captureCommand(root, argv) {
   const temporaryRoot = realpathSync(tmpdir());
@@ -411,7 +412,7 @@ function runUnicodeCheck(root, paths) {
   };
 }
 
-/** Run all applicable checks even after failure, reporting their actual scope. */
+/** Run every applicable check even after one fails, because a later check can find a different problem; a check that throws reports FAIL. */
 function runTouchedChecks(root) {
   const started = performance.now();
   const selected = selectChecks(root, collectChangedPaths(root));
@@ -506,7 +507,7 @@ function runTouchedChecks(root) {
   return failures ? 1 : 0;
 }
 
-/** Reject unsupported options before running checks; help states the byte scope. */
+/** Reject unsupported options before running checks; help states the byte scope, and a selection error reports FAIL with status 1. */
 function main() {
   if (process.argv.length === 3 && ["--help", "-h"].includes(process.argv[2])) {
     console.log(

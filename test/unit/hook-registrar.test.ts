@@ -748,7 +748,7 @@ describe("hook registrar: launchers and installation", () => {
     });
   });
 
-  // Mutating an isolated installed row proves a loader cannot drop one no-op field and revive Copilot's bare-node failure after sync.
+  // Writes one mutated installed row, proving a loader cannot drop a no-op field and revive Copilot's bare-node failure after sync.
   it("reports a partial Claude routing descriptor as command drift", () => {
     withTempProject((root) => {
       installClaudeDenyHook(root);
@@ -780,6 +780,7 @@ describe("hook registrar: launchers and installation", () => {
     assertProviderDenyDescriptorsMatchInstallerContract();
   });
 
+  // Writes a stale Windows override into an installed Codex row, which must be reported as command drift instead of trusted.
   it("reports a stale Codex Windows override as command drift", () => {
     withTempProject((root) => {
       installCodexDenyHook(root);

@@ -113,7 +113,7 @@ export function registeredHistoryFixture(
 }
 
 /**
- * Build the documented sorted-key JSON hash independently of the production reader, preserving JSON array order.
+ * Build the documented deterministic sorted-key JSON hash independently of the production reader, preserving JSON array order.
  *
  * @param forecast - complete snapshot bound to its ID and issue time before the test's predicted work
  * @param receiptId - optional shared provenance for explicit-copy cases; absence claims no relationship to another source
@@ -143,7 +143,7 @@ export function historyRegistration(
 }
 
 /**
- * Write the milestone and registration under one explicit plan directory, creating its evaluation folder when absent.
+ * Writes the milestone and registration under one explicit plan directory, creating its evaluation folder when absent.
  *
  * @param directory - test-owned plan path; the caller owns removal of the temporary project
  * @param fixture - source and matching registration to write; tests may intentionally mutate either afterward
@@ -171,7 +171,7 @@ export function runPlansCheck(...args: string[]) {
   return runPlansCommand("check", ...args);
 }
 
-/** Spawn a plans subcommand with private output files, then remove those files.
+/** Spawns a plans subcommand with private output files, then removes those files.
  *
  * @param args - CLI arguments exactly as an author would type them after `plans`
  * @returns unchanged process metadata with captured stdout and stderr, including usage errors

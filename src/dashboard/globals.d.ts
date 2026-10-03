@@ -102,7 +102,6 @@ interface QualityResult {
   launchPrompt: string;
 }
 
-/** One row in the quality-history trend table from `/api/quality/history`. */
 /** Descriptive statistics supplied by saved history, with legacy evidence labelled. */
 interface QualityRepeatSpread {
   kind: "controlled" | "observational";
@@ -111,6 +110,7 @@ interface QualityRepeatSpread {
   system: { median: number; min: number; max: number; range: number };
 }
 
+/** One row in the quality-history trend table from `/api/quality/history`. */
 interface QualityHistoryRow {
   repeatSpread?: QualityRepeatSpread | null;
   id: string;

@@ -70,7 +70,7 @@ const ENV_CANARY = "goat-flow-canary";
 
 const disposableParents: string[] = [];
 
-/** Capture exact handler bytes through private files, retaining the child's process metadata. */
+/** Spawns the handler and captures its exact bytes through private files, retaining the child's process metadata. */
 function runWithFileStreams(
   command: string,
   args: string[],
@@ -834,7 +834,7 @@ describe("retained policy registrations", () => {
             ? registeredHandler(root, "PreToolUse", hookId)
             : registeredCodexHandler(root, "PreToolUse", hookId);
         // Replay the handler saved before toggling so each cycle proves an already-loaded registration remains usable.
-        const run = (command: string) =>
+        const replaySavedHandler = (command: string) =>
           "args" in saved
             ? runRegisteredHandler(root, saved, denyPayload(command))
             : runRegisteredCodexHandler(root, saved, denyPayload(command));
@@ -852,8 +852,8 @@ describe("retained policy registrations", () => {
           hookId === "deny-dangerous" ? "deny-git-mutations" : "deny-dangerous";
         // Repeat the lifecycle to prove later Sync actions do not wedge the user's saved handler.
         for (let cycle = 0; cycle < 2; cycle += 1) {
-          assert.equal(run("git status").status, 0);
-          assert.equal(run(blockedCommand).status, 2);
+          assert.equal(replaySavedHandler("git status").status, 0);
+          assert.equal(replaySavedHandler(blockedCommand).status, 2);
           const disabled = applyHookState(hookId, false, root);
           assert.equal(disabled.agents[provider].drift, undefined);
           assert.equal(
@@ -866,7 +866,7 @@ describe("retained policy registrations", () => {
           );
           // While disabled, benign and normally blocked requests must both pass without a policy denial.
           for (const command of ["git status", blockedCommand]) {
-            const result = run(command);
+            const result = replaySavedHandler(command);
             assert.equal(result.status, 0, handlerDiagnostics(result));
             assert.equal(result.stderr, "");
             assert.equal(result.stdout, "");
@@ -887,10 +887,10 @@ describe("retained policy registrations", () => {
             readFileSync(configPath, "utf8").includes("preserved-user-hook"),
           );
           assert.ok(readFileSync(configPath, "utf8").includes(`${hookId}.sh`));
-          assert.equal(run(blockedCommand).status, 0);
+          assert.equal(replaySavedHandler(blockedCommand).status, 0);
           applyHookState(hookId, true, root);
-          assert.equal(run(blockedCommand).status, 2);
-          assert.equal(run("git status").status, 0);
+          assert.equal(replaySavedHandler(blockedCommand).status, 2);
+          assert.equal(replaySavedHandler("git status").status, 0);
         }
       });
     }
@@ -1022,8 +1022,8 @@ describe("retained policy registrations", () => {
           denyPayload("git status"),
         );
         assert.equal(result.status, 0, handlerDiagnostics(result));
-        assert.equal(result.stderr, "");
-        assert.equal(result.stdout, "");
+        assert.equal(result.stderr, "", `enabled=${enabled}`);
+        assert.equal(result.stdout, "", `enabled=${enabled}`);
         return performance.now() - started;
       }).sort((a, b) => a - b);
       console.log(
