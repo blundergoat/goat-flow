@@ -3,7 +3,7 @@ category: hook-scanning
 last_reviewed: 2026-09-05
 ---
 
-**Scope:** What a hook-driven scanner can and cannot see: changed-file enumeration, diff and rename detection, gitignore and gitattribute interactions, and language or block parsing. Hook registration, launcher runtime, and policy-module behaviour live in `hooks.md`; installation and per-agent config live in `hook-installation.md`.
+**Scope:** What a hook-driven scanner can and cannot see: changed-file enumeration, diff and rename detection, gitignore and gitattribute interactions, and language or block parsing. Hook registration, launcher runtime, and policy-module behaviour live in `hooks.md`; execution cost lives in `hook-performance.md`; installation and per-agent config live in `hook-installation.md`.
 
 ## Footgun: Destination-only Git pathspecs disguise renames as full-file additions
 

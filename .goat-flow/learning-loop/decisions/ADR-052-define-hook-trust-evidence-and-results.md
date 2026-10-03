@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-09
-**Updated:** 2026-09-05 - condensed; the undated-registry-strings context now reflects the shipped dated `expiresAt` records. The 2026-08-15 amendment absorbed now-removed ADR-034 (hook version stamp) and ADR-041 (interpreter heredoc boundary).
+**Updated:** 2026-10-03 - accepted bounded infrastructure recovery for a captured Stop lifecycle; the M13 launcher implements it, and only the final-byte live capture remains required. The 2026-09-05 condensation retained the dated `expiresAt` records; the 2026-08-15 amendment absorbed now-removed ADR-034 and ADR-041.
 
 ## Context
 
@@ -21,6 +21,15 @@ Hooks are guardrails against accidental and prompt-influenced agent actions insi
 **State chain.** Every setup, audit, and dashboard surface uses `desired -> provider-documented -> live-supported -> registered -> installed-current -> trusted -> observed-running -> result-delivered -> scenario-verified`. The first unmet gate is the user-visible state. Disabled is neutral; missing, stale, unsupported, unregistered, outdated, unobserved, and scenario-unverified are warnings; untrusted evidence or runtime and observed-but-undelivered results are danger; only a fully satisfied chain is success.
 
 **Results.** Hooks produce a provider-neutral result before the final adapter: an outcome of `pass`, `block`, `advisory`, `incomplete`, or `unavailable`; reason codes; coverage counts of attempted, completed, and skipped units; findings capped at 20; and execution metadata naming provider, mode, hook version, adapter, and duration. `pass` requires complete declared coverage. An adapter must preserve a block and must never translate incomplete or unavailable work into pass.
+
+**Bounded Stop infrastructure recovery.** A captured Stop lifecycle may spend at most one automatic infrastructure retry per verified explicit user cycle.
+If that allowance is exhausted, even when the infrastructure failure changes, return a visible nonblocking warning with an incomplete result.
+If recovery state cannot be read or safely persisted, return an unavailable warning without spending another retry or claiming exhaustion.
+
+These exceptions require validated Stop context and infrastructure classification; pass still requires complete declared coverage.
+Run the scan on every fresh invocation and preserve a known finding, declared coverage gap, malformed context or pre-tool denial.
+The terminal response must preserve another matching hook's block; warning-only Codex output omits `continue: false`.
+Providers without a verified lifecycle retain the existing exact-repeat exception: `bounded-reentry-ended` stays incomplete.
 
 **Version staleness, the `installed-current` gate.** Each shipped dispatcher carries `# goat-flow-hook-version: X.Y.Z` (`workflow/hooks/{deny-dangerous,gruff-code-quality}.sh` and their `.goat-flow/hooks/` mirrors), and `bump-version.sh` stamps them with the release. The hard-fail setup check `hook-version` (`src/cli/audit/check-goat-flow.ts`) fails an installed dispatcher whose stamp is missing or behind `AUDIT_VERSION` and tells the user to re-run hooks sync; an absent dispatcher is skipped because `gruff-code-quality` is optional. An unstamped or behind dispatcher cannot reach `trusted` whatever its registration looks like.
 
@@ -43,6 +52,8 @@ Hooks are guardrails against accidental and prompt-influenced agent actions insi
 - Registry strings are historical inputs; the registry now carries dated `expiresAt` captures that go stale on schedule.
 - Configuration presence or official documentation alone never unlocks registration. Provider adapters stay the final translation layer and cannot weaken blocking behaviour.
 - Users reviewing an untrusted branch rely on provider sandboxing, permissions, and OS containment, not on project-local hooks.
+- Infrastructure recovery may end a turn with unscanned changes and an explicit non-pass warning. Users must resolve that warning before treating coverage as complete.
+- This accepted recovery exception grants no live support claim. Local fixture evidence cannot establish provider acceptance or final-byte delivery.
 
 ## Reversibility
 

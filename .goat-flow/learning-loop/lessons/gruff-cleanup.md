@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-09-18
+last_reviewed: 2026-10-03
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
@@ -20,7 +20,7 @@ last_reviewed: 2026-09-18
 **Status:** active | **Created:** 2026-05-30
 **Severity:** INTEGRATION
 **Decision changed:** Re-run the analyzer after each candidate fix and restore the original code when the edit only trades one advisory for another.
-**Incident count:** 4 | **Latest occurrence:** 2026-09-12
+**Incident count:** 5 | **Latest occurrence:** 2026-10-03
 
 **Prevention:** For gruff cleanup, classify the action before editing: FIX code, IGNORE paths, BASELINE accepted debt, or TUNE config. After each edit, compare rule identities as well as the total; a lower or unchanged count can still hide rule substitution. If the user asks to "fix" a rule cluster, do not tune thresholds or other rule numbers unless they explicitly approve that policy change. If a finding cannot be fixed safely in the current scope, stop and say so instead of making the analyzer quieter. Evidence anchors: `.gruff-ts.yaml` (search: `size.file-length`), `CHANGELOG.md` (search: `gruff-ts size cleanup`).
 
@@ -33,6 +33,10 @@ last_reviewed: 2026-09-18
 **Recurrence 2026-09-06:** The Git-hook split review added four installer YAML cases to a test file near its size limit. Two sizing edits still left `size.file-length` findings, and preflight failed after the focused behavior checks passed. I rewound my test-file edits to the user's staged baseline, then replaced the existing flow-map case with one compact five-case table. The original choice and formatting assertions remain, with repeat-install checks for every case; the four reproduced failures now pass. The scoped analyzer reports `0 error` and `0 warning` without a threshold change. Check the file's applicable size gate before the expensive suite, and rewind after two unsuccessful corrections. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `legacyHookChoices`) and `.gruff-ts.yaml` (search: `size.file-length`).
 
 **Recurrence 2026-09-12:** M66 removed the unused catch binding and void expression from src/dashboard/dashboard-app-project-terminal-fragments.ts (search: copyTextToClipboard). Clipboard ESLint already exited 0 on the baseline, but the requested cleanup introduced waste.swallowed-catch. Reading the installed analyzer's hasIntentionalCatchRationale showed that a non-fatal recovery explanation is supported. Clarifying the textarea-fallback comment removed the warning while preserving its statements and control flow. Compare analyzer identities after catch cleanup rather than adding dummy expressions or retuning warnings.
+
+**Recurrence 2026-10-03:** A new best-effort cleanup helper in the hook launcher tripped `waste.swallowed-catch` with an empty catch, then `waste.useless-return` when the catch ended in a bare `return`.
+Returning the removed-record count from both the catch and the normal path satisfied both rules without changing behaviour, so a value-bearing return is the third option before `SKIP-CODEBASE`.
+Evidence: `workflow/hooks/hook-launch-runtime.mjs` (search: `pruneStaleStopRecoveryRecords`).
 
 ## Lesson: Gruff JSON captures must not go through noisy npm output
 
