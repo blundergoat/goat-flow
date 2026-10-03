@@ -1,15 +1,20 @@
 // goat-flow-hook-version: 1.17.0
 /**
  * Decodes bounded provider-neutral hook results and renders one host response.
- * Use at the managed launcher boundary after a migrated hook finishes, so users
- * receive the response shape their agent understands without detector code
- * learning provider protocols or presenting incomplete work as a clean pass.
+ *
+ * Use after a managed hook finishes so the coding agent receives its supported response shape.
+ * Preserve the scan outcome and coverage while fitting findings into the provider reply.
  */
 import {
   appendBoundedHookOutput,
+  applyManagedStopRecovery,
+  codexStopRecoveryWarning,
   HOOK_RESULT_OUTPUT_LIMIT_BYTES,
+  HOOK_RESULT_ENVELOPE_LIMIT_BYTES,
+  hookResultMetadataFailureReason,
+  shortenHookDetail,
 } from "./hook-launch-runtime.mjs";
-export { appendBoundedHookOutput, HOOK_RESULT_OUTPUT_LIMIT_BYTES };
+export { appendBoundedHookOutput, HOOK_RESULT_OUTPUT_LIMIT_BYTES, HOOK_RESULT_ENVELOPE_LIMIT_BYTES };
 
 export const HOOK_RESULT_SCHEMA = "goat-flow.hook-result.v1";
 export const HOOK_RESULT_FINDING_LIMIT = 20; // Cap: matches both shipped hook finding limits.
@@ -62,7 +67,8 @@ const LEGACY_HOOK_LAUNCH_CONTRACTS = new Map([
  * Use before launch; invalid modes return null so user work fails visibly.
  *
  * @param {string} hookResponseMode - generated mode; empty text cannot identify a safe host contract
- * @returns {{providerIdentifier: string, responseKind: string, resultProtocol: string, hookEvent: string, adapterVersion: string, launcherDeadlineMs: number} | null} launch contract, or null for invalid input
+ * @returns {{providerIdentifier: string, responseKind: string, resultProtocol: string, hookEvent: string,
+ * adapterVersion: string, launcherDeadlineMs: number} | null} launch contract, or null for invalid input
  */
 export function decodeHookLaunchContract(hookResponseMode) {
   const legacyContractParts =
@@ -328,6 +334,9 @@ function resultEnvelopeFailureReason(candidateResult) {
   const executionReason = executionFailureReason(candidateResult.execution);
   // A concrete execution failure prevents an unidentified adapter from claiming delivery.
   if (executionReason !== null) return executionReason;
+  const metadataReason = hookResultMetadataFailureReason(candidateResult);
+  // Invalid counters or recovery labels could make a skipped scan appear complete or exhausted.
+  if (metadataReason !== null) return metadataReason;
 
   const candidateCoverage = candidateResult.coverage;
   // Only complete declared coverage can produce the clean state users rely on.
@@ -354,10 +363,10 @@ export function decodeHookResultOutput(childStandardOutput) {
   // A large result could consume or overflow the provider feedback channel before validation.
   if (
     Buffer.byteLength(childStandardOutput, "utf8") >
-    HOOK_RESULT_OUTPUT_LIMIT_BYTES
+    HOOK_RESULT_ENVELOPE_LIMIT_BYTES
   ) {
     return invalidHookOutput(
-      `result output exceeds the ${HOOK_RESULT_OUTPUT_LIMIT_BYTES}-byte limit`,
+      `result output exceeds the ${HOOK_RESULT_ENVELOPE_LIMIT_BYTES}-byte limit`,
     );
   }
 
@@ -392,17 +401,17 @@ export function decodeHookResultOutput(childStandardOutput) {
 /**
  * Recognise the one advisory shape that says only "no analysable source unit was present".
  *
- * Every condition is required. Analyzer-confirmed ignores report one attempted and one completed unit, so they fail the
- * zero-coverage test and keep the detailed rendering that carries their distinct explanation. A line break in the target
- * or message would be lost inside a single line, so those envelopes keep the detailed path too.
- * Invariant: this never widens an outcome, so a true finding, a block, and incomplete or unavailable analysis always
- * return false and keep every field the detailed renderer would have shown.
+ * Invariant: only one non-source advisory with zero declared scope can be compacted; findings and incomplete work retain detailed feedback.
+ * Analyzer-confirmed ignores and multiline detail fail this predicate because a compact line would erase their explanation.
  *
- * @param {{hookId: string, outcome: string, reasonCode: string, coverage: {status: string, attemptedUnits: number, completedUnits: number, skippedUnits: number}, findings: ReadonlyArray<{code: string, target?: string, message: string}>}} hookResult - decoded envelope
+ * @param {{hookId: string, outcome: string, reasonCode: string,
+ * coverage: {status: string, attemptedUnits: number, completedUnits: number, skippedUnits: number},
+ * findings: ReadonlyArray<{code: string, target?: string, message: string}>}} hookResult - decoded envelope; no findings means no advisory to compact
  * @param {string} hookEvent - hook event the host is adapting, such as `post-tool`
  * @returns {boolean} true only for the verified non-source advisory that is safe to compact
  */
 function isNonApplicableSourceAdvisory(hookResult, hookEvent) {
+  // Only the verified single non-source advisory may replace detailed feedback with a compact message.
   if (
     hookResult.hookId !== "gruff-code-quality" ||
     hookEvent !== "post-tool" ||
@@ -414,6 +423,7 @@ function isNonApplicableSourceAdvisory(hookResult, hookEvent) {
   }
 
   const coverage = hookResult.coverage;
+  // Attempted or skipped source work must keep its coverage detail visible to the user.
   if (
     coverage.status !== "complete" ||
     coverage.attemptedUnits !== 0 ||
@@ -434,8 +444,7 @@ function isNonApplicableSourceAdvisory(hookResult, hookEvent) {
 /**
  * Render bounded findings and coverage into one concise message for the active agent.
  * Use after validation so every line belongs to a known hook result the user can inspect.
- * Invariant: findings retain input order and coverage always precedes their detail, except for the single compact
- * advisory above, whose coverage is zero on every axis and therefore adds nothing the finding does not already say.
+ * Invariant: findings retain order and coverage precedes detail; only the verified zero-scope advisory omits that redundant coverage line.
  *
  * @param {Record<string, unknown>} hookResult - validated result; empty findings use its reason code
  * @param {string} hookEvent - hook event being adapted; only `post-tool` may take the compact path
@@ -456,18 +465,35 @@ function renderHookResultMessage(hookResult, hookEvent) {
   const resultDetails =
     findingLines.length > 0 ? findingLines : [`- ${fallbackReason}`];
   const coverage = hookResult.coverage;
-  const coverageSummary = `Coverage: ${coverage.completedUnits}/${coverage.attemptedUnits} completed; ${coverage.skippedUnits} skipped.`;
+  const coverageSummary = `Coverage: ${coverage.completedUnits}/${coverage.attemptedUnits} completed; ${coverage.skippedUnits} skipped (${coverage.status}).`;
+  const summary = hookResult.summary;
+  const omissionSummary = summary && (summary.envelopeOmittedFindings > 0 || summary.presentationOmittedFindings > 0)
+    ? [`Summary: ${summary.envelopeOmittedFindings} finding(s) omitted from the envelope; ${summary.presentationOmittedFindings} further finding(s) omitted from this reply.`]
+    : [];
+  const detailSummary = summary?.areDetailsShortened ? ["Details shortened to fit hook feedback."] : [];
+  const output = hookResult.execution.output;
+  const outputSummary = output ? [
+    `Output: ${output.areByteCountsExact ? "exact" : "at least"} ${output.stdoutBytes} stdout / ${output.stderrBytes} stderr bytes; limits ${output.envelopeLimitBytes} envelope / ${output.stderrRetentionLimitBytes} retained stderr / ${output.stderrFloodLimitBytes} stderr flood / ${output.providerLimitBytes} reply.`,
+  ] : [];
+  const childOutput = hookResult.execution.childOutput;
+  const childOutputSummary = childOutput ? [
+    `Child output: ${childOutput.areByteCountsExact ? "exact" : "at least"} ${childOutput.stdoutBytes} stdout / ${childOutput.stderrBytes} stderr bytes; ${childOutput.isStderrTruncated ? "diagnostics shortened" : "diagnostics retained"}; limits apply per child.`,
+  ] : [];
   const outcomeLabel = String(hookResult.outcome).toUpperCase();
   return [
     `${hookResult.hookId}: ${outcomeLabel}`,
     coverageSummary,
+    ...omissionSummary,
+    ...detailSummary,
+    ...outputSummary,
+    ...childOutputSummary,
     ...resultDetails,
   ].join("\n");
 }
 
 /**
  * Build one JSON stdout response while enforcing the lowest supported feedback ceiling.
- * Use after selecting a provider shape; oversized feedback becomes unavailable, never truncated.
+ * Use after selecting a provider shape; an oversized response requests structured compaction without cutting JSON or weakening its decision.
  *
  * @param {Record<string, unknown>} providerResponse - exact host object; empty object means clean/no feedback
  * @returns {{state: "adapted", exitCode: 0, stdout: string, stderr: ""} | {state: "invalid", reason: string}} provider output or a bounded failure
@@ -612,7 +638,12 @@ function adaptPostToolResult(
  * @returns {ReturnType<typeof jsonProviderOutput> | {state: "unsupported", reason: string}} stop response or explicit unsupported state
  */
 function adaptStopResult(hookResult, providerIdentifier, userFacingMessage) {
-  // One exact repeated infrastructure failure may end loudly without relabelling incomplete coverage as a pass.
+  const recoveryWarning = codexStopRecoveryWarning(hookResult);
+  // A verified exhausted or unsafe allowance ends this hook's recovery while other hooks may still block.
+  if (recoveryWarning !== null) {
+    return { state: "adapted", exitCode: 0, stdout: recoveryWarning, stderr: "" };
+  }
+  // Unverified modes retain their established exact-repeat release while keeping the neutral result incomplete.
   if (
     hookResult.outcome === "incomplete" &&
     hookResult.reasonCode === "bounded-reentry-ended"
@@ -645,7 +676,8 @@ function adaptStopResult(hookResult, providerIdentifier, userFacingMessage) {
  * @param {Record<string, unknown>} hookResult - validated envelope; null or malformed values must be decoded first
  * @param {string} providerIdentifier - registered host; empty or mismatched text rejects delivery
  * @param {string} expectedHookEvent - registered canonical event; empty or mismatched text rejects delivery
- * @returns {{state: "adapted", exitCode: 0, stdout: string, stderr: ""} | {state: "invalid" | "unsupported", reason: string}} bounded provider result; never empty
+ * @returns {{state: "adapted", exitCode: 0, stdout: string, stderr: ""} |
+ * {state: "invalid" | "unsupported", reason: string}} bounded provider result; intentionally empty stdout means a clean provider response
  */
 export function adaptHookResultForProvider(
   hookResult,
@@ -668,10 +700,40 @@ export function adaptHookResultForProvider(
     return adaptCleanResult(providerIdentifier, expectedHookEvent);
   }
 
-  const userFacingMessage = renderHookResultMessage(
-    hookResult,
-    expectedHookEvent,
-  );
+  let presentationResult = hookResult;
+  let delivery = adaptPresentedHookResult(presentationResult, providerIdentifier, expectedHookEvent);
+  // Fit structured detail before serialization; the known outcome and coverage remain enforced throughout.
+  for (const detailBudget of [1024, 256, 64]) {
+    // Ordinary responses and unsupported events retain their established provider behavior.
+    if (delivery.state !== "invalid" || !delivery.reason.startsWith("adapted response exceeds")) return delivery;
+    presentationResult = { ...presentationResult, hookId: shortenHookDetail(hookResult.hookId, 128), findings: presentationResult.findings.map((finding) => ({
+      ...finding, code: shortenHookDetail(finding.code, 256), message: shortenHookDetail(finding.message, detailBudget),
+      ...(finding.target === undefined ? {} : { target: shortenHookDetail(finding.target, detailBudget) }),
+    })), summary: {
+      detectedFindings: hookResult.summary?.detectedFindings ?? hookResult.findings.length,
+      envelopeOmittedFindings: hookResult.summary?.envelopeOmittedFindings ?? 0,
+      presentationOmittedFindings: 0, areDetailsShortened: true,
+    } };
+    delivery = adaptPresentedHookResult(presentationResult, providerIdentifier, expectedHookEvent);
+  }
+  // If even labels fill the channel, keep decisive findings first and count each omitted item only here.
+  while (delivery.state === "invalid" && delivery.reason.startsWith("adapted response exceeds") && presentationResult.findings.length > 1) {
+    presentationResult = { ...presentationResult, findings: presentationResult.findings.slice(0, -1),
+      summary: { ...presentationResult.summary, presentationOmittedFindings: presentationResult.summary.presentationOmittedFindings + 1 } };
+    delivery = adaptPresentedHookResult(presentationResult, providerIdentifier, expectedHookEvent);
+  }
+  return delivery;
+}
+
+/** Select the host response from bounded structured findings, preserving the user's enforcement outcome.
+ *
+ * @param {object} hookResult - Presentable result; empty findings retain its reason and coverage.
+ * @param {string} providerIdentifier - Registered host; empty or unknown is rejected before this step.
+ * @param {string} expectedHookEvent - Registered event; never empty after contract validation.
+ * @returns {object} Complete host response or an explicit unsupported/oversized result.
+ */
+function adaptPresentedHookResult(hookResult, providerIdentifier, expectedHookEvent) {
+  const userFacingMessage = renderHookResultMessage(hookResult, expectedHookEvent);
   // Pre-tool results decide whether the user's proposed tool may run.
   if (expectedHookEvent === "pre-tool") {
     return adaptPreToolResult(
@@ -715,16 +777,21 @@ function unavailableProviderDelivery(userFacingReason, childStandardError) {
  *
  * @param {object} hookExecution - captured status and streams; null status or empty streams mean no complete detail arrived
  * @param {object} launchContract - provider, event, and adapter identity; empty fields cannot establish delivery
- * @returns {{state: "delivered", exitCode: number, stdout: string, stderr: string} | {state: "unavailable", reason: string, stdout: "", stderr: string}} final output or explicit failure
+ * @param {object | null} stopContext - verified explicit user cycle; null keeps scanner-owned legacy recovery
+ * @returns {{state: "delivered", exitCode: number, stdout: string, stderr: string} |
+ * {state: "unavailable", reason: string, stdout: "", stderr: string}} final output or explicit failure; empty diagnostics mean no child detail
  */
 export function prepareProviderHookResultDelivery(
   hookExecution,
   launchContract,
+  stopContext = null,
 ) {
+  // Damaged child text cannot prove a completed scan, even when its replacement characters happen to parse.
+  if (hookExecution.hasInvalidUtf8Output) return unavailableProviderDelivery("result output is not valid UTF-8", hookExecution.stderr);
   // A child that crossed the shared cap cannot claim a complete or delivered result.
   if (hookExecution.hasExceededOutputLimit) {
     return unavailableProviderDelivery(
-      `hook output exceeded the ${HOOK_RESULT_OUTPUT_LIMIT_BYTES}-byte limit`,
+      `hook output exceeded the ${hookExecution.output?.failureStage === "diagnostic-flood" ? "diagnostic flood" : HOOK_RESULT_ENVELOPE_LIMIT_BYTES + "-byte envelope"} limit`,
       hookExecution.stderr,
     );
   }
@@ -755,8 +822,12 @@ export function prepareProviderHookResultDelivery(
     );
   }
 
+  const capturedResult = { ...decodedHookResult.result, execution: {
+    ...decodedHookResult.result.execution,
+    ...(hookExecution.output ? { output: hookExecution.output } : {}),
+  } };
   const providerHookOutput = adaptHookResultForProvider(
-    decodedHookResult.result,
+    applyManagedStopRecovery(capturedResult, stopContext),
     launchContract.providerIdentifier,
     launchContract.hookEvent,
   );

@@ -91,7 +91,10 @@ Direct `.sh` use keeps each hook's existing stdout, stderr, exit status, `--chec
 
 Self-test arguments are exact. Both policy hooks accept `--self-test`, `--self-test=smoke`, and `--self-test=full`; Gruff accepts `--self-test` and `--self-test=smoke`; post-turn safety accepts only `--self-test`. Unsupported values and extra self-test arguments exit non-zero instead of starting normal hook execution.
 
-The `goat-flow.hook-result.v1` path captures at most 10,000 combined stdout/stderr bytes, accepts one JSON object, caps findings at 20, and requires complete declared coverage before `pass`. Malformed, empty, partial, timed-out, or mismatched results become explicit unavailable outcomes. Provider adapters preserve blocking semantics; a host/event pair that cannot deliver the result remains unsupported instead of receiving weaker advice.
+The `goat-flow.hook-result.v1` path accepts one JSON object within a 65,536-byte envelope and keeps diagnostic retention separate.
+It caps displayed findings at 20, tracks omitted findings and requires complete declared coverage before `pass`.
+Malformed, empty, timed-out or mismatched results become explicit unavailable outcomes; partial coverage cannot pass.
+Provider adapters preserve blocking decisions within a 10,000-byte serialized reply. Unsupported host/event pairs stay unsupported.
 
 ## Failure Modes / Runtime Contracts
 
@@ -106,11 +109,22 @@ The `goat-flow.hook-result.v1` path captures at most 10,000 combined stdout/stde
 - Copilot uses direct project-local paths and therefore requires a repo-root working directory for the configured command. Nested-cwd execution is outside the current Copilot contract unless that runtime adds a portable project-root variable or root-resolving command support.
 - Directly invoked `.sh` hooks must keep executable bits. Bash is required to execute an enabled shell hook; a valid explicit-off policy decision completes before Bash discovery.
 - Every namespaced result command installs `hook-provider-adapters.mjs` and `hook-launch-runtime.mjs`. Missing or malformed pieces produce visible unavailable feedback.
-- `post-turn-safety.sh` uses an optimized Bash 4+ scanner and a bounded compatibility scanner on stock macOS Bash 3.2. Both enforce the same findings and shared wall-clock limit. Tracked and staged text streams as added hunks regardless of full file size; binary changed paths and whole untracked text above `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES` report incomplete and block. Non-Git controller fan-out invokes the same scanner once per validated configured repository, preserves configured order, prefixes finding targets with the root path, and validates each provider-neutral result instead of parsing terminal text. A valid Stop payload can end one exact repeated infrastructure failure loudly, including an unavailable Git root from a complete managed installation, while findings, coverage gaps, budget exhaustion, malformed payloads, and unverified launch roots keep blocking. The default scan budget is 60 seconds and the registered Stop timeout is 90 seconds, so the hook can print its own diagnostic before the runner intervenes. Run `bash .goat-flow/hooks/post-turn-safety.sh --self-test` after install or upgrade.
+- `post-turn-safety.sh` uses a Bash 4+ scanner and a compatibility scanner on stock macOS Bash 3.2, with the same findings and wall-clock limit.
+  Tracked and staged text streams as added hunks; binary changes and oversized untracked text leave coverage incomplete and block.
+  Non-Git controllers scan each declared repository in order, prefix finding targets with its root and validate structured results.
+  Infrastructure recovery depends on the registered mode; see [Post-Turn Safety](#post-turn-safety) for retry and warning rules.
+  Findings, declared coverage gaps and malformed payloads remain blocking. The default scan budget is 60 seconds.
+  The registered Stop timeout is 90 seconds, with a 75-second launcher ceiling. Run `bash .goat-flow/hooks/post-turn-safety.sh --self-test` after refresh.
 
 ## Post-Turn Safety
 
-goat-flow configures `post-turn-safety.sh` by default for Claude and Codex. The current Codex Stop evidence is the scoped interactive Linux CLI 0.154.0 capture above and remains subject to its expiry and fixed-scenario gate. Antigravity remains disabled because Stop execution was not captured past its trust gate, and Copilot remains disabled because `agentStop` delivery and a Goat Flow registration adapter are unverified. The hook scans changed text content for built-in safety hazards. It does not run builds, tests, linters, typecheckers, or formatters, and must not be treated as project validation.
+goat-flow configures `post-turn-safety.sh` by default for Claude and Codex. The Linux CLI 0.154.0 capture above describes its historical runtime bytes.
+Shared launcher changes require fresh delivery evidence; that capture does not prove the current recovery behavior.
+Antigravity remains disabled because Stop execution was not captured past its trust gate.
+Copilot remains disabled because `agentStop` delivery and a Goat Flow registration adapter are unverified.
+
+The hook scans changed text for built-in safety hazards. It does not run builds, tests, linters, typecheckers or formatters.
+Use project validation separately from the hook's content scan.
 
 A Git project uses its implicit `.` scan root. A non-Git controller must declare every repository explicitly:
 
@@ -127,13 +141,20 @@ Every listed path must be a contained Git top level. One invalid sibling invalid
 
 Tracked and staged text is scanned from added hunks, including files above the whole-file cap. Non-ignored untracked text above the cap and binary changed paths return explicit incomplete results. New content cannot authorize its own suppression: inline allow markers on a new finding still block. Move intentional scanner fixtures to split synthetic values, or leave a reviewed committed fixture unchanged.
 
-For a valid Stop payload, the first incomplete command failure blocks and records only owner-local hashes. One exact active replay may end with an incomplete `bounded-reentry-ended` result so the user can regain control; it never becomes a pass or a clean scan. Controller aggregation ends only when every non-pass child reports that exact bounded result. Changed findings, incomplete content coverage, budget exhaustion, and malformed input always block. Run `bash .goat-flow/hooks/post-turn-safety.sh --self-test` to check clean, finding, incomplete, and Bash 3 outcomes; unknown options fail instead of scanning.
+The managed Codex Stop mode validates bounded input once and forwards its original bytes to the scanner. It keys one infrastructure retry by provider, selected project, session and explicit turn, with separate hashes for the failure. A new explicit turn receives a new allowance even when its prompt text is unchanged. Changed faults, clean rescans and duplicate deliveries cannot renew a spent allowance.
+
+After that retry, infrastructure ends with a visible warning and incomplete `bounded-reentry-ended` coverage. Unsafe or inaccessible state warns as unavailable without claiming exhaustion. The warning has no `continue: false` override, so another matching hook can still block. Every fresh delivery rescans content; known hazards, declared coverage gaps and malformed context remain blocking. Other modes retain their previous scanner-owned exact-repeat contract.
+
+Managed capture allows 65,536 stdout bytes, retains 4,096 stderr bytes while draining excess, and stops a stderr flood above 1,048,576 bytes. Only a normally completed, zero-status child with one valid UTF-8 envelope can supply a result. Final serialized provider replies, including JSON escaping and newline, stay within 10,000 bytes by condensing structured details while preserving the decision, coverage and separate omission counts. Legacy policy capture keeps its existing shared limit.
+
+Refresh all shared runtime files with `goat-flow hooks sync .`, review any replacement requests and start a fresh agent session. Earlier captures become stale when these bytes change; lifecycle discovery alone does not prove final delivery, model visibility or native Windows behavior. Run `bash .goat-flow/hooks/post-turn-safety.sh --self-test` after refresh.
 
 goat-flow does not ship a project-validation Stop hook or a plan-reminder Stop hook. Run project-specific build, test, lint, typecheck, format, and milestone accounting through explicit verification gates. The shipped `gruff-code-quality.sh` prefers payload-declared edit or patch targets, uses Git only when a runtime omits paths, and reports incomplete scope instead of clean work when Git fails.
 
-Stop recovery records require a regular, owned file plus matching session and failure hashes. POSIX also requires mode `0600`; Git Bash's
-synthetic mode bits cannot establish Windows privacy, so Windows relies on the workspace's ACLs. The hook does not audit those ACLs and does not
-protect a checkout writable by another untrusted local process. Recovery still reports incomplete evidence, never a clean scan.
+Launcher recovery records contain hashes and fixed metadata in the selected project's ignored scratchpad. The verified owner must be a regular,
+single-link file with mode `0600`, beneath owned directories without symlinks or shared write access. Unreadable, corrupt or substituted records are
+left intact, and owned records older than seven days are removed when a new allowance is recorded. Without an OS ownership check, launcher recovery
+warns as unavailable. Other modes retain their existing workspace-ACL limitation.
 
 ## Codex Permissions
 
