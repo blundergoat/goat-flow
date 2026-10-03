@@ -908,6 +908,17 @@ Both policy hooks default on. On upgrade, an explicit new Git-hook choice wins; 
 
 Hook self-tests remain the broad internal regression corpus. `hooks verify` proves fixed outcomes at this checkout's exact configured-command boundary. It does not launch the external coding agent, prove provider-side hook delivery or model visibility, promote a live-support state, or change the cost or semantics of `audit --harness`.
 
+Managed Codex Stop recovery allows one automatic infrastructure retry per verified selected-project/session/explicit-turn identity. Repeated or changed
+infrastructure failures then produce a visible incomplete warning; unsafe state warns as unavailable. A new explicit turn gets a fresh allowance, while
+fresh findings, skipped content and malformed context still block. The warning leaves other matching hooks free to enforce their own blocks.
+
+Managed hooks capture scan envelopes separately from diagnostics: 65,536 stdout bytes, 4,096 retained stderr bytes and a 1,048,576-byte stderr flood
+ceiling. A completed finding survives ordinary diagnostic excess. Replies fit the 10,000-byte serialized provider channel by shortening structured
+details and reporting omissions; a timeout, nonzero child exit or invalid envelope still means unavailable coverage.
+
+After refreshing these shared runtime files, start a fresh agent session and renew affected live-provider evidence. The earlier dated captures above
+describe their tested bytes; a local replay or lifecycle probe does not renew their final-delivery or model-visibility claims.
+
 #### Setting up Gruff feedback
 
 Gruff feedback is off after a fresh install. Turn it on, then replay its registered command:
