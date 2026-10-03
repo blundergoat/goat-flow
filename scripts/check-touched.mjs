@@ -1,26 +1,14 @@
 #!/usr/bin/env node
 /**
- * Fast, read-only feedback on working-tree content, including staged changes.
- * Run from this repository with `npm run check:touched`; owning tests and
- * preflight remain required. Staged bytes are not independently certified.
+ * Fast, read-only feedback on staged, unstaged and untracked working-tree changes, run with `npm run check:touched`.
  *
- * Changed-path trigger table (deletions and both rename endpoints count):
- * Prettier: existing .ts/.js/.html under src, .ts under test, .mjs under scripts.
- * ESLint: existing .ts under src/cli or src/dashboard; tests are excluded.
- * Typecheck: .ts under src, tsconfig{,.dashboard}.json, package.json, dependency
- *   locks or npm-shrinkwrap.json; runs both complete TypeScript projects.
- * Gruff: .ts under src; the existing whole-repository accepted-debt ratchet.
- * Guidance contracts (including word budgets) and stats --check: workflow/skills,
- *   workflow/setup, .goat-flow/skill-docs, .goat-flow/learning-loop, installed
- *   .{agents,claude}/skills and .github/skills, plus the three live instructions.
- * Unicode: changed regular UTF-8 text, excluding ignored local workspaces,
- *   build/dependency output, generated indexes/locks/vendor files and binaries.
- *   Reject U+061C, U+200B, U+200E/F, U+2028-202E, U+2060, U+2066-2069 and
- *   interior U+FEFF. Leading BOM, visible Unicode, emoji and U+200C/D stay valid.
- *   Intentional controls must use source escapes or String.fromCodePoint;
- *   this command has no autofix or literal-character allowlist.
+ * - Changed paths pick Prettier, ESLint, typecheck, the whole-repository Gruff ratchet, guidance contracts with stats --check, and a Unicode scan.
+ * - Deleted paths and both rename endpoints still pick checks; selectChecks owns every path rule, and ESLint skips tests.
+ * - The Unicode scan rejects INVISIBLE controls in changed text, skipping generated and local paths in excludesUnicode; a leading BOM stays valid.
+ * - Intentional controls use source escapes or String.fromCodePoint, and nothing is ever autofixed.
+ * - Every check reads working-tree content, so staged bytes are not independently certified.
  *
- * Every check prints PASS, FAIL or SKIP with elapsed seconds; any FAIL exits 1.
+ * Every check prints PASS, FAIL or SKIP with elapsed seconds and any FAIL exits 1; owning tests and preflight remain required.
  */
 import { spawnSync } from "node:child_process";
 import {
@@ -71,6 +59,7 @@ const INSTRUCTIONS = new Set([
 const GUIDANCE = [
   "workflow/skills/",
   "workflow/setup/",
+  "workflow/evaluation/",
   ".goat-flow/skill-docs/",
   ".goat-flow/learning-loop/",
   ".agents/skills/",

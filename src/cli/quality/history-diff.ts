@@ -20,7 +20,10 @@ import {
   type QualityHistoryEntry,
 } from "./history.js";
 import { isRealCalendarDate } from "./schema-parser.js";
-import { isLegacyQualityRubric, qualityReportRubricId } from "./rubric.js";
+import {
+  isLegacyQualityRubric,
+  isSameQualityAssessmentTarget,
+} from "./rubric.js";
 import { buildQualityRepeatSpreads } from "./repeat-spread.js";
 
 /**
@@ -216,15 +219,10 @@ function assessmentComparisonWarnings(
   newerReport: SavedQualityReport,
 ): string[] {
   const warnings: string[] = [];
-  // A new rubric or project scope changes what a score means, even when both runs used the same agent.
-  const targetFields = ["scope", "project_path"] as const;
-  // A changed rubric or project scope prevents the score delta from measuring the same target.
-  if (
-    qualityReportRubricId(olderReport) !== qualityReportRubricId(newerReport) ||
-    targetFields.some((field) => olderReport[field] !== newerReport[field])
-  ) {
+  // A changed rubric or scope prevents the score delta from measuring the same target, even for the same agent.
+  if (!isSameQualityAssessmentTarget(olderReport, newerReport)) {
     warnings.push(
-      "Assessment rubric, scope, or project differs; score deltas do not measure the same assessment target.",
+      "Assessment rubric or scope differs; score deltas do not measure the same assessment target.",
     );
   }
   if ([olderReport, newerReport].some(isLegacyQualityRubric)) {

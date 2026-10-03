@@ -153,8 +153,9 @@ goat-flow does not ship a project-validation Stop hook or a plan-reminder Stop h
 
 Launcher recovery records contain hashes and fixed metadata in the selected project's ignored scratchpad. The verified owner must be a regular,
 single-link file with mode `0600`, beneath owned directories without symlinks or shared write access. Unreadable, corrupt or substituted records are
-left intact, and owned records older than seven days are removed when a new allowance is recorded. Without an OS ownership check, launcher recovery
-warns as unavailable. Other modes retain their existing workspace-ACL limitation.
+left intact, and owned records older than seven days are removed when a new allowance is recorded. Native Windows has no POSIX owner or mode bits,
+so its records keep the shape, link and content checks and rely on workspace ACLs, the limitation other modes already accept. Any other host
+without an OS ownership check warns as unavailable.
 
 ## Codex Permissions
 

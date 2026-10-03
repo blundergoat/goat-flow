@@ -107,7 +107,7 @@ function createClaudeProject(): string {
 }
 
 /**
- * Create the smallest Codex project whose generated handlers can be replayed on Windows.
+ * Create the smallest Codex project whose generated handlers the local host can replay.
  * Side effects: creates and writes one disposable project removed by suite cleanup.
  */
 function createCodexProject(): string {
@@ -1062,44 +1062,40 @@ describe("effective hook state", () => {
     );
   });
 
-  it(
-    "replays Codex Stop results without upgrading stale provider proof",
-    { skip: process.platform !== "win32" },
-    (testContext) => {
-      // Local replay cannot renew a capture after its published deadline.
-      testContext.mock.timers.enable({
-        apis: ["Date"],
-        now: new Date("2026-10-17T00:00:00.001Z"),
-      });
-      const projectPath = createCodexProject();
-      initializeDisposableGitProject(projectPath);
-      mkdirSync(join(projectPath, "src"), { recursive: true });
-      writeFileSync(
-        join(projectPath, "src", "example.txt"),
-        ["<<<<<<< HEAD", "left", "=======", "right", ">>>>>>> branch", ""].join(
-          "\n",
-        ),
-      );
-      syncHookStates(projectPath);
+  it("replays Codex Stop results without upgrading stale provider proof", (testContext) => {
+    // Local replay cannot renew a capture after its published deadline.
+    testContext.mock.timers.enable({
+      apis: ["Date"],
+      now: new Date("2026-10-17T00:00:00.001Z"),
+    });
+    const projectPath = createCodexProject();
+    initializeDisposableGitProject(projectPath);
+    mkdirSync(join(projectPath, "src"), { recursive: true });
+    writeFileSync(
+      join(projectPath, "src", "example.txt"),
+      ["<<<<<<< HEAD", "left", "=======", "right", ">>>>>>> branch", ""].join(
+        "\n",
+      ),
+    );
+    syncHookStates(projectPath);
 
-      const report = verifyManagedConfiguredHook({
-        projectPath,
-        agent: "codex",
-        scenarioGroup: "post-turn-hook",
-        isTargetUntrusted: false,
-      });
+    const report = verifyManagedConfiguredHook({
+      projectPath,
+      agent: "codex",
+      scenarioGroup: "post-turn-hook",
+      isTargetUntrusted: false,
+    });
 
-      assert.equal(report.status, "pass", JSON.stringify(report, null, 2));
-      assert.deepEqual(
-        report.scenarios.map((scenario) => scenario.observed),
-        ["finding", "incomplete"],
-      );
-      assert.deepEqual(
-        codexHookState(projectPath, "post-turn-safety").effectiveState,
-        { status: "provider-capture-stale", severity: "warning" },
-      );
-    },
-  );
+    assert.equal(report.status, "pass", JSON.stringify(report, null, 2));
+    assert.deepEqual(
+      report.scenarios.map((scenario) => scenario.observed),
+      ["finding", "incomplete"],
+    );
+    assert.deepEqual(
+      codexHookState(projectPath, "post-turn-safety").effectiveState,
+      { status: "provider-capture-stale", severity: "warning" },
+    );
+  });
 
   // An edited source without a Gruff config is unavailable and malformed input is incomplete, while a non-source edit stays quiet.
   it("replays incomplete, quiet, and unavailable Gruff results through its configured command", () => {

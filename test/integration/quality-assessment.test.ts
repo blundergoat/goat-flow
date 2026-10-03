@@ -403,28 +403,32 @@ describe("quality assessment evidence", () => {
       })[0]?.repeatSpread?.setup,
       { median: 22.5, min: 20, max: 25, range: 5 },
     );
-    // A different rubric remains a singleton even when bytes and assessor inputs match.
-    const alternateRubric = {
-      ...fallback,
-      rubric_version: `${legacy.rubric_version}-fixture`,
-    };
-    writeFileSync(
-      join(dir, "2026-07-31-1200-claude-ccccc.json"),
-      JSON.stringify(alternateRubric),
-    );
-    const rubricRows = buildQualityHistoryRows(
-      loadQualityHistory(root).entries,
-      { agent: null, limit: null },
-    );
-    assert.equal(
-      rubricRows.find((row) => row.id.endsWith("ccccc"))?.repeatSpread,
-      null,
-    );
-    assert.equal(
-      rubricRows.find((row) => row.id.endsWith("aaaaa"))?.repeatSpread
-        ?.sampleSize,
-      2,
-    );
+    // A different rubric or scope remains a singleton even when bytes and assessor inputs match; each replaces the same third report.
+    for (const targetChange of [
+      { rubric_version: `${legacy.rubric_version}-fixture` },
+      { scope: "consumer" },
+    ]) {
+      writeFileSync(
+        join(dir, "2026-07-31-1200-claude-ccccc.json"),
+        JSON.stringify({ ...fallback, ...targetChange }),
+      );
+      const targetRows = buildQualityHistoryRows(
+        loadQualityHistory(root).entries,
+        { agent: null, limit: null },
+      );
+      const label = JSON.stringify(targetChange);
+      assert.equal(
+        targetRows.find((row) => row.id.endsWith("ccccc"))?.repeatSpread,
+        null,
+        label,
+      );
+      assert.equal(
+        targetRows.find((row) => row.id.endsWith("aaaaa"))?.repeatSpread
+          ?.sampleSize,
+        2,
+        label,
+      );
+    }
     // Changed snapshots cannot borrow a clean revision; an unavailable capture on a dirty tree proves nothing.
     for (const start of [null, `review-v1:sha256:${"e".repeat(64)}`]) {
       const withoutStableCapture = {

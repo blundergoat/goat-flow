@@ -1,4 +1,9 @@
-/** Changed-file selection and read-only execution against real Git worktrees. */
+/**
+ * Protects `npm run check:touched`, the contributor's fast check of changed working-tree files.
+ *
+ * Real Git worktrees prove which checks each changed, deleted or renamed path selects, and that no check rewrites a file.
+ * Unicode cases cover rejected invisible controls, valid joining characters and bounded diagnostics.
+ */
 import assert from "node:assert/strict";
 import childProcess, {
   spawnSync,
@@ -326,6 +331,7 @@ it("keeps source, configuration and guidance triggers for deletions and renames 
     [".github/copilot-instructions.md", false, false, true],
     ["workflow/skills/gone/SKILL.md", false, false, true],
     ["workflow/setup/gone.md", false, false, true],
+    ["workflow/evaluation/footguns.md", false, false, true],
     [".goat-flow/skill-docs/gone.md", false, false, true],
     [".goat-flow/learning-loop/lessons/gone.md", false, false, true],
     [".agents/skills/gone/SKILL.md", false, false, true],

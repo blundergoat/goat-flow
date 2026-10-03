@@ -112,8 +112,10 @@ export async function readManagedStopContext(responseMode, projectRoot, inputStr
 function recordStopRecoveryAllowance(stopContext, failureKey) {
   let stateDescriptor = null;
   try {
-    const ownerId = process.getuid?.();
-    // Without an ownership check, the user receives an unavailable warning instead of a guessed retry.
+    // Native Windows has no POSIX owner or mode bits, so null leaves ownership to the workspace ACLs that other Stop modes already rely on.
+    // For example, Codex Desktop on Windows working on a WSL checkout over \\wsl.localhost still receives its one retry.
+    const ownerId = process.getuid?.() ?? (process.platform === "win32" ? null : undefined);
+    // Another host without an ownership check receives an unavailable warning instead of a guessed retry.
     if (ownerId === undefined) return "state-unavailable";
     const statePath = prepareStopRecoveryStatePath(stopContext, ownerId);
     // Unsafe parent directories cannot hold a trustworthy allowance for this user.
@@ -173,15 +175,15 @@ function openStopRecoveryAllowance(stopContext, statePath) {
  * Error behavior: malformed or unreadable records reach the caller's unavailable-state warning.
  *
  * @param {number} stateDescriptor - Open record handle; the caller owns its cleanup.
- * @param {number} ownerId - Current OS owner; missing ownership was rejected before opening state.
+ * @param {number | null} ownerId - Current OS owner; null on native Windows, where workspace ACLs replace the owner and mode checks.
  * @param {string} cycleKey - Verified turn hash; an empty or mismatched hash cannot establish exhaustion.
  * @returns {boolean} True for a private, complete matching record; false leaves state unavailable.
  */
 function stopRecoveryRecordIsSafe(stateDescriptor, ownerId, cycleKey) {
   const stateShape = fstatSync(stateDescriptor);
-  // A hard link, foreign owner or oversized record cannot authorize release of the user's turn.
-  if (!stateShape.isFile() || stateShape.uid !== ownerId || stateShape.nlink !== 1 ||
-      (stateShape.mode & 0o777) !== 0o600 || stateShape.size > 512) return false;
+  // A hard link, foreign owner, shared mode or oversized record cannot authorize release of the user's turn.
+  if (!stateShape.isFile() || stateShape.nlink !== 1 || stateShape.size > 512 ||
+      (ownerId !== null && (stateShape.uid !== ownerId || (stateShape.mode & 0o777) !== 0o600))) return false;
   const record = JSON.parse(readFileSync(stateDescriptor, "utf8"));
   return record.version === 1 && record.cycleKey === cycleKey && record.retrySpent === true &&
     typeof record.failureKey === "string" && /^[a-f0-9]{64}$/u.test(record.failureKey) && Object.keys(record).length === 4;
@@ -193,7 +195,7 @@ function stopRecoveryRecordIsSafe(stateDescriptor, ownerId, cycleKey) {
  * Error behavior: throws filesystem failures to the caller's unavailable-state fallback.
  *
  * @param {object} stopContext - Verified project and cycle; missing context is rejected before calling.
- * @param {number} ownerId - Current OS owner; unavailable ownership cannot enter this method.
+ * @param {number | null} ownerId - Current OS owner; null on native Windows, where workspace ACLs replace the owner and mode checks.
  * @returns {string | null} Owned record path, or null when a substituted directory makes recovery unavailable.
  */
 function prepareStopRecoveryStatePath(stopContext, ownerId) {
@@ -206,9 +208,9 @@ function prepareStopRecoveryStatePath(stopContext, ownerId) {
       if (error.code !== "EEXIST") throw error;
     }
     const directoryShape = lstatSync(stateDirectory);
-    // A substituted or shared-writable directory could replace the user's allowance record.
-    if (!directoryShape.isDirectory() || directoryShape.isSymbolicLink() || directoryShape.uid !== ownerId ||
-        (directoryShape.mode & 0o022) !== 0) return null;
+    // A substituted, linked or shared-writable directory could replace the user's allowance record; Windows junctions read as links.
+    if (!directoryShape.isDirectory() || directoryShape.isSymbolicLink() ||
+        (ownerId !== null && (directoryShape.uid !== ownerId || (directoryShape.mode & 0o022) !== 0))) return null;
   }
   return join(stateDirectory, `post-turn-launcher-recovery-v1-${stopContext.cycleKey}.state`);
 }
@@ -219,7 +221,7 @@ function prepareStopRecoveryStatePath(stopContext, ownerId) {
  * Error behavior: swallows every filesystem failure, because cleanup must never change the Stop result the user is about to receive.
  *
  * @param {string} currentStatePath - Record just created for this cycle; it is never a removal candidate.
- * @param {number} ownerId - Current OS owner; records owned by anyone else stay untouched.
+ * @param {number | null} ownerId - Current OS owner whose records may go; null on native Windows, where the workspace ACLs decide.
  * @returns {number} Removed record count, including removals made before a filesystem failure ended cleanup early.
  */
 function pruneStaleStopRecoveryRecords(currentStatePath, ownerId) {
@@ -233,7 +235,8 @@ function pruneStaleStopRecoveryRecords(currentStatePath, ownerId) {
       if (!/^post-turn-launcher-recovery-v1-[a-f0-9]{64}\.state$/u.test(recordName) || recordPath === currentStatePath) continue;
       const recordShape = lstatSync(recordPath);
       // A recent, linked, foreign or non-regular entry is left for its owner or for the safety checks that read it.
-      if (!recordShape.isFile() || recordShape.nlink !== 1 || recordShape.uid !== ownerId || recordShape.mtimeMs >= staleBefore) continue;
+      if (!recordShape.isFile() || recordShape.nlink !== 1 || (ownerId !== null && recordShape.uid !== ownerId) ||
+          recordShape.mtimeMs >= staleBefore) continue;
       unlinkSync(recordPath);
       removedRecordCount += 1;
     }

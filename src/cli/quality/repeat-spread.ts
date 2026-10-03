@@ -1,4 +1,10 @@
-/** Descriptive rerun statistics from stored reports, without a noise verdict. */
+/**
+ * Groups saved Quality reruns of unchanged inputs and describes their score spread for `quality history`, `quality diff` and the dashboard.
+ *
+ * A group needs the same agent, mode, rubric, scope and assessed bytes.
+ * A complete launch identity makes the group controlled; older reports without one stay observational.
+ * The median and range describe variation only and never label a score change as noise or as significant.
+ */
 import type { QualityHistoryEntry } from "./history.js";
 import { qualityReportRubricId } from "./rubric.js";
 import type {
@@ -44,7 +50,7 @@ function isControlledIdentity(identity: QualityAssessmentIdentity): boolean {
   );
 }
 
-/** Avoid mixing unknown new identity with observational legacy reports or another study's inputs. */
+/** Avoid mixing unknown new identity with observational legacy reports, another study's inputs, or another assessment scope. */
 function repeatKey(entry: QualityHistoryEntry): string | null {
   const context = entry.report.assessment_context;
   if (!context) return null;
@@ -56,6 +62,7 @@ function repeatKey(entry: QualityHistoryEntry): string | null {
     entry.agent,
     entry.report.quality_mode ?? "agent-setup",
     qualityReportRubricId(entry.report),
+    entry.report.scope ?? null,
     bytes,
     identity
       ? [

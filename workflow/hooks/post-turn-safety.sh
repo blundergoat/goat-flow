@@ -568,42 +568,27 @@ report_repository_root_failure() {
   esac
 }
 
-# Scan only the explicit Git roots configured for a managed non-Git controller.
+# Run the controller program for the given root and scanner path, printing its result envelope; exit 3 means no valid root list exists.
 #
-# Children return structured results so aggregation preserves detector decisions without parsing terminal text.
-# Exit 3 means root configuration could not be established; the caller then applies its infrastructure recovery contract.
-run_controller_child_scans() {
-  local controller_root=""
-  local controller_result=""
-  local controller_status=0
-  local hook_script="${BASH_SOURCE[0]}"
-
-  # A child whose Git commands fail must report that failure instead of recursively widening scope.
-  if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then
-    return 3
-  fi
-  # Missing Node or an inaccessible controller directory leaves its child scope unresolved.
-  if ! command -v node >/dev/null 2>&1 || \
-    ! controller_root="$(pwd -P 2>/dev/null)" || [ -z "$controller_root" ]; then
-    return 3
-  fi
-
-  # shellcheck disable=SC2016 # Literal JavaScript must not expand shell or provider text.
-  controller_result="$(
-    GOAT_FLOW_CONTROLLER_PARENT_MIGRATED="$post_turn_migrated_result_mode" \
-      GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT="$stop_session_fingerprint" \
-      GOAT_FLOW_CONTROLLER_STOP_ACTIVE="$stop_hook_active" \
-      POST_TURN_HOOK_VERSION="$post_turn_hook_version" \
-      node --input-type=module -e '
+# The program reaches Node on stdin through a quoted heredoc, so provider text never expands in it and Windows' command-line limit never applies.
+# A function body keeps that heredoc out of `$(...)`, whose parsing differs across the Bash versions this scanner supports.
+run_controller_program() {
+  GOAT_FLOW_CONTROLLER_PARENT_MIGRATED="$post_turn_migrated_result_mode" \
+    GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT="$stop_session_fingerprint" \
+    GOAT_FLOW_CONTROLLER_STOP_ACTIVE="$stop_hook_active" \
+    POST_TURN_HOOK_VERSION="$post_turn_hook_version" \
+    node --input-type=module - "$1" "$2" <<'GOAT_FLOW_CONTROLLER_PROGRAM'
 const { readFileSync, realpathSync, statSync } = await import("node:fs");
 const { spawn, spawnSync } = await import("node:child_process");
 const path = await import("node:path");
 const { pathToFileURL } = await import("node:url");
 
-const hookScript = path.resolve(process.argv[1], process.argv[2]);
+// Node reads this program from stdin, so its two arguments follow the "-" script marker in process.argv.
+const [controllerRootArgument, hookScriptArgument] = process.argv.slice(2);
+const hookScript = path.resolve(controllerRootArgument, hookScriptArgument);
 // Bash accepts forward slashes on every host, and each child derives its sibling runtime path from this argument.
 const bashScriptArgument = hookScript.replace(/\\/gu, "/");
-const controllerRoot = realpathSync(process.argv[1]);
+const controllerRoot = realpathSync(controllerRootArgument);
 const startedAt = Date.now();
 const resultSchema = "goat-flow.hook-result.v1";
 const provider = process.env.GOAT_FLOW_HOOK_PROVIDER || "claude";
@@ -1302,8 +1287,30 @@ if (outcome === "block") {
   process.stderr.write("post-turn-safety: controller scan incomplete.\n");
 }
 process.exit(2);
-' "$controller_root" "$hook_script"
-  )"
+GOAT_FLOW_CONTROLLER_PROGRAM
+}
+
+# Scan only the explicit Git roots configured for a managed non-Git controller.
+#
+# Children return structured results so aggregation preserves detector decisions without parsing terminal text.
+# Exit 3 means root configuration could not be established; the caller then applies its infrastructure recovery contract.
+run_controller_child_scans() {
+  local controller_root=""
+  local controller_result=""
+  local controller_status=0
+  local hook_script="${BASH_SOURCE[0]}"
+
+  # A child whose Git commands fail must report that failure instead of recursively widening scope.
+  if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then
+    return 3
+  fi
+  # Missing Node or an inaccessible controller directory leaves its child scope unresolved.
+  if ! command -v node >/dev/null 2>&1 || \
+    ! controller_root="$(pwd -P 2>/dev/null)" || [ -z "$controller_root" ]; then
+    return 3
+  fi
+
+  controller_result="$(run_controller_program "$controller_root" "$hook_script")"
   controller_status=$?
 
   # An absent or invalid explicit list leaves the bounded fail-closed Git-root path authoritative.

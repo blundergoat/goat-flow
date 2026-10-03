@@ -1,8 +1,10 @@
 /**
- * Verifies deterministic signals shown by `quality diff`.
- * Users see finding identity, delta-tag disagreements, and stuck streaks when comparing runs.
- * Exact-ID classes describe report records, while streaks require provably consecutive dates.
- * In-memory reports isolate those rules from filesystem history loading.
+ * Verifies the deterministic signals users see when they compare saved Quality runs with `quality history` and `quality diff`.
+ *
+ * - Score deltas stop at rubric and scope boundaries but follow a moved or linked checkout of the same project.
+ * - Diff output shows score rationale, finding identity, delta-tag disagreements, stuck streaks and absent findings.
+ * - Exact-ID classes describe report records, while streaks require provably consecutive dates.
+ * - In-memory reports isolate those rules from filesystem history loading.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -171,6 +173,48 @@ describe("quality comparison rubric boundaries", () => {
         w.startsWith("Assessment rubric"),
       ),
     );
+  });
+
+  it("stops score deltas at a scope change but keeps them for a moved checkout under the same rubric", () => {
+    // A scope change measures another target; a project's own history holds only its runs, so another path is a moved or linked checkout.
+    for (const { targetChange, isComparable } of [
+      {
+        targetChange: { scope: "framework-self" as const },
+        isComparable: false,
+      },
+      {
+        targetChange: { project_path: "/tmp/relocated-example" },
+        isComparable: true,
+      },
+    ]) {
+      const older = entry(FROM_ID, "2026-06-01", [], null);
+      const newer = entry(TO_ID, "2026-06-15", [], FROM_ID);
+      older.report.rubric_version = getQualityRubricId("agent-setup");
+      newer.report.rubric_version = older.report.rubric_version;
+      Object.assign(newer.report, targetChange);
+      const row = buildQualityHistoryRows([newer, older], {
+        agent: "claude",
+        limit: 1,
+      })[0];
+      assert.deepEqual(
+        [row?.setupDelta, row?.systemDelta],
+        isComparable ? [0, 0] : [null, null],
+        JSON.stringify(targetChange),
+      );
+      // History and diff share one target rule, so only a suppressed delta carries the diff's explanation.
+      const result = buildQualityDiff([newer, older], {
+        agent: "claude",
+        pair: null,
+      });
+      assert.ok(result.ok);
+      assert.equal(
+        result.diff.comparisonWarnings?.some((w) =>
+          w.startsWith("Assessment rubric"),
+        ) ?? false,
+        !isComparable,
+        JSON.stringify(targetChange),
+      );
+    }
   });
 
   it("compares the nearest same-rubric agent/mode run even across unrelated releases", () => {

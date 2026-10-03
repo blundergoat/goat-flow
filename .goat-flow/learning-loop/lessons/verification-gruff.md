@@ -128,9 +128,9 @@ last_reviewed: 2026-09-19
 **Decision changed:** Before rewording an existing comment during a docs pass, grep the learning loop for that exact string; a cited comment is a durable artifact, not free text.
 **Trigger phase:** READ
 **Caught at:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-09-19
+**Incident count:** 5 | **Latest occurrence:** 2026-10-03
 
-**Prevention:** When a docs pass rewords an existing comment, keep the cited substring intact and add the analyzer vocabulary in a second sentence. Run `stats --check` or the harness audit after any batch that rewrites existing comments, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).
+**Prevention:** When a docs pass rewords an existing comment, keep the cited substring intact and add the analyzer vocabulary in a second sentence. Before rewording, search the learning loop for the file's path to list every anchor it cites; matching is case-sensitive. Run `stats --check` or the harness audit after any batch that rewrites existing comments, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).
 
 **What happened:** Rewriting "Write canonical skill stubs" to "Writes canonical skill stubs" in `test/integration/audit-drift.helpers.ts` cleared `docs.missing-side-effect-doc`, passed typecheck, and then failed `test/unit/support-bundle.test.ts` ("emits clean JSON through the CLI", expected exit 0, got 1): the diagnostics bundle embeds the harness audit, whose `feedback-loop-active` check runs `stats --check`, which found this bucket citing the old wording as a search anchor. One letter in a test-helper comment failed a CLI contract three layers away.
 
@@ -141,6 +141,8 @@ last_reviewed: 2026-09-19
 **Recurrence 2026-09-19:** To keep the migrations test file under Gruff's 1000-line error, a milestone moved its disabled-hook cases into `test/integration/setup-install-write-set.test.ts` (search: `keeps disabled hooks installed and inert`). A pattern entry cited the old file with that case title, so `stats --check` reported a stale reference after the five changed test files had passed. The repaired anchor keeps the old path and cites that file's own suite title: `test/integration/setup-install-migrations.test.ts` (search: `setup --apply installer upgrade migrations`). Moving code, not only rewording it, needs the same search of cited text first.
 
 **Recurrence 2026-09-19 (renamed function):** A milestone renamed the hook function that projects analyzer results, because it now reads two contract versions. The focused tests, shellcheck and `npm test` passed, then preflight failed two rows on one cause: `stats --check` reported `stale-ref` and the content audit reported `stale-semantic-anchor`, both for a footgun that searched for the old name. The anchor now names the current function: `workflow/hooks/gruff-code-quality.sh` (search: `hook_contract_report`). The M19 recurrence above already said to search cited text before moving code; a rename needs the same search.
+
+**Recurrence 2026-10-03:** A comment pass reworded the `src/cli/hooks-configured-runtime-evidence.ts` header and lowercased "Shared report contracts", which `lessons/naming.md` cites. Step 0 had retrieved this lesson, but the phrase searches before editing covered other headers, not this one. `stats --check` reported the stale reference after Prettier, typecheck and the Gruff identity comparison had passed. Evidence anchor: `src/cli/hooks-configured-runtime-evidence.ts` (search: `Shared report contracts`).
 
 ---
 

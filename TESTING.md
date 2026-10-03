@@ -11,7 +11,7 @@ npm run test:full                 # Fast then slow; run this before a release
 npm run typecheck                 # Type-check src/cli and src/dashboard
 npm run check:touched             # Read-only static checks selected by changed paths
 npx eslint src/cli src/dashboard  # Lint
-bash scripts/preflight-checks.sh  # Full preflight gate (includes all of the above)
+bash scripts/preflight-checks.sh  # Full preflight gate: typecheck, lint, npm test and repository checks; not test:slow or check:touched
 ```
 
 `npm test` is not the whole suite. `scripts/run-tests.mjs` routes integration,

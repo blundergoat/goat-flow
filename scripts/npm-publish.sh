@@ -8,20 +8,15 @@
 #   bash scripts/npm-publish.sh [--full]
 #
 # Behavior:
-#   1) reads package.json version, stops if npm already has it, and logs in
-#      through npm's browser flow (or uses a bypass token when explicitly selected)
-#   2) runs `npm run publish:check` once - the single expensive gate
-#      (versions, instruction parity, build, package links, fast + slow tests).
-#      When GitHub CI's push run already passed for HEAD and the working tree
-#      is clean, it runs `npm run publish:check:quick` instead, which skips the
-#      test suites CI just ran; --full always runs the whole gate
-#   3) prints an --ignore-scripts dry-run summary and records the tarball
-#      shasum
-#   4) asks for manual confirmation, re-probes the shasum so the approved
-#      bytes are provably what ships, then publishes with --ignore-scripts.
+#   1) reads package.json version, stops if npm already has it, and logs in through npm's browser flow (or a bypass token when explicitly selected)
+#   2) runs `npm run publish:check` once - the single expensive gate (versions, instruction parity, build, package links, fast + slow tests).
+#      When GitHub CI's push run already passed for HEAD and the working tree is clean, it runs `npm run publish:check:quick` instead,
+#      which skips the test suites CI just ran; --full always runs the whole gate
+#   3) prints an --ignore-scripts dry-run summary and records the tarball shasum.
+#      After the quick gate it stops unless HEAD is still the CI-verified commit and the tree is still clean, for example after a parallel commit.
+#   4) asks for manual confirmation, re-probes the shasum so the approved bytes are provably what ships, then publishes with --ignore-scripts.
 #      A cancelled browser authentication can be retried without repeating checks
-#      (prepublishOnly already ran as step 2; rerunning it would repeat
-#      the full release check against an unchanged tree)
+#      (prepublishOnly already ran as step 2; rerunning it would repeat the full release check against an unchanged tree)
 #
 # Exit:
 #   0 if published or explicitly aborted; non-zero on failed checks, package
@@ -45,6 +40,8 @@ AUTH_SOURCE=""
 AUTH_MODE=""
 TEMP_NPMRC=""
 FULL_CHECK=0
+# Commit whose passing CI run let the quick gate skip local suites; empty means the full gate runs on its own evidence.
+CI_VERIFIED_HEAD=""
 
 for arg in "$@"; do
   case "$arg" in
@@ -159,7 +156,17 @@ ci_verified_head() {
       "${head_sha:0:8}" "$verdict"
     return 1
   fi
+  CI_VERIFIED_HEAD="$head_sha"
   printf 'CI passed for %s, so the local test suites are skipped. Use --full to run them anyway.\n' "${head_sha:0:8}"
+}
+
+# Succeeds only while HEAD is still the CI-verified commit and the working tree is still clean, so the locked tarball holds the bytes CI tested.
+ci_verified_checkout_unchanged() {
+  local head_sha tree_status
+
+  head_sha=$(git rev-parse HEAD) || return 1
+  tree_status=$(git status --porcelain) || return 1
+  [[ "$head_sha" == "$CI_VERIFIED_HEAD" && -z "$tree_status" ]]
 }
 
 verify_publish_auth() {
@@ -245,6 +252,13 @@ echo ""
 
 approved_shasum=$(pack_shasum)
 echo "Tarball shasum locked for confirmation: ${approved_shasum}"
+
+# A commit or edit made while the quick gate ran would ship bytes that neither CI nor the local suites tested.
+# For example, a parallel agent session commits during the build, so the maintainer must rerun and let the script choose the gate again.
+if [[ "$release_check" == "publish:check:quick" ]] && ! ci_verified_checkout_unchanged; then
+  echo "Error: HEAD or the working tree changed during the quick release check, so CI no longer covers the packaged bytes. Re-run the script to check the current commit and tree." >&2
+  exit 1
+fi
 
 uncommitted=$(git status --porcelain)
 if [[ -n "$uncommitted" ]]; then

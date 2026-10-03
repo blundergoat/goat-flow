@@ -1,4 +1,9 @@
-/** Exercise the maintainer's publish prompts without contacting the npm registry or GitHub. */
+/**
+ * Exercise the maintainer's publish prompts in `scripts/npm-publish.sh` without contacting the npm registry or GitHub.
+ *
+ * Shims stand in for npm, git and gh; the npm and gh call log shows which release gate ran and whether npm was asked to publish.
+ * Mid-gate repository changes, cancelled logins and changed tarballs must stop before anything reaches npm.
+ */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -45,6 +50,7 @@ function runPublishScript(
     published?: boolean;
     ciRuns?: string;
     gitStatus?: string;
+    changeDuringCheck?: { head?: string; gitStatus?: string };
     loginSucceeds?: boolean;
     firstAttempt?: "reject" | "succeed";
     packMode?: "stable" | "change-on-third";
@@ -114,7 +120,9 @@ case "$1" in
     if [[ "$MOCK_PUBLISHED" != 1 ]]; then printf 'npm error code E404\\n' >&2; exit 1; fi
     printf '%s\\n' "\${2##*@}"
     ;;
-  run) : ;;
+  run) # A parallel commit or edit can land while the release check runs.
+    if [[ -n "$MOCK_CHANGE_HEAD" ]]; then printf '%s\\n' "$MOCK_CHANGE_HEAD" > "$MOCK_GIT_HEAD_FILE"; fi
+    if [[ -n "$MOCK_CHANGE_STATUS" ]]; then printf '%s\\n' "$MOCK_CHANGE_STATUS" > "$MOCK_GIT_STATUS_FILE"; fi ;;
   pack)
     count=0
     if [[ -f "$MOCK_PACK_COUNT" ]]; then count=$(<"$MOCK_PACK_COUNT"); fi
@@ -156,8 +164,8 @@ esac
     gitCommand,
     `#!/usr/bin/env bash
 case "$1" in
-  rev-parse) printf '%s\\n' "$MOCK_GIT_HEAD" ;;
-  status) if [[ -n "$MOCK_GIT_STATUS" ]]; then printf '%s\\n' "$MOCK_GIT_STATUS"; fi ;;
+  rev-parse) if [[ -f "$MOCK_GIT_HEAD_FILE" ]]; then cat "$MOCK_GIT_HEAD_FILE"; else printf '%s\\n' "$MOCK_GIT_HEAD"; fi ;;
+  status) if [[ -f "$MOCK_GIT_STATUS_FILE" ]]; then cat "$MOCK_GIT_STATUS_FILE"; elif [[ -n "$MOCK_GIT_STATUS" ]]; then printf '%s\\n' "$MOCK_GIT_STATUS"; fi ;;
   *) printf 'unexpected git call: %s\\n' "$*" >&2; exit 1 ;;
 esac
 `,
@@ -207,6 +215,10 @@ fi
       MOCK_PUBLISHED: runConfig.published ? "1" : "0",
       MOCK_GIT_HEAD: MOCK_HEAD,
       MOCK_GIT_STATUS: runConfig.gitStatus ?? "",
+      MOCK_GIT_HEAD_FILE: join(workspace, "git-head"),
+      MOCK_GIT_STATUS_FILE: join(workspace, "git-status"),
+      MOCK_CHANGE_HEAD: runConfig.changeDuringCheck?.head ?? "",
+      MOCK_CHANGE_STATUS: runConfig.changeDuringCheck?.gitStatus ?? "",
       MOCK_CI_RUNS: runConfig.ciRuns ?? "[]",
       MOCK_LOGIN_SUCCEEDS: runConfig.loginSucceeds === false ? "0" : "1",
       MOCK_LOGIN_MARKER: join(workspace, "logged-in"),
@@ -280,6 +292,30 @@ describe("npm publish helper", () => {
     assert.doesNotMatch(log, /command:run publish:check\n/u);
     assert.match(log, /publish-otp:\n/u);
   });
+
+  // Each case changes the checkout mid-gate the way a parallel session would: by committing, or by editing a tracked file.
+  for (const change of [
+    {
+      reason: "a commit lands",
+      head: "1234567890123456789012345678901234567890",
+    },
+    { reason: "a file changes", gitStatus: " M workflow/fixture.md" },
+  ]) {
+    it(`stops before confirmation when ${change.reason} during the quick release check`, () => {
+      const { result, log } = runPublishScript("1\ny\n", {
+        ciRuns: CI_PASSED,
+        changeDuringCheck: change,
+      });
+      assert.equal(result.status, 1);
+      assert.match(log, /command:run publish:check:quick\n/u);
+      assert.match(
+        result.stderr,
+        /HEAD or the working tree changed during the quick release check/u,
+      );
+      assert.doesNotMatch(result.stdout, /Publish v[^\n]* to npm\?/u);
+      assert.doesNotMatch(log, /publish-otp:/u);
+    });
+  }
 
   for (const fallback of [
     {

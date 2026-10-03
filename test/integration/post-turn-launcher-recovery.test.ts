@@ -21,6 +21,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
+import { pathToFileURL } from "node:url";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import {
   appendBoundedHookOutput,
@@ -256,6 +257,51 @@ describe("continuation recovery", () => {
       assertWarning(launchStop(projectRoot, "turn-one", true));
       assertBlocked(launchStop(projectRoot, "turn-two"));
     }));
+
+  it(
+    "gives a native Windows host without a POSIX owner the same single retry",
+    {
+      skip:
+        process.platform === "win32"
+          ? "simulates host identity; native Windows runs the missing-scanner recovery test"
+          : false,
+    },
+    () =>
+      withProject((projectRoot) => {
+        const preloadPath = join(projectRoot, "host-identity.mjs");
+        /** Writes the host identity preload and returns the environment that loads it before the launcher module. */
+        const simulatedHostEnvironment = (preloadSource: string) => {
+          writeFileSync(preloadPath, preloadSource);
+          return {
+            NODE_OPTIONS: `--import=${pathToFileURL(preloadPath).href}`,
+          };
+        };
+        // Native Windows exposes no POSIX owner, so workspace ACLs replace the owner and mode checks.
+        const windowsHostEnvironment = simulatedHostEnvironment(
+          'Object.defineProperty(process, "platform", { value: "win32" });\nprocess.getuid = undefined;\n',
+        );
+        assertBlocked(
+          launchStop(projectRoot, "turn-one", false, {
+            environment: windowsHostEnvironment,
+          }),
+        );
+        assertWarning(
+          launchStop(projectRoot, "turn-one", true, {
+            environment: windowsHostEnvironment,
+          }),
+        );
+        // Any other host without an ownership check still warns as unavailable instead of guessing a retry.
+        const ownerlessNonWindowsEnvironment = simulatedHostEnvironment(
+          "process.getuid = undefined;\n",
+        );
+        assertWarning(
+          launchStop(projectRoot, "turn-two", false, {
+            environment: ownerlessNonWindowsEnvironment,
+          }),
+          "state-unavailable",
+        );
+      }),
+  );
 
   it("does not renew the allowance when infrastructure failures alternate", () =>
     withProject((projectRoot) => {

@@ -17,7 +17,7 @@ import type {
 } from "./schema.js";
 import { parseQualityReport } from "./schema.js";
 import { attachFindingIds } from "./ids.js";
-import { qualityReportRubricId } from "./rubric.js";
+import { isSameQualityAssessmentTarget } from "./rubric.js";
 import { KNOWN_AGENT_IDS } from "../agents/registry.js";
 import {
   countQualityConcerns,
@@ -581,10 +581,10 @@ export function selectQualityHistoryEntries(
 }
 
 /**
- * Build display rows with same-agent, same-mode and same-rubric deltas.
+ * Build display rows whose score deltas compare each run with the same agent's previous run in the same mode, rubric and scope.
  *
- * Deltas are only ever taken against the previous run by the same agent in the same mode, because comparing across either one is not a like-for-like
- * contract and would show the user movement that never happened.
+ * Deltas are only ever taken against the previous run by the same agent in the same mode, and only when that run scored the same assessment target
+ * (rubric and scope), because any other comparison is not like-for-like and would show the user movement that never happened.
  *
  * @param entries - pre-sorted quality-history entries; empty entries produce no history rows
  * @param options - filter and limit options; `null` limit means return every matching row
@@ -616,8 +616,7 @@ export function buildQualityHistoryRows(
       );
     const comparable =
       previousSameAgent &&
-      qualityReportRubricId(previousSameAgent.report) ===
-        qualityReportRubricId(entry.report)
+      isSameQualityAssessmentTarget(previousSameAgent.report, entry.report)
         ? previousSameAgent
         : null;
     return {

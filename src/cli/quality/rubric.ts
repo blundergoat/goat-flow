@@ -1,4 +1,10 @@
-/** Identity for comparable quality scores; package releases are independent. */
+/**
+ * Decides which saved Quality runs measure the same thing, so `quality history`, `quality diff` and the dashboard only compare like with like.
+ *
+ * - A rubric id hashes the current scoring text plus a policy revision; publishing a new package version alone never changes it.
+ * - Reports saved without a rubric id, or with a package version in its place, share one legacy segment per quality mode.
+ * - A score delta between two runs counts only when rubric and scope match; a project's own history holds only its own runs.
+ */
 import { createHash } from "node:crypto";
 import { qualityScoringText } from "../prompt/compose-quality-static-sections.js";
 import type { QualityMode, QualityReport } from "./schema-types.js";
@@ -33,6 +39,26 @@ export function isLegacyQualityRubric(
     /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(
       report.rubric_version,
     )
+  );
+}
+
+/**
+ * Decide whether two saved reports score the same target, so `quality history`, `quality diff` and the dashboard compare only like runs.
+ *
+ * The project path is not compared: `quality save` admits only reports whose path resolves to this checkout, so another spelling is the same
+ * project opened through a symlink or after a move.
+ *
+ * @param olderReport - previous report; its stored rubric and scope are compared unchanged
+ * @param newerReport - subsequent report; a scope omitted by a legacy report matches only another omitted scope
+ * @returns whether rubric identity and scope both match
+ */
+export function isSameQualityAssessmentTarget(
+  olderReport: Pick<QualityReport, "rubric_version" | "quality_mode" | "scope">,
+  newerReport: Pick<QualityReport, "rubric_version" | "quality_mode" | "scope">,
+): boolean {
+  return (
+    qualityReportRubricId(olderReport) === qualityReportRubricId(newerReport) &&
+    olderReport.scope === newerReport.scope
   );
 }
 

@@ -1,8 +1,8 @@
 /**
- * Unit tests for terminal spawn specs and terminal input chunking.
+ * Unit tests for terminal spawn specs, terminal input chunking and the runner version probe.
  *
- * Use these cases when changing how the dashboard opens a terminal or sends a user's command.
- * Platform-specific specifications preserve selected paths and avoid executing the generated commands during these checks.
+ * Use these cases when changing how the dashboard opens a terminal, sends a user's command or records the runner's version.
+ * Spawn specifications are checked without running them; only the Windows version-probe case starts a real runner shim.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -22,6 +22,7 @@ import {
   buildTerminalSpawnSpec,
   chunkTerminalInput,
 } from "../../src/cli/server/terminal.js";
+import { observeTerminalToolVersion } from "../../src/cli/server/terminal-spawn.js";
 
 const QUOTED_MULTILINE_PROMPT = [
   "# GOAT Flow Setup - Codex",
@@ -653,4 +654,41 @@ describe("buildTerminalSpawnSpec", () => {
     assert.match(spec.args.join("\n"), /--sandbox danger-full-access/);
     assert.equal(spec.env.GOAT_CODEX_REPORTING_PROFILE, undefined);
   });
+});
+
+describe("observeTerminalToolVersion", () => {
+  // Fixture side effects: writes one npm-style `.cmd` runner in a temporary folder whose name has a space, then removes the folder.
+  it(
+    "reads a Windows npm shim version through PowerShell despite stderr noise",
+    {
+      skip:
+        process.platform === "win32"
+          ? false
+          : "Windows npm shims need PowerShell",
+    },
+    async () => {
+      const fixtureRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow version probe "),
+      );
+      try {
+        const runnerPath = join(fixtureRoot, "codex.cmd");
+        // An update notice on stderr larger than the probe's 4 KB stdout cap must not cost the version printed on stdout.
+        writeFileSync(
+          runnerPath,
+          [
+            "@echo off",
+            `"${process.execPath}" -e "process.stderr.write('x'.repeat(5000))"`,
+            "echo fixture-cli 9.8.7",
+            "",
+          ].join("\r\n"),
+        );
+        assert.equal(
+          await observeTerminalToolVersion(runnerPath, "win32"),
+          "fixture-cli 9.8.7",
+        );
+      } finally {
+        rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    },
+  );
 });

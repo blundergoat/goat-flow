@@ -157,6 +157,24 @@ Evidence: `test/integration/post-turn-launcher-recovery.test.ts` (search: `prese
 
 **Evidence:** `workflow/hooks/gruff-code-quality.sh` (search: `announce_verified_health`) exited 1 with empty stdout after valid analysis when its marker was unreadable or obstructed by a directory.
 
+---
+
+## Footgun: Inline `node -e` programs in hook scripts must fit the Windows command line
+
+**Status:** active | **Created:** 2026-10-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Whether a hook may pass a growing program to Node as a `node -e` argument - it may not; feed a large program on stdin or keep it in a file.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Enforced-by:** `test/unit/hook-inline-node-programs.test.ts` (search: `keeps every inline node -e program in shipped hooks within the Windows command-line budget`)
+
+**Prevention:** Keep inline `node -e` programs small, because Git Bash passes them on the Windows command line, which Windows caps at 32,767 characters. Feed a large program to Node through a quoted heredoc inside a Bash function, as the post-turn controller does, so the heredoc stays out of `$(...)`.
+
+**Symptoms:** On native Windows, a Stop in a folder that is not a Git top level, including a WSL checkout over `\\wsl.localhost` when Git reports dubious ownership, failed with `node: Argument list too long` and `controller scan could not complete`. No scan ran and the `safe.directory` remedy never reached the user, while Linux CI stayed green.
+
+**Why it happens:** The post-turn controller program grew from 20,171 to 34,145 characters in one change. Code inside a Bash string is invisible to Gruff, ESLint and Prettier, so nothing measured it.
+
+**Evidence:** Measured 2026-10-03 with Windows Node v24.9.0 and Git Bash: the earlier scanner failed with `Argument list too long` in a `\\wsl.localhost` checkout and in an NTFS multi-repo workspace. The stdin version blocked once with the dubious-ownership remedy in the first and reported the child's conflict marker in the second. Owner: `workflow/hooks/post-turn-safety.sh` (search: `run_controller_program`).
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.

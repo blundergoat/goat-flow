@@ -1,10 +1,10 @@
 /**
  * PTY-backed terminal session manager used by the dashboard.
+ *
  * It validates runner and project inputs, spawns CLI sessions, and brokers WebSocket traffic.
  * Use when a user launches, reconnects to, or ends a runner from the Workspace UI.
  */
 import { randomUUID } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import type { WebSocket } from "ws";
 import type {
@@ -30,6 +30,7 @@ import {
   chunkTerminalInput,
   clampDim,
   looksLikePromptSend,
+  observeTerminalToolVersion,
   resolveCLIPath,
   sendMessage,
 } from "./terminal-spawn.js";
@@ -412,6 +413,11 @@ class TerminalManager {
       validatedCwd,
       validatedTarget,
     );
+    // A plain workspace terminal has no prompt, so it opens without a runner version check; a prompted launch checks while the setup below runs.
+    const toolVersionProbe =
+      prompt.length > 0
+        ? observeTerminalToolVersion(cliPath)
+        : Promise.resolve(null);
     // Staging runs BEFORE the permission overlay is built below, so a fresh target still receives its `.goat-flow/logs` write allow.
     const reportingCaptureRoots = prepareQualityDraftStaging(
       session,
@@ -419,6 +425,7 @@ class TerminalManager {
       qualityReportProjectPath,
     );
     const nodePty = await this.loadNodePty();
+    const toolVersion = await toolVersionProbe;
 
     const spawnSpec = buildTerminalSpawnSpec(
       runner,
@@ -428,7 +435,7 @@ class TerminalManager {
       process.platform,
       {
         accessMode: session.accessMode,
-        toolVersion: observedTerminalToolVersion(cliPath),
+        toolVersion,
         projectPath: validatedCwd,
         targetPath: validatedTarget,
         ...(qualityReportProjectPath ? { qualityReportProjectPath } : {}),
@@ -858,39 +865,3 @@ class TerminalManager {
 }
 
 export { TerminalManager, resolveCLIPath, validateProjectPath };
-
-/**
- * Run the selected executable's bounded `--version` probe before its requested PTY launch.
- * Error behavior: failed, unreadable or oversized output stays unknown without preventing the session.
- */
-function observedTerminalToolVersion(cliPath: string): string | null {
-  try {
-    const result = spawnSync(cliPath, ["--version"], {
-      encoding: "utf8",
-      timeout: 3000,
-      maxBuffer: 4096,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    // Managed sandboxes may attach EPERM after a completed command; status and signal still govern admission.
-    if (
-      result.status !== 0 ||
-      result.signal !== null ||
-      (result.error &&
-        !("code" in result.error && result.error.code === "EPERM"))
-    )
-      return null;
-    return (
-      result.stdout
-        .split(/\r?\n/u)
-        .find(
-          (line) =>
-            /\d+\.\d+\.\d+/u.test(line) &&
-            line.length <= 200 &&
-            !/[\x00-\x1f\x7f]/u.test(line),
-        )
-        ?.trim() || null
-    );
-  } catch {
-    return null;
-  }
-}
