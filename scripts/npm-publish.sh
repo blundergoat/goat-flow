@@ -5,12 +5,16 @@
 #   Release goat-flow to npm with a preflight check and human confirmation.
 #
 # Usage:
-#   bash scripts/npm-publish.sh
+#   bash scripts/npm-publish.sh [--full]
 #
 # Behavior:
-#   1) reads package.json version and selects interactive 2FA or a bypass token
+#   1) reads package.json version, stops if npm already has it, and selects
+#      interactive 2FA or a bypass token
 #   2) runs `npm run publish:check` once - the single expensive gate
-#      (versions, instruction parity, build, package links, fast + slow tests)
+#      (versions, instruction parity, build, package links, fast + slow tests).
+#      When GitHub CI's push run already passed for HEAD and the working tree
+#      is clean, it runs `npm run publish:check:quick` instead, which skips the
+#      test suites CI just ran; --full always runs the whole gate
 #   3) prints an --ignore-scripts dry-run summary and records the tarball
 #      shasum
 #   4) asks for manual confirmation, re-probes the shasum so the approved
@@ -24,7 +28,8 @@
 #   contents changed after confirmation, or failed publish.
 #
 # Requirements:
-#   - node, npm
+#   - node, npm, git
+#   - gh logged in to GitHub, only for the CI-verified quick check
 #   - package.json and build/test scripts configured for the project
 #   - npm authentication from `npm login`, npm user config, NPM_TOKEN, or
 #     NODE_AUTH_TOKEN. This script treats the latter two as token aliases;
@@ -35,14 +40,19 @@
 #     permission and Bypass 2FA enabled. Never commit a token-bearing .npmrc.
 set -euo pipefail
 
-# Publish @blundergoat/goat-flow to npm
-# Usage: bash scripts/npm-publish.sh
-
 PACKAGE_NAME="@blundergoat/goat-flow"
 REGISTRY_URL="https://registry.npmjs.org/"
 AUTH_SOURCE=""
 AUTH_MODE=""
 TEMP_NPMRC=""
+FULL_CHECK=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --full) FULL_CHECK=1 ;;
+    *) printf 'Error: unknown option %s (expected --full).\n' "$arg" >&2; exit 2 ;;
+  esac
+done
 
 cleanup() {
   if [[ -n "$TEMP_NPMRC" && -f "$TEMP_NPMRC" ]]; then
@@ -63,8 +73,8 @@ Interactive 2FA: enable "authorization and writes" for your npm account,
 
     env -u NPM_TOKEN -u NODE_AUTH_TOKEN bash scripts/npm-publish.sh
 
-  After the release check, enter a fresh authenticator code, or press Enter
-  to let npm handle its own 2FA prompt (including browser/security keys).
+  After the release check, type a fresh authenticator code, or press Enter
+  without typing anything to approve in a browser (passkey or security key).
 
 Token-only publishing: create a granular token with "Read and write (publish
   and stage)" for @blundergoat/goat-flow and "Bypass 2FA" enabled. Set it as
@@ -102,13 +112,57 @@ configure_token_from_env() {
 # Shasum of the tarball npm would publish from the current tree.
 # Probed before and after the confirmation prompt: npm tarballs are
 # content-derived (internal mtimes are fixed), so equal shasums prove the
-# publish ships exactly the bytes the dry run displayed. The JSON travels as
-# an argument, not a pipe, so a failed npm probe aborts under `set -e`
-# instead of feeding the parser an empty stream.
+# publish ships exactly the bytes the dry run displayed. Callers run this
+# inside $(...), where Bash turns `set -e` off, so a failed npm probe returns
+# explicitly and leaves npm's own error visible on stderr.
 pack_shasum() {
   local pack_json
-  pack_json=$(npm pack --dry-run --json --ignore-scripts 2>/dev/null)
+  pack_json=$(npm pack --dry-run --json --ignore-scripts) || return 1
   node -e "const raw = process.argv[1]; const records = raw ? JSON.parse(raw) : []; const shasum = records[0]?.shasum ?? ''; if (!shasum) { console.error('npm pack reported no shasum'); process.exit(1); } console.log(shasum);" "$pack_json"
+}
+
+# npm never accepts a second publish of the same version, so catch it before
+# the release check rather than at the final publish. Lookup failures other
+# than a match (404, offline) continue; the publish itself still enforces it.
+fail_if_already_published() {
+  local published
+  if published=$(npm view "${PACKAGE_NAME}@${VERSION}" version --registry="$REGISTRY_URL" 2>/dev/null) &&
+    [[ "$published" == "$VERSION" ]]; then
+    printf 'Error: %s@%s is already on npm. Bump the version before publishing.\n' "$PACKAGE_NAME" "$VERSION" >&2
+    exit 1
+  fi
+}
+
+# Succeeds only when GitHub CI's push run (which runs on main only) passed for
+# this exact commit and the working tree matches that commit, so the local
+# test suites would repeat what CI already verified. Prints why otherwise.
+ci_verified_head() {
+  local head_sha tree_status runs_json verdict
+
+  # An unreadable commit must not reach `gh run list --commit`, which would
+  # then report CI for some other commit.
+  if ! head_sha=$(git rev-parse HEAD) || ! tree_status=$(git status --porcelain); then
+    echo "Running the full gate: could not read the git commit and working tree."
+    return 1
+  fi
+  if [[ -n "$tree_status" ]]; then
+    echo "Running the full gate: the working tree has uncommitted changes that CI never tested."
+    return 1
+  fi
+  if ! command -v gh >/dev/null ||
+    ! runs_json=$(gh run list --commit "$head_sha" --workflow ci.yml --event push --limit 1 \
+      --json status,conclusion 2>/dev/null); then
+    echo "Running the full gate: could not read CI results with gh (is it installed and logged in?)."
+    return 1
+  fi
+  verdict=$(node -e "const runs = JSON.parse(process.argv[1] || '[]'); const run = runs[0]; console.log(run ? run.status + '/' + run.conclusion : 'no CI push run');" "$runs_json" 2>/dev/null) ||
+    verdict="unreadable"
+  if [[ "$verdict" != "completed/success" ]]; then
+    printf 'Running the full gate: CI for %s is %s. Rerun after CI passes to skip the local tests.\n' \
+      "${head_sha:0:8}" "$verdict"
+    return 1
+  fi
+  printf 'CI passed for %s, so the local test suites are skipped. Use --full to run them anyway.\n' "${head_sha:0:8}"
 }
 
 verify_publish_auth() {
@@ -129,7 +183,7 @@ verify_publish_auth() {
   echo "Credential source: ${AUTH_SOURCE:-npm config or npm login}"
   echo "This script accepts NPM_TOKEN or NODE_AUTH_TOKEN for the same npm token; NPM_TOKEN takes priority."
   echo "Choose how this publish will satisfy npm's 2FA requirement:"
-  echo "  1) Use interactive 2FA after the release check (default)"
+  echo "  1) Use interactive 2FA after the release check: authenticator code or browser login (default)"
   echo "  2) Use a token with Bypass 2FA enabled"
   read -rp "Authentication method [1/2, default 1]: " auth_choice
   case "$auth_choice" in
@@ -147,12 +201,13 @@ verify_publish_auth() {
   # Profile reads are a separate capability from package publishing. A failed
   # profile lookup cannot establish whether this credential can publish.
   echo "npm will verify publishing permission and 2FA when publishing."
-  echo "After the release check, enter a fresh code or press Enter for npm's own 2FA prompt."
+  echo "After the release check, type an authenticator code, or press Enter to approve in a browser."
   echo ""
 }
 
 VERSION=$(node -p "require('./package.json').version")
 echo "Publishing ${PACKAGE_NAME}@${VERSION}"
+fail_if_already_published
 verify_publish_auth
 
 # The single expensive gate. Runs directly (not under `npm publish`) so test
@@ -160,9 +215,17 @@ verify_publish_auth
 # suites; the publish calls below pass --ignore-scripts so prepublishOnly
 # cannot rerun the same checks against the unchanged tree.
 echo "--- Publish check ---"
-echo "Running the full release gate, including the serial slow test suite."
+release_check="publish:check"
+if [[ "$FULL_CHECK" == 1 ]]; then
+  echo "Running the full gate: --full was requested."
+elif ci_verified_head; then
+  release_check="publish:check:quick"
+fi
+if [[ "$release_check" == "publish:check" ]]; then
+  echo "Running the full release gate, including the serial slow test suite."
+fi
 check_started=$SECONDS
-npm run publish:check
+npm run "$release_check"
 check_elapsed=$((SECONDS - check_started))
 printf 'Release check passed in %dm %ds.\n' "$((check_elapsed / 60))" "$((check_elapsed % 60))"
 echo ""
@@ -174,6 +237,12 @@ echo ""
 
 approved_shasum=$(pack_shasum)
 echo "Tarball shasum locked for confirmation: ${approved_shasum}"
+
+uncommitted=$(git status --porcelain)
+if [[ -n "$uncommitted" ]]; then
+  echo "Warning: the working tree has uncommitted changes. Packaged files among them ship as they are on disk:"
+  printf '%s\n' "$uncommitted" | sed 's/^/  /'
+fi
 
 read -rp "Publish v${VERSION} to npm? (y/N) " confirm
 if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
@@ -192,7 +261,13 @@ while true; do
   fi
 
   if [[ "$AUTH_MODE" == "otp" ]]; then
-    read -rsp "Current npm 2FA code (Enter for npm's own prompt): " otp
+    echo ""
+    echo "npm 2FA:"
+    echo "  - Authenticator app: type the current code (hidden as you type), then press Enter."
+    echo "  - Browser login, passkey, or security key: press Enter without typing anything."
+    echo "    npm then prints an \"Authenticate your account at\" URL. Open it and approve;"
+    echo "    if no browser opens, copy the URL into one. The publish continues after approval."
+    read -rsp "2FA code, or Enter for browser login: " otp
     printf '\n'
     if [[ -n "$otp" ]]; then
       # npm normalizes both environment spellings; keep them consistent so an
@@ -205,7 +280,7 @@ while true; do
       break
     fi
     otp=""
-    read -rp "Publish failed. If the error above was a 2FA code rejection, retry with a fresh code? (y/N) " retry
+    read -rp "Publish failed. If the error above was a rejected code or an unapproved browser login, retry 2FA? (y/N) " retry
     if [[ "$retry" != "y" && "$retry" != "Y" ]]; then
       exit 1
     fi

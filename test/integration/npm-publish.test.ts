@@ -1,4 +1,4 @@
-/** Exercise the maintainer's publish prompts without contacting the npm registry. */
+/** Exercise the maintainer's publish prompts without contacting the npm registry or GitHub. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -23,6 +23,8 @@ assert.equal(
   "npm must be available for OTP config checks",
 );
 const REAL_NPM = npmLookup.stdout.trim();
+const MOCK_HEAD = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
+const CI_PASSED = '[{"status":"completed","conclusion":"success"}]';
 const workspaces: string[] = [];
 
 after(() => {
@@ -31,13 +33,17 @@ after(() => {
 });
 
 /**
- * Exercise the release script against a disposable npm shim.
+ * Exercise the release script against disposable npm, git, and gh shims.
  * Side effects: writes temporary files and spawns Bash; the after hook removes them.
  */
 function runPublishScript(
   input: string,
   runConfig: {
+    args?: string[];
     authenticated?: boolean;
+    published?: boolean;
+    ciRuns?: string;
+    gitStatus?: string;
     firstAttempt?: "reject" | "succeed";
     packMode?: "stable" | "change-on-third";
     token?: string;
@@ -68,6 +74,10 @@ case "$1" in
     printf 'publisher\\n'
     ;;
   profile) printf 'npm error code E403\\n' >&2; exit 1 ;;
+  view)
+    if [[ "$MOCK_PUBLISHED" != 1 ]]; then printf 'npm error code E404\\n' >&2; exit 1; fi
+    printf '%s\\n' "\${2##*@}"
+    ;;
   run) : ;;
   pack)
     count=0
@@ -103,7 +113,33 @@ esac
 `,
   );
   chmodSync(npmCommand, 0o755);
-  const result = spawnSync("bash", [SCRIPT], {
+  const gitCommand = join(workspace, "git");
+  writeFileSync(
+    gitCommand,
+    `#!/usr/bin/env bash
+case "$1" in
+  rev-parse) printf '%s\\n' "$MOCK_GIT_HEAD" ;;
+  status) if [[ -n "$MOCK_GIT_STATUS" ]]; then printf '%s\\n' "$MOCK_GIT_STATUS"; fi ;;
+  *) printf 'unexpected git call: %s\\n' "$*" >&2; exit 1 ;;
+esac
+`,
+  );
+  chmodSync(gitCommand, 0o755);
+  // Runs are reported only for the query the script must make: CI push runs for the mocked HEAD commit.
+  const ghCommand = join(workspace, "gh");
+  writeFileSync(
+    ghCommand,
+    `#!/usr/bin/env bash
+printf 'gh:%s\\n' "$*" >> "$MOCK_NPM_LOG"
+if [[ " $* " == *" --commit $MOCK_GIT_HEAD "* && " $* " == *" --workflow ci.yml "* && " $* " == *" --event push "* ]]; then
+  printf '%s\\n' "$MOCK_CI_RUNS"
+else
+  printf '[]\\n'
+fi
+`,
+  );
+  chmodSync(ghCommand, 0o755);
+  const result = spawnSync("bash", [SCRIPT, ...(runConfig.args ?? [])], {
     cwd: PROJECT_ROOT,
     encoding: "utf8",
     input,
@@ -124,6 +160,10 @@ esac
       MOCK_REAL_NPM: REAL_NPM,
       MOCK_WORKSPACE: workspace,
       MOCK_AUTHENTICATED: runConfig.authenticated === false ? "0" : "1",
+      MOCK_PUBLISHED: runConfig.published ? "1" : "0",
+      MOCK_GIT_HEAD: MOCK_HEAD,
+      MOCK_GIT_STATUS: runConfig.gitStatus ?? "",
+      MOCK_CI_RUNS: runConfig.ciRuns ?? "[]",
       MOCK_FAIL_FIRST_PUBLISH: runConfig.firstAttempt === "reject" ? "1" : "0",
       MOCK_FIRST_PUBLISH_MARKER: join(workspace, "first-publish"),
       MOCK_PACK_MODE: runConfig.packMode ?? "stable",
@@ -139,7 +179,7 @@ describe("npm publish helper", () => {
       firstAttempt: "reject",
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.equal(log.match(/command:run publish:check/gu)?.length, 1);
+    assert.equal(log.match(/command:run publish:check\n/gu)?.length, 1);
     assert.deepEqual(log.match(/publish-otp:\d+/gu), [
       "publish-otp:123456",
       "publish-otp:654321",
@@ -151,7 +191,7 @@ describe("npm publish helper", () => {
   it("continues with interactive 2FA when login succeeds but profile access is unavailable", () => {
     const { result, log } = runPublishScript("\ny\n123456\n");
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.equal(log.match(/command:run publish:check/gu)?.length, 1);
+    assert.equal(log.match(/command:run publish:check\n/gu)?.length, 1);
     assert.match(log, /publish-otp:123456/u);
   });
 
@@ -163,6 +203,53 @@ describe("npm publish helper", () => {
     assert.doesNotMatch(log, /command:run publish:check/u);
     assert.doesNotMatch(log, /command:publish /u);
   });
+
+  it("stops before the release check when this version is already on npm", () => {
+    const { result, log } = runPublishScript("", { published: true });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /is already on npm/u);
+    assert.doesNotMatch(log, /command:whoami|command:run /u);
+  });
+
+  it("skips the local test suites when CI's push run passed for this exact commit", () => {
+    const { result, log } = runPublishScript("1\ny\n123456\n", {
+      ciRuns: CI_PASSED,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(log, /command:run publish:check:quick\n/u);
+    assert.doesNotMatch(log, /command:run publish:check\n/u);
+    assert.match(log, /publish-otp:123456/u);
+  });
+
+  for (const fallback of [
+    {
+      reason: "CI failed for this commit",
+      runConfig: {
+        ciRuns: '[{"status":"completed","conclusion":"failure"}]',
+      },
+    },
+    {
+      reason: "the working tree has uncommitted changes",
+      runConfig: { ciRuns: CI_PASSED, gitStatus: " M workflow/fixture.md" },
+      stdout:
+        /uncommitted changes\. Packaged files[^\n]*\n {2} M workflow\/fixture\.md/u,
+    },
+    {
+      reason: "--full is passed",
+      runConfig: { ciRuns: CI_PASSED, args: ["--full"] },
+    },
+  ]) {
+    it(`runs the full release check when ${fallback.reason}`, () => {
+      const { result, log } = runPublishScript(
+        "1\ny\n123456\n",
+        fallback.runConfig,
+      );
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(log.match(/command:run publish:check\n/gu)?.length, 1);
+      assert.doesNotMatch(log, /command:run publish:check:quick/u);
+      if (fallback.stdout) assert.match(result.stdout, fallback.stdout);
+    });
+  }
 
   it("requires a fresh release check if the tarball changes before retry", () => {
     const { result, log } = runPublishScript("1\ny\n123456\ny\n", {
