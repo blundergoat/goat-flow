@@ -79,6 +79,8 @@ A first integration-test placement crossed Gruff's file-size threshold; the regr
 Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
 `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `selected repository commit alias`).
 
+**Recurrence 2026-10-04:** A patched module copy run from this checkout loaded the installed module; a working fix read as ruled out. `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`).
+
 ---
 
 ## Lesson: Header-only edits leave bodies contradicting the new scope

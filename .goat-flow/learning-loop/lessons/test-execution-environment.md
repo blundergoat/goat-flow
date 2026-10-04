@@ -148,7 +148,7 @@ last_reviewed: 2026-09-28
 
 **Status:** active | **Created:** 2026-08-01
 **Severity:** INTEGRATION
-**Incident count:** 2 | **Latest occurrence:** 2026-09-28
+**Incident count:** 3 | **Latest occurrence:** 2026-10-04
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/test-snapshots.md`; argument order for the runner belongs with the other invocation-shape entries.
 
 **Decision changed:** Put Node test-runner filters before explicit test paths and verify the reported test count proves isolation.
@@ -162,3 +162,5 @@ last_reviewed: 2026-09-28
 **Evidence:** `test/contract/skill-hardening-review-2.test.ts` (search: `goat-review internal anchors resolve to named current targets`) - this is the intended isolated contract; its diagnostic reports checked, exempted, and missed anchors.
 
 **Recurrence 2026-09-28:** M02 hook-input diagnostics used name filters that selected zero tests. Their successful exit was discarded as evidence; the unfiltered owning suites supplied the proof. Check both the selected test names and nonzero executed count before accepting a focused run. Evidence: `test/integration/deny-dangerous-operands.test.ts` (search: `classify`) and `test/helpers/check-installed-policy.ts` (search: `runHookWithPayload`).
+
+**Recurrence 2026-10-04:** A filter built from an assertion message matched no test, yet the run printed `# tests 1` and `# pass 1` for the file itself and was first counted as a pass. A nonzero count is not proof: require the named subtest line. The rerun under the real test title passed. Evidence: `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`).

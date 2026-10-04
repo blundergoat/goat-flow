@@ -113,12 +113,15 @@ The full gates then caught an unsupported standalone `Evidence` metadata label a
 ## Lesson: Quality-report recommendations need ADR reconciliation before gate changes
 
 **Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+**Incident count:** 2 | **Latest occurrence:** 2026-10-04
 
 **Prevention:** Before implementing recommendations that change audit status, scoring, or setup gates, reconcile the suggestion against current ADRs and lessons. If the report is right about presentation but wrong about gating, preserve the pass/fail contract and add an explicit limit, warning, or prompt note instead. Evidence anchors: `src/cli/audit/audit.ts` (search: `addNonGatingEvidenceLimits`) and `src/cli/prompt/compose-quality-common.ts` (search: `metrics=${concern.metrics}`).
 
 **What happened:** Four same-agent harness quality reports correctly observed that several concern signals were partly structural, then suggested making missing post-turn hooks, task-state semantics, or learning-loop capture hard failures. Current ADRs and lessons showed some of those weak signals were deliberate product contracts.
 
 **Root cause:** Quality reports detect weak presentation, but they do not automatically know which non-gating limits are intentional.
+
+**Recurrence 2026-10-04:** An improvement report recommended removing hook version stamps, passing the drift audit on declared anchors, and having the installer add missing credential-store denies. It had skipped the decisions INDEX search, and ADR-052, ADR-058 and ADR-065 already covered all three. An independent review and a second pass caught it before any milestone was planned. Reconcile when writing a recommendation, not only when implementing one. Evidence: `.goat-flow/learning-loop/decisions/ADR-052-define-hook-trust-evidence-and-results.md` (search: `An unstamped or behind dispatcher cannot reach`) and `.goat-flow/learning-loop/decisions/ADR-065-content-shape-secret-denies.md` (search: `a normal install does not silently add those denies`).
 
 ---
 
