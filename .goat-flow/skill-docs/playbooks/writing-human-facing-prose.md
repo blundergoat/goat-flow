@@ -54,8 +54,8 @@ If an exempt control surface conflicts with a source of truth, report the discre
 
 Run the core gates in this file first. Load one sibling only when the draft shows its objective trigger:
 
-- Load [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) when a sentence-level reader cost remains after correctness: assistant framing, vague inflation, unclear actors, leaked scaffolding, repeated cadence, punctuation residue, or a mismatch between the prose and what its reader already knows.
-- Load [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) when a document-level assembly defect remains: duplicated representations, append seams, compound list entries, non-parallel lists, padded triads, irrelevant chronology, or an order that hides causality and action.
+- Load [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) when a sentence-level reader cost remains after correctness: assistant framing, vague inflation, unclear actors, leaked scaffolding, repeated cadence, punctuation residue, or a mismatch between the prose and the reader's knowledge.
+- Load [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) when a document-level assembly defect remains: duplicated representations, append seams, compound list entries, fragmented arguments, non-parallel lists, padded triads, irrelevant chronology, or an order that hides causality and action.
 - Load `changelog.md` or `release-notes.md` before either diagnostic when that surface owns audience, version, release state, or output shape. Surface policy decides what belongs; diagnostics may only refine prose already admitted by that owner.
 
 Do not load either diagnostic playbook for a small edit that passes the minimum core checks. Counts, detector scores, or a wish to make prose feel less generated are not objective triggers. If both triggers exist, repair structure before sentences.
@@ -70,7 +70,7 @@ Run this before every style rule on every in-scope surface, against the source o
 - Check names, numbers, units, versions, flags, options, and paths. Committed evidence references and code identifiers must resolve in a fresh clone. Documented workflow-local paths may name the contract, but are never cited as committed evidence. Mark or spell out a diagram abbreviation once.
 - Open a cited document, issue, or benchmark and confirm it supports the claim.
 - When prose describes code behaviour, open the function, query, or getter it describes and confirm the claim; code is a citation like any other.
-- Match claim strength and specificity to the evidence. Do not inflate a narrow result or hedge a supported conclusion.
+- Match claim strength and specificity to the evidence. Do not inflate a narrow result or hedge a supported conclusion. Keep a qualifier that changes what the evidence supports or what the reader should conclude, inside the claim it bounds; a tie, a loss, or the weakest case is a finding.
 - A scope claim is checked against the diff. `comments only` is false when the diff changes executable code, configuration, or schemas. `no behavioural changes` needs implementation evidence; a rename may be non-behavioural but is never `comments only`.
 - Connect named attribution to a specific inspectable point; otherwise name the evidence or remove the prestige cue.
 - Preserve claims, constraints, uncertainty, and provenance. Do not turn a proposal into a decision, an assumption into a fact, an optional action into a required one, or a planned or pending check into a passed check.
@@ -93,7 +93,7 @@ Use one canonical noun per technical referent. Synonym cycling can make one surf
 
 **Replies to people carry social meaning.** Hedges, softeners, sentence boundaries, and punctuation can express uncertainty, warmth, or a checking question. The Scope Gate sets the permission. Do not split a sentence about someone's work when the split would turn a qualified observation into an accusation. Apply the Colleague check before sending.
 
-Put the decision, behaviour, or action where the reader can find it, but never trade a true public detail for a smooth abstraction.
+Put the decision, behaviour, or action where the reader can find it.
 
 ## Integrity
 
@@ -134,7 +134,7 @@ The minimum pass is not a shortened rewrite. If the requested change is already 
 
 If the minimum pass is clean, stop editing. Also stop when the next change would be preference rather than a diagnosed reader cost, when the source cannot support a stronger statement, or when an exemption owns the text. Report an unresolved factual conflict to the artifact owner instead of smoothing it away.
 
-Do not run the sentence or structure playbook merely because it exists. Continued editing converges documents toward one flat register and spends context without improving the reader's decision.
+Continued editing converges documents toward one flat register and spends context without improving the reader's decision.
 
 ## Verification Gate
 

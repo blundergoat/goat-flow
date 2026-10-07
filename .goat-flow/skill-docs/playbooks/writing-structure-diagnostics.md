@@ -21,15 +21,15 @@ Make the document's hierarchy, causality, and action visible without deleting di
 
 Map each section or list item to its unique job. Mark facts that appear more than once, late additions that bypass the established order, entries carrying several unrelated claims, and sequences whose chronology hides cause. If the map is sound, stop and leave sentences to their owner.
 
-Preserve required schemas, project conventions, reader-facing categories, and facts before consolidating. A shorter document that loses one distinct risk, action, limitation, or version fact is not cleaner.
+Preserve required schemas, project conventions, reader-facing categories, and facts before consolidating.
 
 ## Structure
 
-**Duplicate representation.** The same content appears as prose, then a table, then bullets. Keep the representation that best serves comparison, sequence, or explanation; preserve any unique fact from the others.
+**Duplicate representation.** The same content appears as prose, then a table, then bullets. Keep the representation that best serves comparison, sequence, or explanation; preserve any unique fact from the others. Prose beside a table is a duplicate when it re-lists the rows, not when it states the pattern and the magnitude that interprets it; keep in prose the numbers that change the claim, that the reader acts on, or that no table holds.
 
 **Append seam.** A late paragraph or bullet repeats an earlier topic because it was added where the writer stopped rather than where the reader expects it. Merge it with its owner or move it beside the premise it qualifies.
 
-**Compound entries.** One bullet contains several independent behaviours, risks, or actions. Split it only when each part deserves separate scanning, classification, or ownership. Do not split a causal unit merely to shorten it.
+**Compound entries.** One bullet contains several independent behaviours, risks, or actions. Split it only when each part deserves separate scanning, classification, or ownership. Do not split a causal unit merely to shorten it. The inverse is a fragmented argument: items that only read in sequence, with their connectives removed (`Because`, `Which`), rejoin as prose.
 
 **Parallel lists.** Items at one level must represent the same kind of thing. Separate actions from evidence, benefits from constraints, or symptoms from causes when mixing them makes comparison false. Parallel grammar is useful when the underlying units are parallel.
 
@@ -65,7 +65,6 @@ Preserve required schemas, project conventions, reader-facing categories, and fa
 
 - Append seam: a final "Authentication" bullet moves into the earlier authentication section instead of creating a second owner.
 - Compound entry: one bullet about a new flag and an unrelated timeout fix becomes two entries because they have different affected users and release categories.
-- Preserved parallelism: a configuration table keeps identical row grammar because variation would make comparison harder.
 
 ## Verification Gate
 

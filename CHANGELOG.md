@@ -14,6 +14,8 @@
 - **BREAKING: new quality findings require a concern** - Add `concern` using `context`, `constraints`, `verification`, `recovery`, or `feedback-loop`; history and diff count missing legacy values as unclassified. Optional assessor-verified fixes retain committed or captured workspace evidence and warn when references disappear. Shipped prompts supply the new rubric revision 3 contract; older saved reports remain readable.
 - **Quality assessments distinguish evidence from inference** - Prompts accept zero findings, prioritize up to five supported improvements by user benefit, and separate static inspection from runtime proof; finding comparisons distinguish assessor continuity claims from exact-ID matches.
 - **Quality score comparisons** - Reruns omit prior scores, accept integer axes from 0 to 25, and show history deltas only within the same rubric and scope.
+- **Writing playbooks check both directions** - The prose pass keeps a qualifier that changes what the evidence supports, sentence diagnostics flag labels the reader cannot decode, and structure diagnostics keep prose that states a table's pattern and rejoin arguments split into bullets.
+- **Instruction tests include the mirror failure** - `writing-agent-facing-instructions.md` asks near-miss testing to cover the opposite excess a corrective rule can produce.
 
 ### Fixed
 
