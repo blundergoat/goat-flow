@@ -19,6 +19,7 @@
 
 ### Fixed
 
+- **Setup names missing credential denies** - Current projects reach reviewed repair while preserving permission choices.
 - **Permission upgrades settle in one install** - Claude preserves allow/ask choices, and Claude and Codex print actual permission changes.
 - **Recall warns about stale citations** - Text and JSON identify missing, moved or gitignored evidence without hiding entries or changing their order.
 - **Recall and indexes skip resolved history** - `goat-flow recall` no longer returns the last active entry for citations under `## Resolved Entries`, and its INDEX reading cost excludes them.

@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-09-19
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** Installing goat-flow into a project and migrating an existing install - what a package smoke proves, mirror fan-out, the scope a setup agent may write, and concepts that survive their own removal. Repo-wide gates that catch the fallout are [verification-preflight.md](verification-preflight.md).
@@ -162,9 +162,14 @@ last_reviewed: 2026-09-19
 **Decision changed:** Before a fix plan says what a policy fixture will do, resolve every switch the way the reader does, including switches the fixture omits, or run the case once against current code.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-10-08
 
 **Prevention:** A fix plan's sentence about what a test case will show is a claim about current code. For hook-policy migrations, work out both the original and the requested choices: an omitted switch keeps its enforced default, and an upgrade can copy one switch's saved choice into another. If that trace is not quick, run the case before promising the outcome. Evidence anchors: `workflow/hooks/hook-policy-state.cjs` (search: `function effectivePolicyChoices`), `workflow/hooks/hook-policy-state.cjs` (search: `An older config may omit the Git switch`), `test/integration/setup-install-migrations.test.ts` (search: `requires policy review before migrating disabled split guardrail config`).
 
 **What happened:** A goat-debug fix plan for 19 stale slow-suite tests split one legacy test into two cases. Conflicting 1.8.0 guard choices would be refused, and agreeing ones would still migrate. The agreeing fixture turned all three retired guards off and had no Git switch. The installer answered "GitHub policy review is required": the original choices resolved to dangerous off and Git on, and mixed choices with changed ownership files require review by contract. The milestone stopped at a checkpoint, the plan's claim was reported as wrong, and the user approved a policy-review case instead.
 
 **Root cause:** "All guards off" was read from the keys the fixture wrote. The reader fills an omitted switch with its enforced default, so the fixture's effective choices disagreed.
+
+**Recurrence 2026-10-08:** M11's setup fixture guessed the current-state action, omitted the required config state and created a legacy skill directory without the SKILL.md file the classifier probes. Its first run failed before the intended product assertions. After those contracts were corrected, the reviewed-repair assertion still reused a filesystem adapter whose cached contents predated the write. Read the real extraction options, state probes and adapter lifetime before modelling the workflow; use a fresh adapter after fixture changes. `test/integration/setup-install-deny-reconciliation.test.ts` (search: `Each audit needs a fresh adapter after a write`), `src/cli/classify-state.ts` (search: `collectOldSkills`), `src/cli/facts/orchestrator.ts` (search: `options.configState`) and `src/cli/facts/fs.ts` (search: `createCachedReadFile`) retain the contracts and corrected fixture.
+
+**Recurrence 2026-10-08:** M11's follow-up review reproduced a missing Claude credential deny appearing in a healthy Codex setup prompt. Omitting `--agent` makes the CLI gather aggregate facts and render a prompt for each agent from the shared report. The new required-check supplement treated those facts as if they belonged only to the rendered agent. Filter them by that agent before supplementing the report; leave the shared report unchanged. `src/cli/cli-handlers.ts` (search: `runSetupPipeline`), `src/cli/prompt/compose-setup.ts` (search: `facts.agents.filter`) and `test/integration/setup-install-deny-reconciliation.test.ts` (search: `keeps multi-agent deny failures in the matching agent prompt`) retain the reader contract, correction and failing-then-passing regression.

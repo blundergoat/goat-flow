@@ -3457,6 +3457,12 @@ for (const entry of repairedSet) {
   const label = credentialStoreRulePairs.has(entry) ? "paired Claude credential" : "Claude";
   console.error(`  + ${label} deny rule added: ${JSON.stringify(entry)}`);
 }
+// Retiring the broad filename rule calls for reviewed exact replacements, never automatic additions.
+const exactCredentialRules = ["Read(**/credentials.json)", "Edit(**/credentials.json)"];
+if ([...previousSet].some((entry) => ["Read(**/credentials*)", "Edit(**/credentials*)"].includes(normalizeRule(entry))) &&
+    !exactCredentialRules.every((rule) => repairedSet.has(rule))) {
+  console.error(`  ! Review replacement denies: ${exactCredentialRules.join(", ")}. Show the diff and obtain approval before adding missing rules; install did not add them.`);
+}
 console.log("migrated");
 NODE
   )"; then

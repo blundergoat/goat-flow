@@ -762,7 +762,9 @@ npx @blundergoat/goat-flow@latest events tail . --limit 50 --format json
 
 ### `goat-flow setup [path] --agent <id> [--dry-run] [--apply] [--force]`
 
-Generate a setup prompt adapted to the project's current state. An existing goat-flow installation routes to the upgrade path instead.
+Generate a setup prompt adapted to the project's current state. An older goat-flow installation routes to the upgrade path instead.
+
+Current-project setup includes the required secret-deny check without running unrelated harness advisories. It names missing required Claude home Read rules for `.netrc`, `.git-credentials`, `.config/gh/hosts.yml` and `.pgpass`, then offers reviewed settings reconciliation. Show the diff and obtain approval before adding missing denies; preserve allow/ask choices and unrelated settings.
 
 Setup's selected-agent audit is static by default. Add `--trusted-target` only when the setup prompt should include runtime deny-hook proof from a checkout whose hook configuration you have inspected and trust.
 
@@ -785,7 +787,7 @@ Agent settings receive narrow in-place migrations. In both `.claude/settings.jso
 
 In `.codex/config.toml`, install refreshes the active permission profile when it carries legacy forms, lacks a canonical deny, or retains a retired pattern; project-added denies survive. Both providers print actual permission removals and additions, with rule rewrites shown as removed and added forms. Codex also names access-mode, root-anchor and inheritance changes. Rules already present are not reported as additions. Other missing Claude denies still require the reviewed reconciliation step from `goat-flow setup`; install does not restore the entire template list.
 
-New Claude settings include `Read(**/credentials.json)` and `Edit(**/credentials.json)` for the exact filename within the working directory. These rules leave `credentials.ts`, ordinary `credentials/` folders and `credentials.json.example` usable. Existing settings that lack the pair need reviewed setup reconciliation; retiring an old `credentials*` deny does not add the pair automatically.
+New Claude settings include `Read(**/credentials.json)` and `Edit(**/credentials.json)` for the exact filename within the working directory. These rules leave `credentials.ts`, ordinary `credentials/` folders and `credentials.json.example` usable. Existing settings that lack the pair need reviewed setup reconciliation; when an old `credentials*` deny is retired and the exact pair is incomplete, install names both reviewed replacements without adding them.
 
 The shared references include `.goat-flow/skill-docs/README.md` for meta-reference doctrine, while `.goat-flow/skill-docs/playbooks/README.md` indexes tool/capability playbooks such as `browser-use.md` and `page-capture.md`. Generated or repaired instruction files include a Router Table pointer to `.goat-flow/skill-docs/playbooks/` so agents check local availability playbooks before declaring a tool unavailable.
 

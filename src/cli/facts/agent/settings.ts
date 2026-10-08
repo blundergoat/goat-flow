@@ -199,6 +199,21 @@ function parseTomlScalar(rawValue: string): unknown {
   return trimmedFlag;
 }
 
+/**
+ * Name the required home credential reads missing from Claude's saved settings.
+ *
+ * @param parsed - parsed settings; unreadable or absent deny arrays cover none of these stores
+ * @returns missing Read rules in the same order used by the required coverage check
+ */
+export function missingRequiredClaudeReadDenies(parsed: unknown): string[] {
+  const permissions = (parsed as Record<string, unknown> | null)
+    ?.permissions as Record<string, unknown> | undefined;
+  const deny = Array.isArray(permissions?.deny) ? permissions.deny : [];
+  return [".netrc", ".git-credentials", ".config/gh/hosts.yml", ".pgpass"]
+    .map((store) => `Read(~/${store})`)
+    .filter((rule) => !deny.includes(rule));
+}
+
 /** Require settings-based read denies for the main secret and credential path families. */
 function checkReadDenyCoversSecrets(
   parsed: unknown,
@@ -225,12 +240,8 @@ function checkReadDenyCoversSecrets(
   const hasKeys =
     /Read\(.*\.(pem|key|pfx)\b/.test(denyStr) ||
     /Read\((?:[^)]*\/)?credentials/.test(denyStr);
-  const hasPlaintextStores = [
-    ".netrc",
-    ".git-credentials",
-    ".config/gh/hosts.yml",
-    ".pgpass",
-  ].every((store) => denyArr.includes(`Read(~/${store})`));
+  const hasPlaintextStores =
+    missingRequiredClaudeReadDenies(parsed).length === 0;
   return [hasEnv, hasSsh, hasAws, hasKeys, hasPlaintextStores].every(Boolean);
 }
 
