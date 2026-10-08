@@ -21,6 +21,12 @@ import {
   buildInstallerSpawnSpec,
 } from "./install-invocation.js";
 import {
+  emitInstallSummary,
+  hookRegistrationEdit,
+  observeInstallHookRegistrations,
+  renderInstallSummary,
+} from "./install-summary.js";
+import {
   buildManagedSetupPreview,
   isBlockingManagedFile,
   ManagedInstallStateRecordError,
@@ -51,10 +57,7 @@ import {
   emitCommitGuidanceInstallResult,
   pendingCommitGuidanceMigrationInstructionPath,
 } from "./prompt/commit-guidance.js";
-import {
-  readAgentHookState,
-  type AgentHookReadState,
-} from "./server/agent-hook-writer.js";
+import { readAgentHookState } from "./server/agent-hook-writer.js";
 import { readAllHookStates, type HookState } from "./server/hook-registrar.js";
 import { listHookSpecs, type HookSpec } from "./server/hooks-registry.js";
 import type { AgentId, AgentProfile } from "./types.js";
@@ -211,31 +214,6 @@ function hookRegistrationIsAllowed(hookState: HookState): boolean {
       hookState.scanRoots.status === "implicit" ||
       hookState.scanRoots.status === "configured")
   );
-}
-
-/**
- * Classify the one config edit needed to reach desired registration state.
- * Missing or invalid configs stay outside migration because setup either seeds or preserves them.
- */
-function hookRegistrationEdit(
-  current: AgentHookReadState,
-  shouldRegister: boolean,
-): HookRegistrationEdit | null {
-  // Missing or invalid provider config cannot supply an existing registration to edit.
-  if (current.configMissing || current.configInvalid) return null;
-  // An enabled current registration already matches the user's desired state.
-  if (shouldRegister && current.installed) return null;
-  // An enabled hook needs restoration when absent, or repair when its existing row has drifted.
-  if (shouldRegister) {
-    return current.registrationIssue === "registration-missing"
-      ? "restore"
-      : "repair";
-  }
-  const hasOwnedRegistration =
-    current.installed ||
-    (current.registrationIssue !== undefined &&
-      current.registrationIssue !== "registration-missing");
-  return hasOwnedRegistration ? "remove" : null;
 }
 
 /** User-facing verbs for the three registration changes install can perform. */
@@ -1084,9 +1062,6 @@ function managedInstallStateRecovery(
   );
 }
 
-/** Whether the claimed installer reached post-write verification or preserved a child failure. */
-type ClaimedManagedInstallOutcome = "completed" | "installer-failed";
-
 /**
  * Explain pending GitHub ownership review before installation can change the selected project.
  *
@@ -1133,14 +1108,14 @@ function blockedInstallPreview(
  * Apply, verify, and record one install while its caller retains every write claim.
  *
  * Error behavior: preserves installer exits and translates verified-but-unrecorded state into the accepted recovery error.
- * @returns completed after verified state and post-install writes, or installer-failed after preserving a non-zero child status
+ * @returns verified closing text after post-install writes, or null after preserving a non-zero child status
  */
 async function runClaimedManagedInstall(
   options: ParsedCLI,
   agent: AgentId,
   authority: ManagedSetupAuthority,
   initialPreview: ManagedSetupPreview,
-): Promise<ClaimedManagedInstallOutcome> {
+): Promise<string | null> {
   const installPreview = revalidateManagedInstallPreview(
     options,
     agent,
@@ -1150,6 +1125,10 @@ async function runClaimedManagedInstall(
   const admissionBlocker = installAdmissionBlocker(options.projectPath, agent);
   // Another writer may have changed the saved version or policy choices after preview; stop before publishing install-state markers.
   if (admissionBlocker) throw new CLIError(admissionBlocker, 1);
+  const hookObservations = observeInstallHookRegistrations(
+    options.projectPath,
+    installPreview,
+  );
   // V2 state and every old-reader marker become visible while the complete claim batch is held, before Bash receives permission to mutate targets.
   prepareManagedInstallStateForApply(options.projectPath);
   const installerLaunch = buildInstallerInvocation({
@@ -1190,7 +1169,7 @@ async function runClaimedManagedInstall(
   // A failed installer preserves its exit status and skips recording successful install state.
   if (installResult.status !== 0) {
     process.exitCode = installResult.status ?? 1;
-    return "installer-failed";
+    return null;
   }
 
   let installationMismatches: string[];
@@ -1215,7 +1194,11 @@ async function runClaimedManagedInstall(
   }
   emitCommitGuidanceInstallResult(options.projectPath, agent);
   emitIndexGenerationInstallResult(options.projectPath);
-  return "completed";
+  return renderInstallSummary(
+    options.projectPath,
+    installPreview,
+    hookObservations,
+  );
 }
 
 /**
@@ -1362,14 +1345,15 @@ async function installManagedFiles(
     installPreview,
   );
   let didTransactionFail = false;
+  let installSummary: string | null;
   try {
-    const installOutcome = await runClaimedManagedInstall(
+    installSummary = await runClaimedManagedInstall(
       options,
       selectedAgent,
       authority,
       installPreview,
     );
-    didTransactionFail = installOutcome === "installer-failed";
+    didTransactionFail = installSummary === null;
   } catch (error) {
     // A failed installer or verification keeps its original error; later claim cleanup must not hide it from the user.
     didTransactionFail = true;
@@ -1377,4 +1361,6 @@ async function installManagedFiles(
   } finally {
     releaseManagedInstallClaims(claims, didTransactionFail);
   }
+  // Failed claim release throws before verified completion can be printed.
+  emitInstallSummary(installSummary);
 }

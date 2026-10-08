@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-09-08
+last_reviewed: 2026-10-09
 ---
 
 ## Footgun: A preview-layer classification change is inert until apply consumes the decision
@@ -14,6 +14,8 @@ last_reviewed: 2026-09-08
 **Why it happens:** Preview classification, admission, and authority live in TypeScript; the writes live in the installer script. Nothing in the type system, the linter, or a classifier unit test crosses that boundary.
 
 **Evidence:** While implementing 1.16.0 M02's `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` changed and `install` exited 0, but `workflow/install-goat-flow.sh` (search: `copy_file()`) still replaced every system-owned destination. The fix was a decision channel: `src/cli/install-command.ts` (search: `Each row's own decision travels to Bash`) turns preview rows into `--preserve-path` and `--replace-user-path` flags, and `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) consults them inside `copy_file`.
+
+**Reporting recurrence 2026-10-09 (ACTUAL_MEASURED):** Closing output must distinguish requested state from completed writes across the same boundary. The summary fixture initially inferred registration removal from a disabled deny choice, but the installer retained its neutral registration. `workflow/install-goat-flow.sh` (search: `shouldRegisterManagedHook`) uses the generated `retainRegistrationWhenDisabled` contract; Stop registration does not have that retention. A non-Git fixture also lacked a Stop registration before apply, so absence afterward could not prove removal. `test/integration/setup-install-upgrade-summary.test.ts` (search: `names replaced local content and disabled registration removals after verification`) now establishes the initial registration in a Git fixture, verifies actual Stop removal and deny retention, and couples the closing output to target bytes. `src/cli/install-summary.ts` (search: `completedHookChanges`) compares registry readings before and after apply rather than treating preview edit phrases or flags as results. For failure injection, ensure a changed baseline or missing selected receipt reaches the required write: preservable local edits and identical state bytes legitimately skip those failure boundaries.
 
 ## Footgun: Optional-hook agent profiles break when installer treats hooks as universal
 

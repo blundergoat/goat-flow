@@ -4189,12 +4189,13 @@ if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/deny-dangerous.sh" ]
   # Show Claude users where to merge the preserved project instructions after refresh.
   if [[ "$AGENT" == "claude" ]]; then
     echo ""
-    echo "  For Claude, reconcile $SETTINGS_DST, then run:"
-    echo "    npx @blundergoat/goat-flow@$VERSION hooks sync"
+    echo "  For Claude, review $SETTINGS_DST against your saved hook choices."
+    echo "  Keep intentionally disabled hooks disabled."
   # Show Codex users where to merge the preserved project instructions after refresh.
   elif [[ "$AGENT" == "codex" ]]; then
     echo ""
-    echo "  For Codex, sync hooks or mirror workflow/hooks/agent-config/codex-hooks.json."
+    echo "  For Codex, review registrations against your saved hook choices."
+    echo "  Keep intentionally disabled hooks disabled."
     echo "  Do not restore a direct .goat-flow/hooks/deny-dangerous.sh command; Codex hooks"
     echo "  run from the session cwd and need the Node git-root launcher."
   fi
@@ -4233,7 +4234,11 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   fi
 fi
 
-echo "Next steps:"
-echo "  1. Run the setup steps to create project-specific content"
-echo "     (CLAUDE.md, architecture.md, code-map.md, footguns, lessons)"
-echo "  2. Run: goat-flow audit . --agent $AGENT"
+# CLI admission leaves next steps to its verified completion owner; direct use still needs explicit guidance.
+if [[ "${GOAT_FLOW_INSTALL_ADMISSION:-}" != "v2" ]]; then
+  echo "Next steps (managed files and install state have not been verified by the CLI):"
+  echo "  1. Run the setup steps to create project-specific content"
+  echo "     (agent instructions, architecture.md, code-map.md, footguns, lessons)"
+  echo "  2. Run: npx @blundergoat/goat-flow@$VERSION install . --agent $AGENT"
+  echo "  3. Run: npx @blundergoat/goat-flow@$VERSION audit . --agent $AGENT"
+fi
