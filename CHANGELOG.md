@@ -37,6 +37,7 @@
 
 ### Security
 
+- **Claude file tools deny `credentials.json`** - New settings protect the exact filename while leaving `credentials.ts` and `credentials.json.example` usable; existing settings need reviewed reconciliation.
 - **Block abbreviated forced Git cleanup** - The Git write guard recognizes `git clean --f`, `--fo`, `--for`, `--forc` and bundled `-f`, including aliases, without mistaking exclude patterns or paths after `--` for force flags.
 - **Keep denial messages free of unsafe option text** - Unrecognized Git global-option denials no longer echo supplied tokens, keeping embedded display controls out of terminal and provider messages.
 

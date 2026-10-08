@@ -36,6 +36,8 @@
       "Edit(**/*.pem)",
       "Edit(**/*.key)",
       "Edit(**/*.pfx)",
+      "Read(**/credentials.json)",
+      "Edit(**/credentials.json)",
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
       "Read(~/.gnupg/**)",

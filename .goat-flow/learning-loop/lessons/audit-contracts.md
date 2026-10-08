@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-09-18
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
@@ -75,13 +75,15 @@ last_reviewed: 2026-09-18
 
 **Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation | **Evidence:** ACTUAL_MEASURED
 **Severity:** CORRECTNESS
-**Incident count:** 5 | **Latest occurrence:** 2026-10-01
+**Incident count:** 6 | **Latest occurrence:** 2026-10-08
 
 **Prevention:** For fixture-driven audit tests, reproduce the failing audit/check output first, capture the current check ids, then update test assertions and fixture metadata together. A healthy virtual filesystem must also satisfy every newly enforced content invariant; existence-only stubs are no longer healthy after a content detector lands. Do not trust older expected ids or fixture bodies after check-contract work. M12 recurrence anchor: `test/fixtures/projects/index.ts` (search: "healthyPlaybook").
 
 **What happened:** Historical scanner/rubric changes and current audit detector changes both invalidated "known failing" fixture expectations even when the implementation was correct. The failure mode recurs whenever a check is renamed or tightened, or when responsibility moves to a different detector.
 
 **Root cause:** I treated expected check ids as stable facts instead of outputs of the current detector contract.
+
+**Recurrence 2026-10-08:** Adding the exact `credentials.json` deny pair to the Claude template broke the Git-credentials isolation test, which inherited the template but removed only key-extension rules. The audit already accepted a dedicated credentials path as alternative coverage. Removing that alternative from this negative fixture restored its intended isolation without changing the audit contract. When fixtures derive from a live template, review every inherited positive condition before expecting a negative result. Evidence: `src/cli/facts/agent/settings.ts` (search: `const hasKeys`), `test/unit/audit-command/codex-settings.test.ts` (search: `Exclude the audit's other key/credential alternatives`).
 
 **Recurrence update (2026-09-04):** M06 added a content invariant for an installed optional security policy. Focused tests and the live audit passed, but `publish:check` exposed two older healthy-project fixtures that declared the policy present without its route: the shared `stubFS` returned no code-map content, then the consumer lifecycle overwrote both orientation files without the policy path. Keeping the policy present and adding its route to each fixture restored the integration contract. Evidence anchors: `test/fixtures/projects/index.ts` (search: `A present optional policy remains discoverable`), `test/integration/setup-quality-lifecycle.test.ts` (search: `Optional security policy`), and `src/cli/audit/check-goat-flow.ts` (search: `installedSecurityPolicyDiscoveryFailure`).
 

@@ -1033,6 +1033,11 @@ describe("setup --apply permission upgrade migrations", () => {
     );
     // Retirement never reaches the allow list: an allow with the same text is the user's own decision.
     assert.ok(allow.includes("Bash(*sudo *)"), "allow list left alone");
+    assert.ok(
+      !deny.includes("Read(**/credentials.json)") &&
+        !deny.includes("Edit(**/credentials.json)"),
+      "new exact credential rules require reviewed reconciliation, even after retiring credentials*",
+    );
   });
 
   // Covers removed-tool, unmatched-rule, and broad env-deny migrations together.

@@ -59,6 +59,8 @@
       "Edit(~/.pgpass)",
       "Edit(~/.pypirc)",
       "Edit(**/*.pfx)",
+      "Read(**/credentials.json)",
+      "Edit(**/credentials.json)",
       "Edit(~/.kube/**)",
       "Read(**/.ssh/**)",
       "Read(**/.aws/**)",

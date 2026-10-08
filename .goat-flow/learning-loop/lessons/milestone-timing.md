@@ -1,6 +1,6 @@
 ---
 category: milestone-timing
-last_reviewed: 2026-09-20
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** Milestone timing receipts - prospective measurement, category changes, activation and finalization. Plan state, estimates and release accounting are in [milestone-accounting.md](milestone-accounting.md).
@@ -77,13 +77,15 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 **Severity:** INTEGRATION
 **Decision changed:** Activate before timing starts, stop before an inactive handoff, never move a pending or terminal milestone backward only to time acceptance administration, and remove the active receipt schema before resetting to `not-started`.
 **Trigger phase:** ACT
-**Incident count:** 11 | **Latest occurrence:** 2026-09-06
+**Incident count:** 12 | **Latest occurrence:** 2026-10-08
 
 **Prevention:** Change the milestone to `in-progress` or `testing-gate` before checking implementation work or starting the first timing segment, using only the canonical lifecycle vocabulary (`active` is not a status). Confirm exactly one rendered `Status` field, then start the category and inspect the returned open segment; if start is rejected, correct the state and retry prospectively, never backfilling the missed interval. Stop and inspect the open span before changing status to `human-verification-pending`, `blocked`, `abandoned`, or `complete`; once pending, leave later acceptance administration unmeasured. When resetting to `not-started`, reopen every task and proof, preserve closed-segment evidence under Reset history, and remove the active Timing Receipt section. Evidence anchors: `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) rejects missing, competing, empty, or inactive states; `src/cli/plans-check.ts` (search: `not-started milestone must not include a Timing Receipt`) enforces a clean receipt after reset.
 
 **What happened:** Starting code-quality-upstream M04, `plans time start` ran while the rendered `Status` was still `not-started`; the CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`, and the retry after the status change succeeded.
 
 **Root cause:** Receipt creation was treated as the transition that made a milestone active, and lifecycle text as though it also normalized timing state; the CLI models them separately.
+
+**Recurrence 2026-10-08:** M09 in the local `1.18.0-part2` plan attempted timing while still `not-started`. The guard rejected it before source edits; changing status to `in-progress` and retrying opened a prospective receipt without backfilling. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) remains the enforcing boundary.
 
 **Recurrences 2026-08-21, 2026-08-23 (M11), 2026-08-24 (M22), 2026-08-24 (M26):** The same order error, timer before status, on four later activations; each time the guard opened no receipt and the prospective retry after `in-progress` succeeded with no interval backfilled. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`).
 **Recurrence 2026-08-23 (inactive transition):** M08 moved from `in-progress` to `blocked` while its product span stayed open; strict validation rejected the inactive milestone with an active receipt until the span was stopped, leaving a paused 466-second receipt.
