@@ -61,7 +61,7 @@ import type { AgentId, AgentProfile } from "./types.js";
 
 /**
  * Derive installer flags from the project's adoption state.
- * It swallows an unreadable project into the default flag set rather than blocking the install.
+ * Swallows unreadable probes into no inferred flags; admission separately decides whether installation may proceed.
  */
 function deriveInstallFlags(
   projectPath: string,
@@ -88,6 +88,17 @@ function deriveInstallFlags(
     // An unreadable adoption marker supplies no inferred upgrade flags; the user's explicit options still reach setup.
     return [];
   }
+}
+
+/** Read version and policy blockers before migrations, claims or receipts can be written. */
+function installAdmissionBlocker(
+  projectPath: string,
+  agent: AgentId,
+): string | null {
+  const state = classifyProjectState(createFS(projectPath), agent);
+  return state.action === "none"
+    ? `Installation refused: ${state.details}`
+    : policyUpgradeBlocker(projectPath);
 }
 
 /**
@@ -1104,17 +1115,17 @@ function policyUpgradeBlocker(projectPath: string): string | null {
   }
 }
 
-/** Add pending policy review to dry-run diagnostics without granting authority or changing any project files. */
-function policyReviewPreview(
+/** Add version or policy admission failures to dry-run diagnostics without changing project files. */
+function blockedInstallPreview(
   preview: ManagedSetupPreview,
-  policyBlocker: string | null,
+  admissionBlocker: string | null,
 ): ManagedSetupPreview {
-  // No policy decision is pending, so the user sees the original managed-file verdict.
-  if (!policyBlocker) return preview;
+  // No version or policy blocker exists, so the user sees the original managed-file verdict.
+  if (!admissionBlocker) return preview;
   return {
     ...preview,
     verdict: "blocked",
-    limits: [...preview.limits, policyBlocker],
+    limits: [...preview.limits, admissionBlocker],
   };
 }
 
@@ -1136,9 +1147,9 @@ async function runClaimedManagedInstall(
     authority,
     initialPreview,
   );
-  const policyBlocker = policyUpgradeBlocker(options.projectPath);
-  // Another writer may have changed policy choices after preview; stop before publishing any install-state markers.
-  if (policyBlocker) throw new CLIError(policyBlocker, 1);
+  const admissionBlocker = installAdmissionBlocker(options.projectPath, agent);
+  // Another writer may have changed the saved version or policy choices after preview; stop before publishing install-state markers.
+  if (admissionBlocker) throw new CLIError(admissionBlocker, 1);
   // V2 state and every old-reader marker become visible while the complete claim batch is held, before Bash receives permission to mutate targets.
   prepareManagedInstallStateForApply(options.projectPath);
   const installerLaunch = buildInstallerInvocation({
@@ -1284,7 +1295,10 @@ async function installManagedFiles(
   selectedAgent: AgentId,
 ): Promise<void> {
   const authority = readManagedSetupAuthority(options);
-  const policyBlocker = policyUpgradeBlocker(options.projectPath);
+  const admissionBlocker = installAdmissionBlocker(
+    options.projectPath,
+    selectedAgent,
+  );
   let installPreview = buildInstallPreview(options, selectedAgent, authority);
   const installerLaunch = buildInstallerInvocation({
     scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
@@ -1302,14 +1316,14 @@ async function installManagedFiles(
     emitManagedSetupDryRun(
       options,
       managedSetupPreviewForInstallerLaunch(
-        policyReviewPreview(installPreview, policyBlocker),
+        blockedInstallPreview(installPreview, admissionBlocker),
         installerLaunch,
       ),
     );
     return;
   }
-  // Generic install or force authority cannot replace the separate policy decision shown on the Hooks page.
-  if (policyBlocker) throw new CLIError(policyBlocker, 1);
+  // Install and force authority cannot override version admission or a pending policy review.
+  if (admissionBlocker) throw new CLIError(admissionBlocker, 1);
 
   const overwriteBlocker = managedSetupAdmissionFailure(
     installPreview,

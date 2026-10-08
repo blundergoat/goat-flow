@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-09-21
+last_reviewed: 2026-10-09
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -83,7 +83,7 @@ last_reviewed: 2026-09-21
 **Decision changed:** Any version comparison that drives user-facing remediation or a file write must branch on direction, not on `!==`.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-03
+**Incident count:** 3 | **Latest occurrence:** 2026-10-08
 **hallucination-risk:** high
 
 **Prevention:** Never drive remediation or a write from version inequality alone. Compare direction first; when the local tool is older, say so and stop rather than proposing to bring the target back to the tool's version. Put skew guards at the write boundary too, not only in the message.
@@ -93,6 +93,10 @@ last_reviewed: 2026-09-21
 **Why it happens:** `AUDIT_VERSION` is the running CLI's own version, so an older CLI treats itself as the reference; `version !== AUDIT_VERSION` cannot tell "behind" from "ahead", and the template comparison diffs the target against the older bundle. Following that advice is not advisory: `src/cli/server/hook-registrar.ts` (search: `export function syncHookStates`) rewrites installed hook files from the running CLI's bundle, a silent downgrade of the guardrail layer.
 
 **Evidence:** `src/cli/version-compare.ts` (search: `projectIsAheadOfCli`) is the shared direction test; `src/cli/audit/check-goat-flow.ts` (search: `is newer than this CLI`) branches before prescribing remediation; `src/cli/audit/check-agent-common.ts` (search: `targetUsesNewerGoatFlow`) suppresses older-template skill, guardrail, drift, and content checks; `src/cli/server/hook-managed-installation.ts` (search: `Refusing to overwrite`) makes `copyHookScripts` throw rather than downgrade a newer-stamped hook. Tests: `test/unit/version-compare.test.ts` (search: `flags the CLI as the stale side when the project is newer`), `test/integration/audit-quality.test.ts` (search: `reports version skew without older-template agent or drift findings`), `test/unit/hook-registrar.test.ts` (search: `refuses to overwrite a hook stamped newer than the running CLI`).
+
+**Recurrence 2026-10-08:** Public install admitted a target saved as 1.17.1 when the CLI was 1.17.0, and status presented that target as current. The classifier also truncated 1.17.0-rc.1 to a numeric prefix and treated patch lag as current. Read the complete YAML value and compare direction before admitting any install. `src/cli/classify-state.ts` (search: `installedConfigVersion`) validates the full scalar; `src/cli/install-command.ts` (search: `installAdmissionBlocker`) stops before legacy relocation and rechecks before receipt preparation; `workflow/install-goat-flow.sh` (search: `VERSION_ADMISSION`) applies the same refusal before direct copies. `test/integration/setup-install-upgrade-1150.test.ts` (search: `before public or direct target mutations`) proves unchanged target membership, modes and file digests for newer, missing, malformed, prerelease and unsafe-numeric versions, including force and explicit refresh. The same owner (search: `refreshes an older patch in preview and apply`) proves comment-preserving patch refresh through a real isolated package.
+
+**Follow-up 2026-10-09:** A valid older version serialized as a YAML block scalar passed admission, but the line updater replaced only its header and left the scalar body behind. Direct install exited zero with invalid YAML. Validate the editable entry as well as the parsed value before admitting writes. `src/cli/classify-state.ts` and `workflow/install-goat-flow.sh` (search: `writableVersion`) reject unsupported serialization before mutation; `test/integration/setup-install-upgrade-1150.test.ts` (search: `name: "block scalar"`) proves refusal preserves the whole target, including when forced.
 
 ---
 

@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import { quoteManagedInstallProjectArgument } from "../../src/cli/managed-install-evidence.js";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
 import {
   createManagedInstallStateRow,
@@ -167,6 +168,74 @@ function writeLegacyState(
 }
 
 describe("managed install status evidence", () => {
+  /**
+   * Fixture purpose: distinguish complete saved scalars and absent versions from the CLI version in all formats.
+   * Filesystem and process effects: write disposable config and run the public status CLI.
+   */
+  it("distinguishes complete project and CLI versions in JSON, text and Markdown", () => {
+    const projectPath = makeTempProject();
+    mkdirSync(join(projectPath, ".goat-flow"));
+    const [major, minor, patch] = AUDIT_VERSION.split(".").map(Number);
+    for (const version of [
+      "0.0.0",
+      AUDIT_VERSION,
+      `${major}.${minor}.${patch + 1}`,
+      `${AUDIT_VERSION}-rc.1`,
+      "not-a-release",
+      null,
+    ]) {
+      writeFileSync(
+        join(projectPath, ".goat-flow/config.yaml"),
+        version === null
+          ? "# no version\n"
+          : `version: "${version}" # keep the whole scalar\n`,
+      );
+      const json = runStatus(projectPath, "json");
+      assert.equal(json.status, 0, json.stderr);
+      const report = JSON.parse(json.stdout);
+      assert.equal(
+        report.version,
+        AUDIT_VERSION,
+        "legacy version remains the executing CLI",
+      );
+      assert.equal(report.projectVersion, version);
+      if (
+        version !== null &&
+        version !== "0.0.0" &&
+        version !== AUDIT_VERSION
+      ) {
+        assert.equal(report.state, "error");
+        assert.equal(report.action, "none");
+        assert.match(report.details, /CLI|review.*version/iu);
+      }
+      for (const format of ["text", "markdown"] as const) {
+        const result = runStatus(projectPath, format);
+        assert.equal(result.status, 0, result.stderr);
+        assert.ok(
+          result.stdout.includes(
+            `Project version:${format === "markdown" ? "**" : ""} ${version ?? "not recorded"}`,
+          ),
+          result.stdout,
+        );
+        assert.ok(
+          result.stdout.includes(
+            `CLI version:${format === "markdown" ? "**" : ""} ${AUDIT_VERSION}`,
+          ),
+          result.stdout,
+        );
+      }
+    }
+  });
+
+  it("reports no project version for a fresh target without config", () => {
+    const result = runStatus(makeTempProject(), "json");
+    assert.equal(result.status, 0, result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.projectVersion, null);
+    assert.equal(report.version, AUDIT_VERSION);
+    assert.equal(report.state, "bare");
+  });
+
   it("quotes recovery project paths as one shell argument", () => {
     const projectPath = String.raw`C:\team dir\$cache's project`;
     const normalizedPath = projectPath.replace(/\\/gu, "/");

@@ -424,6 +424,48 @@ assert_safe_installer_directory() {
 # A symlinked shared setup root would redirect the policy read below, so report the unsafe directory first.
 ( cd "$PROJECT" && assert_safe_installer_directory ".goat-flow" ) || exit 1
 
+# Rank the complete saved version before policy admission or any target mutation; force cannot bypass this check.
+VERSION_ADMISSION=$(node - "$PROJECT" "$VERSION" "$GOAT_FLOW_ROOT" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const [projectRoot, cliVersion, frameworkRoot] = process.argv.slice(2);
+const configPath = path.join(projectRoot, ".goat-flow/config.yaml");
+try {
+  let stat;
+  try { stat = fs.lstatSync(configPath); }
+  catch (error) { if (error.code === "ENOENT") process.exit(0); throw error; }
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("config is not a regular file");
+  const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
+  const content = fs.readFileSync(configPath, "utf8");
+  const version = yaml.load(content)?.version;
+  const comparable = (value) => typeof value === "string" && /^\d+\.\d+\.\d+$/.test(value) && value.split(".").every((part) => Number.isSafeInteger(Number(part)));
+  if (!comparable(version) || !comparable(cliVersion)) throw new Error("version is not a comparable release");
+  const saved = version.split(".").map(Number);
+  const incoming = cliVersion.split(".").map(Number);
+  for (let index = 0; index < saved.length; index++) {
+    if (saved[index] > incoming[index]) {
+      console.error(`ERROR: Project version ${version} is newer than this CLI ${cliVersion}. Upgrade the CLI before installing; the project's files must remain unchanged.`);
+      process.exit(1);
+    }
+    if (saved[index] < incoming[index]) { console.log("older"); break; }
+  }
+  // A readable scalar is insufficient: the line transform must preserve its serialized entry.
+  const writableVersion = /^(?:version|"version"|'version')[ \t]*:[ \t]*(?:&[^\s#]+[ \t]+)?(["']?)\d+\.\d+\.\d+\1[ \t]*(?:#[^\r\n]*)?\r?$/mu;
+  if (!writableVersion.test(content)) {
+    console.error(`ERROR: Config version ${version} cannot be safely refreshed. Review .goat-flow/config.yaml and put the version on a single top-level line, such as version: "${version}", before installing.`);
+    process.exit(1);
+  }
+} catch {
+  console.error(`ERROR: Config version cannot be safely compared with CLI ${cliVersion}. Review the saved version in .goat-flow/config.yaml; use a numeric X.Y.Z release before installing.`);
+  process.exit(1);
+}
+NODE
+)
+# Refresh every valid older release, including patch lag; existing comments and choices remain authoritative.
+if [[ "$VERSION_ADMISSION" == "older" ]]; then
+  UPDATE_CONFIG_VERSION=true
+fi
+
 # Mixed policy upgrades require dashboard review even when the CLI already admitted file replacements or the caller supplied force.
 node - "$PROJECT" "$GOAT_FLOW_ROOT/workflow/hooks" <<'NODE'
 const [projectRoot, bundledHooksRoot] = process.argv.slice(2);
@@ -1075,7 +1117,8 @@ const fs = require("node:fs");
 const path = process.argv[2];
 const version = process.argv[3];
 const content = fs.readFileSync(path, "utf8");
-fs.writeFileSync(path, content.replace(/^version:.*$/m, `version: "${version}"`));
+const versionEntry = /^((?:version|"version"|'version')[ \t]*:[ \t]*(?:&[^\s#]+[ \t]+)?)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^#\r\n]*?)([ \t]*(?:#[^\r\n]*)?)(\r?)$/m;
+fs.writeFileSync(path, content.replace(versionEntry, (_match, prefix, comment, newline) => `${prefix}"${version}"${comment}${newline}`));
 console.log("changed");
 NODE
   )"; then
@@ -3856,10 +3899,10 @@ assert_file_ownership "$CONFIG_PATH" "user-owned"
 if [[ -f "$CONFIG_PATH" ]]; then
   CONFIG_CHANGED=false
   CONFIG_NOTES=()
-  # Change the saved framework version only when the user requested a version refresh.
+  # Record a valid older release or the user's explicit same-version refresh.
   if $UPDATE_CONFIG_VERSION; then
     # Replace the existing version entry; a config without one receives a new entry.
-    if grep -q "^version:" "$CONFIG_PATH"; then
+    if grep -Eq "^(version|\"version\"|'version')[[:blank:]]*:" "$CONFIG_PATH"; then
       update_config_version_line "$CONFIG_PATH"
       CONFIG_CHANGED=true
       CONFIG_NOTES+=("version updated to $VERSION")

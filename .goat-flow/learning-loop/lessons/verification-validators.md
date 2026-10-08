@@ -221,3 +221,18 @@ The follow-up review reproduced false removal messages for permission-shaped TOM
 **What happened:** The paired home/project credential migration inserted each project rule beside its home rule even when both were already present. The full release gate caught a second Claude install changing the template's rule order. `workflow/install-goat-flow.sh` (search: `credentialPair.every`) now preserves complete pairs; `test/integration/setup-install-write-set.test.ts` (search: `keeps disabled hooks installed and inert`) reproduces the required byte stability, and `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`) retains the incomplete-upgrade control.
 
 **Root cause:** I checked the new deny coverage but missed the already-complete input branch. Existing regression coverage exposed the omission, so the repair changes the migration rather than weakening its assertion. The preview still classified the former home-only migration, hiding an incomplete pair and announcing a rewrite for a complete pair. `src/cli/install-command.ts` (search: `CLAUDE_PAIRED_CREDENTIAL_STORES`) and `test/integration/setup-install-safety-regressions.test.ts` (search: `previews credential-pair migration`) now compare home-only, project-only, complete and absent pairs against the same policy.
+
+## Lesson: A table-escaped pipe turns a ripgrep absence check into a literal-pipe search
+
+**Status:** active | **Created:** 2026-10-08
+**Severity:** CORRECTNESS
+**Decision changed:** Write regex alternation in plan proof commands as one `-e` per pattern, or keep the command in a fenced block that the row references; run every absence check once where hits must exist before trusting a zero.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-10-08
+
+**Prevention:** Milestone Commands rows sit in a Markdown table, `workflow/skills/goat-plan/references/milestone-examples.md` (search: `| Purpose | Command | Expected result |`), so authors escape `|` as `\|`. GNU `grep` reads `\|` as alternation in a basic regex; ripgrep reads it as a literal pipe. Use `rg -e A -e B` or move the command out of the table. Give each absence sweep a positive control: before the change it must report hits. The session `grep` wrapper causes the same false zero for a different reason: `.goat-flow/learning-loop/lessons/test-shell-environment.md` (search: `known-positive`).
+
+**What happened:** A release plan's retired-consumer proof ran `rg --hidden -n 'deny-dangerous\.sh\|deny-git-mutations\.sh\|...'` across the hook consumers. Run verbatim with ripgrep 14.1.0, it printed nothing and exited 1 while every named file still existed; the same pattern with `|` matched 1,208 lines outside local worktrees. The plan's earlier audit had recorded its command references as validated without running them.
+
+**Root cause:** I treated a referenced command as a checked command and a zero-hit search as proof of absence. Ripgrep's Rust regex syntax differs from GNU basic regex exactly at the escaped pipe, and nothing executed the row before it became a proof gate.
