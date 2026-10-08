@@ -18,6 +18,7 @@ import {
 import { dirname, join } from "node:path";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { managedInstallStatePath } from "../../src/cli/managed-setup-state.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
@@ -80,7 +81,7 @@ describe("setup --apply installer upgrade migrations", () => {
       );
       writeFileSync(
         join(root, ".goat-flow/config.yaml"),
-        "hooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: false\n",
+        `version: "${AUDIT_VERSION}"\nhooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: false\n`,
       );
       const profiles = getAgentProfiles().filter(
         (agent) => agent.id === "claude" || agent.id === "codex",
@@ -197,9 +198,10 @@ describe("setup --apply installer upgrade migrations", () => {
     });
   }
 
-  // Writes legacy install state, then runs public preview and the playbook install block against locally edited guidance in a disposable project.
-  // The invariant is exact preservation alongside installed replacements; later installer stages cannot hide these results behind a timeout.
-  it("preserves retired writing playbooks when installing replacements", () => {
+  // Historical incident anchor: "preserves retired writing playbooks when installing replacements".
+  // Writes edited old copies and legacy state, then runs preview and the production playbook block in a disposable project.
+  // The invariant is removal after replacement with baseline history intact; later stages cannot hide cleanup behind a timeout.
+  it("removes renamed writing playbooks after installing replacements", () => {
     const root = makeTempProject();
     const playbookDirectory = join(root, ".goat-flow/skill-docs/playbooks");
     mkdirSync(playbookDirectory, { recursive: true });
@@ -242,7 +244,7 @@ describe("setup --apply installer upgrade migrations", () => {
     const report = JSON.parse(preview.stdout) as {
       files: { path: string; state: string; action: string }[];
     };
-    // Both retired names must carry the preservation promise before the test exercises installation.
+    // Preview retains orphan baseline history; renamed-file cleanup happens separately during installation.
     for (const retiredPath of retiredPlaybookPaths) {
       const previewRow = report.files.find((file) => file.path === retiredPath);
       assert.ok(previewRow, `Preview must list ${retiredPath}`);
@@ -268,6 +270,7 @@ describe("setup --apply installer upgrade migrations", () => {
         "-c",
         [
           "set -euo pipefail",
+          "REMOVED=0",
           "copy_file() {",
           '  local src="$1" dst="$2"',
           '  mkdir -p "$(dirname "$dst")"',
@@ -280,12 +283,16 @@ describe("setup --apply installer upgrade migrations", () => {
       {
         cwd: root,
         encoding: "utf-8",
-        env: { ...process.env, GOAT_FLOW_ROOT: PROJECT_ROOT },
+        env: {
+          ...process.env,
+          GOAT_FLOW_ROOT: PROJECT_ROOT,
+          MANIFEST_PATH: join(PROJECT_ROOT, "workflow/manifest.json"),
+        },
         timeout: 10000,
       },
     );
     assert.equal(install.status, 0, install.stderr || install.stdout);
-    // Every replacement must contain the shipped guidance while the project's retired copies remain available below.
+    // Every replacement must contain the shipped guidance before its old copy disappears.
     for (const replacementPlaybook of [
       "writing-agent-facing-instructions.md",
       "writing-human-facing-prose.md",
@@ -301,13 +308,19 @@ describe("setup --apply installer upgrade migrations", () => {
         `Installed content: ${replacementPlaybook}`,
       );
     }
-    assert.equal(readFileSync(retiredAgentPath, "utf-8"), agentContent);
-    assert.equal(readFileSync(retiredHumanProse, "utf-8"), humanContent);
-    // The install log must tell users that old copies remain available for their own review and removal.
+    assert.equal(existsSync(retiredAgentPath), false);
+    assert.equal(existsSync(retiredHumanProse), false);
+    assert.deepEqual(
+      JSON.parse(readFileSync(statePath, "utf-8")),
+      legacyBaseline,
+    );
+    // The install log names each actual cleanup without pruning historical baseline rows.
     for (const retiredPath of retiredPlaybookPaths) {
       assert.ok(
-        install.stdout.includes(`retained retired ${retiredPath}`),
-        `Missing retention notice for ${retiredPath}: ${install.stdout}`,
+        install.stdout.includes(
+          `${retiredPath} (removed renamed playbook; use `,
+        ),
+        `Missing removal notice for ${retiredPath}: ${install.stdout}`,
       );
     }
   });

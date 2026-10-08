@@ -51,6 +51,12 @@ interface SkillIdentity {
 
 const USER_OWNED_PLAYBOOK_MARKER = "user-owned";
 
+/** The two old installed names whose next install supplies and retains their replacements. */
+const RENAMED_WRITING_PLAYBOOKS: Readonly<Record<string, string>> = {
+  [`${INSTALLED_SHARED_ROOT}/playbooks/writing-style.md`]: `${INSTALLED_SHARED_ROOT}/playbooks/writing-human-facing-prose.md`,
+  [`${INSTALLED_SHARED_ROOT}/playbooks/writing-for-agents.md`]: `${INSTALLED_SHARED_ROOT}/playbooks/writing-agent-facing-instructions.md`,
+};
+
 /**
  * Read a non-empty skill name from YAML frontmatter.
  * Use when proving the command users invoke matches the canonical skill directory.
@@ -385,10 +391,13 @@ function checkSharedFileSets(
     if (declaredInstalled.has(installedPath)) continue;
     // Consumer-authored playbooks are valid local extensions, not package leftovers.
     if (isUserOwnedConsumerPlaybook(fs, installedPath)) continue;
+    const renamedTo = RENAMED_WRITING_PLAYBOOKS[installedPath];
     findings.push({
       kind: "orphan",
       path: installedPath,
-      message: `stale installed shared artifact ${installedPath}; no canonical workflow source is mapped in check-artifact-integrity.ts SHARED_ARTIFACT_MIRRORS`,
+      message: renamedTo
+        ? `writing playbook ${installedPath} was renamed to ${renamedTo}; the next install removes regular system-owned copies after writing their replacements; linked copies are kept`
+        : `stale installed shared artifact ${installedPath}; no canonical workflow source is mapped in check-artifact-integrity.ts SHARED_ARTIFACT_MIRRORS`,
     });
   }
   return findings;

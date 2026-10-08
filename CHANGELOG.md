@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Writing playbook cleanup** - Upgrades remove renamed copies after replacement, keep user-owned copies and list stale instruction references.
 - **Verified install summaries** - Name replaced local content and hook changes, preserve disabled choices, and pin the remaining check commands.
 - **Quality rerun spread** - History, diff and the dashboard show sample size, median and range, with controlled and observational groups labelled and kept apart by assessment scope.
 - **Ranked repeat problems in `stats`** - Text and Markdown show ten unguarded candidates across lessons and footguns, ordered by incident severity and frequency with remainder counts. JSON keeps every candidate, its rank, and any verified enforcement link; existing checks stay report-only.

@@ -3821,15 +3821,85 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-agent-facing-instru
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-sentence-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-structure-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-human-facing-prose.md" ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md"
-# Retired playbooks may contain local guidance that users still need while adopting the replacement documents.
-for retired_writing_playbook in \
-  ".goat-flow/skill-docs/playbooks/writing-for-agents.md" \
-  ".goat-flow/skill-docs/playbooks/writing-style.md"; do
-  # An upgrade may find a locally edited copy; leave review and removal to the project owner.
-  if [[ -f "$retired_writing_playbook" ]]; then
-    echo "  - retained retired $retired_writing_playbook; review local content before removing it"
+# Retire only these renamed copies after their replacement copies have been written.
+for writing_playbook_rename in \
+  "writing-for-agents.md:writing-agent-facing-instructions.md" \
+  "writing-style.md:writing-human-facing-prose.md"; do
+  IFS=: read -r old_writing_playbook replacement_writing_playbook <<< "$writing_playbook_rename"
+  retired_writing_playbook=".goat-flow/skill-docs/playbooks/$old_writing_playbook"
+  replacement_writing_playbook=".goat-flow/skill-docs/playbooks/$replacement_writing_playbook"
+  # A linked copy is outside this regular-file cleanup; never read its destination to infer ownership.
+  if [[ -L "$retired_writing_playbook" ]]; then
+    echo "  · $retired_writing_playbook (kept symlink; use $replacement_writing_playbook)"
+    continue
   fi
+  [[ -f "$retired_writing_playbook" ]] || continue
+  if [[ ! -f "$replacement_writing_playbook" ]]; then
+    echo "ERROR: replacement playbook is missing: $replacement_writing_playbook; old copy was preserved" >&2
+    exit 1
+  fi
+  # Match audit's YAML-frontmatter ownership exception, including quoted values and CRLF files.
+  writing_playbook_ownership="$(node - "$GOAT_FLOW_ROOT" "$retired_writing_playbook" <<'NODE'
+const fs = require("node:fs");
+const [frameworkRoot, oldPath] = process.argv.slice(2);
+const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
+const markdown = fs.readFileSync(oldPath, "utf8");
+const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u);
+let metadata;
+try {
+  metadata = match ? yaml.load(match[1]) : null;
+} catch {
+  // Malformed metadata cannot declare the ownership exception, matching artifact audit.
+  metadata = null;
+}
+const userOwned = metadata !== null && typeof metadata === "object" &&
+  !Array.isArray(metadata) && metadata["goat-flow-ownership"] === "user-owned";
+console.log(userOwned ? "user-owned" : "system-owned");
+NODE
+)"
+  if [[ "$writing_playbook_ownership" == "user-owned" ]]; then
+    echo "  · $retired_writing_playbook (kept user-owned playbook; use $replacement_writing_playbook)"
+    continue
+  fi
+  rm -f -- "$retired_writing_playbook"
+  REMOVED=$((REMOVED + 1))
+  echo "  ✗ $retired_writing_playbook (removed renamed playbook; use $replacement_writing_playbook)"
 done
+
+# Report the manifest's instruction-file references without changing project-owned instructions.
+node - "$MANIFEST_PATH" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const renames = {
+  "writing-for-agents.md": "writing-agent-facing-instructions.md",
+  "writing-style.md": "writing-human-facing-prose.md",
+};
+const instructionPaths = [...new Set(Object.values(manifest.agents)
+  .map((agent) => agent.instruction_file))];
+let printedHeading = false;
+for (const instructionPath of instructionPaths) {
+  // Missing or linked instruction paths are outside this read-only project reference scan.
+  const parts = instructionPath.split("/");
+  const safe = parts.every((_, index) => {
+    const info = fs.lstatSync(path.join(...parts.slice(0, index + 1)), { throwIfNoEntry: false });
+    return info && (index === parts.length - 1 ? info.isFile() : info.isDirectory());
+  });
+  if (!safe) continue;
+  const lines = fs.readFileSync(instructionPath, "utf8").split(/\r?\n/u);
+  lines.forEach((line, index) => {
+    for (const [oldName, newName] of Object.entries(renames)) {
+      if (!line.includes(oldName)) continue;
+      if (!printedHeading) {
+        console.log("Update these instruction references to renamed writing playbooks:");
+        printedHeading = true;
+      }
+      console.log(`  ${instructionPath}:${index + 1}: ${line}`);
+      console.log(`    ${oldName} → .goat-flow/skill-docs/playbooks/${newName}`);
+    }
+  });
+}
+NODE
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-docs/skill-quality-testing/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md"

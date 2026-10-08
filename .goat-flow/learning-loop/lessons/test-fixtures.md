@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-09
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -69,13 +69,18 @@ last_reviewed: 2026-09-30
 
 ## Lesson: Migration-output fixtures must match the collision branch
 
-**Status:** active | **Created:** 2026-06-07
+**Status:** active | **Created:** 2026-06-07 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
+**Decision changed:** Read the migration branch and summary before asserting output.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-09
 
-**Prevention:** Align migration assertions with the branch under test: clean-destination fixtures assert whole-directory moves; collision fixtures assert per-entry moves and `target exists, left old entry in place`. Evidence anchor: `test/integration/setup-install-migrations.test.ts` (search: `migrates legacy skill docs without overwriting target collisions`).
+**Prevention:** Match moves to the branch and counters to helper output. Preview through the CLI; qualify cleanup advice by file type.
 
-**What happened:** The M04 legacy skill-doc test expected a whole-directory move message, but the fixture deliberately pre-created `.goat-flow/skill-docs/playbooks/`, so the installer correctly used its per-entry no-overwrite branch and printed file-level moves, failing the first `test/integration/setup-install.test.ts` run.
+**What happened:** M04 pre-created the destination but expected a directory move. Correct per-entry moves and `target exists, left old entry in place` failed the test. Anchor: `test/integration/setup-install-migrations.test.ts` (search: `migrates legacy skill docs without overwriting target collisions`).
 
-**Root cause:** The clean-destination output shape was asserted while the fixture exercised the destination-exists branch.
+**Recurrence 2026-10-09:** M14 expected `2 removed`; the helper printed `2 stale removed` after removal/history passed. Shell rejected CLI-only `--dry-run`. Audit also promised removal for symlinks; advice now names regular copies and says links stay. Anchors: `test/integration/setup-install-renamed-playbooks.test.ts` (search: `HELPER DONE:`), `src/cli/audit/check-artifact-integrity.ts` (search: `RENAMED_WRITING_PLAYBOOKS`).
 
 ---
 
@@ -220,16 +225,17 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 
 ## Lesson: Current-version fixtures must derive from package metadata
 
-**Status:** active | **Created:** 2026-07-16
-**Decision changed:** Healthy current-version fixtures interpolate the package-derived audit version instead of pinning a release literal.
+**Status:** active | **Created:** 2026-07-16 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
+**Decision changed:** Derive current fixture versions from package metadata.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 1 | **Latest occurrence:** 2026-07-16
+**Incident count:** 2 | **Latest occurrence:** 2026-10-09
 
-**Prevention:** Fixtures that mean "current" import package-derived version metadata; literals are reserved for tests that model old or mismatched installs. After a release bump, search the test tree for the prior version before running the full suite. Evidence anchors: `test/unit/skill-doctor.test.ts` (search: `skillMarkdown`), `src/cli/constants.ts` (search: `export const AUDIT_VERSION`).
+**Prevention:** Import current versions; reserve literals for historical or mismatched installs. Anchors: `test/unit/skill-doctor.test.ts` (search: `skillMarkdown`), `src/cli/constants.ts` (search: `export const AUDIT_VERSION`).
 
-**What happened:** After the bump from 1.13.1 to 1.14.0 the full suite failed two skill-doctor cases whose shared healthy fixture still emitted `goat-flow-skill-version 1.13.1`, so the runtime correctly classified it as warn rather than pass.
+**What happened:** After the 1.14.0 bump, two skill-doctor cases failed because the healthy fixture still emitted 1.13.1 and correctly received warn.
 
-**Root cause:** The fixture represented the current installed version but hard-coded the previous release, and the version sweep covered runtime and release surfaces without this semantic fixture.
+**Recurrence 2026-10-09:** Seven M14 interruption fixtures omitted `version`, so M12 rejected them before the injected replacements. Added `AUDIT_VERSION` without changing protection assertions. Anchor: `test/integration/setup-install-migrations.test.ts` (search: `retains Git protection when the split stops`).
 
 ---
