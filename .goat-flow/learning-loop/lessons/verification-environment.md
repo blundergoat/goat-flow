@@ -1,6 +1,6 @@
 ---
 category: verification-environment
-last_reviewed: 2026-09-05
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** Whether the build, tree, or sandbox that produced the evidence is the one the claim is about - a published package standing in for local source, a mutation sandbox that is not the checkout, and suite results taken while another session writes the tree. What counts as proof in general is [verification.md](verification.md); what a test must establish is [verification-testing.md](verification-testing.md).
@@ -35,7 +35,7 @@ last_reviewed: 2026-09-05
 **Severity:** CORRECTNESS
 **Decision changed:** In a checkout another session or verification command is writing to, prove attribution from the change set and the failure message before reporting a suite result as yours or as pre-existing.
 **Trigger phase:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-08-27
+**Incident count:** 5 | **Latest occurrence:** 2026-10-08
 
 **Prevention:** Keep a written list of the files you actually edited; that list, not `git diff`, is your change set. Prove a failure is not yours by reading its assertion and showing it names a file outside that list, because a filename overlap proves nothing either way. Run the focused contracts covering your change as the gate you claim, and report any full-suite number separately with its attribution stated. Treat build commands that replace shared outputs such as `dist` as writers, and run package or archive tests only after those builds finish. Never `git stash` to isolate, because a second session can commit between the stash and the pop. Write contention on the same file is a different failure, covered by `.goat-flow/learning-loop/lessons/verification-environment.md` (search: `Parallel sessions need concurrency-safe file patterns`).
 
@@ -45,6 +45,8 @@ last_reviewed: 2026-09-05
 
 **Recurrence 2026-08-23:** M17's no-schema gate used broad `src/cli` and `test` status as an ownership signal; it ran clean before M17 wrote its decision, then a concurrent playbook batch made twelve paths appear dirty although M17 had not edited them. Proof was narrowed to the exact M17-owned paths plus an all-diff search for checkpoint-schema vocabulary. `src/cli/audit/skill-docs-contract.ts` (search: `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md`), `workflow/skills/goat-plan/SKILL.md` (search: `mid-proof before switching modules`).
 **Recurrence 2026-08-27:** Running `npm run build` and the packaged-hook canary concurrently let the build delete and recreate `dist` while the test archived the package, so the archive exposed the declared CLI path without its file and the combined run failed 91/92. The isolated canary after the build completed passed 2/2, proving verification-command interference rather than a package regression. `package.json` (search: `rmSync('dist'`), `test/integration/packaged-hook-install.test.ts` (search: `existsSync(declaredCliEntryPath)`).
+
+**Recurrence 2026-10-08:** I edited `workflow/install-goat-flow.sh` while a focused installer suite was still running. The local-settings repeat in `test/integration/setup-install-permission-convergence.test.ts` (search: `converges historical permissions once`) then exited with a Bash syntax error, although the final script passed `bash -n`. That mixed-revision run cannot verify the final source. Finish source edits before launching the suite and keep every executed script frozen until it exits; this applies to one session overlapping its own work as well as concurrent agents.
 
 ---
 

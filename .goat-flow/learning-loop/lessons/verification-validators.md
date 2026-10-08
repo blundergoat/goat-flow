@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -208,8 +208,15 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 **Decision changed:** Test fresh installation, an incomplete permission upgrade, and repeat installation before accepting a permission expansion.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-08
 
 **Prevention:** Return no replacement for an already complete permission pair so its saved order stays byte-stable. A semantic-equivalence assertion does not replace the installer's existing repeated-install byte check.
+
+**Recurrence 2026-10-08:** Historical `v1.13.1` settings needed two installs to settle because tool normalization ran after deny classification. The first install recreated broad environment denies; the second removed them. The earlier fixture also accepted automatic allow/ask rewrites, contrary to the saved user-choice contract. Normalize only denies before classifying them, compare the first installed bytes with subsequent installs, and check preview against the same preservation controls. `test/integration/setup-install-permission-convergence.test.ts` (search: `converges historical permissions once`) retains the release fixture and labels added test inputs; `workflow/install-goat-flow.sh` (search: `const normalizeRule`) owns the ordering.
+
+The amended regression also passed only `deny` to the three-array `stalePermissionRules` helper and failed before checking the result. Supply empty allow/ask arrays when testing only denies; narrowing the assertion does not change the helper's input contract. The exact-output check in `test/integration/setup-install-codex-config-migration.test.ts` (search: `migrates invalid filesystem permission globs in place`) also caught an omitted removal: the rebuilt profile drops an explicit write grant, so the printed delta must name that grant as well as changed denies.
+
+The follow-up review reproduced false removal messages for permission-shaped TOML comments because I scanned raw lines as active rules. Ignore comments outside quoted values before classifying deltas, and preserve quoted hash characters in path patterns. The same Codex regression covers both controls. The historical Claude permissions are now pinned in `test/integration/setup-install-permission-convergence.test.ts` (search: `const historicalPermissions`) so missing release tags cannot silently skip the convergence proof.
 
 **What happened:** The paired home/project credential migration inserted each project rule beside its home rule even when both were already present. The full release gate caught a second Claude install changing the template's rule order. `workflow/install-goat-flow.sh` (search: `credentialPair.every`) now preserves complete pairs; `test/integration/setup-install-write-set.test.ts` (search: `keeps disabled hooks installed and inert`) reproduces the required byte stability, and `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`) retains the incomplete-upgrade control.
 

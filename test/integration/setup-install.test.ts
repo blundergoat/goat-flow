@@ -985,7 +985,7 @@ describe("setup --apply permission upgrade migrations", () => {
     assert.match(result.stdout, /stale or superseded permission rules/);
     assert.match(
       result.stderr,
-      /retired Claude deny rule removed: Read\(\*\*\/secrets\/\*\*\)/,
+      /retired Claude deny rule removed: "Read\(\*\*\/secrets\/\*\*\)"/,
     );
 
     const { deny, allow } = readClaudePermissionGroups(root);
@@ -1079,7 +1079,7 @@ describe("setup --apply permission upgrade migrations", () => {
 
     const { deny, allow, ask } = readClaudePermissionGroups(root);
     assert.deepEqual(
-      stalePermissionRules({ deny, allow, ask }),
+      stalePermissionRules({ deny, allow: [], ask: [] }),
       [],
       "retired and unmatched permission forms should be gone",
     );
@@ -1107,13 +1107,9 @@ describe("setup --apply permission upgrade migrations", () => {
       deny.includes("Edit(**/.env.*.local)"),
       "local-variant edit deny added",
     );
-    // Allow/ask arrays repaired without env expansion.
-    assert.ok(allow.includes("Edit(docs/**)"), "allow Write rewritten to Edit");
-    assert.ok(
-      allow.includes("Read(**/.env.example)"),
-      "sample env allow preserved",
-    );
-    assert.ok(ask.includes("Read(**/dist/**)"), "ask Glob rewritten to Read");
+    // Saved allow/ask spellings remain inert until the project owner deliberately changes them.
+    assert.deepEqual(allow, ["Read(**/.env.example)", "Write(docs/**)"]);
+    assert.deepEqual(ask, ["Glob(**/dist/**)"]);
     // No collateral damage to valid user-added unmanaged tool denies.
     assert.ok(
       deny.includes("WebFetch(**/internal/**)"),

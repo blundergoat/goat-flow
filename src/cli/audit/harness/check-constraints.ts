@@ -659,7 +659,7 @@ const settingsRulesMatched: HarnessCheck = {
         `Claude Code accepts but does not consult the ${staleForms} permission rule ${formLabel} reported here; treat them as inert configuration, not enforcement.`,
       ],
       [
-        "Review the reported inert rules with the project owner. They MAY remain as defense-in-depth markers or be removed deliberately; goat-flow does not rewrite them automatically.",
+        "Review the reported inert rules with the project owner. An approved install normalizes or removes stale deny rules and prints the changes, but preserves allow and ask arrays verbatim. Review those separately: activating an inert allow or ask rule changes its meaning.",
       ],
       { denyMatrix },
     );

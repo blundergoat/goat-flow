@@ -665,15 +665,12 @@ function claudePermissionsNeedMigration(settingsText: string): boolean {
     Array.isArray(permissions)
   )
     return false;
-  const permissionRecord = permissions as Record<string, unknown>;
-  return ["deny", "allow", "ask"].some((arrayName) => {
-    const rules = permissionRecord[arrayName];
-    // A missing or malformed rule list has no saved permission entries to preview.
-    if (!Array.isArray(rules)) return false;
-    return rules.some((rule) =>
-      installRewritesClaudeRule(arrayName, rule, rules),
-    );
-  });
+  const rules = (permissions as Record<string, unknown>).deny;
+  // Install preserves allow/ask spellings, including inert rules, until the owner reviews them.
+  return (
+    Array.isArray(rules) &&
+    rules.some((rule) => installRewritesClaudeRule(rule, rules))
+  );
 }
 
 /** Check whether the preview needs a missing home or project deny for a credential store the developer already protects. */
@@ -699,26 +696,21 @@ function isIncompleteClaudeCredentialPair(
 /**
  * Decide whether install would change one Claude permission rule during an upgrade.
  *
- * Unmatched tool forms are repaired in every list; only deny rules are retired, expanded, or paired across credential locations.
- * An allow or ask rule with the same text remains the user's own choice.
- *
- * @param arrayName - permission list the rule came from: `deny`, `allow`, or `ask`
+ * Only deny rules are normalized, retired, expanded, or paired across credential locations.
+ * The caller excludes allow/ask choices from this migration.
  *
  * @param rule - one raw list entry; a non-string entry is left untouched and reports false
  * @param savedRules - entries in the same saved list; a missing partner requires migration, while a complete pair stays unchanged
  * @returns true when the standalone installer would remove or rewrite this entry
  */
 function installRewritesClaudeRule(
-  arrayName: string,
   rule: unknown,
   savedRules: readonly unknown[],
 ): boolean {
   // A non-string permission entry cannot identify a tool rule that setup rewrites.
   if (typeof rule !== "string") return false;
   // These retired tool spellings need repair before Claude can enforce the user's file rules.
-  if (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(/u.test(rule)) return true;
-  // Only deny lists receive environment expansion and retired-path cleanup; allow and ask choices retain their meaning.
-  if (arrayName !== "deny") return false;
+  if (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(.*\)$/u.test(rule)) return true;
   return (
     rule === "Read(**/.env*)" ||
     rule === "Edit(**/.env*)" ||

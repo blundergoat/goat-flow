@@ -189,7 +189,9 @@ describe("codex config migration", () => {
         "glob_scan_max_depth = 3",
         "",
         '[permissions.goat-flow.filesystem.":workspace_roots"]',
-        '"." = "write"',
+        '# "comment-only" = "read"',
+        '"." = "write" # "comment-inline" = "write"',
+        '"docs/#shared/**" = "read"',
         '"**/*.key" = "none"',
         '"*.pem" = "none"',
         '"secrets/**" = "none"',
@@ -207,6 +209,7 @@ describe("codex config migration", () => {
     assert.match(config, /\[permissions\.goat-flow\]\s*\ndescription = /);
     assert.match(config, /extends = ":workspace"/);
     assert.doesNotMatch(config, /"none"/);
+    assert.doesNotMatch(config, /"\." = "write"/u);
     assert.match(
       config,
       /\[permissions\.goat-flow\.filesystem\.":workspace_roots"\]/,
@@ -218,6 +221,39 @@ describe("codex config migration", () => {
     assert.match(config, /model = "gpt-5"/);
     assert.match(config, /\[other\]\s*\npreserved = "yes"/);
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
+    const canonicalPatterns = [
+      ...readFileSync(
+        join(PROJECT_ROOT, "workflow/hooks/agent-config/codex.toml"),
+        "utf8",
+      ).matchAll(/^"([^"]+)" = "deny"$/gmu),
+    ].map((match) => match[1]);
+    const additions = canonicalPatterns.filter(
+      (pattern) => pattern !== "**/*.key",
+    );
+    assert.deepEqual(
+      result.stderr
+        .split(/\r?\n/u)
+        .filter((line) => /Codex .* (?:added|removed|rewritten):/u.test(line)),
+      [
+        '  - retired Codex deny pattern removed: "secrets/**"',
+        '  - Codex filesystem access rule removed: "." = "write"',
+        '  - Codex filesystem access rule removed: "docs/#shared/**" = "read"',
+        ...additions.map(
+          (pattern) => `  + Codex deny pattern added: "${pattern}"`,
+        ),
+        '  ~ Codex deny mode rewritten: "**/*.key": none -> deny',
+        '  ~ Codex deny mode rewritten: "*.pem": none -> deny',
+        '  + Codex permission inheritance added: extends = ":workspace"',
+      ],
+    );
+    assert.doesNotMatch(result.stderr, /preserved =|model =/u);
+    const second = runInstaller(root, "--agent", "codex");
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    assert.equal(readFileSync(join(codexDir, "config.toml"), "utf8"), config);
+    assert.doesNotMatch(
+      second.stderr,
+      /Codex .* (?:added|removed|rewritten):/u,
+    );
   });
 
   // Fixture purpose: writes a legacy project-root anchor to cover workspace-root migration.
@@ -248,6 +284,10 @@ describe("codex config migration", () => {
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
     assert.doesNotMatch(config, /:project_roots/);
+    assert.match(
+      result.stderr,
+      /Codex permission anchor rewritten: :project_roots -> :workspace_roots/u,
+    );
     assert.match(config, /extends = ":workspace"/);
     assert.doesNotMatch(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
     assert.match(config, /"\*\*\/\.ssh\/\*\*"\s*=\s*"deny"/);
@@ -340,7 +380,7 @@ describe("codex config migration", () => {
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
     assert.match(
       result.stderr,
-      /retired Codex deny pattern removed: \*\*\/secrets\/\*\*/,
+      /retired Codex deny pattern removed: "\*\*\/secrets\/\*\*"/,
     );
   });
 
@@ -353,6 +393,9 @@ describe("codex config migration", () => {
       join(codexDir, "config.toml"),
       [
         'default_permissions = "custom"',
+        "",
+        "[permissions.custom]",
+        'extends = "custom-base"',
         "",
         "[permissions.custom.filesystem]",
         "glob_scan_max_depth = 3",
@@ -370,6 +413,10 @@ describe("codex config migration", () => {
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
     assert.match(config, /default_permissions = "custom"/);
+    assert.match(
+      result.stderr,
+      /Codex permission inheritance rewritten: extends = ":workspace"/u,
+    );
     assert.match(config, /extends = ":workspace"/);
     assert.match(config, /\[permissions\.custom\.filesystem\]/);
     assert.doesNotMatch(config, /\[permissions\.goat-flow\.filesystem\]/);

@@ -104,8 +104,12 @@ describe("settings-rules-matched harness check", () => {
     const result = runWriteOnlyCheck();
     const howToFix = result.howToFix?.join("\n") ?? "";
 
-    assert.match(howToFix, /MAY remain as defense-in-depth markers/u);
-    assert.match(howToFix, /removed deliberately/u);
+    assert.match(howToFix, /install normalizes or removes stale deny rules/u);
+    assert.match(howToFix, /preserves allow and ask arrays verbatim/u);
+    assert.match(
+      howToFix,
+      /activating an inert allow or ask rule changes its meaning/u,
+    );
     assert.doesNotMatch(howToFix, /Re-run goat-flow setup/u);
     assert.doesNotMatch(howToFix, /rewrite Write\/NotebookEdit\/Glob rules/u);
   });

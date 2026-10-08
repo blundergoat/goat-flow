@@ -2853,7 +2853,7 @@ const inlineEntryPattern = new RegExp(
   "gu",
 );
 const filesystemAccessEntryPattern = new RegExp(
-  String.raw`${tomlStringPattern}\s*=\s*(?:"(none|deny)"|'(none|deny)')`,
+  String.raw`${tomlStringPattern}\s*=\s*(?:"(none|deny|read|write)"|'(none|deny|read|write)')`,
   "gu",
 );
 const legacyAccessPattern = new RegExp(
@@ -3021,12 +3021,16 @@ let hasInvalidEntry = false;
 let usesLegacyAccess = false;
 let usesLegacyAnchor = false;
 let profileExtendsWorkspace = false;
+let hasProfileInheritance = false;
 const additionalDenyPatterns = new Set();
 const activeDenyPatterns = new Set();
+const legacyDenyPatterns = new Set();
+const removedAccessRules = new Set();
 // Check active profile metadata before deciding whether workspace inheritance needs repair.
 for (const region of profileRegions) {
   // Inspect each metadata line without treating unrelated TOML tables as profile choices.
   for (let j = region.start; j < region.end; j += 1) {
+    if (/^\s*extends\s*=/u.test(lines[j])) hasProfileInheritance = true;
     // Workspace inheritance already supplies the base editing permissions for this profile.
     if (/^\s*extends\s*=\s*":workspace"\s*(?:#.*)?$/u.test(lines[j])) {
       profileExtendsWorkspace = true;
@@ -3037,20 +3041,28 @@ for (const region of profileRegions) {
 for (const region of regions) {
   // Read each active permission line before rebuilding the selected profile.
   for (let j = region.start; j < region.end; j += 1) {
-    const line = lines[j];
+    // Ignore comments while keeping hash characters inside quoted path patterns.
+    const line = lines[j].replace(
+      /"(?:\\.|[^"\\])*"|'[^']*'|#.*$/gu,
+      (token) => token.startsWith("#") ? "" : token,
+    );
     // The retired project-root anchor needs the current workspace-root spelling.
     if (legacyProjectRootsPattern.test(line)) usesLegacyAnchor = true;
     // The retired none access value needs the current deny spelling.
     if (legacyAccessPattern.test(line) || legacyInlineAccessPattern.test(line)) {
       usesLegacyAccess = true;
     }
-    // Collect each explicit deny entry so the refresh can retain the user's additional restrictions.
+    // Retain additional denies and record explicit access grants that the rebuilt profile removes.
     for (const entry of line.matchAll(filesystemAccessEntryPattern)) {
       const pattern = tomlKeyFromMatch(entry);
       const mode = tomlModeFromMatch(entry);
+      if (mode === "read" || mode === "write") {
+        removedAccessRules.add(`${JSON.stringify(pattern)} = ${JSON.stringify(mode)}`);
+      }
       // A named none or deny entry contributes to the active restriction list.
       if ((mode === "none" || mode === "deny") && pattern) {
         activeDenyPatterns.add(pattern);
+        if (mode === "none") legacyDenyPatterns.add(pattern);
       }
       // A noncanonical, nonretired deny pattern is retained as the user's additional restriction.
       if (
@@ -3107,11 +3119,6 @@ if (
   console.log("unchanged");
   process.exit(0);
 }
-// Name each dropped pattern so a user who added the same text by hand can put it back deliberately.
-for (const pattern of retiredDenyPatterns) {
-  console.error(`  - retired Codex deny pattern removed: ${pattern}`);
-}
-
 const canonicalBlock = [
   `[permissions.${activeProfile}]`,
   'description = "goat-flow workspace editing with secret-path read denies."',
@@ -3199,6 +3206,30 @@ if (trailingStart < after.length) {
 }
 
 fs.writeFileSync(path, rebuilt.join(eol) + (hadFinalNewline ? eol : ""));
+// Report permission deltas only; unrelated values and profile descriptions are never echoed.
+for (const pattern of retiredDenyPatterns) {
+  console.error(`  - retired Codex deny pattern removed: ${JSON.stringify(pattern)}`);
+}
+for (const rule of removedAccessRules) {
+  console.error(`  - Codex filesystem access rule removed: ${rule}`);
+}
+for (const pattern of canonicalDenyPatterns) {
+  if (!activeDenyPatterns.has(pattern)) {
+    console.error(`  + Codex deny pattern added: ${JSON.stringify(pattern)}`);
+  }
+}
+for (const pattern of legacyDenyPatterns) {
+  if (!oldGeneratedPatterns.has(pattern)) {
+    console.error(`  ~ Codex deny mode rewritten: ${JSON.stringify(pattern)}: none -> deny`);
+  }
+}
+if (usesLegacyAnchor) {
+  console.error("  ~ Codex permission anchor rewritten: :project_roots -> :workspace_roots");
+}
+if (!profileExtendsWorkspace) {
+  const change = hasProfileInheritance ? "~ Codex permission inheritance rewritten" : "+ Codex permission inheritance added";
+  console.error(`  ${change}: extends = ":workspace"`);
+}
 console.log("migrated");
 NODE
   )"; then
@@ -3209,7 +3240,7 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
-# Repair existing Claude permission lists during refresh so launch warnings stop and sample environment files remain usable.
+# Repair existing Claude denies during refresh while preserving saved allow/ask choices.
 #
 # Retire removed tools, rename unsupported file-rule tools and expand broad environment denies while retaining valid user rules in order.
 # Report migrated or unchanged; a current settings file keeps its original bytes and formatting.
@@ -3331,66 +3362,64 @@ if (!perms || typeof perms !== "object") {
 const parseRule = (entry) =>
   typeof entry === "string" ? entry.match(/^([A-Za-z]+)\((.*)\)$/u) : null;
 
+// Normalize tool spelling before classifying a deny, so its new form is fully migrated in this install.
+const normalizeRule = (entry) => {
+  const rule = parseRule(entry);
+  return rule && UNMATCHED_RULE_REWRITES.has(rule[1])
+    ? `${UNMATCHED_RULE_REWRITES.get(rule[1])}(${rule[2]})`
+    : entry;
+};
+
 // Replace a stale permission rule; an empty list retires it, while null keeps the user's existing rule.
-// Only deny rules receive retirement, environment expansion and paired store protection; allow or ask choices remain as saved.
-const replacementsFor = (entry, isDenyList, savedRules) => {
-  // A retired deny rule has no replacement; the user's allow and ask rules do not enter this retirement.
-  if (isDenyList && RETIRED_DENY_RULES.has(entry)) return [];
+// Only normalized denies enter this function; allow and ask arrays are never transformed.
+const replacementsFor = (entry, savedRules) => {
+  if (RETIRED_DENY_RULES.has(entry)) return [];
   const credentialPair = credentialStoreRulePairs.get(entry);
   // Complete pairs already protect both locations; preserve their positions so reinstalling stays byte-stable.
-  if (isDenyList && credentialPair && credentialPair.every((rule) => savedRules.has(rule))) return null;
+  if (credentialPair && credentialPair.every((rule) => savedRules.has(rule))) return null;
   // Legacy Docker and Kubernetes file rules receive the current store pair without losing project coverage.
-  if (isDenyList && HOME_ANCHOR_REWRITES.has(entry)) {
+  if (HOME_ANCHOR_REWRITES.has(entry)) {
     return credentialStoreRulePairs.get(HOME_ANCHOR_REWRITES.get(entry));
   }
   // A home-only upgrade or a project-only rule receives its missing partner.
-  if (isDenyList && credentialStoreRulePairs.has(entry)) return credentialStoreRulePairs.get(entry);
+  if (credentialStoreRulePairs.has(entry)) return credentialStoreRulePairs.get(entry);
   // A broad retired environment deny expands into the current explicit sensitive-file rules.
-  if (isDenyList && ENV_DENY_EXPANSIONS.has(entry)) {
+  if (ENV_DENY_EXPANSIONS.has(entry)) {
     return ENV_DENY_EXPANSIONS.get(entry);
-  }
-  const rule = parseRule(entry);
-  // A renamed permission tool gets the current rule spelling while retaining the user's path pattern.
-  if (rule && UNMATCHED_RULE_REWRITES.has(rule[1])) {
-    return [`${UNMATCHED_RULE_REWRITES.get(rule[1])}(${rule[2]})`];
   }
   return null;
 };
 
 // Repair stale permission rules and avoid duplicate replacements while retaining untouched user rules in order.
 // Return the repaired array, or null when the saved list needs no change.
-const repairRules = (rules, isDenyList) => {
+const repairRules = (rules) => {
   // A missing or malformed rule list returns null so setup leaves that setting untouched.
   if (!Array.isArray(rules)) return null;
   const survivors = rules.filter((entry) => {
     const rule = parseRule(entry);
     return !(rule && REMOVED_CLAUDE_TOOLS.has(rule[1]));
   });
-  const savedRules = new Set(survivors);
+  const normalized = survivors.map(normalizeRule);
+  const savedRules = new Set(normalized);
+  const replacements = normalized.map((entry, index) =>
+    replacementsFor(entry, savedRules) ?? (entry === survivors[index] ? null : [entry]),
+  );
   const present = new Set(
-    survivors.filter((entry) => replacementsFor(entry, isDenyList, savedRules) === null),
+    survivors.filter((entry, index) => replacements[index] === null),
   );
   const kept = [];
   // Repair surviving rules in order so unrelated user permissions keep their positions.
-  for (const entry of survivors) {
-    const replacements = replacementsFor(entry, isDenyList, savedRules);
+  for (const [index, entry] of survivors.entries()) {
+    const replacementRules = replacements[index];
     // A rule needing no replacement is retained exactly as the user saved it.
-    if (replacements === null) {
+    if (replacementRules === null) {
       kept.push(entry);
       continue;
     }
-    // A retired rule has no replacement; name it so a user who typed the same rule can restore it on purpose.
-    if (replacements.length === 0) {
-      console.error(`  - retired Claude deny rule removed: ${entry}`);
-    }
     // Append each replacement once without duplicating a restriction already present.
-    for (const replacement of replacements) {
+    for (const replacement of replacementRules) {
       // An existing equivalent rule already expresses this permission choice.
       if (present.has(replacement)) continue;
-      // New credential coverage is visible in the upgrade output so the developer can review the added restriction.
-      if (isDenyList && credentialStoreRulePairs.has(replacement) && !rules.includes(replacement)) {
-        console.error(`  + paired Claude credential deny rule added: ${replacement}`);
-      }
       present.add(replacement);
       kept.push(replacement);
     }
@@ -3401,32 +3430,33 @@ const repairRules = (rules, isDenyList) => {
   return changed ? kept : null;
 };
 
-let migrated = false;
-// Only denies receive environment expansion and paired store protection; applying these to allows would revoke the user's .env.example read choice.
-for (const [arrayName, isDenyList] of [
-  ["deny", true],
-  ["allow", false],
-  ["ask", false],
-]) {
-  const repaired = repairRules(perms[arrayName], isDenyList);
-  // Replace a permission array only when its repaired rules differ from the user's saved array.
-  if (repaired) {
-    perms[arrayName] = repaired;
-    migrated = true;
-  }
-}
-
-// If every permission list is current, preserve the user's settings file unchanged.
-if (!migrated) {
+const previousRules = perms.deny;
+const repaired = repairRules(previousRules);
+// A current deny list leaves the entire settings file byte-identical, including inert allow/ask spellings.
+if (!repaired) {
   console.log("unchanged");
   process.exit(0);
 }
+perms.deny = repaired;
 const eol = raw.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(raw);
 let out = JSON.stringify(settings, null, 2);
 // Restore Windows newlines when that was the user's existing settings style.
 if (eol === "\r\n") out = out.replace(/\n/gu, "\r\n");
 fs.writeFileSync(path, out + (hadFinalNewline ? eol : ""));
+// Report final set differences, not intermediate expansions or replacements already present.
+const previousSet = new Set(previousRules);
+const repairedSet = new Set(repaired);
+for (const entry of previousSet) {
+  if (typeof entry !== "string" || repairedSet.has(entry)) continue;
+  const label = RETIRED_DENY_RULES.has(normalizeRule(entry)) ? "retired Claude" : "Claude";
+  console.error(`  - ${label} deny rule removed: ${JSON.stringify(entry)}`);
+}
+for (const entry of repairedSet) {
+  if (typeof entry !== "string" || previousSet.has(entry)) continue;
+  const label = credentialStoreRulePairs.has(entry) ? "paired Claude credential" : "Claude";
+  console.error(`  + ${label} deny rule added: ${JSON.stringify(entry)}`);
+}
 console.log("migrated");
 NODE
   )"; then
