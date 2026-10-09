@@ -1,6 +1,6 @@
 ---
 category: skill-guidance
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-09
 ---
 
 **Scope:** Editing shipped skill and playbook guidance: behavioural wording, authority alignment, contract caps, and load-budget signals. Skill candidacy and runtime authoring traps live in [skill-authoring.md](skill-authoring.md); mirror sync lives in [skills.md](skills.md).
@@ -29,7 +29,7 @@ last_reviewed: 2026-09-30
 **Decision changed:** Measure the body budget and inventory phrase-pinning contracts, vocabulary consumers, and reconciliation owners before adding or compressing shipped skill guidance.
 **Trigger phase:** READ
 **Caught at:** ACT
-**Incident count:** 11 | **Latest occurrence:** 2026-10-08
+**Incident count:** 12 | **Latest occurrence:** 2026-10-09
 
 **Prevention:** Before editing a playbook or skill, measure its body word count, read its actual cap from `test/contract/skill-hardening-contracts.test.ts` rather than assuming the ADR-023 tier, and grep the contract tests for its filename to list the pinned phrases:
 
@@ -57,6 +57,7 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 - **Recurrence 2026-08-24:** a 99-rule inventory trimmed duplicates from `workflow/skills/playbooks/writing-human-facing-prose.md` (1996 to 1978) and `workflow/skills/playbooks/writing-sentence-diagnostics.md` (1128 to 1114) with rules, caps, contracts, and mirrors unchanged; this entry's own record then reached 41,271 bytes and tripped `stale-ref` on three shorthand paths until compacted with full paths, per `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
 - **Recurrence 2026-09-07:** the goat-review root rose from 2,374 to 2,554 body words against the strict 2,500 cap; the first compression deleted the enumerated `**Always emit:**` field list, three integrity bullets, and the `**Emit when resolved:**` block that four review contracts pin, turning 61 passing assertions into 19 failures. Restoring every pinned string and funding it by tightening the milestone's own new sentences landed at 2,497 with 61 of 61 passing. A second compression during the recheck then dropped `unknowns degrade`, a rule a lesson already records as lost to compaction once before, until `goat-flow stats --check` reported the stale reference; two unpinned words elsewhere paid for its return. Anchors: `test/contract/skill-hardening-review-2.test.ts` (search: `emits only resolved goat-review integrity fields`), `workflow/skills/goat-review/SKILL.md` (search: `**Always emit:**`), `.goat-flow/learning-loop/lessons/verification-formatting.md` (search: `compaction had dropped the rule`).
 - **Recurrence 2026-10-08:** five additions measured only against the 3000 cap took `workflow/skills/playbooks/writing-human-facing-prose.md` to 2041, `workflow/skills/playbooks/writing-sentence-diagnostics.md` to 1263 and `workflow/skills/playbooks/writing-structure-diagnostics.md` to 962 against routed ranges of 1700-2000, 900-1150 and 650-900; the budget assertion stops at the first failing file, so three runs each revealed one. Read every range in `test/contract/skill-hardening-contracts.test.ts` (search: `routedWritingBudgets`) before drafting, and fund additions from third restatements of rules the Quick Tests and Verification Gate already carry. Final bodies 1993, 1147 and 890 with 524 of 524 guidance contracts passing.
+- **Recurrence 2026-10-09:** Adding plan progress rules to the 2499-word goat-plan body required compression. Rewording `Archetypes are optional lenses` and the post-plan ACT handoff broke two pinned contracts; the first full guidance run reported 522 passing and two failing. A plan-only diagnostic still missed the shared handoff reader. Restoring the exact phrases and trimming unasserted repetition left 2494 words below the 2500 cap, with 524 of 524 guidance contracts passing. Anchors: `test/contract/skill-hardening-plan-2.test.ts` (search: `defines proportional goat-plan renderings and a mixed-audience ISSUE contract`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), and `workflow/skills/goat-plan/SKILL.md` (search: `Post-plan return`).
 
 ## Footgun: Adjective-shaped style rules in shipped guidance do not constrain another agent's output
 
