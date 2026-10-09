@@ -21,7 +21,7 @@ Validate setup correctness. The base audit runs two deterministic scopes (all pa
 | `--agent <id>` | Filter to one manifest-backed agent id. Run `npx @blundergoat/goat-flow@latest manifest` to inspect the current registry. |
 | `--harness` | Add AI Harness Completeness scope (18 checks, installed/not-installed per concern) |
 | `--check-drift` | Add managed-artifact and peer-instruction drift detection |
-| `--check-content` | Add cold-path content lint (vague terms, generic instructions, factual-claim drift) |
+| `--check-content` | Add selected Markdown, framework-claim and release-snapshot checks |
 | `--trusted-target` | Execute the selected checkout's configured deny-hook handler and managed script for runtime proof. Omit this flag for static inspection. |
 | `--untrusted-target` | Deprecated compatibility alias for the static, non-executing default. It remains accepted throughout v1.16.x and will not be removed before v1.17.0. It cannot be combined with `--trusted-target`. |
 | `--format <type>` | Output: json, text, markdown, sarif (default: auto) |
@@ -44,7 +44,15 @@ Audit, setup-prompt generation, and quality-prompt generation inspect target hoo
 
 When drift checking is active, the audit compares managed workflow artifacts with their installed copies and checks manifest-declared shared phrases across every distinct sibling instruction file present in the target. The sibling comparison still runs with `--agent <id>` because parity is a relationship between instruction files, not a property of one selected agent. A mismatch names the affected file, section, and phrase without choosing a canonical winner or proposing a rewrite. Multi-agent targets enable drift checking automatically; single-agent targets require `--check-drift`.
 
-`--format sarif` exports the same deterministic audit findings as SARIF 2.1.0. It is an interchange format for CI and SARIF-aware tools; goat-flow is still reporting harness/setup integrity findings, not source-code vulnerabilities. Failing setup, agent, and harness checks become SARIF results. `--check-drift` and `--check-content` findings are included when those audit sections are enabled. Checks without target-file evidence are emitted without fabricated locations; GitHub code scanning accepts SARIF without annotations, but it only displays code annotations for results that include `locations[]`.
+`--check-content` describes three scanners in text, Markdown and JSON:
+
+- Prose, readiness and semantic anchors in selected Markdown, including installed guidance and learning-loop records; local working artifacts are excluded.
+- Supported framework claims in current guidance against live goat-flow registries and source, including counts, paths and removed-command examples.
+- Release count claims in `CHANGELOG.md` and the optional .goat-flow/scratchpad/release.md draft against available matching manifest snapshots.
+
+A pass does not verify arbitrary project or domain facts. Missing documents, unsupported claims and unavailable snapshots can leave claims unchecked. Warnings fail the content section; information remains advisory. JSON exposes `content.coverage.scanners` and `content.coverage.limitation`; `content` remains null when disabled or skipped for a newer target version. The existing `filesScanned` count sums scanner counts, so one document can contribute more than once.
+
+`--format sarif` exports the same deterministic audit findings as SARIF 2.1.0. It is an interchange format for CI and SARIF-aware tools; goat-flow is still reporting harness/setup integrity findings, not source-code vulnerabilities. Failing setup, agent, and harness checks become SARIF results. `--check-drift` and `--check-content` findings are included when those audit sections are enabled. Descriptive content coverage adds no SARIF results. Checks without target-file evidence are emitted without fabricated locations; GitHub code scanning accepts SARIF without annotations, but it only displays code annotations for results that include `locations[]`.
 
 ### `goat-flow quality [path] --agent <id> [--mode <mode>]`
 

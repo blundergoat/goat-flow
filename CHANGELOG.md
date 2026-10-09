@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Content-audit coverage** - Text, Markdown and JSON name the three scanners and explain that a pass does not verify project facts.
 - **Writing playbook cleanup** - Upgrades remove renamed copies after replacement, keep user-owned copies and list stale instruction references.
 - **Verified install summaries** - Name replaced local content and hook changes, preserve disabled choices, and pin the remaining check commands.
 - **Quality rerun spread** - History, diff and the dashboard show sample size, median and range, with controlled and observational groups labelled and kept apart by assessment scope.

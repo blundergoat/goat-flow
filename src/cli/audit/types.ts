@@ -186,6 +186,11 @@ export interface ContentReport {
   infos: number;
   /** Number of target files scanned. */
   filesScanned: number;
+  /** Descriptive scanner scope; older reports may omit this metadata. */
+  coverage?: {
+    scanners: string[];
+    limitation: string;
+  };
 }
 
 // === Internal types (check definitions and context) ===
