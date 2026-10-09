@@ -764,6 +764,8 @@ npx @blundergoat/goat-flow@latest events tail . --limit 50 --format json
 
 Generate a setup prompt adapted to the project's current state. An older goat-flow installation routes to the upgrade path instead.
 
+Consumer instruction files use a stable project heading and keep any project-specific product version. Remove an old goat-flow release suffix only after the target's instruction-file review approval; preserve the rest of the heading. Installation identity comes from `.goat-flow/config.yaml`, verified install receipts and consumed artifact stamps. The goat-flow framework's own instruction headers remain versioned for its parity and release checks.
+
 Current-project setup includes the required secret-deny check without running unrelated harness advisories. It names missing required Claude home Read rules for `.netrc`, `.git-credentials`, `.config/gh/hosts.yml` and `.pgpass`, then offers reviewed settings reconciliation. Show the diff and obtain approval before adding missing denies; preserve allow/ask choices and unrelated settings.
 
 Setup's selected-agent audit is static by default. Add `--trusted-target` only when the setup prompt should include runtime deny-hook proof from a checkout whose hook configuration you have inspected and trust.

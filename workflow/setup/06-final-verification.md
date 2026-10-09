@@ -48,7 +48,7 @@ For each backtick-wrapped path or hook path:
 - Verify the file or directory exists on disk
 - If a file was renamed during setup, grep the old name across the repo and update every remaining reference
 - For registered hook scripts, verify the file exists and has execute permissions
-- Verify the instruction file version header matches the goat-flow release version
+- For consumer projects, verify the instruction file keeps a stable project heading and any project-specific product version; removal of an old goat-flow release suffix has instruction-file review approval. When maintaining goat-flow itself, verify its versioned instruction headers with the framework parity and release checks
 - Verify `.goat-flow/config.yaml` version matches the goat-flow release version
 - Verify every installed goat skill reference Markdown file is listed in `workflow/manifest.json` `skills.references`; remove stale files left by reference merges or renames
 - For footgun entries promoted from history candidates, spot-check that each cited semantic anchor actually resolves to the described trap. If the anchor doesn't match (wrong function, outdated string), return the item to the session log instead of weakening its evidence

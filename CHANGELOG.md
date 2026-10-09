@@ -13,6 +13,7 @@
 
 ### Changed
 
+- **Stable project headings** - Setup keeps project headings and product versions; removing an old goat-flow release suffix needs instruction-file review.
 - **BREAKING: new quality findings require a concern** - Add `concern` using `context`, `constraints`, `verification`, `recovery`, or `feedback-loop`; history and diff count missing legacy values as unclassified. Optional assessor-verified fixes retain committed or captured workspace evidence and warn when references disappear. Shipped prompts supply the new rubric revision 3 contract; older saved reports remain readable.
 - **Quality assessments distinguish evidence from inference** - Prompts accept zero findings, prioritize up to five supported improvements by user benefit, and separate static inspection from runtime proof; finding comparisons distinguish assessor continuity claims from exact-ID matches.
 - **Quality score comparisons** - Reruns omit prior scores, accept integer axes from 0 to 25, and show history deltas only within the same rubric and scope.
