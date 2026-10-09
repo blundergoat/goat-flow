@@ -165,7 +165,7 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 ### File Artifact Rules (Modes 3 and 4)
 
-Fresh plan: create a slugged directory and write one zero-padded `M*.md` per milestone. Only explicit active-plan selection updates `.active`; a creation destination or unrelated existing-plan edit leaves a valid marker unchanged. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` bands and totals.
+Fresh plan: honour supplied destinations; otherwise create a slugged directory. Write zero-padded `M*.md` files plus `investigation-notes` (empty allowed; no filler); follow the plans README. Existing plans adopt notes only explicitly. Only explicit active-plan selection updates `.active`. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` bands and totals.
 
 **Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty sections; retain Phase 1 core, claim-based Proof, and one command source.
 

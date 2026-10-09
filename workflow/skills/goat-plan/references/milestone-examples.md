@@ -62,6 +62,7 @@ Use Standard for multi-milestone or cold-start work: at most 900 words and ten H
 
 ## Context
 - Read first: `<file>` (search: `<semantic anchor>`) — <non-obvious convention or reference>.
+- Investigation: link relevant topic notes and semantic anchors; keep tasks/proof here. Read other notes only when needed.
 - Drift: `git diff --stat <sha> -- <paths>` and `git status --short -- <paths>`.
 
 ## Scope

@@ -1,6 +1,6 @@
 ---
 category: skills
-last_reviewed: 2026-09-05
+last_reviewed: 2026-10-09
 ---
 
 ## Footgun: Skill parity edits can miss `.github/skills/` and fail repo-level drift checks
@@ -14,6 +14,8 @@ last_reviewed: 2026-09-05
 **Why it happens:** The installed surface is broader than the two mirrors most edits cover. `workflow/manifest.json` (search: `"skills_dir": ".github/skills/"`) declares the GitHub agent root, `src/cli/manifest/manifest.ts` (search: `getInstalledSkillRoots`) exposes it to the drift fixture, and `scripts/check-path-integrity.sh` (search: `skill_dirs=".claude/skills .agents/skills .github/skills"`) treats it as a first-class mirror, so a hand-written file list that omits it is incomplete.
 
 **Evidence:** `test/integration/audit-drift-checkdrift-this-repo.test.ts` (search: `goat-flow root should be drift-clean`) failed on 2026-04-21 with `goat-review: template (workflow/skills/goat-review/SKILL.md) and installed copy (.github/skills/goat-review/SKILL.md) differ`. Mirror budgets across all four roots are pinned by `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
+
+**Recurrence 2026-10-09:** M19's handed-off write list covered the canonical skill/reference and `.agents` copies but omitted the installed Claude and GitHub copies. Intake found the missing four paths before synchronising them. Enumerate mirror roots before freezing the write list, even when a milestone already names installed copies. `scripts/preflight-checks.sh` (search: `Skill SKILL.md Parity`; `manifest_eval skill-roots`) compares every manifest-listed skill and reference in each installed root. The application trial receipt is `2026-10-09-goat-plan-M19-tdd-afw24tim.md`; it is local continuity, not committed evidence.
 
 ## Footgun: Shared reference edits can split workflow templates from installed runtime copies
 

@@ -15,6 +15,14 @@ Milestone files here coordinate the current work - they are not long-term artifa
 
 See `goat-plan` SKILL.md for milestone file conventions.
 
+## Investigation notes
+
+New Small and Standard plans create an `investigation-notes` directory inside the selected plan, honouring an explicit destination. Leave it empty when no substantive investigation exists; do not create filler files.
+
+Organise substantive findings by topic. Each note records the question, inspected evidence with source paths and semantic anchors, findings, uncertainties and next action. Link relevant notes and anchors from milestone Context; keep executable tasks and proof in milestones. Read other notes only when needed.
+
+Existing plans adopt this layout only on explicit request. A missing notes directory is not a setup defect.
+
 ## Data Boundary
 
 Local data contract: `.goat-flow/architecture.md` (search: `Local Data and Evidence Budget`).
