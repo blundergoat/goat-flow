@@ -13,6 +13,8 @@ import type { AgentId, ProjectFacts } from "../types.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { PROFILES } from "../detect/agents.js";
 import { getTemplatePath, getCliCommand } from "../paths.js";
+import { denyCoversSecrets } from "../audit/harness/check-constraints.js";
+import { toCheckResult } from "../audit/harness-scoring.js";
 
 /**
  * Render a packaged template path with forward slashes so the prompt reads the same on Windows as it does on macOS and Linux.
@@ -74,6 +76,7 @@ const CHECK_TO_STEP: Record<string, string> = {
   "agent-skills": "Step 03 (install skills)",
   "agent-settings": "Step 05 (customise - settings file)",
   "agent-guardrails": "Step 05 (customise - deny mechanism)",
+  "deny-covers-secrets": "reviewed agent settings reconciliation",
 };
 
 /** Lookup from agent ID to its agent-specific setup guide. */
@@ -459,6 +462,14 @@ function renderAuditFail(
   }
 
   lines.push(`**Target: audit passes with zero failures.**`);
+  if (
+    failedChecks.some((check) => check.id === "deny-covers-secrets") &&
+    profile.settingsFile !== null
+  ) {
+    const verifyStep = pushAgentSettingsReconcileStep(lines, agentId, 1);
+    lines.push(`## Step ${verifyStep} - Verify`);
+    lines.push("");
+  }
   lines.push(
     `Re-run: \`${rerunAuditCommand(facts, agentId, includeHarness)}\``,
   );
@@ -518,9 +529,9 @@ function pushDetectedInstallIssues(
 }
 
 /**
- * Append the upgrade step where the agent reconciles the user-owned permission rules with the shipped template.
- * Install only repairs rules goat-flow itself shipped and later retired or superseded, so new template rules and the user's own
- * additions need a judgment call the installer must not make. Agents whose hook config is fully managed have nothing to reconcile.
+ * Append reviewed settings reconciliation for current, upgrade or migration prompts.
+ * Narrow install migrations leave other missing rules for review; preserve saved user choices.
+ * Agents whose hook config is fully managed have no settings step.
  *
  * @param lines - prompt lines built so far; the step is appended in place
  * @param agentId - agent the prompt addresses; selects its settings file and template
@@ -545,13 +556,13 @@ function pushAgentSettingsReconcileStep(
   lines.push(`## Step ${stepNumber} - Reconcile agent settings`);
   lines.push("");
   lines.push(
-    `Install repairs only rules goat-flow itself shipped and later retired or superseded; it never adds a rule and never touches one you added. Compare \`${settingsFile}\` with the shipped template \`${templatePath}\` and reconcile by hand:`,
+    `Install performs narrow, printed deny migrations: Claude may add a missing partner to an existing credential-store rule or expand an old environment deny; Codex may refresh its active permission profile while preserving project-added denies. Other absent Claude rules require review. Compare \`${settingsFile}\` with the shipped template \`${templatePath}\` and reconcile in place:`,
   );
   lines.push("");
   lines.push(
     isCodexProfile
       ? "- Add each template deny pattern missing from the active permission profile, unless this project removed it on purpose; when a removal looks deliberate, ask before restoring it."
-      : "- Add each template deny or allow rule that is missing, unless this project removed it on purpose; when a removal looks deliberate, ask before restoring it.",
+      : "- Review each missing template deny, including Read(**/credentials.json) and Edit(**/credentials.json); show the diff and obtain approval before adding it. Ask before restoring a deliberate removal. Preserve allow and ask arrays verbatim; review any change to those user choices separately.",
   );
   lines.push(
     isCodexProfile
@@ -590,7 +601,8 @@ function renderUpgradeRedirect(
   const profile = PROFILES[agentId];
   const lines: string[] = [];
 
-  // An ordinary older install just needs a refresh, so the user gets a two-step upgrade with no cleanup work.
+  // Older installs start with a refresh; only the legacy layout needs a cleanup step.
+  let verifyStep: number;
   if (state === "outdated") {
     lines.push(`# GOAT Flow Upgrade - ${profile.name}`);
     lines.push("");
@@ -615,6 +627,7 @@ function renderUpgradeRedirect(
 
     // Agents whose settings file carries user-owned permission rules get a reconcile step; hook-only agents skip straight to the rebuild.
     const rebuildStep = pushAgentSettingsReconcileStep(lines, agentId, 2);
+    verifyStep = rebuildStep + 1;
     lines.push(`## Step ${rebuildStep} - Rebuild project-specific content`);
     lines.push("");
     lines.push(
@@ -647,6 +660,7 @@ function renderUpgradeRedirect(
 
     // A v0.9 settings file predates every shipped permission rule, so the reconcile step matters most on this route.
     const rebuildStep = pushAgentSettingsReconcileStep(lines, agentId, 3);
+    verifyStep = rebuildStep + 1;
     lines.push(`## Step ${rebuildStep} - Rebuild project-specific content`);
     lines.push("");
     lines.push(
@@ -655,7 +669,7 @@ function renderUpgradeRedirect(
   }
 
   lines.push("");
-  lines.push(`## ${state === "outdated" ? "Step 3" : "Step 4"} - Verify`);
+  lines.push(`## Step ${verifyStep} - Verify`);
   lines.push("");
   pushFinalSetupGate(lines, facts, agentId);
 
@@ -747,6 +761,51 @@ const FULL_SETUP_STATES = new Set(["bare", "partial", "error"]);
 const UPGRADE_STATES = new Set(["v0.9", "outdated"]);
 
 /**
+ * Include only the required secret failure when CLI setup omits harness scoring.
+ *
+ * @param report - completed audit report, left unchanged
+ * @param agents - existing facts for the agent whose prompt is being rendered
+ * @param promptScope - full setup or the already harness-scoped dashboard card
+ * @returns the original report or a copy containing the required failure
+ */
+function includeRequiredSecretFailure(
+  report: AuditReport,
+  agents: ProjectFacts["agents"],
+  promptScope: SetupPromptScope,
+): AuditReport {
+  if (promptScope !== "full" || report.scopes.harness !== null) return report;
+  const secretCheck = toCheckResult(
+    denyCoversSecrets,
+    denyCoversSecrets.run({ agents }),
+    false,
+  );
+  if (secretCheck.status !== "fail") return report;
+  return {
+    ...report,
+    status: "fail",
+    scopes: {
+      ...report.scopes,
+      harness: {
+        status: "fail",
+        checks: [secretCheck],
+        failures: secretCheck.failure ? [secretCheck.failure] : [],
+        summary: {},
+      },
+    },
+  };
+}
+
+/** Render the attribution step when Claude's full setup prompt requires it. */
+function setupAttributionGuidance(
+  agentId: AgentId,
+  promptScope: SetupPromptScope,
+): string {
+  return agentId === "claude" && promptScope === "full"
+    ? `\n\n**Claude attribution:** Before completing setup, follow the Attribution settings section in \`${displayTemplatePath(SETUP_FILES.claude)}\`. Complete any required installer step first.`
+    : "";
+}
+
+/**
  * Compose the setup prompt that matches the project's current install state.
  *
  * @param auditReport - current audit result used to select failure/upgrade/full setup copy
@@ -764,10 +823,10 @@ export function composeSetup(
   const projectFS = createFS(facts.root);
   const projectState = classifyProjectState(projectFS, agentId);
   const promptScope = options.promptScope ?? "full";
-  const attributionGuidance =
-    agentId === "claude" && promptScope === "full"
-      ? `\n\n**Claude attribution:** Before completing setup, follow the Attribution settings section in \`${displayTemplatePath(SETUP_FILES.claude)}\`. Complete any required installer step first.`
-      : "";
+  if (projectState.state === "error" && projectState.action === "none") {
+    return `# GOAT Flow Setup - ${PROFILES[agentId].name}\n\n${projectState.details}`;
+  }
+  const attributionGuidance = setupAttributionGuidance(agentId, promptScope);
 
   // Nothing usable installed, or a half-finished install: the audit result cannot be trusted as a to-do list, so start from the setup guide.
   if (
@@ -788,6 +847,11 @@ export function composeSetup(
       ) + attributionGuidance
     );
   }
+  auditReport = includeRequiredSecretFailure(
+    auditReport,
+    facts.agents.filter(({ agent }) => agent.id === agentId),
+    promptScope,
+  );
   // A current install that passes its checks gets the inventory-and-next-gates prompt; the card variant keeps the harness gate on its own.
   if (auditStatusForPrompt(auditReport, promptScope) === "pass") {
     return (

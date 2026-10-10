@@ -130,7 +130,27 @@ describe("agent config template parity", () => {
     assert.match(codexTemplate, /env\.example stays readable/);
   });
 
-  // A folder or file name is not evidence of secret content, and no allow rule can reopen a deny.
+  for (const configPath of [
+    "workflow/hooks/agent-config/claude.json",
+    ".claude/settings.json",
+  ]) {
+    it(`denies only the exact credentials.json name in ${configPath}`, () => {
+      const config = JSON.parse(
+        readFileSync(join(PROJECT_ROOT, configPath), "utf-8"),
+      ) as {
+        permissions: { deny: string[] };
+      };
+      assert.deepEqual(
+        config.permissions.deny.filter((rule) =>
+          /^(Read|Edit)\((?:.*\/)?credentials/u.test(rule),
+        ),
+        ["Read(**/credentials.json)", "Edit(**/credentials.json)"],
+        "credentials.ts, credentials/ routes and credentials.json.example must stay outside the filename deny",
+      );
+    });
+  }
+
+  // Broad names collide with application code; credentials.json is the exact exception.
   // One named case per retired pattern, so a failure names the heuristic that came back.
   for (const pattern of ["**/secrets/**", "**/credentials*"]) {
     it(`ships no ${pattern} name heuristic on either template`, () => {

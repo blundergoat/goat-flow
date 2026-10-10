@@ -1,6 +1,6 @@
 ---
 category: milestone-timing
-last_reviewed: 2026-09-20
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** Milestone timing receipts - prospective measurement, category changes, activation and finalization. Plan state, estimates and release accounting are in [milestone-accounting.md](milestone-accounting.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Actual time must come from prospective active-time segments
 
 **Status:** active | **Created:** 2026-08-02
+**Severity:** CORRECTNESS
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -28,22 +29,23 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity, and task estimates were reused as observations.
 
-**Recurrences 2026-08-10, 2026-08-17, 2026-08-24, 2026-08-30 (span open across a yield):** Four milestones left a span open while control was elsewhere, and each had to be discarded rather than corrected by subtracting an inferred idle duration. A hook-coverage receipt stayed open overnight across approval pauses. M39 stayed open across a human approval wait. M22 stayed open across an inactive gap until a normal stop counted 30,762 seconds, where restoring the last pre-stop state and using `--discard-open` preserved the valid 933. M74 stayed open across three backgrounded verification runs, so about twenty minutes of suite and preflight wall-clock shared one span with reading and reconciliation, and the same flag preserved 3,038 seconds. A human gate, an inactive gap, and a backgrounded command are all yields: stop before yielding. `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
-**Recurrences 2026-08-23 and 2026-08-28 (finalized before the gates):** M07 finalized a 465-second receipt before strict validation and learning-loop closeout, and strict validation then rejected an added proof row twice. M58 finalized a 2,529-second receipt before the plan-wide check found it and M37 simultaneously active. Both receipts exclude the correction and index work that followed, so both label Actual incomplete. `src/cli/plans-check-structure.ts` (search: `multiple active milestones`).
+**Recurrences 2026-08-10, 2026-08-17, 2026-08-24, 2026-08-30 (span open across a yield):** Four milestones left a span open while control was elsewhere, and each had to be discarded rather than corrected by subtracting an inferred idle duration. A hook-coverage receipt stayed open overnight across approval pauses. Another receipt stayed open across a human approval wait. Another receipt stayed open across an inactive gap until a normal stop counted 30,762 seconds, where restoring the last pre-stop state and using `--discard-open` preserved the valid 933. Another receipt stayed open across three backgrounded verification runs, so about twenty minutes of suite and preflight wall-clock shared one span with reading and reconciliation, and the same flag preserved 3,038 seconds. A human gate, an inactive gap, and a backgrounded command are all yields: stop before yielding. `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
+**Recurrences 2026-08-23 and 2026-08-28 (finalized before the gates):** One task finalized a 465-second receipt before strict validation and learning-loop closeout, and strict validation then rejected an added proof row twice. Another task finalized a 2,529-second receipt before the plan-wide check found it and a paused task simultaneously active. Both receipts exclude the correction and index work that followed, so both label Actual incomplete. `src/cli/plans-check-structure.ts` (search: `multiple active milestones`).
 **Recurrence 2026-08-10 (file path):** `plans time stop` was given a display identifier instead of the milestone-file path and rejected it. `src/cli/plans-time.ts` (search: `requires an M*.md milestone file`).
-**Recurrence 2026-08-17 (grammar):** Abandoned M40's Actual read `unavailable - timing was never started`; strict validation rejected the separator until the canonical `unavailable: timing was never started` form. `test/unit/plans-effort.test.ts` (search: `unavailable: timing was never started`), `test/unit/plans-export-parsing.test.ts` (search: `rejects Start with`).
+**Recurrence 2026-08-17 (grammar):** The abandoned task’s Actual read `unavailable - timing was never started`; strict validation rejected the separator until the canonical `unavailable: timing was never started` form. `test/unit/plans-effort.test.ts` (search: `unavailable: timing was never started`), `test/unit/plans-export-parsing.test.ts` (search: `rejects Start with`).
 
-**Recurrence 2026-09-16:** Quality follow-up M01 left product segment S04 open across an interrupted handoff. Recovery used `plans time stop --discard-open`, preserving the closed segments and marking Actual incomplete. Human acceptance cannot turn this into a measured calibration sample or a scored prospective case; rerun the outcome check and keep the invalid case visible. `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`) owns the incomplete Actual; `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) excludes non-measured outcomes.
+**Recurrence 2026-09-16:** The quality follow-up left product segment S04 open across an interrupted handoff. Recovery used `plans time stop --discard-open`, preserving the closed segments and marking Actual incomplete. Human acceptance cannot turn this into a measured calibration sample or a scored prospective case; rerun the outcome check and keep the invalid case visible. `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`) owns the incomplete Actual; `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) excludes non-measured outcomes.
 
-**Recurrence 2026-09-18:** During quality follow-up M07, `plans time switch` exited 2 before changing the receipt. The documented stop/start sequence succeeded, preserving the original timestamps without backfill. Read the command grammar before scripting a transition: `src/cli/cli-parser-positionals.ts` (search: `parsePlansTimePositionals`) accepts only start, stop and status; `workflow/skills/goat-plan/references/milestone-examples.md` (search: `Change category`) gives the sequence.
+**Recurrence 2026-09-18:** During quality follow-up, `plans time switch` exited 2 before changing the receipt. The documented stop/start sequence succeeded, preserving the original timestamps without backfill. Read the command grammar before scripting a transition: `src/cli/cli-parser-positionals.ts` (search: `parsePlansTimePositionals`) accepts only start, stop and status; `workflow/skills/goat-plan/references/milestone-examples.md` (search: `Change category`) gives the sequence.
 
-**Recurrence 2026-09-20 (finalized before the gates):** Forecast-accuracy M07 finalized a 1,420-second receipt before comparing its segments with the work done. The Actual correction, two lesson recurrences, the index and check re-runs and a final preflight all followed, so they sit outside the receipt. A background preflight had also shared the last proof span with foreground reading. Actual reads `unavailable`.
+**Recurrence 2026-09-20 (finalized before the gates):** The forecast study finalized a 1,420-second receipt before comparing its segments with the work done. The Actual correction, two lesson recurrences, the index and check re-runs and a final preflight all followed, so they sit outside the receipt. A background preflight had also shared the last proof span with foreground reading. Actual reads `unavailable`.
 
 ---
 
 ## Lesson: A running receipt makes a wrong category split look measured
 
 **Status:** active | **Created:** 2026-08-02 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
 **Decision changed:** Switch category at each work boundary; correct timestamps cannot make an inaccurate category split measured evidence.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -51,19 +53,19 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 
 **Prevention:** On entering evaluation, tests, lint or typecheck, stop the implementation span and start `--category proof`; switch again for implementation or bookkeeping. Before finalizing, compare segment boundaries with the recorded actions. If a category split is wrong and cannot be recovered honestly, preserve timestamps and elapsed totals, disclose the limitation and use `Actual: unavailable`. Never invent a retrospective split to keep a sample eligible. Excluding an invalid sample protects calibration; a structurally valid receipt cannot prove its category reflects the work.
 
-**What happened:** Effort-estimation-timing M02 left a product span open through implementation and verification. Its finalized record reported 1112 product / 99 proof seconds within a correct 1354-second total. Strict validation accepted the internally consistent categories, although much of the product span contained proof.
+**What happened:** The timing implementation left a product span open through implementation and verification. Its finalized record reported 1112 product / 99 proof seconds within a correct 1354-second total. Strict validation accepted the internally consistent categories, although much of the product span contained proof.
 
 **Root cause:** The timer stamps the selected category; it cannot infer what work occurred inside the span.
 
-**Recurrences 2026-08-04, 2026-08-09, 2026-08-14:** The quality-findings milestone left tests, hook corpora, benchmarks and contracts under product; its split was excluded from calibration. M03 covered debug evaluations and proof until challenged after 1,604 seconds. Code-quality-upstream M03 mixed edits and verification without recoverable boundaries, so its span was discarded and Actual marked incomplete. The discarded-span path is in `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
+**Recurrences 2026-08-04, 2026-08-09, 2026-08-14:** The quality-findings milestone left tests, hook corpora, benchmarks and contracts under product; its split was excluded from calibration. Another receipt covered debug evaluations and proof until challenged after 1,604 seconds. The code-quality work mixed edits and verification without recoverable boundaries, so its span was discarded and Actual marked incomplete. The discarded-span path is in `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
 
-**Recurrence 2026-09-07:** M29, M32 and M33 recorded 999, 342 and 94 seconds entirely as product despite verification. Their corrected records preserve elapsed totals and timestamps but exclude unavailable category allocations from measured calibration.
+**Recurrence 2026-09-07:** Three tasks recorded 999, 342 and 94 seconds entirely as product despite verification. Their corrected records preserve elapsed totals and timestamps but exclude unavailable category allocations from measured calibration.
 
-**Recurrence 2026-09-20:** Forecast-accuracy M07 wrote a lesson and regenerated the indexes inside a product span, ran a failing-first test inside another, and compared segments with actions only after `--finalize`. The 1,420-second total stands, Actual reads `unavailable`, and the milestone gives calibration no sample. The bookkeeping task sat between product tasks in the plan, which is where the switch was missed.
+**Recurrence 2026-09-20:** The forecast study wrote a lesson and regenerated the indexes inside a product span, ran a failing-first test inside another, and compared segments with actions only after `--finalize`. The 1,420-second total stands, Actual reads `unavailable`, and the milestone gives calibration no sample. The bookkeeping task sat between product tasks in the plan, which is where the switch was missed.
 
-**Recurrence 2026-09-20 (M08):** The next milestone switched category at every planned boundary and compared its segments before finalizing, and still mixed one span: a preflight warning arrived mid-proof, and the lesson note that caused it was moved to another bucket without leaving the proof span. A fix that a proof run asks for is its own boundary. The total stands and Actual reads `unavailable`.
+**Recurrence 2026-09-20:** The next milestone switched category at every planned boundary and compared its segments before finalizing, and still mixed one span: a preflight warning arrived mid-proof, and the lesson note that caused it was moved to another bucket without leaving the proof span. A fix that a proof run asks for is its own boundary. The total stands and Actual reads `unavailable`.
 
-**Recurrence 2026-09-20 (M10):** The third milestone that day switched for every fix a gate asked for, then re-ran the formatter, lint and typecheck inside the 54-second product span that held one such fix. A check of seconds is still proof. The total stands and Actual reads `unavailable`.
+**Recurrence 2026-09-20:** The third milestone that day switched for every fix a gate asked for, then re-ran the formatter, lint and typecheck inside the 54-second product span that held one such fix. A check of seconds is still proof. The total stands and Actual reads `unavailable`.
 
 **Evidence:** `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) owns category transitions; `src/cli/plans-check.ts` (search: `function collectMeasuredActualErrors`) checks receipt arithmetic; `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) excludes non-measured Actuals. Missing timers are covered by `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `## Lesson: Actual time must come from prospective active-time segments`).
 
@@ -72,41 +74,45 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 ## Lesson: Activate a milestone before starting its timing receipt
 
 **Status:** active | **Created:** 2026-08-14
+**Severity:** INTEGRATION
 **Decision changed:** Activate before timing starts, stop before an inactive handoff, never move a pending or terminal milestone backward only to time acceptance administration, and remove the active receipt schema before resetting to `not-started`.
 **Trigger phase:** ACT
-**Incident count:** 11 | **Latest occurrence:** 2026-09-06
+**Incident count:** 12 | **Latest occurrence:** 2026-10-08
 
 **Prevention:** Change the milestone to `in-progress` or `testing-gate` before checking implementation work or starting the first timing segment, using only the canonical lifecycle vocabulary (`active` is not a status). Confirm exactly one rendered `Status` field, then start the category and inspect the returned open segment; if start is rejected, correct the state and retry prospectively, never backfilling the missed interval. Stop and inspect the open span before changing status to `human-verification-pending`, `blocked`, `abandoned`, or `complete`; once pending, leave later acceptance administration unmeasured. When resetting to `not-started`, reopen every task and proof, preserve closed-segment evidence under Reset history, and remove the active Timing Receipt section. Evidence anchors: `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) rejects missing, competing, empty, or inactive states; `src/cli/plans-check.ts` (search: `not-started milestone must not include a Timing Receipt`) enforces a clean receipt after reset.
 
-**What happened:** Starting code-quality-upstream M04, `plans time start` ran while the rendered `Status` was still `not-started`; the CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`, and the retry after the status change succeeded.
+**What happened:** Starting the code-quality work, `plans time start` ran while the rendered `Status` was still `not-started`; the CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`, and the retry after the status change succeeded.
 
 **Root cause:** Receipt creation was treated as the transition that made a milestone active, and lifecycle text as though it also normalized timing state; the CLI models them separately.
 
-**Recurrences 2026-08-21, 2026-08-23 (M11), 2026-08-24 (M22), 2026-08-24 (M26):** The same order error, timer before status, on four later activations; each time the guard opened no receipt and the prospective retry after `in-progress` succeeded with no interval backfilled. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`).
-**Recurrence 2026-08-23 (inactive transition):** M08 moved from `in-progress` to `blocked` while its product span stayed open; strict validation rejected the inactive milestone with an active receipt until the span was stopped, leaving a paused 466-second receipt.
-**Recurrence 2026-08-24 (reset):** Resetting `windows-native-hooks` M01 to `not-started` while preserving its paused receipt failed `not-started milestone must not include a Timing Receipt`; moving the closed S01 row to Reset history and reopening the checked task passed without erasing measured effort.
-**Recurrence 2026-09-03 (M13 activation):** The unsupported status `active` was written first, then M13's frozen-contract task was checked while the milestone still read `not-started`. `src/cli/plans-check.ts` (search: `const VALID_STATUSES`), `src/cli/plans-check.ts` (search: `not-started milestone has checked implementation tasks`).
-**Recurrence 2026-09-04 (go-live M15 activation):** Timing started while a go-live milestone was still `not-started`, and later a reopen attempt for release-candidate acceptance after `human-verification-pending` was refused by the same guard; the accepted lifecycle update stays unmeasured instead of moving status backward.
+**Recurrence 2026-10-08:** A task attempted timing while still `not-started`. The guard rejected it before source edits; changing status to `in-progress` and retrying opened a prospective receipt without backfilling. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) remains the enforcing boundary.
 
-**Recurrence 2026-09-06 (go-live M23 proposal label):** A narrative `Status:` label created a second rendered lifecycle field. Timing start refused the file until the narrative used `Proposal state:`. Keep reserved field names out of handoff prose; the forty-second gap stayed unmeasured. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) retains the refusal.
+**Recurrences 2026-08-21, 2026-08-23, 2026-08-24, 2026-08-24:** The same order error, timer before status, on four later activations; each time the guard opened no receipt and the prospective retry after `in-progress` succeeded with no interval backfilled. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`).
+**Recurrence 2026-08-23 (inactive transition):** The change moved from `in-progress` to `blocked` while its product span stayed open; strict validation rejected the inactive milestone with an active receipt until the span was stopped, leaving a paused 466-second receipt.
+**Recurrence 2026-08-24 (reset):** Resetting the Windows hook task to `not-started` while preserving its paused receipt failed `not-started milestone must not include a Timing Receipt`; moving the closed S01 row to Reset history and reopening the checked task passed without erasing measured effort.
+**Recurrence 2026-09-03 (activation):** The unsupported status `active` was written first, then the frozen-contract task was checked while the milestone still read `not-started`. `src/cli/plans-check.ts` (search: `const VALID_STATUSES`), `src/cli/plans-check.ts` (search: `not-started milestone has checked implementation tasks`).
+**Recurrence 2026-09-04 (go-live activation):** Timing started while a go-live milestone was still `not-started`, and later a reopen attempt for release-candidate acceptance after `human-verification-pending` was refused by the same guard; the accepted lifecycle update stays unmeasured instead of moving status backward.
+
+**Recurrence 2026-09-06 (go-live proposal label):** A narrative `Status:` label created a second rendered lifecycle field. Timing start refused the file until the narrative used `Proposal state:`. Keep reserved field names out of handoff prose; the forty-second gap stayed unmeasured. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) retains the refusal.
 
 ---
 
 ## Lesson: Finalized timing receipts require their parsed summaries
 
 **Status:** active | **Created:** 2026-08-14 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
 **Decision changed:** Finalize milestone timing through the plans-time command; when repairing a receipt manually, reconcile both summary lines before claiming measured Actual.
 **Trigger phase:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-09-16
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/verification.md`; timing receipts sit with the three sibling entries above rather than in general verification discipline.
 
-**Prevention:** Finalization writes an Actual field automatically. If measured spans omit known work, replace that field with one incomplete Actual instead of appending a second field. Use `plans time stop <milestone> --finalize` for normal closure. For manual recovery, restore both summaries, derive the largest-remainder split, then validate the terminal status. Unknown Actual uses `unavailable: reason` or `incomplete: reason`, never the CLI display dash. Evidence anchors: `docs/cli.md` (search: `plans time stop .goat-flow/plans/<active>/M01-example.md --finalize`), `src/cli/plans-time-receipt.ts` (search: `Compare rounded total, category sum, and largest-remainder allocation`), `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).
+**Prevention:** Finalization writes an Actual field automatically. If measured spans omit known work, replace that field with one incomplete Actual instead of appending a second field. Use `plans time stop <milestone> --finalize` for normal closure. For manual recovery, restore both summaries, derive the largest-remainder split, then validate the terminal status. Unknown Actual uses `unavailable: reason` or `incomplete: reason`, never the CLI display dash. Evidence anchors: `docs/cli.md` (search: `stop --finalize`), `src/cli/plans-time-receipt.ts` (search: `Compare rounded total, category sum, and largest-remainder allocation`), `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).
 
 **What happened:** A milestone's segment table, receipt state, and measured Actual were finalized by hand, but the first strict completion check rejected them because the receipt omitted the `Recorded seconds` and `Allocated minutes` lines, leaving the parser no summary object to validate the Actual claim against. After those lines were added, the next check rejected a manually rounded category split that did not follow the canonical largest-remainder allocation.
 
 **Root cause:** The visible segment arithmetic was treated as the whole embedded receipt and category minutes were rounded by intuition, although the strict checker requires both canonical parsed summaries and its deterministic allocation.
 
-**Recurrence 2026-09-08:** M35 used the display dash in an unavailable Actual; strict parsing failed until the colon was restored. Source grammar: `src/cli/plans-effort.ts` (search: `ACTUAL_UNKNOWN_STATE_PATTERN`).
+**Recurrence 2026-09-08:** The change used the display dash in an unavailable Actual; strict parsing failed until the colon was restored. Source grammar: `src/cli/plans-effort.ts` (search: `ACTUAL_UNKNOWN_STATE_PATTERN`).
 
 **Recurrence 2026-09-16:** After finalization inserted a measured Actual, I appended an incomplete Actual for untimed work. Strict validation rejected the duplicate. Keep the finalized subtotal, replace the generated field, and recheck the terminal state. Evidence: src/cli/plans-time.ts (search: writeActualField) and src/cli/plans-effort.ts (search: multiple Actual values supplied).
 

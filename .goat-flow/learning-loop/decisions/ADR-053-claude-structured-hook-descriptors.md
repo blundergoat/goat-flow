@@ -2,15 +2,16 @@
 
 **Status:** Implemented
 **Date:** 2026-08-13
-**Ticket/Context:** `.goat-flow/plans/1.17.0/M53-copilot-claude-hook-routing-decision.md`; `.goat-flow/plans/1.17.0/M54-copilot-claude-hook-routing-fix.md`
 **Updated:** 2026-09-05 - condensed; the deleted local spawn-matrix reproduction is replaced by the CI job that runs it. The 2026-08-22 amendment added Codex `commandWindows`; the 2026-08-25 amendment added Claude's inert Copilot routing fields.
 **Updated:** 2026-09-19 - ADR-066 changes root selection for the Gruff edit hook only; policy and Stop hooks keep this contract.
+
+**Updated:** 2026-10-10 - retargeted evidence requirements after the hook-trust ADR was removed; later Codex captures no longer inherit the original stale-state wording.
 
 ## Context
 
 The hook writer serialized one 5,648-character `node -e` shell command for every provider. On Windows all three transports mangled it before goat-flow's policy code started: cmd.exe exited 255 on an unrecognized token, Windows PowerShell failed at its operand tokenizer, and the `bash -c` argv round-trip collapsed `\\` and `\"` into a Node `[eval]:1` SyntaxError. A Bash file control ran the same bootstrap, so the failure belonged to command transport, not policy. Measured 2026-08-13 with Node v24.9.0 and Git Bash 5.3.15; the spawn matrix now runs in CI (`.github/workflows/ci.yml`, search: `windows-hook-contracts`).
 
-Provider handler contracts are not interchangeable. A live capture of Claude Code 2.1.229 on Windows loaded exec-form `command` plus `args`, preserved an operand containing spaces, ampersands, parentheses, and a pipe, ran from the project root, and delivered an exit-2 denial to the model. Disposable captures of Codex CLI 0.147.0, Copilot CLI 0.0.409, and Antigravity CLI 1.1.9 produced no handler start or delivered result, so ADR-052's gate blocked a universal migration.
+Provider handler contracts are not interchangeable. A live capture of Claude Code 2.1.229 on Windows loaded exec-form `command` plus `args`, preserved an operand containing spaces, ampersands, parentheses, and a pipe, ran from the project root, and delivered an exit-2 denial to the model. Disposable captures of Codex CLI 0.147.0, Copilot CLI 0.0.409, and Antigravity CLI 1.1.9 produced no handler start or delivered result, so the requirement for captured provider delivery blocked a universal migration.
 
 Codex documents a Windows-only `commandWindows` override beside `command`. Exact replay on Windows showed the unchanged command failing before policy startup while a PowerShell override preserved hostile cwd characters, returned status 0, propagated denial status 2, and rejected a fake secret canary. A first Codex CLI 0.149.0 exec capture did not load the project hooks and is invalid evidence; a later capture in this already-trusted project loaded the registration and delivered `Command blocked by PreToolUse hook: BLOCKED: Policy secret:` before shell execution. That PreToolUse proof stays `scenario-unverified` and does not renew PostToolUse or Stop evidence.
 
@@ -20,7 +21,7 @@ The repository already ships `run-with-bash.mjs`, `hook-launch-runtime.mjs`, and
 
 ## Decision
 
-Use provider-specific descriptors: Claude keeps a structured exec-form handler with inert Copilot routing fields, Codex keeps its `command` byte-for-byte and adds `commandWindows`, and Copilot and Antigravity keep their registrations until fresh exact-version evidence approves a change.
+Use provider-specific descriptors: Claude keeps a structured exec-form handler with inert Copilot routing fields, Codex keeps its `command` byte-for-byte and adds `commandWindows`, and Copilot and Antigravity keep their registrations until applicable exact-version evidence approves a change.
 
 The writer emits this complete shape for every managed Claude hook:
 
@@ -56,7 +57,7 @@ Failure boundary: failures after Node starts (missing or incomplete root, regist
 | One universal command string | cmd.exe, PowerShell, and Bash argv transport all break it before policy starts | Rejected; the measured incident |
 | New checked-in shared shim | Duplicates three stamped launch assets and still cannot run before root discovery | Rejected |
 | Direct `${CLAUDE_PROJECT_DIR}` file execution | Cannot report a stale or incomplete environment root as unavailable | Rejected |
-| Claim provider delivery after a registration change | Configured replay does not prove the provider fired or delivered | Rejected by ADR-052 |
+| Claim provider delivery after a registration change | Configured replay does not prove the provider fired or delivered | Rejected; registration replay cannot establish live delivery |
 | Register the real policy in both Claude and native Copilot sources | Copilot combines the sources and can invoke the lifecycle twice | Rejected; Claude carries inert routes and native Copilot is the sole policy source |
 | Exec-form argv for the captured provider, `commandWindows` for Codex, no change elsewhere | Nothing observed failing; live capture, spawn matrix, and degradation suites pass | Accepted |
 
@@ -64,9 +65,9 @@ Failure boundary: failures after Node starts (missing or incomplete root, regist
 
 - Claude handlers bypass host-shell tokenization; the live Windows capture delivered `BLOCKED: Policy destructive:` at exit 2.
 - Claude rows carry `bash: "exit 0"` and `powershell: "exit 0"`; they change local routing for hosts that combine config sources and establish no provider-delivery evidence.
-- Codex gains `commandWindows` with `command` byte-identical; its gruff and Stop evidence is stale until an exact current-registration capture proves delivery.
+- Codex gains `commandWindows` with `command` byte-identical. Later applicable captures and remaining scenario gates are recorded in `workflow/hooks/README.md` (search: `The Codex Gruff gate is therefore`) and `src/cli/server/hooks-registry.ts` (search: `hook-provider-adapter.v1:codex:turn-stop`).
 - `hooks sync` and the standalone installer migrate historical inline rows and converge duplicate or mixed rows to one registration (`test/unit/hook-registrar.test.ts`, `test/integration/setup-install-agent-matrix.test.ts`).
 
 ## Reversibility
 
-Two-way for the registration shape: `hooks sync` rewrites managed rows from the writer while preserving user-owned siblings. Reverting Claude's descriptor or Codex's `commandWindows`, regenerating the installer contract, and syncing restores the prior registrations; removing Claude's no-op fields reintroduces Copilot's measured bare-Node failure. Revisit provider support only with an exact current-version capture renewed per ADR-052.
+Two-way for the registration shape: `hooks sync` rewrites managed rows from the writer while preserving user-owned siblings. Reverting Claude's descriptor or Codex's `commandWindows`, regenerating the installer contract, and syncing restores the prior registrations; removing Claude's no-op fields reintroduces Copilot's measured bare-Node failure. Revisit provider support only with a trusted capture applicable to the exact provider version, mode and registration, as required by `.goat-flow/architecture.md` (search: `Documentation and capture records have no calendar expiry`).

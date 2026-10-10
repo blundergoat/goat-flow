@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-09-19
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** Installing goat-flow into a project and migrating an existing install - what a package smoke proves, mirror fan-out, the scope a setup agent may write, and concepts that survive their own removal. Repo-wide gates that catch the fallout are [verification-preflight.md](verification-preflight.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Packaged install smoke is not a completed setup audit
 
 **Status:** active | **Created:** 2026-08-03
+**Severity:** INTEGRATION
 **Decision changed:** Release probes verify deterministic installation and adapted-project audit as separate stages.
 **Trigger phase:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-09-05
@@ -26,6 +27,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Skill edits must fan out to all four installed mirrors, and removed anchors cascade
 
 **Status:** active | **Created:** 2026-07-18
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-09-10
 
 **Prevention:** Treat one canonical skill edit as a four-target fan-out, `workflow/skills/` plus the `.claude/`, `.agents/`, and `.github/` mirrors, and verify with `goat-flow audit . --check-drift`. After deleting or renaming any anchored function, run `goat-flow stats . --check`, rewrite the citing footgun and lesson anchors as dated resolved-history prose, then re-check bucket size. Evidence anchors: `test/unit/support-bundle.test.ts` (search: `emits clean JSON through the CLI`), `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `removed 2026-07-18`).
@@ -34,7 +36,7 @@ last_reviewed: 2026-09-19
 
 **Root cause:** The mirror set was treated as three targets, and anchor repair was treated as free of size consequences.
 
-**Recurrence 2026-09-10:** M52's committed security-skill wording change (`6e554aa2`) removed the phrase `If no admissible and available specialist exists` that `.goat-flow/learning-loop/lessons/agent-behavior.md` cited as an anchor; the four mirrors were synced correctly, but `goat-flow stats . --check` did not run with the source change, so the stale reference surfaced only during the later learning-loop closeout. Run the stats check whenever a skill edit deletes or rewrites a phrase, and grep the learning-loop buckets for the removed text before syncing mirrors. `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `coverage degrades; continue without waiting`).
+**Recurrence 2026-09-10:** The committed security-skill wording change (`6e554aa2`) removed the phrase `If no admissible and available specialist exists` that `.goat-flow/learning-loop/lessons/agent-behavior.md` cited as an anchor; the four mirrors were synced correctly, but `goat-flow stats . --check` did not run with the source change, so the stale reference surfaced only during the later learning-loop closeout. Run the stats check whenever a skill edit deletes or rewrites a phrase, and grep the learning-loop buckets for the removed text before syncing mirrors. `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `coverage degrades; continue without waiting`).
 
 ---
 
@@ -91,6 +93,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Removing a concept requires full-repo grep, not just code grep
 
 **Status:** active | **Created:** 2026-03-22
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-19
 
 **Prevention:** After removing or renaming a concept, search the entire tracked repository with `git grep -l` rather than a curated directory list, then run both `stats --check` and the harness audit, because they cover different surfaces and neither validates search anchors inside ADRs.
@@ -159,9 +162,14 @@ last_reviewed: 2026-09-19
 **Decision changed:** Before a fix plan says what a policy fixture will do, resolve every switch the way the reader does, including switches the fixture omits, or run the case once against current code.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-10-08
 
 **Prevention:** A fix plan's sentence about what a test case will show is a claim about current code. For hook-policy migrations, work out both the original and the requested choices: an omitted switch keeps its enforced default, and an upgrade can copy one switch's saved choice into another. If that trace is not quick, run the case before promising the outcome. Evidence anchors: `workflow/hooks/hook-policy-state.cjs` (search: `function effectivePolicyChoices`), `workflow/hooks/hook-policy-state.cjs` (search: `An older config may omit the Git switch`), `test/integration/setup-install-migrations.test.ts` (search: `requires policy review before migrating disabled split guardrail config`).
 
 **What happened:** A goat-debug fix plan for 19 stale slow-suite tests split one legacy test into two cases. Conflicting 1.8.0 guard choices would be refused, and agreeing ones would still migrate. The agreeing fixture turned all three retired guards off and had no Git switch. The installer answered "GitHub policy review is required": the original choices resolved to dangerous off and Git on, and mixed choices with changed ownership files require review by contract. The milestone stopped at a checkpoint, the plan's claim was reported as wrong, and the user approved a policy-review case instead.
 
 **Root cause:** "All guards off" was read from the keys the fixture wrote. The reader fills an omitted switch with its enforced default, so the fixture's effective choices disagreed.
+
+**Recurrence 2026-10-08:** The setup fixture guessed the current-state action, omitted the required config state and created a legacy skill directory without the SKILL.md file the classifier probes. Its first run failed before the intended product assertions. After those contracts were corrected, the reviewed-repair assertion still reused a filesystem adapter whose cached contents predated the write. Read the real extraction options, state probes and adapter lifetime before modelling the workflow; use a fresh adapter after fixture changes. `test/integration/setup-install-deny-reconciliation.test.ts` (search: `Each audit needs a fresh adapter after a write`), `src/cli/classify-state.ts` (search: `collectOldSkills`), `src/cli/facts/orchestrator.ts` (search: `options.configState`) and `src/cli/facts/fs.ts` (search: `createCachedReadFile`) retain the contracts and corrected fixture.
+
+**Recurrence 2026-10-08:** The follow-up review reproduced a missing Claude credential deny appearing in a healthy Codex setup prompt. Omitting `--agent` makes the CLI gather aggregate facts and render a prompt for each agent from the shared report. The new required-check supplement treated those facts as if they belonged only to the rendered agent. Filter them by that agent before supplementing the report; leave the shared report unchanged. `src/cli/cli-handlers.ts` (search: `runSetupPipeline`), `src/cli/prompt/compose-setup.ts` (search: `facts.agents.filter`) and `test/integration/setup-install-deny-reconciliation.test.ts` (search: `keeps multi-agent deny failures in the matching agent prompt`) retain the reader contract, correction and failing-then-passing regression.

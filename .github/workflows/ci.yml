@@ -250,6 +250,12 @@ jobs:
         run: node --import tsx --test test/unit/path-write-claim.test.ts test/integration/local-state-migration.test.ts
       - name: Descriptor spawn matrix and focused hook contracts
         run: node --import tsx --test test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-effective-state.test.ts
+      # Native Windows has no POSIX owner and a 32,767-character command line, so Stop recovery and the multi-repo controller need a real run here.
+      - name: Post-turn recovery and controller contracts
+        run: node --import tsx --test --test-name-pattern="blocks a missing scanner once|preserves controller child findings" test/integration/post-turn-launcher-recovery.test.ts
+      # Node cannot start npm `.cmd` runner shims without a shell, so only this job exercises the dashboard's PowerShell version probe.
+      - name: Dashboard runner version probe
+        run: node --import tsx --test --test-name-pattern="npm shim version through PowerShell" test/unit/terminal-spawn.test.ts
       - name: Windows audit contract
         run: node --import tsx --test test/unit/audit-command/agent-deny-hooks-drift.test.ts
       - name: Windows packaged install contract

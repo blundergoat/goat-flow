@@ -7,8 +7,8 @@
  * maintainer reads one summary line on pass, or a short bounded list of what regressed on fail.
  * Exit codes: 0 debt unchanged or reduced, 1 policy or manifest failure, 2 analyzer could not run.
  */
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { captureCommand } from "./capture-command.mjs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
@@ -59,7 +59,7 @@ function resolveAnalyzerLaunchCommand() {
  * @returns the parsed report, or a `failure` message when the analyzer could not produce one;
  *   `scan` absent means the maintainer sees an analyzer problem rather than a debt verdict
  */
-function scanRepositoryWithAnalyzer() {
+async function scanRepositoryWithAnalyzer() {
   let launchCommand;
   try {
     launchCommand = resolveAnalyzerLaunchCommand();
@@ -69,35 +69,39 @@ function scanRepositoryWithAnalyzer() {
     };
   }
   const { command, prefixArgs } = launchCommand;
-  const analyzerRun = spawnSync(
-    command,
-    [...prefixArgs, "analyse", "--format=json", "--fail-on", "none"],
-    {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      shell: false,
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
-  // The analyzer never started - for example `npm ci` has not run in a fresh clone.
-  if (analyzerRun.error) {
+  let analyzerRun;
+  try {
+    analyzerRun = await captureCommand(
+      [command, ...prefixArgs, "analyse", "--format=json", "--fail-on", "none"],
+      { cwd: REPO_ROOT, maxBuffer: 64 * 1024 * 1024 },
+    );
+  } catch (error) {
     return {
-      failure: `analyzer failure: spawn failed (${analyzerRun.error.message})`,
+      failure: `analyzer failure: output capture failed (${error.message})`,
+    };
+  }
+  // EPERM can accompany a completed child; every other launch error remains fatal.
+  const completed =
+    typeof analyzerRun.status === "number" && analyzerRun.signal === null;
+  if (!completed || (analyzerRun.error && analyzerRun.error.code !== "EPERM")) {
+    return {
+      failure: `analyzer failure: spawn failed (${analyzerRun.error?.message ?? analyzerRun.signal ?? "no exit status"})`,
     };
   }
   // The analyzer ran but gave up, so its own first line explains more than a debt diff would.
   if (analyzerRun.status !== 0) {
     const firstStderrLine =
-      (analyzerRun.stderr ?? "").trim().split("\n")[0] ?? "";
+      (analyzerRun.stderr ?? "").toString().trim().split("\n")[0] ?? "";
     return {
       failure: `analyzer failure: exit ${analyzerRun.status} (${firstStderrLine})`,
     };
   }
   try {
-    return { scan: JSON.parse(analyzerRun.stdout) };
+    return { scan: JSON.parse(analyzerRun.stdout.toString("utf8")) };
   } catch (error) {
     // Output was not JSON - for example a plugin printed a banner onto stdout ahead of the report.
     const outputStart = (analyzerRun.stdout ?? "")
+      .toString()
       .slice(0, 120)
       .replaceAll("\n", " ");
     return {
@@ -153,7 +157,7 @@ function printAcceptedDebtSummary(
  * @returns 0 when debt is unchanged or reduced, 1 for a policy or manifest failure, 2 when the
  *   analyzer could not run at all
  */
-function main() {
+async function main() {
   // e.g. a maintainer ran `bash scripts/preflight-checks.sh` before tagging a release, or CI started
   // the Node 22 ratchet job on a pull request.
   const failures = new RatchetFailureReport();
@@ -163,7 +167,7 @@ function main() {
     for (const line of failures.renderReportLines()) console.error(line);
     return 1;
   }
-  const analyzerResult = scanRepositoryWithAnalyzer();
+  const analyzerResult = await scanRepositoryWithAnalyzer();
   // No usable scan means an operational problem to fix, told apart from a debt regression by exit 2.
   if (analyzerResult.failure) {
     console.error(analyzerResult.failure);
@@ -199,4 +203,4 @@ function main() {
   return 0;
 }
 
-process.exit(main());
+process.exitCode = await main();

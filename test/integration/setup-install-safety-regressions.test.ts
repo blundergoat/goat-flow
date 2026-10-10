@@ -108,6 +108,7 @@ describe("setup safety regressions", () => {
     });
   }
 
+  // Writes a provider enrolled through a legacy deny guard; it must get Git protection previewed before its Git companion exists.
   it("previews Git protection for an already enrolled sibling provider", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".claude"), { recursive: true });
@@ -183,7 +184,8 @@ describe("setup safety regressions", () => {
     });
   }
 
-  // The outside sentinel proves setup neither imports unrelated documentation nor removes the developer's link to it.
+  // Writes an outside sentinel proving setup neither imports unrelated documentation nor removes the developer's link to it.
+  // A Windows host that refuses symlinks skips; any other symlink error throws.
   it("does not migrate a legacy commit guide through a symlink", (testContext) => {
     const root = makeTempProject();
     const outside = makeTempProject();

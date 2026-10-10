@@ -49,7 +49,10 @@ it("all quality history readers skip unsafe and oversized entries with visible w
   const directory = join(root, ".goat-flow/logs/quality");
   mkdirSync(directory, { recursive: true });
   const valid = join(directory, "2026-09-21-1000-codex-aaaaa.json");
-  writeFileSync(valid, JSON.stringify(makeCurrentQualityReport(root)));
+  writeFileSync(
+    valid,
+    JSON.stringify({ ...makeCurrentQualityReport(root), agent: "codex" }),
+  );
   const oversized = join(directory, "2026-09-21-1100-codex-bbbbb.json");
   writeFileSync(oversized, "");
   truncateSync(oversized, 2 * 1024 * 1024 + 1);

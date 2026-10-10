@@ -8,6 +8,7 @@ last_reviewed: 2026-09-20
 ## Footgun: Learning-loop record counts have two grammars that disagree on resolved entries
 
 **Status:** active | **Created:** 2026-06-10 | **Updated:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Incident count:** 2 | **Latest occurrence:** 2026-08-15
 
 **Prevention:** Match the count source to the surface's concept: retrieval and index surfaces use `parseBucket` active counts; size and health surfaces use stats totals. Never render counts from both grammars under one bucket label on one surface; when both must appear, label them distinctly ("active entries" versus total records). Any tool that counts headings excludes the `## Footgun:` template in `README.md` and decides which grammar it means.
@@ -54,6 +55,7 @@ last_reviewed: 2026-09-20
 ## Footgun: Bulk learning-loop rewrites can duplicate entries and hoist Prevention above the metadata block
 
 **Status:** active | **Created:** 2026-09-02 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** A programmatic bucket rewrite proves itself with heading counts, a non-blank line multiset diff against HEAD, and a Status-first scan before `goat-flow index` runs; a green transform log and a passing order contract are not that proof.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -112,4 +114,4 @@ last_reviewed: 2026-09-20
 
 **Original symptoms:** `stats --check` existence-checked only `` `file:line` ``, `` `file` (search: `needle`) ``, and `(search: "needle")`, so the `Evidence anchors:` convention used in 15 files as of 2026-06-01 bypassed the gate while lessons cited two deleted tests and a deleted milestone; a Codex quality run found them by hand.
 
-**Invariant:** Durable learning-loop evidence uses the `(search: "needle")` form when content identity matters, and never anchors to `.goat-flow/plans/**` milestone files, which are gitignored WIP.
+**Invariant:** Durable learning-loop evidence uses the `(search: "needle")` form when content identity matters, and never anchors to `.goat-flow/plans/**` milestone files, which are gitignored WIP. Identify incidents by their observed behaviour and date, with committed file and semantic anchors rather than local milestone identities.

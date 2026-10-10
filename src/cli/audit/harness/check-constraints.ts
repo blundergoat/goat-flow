@@ -10,6 +10,7 @@ import type {
 } from "../types.js";
 import type { CheckEvidence } from "../provenance-types.js";
 import { pass, fail } from "./helpers.js";
+import { missingRequiredClaudeReadDenies } from "../../facts/agent/settings.js";
 
 const VERIFIED_ON = "2026-04-19";
 
@@ -92,7 +93,15 @@ function secretDenyDetails(
         !isScriptOnly &&
         !agentFacts.hooks.readDenyCoversSecrets
       ) {
-        missingPatterns.push("file-read-secret-paths");
+        const missingRules =
+          agentFacts.agent.id === "claude"
+            ? missingRequiredClaudeReadDenies(agentFacts.settings.parsed)
+            : [];
+        missingPatterns.push(
+          ...(missingRules.length > 0
+            ? missingRules
+            : ["file-read-secret-paths"]),
+        );
       }
       if (!agentFacts.hooks.bashDenyCoversSecrets) {
         missingPatterns.push("bash-secret-paths");
@@ -105,6 +114,30 @@ function secretDenyDetails(
       };
     }),
   };
+}
+
+/**
+ * Name missing required Read rules before the reviewed settings repair guidance.
+ *
+ * @param agents - settings-based agents with incomplete secret coverage
+ * @param details - required deny evidence collected for this check
+ * @returns repair advice that preserves saved permission choices until approval
+ */
+function secretSettingsRepairAdvice(
+  agents: string[],
+  details: HarnessCheckDetails,
+): string {
+  const missingRules =
+    details.denyMatrix?.flatMap((row) =>
+      row.missingPatterns
+        .filter((rule) => rule.startsWith("Read("))
+        .map((rule) => `${row.agent}: ${rule}`),
+    ) ?? [];
+  const missingAdvice =
+    missingRules.length > 0
+      ? `Missing required deny rules: ${missingRules.join(", ")}. `
+      : "";
+  return `${missingAdvice}Review ${agents.join(", ")} settings against the shipped template, preserve allow/ask and unrelated rules, and show the diff for approval before adding missing denies. Keep .env, .ssh, .aws, *.key, *.pem, *.pfx and plaintext credential stores protected. Verify Bash hook coverage too; file-read deny alone does not bind Bash shell reads.`;
 }
 
 /**
@@ -166,7 +199,8 @@ function denyRegistrationDetails(
   };
 }
 
-const denyCoversSecrets: HarnessCheck = {
+/** Required constraint shared with setup without running unrelated harness advisories. */
+export const denyCoversSecrets = {
   id: "deny-covers-secrets",
   name: "Deny blocks direct literal secret paths",
   concern: "constraints",
@@ -176,7 +210,7 @@ const denyCoversSecrets: HarnessCheck = {
     ".goat-flow/learning-loop/footguns/auditor.md",
   ]),
   /** Run the Deny blocks direct literal secret paths check. */
-  run: (ctx) => {
+  run: (ctx: Pick<AuditContext, "agents">) => {
     const { covered, scriptOnly, uncoveredSettings, uncoveredScript } =
       classifySecretDeny(ctx);
     const details = secretDenyDetails(ctx.agents);
@@ -228,18 +262,16 @@ const denyCoversSecrets: HarnessCheck = {
         `${uncoveredSettings.join(", ")}: direct literal secret-path blocking incomplete (file-read deny and/or Bash hook pattern is missing)`,
       );
       recs.push(
-        `Add direct literal secret-path blocking to ${uncoveredSettings.join(", ")}: settings/Codex permission file-read patterns for .env / .ssh / .aws / .pem / .key, AND the Bash deny hook must block cat/source/base64/etc. on the same literal paths.`,
+        `Review direct literal secret-path blocking for ${uncoveredSettings.join(", ")}: settings/Codex permission file-read patterns for .env / .ssh / .aws / .pem / .key / .pfx and plaintext credential stores, AND the Bash deny hook must block cat/source/base64/etc. on the same literal paths.`,
       );
-      fixes.push(
-        `${uncoveredSettings.join(", ")}: extend the agent file-read deny layer with .env, .ssh, .aws, credentials, *.key, *.pem AND add an is_secret_path_touch (or equivalent) check in the Bash deny hook. File-read deny alone does not bind Bash shell reads.`,
-      );
+      fixes.push(secretSettingsRepairAdvice(uncoveredSettings, details));
     }
     if (uncoveredScript.length > 0) {
       findings.push(
         `${uncoveredScript.join(", ")}: Bash deny hook does not block direct literal secret paths (script-only agent - no file-read deny layer applies)`,
       );
       recs.push(
-        `Add direct literal secret-path blocking to the Bash deny hook for ${uncoveredScript.join(", ")}: block cat/source/base64/etc. on .env, .ssh, .aws, credentials, *.key, *.pem.`,
+        `Add direct literal secret-path blocking to the Bash deny hook for ${uncoveredScript.join(", ")}: block cat/source/base64/etc. on .env, .ssh, .aws, credential stores, *.key, *.pem, *.pfx.`,
       );
       fixes.push(
         `${uncoveredScript.join(", ")}: add an is_secret_path_touch (or equivalent) check in the Bash deny hook. Script-only agents have no file-read deny surface; the Bash hook is the only enforcement layer.`,
@@ -247,7 +279,7 @@ const denyCoversSecrets: HarnessCheck = {
     }
     return fail(findings, recs, fixes, details);
   },
-};
+} satisfies HarnessCheck;
 
 const denyBlocksDangerous: HarnessCheck = {
   id: "deny-blocks-dangerous",
@@ -659,7 +691,7 @@ const settingsRulesMatched: HarnessCheck = {
         `Claude Code accepts but does not consult the ${staleForms} permission rule ${formLabel} reported here; treat them as inert configuration, not enforcement.`,
       ],
       [
-        "Review the reported inert rules with the project owner. They MAY remain as defense-in-depth markers or be removed deliberately; goat-flow does not rewrite them automatically.",
+        "Review the reported inert rules with the project owner. An approved install normalizes or removes stale deny rules and prints the changes, but preserves allow and ask arrays verbatim. Review those separately: activating an inert allow or ask rule changes its meaning.",
       ],
       { denyMatrix },
     );

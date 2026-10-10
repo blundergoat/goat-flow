@@ -16,6 +16,9 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
+import os from "node:os";
+import { syncBuiltinESMExports } from "node:module";
+import { gitTopLevel } from "../../src/cli/server/hook-scan-paths.js";
 import {
   deriveManagedHookDesiredState,
   readAgentHookState,
@@ -58,6 +61,20 @@ import {
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: launchers and installation", () => {
+  it("resolves a Git root when it contains the temporary directory", (t) => {
+    withTempProject((root) => {
+      runGit(root, ["init"]);
+      t.mock.method(os, "tmpdir", () => root);
+      syncBuiltinESMExports();
+      try {
+        assert.equal(gitTopLevel(root), root);
+        assert.equal(runGit(root, ["status", "--porcelain"]), "");
+      } finally {
+        t.mock.restoreAll();
+        syncBuiltinESMExports();
+      }
+    });
+  });
   /** Proves installed hooks can find default Git Bash when PATH exposes only WSL. */
   it("finds default Git Bash for hooks when PATH exposes only the WSL shim", () => {
     const defaultGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
@@ -748,7 +765,7 @@ describe("hook registrar: launchers and installation", () => {
     });
   });
 
-  // Mutating an isolated installed row proves a loader cannot drop one no-op field and revive Copilot's bare-node failure after sync.
+  // Writes one mutated installed row, proving a loader cannot drop a no-op field and revive Copilot's bare-node failure after sync.
   it("reports a partial Claude routing descriptor as command drift", () => {
     withTempProject((root) => {
       installClaudeDenyHook(root);
@@ -780,6 +797,7 @@ describe("hook registrar: launchers and installation", () => {
     assertProviderDenyDescriptorsMatchInstallerContract();
   });
 
+  // Writes a stale Windows override into an installed Codex row, which must be reported as command drift instead of trusted.
   it("reports a stale Codex Windows override as command drift", () => {
     withTempProject((root) => {
       installCodexDenyHook(root);

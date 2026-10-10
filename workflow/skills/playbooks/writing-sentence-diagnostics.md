@@ -19,7 +19,7 @@ Find the smallest sentence edit that lowers a concrete reader cost while preserv
 
 ## Diagnostic Route
 
-Name the reader cost before editing with one primary code: `DELAY` defers its claim, `ACTOR` wrong subject, `KNOWN` the reader already knows it, `INFLATE` unsupported significance, `HIDDEN-RISK` an obscured regression, `RESIDUE` drafting scaffolding, or `CADENCE` repetition that obscures priority.
+Name the reader cost before editing with one primary code: `DELAY` defers its claim, `ACTOR` wrong subject, `KNOWN` the reader already knows it, `OPAQUE` a label the reader cannot decode, `INFLATE` unsupported significance, `HIDDEN-RISK` an obscured regression, `RESIDUE` drafting scaffolding, or `CADENCE` repetition that obscures priority.
 
 Use a component as the actor when the component performs the action. Name a person or team only when responsibility is relevant and evidenced. Do not turn a system behaviour into a claim about what people chose, believed, or intended. Passive voice is valid when the actor is unknown, irrelevant, or deliberately withheld.
 
@@ -52,6 +52,8 @@ These patterns diagnose reader cost, not authorship. A found phrase is only a ca
 
 **Canonical terminology.** Use one noun per technical referent. Repeat it or use an unambiguous pronoun instead of rotating among near-synonyms.
 
+**Opaque terms.** A label, acronym, or ID the artifact never establishes costs the reader a lookup the author did not need. Establish it once where it first matters, or use the plain name when the label carries nothing the reader acts on. The fix for `OPAQUE` must not create `KNOWN`.
+
 **Cadence.** The same opening three words across three or more sibling items locates a `CADENCE` candidate. Confirm the shape has become a template, then vary the repeats; identical grammar stays correct when the units are genuinely parallel.
 
 **Residue.** Remove leaked scaffolding, shipped placeholders, tracking parameters on pasted links, broken Markdown, and broken dash spacing. Re-read the repaired sentence so deletion does not weld neighbouring words together.
@@ -64,14 +66,12 @@ These patterns diagnose reader cost, not authorship. A found phrase is only a ca
 
 **Punctuation carries meaning.** For new or edited prose, follow active project punctuation policy. Do not run a broad punctuation sweep. Preserve direct quotations, code, approved titles, and untouched history. An em dash, semicolon, fragment, or repeated sentence length is not independently a defect.
 
-**Replies carry social cost.** Hedges, softeners, and a checking question can preserve uncertainty or warmth. Do not split a sentence about a person's work when the split makes it sound accusatory.
-
 ## Quick Tests
 
 1. **Read it aloud.** Mark the place where meaning or breath fails, not every long sentence.
 2. **Feelings check.** If the sentence tells the reader how to feel about a fact, state the fact unless the reaction is sourced.
 3. **Actor check.** Can the named subject perform the verb, and is human responsibility evidenced?
-4. **Knowledge check.** Does the explanation answer a likely question, or repeat what this reader already knows?
+4. **Knowledge check.** Does the explanation answer a likely question rather than repeat what this reader knows, and can the reader decode every label?
 5. **Neighbour check.** Did the edit preserve qualifications, cause, consequence, and social meaning across sentence boundaries?
 
 ## Worked Example

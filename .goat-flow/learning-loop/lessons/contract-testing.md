@@ -1,62 +1,16 @@
 ---
 category: contract-testing
-last_reviewed: 2026-09-27
+last_reviewed: 2026-10-01
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
 
-## Lesson: Reference-pack wording fixes must check word budget immediately
-
-**Status:** active | **Created:** 2026-05-19
-
-**Decision changed:** Run the canonical word-budget contract immediately after every skill or shared-reference wording edit.
-
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Incident count:** 33
-
-**Latest occurrence:** 2026-09-20
-
-**Prevention:** Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` immediately after each edit, before aggregate suites; compact before expanding scope. Check bucket headroom first; several sit within tens of bytes of the 40,000-byte gate.
-
-**What happened:** Repeated wording edits and learning captures crossed caps. Unless noted, the gate is `test/contract/skill-hardening-contracts.test.ts`:
-
-- **2026-05-19/22:** TDD packs 3022/3008 words, preamble over 1500, QA over 2578 (search: `progressive reference packs stay within the 3000-word cap per file`).
-- **2026-06-14:** Dispatcher 653/555 - `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
-- **2026-07-12 preflight verification:** `verification-preflight.md` hit 40KB - `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
-- **2026-07-12 boundary rollout:** Plan/QA 2503/2524 while a bad delimiter count said 1202 (search: `Counts user-facing skill guidance without YAML frontmatter`).
-- **2026-07-12 goat-plan handoff work:** Plan 2533 - `workflow/skills/goat-plan/SKILL.md` (search: `Handoff-grade artifacts`).
-- **2026-07-13 shared-reference compaction:** Shared references 1560/1601, compacted to 1484/1490 (search: `always-loaded shared references stay within the 1500-word cap`).
-- **2026-07-16 PR #56:** Goat/plan/preamble/TDD 597/2689/1540/3021; compaction also repaired stale assertions (search: `requires pre-write redaction for durable local text`).
-- **2026-07-17–19, 2026-08-01 review hardening, 2026-08-02 PR #57:** QA, plan, review, preamble, and dispatcher edits repeatedly reached 2506–2762 / 1514 / 579 words; focused contracts restored every surface before mirror sync (search: `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-08-01 learning capture:** A new lesson pushed this bucket to 40KB; narrower routing and recurrence consolidation restored it - `src/cli/stats/stats.ts` (search: `rule: "bucket-size"`).
-- **2026-08-02 PR #57 CI:** `verification-preflight.md` reached 40,415 bytes and failed the merge build - the round-trip installer fixture runs preflight inside a temp install. Local `stats --check` had flagged it for days as an accepted baseline. Buckets gate the build.
-- **2026-08-03 v1.15 ship hardening:** Unifying goat-critique's meta-audit rubric left every mirrored SKILL.md at exactly 2,500 words, so the focused contract failed until the new pointer was compacted. Evidence anchor: `test/contract/skill-hardening-skills-2.test.ts` (search: `uses one reproducible goat-critique meta-audit rubric`).
-- **2026-08-03 goat-review base clause:** A one-clause scope fix added 23 words to a skill sitting at 2,498/2,500 and simultaneously reworded away a contract-pinned literal, so two contracts failed at once (search: `stops oversized inferred branch scopes before review begins`). Wording edits have two budgets, not one: the word cap AND the exact phrases contracts assert. Measure headroom and grep `test/` for the phrases being reworded BEFORE editing; when headroom is one word, attach the change to an unpinned line and pay for it with a same-line trim.
-- **2026-08-04 goat-review mutation vocabulary:** Synchronizing the five shared mutation verbs pushed the root skill to 2,506 words. The first compaction then removed the exact Spec Drift phrase pinned at `test/contract/skill-hardening-review-3.test.ts` (search: `keeps an unselected optional Spec Drift pass out of review degradation`). Restoring the pinned phrase and compacting unpinned optional-output prose returned the focused run to 3/3 pass.
-- **2026-08-06 human-facing prose scope extension:** Adding a learning-loop Scope Gate row plus a Why paragraph pushed `writing-human-facing-prose.md` to 3,026 words; the fix trimmed the just-added paragraph, never pre-existing load-bearing text (search: `progressive reference packs stay within the 3000-word cap per file`). A same-day review-pass register edit then broke the pinned literal `Reports and reviews` because the pin grep ran before Stage A but not before the follow-up edit (search: `keeps human-facing prose edits truth-preserving and source-aware`); restoring the literal and attaching the addition as an unpinned clause returned both focused contracts to green.
-- **2026-08-09 v1.15.1 goat-plan:** Correcting the ISSUE write target raised the 2,100-word redesign surface to 2,103. Trimming three words from an unpinned fresh-plan sentence returned it to exactly 2,100 without changing the artifact rule. Evidence: `test/contract/skill-hardening-plan-2.test.ts` (search: `redesigned goat-plan canonical surface`).
-- **2026-08-17 goat-review integrity guidance:** Resolved-only integrity guidance raised the skill to 2,560 words. Compressing only the new guidance restored the cap but removed three pinned semantics: diff-path disclosure, verdict grammar, and explicit gate-evidence classification. The word-budget contract, all goat-review shards, and the shared-surface shard had to pass together. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`), `test/contract/skill-hardening-review-1.test.ts` (search: `keeps area audits independent of diff-only metadata and verdicts`), and `test/contract/skill-hardening-shared-1.test.ts` (search: `classifies gate evidence without inventing changed-code causality`).
-- **2026-08-24 goat-plan checker-pointer rewrite:** The first checker-pointer rewrite added three words to the near-full canonical surface. Measuring the combined reference
-  pack immediately led to a tighter sentence that removed the duplicated identifier list and freed seven words without weakening the contract.
-  Evidence anchor: `test/contract/skill-hardening-plan-2.test.ts` (search: `enforces current-heading length and internal identifiers`).
-
-**Recurrence 2026-08-29:** Adding the accepted two-tier sub-agent budget to both shared convention copies raised each body from 1496 to 1539 words. The focused budget contract ran only after the aggregate fast suite, delaying attribution. The first trim then changed five redaction phrases pinned by the shared-surface contract. Applying the agent-facing writing playbook's one-owner and pruning rules around those fixed phrases removed duplicate continuity prose and restored both mirrors to 1481 words. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`), `test/contract/skill-hardening-shared-3.test.ts` (search: `requires pre-write redaction for durable local text`), and `workflow/skills/reference/skill-preamble.md` (search: `session, handoff, critique, review, quality, security, or export text`), which owned that artifact wording from 2026-09-07 when M29 consolidated it out of `skill-conventions.md` so Quick depth could reach it.
-
-**Recurrence 2026-09-01:** Inserting a retrieval-cap clause into the shared READ bullet raised that line to 861-863 characters across the seven parity-checked files, and `scripts/check-instruction-parity.mjs` (search: `MAX_INSTRUCTION_LINE_CHARACTERS`) failed on its 800-character line limit - a cap no instruction file or setup template states. Contract and link checks had already passed, so parity was the only gate that saw it. Rewriting the clause to 93 characters with the same meaning restored parity at 794. Instruction files carry a third budget beyond word caps and pinned phrases: characters per line. Measure the target line before inserting, and run the parity script first when a shared section changes.
-
-**Recurrence 2026-09-05:** The lane-aware planning edit first checked only its three new cases and skill-body cap. The complete plan/parity run then reported `# pass 61`, `# fail 7`: six existing phrase pins and a 6,080/5,650 combined surface. The wider skill suite also caught conventions at 1,690 words against the exclusive 1,500 cap. Restoring pinned guidance and routing duplicate rules to their owners yielded 2,139 body words, 5,649 combined words, 1,497 conventions words, and `# pass 249`, `# fail 0`. Measure every affected owner together before mirror writes. Evidence: `test/contract/skill-hardening-plan-2.test.ts` (search: `canonical goat-plan surface has`), `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`), and `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`).
-
-**Recurrence 2026-09-20:** One new sentence in goat-plan's milestone reference, permitting a single likely floor, raised the file from 2,966 to 3,002 words. The plan had named the fast suite as the proof route, so the budget contract first ran there, after the three installed copies were written, and they had to be copied again. Trimming the new sentence left 2,986. The INDEX search before the work never used the word budget, although the milestone named reference budgets as a risk. `test/contract/skill-hardening-plan-2.test.ts` (search: `keeps canonical goat-plan files within the standard per-file budgets`).
-
-**Root cause:** Treated capped prose as tiny.
-
----
+Related evidence moved intact to [instruction-word-budgets.md](instruction-word-budgets.md).
 
 ## Lesson: Skill compaction must preserve indexed semantic anchors
 
 **Status:** active | **Created:** 2026-07-12
+**Severity:** INTEGRATION
 
 **Decision changed:** Preserve skill decision rules before optimizing word-count headroom; retain semantic anchors and verify meaning as well as contracts.
 
@@ -79,11 +33,11 @@ When a cut changes a decision or makes a rule ambiguous, restore it and remove l
 - **2026-08-01:** A review-contract rollout changed pinned wording, split one code span, and removed “with R-ID”; contracts restored all. Evidence: `test/contract/skill-hardening-review-2.test.ts` (search: `gives goat-review findings stable IDs, harm, and distinct evidence axes`).
 - **2026-08-09:** A prose-style pass changed `Decide First` to sentence case and broke a learning-loop semantic anchor. The midpoint content audit caught `stale-semantic-anchor`; restoring `docs/skill-authoring.md` (search: `## Decide First`) preserved the reference.
 - **2026-08-09 v1.15.1 goat-critique:** The new clean-attestation contract passed within budget, but the first compaction removed four phrases pinned by the adjacent meta-rubric contract. The focused suite reported 17/18 until those phrases were restored and unpinned output-list prose paid the word cost. Evidence: `test/contract/skill-hardening-skills-2.test.ts` (search: `uses one reproducible goat-critique meta-audit rubric`).
-- **2026-09-04:** M15's content audit found that ADR-006 still cited a shared-preamble phrase shortened during compaction. Updating the decision's needle to the current wording restored the semantic-anchor contract. Evidence: `.goat-flow/learning-loop/decisions/ADR-006-autonomous-skill-mode.md` (search: `an invoked skill runs its full protocol`) and `.goat-flow/skill-docs/skill-preamble.md` (search: `an invoked skill runs its full protocol`).
-- **2026-09-04 release acceptance:** Consolidating a timing recurrence removed its cited `go-live M15 activation` heading fragment. `stats --check` rejected the stale inbound reference; restoring the fragment preserved the existing anchor without dropping the expanded timing rule. Evidence: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `go-live M15 activation`) and `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `go-live M15 activation`).
+- **2026-09-04:** the content audit found that ADR-006 still cited a shared-preamble phrase shortened during compaction. Updating the decision's needle to the current wording restored the semantic-anchor contract. Evidence: `.goat-flow/learning-loop/decisions/ADR-006-autonomous-skill-mode.md` (search: `an invoked skill runs its full protocol`) and `.goat-flow/skill-docs/skill-preamble.md` (search: `an invoked skill runs its full protocol`).
+- **2026-09-04 release acceptance:** Consolidating a timing recurrence removed its cited `go-live activation` heading fragment. `stats --check` rejected the stale inbound reference; restoring the fragment preserved the existing anchor without dropping the expanded timing rule. Evidence: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `go-live activation`) and `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `go-live activation`).
 - **2026-09-05 ADR concision rewrite:** Condensing 30 ADRs dropped twelve phrases pinned by contract tests or learning-loop anchors across six records: `return-to-implement` and two siblings in ADR-005, four headings and sentences in ADR-006, `A skill must have at least one of` and `explicit user acceptance for each compatibility break` in ADR-009, `Canonical agents` in ADR-020, `shipped and reverted` in ADR-037, and `exec form` in ADR-053. The pre-rewrite sweep found 14 anchors and missed these because its grep was capped at 12 lines and single-line. `stats --check` and the three ADR-reading contracts caught every one, and all were restored verbatim. Evidence: `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `explicit user acceptance for each compatibility break`) and `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the accepted clarity authority aligned`).
 
-**Recurrence 2026-09-13 (M71 bucket split):** Searching only the four moved lesson headings missed two citations to text inside an entry. The first `stats --check` reported two `stale-ref` findings after the split. Before moving entries, inventory references to the source bucket and validate every cited needle against its destination; heading preservation alone does not preserve citation paths. Evidence: `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `go-live M15 activation`) and `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `go-live M15 activation`).
+**Recurrence 2026-09-13 (bucket split):** Searching only the four moved lesson headings missed two citations to text inside an entry. The first `stats --check` reported two `stale-ref` findings after the split. Before moving entries, inventory references to the source bucket and validate every cited needle against its destination; heading preservation alone does not preserve citation paths. Evidence: `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `go-live activation`) and `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `go-live activation`).
 
 **Recurrence 2026-09-21 (v1.17.0 release headroom):** Compaction across functional skill roots and the shared preamble paraphrased exact phrases used by contract consumers. The broad hardening suite rejected the first pass; restoring pinned phrases recovered structural acceptance, but did not prove that all meaning survived. Inventory exact assertions before compaction, then run the whole hardening suite after each canonical-to-installed mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`) and `test/contract/skill-hardening-review-2.test.ts` (search: `pins one severity vocabulary and canonical integrity field shapes`).
 
@@ -115,6 +69,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 ## Lesson: Source-regex dashboard tests must tolerate formatter reflow
 
 **Status:** active | **Created:** 2026-05-11
+**Severity:** INTEGRATION
 
 **Prevention:** After changing source-grep tests for dashboard classic scripts, run Prettier before the focused test rerun. If a regex only protects structure, make whitespace flexible enough for formatter reflow or use a small VM helper test instead.
 
@@ -136,6 +91,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 ## Lesson: Config mergers must preserve user-visible serialization
 
 **Status:** active | **Created:** 2026-08-12 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 
 **Decision changed:** Compare both parsed state and serialized output when replacing migration logic, and seed compatibility proof through the predecessor producer when it remains callable.
 
@@ -153,13 +109,14 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 **Recurrence 2026-08-27:** The first v2 bootstrap fixture rebuilt small v1 files in an order that happened to satisfy the new UTF-8 canonicalizer. The production v1 writer orders its complete path set with `localeCompare`; a direct writer-to-facade reproduction returned `malformed-blocking` for every agent shape checked. The correction preserves parsed v1 row order during byte normalization, then applies UTF-8 sorting only to the virtual v2 state. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `V1 predates UTF-8 canonical ordering`) and `test/unit/managed-setup-preview.test.ts` (search: `bootstraps a baseline written by the v1 state writer`).
 
 
-**Recurrence 2026-09-07:** The M32 review found that a helper stringified the whole adapter result before inspecting feedback. JSON escaping hid decoded line breaks from the old line-count assertion; the reviewed newline mutation survived that check. The word `Coverage:` itself remains searchable through ordinary JSON escaping, so its absence was not the decisive regression discriminator. The current helper parses stdout and selects the host feedback field; each provider case checks the exact decoded message and its real line count. Evidence: `test/unit/hook-provider-adapters.test.ts` (search: `providerFeedbackText`, `compacts only the verified non-source Gruff advisory for`), `workflow/hooks/hook-provider-adapters.mjs` (search: `renderHookResultMessage`, `adaptPostToolResult`). These are the observable representation and regression boundaries, not proof that the original executor performed a mutation check.
+**Recurrence 2026-09-07:** The review found that a helper stringified the whole adapter result before inspecting feedback. JSON escaping hid decoded line breaks from the old line-count assertion; the reviewed newline mutation survived that check. The word `Coverage:` itself remains searchable through ordinary JSON escaping, so its absence was not the decisive regression discriminator. The current helper parses stdout and selects the host feedback field; each provider case checks the exact decoded message and its real line count. Evidence: `test/unit/hook-provider-adapters.test.ts` (search: `providerFeedbackText`, `compacts only the verified non-source Gruff advisory for`), `workflow/hooks/hook-provider-adapters.mjs` (search: `renderHookResultMessage`, `adaptPostToolResult`). These are the observable representation and regression boundaries, not proof that the original executor performed a mutation check.
 
 ---
 
 ## Lesson: Retire shared contract vocabulary only after predecessor consumers migrate
 
 **Status:** active | **Created:** 2026-08-27
+**Severity:** INTEGRATION
 
 **Decision changed:** Stop emitting predecessor-only values at the new boundary first; narrow a shared type only after every producer and consumer has migrated.
 
@@ -180,6 +137,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 ## Lesson: Regressions caught too late - tests run at milestone granularity, not edit granularity
 
 **Status:** active | **Created:** 2026-04-05
+**Severity:** INTEGRATION
 
 **Prevention:**
 1. Consider an optional post-write hook that runs the project's test command after file changes (configured via `config.yaml`, off by default)
@@ -214,6 +172,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 ## Lesson: Filtered manifest ids still need explicit indexed-lookup proof in TypeScript
 
 **Status:** active | **Created:** 2026-04-21
+**Severity:** INTEGRATION
 
 **Prevention:**
 1. After refactoring manifest/registry code that filters ids and then indexes a `Record`, run `npm run typecheck` even if the focused unit tests already pass.
@@ -235,6 +194,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 ## Lesson: Semantic prose contracts must bind to the owned section
 
 **Status:** active | **Created:** 2026-08-14
+**Severity:** INTEGRATION
 
 **Decision changed:** Make semantic wording assertions case-insensitive unless casing is the contract, and bound shared files to the exact owned section, object, or fence.
 

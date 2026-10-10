@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-07
-**Updated:** 2026-09-13 - aligned lifecycle guidance with the existing footgun and lesson states. The 2026-09-05 amendment condensed this record, absorbed now-removed ADR-045-index-cost-date-columns.md (content-derived cost and date columns, 2026-08-23), corrected the bucket split rule to the enforced byte gate, and deferred `agents` semantics to ADR-014. The 2026-08-15 amendment absorbed now-removed ADR-004 (config and directory layout), ADR-016 (cold-path truth), ADR-035 (generated indexes), and ADR-001 (confusion-log removal).
+**Updated:** 2026-09-30 - recorded the rejection of a second memory store. The 2026-09-13 amendment aligned lifecycle guidance with the existing footgun and lesson states. The 2026-09-05 amendment condensed this record, absorbed now-removed ADR-045-index-cost-date-columns.md (content-derived cost and date columns, 2026-08-23), corrected the bucket split rule to the enforced byte gate, and deferred `agents` semantics to ADR-014. The 2026-08-15 amendment absorbed now-removed ADR-004 (config and directory layout), ADR-016 (cold-path truth), ADR-035 (generated indexes), and ADR-001 (confusion-log removal).
 **Supersedes:** the ADR-017 marker path `.goat-flow/tasks/.active`; ADR-017's marker semantics remain in force.
 
 ## Context
@@ -62,6 +62,7 @@ Nothing in generated output is clock-derived. `stats --check` regenerates in mem
 | Generation time or mtime in rows | Unchanged sources produce different bytes, so `stats --check` reports permanent staleness | Rejected |
 | Exact model tokenizer | A model-specific dependency with false precision across runtimes | Rejected |
 | Warn on aggregate index bytes | Prescribes retiring live evidence although bounded search prevents a whole-file read | Rejected |
+| Second memory store (wiki, vector or graph) | The committed learning-loop buckets and generated indexes already provide durable retrieval; a second store would require synchronization and source-of-truth rules, with no cited local comparison showing a gain. | Decline a parallel store for project learning. Evidence: `.goat-flow/learning-loop/decisions/ADR-033-goat-flow-directory-restructure.md` (search: `### Installed layout`); `.goat-flow/learning-loop/decisions/ADR-033-goat-flow-directory-restructure.md` (search: `### Generated indexes`); `.goat-flow/architecture.md` (search: `Not a persistence gap`) Reconsider when: A fixed retrieval study demonstrates a specific missed decision that simpler index or query changes cannot resolve, and a human approves migration, ownership, and synchronization. |
 | No-overwrite migration, bucket files with a byte gate, deterministic rows with a content-derived suffix | Editing an entry changes its estimate and makes the index stale until regeneration | Accepted |
 
 ## Consequences

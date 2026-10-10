@@ -21,6 +21,7 @@ import { load } from "js-yaml";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
 import { getSkillNames, getStaleSkillNames } from "../../src/cli/constants.js";
+import { AUDIT_VERSION } from "../src.js";
 import { readAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import {
   getHookSpec,
@@ -600,7 +601,7 @@ function verifyStandaloneInstallerHookSemantics(
   writeFileSync(
     join(targetProjectPath, ".goat-flow", "config.yaml"),
     [
-      "hooks:",
+      `version: "${AUDIT_VERSION}"\nhooks:`,
       "  deny-dangerous:",
       "    enabled: true",
       "  gruff-code-quality:",
@@ -1002,8 +1003,7 @@ describe("cross-agent install smoke matrix", () => {
     assert.ok(claudeProfile?.hookConfigFile);
     assert.ok(denySpec);
     assert.ok(gruffSpec);
-    const configText =
-      'hooks: { "deny-dangerous": { enabled: false }, "post-turn-safety": { enabled: false }, "gruff-code-quality": { enabled: true } }\n';
+    const configText = `version: "${AUDIT_VERSION}"\nhooks: { "deny-dangerous": { enabled: false }, "post-turn-safety": { enabled: false }, "gruff-code-quality": { enabled: true } }\n`;
     mkdirSync(join(targetProjectPath, ".goat-flow"), { recursive: true });
     writeFileSync(
       join(targetProjectPath, ".goat-flow", "config.yaml"),
@@ -1041,7 +1041,7 @@ describe("cross-agent install smoke matrix", () => {
   const legacyHookChoices =
     '"deny-dangerous": { enabled: false }, "gruff-code-quality": { enabled: true }';
   // Replay block aliases and flow mappings so config migration preserves the user's existing YAML relationships.
-  for (const [shape, config] of Object.entries({
+  for (const [shape, hooksConfig] of Object.entries({
     "plain flow": `hooks: { ${legacyHookChoices} }\n`,
     "anchored flow": `hooks: &policy { ${legacyHookChoices} }\ncopy: *policy\n`,
     alias: `defaults: &policy { ${legacyHookChoices} }\nhooks: *policy # retain defaults\n`,
@@ -1049,6 +1049,7 @@ describe("cross-agent install smoke matrix", () => {
     "multiline flow": `hooks: {\n  ${legacyHookChoices}\n}\n`,
   })) {
     it(`preserves ${shape} hook choices during the Git split and repeated installation`, () => {
+      const config = `version: "${AUDIT_VERSION}"\n${hooksConfig}`;
       const root = makeTempProject();
       const path = join(root, ".goat-flow/config.yaml");
       mkdirSync(dirname(path), { recursive: true });
@@ -1097,7 +1098,7 @@ describe("cross-agent install smoke matrix", () => {
     assert.equal(firstInstall.status, 0, firstInstall.stderr);
     writeFileSync(
       join(targetProjectPath, ".goat-flow", "config.yaml"),
-      "hooks:\n  guard-secret-paths:\n    enabled: false\n",
+      `version: "${AUDIT_VERSION}"\nhooks:\n  guard-secret-paths:\n    enabled: false\n`,
     );
 
     const migration = runInstaller(

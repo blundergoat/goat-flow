@@ -1,11 +1,12 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-09-18
+last_reviewed: 2026-10-10
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
 
 **Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-08-04
 
 **Prevention:** When adding or tightening path validation, classify paths before checking existence: committed setup and doc files must resolve, while gitignored local-state paths are valid navigation vocabulary. Classify exceptional policy paths before generic skip predicates. Keep `scripts/check-path-integrity.sh` and `doc-paths-resolve` on the same local-state exemption policy, and never let a basename fallback search untracked trees, because a fallback is only as trustworthy as the tree it searches.
@@ -21,6 +22,7 @@ last_reviewed: 2026-09-18
 ## Footgun: Playbooks reference goat-flow repo-internal files absent from consumer installs
 
 **Status:** active | **Created:** 2026-05-29 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-07-14
 
 **Prevention:** Keep playbook rules self-contained; reference only installed siblings and the consumer's instruction files, and move goat-flow-specific commands, scans, and ADR pointers into goat-flow's own instruction files. Before declaring a playbook or shipped skill done, grep it for `\.goat-flow/(decisions|lessons|patterns|footguns)|src/cli|scripts/|ADR-|check-(drift|goat-flow)|stats --check|DESIGN_TARGET` and confirm any `scripts/...` path it names is listed in `workflow/manifest.json`; otherwise genericize it. Triage each hit: a reference to a learning-loop directory the consumer is meant to populate is portable, because `workflow/install-goat-flow.sh` (search: `for dir in .goat-flow/learning-loop/footguns`) seeds those directories, and only a specific goat-flow-authored file or ADR number is dead.
@@ -29,11 +31,12 @@ last_reviewed: 2026-09-18
 
 **Why it happens:** Playbooks are both goat-flow's working docs and shipped artifacts, and `check-drift.ts` enforces template-versus-installed byte parity, which a repo-internal reference passes identically in both copies.
 
-**Evidence:** The 2026-05-29 pass removed repo-only pointers from `workflow/skills/playbooks/code-comments.md` (search: `Related References`) and `workflow/skills/playbooks/gruff-code-quality.md` (search: `Related References`). On 2026-06-05, `workflow/skills/playbooks/browser-use.md` (search: `browser-use-python`), `workflow/skills/playbooks/page-capture.md` (search: `browser-use-python`), and `workflow/skills/goat-debug/SKILL.md` (search: `Browser evidence detection`) dropped the unshipped installer script for portable package commands; the same day a critique flagged `deployment.md`'s generic decisions-directory reference and was retracted once the installer seeding was verified. **Recurrence 2026-07-14:** M16 linked `hook-policy-testing.md` to three goat-flow-authored files and two gitignored milestone files; parity passed, but `test/integration/audit-drift.test.ts` failed on links resolving under nonexistent `workflow/learning-loop/` paths and `test/integration/setup-quality-lifecycle.test.ts` proved the milestone files never reach a consumer. The playbook now carries its policy inline and links only `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `## Related References`).
+**Evidence:** The 2026-05-29 pass removed repo-only pointers from `workflow/skills/playbooks/code-comments.md` (search: `Related References`) and `workflow/skills/playbooks/gruff-code-quality.md` (search: `Related References`). On 2026-06-05, `workflow/skills/playbooks/browser-use.md` (search: `browser-use-python`), `workflow/skills/playbooks/page-capture.md` (search: `browser-use-python`), and `workflow/skills/goat-debug/SKILL.md` (search: `Browser evidence detection`) dropped the unshipped installer script for portable package commands; the same day a critique flagged `deployment.md`'s generic decisions-directory reference and was retracted once the installer seeding was verified. **Recurrence 2026-07-14:** the change linked `hook-policy-testing.md` to three goat-flow-authored files and two gitignored milestone files; parity passed, but `test/integration/audit-drift.test.ts` failed on links resolving under nonexistent `workflow/learning-loop/` paths and `test/integration/setup-quality-lifecycle.test.ts` proved the milestone files never reach a consumer. The playbook now carries its policy inline and links only `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `## Related References`).
 
 ## Footgun: Agent capability metadata goes stale when upstream docs add hooks
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Re-check each provider, event, and result channel instead of carrying agent-level support forward.
 **Trigger phase:** READ
 **Incident count:** 4 | **Latest occurrence:** 2026-08-23
@@ -44,18 +47,19 @@ last_reviewed: 2026-09-18
 
 **Why it happens:** Capability tables freeze one observation and reuse it across events, and setup docs, dashboard state, audit logic, tests, and learning entries then reinforce a claim structural checks cannot validate.
 
-**Evidence:** `workflow/manifest.json` (search: `"hook_config_file": ".agents/hooks.json"`) records the project hook surface without claiming every event returns a result; `src/cli/server/agent-hook-command.ts` (search: `spec.id === "gruff-code-quality"`) proves Antigravity input routing only; `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`) records the delivery limit; `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) proves the toggle does not create unusable registration. **Recurrence 2026-08-23:** M13's first compatibility matrix said Claude subagents could not spawn subagents, while the current [Claude Code subagent reference](https://code.claude.com/docs/en/sub-agents) says they delegate up to three layers by default and the installed CLI was 2.1.240; rechecking removed that false blocker before the ADR draft.
+**Evidence:** `workflow/manifest.json` (search: `"hook_config_file": ".agents/hooks.json"`) records the project hook surface without claiming every event returns a result; `src/cli/server/agent-hook-command.ts` (search: `spec.id === "gruff-code-quality"`) proves Antigravity input routing only; `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`) records the delivery limit; `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) proves the toggle does not create unusable registration. **Recurrence 2026-08-23:** the first compatibility matrix said Claude subagents could not spawn subagents, while the current [Claude Code subagent reference](https://code.claude.com/docs/en/sub-agents) says they delegate up to three layers by default and the installed CLI was 2.1.240; rechecking removed that false blocker before the ADR draft.
 
 ## Footgun: Active footgun Symptoms paragraph drifts after the underlying bug is fixed
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** When a behavior fix changes evidence cited by an active footgun, update or resolve that entry in the same change.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 5
-**Latest occurrence:** 2026-09-05
+**Incident count:** 6
+**Latest occurrence:** 2026-09-30
 
-**Prevention:** When you fix a bug that has a footgun entry, in the same change either rewrite its Symptoms to the principle the fix demonstrates with anchors at the current shape, or move it to Resolved with a one-line summary; never leave an active entry whose anchors do not resolve. When reviewing a bucket, treat a zero-hit anchor or one that contradicts the prose as a SEV signal. `stats --check` validates literal `(search: ...)` anchors in footguns and lessons and promotes stale existing-target anchors in patterns to blocking findings; `audit --check-content` applies the same literal check to current guidance and accepted ADR evidence. The lifecycle is incident, active footgun, fix, then rewrite or resolve; skipping the last step punishes the agents who follow anchors.
+**Prevention:** When you fix a bug that has a footgun entry, in the same change either rewrite its Symptoms to the principle the fix demonstrates with anchors at the current shape, or move it to Resolved with a one-line summary; never leave an active entry whose anchors do not resolve. When reviewing a bucket, treat a zero-hit anchor or one that contradicts the prose as a SEV signal. `stats --check` validates literal `(search: ...)` anchors in footguns and lessons and promotes stale existing-target anchors in patterns to blocking findings; `audit --check-content` applies the same literal check to current guidance and accepted ADR evidence. Give each search needle its own full repository path; a bare ADR number does not reset the validator's preceding target. The lifecycle is incident, active footgun, fix, then rewrite or resolve; skipping the last step punishes the agents who follow anchors.
 
 **Symptoms:** An entry tagged `**Status:** active` has good Prevention rules but a Symptoms paragraph describing an obsolete code shape, with an anchor that resolves to contradicting behaviour or to nothing, so agents chase removed code or distrust the whole bucket.
 
@@ -63,11 +67,17 @@ last_reviewed: 2026-09-18
 
 **Evidence:** A Codex quality report on 2026-05-25 flagged `.goat-flow/learning-loop/footguns/setup.md` (search: `Codex install migration matcher and post-install validator used different`), whose Symptoms named a matcher that the v1.8.0 installer refactor had replaced with a single `isInvalidNoneKey` predicate; the entry is now resolved with current anchors. **Recurrence 2026-08-04:** the first anchor evaluator missed chained needles and root dotfiles, and naive carry-over crossed sentence boundaries; the final grammar follows chains only from an explicit same-sentence target, per `test/unit/check-content-quality.test.ts` (search: `validates every chained search needle`), (search: `does not guess a target for an unqualified search anchor`), and (search: `validates root dotfile search anchors`). **Recurrence 2026-08-07:** `.goat-flow/learning-loop/footguns/auditor.md` (search: `## Footgun: The deny-mechanism runtime smoke executes the target checkout's own hook command`) was corrected at 07:09 to describe a dashboard audit using `"full"`, and commit `19046c08` changed `src/cli/server/dashboard-audit-routes.ts` (search: `agentFilter === null ? "present-only" : "static"`) at 17:06 without refreshing it; `test/integration/dashboard-audit-api.test.ts` (search: `does not execute selected-project hook launcher in /api/audit`) proves the old claim false. **Recurrence 2026-08-10:** the Antigravity capability entry and a resolved migration entry still cited local Gruff wiring as current support after the registry stopped registering it; both now distinguish runnable input handling from model-visible delivery. **Recurrence 2026-09-05:** a concision rewrite of every footgun bucket produced eight `stats --check` findings across three runs, all from the validator's grammar rather than from stale code: two `(search: ...)` needles were re-attributed to a different file named earlier in the same sentence, one long-dead needle surfaced only once its citation used the validated form, one rewording broke an inbound anchor from `.goat-flow/learning-loop/patterns/architecture.md`, a sibling cited as bare `hooks.md` was validated instead of skipped, an entry that named its own bucket without a path lost its only evidence anchor, and the words "retired in" followed by a version number counted against the last active entry twice, once in a trailing resolved bullet list and once in this paragraph's first draft, per `src/cli/facts/shared/learning-loop-sections.ts` (search: `uses retired-file evidence`). Give every needle its own full path in the same sentence, grep inbound anchors before rewording, and keep that phrasing out of active sections.
 
+
+**Recurrence 2026-09-30:** The new adoption rows in `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `### Adoption rulings`) cited the full skill-conventions path and then abbreviated the next evidence owner to ADR-009. `audit --check-content` reported two stale anchors against skill-conventions although both literals exist in ADR-009. `src/cli/facts/shared/search-anchors.ts` (search: `extractVisibleSearchAnchorCitations`) retains the preceding full file target across that same-sentence abbreviation. Repeat the full ADR path before each needle; verify the actual content audit before accepting the citation.
+
+The follow-up review found a second symptom in `.goat-flow/learning-loop/decisions/ADR-033-goat-flow-directory-restructure.md` (search: `Second memory store (wiki, vector or graph)`): an abbreviated ADR owner and two needles inside one parenthesis group left both self-citations unchecked. Passing that row to `src/cli/facts/shared/search-anchors.ts` (search: `evaluateSearchAnchors`) returned only its architecture citation. A full path and separate search group for each needle made all three intended citations valid. Check that the evaluator returns every intended citation; zero stale findings alone does not prove coverage.
+
 ---
 
 ## Footgun: Cross-reference fragility across docs
 
 **Status:** active | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Stage a rename before registering its destination; search all tracked files, not only Markdown, for old paths.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -80,15 +90,16 @@ last_reviewed: 2026-09-18
 
 **Why it happens:** Hundreds of committed Markdown files reference each other by relative path (`git ls-files '*.md' | wc -l` gives the current count), so renaming one file typically breaks references in 5 to 10 others.
 
-**Evidence:** 2026-07-27: M01 registered a destination before M02 created it, so audit failed `evidence_path does not exist`, and M02 missed two synthetic config references. 2026-08-09: correcting M02's timeout premise left removed-phrase anchors in two roadmaps and two analysis reports that `rg --hidden --no-ignore` caught. 2026-08-27: renaming the Codex capture-expiry integration test updated the new recurrence but left an older one pointing at the previous title, and later that day Git auto-merged concurrent edits to a bucket and its generated index without a textual conflict while the combined index kept the old decision text and token estimate; `stats --check` caught both. Enforcers: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`), `scripts/profile-dashboard-audit.mjs` (search: `Synthetic. Commit rules`), `src/cli/facts/shared/search-anchors.ts` (search: `Validate one parsed citation`), `test/integration/hook-effective-state.test.ts` (search: `currentHookProviderSupportGate`), `src/cli/stats/stats.ts` (search: `stale file ref`), `src/cli/stats/index-freshness.ts` (search: `const expected = formatIndex`). The historical M13 setup-step renumber left three stale pointers at the removed steps 09-customise-to-project and 05-install-skills, since fixed to `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`.
+**Evidence:** 2026-07-27: A declaration registered a destination before its implementation created it, so audit failed `evidence_path does not exist`, and the implementation missed two synthetic config references. 2026-08-09: correcting the timeout premise left removed-phrase anchors in two roadmaps and two analysis reports that `rg --hidden --no-ignore` caught. 2026-08-27: renaming the Codex capture-expiry integration test updated the new recurrence but left an older one pointing at the previous title, and later that day Git auto-merged concurrent edits to a bucket and its generated index without a textual conflict while the combined index kept the old decision text and token estimate; `stats --check` caught both. Enforcers: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`), `scripts/profile-dashboard-audit.mjs` (search: `Synthetic. Commit rules`), `src/cli/facts/shared/search-anchors.ts` (search: `Validate one parsed citation`), `test/integration/hook-effective-state.test.ts` (search: `currentHookProviderSupportGate`), `src/cli/stats/stats.ts` (search: `stale file ref`), `src/cli/stats/index-freshness.ts` (search: `const expected = formatIndex`). The historical setup-step renumber left three stale pointers at the removed steps 09-customise-to-project and 05-install-skills, since fixed to `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`.
 
-**Recurrence 2026-09-18:** M03 renewed the Codex Stop expiry test and repaired its lesson citation, but its four-file patch omitted the older citation in this footgun. The foreground learning check reported that test title as a stale file reference after both test owners passed. The source-wide search located this remaining citation. Evidence: `test/integration/hook-effective-state.test.ts` (search: `currentHookProviderSupportGate`), `src/cli/stats/stats.ts` (search: `stale file ref`).
+**Recurrence 2026-09-18:** The change renewed the Codex Stop expiry test and repaired its lesson citation, but its four-file patch omitted the older citation in this footgun. The foreground learning check reported that test title as a stale file reference after both test owners passed. The source-wide search located this remaining citation. Evidence: `test/integration/hook-effective-state.test.ts` (search: `currentHookProviderSupportGate`), `src/cli/stats/stats.ts` (search: `stale file ref`).
 
 ---
 
 ## Footgun: Consolidating a rule stated several ways deletes the riders only one variant carried
 
 **Status:** active | **Created:** 2026-08-18 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Decision changed:** Before merging divergent statements of one rule, list every distinct clause across all variants, not only the clause they disagree about. Merge on the conflict, then re-add each rider the merged text dropped.
 **Trigger phase:** ACT
 **Incident count:** 2
@@ -100,15 +111,17 @@ last_reviewed: 2026-09-18
 
 **Why it happens:** Divergence analysis fixes attention on the axis where variants disagree. Clauses orthogonal to that axis ride along in only some variants and have no advocate during the merge, the shortest consistent wording drops them, and a word budget rewards exactly that. The trap fires again when the merged rule is restated beside its pointer.
 
-**Evidence:** 2026-08-18, M55: three sites stated the replies-editing permission in `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` (search: `Replies are deliberately narrow`) and `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` (search: `Replies to people receive`), disagreeing on whether a diagnosed social cost authorises an edit; only two carried a requested-tone escape, consolidating on the social-cost axis removed it from all three, and the first repair restated `correctness and residue only` as absolute in the Audience paragraph while the owner read `unless the user asks`. The playbook forbids that class of change in its own Correctness and Meaning section (search: `an optional action into a required one`). **Recurrence 2026-08-18:** a line-density rewrite across seven instruction surfaces dropped the user-only commit rider, the current-session GitHub authorization rider, and two canonical retrieval-order phrases; preflight failed 10 of 2,084 tests, and the focused suite failed 4 of 44 until every rider and grep-stable phrase returned. Enforcers: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`) and `scripts/check-instruction-parity.mjs` (search: `MAX_INSTRUCTION_LINE_CHARACTERS`).
+**Evidence:** 2026-08-18: three sites stated the replies-editing permission in `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` (search: `Replies are deliberately narrow`) and `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` (search: `Replies to people receive`), disagreeing on whether a diagnosed social cost authorises an edit; only two carried a requested-tone escape, consolidating on the social-cost axis removed it from all three, and the first repair restated `correctness and residue only` as absolute in the Audience paragraph while the owner read `unless the user asks`. The playbook forbids that class of change in its own Correctness and Meaning section (search: `an optional action into a required one`). **Recurrence 2026-08-18:** a line-density rewrite across seven instruction surfaces dropped the user-only commit rider, the current-session GitHub authorization rider, and two canonical retrieval-order phrases; preflight failed 10 of 2,084 tests, and the focused suite failed 4 of 44 until every rider and grep-stable phrase returned. Enforcers: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`) and `scripts/check-instruction-parity.mjs` (search: `MAX_INSTRUCTION_LINE_CHARACTERS`).
 
 ---
 
 ## Footgun: ADR renumbering breaks cross-references
 
 **Status:** active | **Created:** 2026-05-18 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
+**Incident count:** 2 | **Latest occurrence:** 2026-10-10
 
-**Prevention:** When deleting, compacting, or renumbering ADRs, grep `.goat-flow/learning-loop/decisions/` for every old `ADR-NNN` token and replace historical references with the deleted slug, not only the number. Then check topic: each remaining `ADR-NNN` reference either matches the current target title or says `now-removed ADR-NNN-slug`.
+**Prevention:** When deleting, compacting, or renumbering ADRs, grep `.goat-flow/learning-loop/decisions/` for every old `ADR-NNN` token and replace historical references with the deleted slug, not only the number. Retarget current requirements to a surviving architecture, decision or executable contract; bare ADR numbers can evade path checks. Then check topic: each remaining `ADR-NNN` reference either matches the current target title or says `now-removed ADR-NNN-slug`.
 
 **Symptoms:** ADR notes that say "absorbs ADR-NNN" or "supersedes ADR-NNN" point at the wrong decision after deletion and renumbering. The number still resolves, so a path-existence check misses the break while readers land on an unrelated topic.
 
@@ -116,11 +129,14 @@ last_reviewed: 2026-09-18
 
 **Evidence:** A 2026-05-18 cleanup found three numeric references whose numbers resolved but whose topics no longer matched; the concrete links are fixed and retained under `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `ADR renumbering concrete examples`).
 
+**Recurrence 2026-10-10:** Deleting the hook-trust decision left current requirements citing its bare number in other ADRs, footguns and the registration generator while preflight still passed. A full tracked-token search found the remaining owners. Current trust and evidence rules now cite `.goat-flow/architecture.md` (search: `### Hook Provider and Result Contracts`), registration freezes cite `.goat-flow/learning-loop/decisions/ADR-053-claude-structured-hook-descriptors.md` (search: `applicable exact-version evidence`), and the generator lesson anchors `src/cli/server/agent-hook-command.ts` (search: `LEGACY_REGISTRATION_RECOGNITION_FRAGMENT`).
+
 ---
 
 ## Footgun: Version bump checks do not cover synthetic project config strings
 
 **Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
 **Prevention:** Derive fanout from manifest ownership. After every bump, search tracked release surfaces for literal and regex-escaped old versions, capture the release snapshot, run packed-byte canaries, and run the full suite.
@@ -161,6 +177,23 @@ last_reviewed: 2026-09-18
 
 ---
 
+## Footgun: A one-sided merge can revert a fix while its lesson keeps citing it
+
+**Status:** active | **Created:** 2026-10-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** When a learning-loop anchor goes stale after a merge, diff the cited file against both merge parents before editing the entry; restore dropped code rather than rewriting the entry to match it.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Check each cited file the merge touched. If both sides changed it since `git merge-base <parent1> <parent2>` and `git diff <parent> <merge> -- <file>` is empty for one parent, the merge kept that parent's copy wholesale. Re-merge the dropped commit with `git merge-file` against the merge base, keep both sides' tests, and run the restored tests against the merge result to confirm they catch the loss.
+
+**Symptoms:** `goat-flow stats --check` reports `stale-ref` for anchors that exist on one branch, and audit fails "Feedback loop directories exist". The audit's fix text says to update the entry. Doing that would leave the lesson describing safeguards the code no longer has.
+
+**Why it happens:** Code, its tests, and the lesson citing them merge independently. Taking one side for the conflicted script and test drops the other branch's fix, while the lesson bucket merges cleanly with both branches' text. The kept script and test come from the same commit, so only the stale anchor disagrees.
+
+**Evidence:** Merge `46bc6d10` (main into dev, 2026-10-03) kept `scripts/npm-publish.sh` and `test/integration/npm-publish.test.ts` exactly as main's `9984a303` had them. That dropped dev-only `0f65374c`: browser login with the inherited OTP cleared, a direct `configure_token_from_env` call so a failed `mktemp` stops publishing, and `--dry-run=false` on the confirmed publish. `.goat-flow/learning-loop/lessons/npm-publishing.md` still cited all three, and `stats --check` reported three stale refs. Re-merging `0f65374c` onto the merge result (5 conflict hunks per file) restored them alongside main's CI fast path. Run against the merge result's script, the restored suite failed 12 of 17: a failed `mktemp` still exited 0, and with input matching the old prompts the confirmed publish resolved `publish-dry-run:true`. Against the restored script, `test/integration/npm-publish.test.ts` (search: `performs the confirmed publish despite inherited dry-run settings`) and the rest of the suite passed 17 of 17, and the stale refs cleared.
+
+---
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
@@ -175,4 +208,4 @@ last_reviewed: 2026-09-18
 - **Stale references from old project structure** (resolved 2026-04-15) - `ai-workflow-framework` no longer appears anywhere in the repo.
 - **Preflight validates doc totals but not sub-breakdowns** (resolved 2026-04-17) - `scripts/preflight-checks.sh` (search: `B.8a2: Sub-breakdown validation`) validates the `(N setup + M agent)` breakdown in `.goat-flow/architecture.md`, not only the total.
 - **Dashboard session-limit constants drift across server, UI, docs, and tests** (resolved 2026-04-19) - `src/cli/server/terminal.ts` (search: `MAX_SESSIONS`) exports the constant, `src/cli/server/dashboard-terminal.ts` (search: `MAX_SESSIONS`) imports it, `test/integration/dashboard-server-dashboard-terminal-endpoints.test.ts` (search: `payload.maxSessions`) asserts it, and `docs/dashboard.md` says "Maximum 10 concurrent sessions"; grep `maxSessions`, `serverSessions.length >=`, and `Maximum of` before closing a similar change.
-- **ADR renumbering concrete examples** (resolved 2026-05-27) - stale references to `ADR-010-confusion-log-disposition.md`, `ADR-023-expand-inline-conventions.md`, and `ADR-016-dispatcher-is-canonical-skill.md` were fixed before M11; the active entry keeps only the failure pattern.
+- **ADR renumbering concrete examples** (resolved 2026-05-27) - stale references to `ADR-010-confusion-log-disposition.md`, `ADR-023-expand-inline-conventions.md`, and `ADR-016-dispatcher-is-canonical-skill.md` were fixed before learning-loop consolidation; the active entry keeps only the failure pattern.

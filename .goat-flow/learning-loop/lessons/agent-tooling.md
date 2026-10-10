@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-09-04
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-04
 ## Lesson: Confused install-copy path pair for a directory move
 
 **Created:** 2026-04-18
+**Severity:** CORRECTNESS
 **Updated:** 2026-08-16
 **Decision changed:** Resolve the exact workflow source from `workflow/manifest.json` or `rg --files`, then set and verify the installed executable mode explicitly when a copy crosses filesystems.
 **Trigger phase:** READ
@@ -16,7 +17,7 @@ last_reviewed: 2026-09-04
 
 **Prevention:** Resolve managed paths from `workflow/manifest.json`, learning entries from the generated `INDEX.md`, and ignored milestones by listing them, as in `find .goat-flow/plans -name 'M*.md'`; ripgrep is a session-only shim here and is not on `PATH` for a spawned process, so a script that calls it exits 127. Never infer directory or document names. When distributing executables across WSL, NTFS, or Linux filesystems, copy content, set the destination to the intended mode explicitly, and verify both `stat` and byte parity.
 
-**What happened:** Four pre-edit reads or commands inferred paths: the agent misread a workflow source/install pair as a move, pluralized a managed source directory, guessed the removed historical `ADR-016-dispatcher-is-canonical-skill.md` path, then guessed an M06 milestone filename. Each failed. `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-033-goat-flow-directory-restructure.md`), and `rg --files --hidden --no-ignore` supplied the exact paths.
+**What happened:** Four pre-edit reads or commands inferred paths: the agent misread a workflow source/install pair as a move, pluralized a managed source directory, guessed the removed historical `ADR-016-dispatcher-is-canonical-skill.md` path, then guessed a milestone filename. Each failed. `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-033-goat-flow-directory-restructure.md`), and `rg --files --hidden --no-ignore` supplied the exact paths.
 
 **Recurrence 2026-08-16:** Copying `workflow/hooks/post-turn-safety.sh` from the NTFS-backed source checkout into a Linux controller with `cp --preserve=mode` propagated mode `0777` over the controller's intended `0755`. The content was correct, but the installation metadata was not. An immediate `chmod 0755` plus `stat` and byte-parity checks restored the expected installation.
 
@@ -29,12 +30,15 @@ last_reviewed: 2026-09-04
 ## Lesson: When deny hook blocks a command, use the unblocked equivalent
 
 **Created:** 2026-03-28
-**Updated:** 2026-09-04
+**Severity:** INTEGRATION
+**Updated:** 2026-09-30
 **Decision changed:** After a guard rejects cleanup syntax, keep every destructive target literal and use the narrowest permitted file and directory operations.
 **Trigger phase:** ACT
-**Incident count:** 10 | **Latest occurrence:** 2026-09-04
+**Incident count:** 12 | **Latest occurrence:** 2026-09-30
 
 **Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves. This entry owns recovery after a block; authoring a search pattern that avoids the block is `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`).
+
+For read-only reconciliation, run Git and checksum commands directly and compare their returned data without an interpreter that launches shell commands.
 
 **What happened:** Agent needed to delete `.github/skills/goat-onboard/` and `.github/skills/goat-reflect/`. Used `rm -rf`, blocked by the destructive-shell guard. Instead of `rm file && rmdir dir` (not blocked), it asked the user to delete manually - wasting a round trip on something trivially solvable.
 
@@ -51,7 +55,9 @@ last_reviewed: 2026-09-04
 - **Recurrence 2026-08-16:** A known JSON Stop payload was piped into a shell hook. Redirecting an inspected local payload file preserved the test without the prohibited pipe-to-shell shape. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`).
 - **Recurrence 2026-08-22:** Planning reads hit both the command-segment cap and backtick classification. Smaller read batches and an inspected file-backed draft avoided both rejected shapes. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and (search: `Command has more than 50 chained segments`).
 - **Recurrence 2026-09-03:** An approved disposable-worktree cleanup used recursive removal through a validated shell variable, so PreToolUse rejected the whole batch before execution. The corrected command named the worktree literally, removed the four remaining files individually, and used `rmdir` for the two empty directories. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`).
-- **Recurrence 2026-09-04:** Two M15 read-only diagnostics were rejected before execution: a double-quoted search embedded Markdown backticks, and an inline Node wrapper referenced `spawnSync`. Literal-safe search terms and a direct CLI-to-`jq` pipeline produced the same evidence without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-09-04:** Two read-only diagnostics were rejected before execution: a double-quoted search embedded Markdown backticks, and an inline Node wrapper referenced `spawnSync`. Literal-safe search terms and a direct CLI-to-`jq` pipeline produced the same evidence without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-09-29:** Closeout put Git status and checksum reconciliation inside a Python `-c` helper using `subprocess.check_output`; PreToolUse rejected the helper before execution. Direct `git status`, `git diff --cached --binary` and `sha256sum` commands, compared in the orchestration layer, verified unchanged intake bytes and staging without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-09-30:** Inventory piped `stats --format json` into an inline Node summarizer, and the `Pipe to interpreter` guard rejected it before execution. Writing the CLI JSON to a temporary file and feeding that file to the summarizer preserved the read-only count check. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`).
 
 ---
 
@@ -93,6 +99,7 @@ last_reviewed: 2026-09-04
 ## Lesson: Line-number evidence in footguns/lessons creates silent maintenance debt
 
 **Created:** 2026-04-24
+**Severity:** INTEGRATION
 
 **Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
 
@@ -114,7 +121,7 @@ last_reviewed: 2026-09-04
 
 **Prevention:** When moving guidance into `.goat-flow/skill-docs/`, grep every old path, remove redundant local copies unless an explicit compatibility requirement exists, and update manifest/install references in the same pass. Compatibility copies are a conscious exception.
 
-**What happened:** M12 promoted browser-use guidance into the canonical shared playbook `.goat-flow/skill-docs/playbooks/browser-use.md`, but the first implementation kept four per-skill browser-use compatibility files under goat-debug reference directories. The user pointed out that once the shared playbook exists, those skill-local copies duplicate doctrine and add a drift surface.
+**What happened:** The change promoted browser-use guidance into the canonical shared playbook `.goat-flow/skill-docs/playbooks/browser-use.md`, but the first implementation kept four per-skill browser-use compatibility files under goat-debug reference directories. The user pointed out that once the shared playbook exists, those skill-local copies duplicate doctrine and add a drift surface.
 
 **Root cause:** The agent preserved a backward-compatibility shape without proving any installed project still needed the per-skill file. That weakened the migration: one canonical reference existed, but stale compatibility files could keep attracting edits or references.
 
@@ -122,7 +129,7 @@ last_reviewed: 2026-09-04
 
 ## Lesson: Sub-agent delegation is universal across goat-flow's four supported agents
 
-**Status:** active | **Created:** 2026-04-20 | **Merged during:** M11 learning-loop consolidation
+**Status:** active | **Created:** 2026-04-20 | **Merged during:** learning-loop consolidation
 
 **Prevention:** Before accepting a finding that adds a capability pre-check, verify it against the four supported agents. If all four ship it, retract the finding. Applies to delegation, hook support, MCP, slash commands, and other historically-partial capabilities.
 

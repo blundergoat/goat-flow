@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-09-18
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
@@ -16,7 +16,7 @@ last_reviewed: 2026-09-18
 
 **Prevention:** Resolve artifact references through the exact installed-to-canonical mirror map before applying any path convention. Removed-command checks must distinguish executable code-span and shell grammar from product prose, with paired positive and negative fixtures. Run the live combined audit after focused tests, because real documentation supplies exceptions synthetic fixtures miss. Evidence anchors: `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), `src/cli/audit/check-factual-claims.ts` (search: `REMOVED_COMMAND_CHECKS`), `test/integration/audit-drift-artifact-integrity.test.ts` (search: `resolves installed shared-document paths`).
 
-**What happened:** The first live M01 artifact-integrity audit failed two valid files after focused fixtures were green. The check resolved references to the installed `.goat-flow/skill-docs/skill-quality-testing/README.md` by directory convention to a nonexistent canonical `skill-quality-testing/README.md`, although the explicit mirror map installs that README from `skill-quality-testing.md`. The removed-command scanner separately treated prose about goat-flow check IDs as an invocation of the retired `check` command.
+**What happened:** The first live artifact-integrity audit failed two valid files after focused fixtures were green. The check resolved references to the installed `.goat-flow/skill-docs/skill-quality-testing/README.md` by directory convention to a nonexistent canonical `skill-quality-testing/README.md`, although the explicit mirror map installs that README from `skill-quality-testing.md`. The removed-command scanner separately treated prose about goat-flow check IDs as an invocation of the retired `check` command.
 
 **Root cause:** Common path and token shapes were validated without pressure-testing the repository's exceptional source-to-install mapping or a producer-language prose control, even though the authoritative mirror table and CLI registry were both available.
 
@@ -25,6 +25,7 @@ last_reviewed: 2026-09-18
 ## Lesson: Audit check skip semantics need both unit and integration fixture updates
 
 **Status:** active | **Created:** 2026-05-20
+**Severity:** INTEGRATION
 
 **Prevention:** When changing an audit check from optional/skippable to mandatory, grep for both the check id and `skip?.` before verification. Update unit report expectations and integration `BuildCheck` assertions in the same edit, then run `npm run typecheck` before `npm test`. Evidence anchors: `src/cli/audit/check-goat-flow.ts` (search: `instruction-file-skill-docs-pointer`), `test/integration/audit-build.test.ts` (search: `fails when the project has no shared reference/playbook pack`).
 
@@ -32,13 +33,14 @@ last_reviewed: 2026-09-18
 
 **Root cause:** I treated the unit audit report contract as the only caller. Integration tests also assert the lower-level `BuildCheck` shape, including optional `skip` behavior. Removing the skip gate also left unused directory constants that `npm run typecheck` caught before the full suite.
 
-**Recurrence update (2026-07-13):** M06 added two required session-README gitignore exceptions. The live audit passed, but the first integration run failed because `HEALTHY_GOAT_FLOW_GITIGNORE` and the audit-command project writer still modeled the old contract. Updating both healthy fixtures cleared the exact 95-test suite.
+**Recurrence update (2026-07-13):** The change added two required session-README gitignore exceptions. The live audit passed, but the first integration run failed because `HEALTHY_GOAT_FLOW_GITIGNORE` and the audit-command project writer still modeled the old contract. Updating both healthy fixtures cleared the exact 95-test suite.
 
 ---
 
 ## Lesson: Additive audit report fields need renderer defaults
 
 **Status:** active | **Created:** 2026-05-17
+**Severity:** INTEGRATION
 
 **Prevention:** When adding fields to `AuditReport` or other shared CLI/dashboard payloads, grep for direct renderer/reader fixture construction and either update every fixture or make consumers default missing additive fields. Evidence anchors: `src/cli/audit/render.ts` (search: `Array.isArray(report.enforcement)`), `test/contract/command-phrases.test.ts` (search: `renderAuditText does not mention scan`).
 
@@ -61,7 +63,7 @@ last_reviewed: 2026-09-18
 
 **Prevention:** For user-facing remediation, test action text and evidence paths together on an empty selected-agent target. Never convert normative or multi-agent provenance into a repair path without target-specific disambiguation. Evidence anchors: `src/cli/diagnostics/readiness-report.ts` (search: `blockerEvidencePath`), `test/unit/readiness-report.test.ts` (search: `selects the target path named by the failure`).
 
-**What happened:** M24's first empty-target readiness run displayed `Create AGENTS.md (CLAUDE.md)`. The action named the Codex instruction file, but the citation came from a multi-agent provenance list and pointed at Claude's file.
+**What happened:** The first empty-target readiness run displayed `Create AGENTS.md (CLAUDE.md)`. The action named the Codex instruction file, but the citation came from a multi-agent provenance list and pointed at Claude's file.
 
 **Root cause:** I treated the first provenance path as the user's repair location. Audit provenance can explain where a rule comes from or list every supported agent surface; neither proves which target file the selected user must change.
 
@@ -71,21 +73,36 @@ last_reviewed: 2026-09-18
 
 ## Lesson: Audit fixture expectations must follow detector semantics
 
-**Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+**Status:** active | **Created:** 2026-05-27 | **Merged during:** learning-loop consolidation | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
+**Incident count:** 6 | **Latest occurrence:** 2026-10-08
 
-**Prevention:** For fixture-driven audit tests, reproduce the failing audit/check output first, capture the current check ids, then update test assertions and fixture metadata together. A healthy virtual filesystem must also satisfy every newly enforced content invariant; existence-only stubs are no longer healthy after a content detector lands. Do not trust older expected ids or fixture bodies after check-contract work. M12 recurrence anchor: `test/fixtures/projects/index.ts` (search: "healthyPlaybook").
+**Prevention:** For fixture-driven audit tests, reproduce the failing audit/check output first, capture the current check ids, then update test assertions and fixture metadata together. A healthy virtual filesystem must also satisfy every newly enforced content invariant; existence-only stubs are no longer healthy after a content detector lands. Do not trust older expected ids or fixture bodies after check-contract work. Recurrence anchor: `test/fixtures/projects/index.ts` (search: "healthyPlaybook").
 
 **What happened:** Historical scanner/rubric changes and current audit detector changes both invalidated "known failing" fixture expectations even when the implementation was correct. The failure mode recurs whenever a check is renamed or tightened, or when responsibility moves to a different detector.
 
 **Root cause:** I treated expected check ids as stable facts instead of outputs of the current detector contract.
 
-**Recurrence update (2026-09-04):** M06 added a content invariant for an installed optional security policy. Focused tests and the live audit passed, but `publish:check` exposed two older healthy-project fixtures that declared the policy present without its route: the shared `stubFS` returned no code-map content, then the consumer lifecycle overwrote both orientation files without the policy path. Keeping the policy present and adding its route to each fixture restored the integration contract. Evidence anchors: `test/fixtures/projects/index.ts` (search: `A present optional policy remains discoverable`), `test/integration/setup-quality-lifecycle.test.ts` (search: `Optional security policy`), and `src/cli/audit/check-goat-flow.ts` (search: `installedSecurityPolicyDiscoveryFailure`).
+**Recurrence 2026-10-08:** Adding the exact `credentials.json` deny pair to the Claude template broke the Git-credentials isolation test, which inherited the template but removed only key-extension rules. The audit already accepted a dedicated credentials path as alternative coverage. Removing that alternative from this negative fixture restored its intended isolation without changing the audit contract. When fixtures derive from a live template, review every inherited positive condition before expecting a negative result. Evidence: `src/cli/facts/agent/settings.ts` (search: `const hasKeys`), `test/unit/audit-command/codex-settings.test.ts` (search: `Exclude the audit's other key/credential alternatives`).
+
+**Recurrence update (2026-09-04):** The change added a content invariant for an installed optional security policy. Focused tests and the live audit passed, but `publish:check` exposed two older healthy-project fixtures that declared the policy present without its route: the shared `stubFS` returned no code-map content, then the consumer lifecycle overwrote both orientation files without the policy path. Keeping the policy present and adding its route to each fixture restored the integration contract. Evidence anchors: `test/fixtures/projects/index.ts` (search: `A present optional policy remains discoverable`), `test/integration/setup-quality-lifecycle.test.ts` (search: `Optional security policy`), and `src/cli/audit/check-goat-flow.ts` (search: `installedSecurityPolicyDiscoveryFailure`).
+
+**Recurrence 2026-09-30:** The first focused run exposed stale prior-refutation wording, a rubric helper import inserted inside a comment by a first-text-match edit, assertions against model field names instead of CLI `setup_delta`/`system_delta`, and an assumed directory that strict save rejection never creates. Read the serializer and fixture setup, use syntax-bound import edits, and assert the rejected state actually owned by the saver. The corrected slice reported `ℹ pass 162` and `ℹ fail 0`. Evidence: `test/unit/quality-report-contract.test.ts` (search: `retains more than three short prior refutations`), `test/unit/quality-subcommands.test.ts` (search: `legacy-compatible and rejects saving the same bytes`), and `test/integration/quality-history-diff.test.ts` (search: `suppresses setup/system deltas`).
+
+**Recurrence 2026-10-01:** Plain-label score fixtures missed JSON keys, Markdown labels and serialized axis names. A source-renderer probe leaked five prior values; adding those formats to the shared filter restored isolation while retaining dates, counts and claims. The focused boundary suite reported `ℹ pass 13` and `ℹ fail 0`. Evidence: `src/cli/prompt/compose-quality-common.ts` (search: `scoreFreePriorText`) and `test/unit/quality-prior-summary-boundary.test.ts` (search: `removes JSON, Markdown and serialized score labels`). Probe realistic representations as well as ordinary labels before claiming score isolation.
+
+The review authority capture also refused Git text-conversion attributes. Explicit raw-file selection retained source authority, but nested repositories under local logs and scratchpad prevented a complete execution fingerprint. Keep those limits visible; separate ordinary implementation checks from authority-bound review gates rather than granting missing evidence a pass. Evidence: `src/cli/review-validate-anchors.ts` (search: `requireRawComparison`, `live review paths cannot enter nested repositories`).
+
+The full gates then caught an unsupported standalone `Evidence` metadata label and a test matrix that exceeded the 1000-substantive-line limit by four lines. Use the parser's supported inline metadata shape and remove repeated matrix fields without dropping assertions. Evidence: `src/cli/learning-loop-index/parse-bucket.ts` (search: `INLINE_ENTRY_METADATA_LABELS`) and `test/unit/quality-subcommands.test.ts` (search: `Object.keys(override)`).
+
+
+**Recurrence 2026-10-01 (second pass):** The passing score-isolation fixture still omitted linking-word phrases and camel-case total labels. Runtime probes retained the old numbers in `Setup total of 93`, `System scored at 84`, `Accuracy was rated 23` and `setupTotal: 91`. Extending the existing composition matrix produced 12 passing tests and one failure before the fix, then 13 passes and zero failures after the filter accepted those representations. The same case retains the claim text, date and case counts across both agents and all four modes. Evidence: `src/cli/prompt/compose-quality-common.ts` (search: `scoreFreePriorText`) and `test/unit/quality-prior-summary-boundary.test.ts` (search: `Setup total of 91`). Include linking phrases and producer field spelling in representation probes before claiming old scores are absent.
 
 ---
 
 ## Lesson: Generic skill quality rules must be portable outside goat-flow
 
-**Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+**Status:** active | **Created:** 2026-05-27 | **Merged during:** learning-loop consolidation
 
 **Prevention:** Every generic skill-quality rule must be satisfiable by a standalone skill with no goat-flow files present. Framework inheritance can be credited only for installed artifact paths that actually compose the shared references. Evidence anchors: `src/cli/quality/skill-quality-metrics.ts` (search: `no prerequisites or operating context`) and `src/cli/quality/skill-quality-upload.ts` (search: `standalone artifact`).
 
@@ -97,13 +114,16 @@ last_reviewed: 2026-09-18
 
 ## Lesson: Quality-report recommendations need ADR reconciliation before gate changes
 
-**Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+**Status:** active | **Created:** 2026-05-27 | **Merged during:** learning-loop consolidation
+**Incident count:** 2 | **Latest occurrence:** 2026-10-04
 
 **Prevention:** Before implementing recommendations that change audit status, scoring, or setup gates, reconcile the suggestion against current ADRs and lessons. If the report is right about presentation but wrong about gating, preserve the pass/fail contract and add an explicit limit, warning, or prompt note instead. Evidence anchors: `src/cli/audit/audit.ts` (search: `addNonGatingEvidenceLimits`) and `src/cli/prompt/compose-quality-common.ts` (search: `metrics=${concern.metrics}`).
 
 **What happened:** Four same-agent harness quality reports correctly observed that several concern signals were partly structural, then suggested making missing post-turn hooks, task-state semantics, or learning-loop capture hard failures. Current ADRs and lessons showed some of those weak signals were deliberate product contracts.
 
 **Root cause:** Quality reports detect weak presentation, but they do not automatically know which non-gating limits are intentional.
+
+**Recurrence 2026-10-04:** An improvement report recommended removing hook version stamps, passing the drift audit on declared anchors, and having the installer add missing credential-store denies. It had skipped the decisions INDEX search; the now-removed ADR-052-define-hook-trust-evidence-and-results, ADR-058 and ADR-065 covered all three at the time. An independent review and a second pass caught it before any milestone was planned. Reconcile when writing a recommendation, not only when implementing one. Evidence: `src/cli/audit/check-goat-flow.ts` (search: `const hookVersionCurrent`) and `.goat-flow/learning-loop/decisions/ADR-065-content-shape-secret-denies.md` (search: `a normal install does not silently add those denies`).
 
 ---
 
@@ -137,11 +157,12 @@ last_reviewed: 2026-09-18
 ## Lesson: Verify the capture mode and output contract before encoding assessment evidence
 
 **Status:** active | **Created:** 2026-09-13
+**Severity:** INTEGRATION
 **Decision changed:** Run the documented capture shape and inspect the produced fields before prescribing it or asserting its terminal labels.
 **Trigger phase:** ACT | **Caught at:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-09-18
+**Incident count:** 4 | **Latest occurrence:** 2026-10-01
 
-**Prevention:** Use the existing command contract against the actual project before embedding it in an assessment prompt. For live hooks, map each required observation to a capture channel before requesting launch approval: event input, production output and exit, and the subsequent model response need separate evidence. A sibling observer cannot supply the production result. Read the exact provider clean-result contract before asserting a JSON shape; empty output with exit zero is valid for Codex Stop. Send terminal shortcuts separately from Enter, then inspect the native state before prompts. Distinguish unsupported capture from failed assessment, and use explicit named fields at TypeScript boundaries instead of assuming array indexes exist.
+**Prevention:** Use the existing command contract against the actual project before embedding it in an assessment prompt. For live hooks, map each required observation to a capture channel before requesting launch approval: event input, production output and exit, and the subsequent model response need separate evidence. A sibling observer cannot supply the production result. Read the exact provider clean-result contract before asserting a JSON shape; empty output with exit zero is valid for Codex Stop. Send terminal shortcuts separately from Enter, then inspect the native state before prompts. Distinguish unsupported capture from failed assessment, and use explicit named fields at TypeScript boundaries instead of assuming array indexes exist. For compiler-backed consumer checks, use each source project's own TypeScript configuration and derive removed declarations from the compared source bytes before asserting their count.
 
 **What happened:** Quality-process work first tried a worktree snapshot, which refused this repository's content-conversion settings. The documented raw `area` capture succeeded. Typecheck also rejected possibly undefined snapshot endpoints, and a persistence regression initially expected `grounding:` while the renderer emitted `assessment:`. Reading the owning paths corrected each assumption before the repository gates ran.
 
@@ -151,3 +172,6 @@ last_reviewed: 2026-09-18
 **Recurrence 2026-09-18:** The Codex 0.154.0 Stop capture reached two trusted active handlers, returned the clean-control reply and saved nine live input field names. The packet retained only a sibling observer, so neither that event nor the inspected native transcript established the production handler's completion result. The agent stopped before the conflict trial and retained an inconclusive result. Native review also required restoring the two approved handlers after batched shortcut/Enter input temporarily toggled them off; both were active before the prompt. Contract owners: `src/cli/hook-contracts.ts` (search: `HookProviderCaptureEvidence`, `resultDelivery`, `modelResultVisibility`) and `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptStopResult`). The local milestone capture records the actual observation; no provider defect or support promotion was established.
 
 **Recurrence 2026-09-18 (clean-output assertion):** The revised recorder forwarded the direct clean command's empty stdout, empty stderr and exit zero unchanged. The comparison helper nevertheless tried to decode clean stdout as JSON and failed. `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptCleanResult`) explicitly returns those empty channels for Codex Stop. Correcting only the helper expectation and repeating the clean comparison verified the contract; the conflict comparison also preserved both output streams and exit. The subsequent live capture delivered the conflict finding, received a one-file model repair and completed cleanly. This establishes the reviewed instrumented capture, not forced-timeout recovery or other provider modes.
+
+
+**Recurrence 2026-10-01 (review helper):** The consumer helper combined dashboard files with CLI compiler settings, so classic browser globals appeared to have only local references. A revised helper then asserted five removed functions, but the compared source contained four; a follow-up diagnostic also failed to parse. The agent stopped patching that helper, reread the two compiler configurations and the actual declaration diff, then reran separate native programs with import-alias and awaited-import destructuring resolution. The completed receipt includes the live dashboard decoder caller and both CLI/server history callers. Evidence: `tsconfig.json` (search: `src/dashboard`), `tsconfig.dashboard.json` (search: `isolatedModules`), `src/dashboard/dashboard-setup-quality.ts` (search: `.map((row) => readQualityHistoryRow(row))`). The final preflight then rejected the added gitignored receipt citation as a durable evidence anchor. The entry now cites the tracked configuration and decoder caller; task-local execution receipts remain in the milestone. These were helper-evidence failures; no product behavior changed.

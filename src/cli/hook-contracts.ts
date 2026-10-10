@@ -2,8 +2,7 @@
  * Defines the hook evidence and result contracts used by CLI and dashboard surfaces.
  *
  * Use before a screen claims provider support or an adapter translates a hook result.
- * Documentation, live delivery, installed state, and scenario proof stay separate so users never see an unavailable or incomplete hook presented as
- * clean coverage.
+ * Keep documentation, live delivery, installed state and scenario proof separate so unavailable or incomplete coverage never appears clean.
  */
 import type { AgentId } from "./types.js";
 
@@ -12,8 +11,10 @@ export const HOOK_PROVIDER_EVIDENCE_SCHEMA =
 export const HOOK_RESULT_SCHEMA = "goat-flow.hook-result.v1";
 export const HOOK_RESULT_FINDING_LIMIT = 20; // Cap: matches both shipped hook limits across agent UIs.
 export const HOOK_RESULT_OUTPUT_LIMIT_BYTES = 10_000; // Cap: fits Copilot's smallest documented feedback channel.
-/** Cap: the 30-day revalidation window ADR-052 documents for documentation and capture records. */
-const HOOK_EVIDENCE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+export const HOOK_RESULT_ENVELOPE_LIMIT_BYTES = 65_536; // Cap: retains scan findings before provider presentation is condensed.
+const HOOK_STDERR_RETENTION_LIMIT_BYTES = 4096; // Cap: retains useful diagnostics without a second copy of the scan.
+const HOOK_STDERR_FLOOD_LIMIT_BYTES = 1_048_576; // Cap: ordinary excess is drained; a flood ends the child.
+const STOP_RECOVERY_FAILURE_CODE_LIMIT = 64; // Cap: leaves room for the recovery explanation inside the user's provider reply.
 
 /** Provider-neutral lifecycle points shown consistently across hook screens. */
 export type HookLifecycleEvent = "pre-tool" | "post-tool" | "turn-stop";
@@ -22,7 +23,6 @@ export type HookLifecycleEvent = "pre-tool" | "post-tool" | "turn-stop";
 export interface HookProviderDocumentationEvidence {
   sourceUrl: string;
   checkedAt: string;
-  expiresAt: string;
   isSupportDeclared: boolean;
 }
 
@@ -39,7 +39,6 @@ export interface HookProviderCaptureEvidence {
   configurationSource: "managed" | "user" | "project" | "plugin" | "session";
   trustState: "trusted" | "untrusted" | "unknown";
   capturedAt: string;
-  expiresAt: string;
   supportOutcome: "supported" | "unsupported" | "inconclusive";
   observedPayloadFields: string[];
   responseChannels: HookProviderResponseChannel[];
@@ -82,46 +81,27 @@ export interface HookProviderEvidenceAssessment {
 }
 
 /**
- * Decide whether dated evidence can still back a support label shown to users.
+ * Reject malformed or future observations before they back a support label.
  * Use before documentation or capture advances a hook toward effective coverage.
  *
- * Both dates are enforced.
- * `expiresAt` alone is author-supplied, so a record claiming a decade of validity would otherwise pin a stale support badge forever; the observation
- * date caps every record at the window ADR-052 documents, whatever expiry its author wrote.
- *
  * @param observedAt - ISO date the record was checked or captured; empty or invalid text is stale
- * @param expiresAt - ISO expiry from the evidence record; empty or invalid text means users see stale evidence
  * @param currentDate - time of the support check; an invalid date cannot establish fresh evidence
- * @returns `true` when the record is expired, too old, or invalid, so support remains unverified
+ * @returns `true` for invalid or not-yet-observed evidence; elapsed time never invalidates an observation
  */
-function hookEvidenceHasExpired(
+function hookEvidenceObservationIsInvalid(
   observedAt: string,
-  expiresAt: string,
   currentDate: Date,
 ): boolean {
-  const expiryMilliseconds = Date.parse(expiresAt);
   const observedMilliseconds = Date.parse(observedAt);
   const currentMilliseconds = currentDate.getTime();
 
   // Invalid dates cannot justify a fresh support badge for the user.
-  if (
-    Number.isNaN(expiryMilliseconds) ||
-    Number.isNaN(observedMilliseconds) ||
-    Number.isNaN(currentMilliseconds)
-  ) {
+  if (Number.isNaN(observedMilliseconds) || Number.isNaN(currentMilliseconds)) {
     return true;
   }
 
   // Evidence recorded in the future cannot describe an observation the user can trust.
-  if (observedMilliseconds > currentMilliseconds) return true;
-
-  // The documented window caps the author's expiry so no record outlives revalidation.
-  if (currentMilliseconds - observedMilliseconds > HOOK_EVIDENCE_MAX_AGE_MS) {
-    return true;
-  }
-
-  // Evidence remains fresh through its expiry instant, then asks for a new check.
-  return expiryMilliseconds < currentMilliseconds;
+  return observedMilliseconds > currentMilliseconds;
 }
 
 /**
@@ -139,14 +119,8 @@ function classifyProviderDocumentation(
   // No official record means the UI can only show that support is unverified.
   if (!documentation) return "absent";
 
-  // Expired documentation prompts re-checking instead of preserving a timeless claim.
-  if (
-    hookEvidenceHasExpired(
-      documentation.checkedAt,
-      documentation.expiresAt,
-      currentDate,
-    )
-  ) {
+  // Invalid or future observations cannot establish documented support.
+  if (hookEvidenceObservationIsInvalid(documentation.checkedAt, currentDate)) {
     return "stale";
   }
 
@@ -158,7 +132,7 @@ function classifyProviderDocumentation(
 }
 
 /**
- * Classify live capture while keeping trust, age, and delivery failures visible.
+ * Classify live capture while keeping trust, observation, and delivery failures visible.
  * Use before setup or audit treats a provider event as live-supported.
  *
  * @param capture - exact provider capture; `undefined` means no runtime proof exists for this combination
@@ -175,10 +149,8 @@ function classifyProviderCapture(
   // Unreviewed checkout or provider config cannot establish trusted hook behavior.
   if (capture.trustState !== "trusted") return "untrusted";
 
-  // An expired provider/version observation asks the user to re-run live verification.
-  if (
-    hookEvidenceHasExpired(capture.capturedAt, capture.expiresAt, currentDate)
-  ) {
+  // A malformed or future capture cannot establish an observed provider result.
+  if (hookEvidenceObservationIsInvalid(capture.capturedAt, currentDate)) {
     return "stale";
   }
 
@@ -202,7 +174,7 @@ function classifyProviderCapture(
  * Use when a user opens setup, audit, or hook status after provider metadata changes.
  *
  * @param evidenceRecord - versioned provider record; missing optional evidence keeps that layer `absent`
- * @param currentDate - time used for expiry; invalid dates make present evidence stale
+ * @param currentDate - time used to reject future observations; invalid dates make present evidence stale
  * @returns separate documentation and capture states; neither field is empty
  */
 export function assessHookProviderEvidence(
@@ -268,7 +240,7 @@ function classifyProviderEvidenceState(
     return { status: "provider-undocumented", severity: "warning" };
   }
 
-  // Old provider documentation asks for a source re-check before setup proceeds.
+  // Invalidated provider documentation asks for a source re-check before setup proceeds.
   if (stateFacts.providerDocumentation === "stale") {
     return { status: "provider-documentation-stale", severity: "warning" };
   }
@@ -288,7 +260,7 @@ function classifyProviderEvidenceState(
     return { status: "provider-capture-absent", severity: "warning" };
   }
 
-  // An expired capture asks the user to re-verify the exact provider combination.
+  // Invalidated capture evidence asks the user to re-verify the exact provider combination.
   if (stateFacts.providerCapture === "stale") {
     return { status: "provider-capture-stale", severity: "warning" };
   }
@@ -439,6 +411,47 @@ export interface HookResultExecution {
   adapterName: string;
   adapterVersion: string;
   durationMs: number;
+  failureClass?: "infrastructure";
+  recovery?: HookStopRecovery;
+  output?: HookOutputMeasurement;
+  /** Aggregate child bytes; absent means no managed child measurement. The listed limits apply to each child. */
+  childOutput?: HookOutputMeasurement;
+}
+
+/** Recovery metadata for the verified explicit user turn.
+ *
+ * Use to explain why infrastructure requested one retry or ended with incomplete coverage.
+ */
+interface HookStopRecovery {
+  state: "retry-scheduled" | "exhausted" | "state-unavailable";
+  failureCode: string;
+}
+
+/** Raw-byte measurements at the launcher boundary.
+ *
+ * Use exact totals after normal EOF; forced shutdown counts only bytes already observed.
+ */
+interface HookOutputMeasurement {
+  envelopeLimitBytes: number;
+  stderrRetentionLimitBytes: number;
+  stderrFloodLimitBytes: number;
+  providerLimitBytes: number;
+  stdoutBytes: number;
+  stderrBytes: number;
+  areByteCountsExact: boolean;
+  isStderrTruncated: boolean;
+  failureStage?: "envelope" | "diagnostic-flood";
+}
+
+/** Finding counts retained or omitted at each output stage.
+ *
+ * Use these counts for a condensed reply; skipped files remain coverage gaps.
+ */
+interface HookFindingSummary {
+  detectedFindings: number;
+  envelopeOmittedFindings: number;
+  presentationOmittedFindings: number;
+  areDetailsShortened?: boolean;
 }
 
 /** Versioned provider-neutral result passed to one final provider adapter. */
@@ -451,6 +464,7 @@ export interface HookResultEnvelope {
   reasonCode: HookResultReasonCode;
   findings: HookResultFinding[];
   execution: HookResultExecution;
+  summary?: HookFindingSummary;
 }
 
 /**
@@ -522,10 +536,10 @@ export function validateHookResultEnvelope(
   // Oversized envelopes may be dropped by the host instead of reaching the user's agent.
   if (
     Buffer.byteLength(JSON.stringify(hookResult), "utf8") >
-    HOOK_RESULT_OUTPUT_LIMIT_BYTES
+    HOOK_RESULT_ENVELOPE_LIMIT_BYTES
   ) {
     validationMessages.push(
-      `result exceeds the ${HOOK_RESULT_OUTPUT_LIMIT_BYTES}-byte limit`,
+      `result exceeds the ${HOOK_RESULT_ENVELOPE_LIMIT_BYTES}-byte limit`,
     );
   }
 
@@ -548,7 +562,188 @@ export function validateHookResultEnvelope(
       "complete coverage must finish every attempted unit",
     );
   }
+  const metadataReason = hookResultMetadataFailureReason(hookResult);
+  // Invalid optional facts cannot authorize release or misstate omitted findings.
+  if (metadataReason !== null) validationMessages.push(metadataReason);
 
   // An empty list lets the final adapter preserve this result for the user.
   return validationMessages;
+}
+
+/** Validate supplied output and recovery facts with the same meaning as the managed runtime.
+ *
+ * @param hookResult - Neutral result; missing optional metadata keeps legacy validation.
+ * @returns Rejection reason, or null when byte counts, omissions and recovery outcomes agree.
+ */
+function hookResultMetadataFailureReason(
+  hookResult: HookResultEnvelope,
+): string | null {
+  const failureClass: unknown = hookResult.execution.failureClass;
+  // Only a fixed infrastructure label qualifies incomplete Stop recovery.
+  if (failureClass !== undefined && failureClass !== "infrastructure")
+    return "execution failure class is invalid";
+  return (
+    stopRecoveryMetadataFailureReason(hookResult) ??
+    hookOutputMetadataFailureReason(hookResult) ??
+    findingSummaryFailureReason(hookResult)
+  );
+}
+
+/** Reject recovery facts that could release a genuine finding or misstate an exhausted turn.
+ *
+ * @param hookResult - Neutral result; absent optional facts preserve the legacy contract.
+ * @returns Rejection reason, or null when supplied facts agree.
+ */
+function stopRecoveryMetadataFailureReason(
+  hookResult: HookResultEnvelope,
+): string | null {
+  const execution = hookResult.execution;
+  const recovery: unknown = execution.recovery;
+  // Older results carry no recovery facts and retain their existing outcome.
+  if (recovery === undefined) return null;
+  // Recovery cannot release a genuine block, another event or an unverified provider.
+  if (
+    !stopRecoveryShapeIsValid(recovery) ||
+    execution.failureClass !== "infrastructure" ||
+    execution.provider !== "codex" ||
+    hookResult.event !== "turn-stop" ||
+    !["unavailable", "incomplete"].includes(hookResult.outcome)
+  )
+    return "execution recovery metadata is invalid";
+  return stopRecoveryOutcomeFailureReason(hookResult, recovery);
+}
+
+/** Keep an exhausted or inaccessible retry distinct from a clean safety scan.
+ *
+ * @param hookResult - Neutral Stop result whose recovery shape has already been checked.
+ * @param recovery - Validated retry state; retry-scheduled has no terminal-outcome constraint.
+ * @returns Rejection reason, or null when the visible outcome matches that retry state.
+ */
+function stopRecoveryOutcomeFailureReason(
+  hookResult: HookResultEnvelope,
+  recovery: HookStopRecovery,
+): string | null {
+  // A spent allowance ends with incomplete coverage and its explicit terminal reason.
+  if (
+    recovery.state === "exhausted" &&
+    (hookResult.outcome !== "incomplete" ||
+      hookResult.reasonCode !== "bounded-reentry-ended")
+  )
+    return "execution recovery outcome is invalid";
+  // Inaccessible state cannot claim exhaustion or a successful scan.
+  if (
+    recovery.state === "state-unavailable" &&
+    hookResult.outcome !== "unavailable"
+  )
+    return "execution recovery outcome is invalid";
+  return null;
+}
+
+/** Check the small recovery record before its state can affect the user's Stop outcome.
+ *
+ * @param recovery - Untrusted optional record; null or non-object values cannot describe a retry.
+ * @returns True when the state and fixed failure code have the supported shape.
+ */
+function stopRecoveryShapeIsValid(
+  recovery: unknown,
+): recovery is HookStopRecovery {
+  // Damaged metadata cannot authorize the agent to end its safety retry.
+  if (recovery === null || typeof recovery !== "object") return false;
+  const fields = recovery as Record<string, unknown>;
+  return (
+    typeof fields.state === "string" &&
+    ["retry-scheduled", "exhausted", "state-unavailable"].includes(
+      fields.state,
+    ) &&
+    typeof fields.failureCode === "string" &&
+    fields.failureCode.length <= STOP_RECOVERY_FAILURE_CODE_LIMIT &&
+    /^[a-z]+(?:-[a-z]+)*$/u.test(fields.failureCode)
+  );
+}
+
+/** Check raw-byte facts before the user sees an exact or lower-bound output summary.
+ *
+ * @param hookResult - Neutral result; absent optional facts preserve the legacy contract.
+ * @returns Rejection reason, or null when supplied facts agree.
+ */
+function hookOutputMetadataFailureReason(
+  hookResult: HookResultEnvelope,
+): string | null {
+  // Outer and aggregate child measurements name their own byte stage; either may be absent for older hooks.
+  for (const output of [
+    hookResult.execution.output,
+    hookResult.execution.childOutput,
+  ]) {
+    // Raw byte totals describe what arrived, with exactness only after normal stream completion.
+    if (output !== undefined && !hookOutputShapeIsValid(output))
+      return "execution output metadata is invalid";
+  }
+  return null;
+}
+
+/** Check measured byte facts before a reply describes output as exact, shortened or interrupted.
+ *
+ * @param output - Untrusted measurement; null cannot describe a completed child stream.
+ * @returns True when counts, stage and limits match the managed capture contract.
+ */
+function hookOutputShapeIsValid(output: unknown): boolean {
+  // Missing stream facts cannot justify byte counts shown beside a user's safety result.
+  if (output === null || typeof output !== "object") return false;
+  const fields = output as Record<string, unknown>;
+  const expectedLimits = {
+    envelopeLimitBytes: HOOK_RESULT_ENVELOPE_LIMIT_BYTES,
+    stderrRetentionLimitBytes: HOOK_STDERR_RETENTION_LIMIT_BYTES,
+    stderrFloodLimitBytes: HOOK_STDERR_FLOOD_LIMIT_BYTES,
+    providerLimitBytes: HOOK_RESULT_OUTPUT_LIMIT_BYTES,
+  };
+  return (
+    Object.entries(expectedLimits).every(
+      ([name, limit]) => fields[name] === limit,
+    ) &&
+    [fields.stdoutBytes, fields.stderrBytes].every(
+      (count) =>
+        typeof count === "number" && Number.isSafeInteger(count) && count >= 0,
+    ) &&
+    typeof fields.areByteCountsExact === "boolean" &&
+    typeof fields.isStderrTruncated === "boolean" &&
+    (fields.failureStage === undefined ||
+      (typeof fields.failureStage === "string" &&
+        ["envelope", "diagnostic-flood"].includes(fields.failureStage)))
+  );
+}
+
+/** Keep omitted findings distinct from skipped coverage and count each omission once.
+ *
+ * @param hookResult - Neutral result; absent optional facts preserve the legacy contract.
+ * @returns Rejection reason, or null when supplied facts agree.
+ */
+function findingSummaryFailureReason(
+  hookResult: HookResultEnvelope,
+): string | null {
+  const summary: unknown = hookResult.summary;
+  // Older results omit the summary and retain their original finding list.
+  if (summary === undefined) return null;
+  // A damaged summary cannot explain how many findings were omitted from the user's reply.
+  if (summary === null || typeof summary !== "object")
+    return "result summary metadata is invalid";
+  const fields = summary as Record<string, unknown>;
+  // Each omitted finding belongs to one stage; a skipped file cannot inflate this count.
+  if (
+    ![
+      fields.detectedFindings,
+      fields.envelopeOmittedFindings,
+      fields.presentationOmittedFindings,
+    ].every(
+      (count) =>
+        typeof count === "number" && Number.isSafeInteger(count) && count >= 0,
+    ) ||
+    fields.detectedFindings !==
+      hookResult.findings.length +
+        (fields.envelopeOmittedFindings as number) +
+        (fields.presentationOmittedFindings as number) ||
+    (fields.areDetailsShortened !== undefined &&
+      typeof fields.areDetailsShortened !== "boolean")
+  )
+    return "result summary metadata is invalid";
+  return null;
 }

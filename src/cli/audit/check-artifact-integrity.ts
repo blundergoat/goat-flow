@@ -51,6 +51,12 @@ interface SkillIdentity {
 
 const USER_OWNED_PLAYBOOK_MARKER = "user-owned";
 
+/** The two old installed names whose next install supplies and retains their replacements. */
+const RENAMED_WRITING_PLAYBOOKS: Readonly<Record<string, string>> = {
+  [`${INSTALLED_SHARED_ROOT}/playbooks/writing-style.md`]: `${INSTALLED_SHARED_ROOT}/playbooks/writing-human-facing-prose.md`,
+  [`${INSTALLED_SHARED_ROOT}/playbooks/writing-for-agents.md`]: `${INSTALLED_SHARED_ROOT}/playbooks/writing-agent-facing-instructions.md`,
+};
+
 /**
  * Read a non-empty skill name from YAML frontmatter.
  * Use when proving the command users invoke matches the canonical skill directory.
@@ -277,8 +283,8 @@ function checkSkillIdentities(templateRoot: string): DriftFinding[] {
 }
 
 /**
- * Report canonical or installed skill Markdown omitted from the manifest's declared file set.
- * Compare both sides because undeclared source is not shipped and leftover installed guidance can outlive a rename.
+ * Reports canonical or installed skill Markdown omitted from the manifest's declared file set.
+ * Compares both sides because undeclared source is not shipped and leftover installed guidance can outlive a rename.
  *
  * @param fs - audited project filesystem; empty mirrors produce no stale-file findings
  * @param templateRoot - package or fixture root; empty resolves source paths from the current working directory
@@ -341,8 +347,8 @@ function checkSkillFileSets(
 }
 
 /**
- * Report shared source and installed Markdown absent from the explicit mirror map.
- * Preserve marked user-owned playbooks so local extensions do not appear as stale package guidance.
+ * Reports shared source and installed Markdown absent from the explicit mirror map.
+ * Skips marked user-owned playbooks so local extensions do not appear as stale package guidance.
  *
  * @param fs - audited project filesystem; an empty installed tree yields no stale extras
  * @param templateRoot - package or fixture root; empty resolves source paths from the current working directory
@@ -385,10 +391,13 @@ function checkSharedFileSets(
     if (declaredInstalled.has(installedPath)) continue;
     // Consumer-authored playbooks are valid local extensions, not package leftovers.
     if (isUserOwnedConsumerPlaybook(fs, installedPath)) continue;
+    const renamedTo = RENAMED_WRITING_PLAYBOOKS[installedPath];
     findings.push({
       kind: "orphan",
       path: installedPath,
-      message: `stale installed shared artifact ${installedPath}; no canonical workflow source is mapped in check-artifact-integrity.ts SHARED_ARTIFACT_MIRRORS`,
+      message: renamedTo
+        ? `writing playbook ${installedPath} was renamed to ${renamedTo}; the next install removes regular system-owned copies after writing their replacements; linked copies are kept`
+        : `stale installed shared artifact ${installedPath}; no canonical workflow source is mapped in check-artifact-integrity.ts SHARED_ARTIFACT_MIRRORS`,
     });
   }
   return findings;

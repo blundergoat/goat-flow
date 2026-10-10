@@ -33,9 +33,9 @@ last_reviewed: 2026-09-05
 
 **Status:** active | **Created:** 2026-04-04
 
-**Prevention:** Listen for the verb. "Update the plan", "create M31", and "write a plan" mean write Markdown only; "execute", "implement", "do it", and "fix it" mean change code. If the verb is absent or ambiguous, write the plan and ask whether to execute it, and never auto-execute a plan the user has just asked you to write.
+**Prevention:** Listen for the verb. "Update the plan", "create a plan", and "write a plan" mean write Markdown only; "execute", "implement", "do it", and "fix it" mean change code. If the verb is absent or ambiguous, write the plan and ask whether to execute it, and never auto-execute a plan the user has just asked you to write.
 
-**What happened:** The user asked to create an M31 plan and later to update it with a detailed design spec. The agent wrote the plan file, then launched a sub-agent to rewrite `index.html`, implementing the plan unasked, and the user interrupted with "dont change anything. just update this plan."
+**What happened:** The user asked to create a plan and later to update it with a detailed design spec. The agent wrote the plan file, then launched a sub-agent to rewrite `index.html`, implementing the plan unasked, and the user interrupted with "dont change anything. just update this plan."
 
 **Root cause:** Writing a plan and executing one were collapsed into a single action, although the user controls when code changes happen and may want to review, share, or revise first.
 
@@ -44,6 +44,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Don't overcomplicate clear requests - a spec is not ambiguous
 
 **Status:** active | **Created:** 2026-04-14
+**Severity:** CORRECTNESS
 **Incident count:** 2 | **Latest occurrence:** 2026-08-06
 
 **Prevention:** When the user gives a clear spec, implement it literally: add no scope and reinterpret nothing. A detailed mockup is the plan, so do not enter plan mode when the user has already said what to build, and never edit files in plan mode except the plan file. If you are unsure, ask one question rather than guessing across turns. Apply a numeric limit to the named unit: "each bullet at most 150 characters" means the complete bullet, on one line unless wrapping is explicitly requested.
@@ -71,6 +72,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Quality findings must respect local-state and reporting-only contracts
 
 **Status:** active | **Created:** 2026-04-22
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-07-17
 
 **Prevention:** Before reporting findings about `.goat-flow/plans/`, `.goat-flow/logs/`, scratchpad files, or other gitignored state, classify the artifact as committed knowledge or local session state; for local state, review behaviour and fallback handling rather than existence. In goat-flow reviews, read-only, reporting-only, no-write, and no-implementation all mean no committed-file changes and no implementation: gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state are not writes.

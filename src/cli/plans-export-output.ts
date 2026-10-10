@@ -27,7 +27,7 @@ import type { PlanForecastContext } from "./plans-forecast-context.js";
 
 /**
  * Decode a saved JSON section before scrubbing so escaped credential text cannot survive in a portable forecast record.
- * Preserve the author's original formatting when decoded values need no redaction; malformed JSON still receives readable-text scrubbing.
+ * Preserve the author's original formatting when decoded values need no redaction; malformed JSON receives the readable-text scrubbing fallback.
  */
 function redactForecastRecordSection(section: string): string {
   const fence = section.match(

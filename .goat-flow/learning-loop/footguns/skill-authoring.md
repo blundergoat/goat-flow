@@ -1,6 +1,6 @@
 ---
 category: skill-authoring
-last_reviewed: 2026-09-12
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** Skill candidacy, versioning, tool-isolated execution, and runtime authoring traps. Editing shipped guidance, authority, and size caps lives in [skill-guidance.md](skill-guidance.md); mirror sync lives in [skills.md](skills.md).
@@ -24,6 +24,7 @@ last_reviewed: 2026-09-12
 ## Footgun: Release-version bumps can break skill-rename work through stale fixtures and hardcoded current-version routing
 
 **Status:** active | **Created:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-08-26
 
 **Prevention:** Treat version-sensitive helpers as rename scope: update classifiers, config fixtures, quality snapshot ids and bands, installer version discovery, and setup-routing tests before trusting `npm test`.
@@ -32,7 +33,7 @@ last_reviewed: 2026-09-12
 
 **Why it happens:** Several helpers encode the current version independently, and the rename itself exercises none of them.
 
-**Evidence:** `src/cli/audit/check-goat-flow.ts` (search: `configVersionCurrent`) requires exact equality with `AUDIT_VERSION`; `test/fixtures/projects/index.ts` (search: `stubConfig`) is the shared stub; `src/cli/classify-state.ts` (search: `CURRENT_VERSION_FAMILY`) routes current versus outdated installs; `workflow/install-goat-flow.sh` (search: `Read version from package.json`) must derive the install version rather than hardcode it. **Recurrence 2026-08-26:** renaming two writing playbooks left the quality snapshot with `reference:writing-style`, no rows for the replacements, and stale bands, so validation found 29 artifacts against 28 rows and measured changelog and release notes at 80% and 84% outside 72-76%; anchor `package.json` (search: `skill-quality:snapshot`).
+**Evidence:** `src/cli/audit/check-goat-flow.ts` (search: `configVersionCurrent`) requires exact equality with `AUDIT_VERSION`; `test/fixtures/projects/index.ts` (search: `stubConfig`) is the shared stub; `src/cli/classify-state.ts` (search: `classifyInstalledProject`) compares complete release versions before routing current, outdated or refused installs; `workflow/install-goat-flow.sh` (search: `Read version from package.json`) must derive the install version rather than hardcode it. **Recurrence 2026-08-26:** renaming two writing playbooks left the quality snapshot with `reference:writing-style`, no rows for the replacements, and stale bands, so validation found 29 artifacts against 28 rows and measured changelog and release notes at 80% and 84% outside 72-76%; anchor `package.json` (search: `skill-quality:snapshot`).
 
 ## Footgun: New skill proposals can be configuration systems shaped around one workflow rather than general-purpose tools
 

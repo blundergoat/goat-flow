@@ -16,6 +16,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
 import {
   canonicalManagedInstallStateBytes,
@@ -517,7 +518,7 @@ describe("managed setup preview", () => {
     const configPath = join(projectPath, ".goat-flow", "config.yaml");
     const userConfig = [
       "# User-selected setup remains authoritative during a managed refresh.",
-      'version: "local"',
+      `version: "${AUDIT_VERSION}"`,
       'project_name: "operator-console"',
       "skills:",
       "  install: all",

@@ -17,10 +17,12 @@ GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `den
 
 | Agent | Runtime mechanism | Primary locations |
 | --- | --- | --- |
-| Claude Code | `PreToolUse` config entries invoking central hooks plus settings deny patterns | `.claude/settings.json`, `.goat-flow/hooks/` |
+| Claude Code | `PreToolUse` entries matching `Bash\|PowerShell` and invoking central hooks, plus settings deny patterns | `.claude/settings.json`, `.goat-flow/hooks/` |
 | Codex | `PreToolUse` config entries invoking central hooks plus config TOML permission profile | `.codex/hooks.json`, `.codex/config.toml`, `.goat-flow/hooks/` |
 | Copilot CLI | `preToolUse` hooks registered in `.github/hooks/hooks.json` and invoking central hooks | `.github/hooks/hooks.json`, `.goat-flow/hooks/` |
 | Antigravity | `PreToolUse` hooks registered in `.agents/hooks.json` and invoking central hooks | `.agents/hooks.json`, `.goat-flow/hooks/` |
+
+Enabled Claude Code deny hooks block native PowerShell tool requests and direct the agent to the Bash tool with Git Bash. To refresh existing Claude registrations, run `goat-flow hooks sync .` in the selected project and restart Claude Code.
 
 ## Verification
 
@@ -47,6 +49,12 @@ A policy denial means the hook rejected the proposed command. An unavailable pol
 The launcher can report these failures only after Node starts. A host that cannot start Node or rejects the handler before launch has a host-prerequisite failure; the hook cannot guarantee a blocking response at that earlier boundary.
 
 For shell-context problems, distinguish the hook's launcher from the command being inspected. A PowerShell registration describes how the hook starts, not which shell will interpret the proposed command. Use the provider's captured command fields and established tool-shell context when diagnosing grammar. Missing context leaves the case unresolved; it does not justify stripping escapes or relaxing a denial.
+
+## Windows command grammar
+
+Explicit `cmd /c` and `cmd //c` bodies use cmd quoting and escapes; PowerShell bodies use PowerShell grammar, and WSL wrappers distinguish shell interpretation from direct execution. The shared corpus covers these hosts, launch prefixes, and paired read-only controls. A host's launcher language does not establish the proposed command's language.
+
+Cmd caret escapes in command and path words must reach the same policy as their plain spelling. Escaped operators must stay literal, and cmd double quotes retain literal carets. Linux classifier tests establish parser decisions; they do not establish native Windows execution or live provider delivery. See the hook-policy-testing playbook for the grammar and platform checks.
 
 ## Recovering an older installation
 

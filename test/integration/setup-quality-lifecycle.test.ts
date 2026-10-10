@@ -5,6 +5,7 @@
  * a disposable consumer, preventing framework files from being mistaken for target evidence.
  * Cleanup checks preserve a pre-existing user marker on both successful and failed scenarios.
  */
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import assert from "node:assert/strict";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import {
@@ -298,7 +299,7 @@ function consumerQualityReport(consumerTargetPath: string): object {
     run_date: "2026-07-12",
     audit_status: "pass",
     scope: "consumer",
-    rubric_version: getPackageVersion(),
+    rubric_version: getQualityRubricId("agent-setup"),
     quality_mode: "agent-setup",
     prior_report_id: null,
     assessment_context: {

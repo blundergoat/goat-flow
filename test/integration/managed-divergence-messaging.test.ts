@@ -17,6 +17,7 @@ import {
   releasePathWriteClaims,
 } from "../../src/cli/path-write-claim.js";
 import { spawnSync } from "node:child_process";
+
 import { createHash } from "node:crypto";
 import {
   mkdirSync,
@@ -57,6 +58,37 @@ import {
   writeHookFixtures,
 } from "./audit-drift.helpers.js";
 
+/** Spawns the fixture command with private stream files, then closes and removes every capture. */
+function runWithFileStreams(
+  command: string,
+  args: string[],
+  options: import("node:child_process").SpawnSyncOptionsWithStringEncoding,
+) {
+  const directory = fileSystem.mkdtempSync(
+    join(tmpdir(), "goat-hook-recovery-streams-"),
+  );
+  const stdoutPath = join(directory, "stdout");
+  const stderrPath = join(directory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    const stdout = fileSystem.openSync(stdoutPath, "wx", 0o600);
+    descriptors.push(stdout);
+    const stderr = fileSystem.openSync(stderrPath, "wx", 0o600);
+    descriptors.push(stderr);
+    const result = spawnSync(command, args, {
+      ...options,
+      stdio: ["ignore", stdout, stderr],
+    });
+    return {
+      ...result,
+      stdout: fileSystem.readFileSync(stdoutPath, "utf8"),
+      stderr: fileSystem.readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) fileSystem.closeSync(descriptor);
+    fileSystem.rmSync(directory, { recursive: true, force: true });
+  }
+}
 /** Hash exact managed bytes using the same SHA-256 representation as install state. */
 function sha256(content: string): string {
   return createHash("sha256").update(content).digest("hex");
@@ -482,7 +514,7 @@ describe("managed divergence messaging", () => {
 
 /**
  * Create a disposable project for a whole-operation refusal case, then remove it even when an assertion fails.
- * The callback can change only its fixture; this helper creates and deletes that temporary directory.
+ * The callback can change only its fixture; the helper itself writes nothing beyond creating and deleting that temporary directory.
  */
 function withAdmissionProject(scenario: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-hook-admission-"));
@@ -680,7 +712,7 @@ describe("guarded hook sync", () => {
         syncHookStates(projectPath),
       );
       assert.equal(review.conflicts?.[0]?.reason, "unclassified");
-      const cli = spawnSync(
+      const cli = runWithFileStreams(
         process.execPath,
         [
           "--import",
@@ -728,7 +760,7 @@ describe("guarded hook sync", () => {
         ["hooks", "sync", projectPath],
         ["install", projectPath, "--agent", "claude", "--force-managed"],
       ]) {
-        const result = spawnSync(
+        const result = runWithFileStreams(
           process.execPath,
           [
             "--import",

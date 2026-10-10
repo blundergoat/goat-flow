@@ -35,8 +35,6 @@ export interface HookDeliveryContract {
 export interface HookProviderRegistryEvidence {
   identity: string;
   effectiveSupportGate: HookEffectiveState["status"];
-  /** Last instant this live proof may stay green; absent means the gate is not time-bounded. */
-  expiresAt?: string;
 }
 
 /**
@@ -132,7 +130,6 @@ const HOOKS: HookSpec[] = [
       codex: {
         identity: "hook-provider-adapter.v1:codex:pre-tool",
         effectiveSupportGate: "scenario-unverified",
-        expiresAt: "2026-10-21T00:00:00Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:pre-tool",
@@ -173,7 +170,6 @@ const HOOKS: HookSpec[] = [
       codex: {
         identity: "hook-provider-adapter.v1:codex:pre-tool",
         effectiveSupportGate: "scenario-unverified",
-        expiresAt: "2026-10-21T00:00:00Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:pre-tool",
@@ -214,7 +210,6 @@ const HOOKS: HookSpec[] = [
       codex: {
         identity: "hook-provider-adapter.v1:codex:post-tool",
         effectiveSupportGate: "scenario-unverified",
-        expiresAt: "2026-09-25T20:17:22.830Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:post-tool",
@@ -262,7 +257,6 @@ const HOOKS: HookSpec[] = [
       codex: {
         identity: "hook-provider-adapter.v1:codex:turn-stop",
         effectiveSupportGate: "scenario-unverified",
-        expiresAt: "2026-10-17T00:00:00Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:turn-stop",
@@ -285,35 +279,15 @@ const HOOKS: HookSpec[] = [
 const HOOKS_BY_IDENTIFIER = new Map(HOOKS.map((hook) => [hook.id, hook]));
 
 /**
- * Expire live provider proof before a hook screen presents it as current.
+ * Read the reviewed provider support gate without imposing a calendar deadline.
  * Use when setup, audit, or the dashboard reads one provider support gate.
  *
- * @param providerEvidence - registry proof; an absent expiry means this gate has no live-capture clock
- *
- * @param supportCheckDate - time shown by the current run; an invalid date cannot keep live proof green
- * @returns current support gate; never empty, and stale when a dated proof is invalid or expired
+ * @param providerEvidence - registry proof for the provider and event under review
+ * @returns the explicit support gate; elapsed time never upgrades or invalidates provider proof
  */
 export function currentHookProviderSupportGate(
   providerEvidence: HookProviderRegistryEvidence,
-  supportCheckDate: Date = new Date(),
 ): HookEffectiveState["status"] {
-  const providerEvidenceExpiry = providerEvidence.expiresAt;
-
-  // Undated non-live gates keep their explicit state instead of inventing a capture deadline.
-  if (!providerEvidenceExpiry) return providerEvidence.effectiveSupportGate;
-
-  const providerEvidenceExpiryMilliseconds = Date.parse(providerEvidenceExpiry);
-  const supportCheckMilliseconds = supportCheckDate.getTime();
-
-  // Invalid or elapsed evidence asks the user for a fresh provider capture.
-  if (
-    Number.isNaN(providerEvidenceExpiryMilliseconds) ||
-    Number.isNaN(supportCheckMilliseconds) ||
-    providerEvidenceExpiryMilliseconds < supportCheckMilliseconds
-  ) {
-    return "provider-capture-stale";
-  }
-
   return providerEvidence.effectiveSupportGate;
 }
 

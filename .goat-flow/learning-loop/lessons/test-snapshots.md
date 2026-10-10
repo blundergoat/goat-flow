@@ -1,6 +1,6 @@
 ---
 category: test-snapshots
-last_reviewed: 2026-08-24
+last_reviewed: 2026-10-02
 ---
 
 **Scope:** Keeping asserted values true - snapshot files and tables, metadata contracts beyond the typed shape, and which field a check should assert. Building the fixtures themselves is [test-fixtures.md](test-fixtures.md); choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); getting a checker's own counting right is [verification-validators.md](verification-validators.md).
@@ -47,6 +47,7 @@ last_reviewed: 2026-08-24
 ## Lesson: Audit check tests should assert the public failure field
 
 **Status:** active | **Created:** 2026-05-06
+**Severity:** INTEGRATION
 **Decision changed:** Assert each public result field according to its declared role before matching prose.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -58,7 +59,7 @@ last_reviewed: 2026-08-24
 
 **Root cause:** I wrote the test against an internal diagnostic phrase rather than the audit result field users and dashboard consumers actually receive.
 
-**Recurrence (2026-07-13):** The M07 ownership test matched a detailed validator finding against `ManifestValidationError.message`, but the public summary intentionally contains only the finding count. The validator was correct; the assertion now inspects `ManifestValidationError.findings`, matching existing manifest tests. Evidence anchor: `test/unit/manifest-file-ownership.test.ts` (search: `rejects ownership records without a usable source or generator`).
+**Recurrence (2026-07-13):** The ownership test matched a detailed validator finding against `ManifestValidationError.message`, but the public summary intentionally contains only the finding count. The validator was correct; the assertion now inspects `ManifestValidationError.findings`, matching existing manifest tests. Evidence anchor: `test/unit/manifest-file-ownership.test.ts` (search: `rejects ownership records without a usable source or generator`).
 
 **Recurrence (2026-07-16):** The PR #56 recovery regression correctly received separate `recommendations` and `howToFix` arrays from `HarnessCheckResult`, but the first assertion looked for recommendation text in `howToFix`. The runtime fix was correct; the focused run reported `pass 161`, `fail 1` until the assertion was aligned with the public field contract. Evidence anchors: `src/cli/audit/harness/helpers.ts` (search: `Build a failing harness-check result with recommendations`), `test/integration/audit-quality.test.ts` (search: `reports an unreadable session-log listing without aborting the audit`).
 
@@ -68,12 +69,29 @@ last_reviewed: 2026-08-24
 
 **Status:** resolved | **Created:** 2026-05-30 | **Resolved:** 2026-08-02
 
-**What happened:** During the M00 gruff cleanup, `test-quality.setup-bloat` reported 158 advisory findings at the default 12-line threshold. The top offenders were not opaque unit tests; they were harness, dashboard, quality-history, and terminal tests that build temp projects, create fake servers, inject browser globals, or serialize audit payloads before the assertion.
+**What happened:** During the gruff cleanup, `test-quality.setup-bloat` reported 158 advisory findings at the default 12-line threshold. The top offenders were not opaque unit tests; they were harness, dashboard, quality-history, and terminal tests that build temp projects, create fake servers, inject browser globals, or serialize audit payloads before the assertion.
 
 **Root cause:** The default threshold is tuned for small unit tests. goat-flow has many contract tests where visible fixture construction is part of the evidence. Extracting all of that setup into generic helpers would hide the behavioural contract the test is meant to preserve.
 
 **Resolution:** Gruff 0.4.0 no longer exposes `test-quality.setup-bloat`; `gruff-ts list-rules test-quality.setup-bloat` reports an unknown rule. Do not recreate its stale config block merely to preserve historical evidence.
 
 **Prevention:** Keep fixture construction visible when it explains the behavioural contract. If a current rule reports excessive setup, assess each test against that rule's live options; extract reusable builders only when they clarify the SUT call and assertion.
+
+---
+
+## Lesson: Shared launch-command changes need every literal expectation synchronized
+
+**Status:** active | **Created:** 2026-10-02 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
+**Decision changed:** Before verifying a shared launch-command change, search every test level for the old command text and include all dependent expectations in the write scope.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-10-02
+
+**Prevention:** Search the full test tree for the previous shared command or cleanup operand list before editing its owner. Read each matching assertion, preserve its launch and cleanup contract, and update dependent expectations together. A dependent file outside the write list needs a scope decision before mutation. Run the owning suites and full repository gate after changing the literals. Evidence anchors: `src/cli/server/terminal-spawn.ts` (search: `POSIX_PROMPT_ENV_CLEANUP`), `test/unit/terminal-spawn.test.ts` (search: `carries exact prompt identity beside the bytes`), and `test/smoke/dashboard-endpoints.test.ts` (search: `builds a POSIX PTY launch that returns to the interactive shell`).
+
+**What happened:** The change added `GOAT_QUALITY_ASSESSMENT_IDENTITY` to the shared POSIX environment cleanup and updated the adjacent unit coverage. Three smoke cases still pinned the preceding shell string. The 2026-10-02 `npm test` run completed with `# tests 3686`, `# pass 3676`, `# fail 3`; preflight reported the same three assertion failures. The literal diffs all showed the added cleanup operand. After explicit scope approval, only those three expectations changed. Their reduced reproduction reports `# pass 3`, `# fail 0`, and the owning smoke/spawn suites report `# pass 39`, `# fail 0`, both exit 0. The original failure and correction logs are temporary local continuity; the committed regression owners are cited below.
+
+**Root cause:** The agent treated the adjacent unit suite as the full set of command consumers and missed literal expectations in the smoke owner. File-level evidence: `test/smoke/dashboard-endpoints.test.ts` (search: `launches Codex on POSIX with an explicit preflight-capable sandbox`; search: `injects POSIX launch prompts through PTY input instead of runner flags`).
 
 ---

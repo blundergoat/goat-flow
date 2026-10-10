@@ -6,9 +6,18 @@
  */
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire, syncBuiltinESMExports } from "node:module";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import {
   buildTerminalSpawnSpec,
   MAX_SESSIONS,
@@ -375,7 +384,7 @@ describe("terminal exports", () => {
     assert.equal(launchSpec.shell, "/bin/zsh");
     assert.deepStrictEqual(launchSpec.args, [
       "-c",
-      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
+      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS GOAT_QUALITY_ASSESSMENT_IDENTITY; exec "$SHELL" -i',
     ]);
     assert.equal(launchSpec.env.GOAT_PROMPT, undefined);
     assert.equal(launchSpec.initialInput, null);
@@ -394,7 +403,7 @@ describe("terminal exports", () => {
     assert.equal(launchSpec.shell, "/bin/bash");
     assert.deepStrictEqual(launchSpec.args, [
       "-c",
-      '"$GOAT_RUNNER" --sandbox danger-full-access; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
+      '"$GOAT_RUNNER" --sandbox danger-full-access; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS GOAT_QUALITY_ASSESSMENT_IDENTITY; exec "$SHELL" -i',
     ]);
     assert.equal(launchSpec.env.GOAT_RUNNER, "/usr/local/bin/codex");
     assert.equal(launchSpec.initialInput, null);
@@ -412,11 +421,64 @@ describe("terminal exports", () => {
     assert.equal(launchSpec.shell, "/bin/bash");
     assert.deepStrictEqual(launchSpec.args, [
       "-c",
-      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
+      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS GOAT_QUALITY_ASSESSMENT_IDENTITY; exec "$SHELL" -i',
     ]);
     assert.equal(launchSpec.env.GOAT_PROMPT, undefined);
     assert.equal(launchSpec.initialInput, "\x1b[200~audit target\x1b[201~\r");
   });
+
+  it(
+    "probes the runner version only for a prompted launch's assessment identity",
+    {
+      skip: process.platform === "win32" ? "POSIX shell fixture runner" : false,
+    },
+    async (t) => {
+      const fixtureRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-version-probe-"),
+      );
+      t.after(() => rmSync(fixtureRoot, { recursive: true, force: true }));
+      const probeLog = join(fixtureRoot, "probes.log");
+      const fakeRunner = join(fixtureRoot, "claude");
+      // Runners print update and deprecation notices on stderr, and 5,000 bytes of them must not cost the probe the version on stdout.
+      writeFileSync(
+        fakeRunner,
+        `#!/bin/sh\nprintf '%s\\n' "$*" >> '${probeLog}'\nprintf '%05000d\\n' 0 >&2\nprintf 'fixture-cli 9.8.7\\n'\n`,
+      );
+      chmodSync(fakeRunner, 0o755);
+      const timers = enableTerminalMockTimers();
+      const manager = makeManager();
+      const internals = managerInternals(manager);
+      internals.runnerPaths.set("claude", fakeRunner);
+      const toolVersions: Array<string | null> = [];
+      internals.nodePtyModule = {
+        spawn: (
+          _shell: string,
+          _args: string[],
+          spawnOptions: { env: NodeJS.ProcessEnv },
+        ) => {
+          toolVersions.push(
+            JSON.parse(
+              spawnOptions.env.GOAT_QUALITY_ASSESSMENT_IDENTITY ?? "{}",
+            ).tool_version,
+          );
+          return makeSpawnedPty().pty;
+        },
+      };
+      internals.nodePtyAvailable = true;
+
+      try {
+        // A workspace terminal without a prompt must not start the runner before its PTY.
+        await manager.create("", PROJECT_ROOT, "claude");
+        assert.equal(existsSync(probeLog), false);
+        await manager.create("review this", PROJECT_ROOT, "claude");
+        assert.equal(readFileSync(probeLog, "utf8"), "--version\n");
+        assert.deepStrictEqual(toolVersions, [null, "fixture-cli 9.8.7"]);
+      } finally {
+        manager.shutdown();
+        timers.reset();
+      }
+    },
+  );
 
   it("waits for runner output to settle before initial prompt delivery", async () => {
     const timers = enableTerminalMockTimers();

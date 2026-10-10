@@ -11,10 +11,27 @@
 import { describe, it } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
-import { makeTempProject, runCliInstaller } from "./setup-install.helpers.js";
+import {
+  makeTempProject,
+  PROJECT_ROOT,
+  runCliInstaller,
+  runInstaller,
+} from "./setup-install.helpers.js";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
 /** Create a file symlink, or skip when the host forbids the fixture; it swallows that platform failure into a skip rather than a red test. */
 function symlinkFileOrSkip(
@@ -298,5 +315,242 @@ describe("1.15.0 consumer upgrade", () => {
       readFileSync(outsideTargetPath, "utf-8"),
       "bytes outside the selected project\n",
     );
+  });
+});
+
+/**
+ * Read disposable target membership, modes and file digests without changing it.
+ * Invariant: refused commands preserve the complete snapshot, including registrations and receipts.
+ */
+function targetSnapshot(root: string, relative = ""): string[] {
+  return readdirSync(join(root, relative))
+    .sort()
+    .flatMap((name) => {
+      const path = relative ? `${relative}/${name}` : name;
+      const stat = lstatSync(join(root, path));
+      const entry = `${path}:${stat.mode}`;
+      return stat.isDirectory()
+        ? [entry, ...targetSnapshot(root, path)]
+        : [
+            `${entry}:${createHash("sha256")
+              .update(readFileSync(join(root, path)))
+              .digest("hex")}`,
+          ];
+    });
+}
+
+/**
+ * Exercise patch lag without a production version override or changing this checkout.
+ * Filesystem side effects: copy a disposable package, link dependencies and advance its version metadata.
+ */
+function newerPatchPackage(): { root: string; version: string } {
+  const root = makeTempProject();
+  for (const path of ["src", "workflow", "package.json"]) {
+    assert.equal(existsSync(join(root, path)), false);
+    cpSync(join(PROJECT_ROOT, path), join(root, path), {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+  }
+  symlinkSync(
+    join(PROJECT_ROOT, "node_modules"),
+    join(root, "node_modules"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  const metadata = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const [major, minor, patch] = AUDIT_VERSION.split(".").map(Number);
+  const version = `${major}.${minor}.${patch + 2}`;
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({ ...metadata, version }),
+  );
+  return { root, version };
+}
+
+describe("install version admission", () => {
+  /**
+   * Fixture purpose: a newer isolated package exposes automatic patch refresh while local choices and comments stay authoritative.
+   * Filesystem and process effects: writes disposable config and runs real preview/apply installations.
+   */
+  it("refreshes an older patch in preview and apply while preserving config prose and choices", () => {
+    const consumer = measuredConsumerTarget("claude");
+    const packageFixture = newerPatchPackage();
+    const savedConfig = consumer.userConfig.replace(
+      /^version:.*$/mu,
+      "$& # keep the version comment",
+    );
+    writeFileSync(consumer.configPath, savedConfig);
+    /** Spawns the isolated package's public install CLI; apply writes only to the disposable consumer. */
+    const invoke = (...flags: string[]) =>
+      spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          join(packageFixture.root, "src/cli/cli.ts"),
+          "install",
+          consumer.projectPath,
+          "--agent",
+          "claude",
+          ...flags,
+        ],
+        { cwd: PROJECT_ROOT, encoding: "utf8", timeout: 30_000 },
+      );
+    const before = targetSnapshot(consumer.projectPath);
+    const preview = invoke("--dry-run", "--format", "json");
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    const row = JSON.parse(preview.stdout).files.find(
+      (file: PreviewRow) => file.path === ".goat-flow/config.yaml",
+    );
+    assert.equal(row.state, "user-migrated");
+    assert.match(row.reason, /update the version field/u);
+    assert.deepEqual(targetSnapshot(consumer.projectPath), before);
+    const apply = invoke();
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const expected = savedConfig.replace(
+      /^version: "[^"]*"/mu,
+      `version: "${packageFixture.version}"`,
+    );
+    assert.equal(readFileSync(consumer.configPath, "utf8"), expected);
+    const repeat = invoke();
+    assert.equal(repeat.status, 0, repeat.stderr || repeat.stdout);
+    assert.equal(readFileSync(consumer.configPath, "utf8"), expected);
+  });
+
+  const [major, minor, patch] = AUDIT_VERSION.split(".").map(Number);
+  const refusedVersions = [
+    {
+      name: "newer patch",
+      line: `version: "${major}.${minor}.${patch + 1}"`,
+      guidance: /newer.*CLI|upgrade.*CLI/iu,
+    },
+    {
+      name: "newer minor",
+      line: `version: "${major}.${minor + 1}.0"`,
+      guidance: /newer.*CLI|upgrade.*CLI/iu,
+    },
+    {
+      name: "missing",
+      line: "# version omitted deliberately",
+      guidance: /review.*version/iu,
+    },
+    {
+      name: "malformed",
+      line: 'version: "not-a-release"',
+      guidance: /review.*version/iu,
+    },
+    {
+      name: "prerelease",
+      line: `version: "${AUDIT_VERSION}-rc.1"`,
+      guidance: /review.*version/iu,
+    },
+    {
+      name: "unsafe numeric",
+      line: 'version: "1.17.9007199254740992"',
+      guidance: /review.*version/iu,
+    },
+    {
+      name: "block scalar",
+      line: "version: |- # preserve this comment\n  0.0.0",
+      guidance: /review.*version/iu,
+    },
+  ];
+  for (const fixture of refusedVersions) {
+    it(`refuses ${fixture.name} versions before public or direct target mutations`, () => {
+      const consumer = measuredConsumerTarget("claude");
+      writeFileSync(
+        consumer.configPath,
+        consumer.userConfig.replace(/^version:.*$/mu, fixture.line),
+      );
+      const before = targetSnapshot(consumer.projectPath);
+      for (const flags of [[], ["--force", "--update-config-version"]]) {
+        const preview = runCliInstaller(
+          consumer.projectPath,
+          "--agent",
+          "claude",
+          "--dry-run",
+          "--format",
+          "json",
+          ...flags,
+        );
+        assert.notEqual(preview.status, 0, fixture.name);
+        const report = JSON.parse(preview.stdout);
+        assert.equal(report.verdict, "blocked");
+        assert.match(report.limits.join(" "), fixture.guidance);
+        assert.deepEqual(
+          targetSnapshot(consumer.projectPath),
+          before,
+          "preview preserves every target path",
+        );
+        const apply = runCliInstaller(
+          consumer.projectPath,
+          "--agent",
+          "claude",
+          ...flags,
+        );
+        assert.notEqual(apply.status, 0, fixture.name);
+        assert.match(apply.stderr, fixture.guidance);
+        assert.deepEqual(
+          targetSnapshot(consumer.projectPath),
+          before,
+          "apply preserves files, registrations and receipts",
+        );
+        const direct = runInstaller(
+          consumer.projectPath,
+          "--agent",
+          "claude",
+          ...flags,
+        );
+        assert.notEqual(direct.status, 0, fixture.name);
+        assert.match(direct.stderr, fixture.guidance);
+        assert.deepEqual(
+          targetSnapshot(consumer.projectPath),
+          before,
+          "direct install preserves every target path",
+        );
+      }
+      const setup = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          join(PROJECT_ROOT, "src/cli/cli.ts"),
+          "setup",
+          consumer.projectPath,
+          "--agent",
+          "claude",
+          "--apply",
+          "--force",
+          "--update-config-version",
+        ],
+        { cwd: PROJECT_ROOT, encoding: "utf8", timeout: 30_000 },
+      );
+      assert.notEqual(setup.status, 0);
+      assert.match(setup.stderr, fixture.guidance);
+      assert.deepEqual(
+        targetSnapshot(consumer.projectPath),
+        before,
+        "setup apply preserves every target path",
+      );
+    });
+  }
+
+  it("refreshes an older direct install without resetting config choices", () => {
+    const root = makeTempProject();
+    const install = runInstaller(root, "--agent", "claude");
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    const configPath = join(root, ".goat-flow/config.yaml");
+    const original = readFileSync(configPath, "utf8").replace(
+      /^version:.*$/mu,
+      "$& # preserve direct version comment",
+    );
+    writeFileSync(
+      configPath,
+      original.replace(/^version: "[^"]*"/mu, 'version: "0.0.0"'),
+    );
+    const upgrade = runInstaller(root, "--agent", "claude");
+    assert.equal(upgrade.status, 0, upgrade.stderr || upgrade.stdout);
+    assert.equal(readFileSync(configPath, "utf8"), original);
   });
 });

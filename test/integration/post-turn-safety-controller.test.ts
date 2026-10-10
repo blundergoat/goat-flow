@@ -376,6 +376,32 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
     });
   });
 
+  it("scans roots written with valid YAML hexadecimal and Unicode escapes", () => {
+    withTempController(["gruff-go"], (controllerRoot, childRoots) => {
+      writeFile(childRoots["gruff-go"], ".env", `API_KEY=${TEST_API_TOKEN}\n`);
+      for (const root of [
+        '"\\x67ruff-go"',
+        '"\\U00000067ruff-go"',
+        '"\\u0067ruff-go"',
+      ]) {
+        writeFile(
+          controllerRoot,
+          ".goat-flow/config.yaml",
+          `hooks: { post-turn-safety: { enabled: true, scan-roots: [${root}] } }\n`,
+        );
+        const envelope = assertManagedEnvelope(
+          runHook(
+            controllerRoot,
+            MANAGED_STOP_ENV,
+            buildStopPayload(`controller-yaml-${root}`, false),
+          ),
+        );
+        assert.equal(envelope.outcome, "block", root);
+        assert.equal(envelope.findings[0].target, "gruff-go/.env", root);
+      }
+    });
+  });
+
   it("scans a child configured through a flow-style hooks mapping", () => {
     withTempController(["gruff-go"], (controllerRoot, childRoots) => {
       writeFile(childRoots["gruff-go"], ".env", `API_KEY=${TEST_API_TOKEN}\n`);

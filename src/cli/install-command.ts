@@ -21,6 +21,12 @@ import {
   buildInstallerSpawnSpec,
 } from "./install-invocation.js";
 import {
+  emitInstallSummary,
+  hookRegistrationEdit,
+  observeInstallHookRegistrations,
+  renderInstallSummary,
+} from "./install-summary.js";
+import {
   buildManagedSetupPreview,
   isBlockingManagedFile,
   ManagedInstallStateRecordError,
@@ -51,17 +57,14 @@ import {
   emitCommitGuidanceInstallResult,
   pendingCommitGuidanceMigrationInstructionPath,
 } from "./prompt/commit-guidance.js";
-import {
-  readAgentHookState,
-  type AgentHookReadState,
-} from "./server/agent-hook-writer.js";
+import { readAgentHookState } from "./server/agent-hook-writer.js";
 import { readAllHookStates, type HookState } from "./server/hook-registrar.js";
 import { listHookSpecs, type HookSpec } from "./server/hooks-registry.js";
 import type { AgentId, AgentProfile } from "./types.js";
 
 /**
  * Derive installer flags from the project's adoption state.
- * It swallows an unreadable project into the default flag set rather than blocking the install.
+ * Swallows unreadable probes into no inferred flags; admission separately decides whether installation may proceed.
  */
 function deriveInstallFlags(
   projectPath: string,
@@ -88,6 +91,17 @@ function deriveInstallFlags(
     // An unreadable adoption marker supplies no inferred upgrade flags; the user's explicit options still reach setup.
     return [];
   }
+}
+
+/** Read version and policy blockers before migrations, claims or receipts can be written. */
+function installAdmissionBlocker(
+  projectPath: string,
+  agent: AgentId,
+): string | null {
+  const state = classifyProjectState(createFS(projectPath), agent);
+  return state.action === "none"
+    ? `Installation refused: ${state.details}`
+    : policyUpgradeBlocker(projectPath);
 }
 
 /**
@@ -200,31 +214,6 @@ function hookRegistrationIsAllowed(hookState: HookState): boolean {
       hookState.scanRoots.status === "implicit" ||
       hookState.scanRoots.status === "configured")
   );
-}
-
-/**
- * Classify the one config edit needed to reach desired registration state.
- * Missing or invalid configs stay outside migration because setup either seeds or preserves them.
- */
-function hookRegistrationEdit(
-  current: AgentHookReadState,
-  shouldRegister: boolean,
-): HookRegistrationEdit | null {
-  // Missing or invalid provider config cannot supply an existing registration to edit.
-  if (current.configMissing || current.configInvalid) return null;
-  // An enabled current registration already matches the user's desired state.
-  if (shouldRegister && current.installed) return null;
-  // An enabled hook needs restoration when absent, or repair when its existing row has drifted.
-  if (shouldRegister) {
-    return current.registrationIssue === "registration-missing"
-      ? "restore"
-      : "repair";
-  }
-  const hasOwnedRegistration =
-    current.installed ||
-    (current.registrationIssue !== undefined &&
-      current.registrationIssue !== "registration-missing");
-  return hasOwnedRegistration ? "remove" : null;
 }
 
 /** User-facing verbs for the three registration changes install can perform. */
@@ -665,15 +654,12 @@ function claudePermissionsNeedMigration(settingsText: string): boolean {
     Array.isArray(permissions)
   )
     return false;
-  const permissionRecord = permissions as Record<string, unknown>;
-  return ["deny", "allow", "ask"].some((arrayName) => {
-    const rules = permissionRecord[arrayName];
-    // A missing or malformed rule list has no saved permission entries to preview.
-    if (!Array.isArray(rules)) return false;
-    return rules.some((rule) =>
-      installRewritesClaudeRule(arrayName, rule, rules),
-    );
-  });
+  const rules = (permissions as Record<string, unknown>).deny;
+  // Install preserves allow/ask spellings, including inert rules, until the owner reviews them.
+  return (
+    Array.isArray(rules) &&
+    rules.some((rule) => installRewritesClaudeRule(rule, rules))
+  );
 }
 
 /** Check whether the preview needs a missing home or project deny for a credential store the developer already protects. */
@@ -699,26 +685,21 @@ function isIncompleteClaudeCredentialPair(
 /**
  * Decide whether install would change one Claude permission rule during an upgrade.
  *
- * Unmatched tool forms are repaired in every list; only deny rules are retired, expanded, or paired across credential locations.
- * An allow or ask rule with the same text remains the user's own choice.
- *
- * @param arrayName - permission list the rule came from: `deny`, `allow`, or `ask`
+ * Only deny rules are normalized, retired, expanded, or paired across credential locations.
+ * The caller excludes allow/ask choices from this migration.
  *
  * @param rule - one raw list entry; a non-string entry is left untouched and reports false
  * @param savedRules - entries in the same saved list; a missing partner requires migration, while a complete pair stays unchanged
  * @returns true when the standalone installer would remove or rewrite this entry
  */
 function installRewritesClaudeRule(
-  arrayName: string,
   rule: unknown,
   savedRules: readonly unknown[],
 ): boolean {
   // A non-string permission entry cannot identify a tool rule that setup rewrites.
   if (typeof rule !== "string") return false;
   // These retired tool spellings need repair before Claude can enforce the user's file rules.
-  if (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(/u.test(rule)) return true;
-  // Only deny lists receive environment expansion and retired-path cleanup; allow and ask choices retain their meaning.
-  if (arrayName !== "deny") return false;
+  if (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(.*\)$/u.test(rule)) return true;
   return (
     rule === "Read(**/.env*)" ||
     rule === "Edit(**/.env*)" ||
@@ -1081,9 +1062,6 @@ function managedInstallStateRecovery(
   );
 }
 
-/** Whether the claimed installer reached post-write verification or preserved a child failure. */
-type ClaimedManagedInstallOutcome = "completed" | "installer-failed";
-
 /**
  * Explain pending GitHub ownership review before installation can change the selected project.
  *
@@ -1112,17 +1090,17 @@ function policyUpgradeBlocker(projectPath: string): string | null {
   }
 }
 
-/** Add pending policy review to dry-run diagnostics without granting authority or changing any project files. */
-function policyReviewPreview(
+/** Add version or policy admission failures to dry-run diagnostics without changing project files. */
+function blockedInstallPreview(
   preview: ManagedSetupPreview,
-  policyBlocker: string | null,
+  admissionBlocker: string | null,
 ): ManagedSetupPreview {
-  // No policy decision is pending, so the user sees the original managed-file verdict.
-  if (!policyBlocker) return preview;
+  // No version or policy blocker exists, so the user sees the original managed-file verdict.
+  if (!admissionBlocker) return preview;
   return {
     ...preview,
     verdict: "blocked",
-    limits: [...preview.limits, policyBlocker],
+    limits: [...preview.limits, admissionBlocker],
   };
 }
 
@@ -1130,23 +1108,27 @@ function policyReviewPreview(
  * Apply, verify, and record one install while its caller retains every write claim.
  *
  * Error behavior: preserves installer exits and translates verified-but-unrecorded state into the accepted recovery error.
- * @returns completed after verified state and post-install writes, or installer-failed after preserving a non-zero child status
+ * @returns verified closing text after post-install writes, or null after preserving a non-zero child status
  */
 async function runClaimedManagedInstall(
   options: ParsedCLI,
   agent: AgentId,
   authority: ManagedSetupAuthority,
   initialPreview: ManagedSetupPreview,
-): Promise<ClaimedManagedInstallOutcome> {
+): Promise<string | null> {
   const installPreview = revalidateManagedInstallPreview(
     options,
     agent,
     authority,
     initialPreview,
   );
-  const policyBlocker = policyUpgradeBlocker(options.projectPath);
-  // Another writer may have changed policy choices after preview; stop before publishing any install-state markers.
-  if (policyBlocker) throw new CLIError(policyBlocker, 1);
+  const admissionBlocker = installAdmissionBlocker(options.projectPath, agent);
+  // Another writer may have changed the saved version or policy choices after preview; stop before publishing install-state markers.
+  if (admissionBlocker) throw new CLIError(admissionBlocker, 1);
+  const hookObservations = observeInstallHookRegistrations(
+    options.projectPath,
+    installPreview,
+  );
   // V2 state and every old-reader marker become visible while the complete claim batch is held, before Bash receives permission to mutate targets.
   prepareManagedInstallStateForApply(options.projectPath);
   const installerLaunch = buildInstallerInvocation({
@@ -1187,7 +1169,7 @@ async function runClaimedManagedInstall(
   // A failed installer preserves its exit status and skips recording successful install state.
   if (installResult.status !== 0) {
     process.exitCode = installResult.status ?? 1;
-    return "installer-failed";
+    return null;
   }
 
   let installationMismatches: string[];
@@ -1212,7 +1194,11 @@ async function runClaimedManagedInstall(
   }
   emitCommitGuidanceInstallResult(options.projectPath, agent);
   emitIndexGenerationInstallResult(options.projectPath);
-  return "completed";
+  return renderInstallSummary(
+    options.projectPath,
+    installPreview,
+    hookObservations,
+  );
 }
 
 /**
@@ -1292,7 +1278,10 @@ async function installManagedFiles(
   selectedAgent: AgentId,
 ): Promise<void> {
   const authority = readManagedSetupAuthority(options);
-  const policyBlocker = policyUpgradeBlocker(options.projectPath);
+  const admissionBlocker = installAdmissionBlocker(
+    options.projectPath,
+    selectedAgent,
+  );
   let installPreview = buildInstallPreview(options, selectedAgent, authority);
   const installerLaunch = buildInstallerInvocation({
     scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
@@ -1310,14 +1299,14 @@ async function installManagedFiles(
     emitManagedSetupDryRun(
       options,
       managedSetupPreviewForInstallerLaunch(
-        policyReviewPreview(installPreview, policyBlocker),
+        blockedInstallPreview(installPreview, admissionBlocker),
         installerLaunch,
       ),
     );
     return;
   }
-  // Generic install or force authority cannot replace the separate policy decision shown on the Hooks page.
-  if (policyBlocker) throw new CLIError(policyBlocker, 1);
+  // Install and force authority cannot override version admission or a pending policy review.
+  if (admissionBlocker) throw new CLIError(admissionBlocker, 1);
 
   const overwriteBlocker = managedSetupAdmissionFailure(
     installPreview,
@@ -1356,14 +1345,15 @@ async function installManagedFiles(
     installPreview,
   );
   let didTransactionFail = false;
+  let installSummary: string | null;
   try {
-    const installOutcome = await runClaimedManagedInstall(
+    installSummary = await runClaimedManagedInstall(
       options,
       selectedAgent,
       authority,
       installPreview,
     );
-    didTransactionFail = installOutcome === "installer-failed";
+    didTransactionFail = installSummary === null;
   } catch (error) {
     // A failed installer or verification keeps its original error; later claim cleanup must not hide it from the user.
     didTransactionFail = true;
@@ -1371,4 +1361,6 @@ async function installManagedFiles(
   } finally {
     releaseManagedInstallClaims(claims, didTransactionFail);
   }
+  // Failed claim release throws before verified completion can be printed.
+  emitInstallSummary(installSummary);
 }

@@ -1,6 +1,6 @@
 ---
 category: verification-scanners
-last_reviewed: 2026-09-20
+last_reviewed: 2026-09-30
 ---
 
 **Scope:** Proving a guard, scanner, or parser actually guards - block-and-allow pairs, false-positive probes, parser-shape fixtures per claimed file family, and self-test fanout. What a test must assert generally is [verification-testing.md](verification-testing.md); Gruff specifics are [verification-gruff.md](verification-gruff.md); Markdown formatting reaching a shell argument is [verification-preflight.md](verification-preflight.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
 
 **Status:** active | **Created:** 2026-06-03
+**Severity:** SECURITY
 **Decision changed:** Verify fallback and optimized hook paths against the same adversarial repository configuration, not only the same payload.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -28,6 +29,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Security parser fixes need focused parser proof
 
 **Status:** active | **Created:** 2026-05-30 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-09-20
 
 **Prevention:** For security changes that parse shell or agent-config command strings, run the focused parser and contract tests immediately, avoid dynamic regex construction when a literal token scan is enough, run `goat-flow stats --check` after renaming test anchors that learning-loop artifacts cite, and let current type and lint evidence override stale lesson text. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `extractConfiguredScriptPath`), `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
@@ -64,7 +66,7 @@ last_reviewed: 2026-09-20
 
 **Prevention:** Quote every search pattern containing `<`, `>`, `|`, backticks, or quotes as a single shell argument, or pass it through a safer command form. After any complex shell search over generated or HTML-heavy files, run `git diff --stat` or `wc -l` on the touched files before continuing verification; an unquoted redirect operator is not blocked by the command guard, so the only evidence is the file itself.
 
-**What happened:** During M05b verification, a malformed `rg` command left a literal `>` outside the quoted search pattern; the shell read it as output redirection and truncated `src/dashboard/views/home.html` to an empty file. `wc -l`, `git diff`, and the dashboard HTML regression caught it before final verification and the template was restored.
+**What happened:** During verification, a malformed `rg` command left a literal `>` outside the quoted search pattern; the shell read it as output redirection and truncated `src/dashboard/views/home.html` to an empty file. `wc -l`, `git diff`, and the dashboard HTML regression caught it before final verification and the template was restored.
 
 **Root cause:** The pattern contained a shell-significant character from the HTML text being searched and the command was assembled too casually, so a read-only verification command stopped being read-only before `rg` ever ran.
 
@@ -73,6 +75,7 @@ last_reviewed: 2026-09-20
 ## Lesson: Temp cleanup must satisfy destructive-command hooks
 
 **Status:** active | **Created:** 2026-05-08
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-08-27
 
 **Prevention:** For verification scratch space, prefer non-recursive cleanup (`rm -f` known files, then `rmdir`) or an explicit literal temp path that satisfies the hook. Do not combine validation and variable-scoped `rm -rf` in the same command, and do not place recursive removal in an `EXIT` trap inside the same shell program: the guard classifies the whole program before `mktemp` runs, so the validation never happens. Keeping a printed temp directory as disposable evidence is preferable to coupling proof to cleanup. Evidence anchor: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `embedded variable recursive rm`).
@@ -83,7 +86,7 @@ last_reviewed: 2026-09-20
 
 **Recurrence 2026-08-03:** A packaged-release smoke again placed variable-scoped `rm -rf` in the same shell program as its validation; the hook rejected the complete command before `mktemp` ran, so no validation state was created, and the rerun retained its printed temp directory as disposable evidence.
 **Recurrence 2026-08-10:** Cleanup of two known redaction directories used recursive removal despite literal paths; listing each file, deleting them in bounded groups, and removing the empty directories completed cleanup without weakening the guard.
-**Recurrence 2026-08-27:** Regenerating the M41 learning-loop index through a temporary mirror, `rm -rf "$index_fixture_dir"` sat in an `EXIT` trap within the same program; the guard rejected it before `mktemp` ran, so neither temporary nor workspace files were created.
+**Recurrence 2026-08-27:** Regenerating the learning-loop index through a temporary mirror, `rm -rf "$index_fixture_dir"` sat in an `EXIT` trap within the same program; the guard rejected it before `mktemp` ran, so neither temporary nor workspace files were created.
 
 ---
 
@@ -100,23 +103,25 @@ last_reviewed: 2026-09-20
 ## Lesson: Scanner hardening must test block and allow cases together
 
 **Status:** active | **Created:** 2026-06-14
+**Severity:** SECURITY
 **Incident count:** 4 | **Latest occurrence:** 2026-08-09
 
 **Prevention:** For credential-scanner changes, run a matrix including must-block misses and must-allow placeholder assignments after each parser edit. Parse and normalize the assignment key first, classify it second, and expect a broader key match to require explicit placeholder allowlist proof. Capture regex matches into locals before calling helpers, because a helper can overwrite `BASH_REMATCH`. Compare normalized findings across the full block-and-allow corpus rather than treating a few equal exit codes as parity, and inventory every external command, redirection, and direct content read before treating named reproductions as completeness proof. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_env_assignment`), `test/integration/post-turn-safety-hook.test.ts` (search: `blocks exported credential assignments`), `test/integration/post-turn-safety-hook.test.ts` (search: `allows safe placeholders in env examples`).
 
-**What happened:** During M08 post-turn hardening, live probes showed three false negatives: bare `sk-...` tokens, `export API_KEY=...`, and quoted credential assignments containing `#`. The first parser patch still failed the new exported and quoted tests because key extraction tried to parse and classify sensitive keys in one POSIX ERE; splitting extraction from classification fixed those, and the next focused run failed existing placeholder tests because `API_KEY=your_api_key_here` had only ever been allowed by the old false negative.
+**What happened:** During post-turn hardening, live probes showed three false negatives: bare `sk-...` tokens, `export API_KEY=...`, and quoted credential assignments containing `#`. The first parser patch still failed the new exported and quoted tests because key extraction tried to parse and classify sensitive keys in one POSIX ERE; splitting extraction from classification fixed those, and the next focused run failed existing placeholder tests because `API_KEY=your_api_key_here` had only ever been allowed by the old false negative.
 
 **Root cause:** New must-block probes were tested before accounting for must-allow placeholders that the old false negative had accidentally protected.
 
 **Recurrence 2026-08-02:** The PR #57 scanner-parity fix first lost the raw assignment key because a placeholder helper overwrote `BASH_REMATCH`, then broader forced-fallback fixtures exposed Docker space-form and multi-assignment drift, dotted config-reference drift, npm secondary-assignment drift, and quoted-password mismatches; only the complete native-versus-fallback finding-set comparison caught these after named examples agreed. `workflow/hooks/post-turn-safety.sh` (search: `scan_literal_credential_assignment`), `test/integration/post-turn-safety-hook.helpers.ts` (search: `hookFindingSignatures`).
 **Recurrence 2026-08-02 (general rule, surfaced here):** PR #57 review found `plans time` rejecting `stop --discard-open` under the clock reversal whose own error names discard as the remedy; the suite had a discard case and a reversal case that never crossed. When an error names a recovery path, test that path under the condition raising it. `src/cli/plans-time.ts` (search: `if (transition.discardOpen) return;`), `test/unit/plans-time.test.ts` (search: `lets discard-open recover a span the clock reversed under`).
-**Recurrence 2026-08-09:** M00's named failure cases went green before a complete command and read-boundary inventory found unchecked compatibility `tr` normalization and the selected-file open. `workflow/hooks/post-turn-safety.sh` (search: `fallback_lower`), `workflow/hooks/post-turn-safety.sh` (search: `fallback_open_scan_file`), `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `blocks when selected content disappears after byte counting`).
+**Recurrence 2026-08-09:** The named failure cases went green before a complete command and read-boundary inventory found unchecked compatibility `tr` normalization and the selected-file open. `workflow/hooks/post-turn-safety.sh` (search: `fallback_lower`), `workflow/hooks/post-turn-safety.sh` (search: `fallback_open_scan_file`), `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `blocks when selected content disappears after byte counting`).
 
 ---
 
 ## Lesson: Scanner scope gates need parser-shape fixtures for each claimed file family
 
 **Status:** active | **Created:** 2026-06-14
+**Severity:** SECURITY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-24
 
 **Prevention:** When a scanner scope gate lists file families, add at least one block fixture for each family whose syntax differs from the default parser shape. For Dockerfiles, probe `ARG KEY=value` and `ENV KEY=value`, the space forms `ARG KEY value` and `ENV KEY value`, and multi-assignment `ENV SAFE=x API_TOKEN=...`; for config key classifiers, probe snake_case, uppercase, and camelCase or PascalCase credential names plus excluded suffixes such as `tokenCount`, `secretName`, and `clientSecretId`. When adding a token family, pair its positive examples with ambiguous shorthand sharing its punctuation. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_env_assignment_file`), `test/integration/post-turn-safety-hook.test.ts` (search: `blocks Dockerfile ARG and ENV credential assignments`).
@@ -125,4 +130,4 @@ last_reviewed: 2026-09-20
 
 **Root cause:** The path gate was verified broadly without pairing each newly claimed file family and naming convention with a syntax-shaped fixture, so the gate said "Dockerfile" while the parser understood only shell assignment syntax.
 
-**Recurrence 2026-08-24:** M22's first code-spanned path matcher treated `n/a` as an internal file path; the focused block fixtures passed and only the archived-plan allow case exposed the false positive. The matcher now requires a known file extension, with `n/a` kept as a negative control. `test/unit/plans-check-structure.test.ts` (search: `slash shorthand such as \`n/a\` stays clean`).
+**Recurrence 2026-08-24:** The first code-spanned path matcher treated `n/a` as an internal file path; the focused block fixtures passed and only the archived-plan allow case exposed the false positive. The matcher now requires a known file extension, with `n/a` kept as a negative control. `test/unit/plans-check-structure.test.ts` (search: `slash shorthand such as \`n/a\` stays clean`).

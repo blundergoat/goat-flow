@@ -82,7 +82,19 @@ Before export, inspect every prose section, table and checklist for unexplained 
 
 Illustrative rewrite, shape only: “Finalize the report metadata contract” becomes “Preserve assessment metadata when saving reports”, followed by the check “Reload the saved report; confirm its assessment metadata is unchanged”. Validation and history loading receive separate change tasks when required; they must not disappear inside the saving task.
 
-The headings below are the default output order. The snippets are illustrative input/output shape only, never repository evidence.
+### Plan progress updates
+
+New plans contain `_PROGRESS.md`, initially only `# Plan progress`. Existing plans adopt it only on explicit request. This summary reports completed outcomes for issue readers; milestones retain task state and acceptance.
+
+At each meaningful completed-batch checkpoint or handoff, compare completed tasks, observed evidence and saved entries. Prepend `## YYYY-MM-DD` below the title, newest first even on the same day. Normally write three to five short outcome bullets and one brief checks line naming actual verification, gaps and pending human review. Use fewer bullets for sparse results; never pad or invent completion. Update during implementation, without waiting for milestone completion.
+
+Report each outcome once. An unchanged resume or empty batch writes nothing. Material approval, verification or rework changes may prepend a short dated correction without new completed tasks: say what changed and refer to the affected outcome plainly. Preserve earlier entries verbatim.
+
+Apply Human-facing exports and the human-prose playbook. Preserve facts and public technical names; omit private note links, executor IDs and agent-operation details. Posting remains a human action.
+
+Before saving, follow the shared preamble's Durable Local Text Redaction → Plan-summary exception. Run `/goat-clarity documentation .goat-flow/plans/<selected-plan>/_PROGRESS.md` before presenting each update as ready to paste. Limit writes to the new entry; older entries are read-only. Compare earlier bytes before/after and require a repeated pass to preserve already-clear text. Every clarity edit follows the same pre-write redaction rule. Failed saving leaves the existing file untouched; unavailable clarity is disclosed as incomplete, never paste-ready.
+
+The headings below are the default ISSUE output order. The snippets are illustrative input/output shape only, never repository evidence.
 
 ## Outcome
 

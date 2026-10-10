@@ -274,6 +274,8 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
   if (options.format === "markdown") {
     const lines = [
       `**Path:** ${options.projectPath}`,
+      `**Project version:** ${result.version ?? "not recorded"}`,
+      `**CLI version:** ${PACKAGE_VERSION}`,
       `**State:** ${result.state}`,
       `**Action:** ${result.action}`,
       `**Details:** ${result.details}`,
@@ -292,6 +294,7 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
           path: options.projectPath,
           ...result,
           version: PACKAGE_VERSION,
+          projectVersion: result.version ?? null,
           managedInstallEvidence,
         },
         null,
@@ -314,6 +317,8 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
 
   const rendered = [
     `  Path:    ${options.projectPath}`,
+    `  Project version: ${result.version ?? "not recorded"}`,
+    `  CLI version: ${PACKAGE_VERSION}`,
     `  State:   ${color}${result.state}${reset}`,
     `  Action:  ${result.action}`,
     `  Details: ${result.details}`,

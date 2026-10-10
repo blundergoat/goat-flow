@@ -133,8 +133,8 @@ function bootstrapPreludeFragments(
   ];
 }
 
-// ADR-052 freezes deferred provider registrations, so this recognizer must keep
-// emitting exactly the bytes those providers registered before ADR-053.
+// ADR-053 freezes deferred provider registrations until exact delivery is captured.
+// Keep this recognizer byte-identical to the legacy registration contract.
 const LEGACY_REGISTRATION_RECOGNITION_FRAGMENT =
   "const registrationNamesOperands=(value)=>{if(Array.isArray(value))return value.some(registrationNamesOperands);if(!isPlainObject(value))return false;for(const [key,nested] of Object.entries(value)){if((key==='command'||key==='bash'||key==='powershell')&&typeof nested==='string'&&commandNamesOperands(nested))return true;if((Array.isArray(nested)||isPlainObject(nested))&&registrationNamesOperands(nested))return true;}return false;};";
 

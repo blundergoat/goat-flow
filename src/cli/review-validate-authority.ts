@@ -5,6 +5,7 @@
  * The CLI and report validator share canonical JSON and raw readers; snapshots retain metadata while file contents stay transient.
  * Capture and revalidation never change the project or run a review gate.
  */
+import { parseRetainedReviewAuthority } from "./review-validate-snapshot.js";
 import { existsSync, lstatSync, readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -238,7 +239,7 @@ function selectWorkingFiles(
   };
 }
 
-/** Resolve each explicitly qualified path without borrowing authority from another selected side. */
+/** Resolve each explicitly qualified path without borrowing authority from another selected side; resolved paths keep a stable sorted order. */
 function selectPaths(
   context: GitContext,
   requested: JsonRecord,
@@ -298,7 +299,7 @@ function selectPaths(
   };
 }
 
-/** Walk a standalone project using the same excluded build/tool directories as the repository filesystem adapter. */
+/** Walk a standalone project using the same excluded build/tool directories as the repository filesystem adapter, in a stable path order. */
 function standalonePaths(root: string, directory = "."): string[] {
   const excluded = new Set([
     ".git",
@@ -365,7 +366,7 @@ function withinAreaBoundary(context: GitContext, path: string): boolean {
   }
 }
 
-/** Enumerate the requested live area or freeze only its declared sample. */
+/** Enumerate the requested live area or freeze only its declared sample, in a stable path order. */
 function selectArea(context: GitContext, requested: JsonRecord): SelectedFiles {
   exactKeys(requested, ["kind", "roots", "sample"]);
   const roots = pathList(requested.roots, true);
@@ -453,7 +454,7 @@ function sameFile(left: FileState, right: FileState): boolean {
   return left.mode === right.mode && left.sha256 === right.sha256;
 }
 
-/** Build changed literal members without rename inference; explicit paths retain unchanged and absent members too. */
+/** Build changed literal members without rename inference; explicit paths retain unchanged and absent members too, in a stable path order. */
 function selectedInventory(selection: SelectedFiles): InventoryMember[] {
   const paths = [
     ...new Set([
@@ -473,7 +474,7 @@ function selectedInventory(selection: SelectedFiles): InventoryMember[] {
   });
 }
 
-/** Validate optional rename labels against actual deleted and added members, never using them to invent authority. */
+/** Validate optional rename labels against actual deleted and added members, never using them to invent authority; pairs keep a stable order. */
 function selectedRenames(
   value: JsonValue | undefined,
   inventory: InventoryMember[],
@@ -510,7 +511,7 @@ function selectedRenames(
   return renames.sort((left, right) => comparePaths(left.old, right.old));
 }
 
-/** Describe executable source files without their review-specific Git/index/live origin labels. */
+/** Describe executable source files in a stable path order, without their review-specific Git/index/live origin labels. */
 function workspaceFiles(files: Map<string, FileState>): unknown[] {
   return [...files]
     .sort(([left], [right]) => comparePaths(left, right))
@@ -628,7 +629,7 @@ function expectedPathWorkspace(
 }
 
 /**
- * Capture optional execution identity while preserving a fixed source when the unrelated checkout is unsupported.
+ * Capture an optional workspace fingerprint as execution identity while preserving a fixed source when the unrelated checkout is unsupported.
  *
  * @throws Error for unexpected read failures; a disclosed checkout refusal retains any resolved source identity and explains the missing measurement
  */
@@ -672,7 +673,7 @@ function captureWorkspace(
   }
 }
 
-/** Capture one selection once; the outer producer compares a second capture before returning its original baseline. */
+/** Capture one selection once with its authority fingerprint; the outer producer compares a second capture before returning its original baseline. */
 function captureOnce(
   request: JsonRecord,
   projectRoot: string,
@@ -784,7 +785,7 @@ function authorityViolation(
 }
 
 /**
- * Parse and verify one frozen authority field before any finding can use it.
+ * Parse and verify one frozen authority field before any finding can use it; an invalid or drifted field reports a violation and returns null.
  *
  * @param text - canonical producer output's authority object; empty or malformed metadata is refused
  *
@@ -801,34 +802,7 @@ export function readReviewAuthority(
   violations: ReviewValidationViolation[],
 ): ReviewAuthoritySnapshot | null {
   try {
-    const parsed = record(parseReviewJson(text, true), "authority snapshot");
-    exactKeys(parsed, [
-      "schema",
-      "objectFormat",
-      "source",
-      "index",
-      "inventory",
-      "renames",
-      "workspace",
-      "fingerprint",
-    ]);
-    requireAuthority(
-      parsed.schema === "goat-review-authority/v1",
-      "unsupported authority schema",
-    );
-    record(parsed.source, "resolved source");
-    const { fingerprint, ...unsigned } = parsed;
-    requireAuthority(
-      fingerprint === taggedHash("authority", unsigned),
-      "authority fingerprint does not match its frozen record",
-    );
-    requireAuthority(
-      parsed.workspace === null ||
-        /^workspace-v1:sha256:[0-9a-f]{64}$/u.test(
-          textField(parsed.workspace, "workspace"),
-        ),
-      "invalid execution workspace identity",
-    );
+    const parsed = parseRetainedReviewAuthority(parseReviewJson(text, true));
     // The producer supplies the typed shape only after its canonical bytes match the retained receipt exactly.
     return checkSnapshot(projectRoot, parsed);
   } catch (error) {
@@ -839,7 +813,7 @@ export function readReviewAuthority(
 }
 
 /**
- * Recheck the original selection at a pass boundary; drift becomes a report violation without refreshing the baseline.
+ * Recheck the original selection at a pass boundary; drift reports a violation without refreshing the baseline.
  *
  * @param projectRoot - reviewed project where the original selection must still resolve
  *
@@ -919,7 +893,7 @@ export function reviewScopeLabels(snapshot: ReviewAuthoritySnapshot): {
 }
 
 /**
- * Require the readable scope to describe the same selected state as the canonical receipt.
+ * The readable scope must describe the same selected state as the canonical receipt, including its fingerprint.
  *
  * @param scope - parsed human-readable scope fields
  *

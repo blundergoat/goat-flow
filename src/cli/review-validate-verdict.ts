@@ -468,7 +468,8 @@ export function validateDegradationFlags(
 }
 
 /**
- * Require one nonempty explanation for each declared limit; explanations disclose host work rather than proving it occurred.
+ * Require one nonempty explanation for each declared limit; a missing one reports a violation.
+ * Explanations disclose host work rather than proving it occurred.
  *
  * @param integrity - declared flags and their explanation map; no flags requires an empty object
  * @param violations - errors to append for missing, extra, or incompatible explanations

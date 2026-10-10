@@ -2,12 +2,11 @@
 
 **Status:** Accepted
 **Date:** 2026-08-23
-**Ticket/Context:** `.goat-flow/plans/1.17.0/M03-concurrent-session-spike.md`
 **Updated:** 2026-09-26 - public index generation and operator recovery now coordinate on path-keyed claims and guards.
 
 ## Context
 
-Atomic replacement stops readers seeing partial bytes; it does not stop two writers replacing a file from the same stale snapshot. `.goat-flow/learning-loop/lessons/verification-environment.md` (search: `Parallel sessions need concurrency-safe file patterns`) records two agents writing the same bucket, and `.goat-flow/learning-loop/footguns/cleanup-layering.md` (search: `Session-scoped cleanup over a project-scoped resource`) records cross-process duplication and deletion when process-local ownership was applied to a project-scoped resource. `src/cli/plans-time.ts` (search: `writeMilestoneAtomically`) already compares destination identity and exact content before replacing a milestone, but two cooperating processes can both pass that comparison before either rename; the M03 local runner reproduced the overwrite.
+Atomic replacement stops readers seeing partial bytes; it does not stop two writers replacing a file from the same stale snapshot. `.goat-flow/learning-loop/lessons/verification-environment.md` (search: `Parallel sessions need concurrency-safe file patterns`) records two agents writing the same bucket, and `.goat-flow/learning-loop/footguns/cleanup-layering.md` (search: `Session-scoped cleanup over a project-scoped resource`) records cross-process duplication and deletion when process-local ownership was applied to a project-scoped resource. `src/cli/plans-time.ts` (search: `writeMilestoneAtomically`) already compares destination identity and exact content before replacing a milestone, but two cooperating processes can both pass that comparison before either rename; the local runner reproduced the overwrite.
 
 The mechanism must work without a daemon or lock service, and it can protect only writers that cooperate with it.
 

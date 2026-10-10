@@ -60,7 +60,13 @@ Aggregate-mode nuance:
 
 `--check-drift` keeps the 20 build checks and adds canonical-package integrity. It compares skill, shared-document, hook, and agent mirrors, then validates the complete artifact graph: skill frontmatter names match their directory commands; command and artifact IDs are unique; manifest skill references stay inside committed `references/` packs; local Markdown resources resolve; and source-only or stale installed skill/playbook files fail with both the affected path and canonical owner. It also checks manifest-declared shared phrases across every distinct sibling instruction file present in the target. That peer comparison still runs with `--agent <id>` and reports the affected file, section, and phrase without selecting a canonical winner. These checks do not add registered build-check IDs, so they appear under the separate `drift` report field.
 
-`--check-content` scans current user guidance for factual drift, including invocations of commands the parser has removed. Removed top-level commands are matched only when written as a code-span or shell-style invocation, so prose such as "goat-flow check IDs" is not treated as a command. Historical learning-loop records remain outside this current-guidance scan. Content findings appear under the separate `content` report field.
+`--check-content` runs three scanners and describes their coverage in text, Markdown and JSON:
+
+- Prose, readiness and semantic anchors in selected Markdown. Curated guidance and installed skills receive prose checks; learning-loop buckets receive incident-appropriate rules, and additional eligible Markdown receives readiness and anchor checks. Local working artifacts are excluded.
+- Supported framework claims in current guidance against live goat-flow registries and source. These checks cover named counts, paths, removed-command examples, lifetime evidence and specific semantic claims; historical learning-loop records remain outside this framework-claim scan.
+- Release count claims in `CHANGELOG.md` and the optional .goat-flow/scratchpad/release.md draft against available matching manifest snapshots. Missing snapshots are skipped.
+
+Removed top-level commands are matched only when written as a code-span or shell-style invocation, so prose such as "goat-flow check IDs" is not treated as a command. A content pass does not verify arbitrary project or domain facts; missing documents and unsupported claims can remain unchecked. Warnings fail the content section and information remains advisory. Findings and descriptive `coverage` appear under the separate `content` report field; disabled checks or a newer target leave it null. `filesScanned` retains the sum of scanner counts rather than a unique-document total. Coverage metadata does not add SARIF findings.
 
 ## Harness Checks
 
@@ -77,7 +83,7 @@ Aggregate-mode nuance:
 | Constraints | `deny-blocks-dangerous` | `integrity` | Deny patterns block broad recursive deletion, all git push (ADR-025), and `chmod` |
 | Constraints | `deny-blocks-pipe-to-shell` | `advisory` | Deny patterns block `curl \| bash` and `wget \| sh` pipe-to-shell execution |
 | Constraints | `deny-hook-registered` | `integrity` | Both policy hooks exist and are registered at their canonical paths in the correct pre-tool hook slot |
-| Constraints | `settings-rules-matched` | `advisory` | JSON permission rules (deny/allow/ask) use forms Claude Code consults. Its [permissions documentation](https://code.claude.com/docs/en/permissions) says file permissions consult `Edit(path)` and `Read(path)`, while path rules for `Write`, `NotebookEdit`, `Glob`, and legacy `MultiEdit` are accepted but not consulted. The audit reports inert forms as a score-only warning; they MAY remain as defense-in-depth markers or be removed deliberately after project-owner review, and goat-flow never rewrites them automatically. |
+| Constraints | `settings-rules-matched` | `advisory` | JSON permission rules (deny/allow/ask) use forms Claude Code consults. Its [permissions documentation](https://code.claude.com/docs/en/permissions) says file permissions consult `Edit(path)` and `Read(path)`, while path rules for `Write`, `NotebookEdit`, `Glob`, and legacy `MultiEdit` are accepted but not consulted. The audit reports inert forms as a score-only warning. An approved install normalizes or removes stale deny rules and prints the changes, but preserves allow and ask arrays verbatim. Review those separately: activating an inert allow or ask rule changes its meaning. |
 | Verification | `hooks-registered` | `integrity` | Post-turn hook registrations and on-disk hook files stay in sync |
 | Verification | `commit-guidance` | `advisory` | For targets containing `.git`, commit guidance exists at preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md`; targets without `.git` skip the check, and old GitHub commit-guidance locations are flagged as misplaced |
 | Verification | `evidence-before-claims` | `metric` | Present instruction files carry the Hallucination red-flags clauses and Rationalisations-to-reject pointer |
@@ -94,7 +100,7 @@ Aggregate-mode nuance:
 | `npx @blundergoat/goat-flow@latest audit .` | 16 setup + 4 agent = 20 build checks | Structural install gate only |
 | `npx @blundergoat/goat-flow@latest audit . --agent <id>` | Same 20 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
 | `npx @blundergoat/goat-flow@latest audit . --check-drift` | 20 build checks + artifact and instruction drift | Validates canonical sources, installed mirrors, IDs, frontmatter, referenced resources, and sibling instruction parity |
-| `npx @blundergoat/goat-flow@latest audit . --check-content` | 20 build checks + factual/content drift | Validates current documentation claims and removed-command examples |
+| `npx @blundergoat/goat-flow@latest audit . --check-content` | 20 build checks + content scans | Checks selected Markdown, supported framework claims and release counts against available snapshots |
 | `npx @blundergoat/goat-flow@latest audit . --harness` | 20 build + 18 harness = 38 checks | Adds harness completeness, still deterministic |
 
 Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx @blundergoat/goat-flow@latest quality`.

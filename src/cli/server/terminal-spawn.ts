@@ -10,7 +10,9 @@
  * A runner that cannot be found comes back as null so the caller can tell the user their CLI is not installed, instead of spawning a shell that fails
  * cryptically.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
+import type { QualityAssessmentIdentity } from "../quality/schema-types.js";
 import { extname } from "node:path";
 import type { WebSocket } from "ws";
 import type { Runner, ServerMessage, TerminalAccessMode } from "./types.js";
@@ -39,6 +41,8 @@ export interface TerminalSpawnSpec {
 
 /** Extra access and workspace context needed for runner-specific launch policy. */
 export interface TerminalSpawnOptions {
+  /** Version observed from this launch's actual binary, never from the selected assessment agent. */
+  toolVersion?: string | null;
   accessMode?: TerminalAccessMode;
   projectPath?: string;
   targetPath?: string;
@@ -54,16 +58,16 @@ const WINDOWS_RUNNER_EXTENSION_PRIORITY = [
 ] as const;
 const WINDOWS_TERMINAL_SHELL = "powershell.exe";
 const POSIX_PROMPT_ENV_CLEANUP =
-  "unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS";
+  "unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS GOAT_QUALITY_ASSESSMENT_IDENTITY";
 const WINDOWS_PROMPT_ENV_CLEANUP =
-  "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CODEX_REPORTING_PROFILE -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CLAUDE_REPORTING_SETTINGS -ErrorAction SilentlyContinue";
+  "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CODEX_REPORTING_PROFILE -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CLAUDE_REPORTING_SETTINGS -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_QUALITY_ASSESSMENT_IDENTITY -ErrorAction SilentlyContinue";
 const CODEX_DASHBOARD_ARGS = "--sandbox danger-full-access";
 const CODEX_REPORTING_DEFAULT_PERMISSION = `default_permissions="${CODEX_REPORTING_PROFILE_NAME}"`;
 const CODEX_REPORTING_APPROVAL_ARGS = "--ask-for-approval never";
 const CLAUDE_REPORTING_ARGS =
-  '--setting-sources= --settings "$GOAT_CLAUDE_REPORTING_SETTINGS" --permission-mode dontAsk';
+  '--setting-sources= --settings "$GOAT_CLAUDE_REPORTING_SETTINGS" --permission-mode dontAsk --append-system-prompt "$GOAT_QUALITY_ASSESSMENT_IDENTITY"';
 const WINDOWS_CLAUDE_REPORTING_ARGS =
-  "--setting-sources= --settings $env:GOAT_CLAUDE_REPORTING_SETTINGS --permission-mode dontAsk";
+  "--setting-sources= --settings $env:GOAT_CLAUDE_REPORTING_SETTINGS --permission-mode dontAsk --append-system-prompt $env:GOAT_QUALITY_ASSESSMENT_IDENTITY";
 /**
  * Wrap a launch prompt so the runner receives it as one paste, not as typing.
  * Use when the dashboard opens a terminal with a prompt already filled in, so the agent sees the whole instruction at once instead of reacting to it
@@ -217,6 +221,9 @@ export function buildTerminalSpawnSpec(
     environment,
     options,
   );
+  env.GOAT_QUALITY_ASSESSMENT_IDENTITY = JSON.stringify(
+    terminalAssessmentIdentity(prompt, options.toolVersion),
+  );
   const initialInput = hasPrompt ? formatInitialPromptInput(prompt) : null;
 
   // Windows reporting closes with its runner, while a normal workspace keeps PowerShell available.
@@ -251,6 +258,127 @@ export function buildTerminalSpawnSpec(
     },
     initialInput,
   };
+}
+
+/** Metadata stays outside the prompt's byte boundary; unresolved effective settings remain unknown. */
+function terminalAssessmentIdentity(
+  prompt: string,
+  toolVersion: string | null | undefined,
+): QualityAssessmentIdentity {
+  const hasPrompt = prompt.length > 0;
+  return {
+    model: null,
+    tool_version: toolVersion ?? null,
+    prompt_sha256: hasPrompt
+      ? createHash("sha256").update(prompt, "utf8").digest("hex")
+      : null,
+    settings_sha256: null,
+    capture: hasPrompt ? "launch-observed" : "unknown",
+    fixed_input_protocol: null,
+  };
+}
+
+/**
+ * Record which runner version a prompted dashboard launch used, so a Quality report saved from that terminal can join controlled rerun groups.
+ *
+ * Starts the runner the same way the PTY launch does, after the user launches a Quality assessment or preset prompt.
+ * Error behavior: swallows a failed, slow, unreadable or oversized result as null, so the terminal still opens with an unknown version.
+ *
+ * @param cliPath - resolved runner executable or Windows shim; passed through the environment, never interpolated into a command
+ * @param platform - host platform; Windows routes through PowerShell, other hosts execute the runner directly
+ * @returns the first version-shaped output line, or null when the runner gave no trustworthy version and the saved report records it as unknown
+ */
+export function observeTerminalToolVersion(
+  cliPath: string,
+  platform: NodeJS.Platform = process.platform,
+): Promise<string | null> {
+  // Node cannot spawn npm `.cmd` shims directly, so native Windows reuses the PTY's PowerShell route; a cold Copilot shim took 2.9s on 2026-10-03.
+  const [probeExecutable, probeArguments, probeTimeoutMs] =
+    platform === "win32"
+      ? [
+          WINDOWS_TERMINAL_SHELL,
+          [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "& $env:GOAT_RUNNER --version",
+          ],
+          5000,
+        ]
+      : [cliPath, ["--version"], 3000];
+  return new Promise((resolveVersion) => {
+    let child: ChildProcess;
+    try {
+      // Only stdout carries the version, so runner notices on stderr cannot cost the probe its result; ignored stdin reads as end of input.
+      child = spawn(probeExecutable, probeArguments, {
+        env: { ...process.env, GOAT_RUNNER: cliPath },
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+      });
+    } catch {
+      // Node throws before starting the runner when an argument is malformed, for example a path holding a NUL byte; the terminal still opens.
+      resolveVersion(null);
+      return;
+    }
+    let probeOutput = "";
+    let isSettled = false;
+    const deadline = setTimeout(() => {
+      child.kill();
+      settle(null);
+    }, probeTimeoutMs);
+    /** Settle once, so a late process event cannot change the version the terminal already recorded. */
+    const settle = (version: string | null): void => {
+      // The first outcome wins; a runner killed after a flood or timeout still emits close afterwards.
+      if (isSettled) return;
+      isSettled = true;
+      clearTimeout(deadline);
+      resolveVersion(version);
+    };
+    child.stdout?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => {
+      // Output after the verdict is dropped, so a runner that outlives its kill cannot grow the dashboard server's memory.
+      if (isSettled) return;
+      probeOutput += chunk;
+      // A runner that floods stdout cannot hold the launch open past its first 4 KB.
+      if (probeOutput.length > 4096) {
+        child.kill();
+        settle(null);
+      }
+    });
+    child.on("error", () => {
+      // A runner that never started, such as a missing file, has no version to wait for; an error after start leaves the verdict to close.
+      if (child.pid === undefined) settle(null);
+    });
+    // Managed sandboxes may attach EPERM after a completed command; exit status and signal still govern admission.
+    child.on("close", (exitCode, signal) => {
+      settle(
+        exitCode === 0 && signal === null
+          ? firstVersionLine(probeOutput)
+          : null,
+      );
+    });
+  });
+}
+
+/**
+ * Pick the version line a runner printed for `--version`, so the Quality report records exactly what the user's terminal ran.
+ *
+ * @param probeOutput - captured stdout; empty when the runner printed nothing
+ * @returns the first printable, version-shaped line, trimmed, or null when none exists and the report keeps the version unknown
+ */
+function firstVersionLine(probeOutput: string): string | null {
+  return (
+    probeOutput
+      .split(/\r?\n/u)
+      .find(
+        (line) =>
+          /\d+\.\d+\.\d+/u.test(line) &&
+          line.length <= 200 &&
+          !/[\x00-\x1f\x7f]/u.test(line),
+      )
+      ?.trim() || null
+  );
 }
 
 /**

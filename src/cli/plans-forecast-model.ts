@@ -46,7 +46,7 @@ interface WorkForecast {
   reason: string;
 }
 
-/** Publish exactly the precision authors save; quantiles use raw receipt rates. */
+/** Quantiles use sorted raw receipt rates, and published rates must keep exactly the two-decimal precision authors save. */
 function matchedBasis(
   target: PlanForecastRecord,
   selected: ReturnType<typeof selectPlanForecastHistory>,
@@ -54,6 +54,7 @@ function matchedBasis(
   const rates = selected.samples
     .map((sample) => sample.minutesPerUnit)
     .sort((a, b) => a - b);
+  // Round each quantile to the two decimals a saved forecast record stores.
   const published = (percentile: number) =>
     Number(interpolatedQuantile(rates, percentile / 100).toFixed(2));
   return {

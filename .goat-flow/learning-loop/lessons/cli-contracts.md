@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-09-21
+last_reviewed: 2026-10-10
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -11,12 +11,16 @@ last_reviewed: 2026-09-21
 **Decision changed:** Compare a validator's accepted fixtures with each documented input branch before treating a green suite as contract coverage.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-10
+**Severity:** CORRECTNESS
 
-**Prevention:** Test a valid input for each materially different evidence branch, its missing-evidence control, and any legacy default. For citation grammar, pair each supported punctuation form with an unrelated-sentence control. A passing check proves only the inputs its parser recognizes; inspect extraction before interpreting an empty findings array as complete validation.
+**Prevention:** Test a valid input for each materially different evidence branch, its missing-evidence control, and any legacy default. For retained evidence, pair producer-generated valid captures with freshly rehashed contradictions between fields; test admission through the public consumer. For citation grammar, pair each supported punctuation form with an unrelated-sentence control. A passing check proves only the inputs its parser recognizes; inspect extraction before interpreting an empty findings array as complete validation.
 
 **What happened:** During the 1.17.0 release follow-up, production scaffold probes rejected technique, pattern and reference receipts for lacking discipline pressure and rationalisation, although the authoring guide permits capability tests. A separate citation probe showed that a period immediately after a file path hid both valid and stale needles. Existing discipline and unrelated-sentence controls passed while those valid-input branches failed.
 
 **Root cause:** The exercised receipt fixtures represented only discipline evidence, and citation extraction treated direct punctuation like intervening prose. The fixes preserve the old discipline default and unrelated-sentence exclusion while accepting the documented alternatives. Evidence: `src/cli/skill-author-red-log.ts` (search: `validateSkillTypeEvidence`), `test/integration/skill-author.test.ts` (search: `skill from capability evidence without invented pressure`), `src/cli/facts/shared/search-anchors.ts` (search: `activeFilePathAfterGap`), and `test/unit/check-content-quality.test.ts` (search: `checks a direct citation after sentence punctuation without borrowing across prose`).
+
+**Recurrence 2026-10-10:** During the PR 67 double-check, I found that my retained-authority fix validated field shapes and hashes but missed relationships between source selection and inventory. A freshly rehashed capture selected live bytes while describing index bytes; the saved-quality path incorrectly confirmed its fix claim. A two-dot range also accepted a comparison base different from its left endpoint. Producer-generated controls now cover each source variant after a later workspace edit, while rehashed negative controls reject contradictory origins, revisions, parents, bases, Git context and unchanged comparison members. Evidence: `src/cli/review-validate-snapshot.ts` (search: `checkInventoryOrigins`), `test/integration/review-validate-authority.test.ts` (search: `rejects rehashed retained captures with contradictory source relationships`), and `test/integration/quality-history-diff.test.ts` (search: `rejects correctly rehashed malformed captures`).
 
 ---
 
@@ -35,6 +39,7 @@ last_reviewed: 2026-09-21
 ## Lesson: New subcommands need parser headroom before the first GREEN refactor
 
 **Status:** active | **Created:** 2026-07-13
+**Severity:** INTEGRATION
 **Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -46,7 +51,7 @@ last_reviewed: 2026-09-21
 3. Before the human gate, run Knip and path-integrity through full preflight; focused TypeScript and analyzer checks do not prove the command's public exports or documentation references are clean.
 4. After behavioral GREEN, run whole-file ESLint, typecheck, and gruff before documentation or task completion; the verification unit is the changed file set, not only the new test cases.
 
-**What happened:** The first M02 `skill doctor` implementation passed its behavioral suite (`20 passed`, `0 failed`) but failed the whole-file quality gate. `parseSkillPositionals` and `validateSkillFlags` exceeded ESLint complexity limits, the first doctor collector had two more complexity failures, and adding one branch pushed `cli-parser.ts` and `cli-handlers.ts` above the 750-line gruff threshold. The final preflight later caught an unnecessary `renderSkillDoctorMarkdown` export and a bare backticked filename in `docs/cli.md` (search: `Canonical workflow source`) that focused tests, ESLint, typecheck, Prettier, and targeted gruff did not cover.
+**What happened:** The first `skill doctor` implementation passed its behavioral suite (`20 passed`, `0 failed`) but failed the whole-file quality gate. `parseSkillPositionals` and `validateSkillFlags` exceeded ESLint complexity limits, the first doctor collector had two more complexity failures, and adding one branch pushed `cli-parser.ts` and `cli-handlers.ts` above the 750-line gruff threshold. The final preflight later caught an unnecessary `renderSkillDoctorMarkdown` export and a bare backticked filename in `docs/cli.md` (search: `Canonical workflow source`) that focused tests, ESLint, typecheck, Prettier, and targeted gruff did not cover.
 
 **Root cause:** I treated a behavioral GREEN as permission to finish the command inside two already-large shared modules. The tests proved output behavior, but they did not measure whether the new subcommand left the parser and dispatch surfaces easy to verify. Importing doctor helpers back into the parser would also have violated the existing lazy-import pattern by loading audit and manifest dependencies for unrelated commands.
 
@@ -54,7 +59,7 @@ last_reviewed: 2026-09-21
 
 **Incident ledger:**
 
-- **Recurrence 2026-07-18:** M02 reached 61/61 focused tests and typecheck before ESLint rejected `parseCLIArgs` at complexity 12. A helper extraction then crossed the file-length gate; removing duplicate namespace parsing in `src/cli/cli-parser.ts` (search: `selectCommandPositionals`) cleared both without a new module.
+- **Recurrence 2026-07-18:** The change reached 61/61 focused tests and typecheck before ESLint rejected `parseCLIArgs` at complexity 12. A helper extraction then crossed the file-length gate; removing duplicate namespace parsing in `src/cli/cli-parser.ts` (search: `selectCommandPositionals`) cleared both without a new module.
 - **Recurrence 2026-07-29:** The checker and comment pass grew `cli-handlers.ts` to 751 lines and `plans-export.ts` to 753. Extracting the complete effort-notation concern into `src/cli/plans-effort.ts` (search: `Effort-estimate notation parser`) cleared the destination-size problem.
 - **Recurrence 2026-08-07:** Timing stamp validation passed 116 focused tests before ESLint rejected `parseStamp` at complexity 11. A helper extraction created five file-length warnings. Deriving UTC from the epoch inside `parseStamp`, folding regressions into existing cases, and preserving the `plans-time.ts` size cleared the gates without weakening invalid-calendar or rendered-heading checks.
 - **Recurrence 2026-09-01:** Playbook inventory tests passed before preflight rejected `driftSkillPlaybookInventory` at complexity 11. Extracting `describePlaybookInventoryProblems` preserved the exact-set cases and restored ESLint.
@@ -66,6 +71,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Required CLI choices need omission tests
 
 **Status:** active | **Created:** 2026-07-13
+**Severity:** CORRECTNESS
 **Decision changed:** Test valid, invalid, omitted, and explicit fallback forms; preserve invocation shape when omission selects a fallback.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -84,13 +90,13 @@ Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`), `src
 `src/dashboard/dashboard-terminal-connect.ts` (search: `qualityReportProjectPath ?`), and `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts`
 (search: `carries staged-draft capture through a retried launch`).
 
-**What happened:** M17's plan and handler required `--scenario deny-hook`, but the parser returned that value when the flag was absent. Positive, invalid-value, and live explicit-command checks all passed, so only a final omission probe exposed the false choice.
+**What happened:** The plan and handler required `--scenario deny-hook`, but the parser returned that value when the flag was absent. Positive, invalid-value, and live explicit-command checks all passed, so only a final omission probe exposed the false choice.
 
 A second incident added a required quality-report owner whenever staged draft capture is enabled. The first retry implementation forwarded an absent owner as explicit `null`, and the existing retry contract caught the changed payload shape during VERIFY.
 
 A third incident added a Claude/reporting-only relationship ahead of the owner relationship. The first missing-owner fixture omitted `accessMode`, so it exercised the new mode guard instead of the intended owner guard.
 
-**Recurrence update (2026-08-22):** M40's first contextual-help GREEN rendered `menu` help for global `--help`.
+**Recurrence update (2026-08-22):** The first contextual-help GREEN rendered `menu` help for global `--help`.
 The parser deliberately normalizes that request to the fallback `menu` command.
 Command-topic tests passed, but the existing root-help contract failed.
 Passing explicit invocation-shape evidence from the CLI entry point restored global navigation without changing parser grammar.
@@ -141,8 +147,8 @@ The same assumption erased the difference between an omitted command and an expl
 advisory lane with existing empty-input and legacy-output contracts. Evidence anchors: `src/cli/plans-check.ts` (search: `No effort rows and no errors`),
 `test/unit/plans-check-forecast.test.ts` (search: `default mode preserves legacy plans`), and `test/unit/plans-check.test.ts` (search: `single info line`).
 
-**What happened:** M22 appended plain-language warnings to `plans check` before testing whether a legacy plan had no effort report. The warnings made
-the shared output array nonempty, so the established `no effort estimates found` line disappeared. Focused M22 tests passed, while the fast suite
+**What happened:** The change appended plain-language warnings to `plans check` before testing whether a legacy plan had no effort report. The warnings made
+the shared output array nonempty, so the established `no effort estimates found` line disappeared. Focused tests passed, while the fast suite
 failed both existing estimate-less-plan contracts.
 
 **Root cause:** The final rendered output array was reused as the semantic test for whether effort data existed. An unrelated advisory changed that

@@ -5,9 +5,13 @@
  *
  * Registration is per agent because each one stores hooks differently, so enabling one hook can mean editing several config files.
  */
-import { spawnSync } from "node:child_process";
-import { realpathSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import {
+  gitTopLevel,
+  physicalDirectory,
+  relativePathEscapesRoot,
+} from "./hook-scan-paths.js";
 import { getAgentProfiles } from "../agents/registry.js";
 import {
   hookScanRootsUseYamlAliases,
@@ -198,26 +202,6 @@ function unsupportedReasonForSpec(
   return spec.unsupportedAgents?.[agent.id] ?? null;
 }
 
-/**
- * Resolve a project or scan folder to its physical path before checking coverage.
- * Missing folders, non-directories and filesystem failures return null so callers can show an invalid-root state.
- *
- * @param directoryPath - candidate directory; missing or unreadable paths are invalid facts
- *
- * @returns physical directory path, or `null` after any filesystem lookup failure
- * @throws Never; filesystem lookup errors are converted to `null`
- */
-function physicalDirectory(directoryPath: string): string | null {
-  try {
-    // A selected file cannot serve as a project or post-turn scan folder.
-    if (!statSync(directoryPath).isDirectory()) return null;
-    return realpathSync(directoryPath);
-  } catch {
-    // A folder may be moved or become unreadable after selection; report no usable physical root.
-    return null;
-  }
-}
-
 /** Function shape used to compare two platform-native filesystem paths. */
 type RelativePathResolver = (from: string, to: string) => string;
 
@@ -285,43 +269,6 @@ export function filesystemPathsAreEquivalent(
     rightIdentity !== null &&
     leftIdentity.device === rightIdentity.device &&
     leftIdentity.inode === rightIdentity.inode
-  );
-}
-
-/**
- * Return the physical Git top-level for one directory.
- * Spawns one bounded read-only Git process; startup, timeout, and non-work-tree failures return `null`.
- *
- * @param directoryPath - existing directory Git should classify without modifying it
- * @returns physical work-tree root, or `null` when the bounded child process cannot prove one
- */
-function gitTopLevel(directoryPath: string): string | null {
-  const result = spawnSync(
-    "git",
-    ["-C", directoryPath, "rev-parse", "--show-toplevel"],
-    {
-      encoding: "utf-8",
-      shell: false,
-      timeout: 5_000,
-      maxBuffer: 16_384,
-    },
-  );
-  // Missing Git, a timeout or a non-repository folder supplies no proven scan root.
-  if (result.error || result.status !== 0 || result.stdout.trim() === "") {
-    return null;
-  }
-  return physicalDirectory(result.stdout.trim());
-}
-
-/**
- * Detect a scan path outside its selected root before post-turn registration can include another project.
- */
-function relativePathEscapesRoot(relativePath: string): boolean {
-  return (
-    relativePath === ".." ||
-    relativePath.startsWith(`..${String.fromCharCode(47)}`) ||
-    relativePath.startsWith(`..${String.fromCharCode(92)}`) ||
-    isAbsolute(relativePath)
   );
 }
 

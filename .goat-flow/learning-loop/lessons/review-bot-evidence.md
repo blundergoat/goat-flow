@@ -8,6 +8,7 @@ last_reviewed: 2026-09-25
 ## Lesson: Reproduce review findings through the production parser before mutating parsed fixtures
 
 **Status:** active | **Created:** 2026-09-21 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Serialize suspect input and run the production parser before testing a downstream consumer's response to it.
 **Trigger phase:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-09-25
@@ -51,7 +52,7 @@ All three were wrong. Locally: `npm run typecheck` exits 0, `npm test` passes 83
 
 **Evidence at the time:** `workflow/skills/playbooks/README.md` required a grep-findable Availability Check, while the first H2 remained different in two playbooks and the skill-quality-testing reference had no such section.
 
-**Resolution:** M12 later made Availability Check the deliberate first-H2 contract because cold-start users and agents need capability limits before procedural guidance. The audit now parses and enforces that order, and every standalone playbook conforms. Current anchors: `workflow/skills/playbooks/skill-playbook-authoring-sync.md` (search: "After the title and short orientation") and `src/cli/audit/skill-docs-contract.ts` (search: "standalonePlaybookContractFailure"). The original critique was over-scoped against the old contract; the later explicit contract change does not retroactively make that unverified recommendation correct.
+**Resolution:** A later revision made Availability Check the deliberate first-H2 contract because cold-start users and agents need capability limits before procedural guidance. The audit now parses and enforces that order, and every standalone playbook conforms. Current anchors: `workflow/skills/playbooks/skill-playbook-authoring-sync.md` (search: "After the title and short orientation") and `src/cli/audit/skill-docs-contract.ts` (search: "standalonePlaybookContractFailure"). The original critique was over-scoped against the old contract; the later explicit contract change does not retroactively make that unverified recommendation correct.
 
 **Prevention:**
 1. For an ordering finding ("X must be first/before Y"), identify how the artifact is consumed (grep, top-down scan, or parser) and read the current contract before assigning severity.

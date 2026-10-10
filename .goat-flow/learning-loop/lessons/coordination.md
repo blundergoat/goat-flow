@@ -8,6 +8,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
+**Severity:** CORRECTNESS
 **Decision changed:** Test platform-specific admission through injected discovery results, not shared process globals.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -58,10 +59,11 @@ last_reviewed: 2026-09-05
 ## Lesson: Verification phases must cross-reference between artifacts, not just check each internally
 
 **Status:** active | **Created:** 2026-05-01
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-08-17
 
 **Prevention:** Add "programme document claims match per-plan deliverables" as a verification check. When an artifact changes owner, grep both the old path and its old prose label across every touched artifact; cross-document consistency is the gap between internal-file verification and audit completeness.
 
 **What happened:** Phase 3 verification checked word counts, parity, rubric citations, and `npm test`, all internal to individual files, without cross-referencing programme claims against plan content. Four residual inconsistencies survived and were caught by editorial review instead: a missing qa score in the cumulative table, a critique target of "~95+" against 91 in the plan, stale appendix statuses, and a review plan still using version labels the programme claimed were renamed.
 
-**Recurrence 2026-08-17:** Rerouting M45's secret-parser footgun to its owning bucket updated the read-first and task text but left Boundary Notes saying "hooks footgun"; a targeted old-owner grep caught the stale wording after the internal plan and learning-loop checks were green. `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `git_log_candidate_without_search_values`), `.goat-flow/learning-loop/footguns/deny-secrets.md` (search: `Secret-path matching must distinguish search data from file operands`).
+**Recurrence 2026-08-17:** Rerouting the secret-parser footgun to its owning bucket updated the read-first and task text but left Boundary Notes saying "hooks footgun"; a targeted old-owner grep caught the stale wording after the internal plan and learning-loop checks were green. `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `git_log_candidate_without_search_values`), `.goat-flow/learning-loop/footguns/deny-secrets.md` (search: `Secret-path matching must distinguish search data from file operands`).

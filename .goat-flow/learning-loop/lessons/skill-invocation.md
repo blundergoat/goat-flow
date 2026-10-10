@@ -48,6 +48,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Session-log contract is conditional, not per-skill-invocation
 
 **Status:** active | **Created:** 2026-03-30 | **Updated:** 2026-04-19
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-07-17
 
 **Prevention:** Do not put a "write a session log" bullet in every skill's closing protocol; keep the conditional phrasing in `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-conventions.md`, current since 2026-04-18, and let skills opt in through the Milestone Retrospective pattern. Session logs are optional continuity notes: write one when compaction fires without an active milestone file, or when the human asks for a summary, and otherwise skip. Do not revive the Notification or compact hook that was meant to mechanize this; it was silently dead and is recorded in the resolved entries of `.goat-flow/learning-loop/footguns/hooks.md`.
@@ -63,6 +64,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Dispatcher keeps getting excluded from patterns and glob matches
 
 **Status:** active | **Created:** 2026-04-01
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-04-01
 
 **Prevention:** Use `goat*` without the dash for glob patterns, iterate literal canonical names rather than deriving them by prefixing, and test the dispatcher first in any skill enumeration.
@@ -79,6 +81,6 @@ last_reviewed: 2026-09-05
 
 **Prevention:** Scope verification prompts and audit checks to goat-flow's own domain: list the `goat-*` directories, not every directory. Project-specific skills are not goat-flow's business.
 
-**What happened:** An M1 human testing gate prompt said to list all directories under the installed skills path and named the only ones allowed, which would report any project's own skills as violations.
+**What happened:** A human testing gate prompt said to list all directories under the installed skills path and named the only ones allowed, which would report any project's own skills as violations.
 
 **Root cause:** A check written against this repository's contents was phrased as a universal invariant.

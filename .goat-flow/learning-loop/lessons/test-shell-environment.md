@@ -1,6 +1,6 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-09-12
+last_reviewed: 2026-09-29
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
@@ -14,7 +14,7 @@ last_reviewed: 2026-09-12
 
 **Prevention:** Run an isolated package script through the production runner and assert that both its script process and worker exit after timeout. Keep the timeout status and diagnostic assertions, but do not treat them as proof of descendant cleanup. Preserve a failing run before changing the implementation.
 
-**What happened:** During M66 verification, I accepted a passing direct-Node timeout fixture as evidence that Windows cleanup removed the verification tree. The follow-up replaced that fixture with an actual `npm run` script. The runner returned timeout status 124, but the script-process exit assertion failed because the script remained alive.
+**What happened:** During verification, I accepted a passing direct-Node timeout fixture as evidence that Windows cleanup removed the verification tree. The follow-up replaced that fixture with an actual `npm run` script. The runner returned timeout status 124, but the script-process exit assertion failed because the script remained alive.
 
 **Root cause:** The fixture omitted npm's additional process layers. Killing the runner's direct child did not prove that the package script and its worker had stopped.
 
@@ -25,6 +25,7 @@ last_reviewed: 2026-09-12
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently drops `.goat-flow/` subtrees, committed or ignored
 
 **Status:** active | **Created:** 2026-06-13
+**Severity:** CORRECTNESS
 **Decision changed:** Treat a zero-hit recursive search under `.goat-flow/` as unproven until a known-positive control passes with the same command; use `command grep` for any sweep that must reach ignored plans or logs, and classify a negative search by its exit status rather than by empty output.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -38,7 +39,7 @@ last_reviewed: 2026-09-12
 
 Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/setup/reference/goat-flow-gitignore` (search: `Ignore everything by default`), `CLAUDE.md` (search: `Recursive searches under`), `test/integration/gitignore-shape.test.ts` (search: `carries the logs subdirectory guard and depends on it`), `src/cli/audit/check-goat-flow.ts` (search: `REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS`).
 
-**What happened:** During the M02b review, a recursive shim grep for `plan-checkbox-guard` under `.goat-flow` returned nothing although the milestone file and the then-current ADR both matched when grepped directly. `type grep` showed the session shell defines `grep` as a function that execs ugrep with `--ignore-files --hidden`, and that flag applies gitignore-style rules during recursion, so any sweep descending into `.goat-flow/plans/` or `.goat-flow/logs/` silently returns clean. The rejected guard decision is preserved in `.goat-flow/learning-loop/decisions/ADR-037-separate-post-turn-safety-from-validation.md` (search: `shipped and reverted`).
+**What happened:** During the review, a recursive shim grep for `plan-checkbox-guard` under `.goat-flow` returned nothing although the milestone file and the then-current ADR both matched when grepped directly. `type grep` showed the session shell defines `grep` as a function that execs ugrep with `--ignore-files --hidden`, and that flag applies gitignore-style rules during recursion, so any sweep descending into `.goat-flow/plans/` or `.goat-flow/logs/` silently returns clean. The rejected guard decision is preserved in `.goat-flow/learning-loop/decisions/ADR-037-separate-post-turn-safety-from-validation.md` (search: `shipped and reverted`).
 
 **Root cause:** A search command's apparent result was treated as filesystem truth without proving the command had searched the intended operands successfully. Ignore filtering can produce a false clean, a shell wrapper can misreport tool availability, and control flow can collapse an invocation error into the same branch as a legitimate no-match.
 
@@ -50,7 +51,7 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 **Recurrence 2026-08-10 (the wrapper masked a missing binary):** Two playbook-contract cases failed with `rg: command not found` while `command -v rg` in the session answered `rg`, so the failure was first called a sanitized-PATH harness artifact. `type rg` showed a function and a child shell found nothing: ripgrep is not installed here at all. The real defect was the shipped playbook, whose documented registration check hard-required ripgrep and exited 127 for any consumer without it. `workflow/skills/playbooks/hook-policy-testing.md` (search: `Ripgrep is not installed on every consumer machine`).
 **Recurrence 2026-08-15 (error read as no-match):** A brace-shaped list of Markdown operands was quoted in one search command, so Bash passed the braces literally, the search emitted an I/O error for the nonexistent path, and the surrounding conditional converted that error into the same success message used for a genuine no-match. The result was discarded and the sweep rerun with explicit operands. The incident's plan files are gitignored and are therefore not cited as durable anchors.
 **Recurrence 2026-08-18 (committed trees are dropped too, correcting the original explanation):** Verifying that a deleted ADR had no remaining references, a recursive shim grep from the repository root returned nothing, and `stats --check` then surfaced four live references one at a time. Re-measured with a tracked needle, the shim from the root found 2 files, the same command with `.goat-flow/` as the working directory found 10, `git grep` found 10, and `command grep` found 99, of which 55 were under logs, 34 under plans, and 8 under learning-loop. The shim does not only skip the ignored trees: `.goat-flow/.gitignore` opens with a catch-all, and ugrep matches the re-includes against the path as passed rather than relative to that ignore file, so only depth-one file re-includes survive. A three-file fixture reproduces it, `--hidden` is already in the shim's flags so hidden-directory skipping is not the cause, and `git grep` is no substitute here because it is tracked-only and missed the 89 files under plans and logs.
-**Recurrence 2026-09-03:** During M13 activation, a default ripgrep search ran against the ignored milestone tree. The result was discarded before use and the lookup rerun with `command grep`, which reached the expected plan state. `AGENTS.md` (search: `Recursive searches under`).
+**Recurrence 2026-09-03:** During activation, a default ripgrep search ran against the ignored milestone tree. The result was discarded before use and the lookup rerun with `command grep`, which reached the expected plan state. `AGENTS.md` (search: `Recursive searches under`).
 
 ---
 
@@ -64,7 +65,7 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 
 **Prevention:** Create a fresh temporary directory and one never-reused output path per proof command. Let the producer create its capture, then inspect the exit status and bytes; do not clear a capture with a null-command redirect or another truncation pattern, which the guard classifies as destructive. Evidence anchor: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Null-command (: / true) followed by redirect truncates the target`).
 
-**What happened:** M13's whitespace-check wrapper initialised its `check.out` capture with a null-command redirect before running two no-index checks, so the deny hook blocked the entire command and no verification ran. The retry used separate new output paths and completed.
+**What happened:** The whitespace-check wrapper initialised its `check.out` capture with a null-command redirect before running two no-index checks, so the deny hook blocked the entire command and no verification ran. The retry used separate new output paths and completed.
 
 **Root cause:** A temporary capture was treated as disposable and reused, although write-once paths are simpler and preserve each command's evidence.
 
@@ -73,7 +74,8 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 ## Lesson: Hook tests should feed stdin through files when child `cat` must see EOF
 
 **Status:** active | **Created:** 2026-06-13
-**Incident count:** 2 | **Latest occurrence:** 2026-06-14
+**Severity:** INTEGRATION
+**Incident count:** 3 | **Latest occurrence:** 2026-09-28
 
 **Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only descriptor or shell redirection rather than the runner's `input` option. Capture hook stderr explicitly when the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runLauncherWithPayload`).
 
@@ -82,6 +84,12 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 **Root cause:** The runner's `input` option was assumed equivalent to a real stdin file for hook scripts. In this environment it is not reliable for hooks that read all of stdin with `cat`, which makes correct hook behaviour look like a product hang.
 
 **Recurrence 2026-06-14:** A Codex workspace-terminal `bash scripts/preflight-checks.sh` run reached the test phase and then stayed silent; process inspection showed the only remaining workers were `test/integration/gruff-code-quality-contract.test.ts` and `test/integration/gruff-code-quality-smoke.test.ts`, each blocked under the hook at its stdin read, because the shared helper still passed the payload through the runner's `input` option and needed the same file-redirection fix.
+
+**Recurrence 2026-09-28:** Verification stalled in the provider-payload policy tests. A finite input file restored the unchanged 134-case operands corpus. The shared `test/helpers/check-installed-policy.ts` helper (search: `runHookWithPayload`) now supplies a private read-only descriptor and closes and removes it after each call. Owning runs passed all 134 operands, 215 policy, 118 GraphQL and 124 native-shell cases without changing their assertions. Evidence: `test/integration/deny-dangerous-operands.test.ts` (search: `classify`), `test/integration/deny-dangerous-policy.test.ts` (search: `runStdinPolicyCheck`), `test/integration/deny-git-graphql.test.ts` and `test/integration/deny-native-shells.test.ts` (search: `runHookWithPayload`). The same finite-input repair later restored all 30 cases in `test/integration/gruff-code-quality-contract.test.ts` (search: `runProviderLauncher`); its real Node launcher and provider feedback assertions remain in place. The 2026-09-29 continuation applied finite input and private output captures to `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `deliveredContext`); all 12 original cases passed, including the three saved-handler feedback cases that had stalled.
+
+The same continuation reached saved Codex replay and the preflight ESLint verdict fixture. The first handler-matrix repair left two Codex cases failing because their separate helper still defaulted to pipe input. Finite input restored 27 passing cases; the three Windows-only skips and explicit Windows pipe variants remain unchanged. The full hook-sync recovery suite passed all 12 cases after the same replay repair and private CLI output capture. The ESLint verdict suite had exceeded 20 seconds; finite input then restored both original cases. Evidence: `test/integration/hook-command-spawn-matrix.test.ts` (search: `runRegisteredCodexHandler`), `test/integration/hook-sync-recovery.test.ts` (search: `replaySavedCodexCommand`) and `test/integration/preflight-eslint.test.ts` (search: `runPreflightLintClassifier`). Inspect each process helper separately; one repaired transport does not cover every caller in the file.
+
+The later quality-save and redaction fixtures stalled for 25 and 20 seconds respectively while their CLI readers waited for stdin EOF. Private finite input and output captures restored all 47 quality-subcommand and 23 redaction cases, preserving the real CLI, raw input bytes and safety assertions. The redaction file contained both a shared helper and one separate inline spawn; both required repair. Evidence: `test/unit/quality-subcommands.test.ts` (search: `runQualityCommand`) and `test/unit/redact-command.test.ts` (search: `runRedact`, `writes only scrubbed stdin to an explicit output file`).
 
 ---
 
@@ -107,7 +115,7 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 
 **Prevention:** Always include a positive-control row that an existing rule provably allows, such as a plain version command through the source CLI. A control that executes beside a denied target is a valid negative verdict; a denied control voids the probe and should be reported as a harness fault rather than a matcher verdict. Keep `env -i HOME="$HOME" PATH="$PATH" TERM=xterm SHELL=/bin/bash` as cheap hygiene, but do not treat env stripping or init-event marker greps as proof in either direction. The real launch environment is a dashboard server spawn rather than an interactive session, so mirror that flag set when reproducing it. Evidence anchor: `src/cli/server/terminal-spawn.ts` (search: `CLAUDE_REPORTING_ARGS`).
 
-**What happened:** An approved M06 probe of a trailing-wildcard heredoc matcher launched a nested print-mode session with a settings overlay from inside an interactive session and with no positive-control row. Both probe rows returned the generic denial, which cannot distinguish a rule that did not match from an overlay that was never consulted, so the run produced no verdict; reading it as a disqualification would have activated the milestone's kill criterion on unproven evidence. The ambiguity was first blamed on host-session contamination, because the child's init event showed cloud-looking markers and the environment carried surviving session variables.
+**What happened:** An approved probe of a trailing-wildcard heredoc matcher launched a nested print-mode session with a settings overlay from inside an interactive session and with no positive-control row. Both probe rows returned the generic denial, which cannot distinguish a rule that did not match from an overlay that was never consulted, so the run produced no verdict; reading it as a disqualification would have activated the milestone's kill criterion on unproven evidence. The ambiguity was first blamed on host-session contamination, because the child's init event showed cloud-looking markers and the environment carried surviving session variables.
 
 **Root cause:** There was no positive control. The corrected rerun under a stripped environment displayed the same init markers while its control row executed, proving those markers reflect this machine's logged-in CLI state rather than session attachment, and that init-roster inspection is not a contamination test. Only a control row that an existing rule provably allows converts a denial into evidence.
 

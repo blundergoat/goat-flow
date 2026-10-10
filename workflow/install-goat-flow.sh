@@ -424,6 +424,48 @@ assert_safe_installer_directory() {
 # A symlinked shared setup root would redirect the policy read below, so report the unsafe directory first.
 ( cd "$PROJECT" && assert_safe_installer_directory ".goat-flow" ) || exit 1
 
+# Rank the complete saved version before policy admission or any target mutation; force cannot bypass this check.
+VERSION_ADMISSION=$(node - "$PROJECT" "$VERSION" "$GOAT_FLOW_ROOT" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const [projectRoot, cliVersion, frameworkRoot] = process.argv.slice(2);
+const configPath = path.join(projectRoot, ".goat-flow/config.yaml");
+try {
+  let stat;
+  try { stat = fs.lstatSync(configPath); }
+  catch (error) { if (error.code === "ENOENT") process.exit(0); throw error; }
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("config is not a regular file");
+  const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
+  const content = fs.readFileSync(configPath, "utf8");
+  const version = yaml.load(content)?.version;
+  const comparable = (value) => typeof value === "string" && /^\d+\.\d+\.\d+$/.test(value) && value.split(".").every((part) => Number.isSafeInteger(Number(part)));
+  if (!comparable(version) || !comparable(cliVersion)) throw new Error("version is not a comparable release");
+  const saved = version.split(".").map(Number);
+  const incoming = cliVersion.split(".").map(Number);
+  for (let index = 0; index < saved.length; index++) {
+    if (saved[index] > incoming[index]) {
+      console.error(`ERROR: Project version ${version} is newer than this CLI ${cliVersion}. Upgrade the CLI before installing; the project's files must remain unchanged.`);
+      process.exit(1);
+    }
+    if (saved[index] < incoming[index]) { console.log("older"); break; }
+  }
+  // A readable scalar is insufficient: the line transform must preserve its serialized entry.
+  const writableVersion = /^(?:version|"version"|'version')[ \t]*:[ \t]*(?:&[^\s#]+[ \t]+)?(["']?)\d+\.\d+\.\d+\1[ \t]*(?:#[^\r\n]*)?\r?$/mu;
+  if (!writableVersion.test(content)) {
+    console.error(`ERROR: Config version ${version} cannot be safely refreshed. Review .goat-flow/config.yaml and put the version on a single top-level line, such as version: "${version}", before installing.`);
+    process.exit(1);
+  }
+} catch {
+  console.error(`ERROR: Config version cannot be safely compared with CLI ${cliVersion}. Review the saved version in .goat-flow/config.yaml; use a numeric X.Y.Z release before installing.`);
+  process.exit(1);
+}
+NODE
+)
+# Refresh every valid older release, including patch lag; existing comments and choices remain authoritative.
+if [[ "$VERSION_ADMISSION" == "older" ]]; then
+  UPDATE_CONFIG_VERSION=true
+fi
+
 # Mixed policy upgrades require dashboard review even when the CLI already admitted file replacements or the caller supplied force.
 node - "$PROJECT" "$GOAT_FLOW_ROOT/workflow/hooks" <<'NODE'
 const [projectRoot, bundledHooksRoot] = process.argv.slice(2);
@@ -1075,7 +1117,8 @@ const fs = require("node:fs");
 const path = process.argv[2];
 const version = process.argv[3];
 const content = fs.readFileSync(path, "utf8");
-fs.writeFileSync(path, content.replace(/^version:.*$/m, `version: "${version}"`));
+const versionEntry = /^((?:version|"version"|'version')[ \t]*:[ \t]*(?:&[^\s#]+[ \t]+)?)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^#\r\n]*?)([ \t]*(?:#[^\r\n]*)?)(\r?)$/m;
+fs.writeFileSync(path, content.replace(versionEntry, (_match, prefix, comment, newline) => `${prefix}"${version}"${comment}${newline}`));
 console.log("changed");
 NODE
   )"; then
@@ -2853,7 +2896,7 @@ const inlineEntryPattern = new RegExp(
   "gu",
 );
 const filesystemAccessEntryPattern = new RegExp(
-  String.raw`${tomlStringPattern}\s*=\s*(?:"(none|deny)"|'(none|deny)')`,
+  String.raw`${tomlStringPattern}\s*=\s*(?:"(none|deny|read|write)"|'(none|deny|read|write)')`,
   "gu",
 );
 const legacyAccessPattern = new RegExp(
@@ -3021,12 +3064,16 @@ let hasInvalidEntry = false;
 let usesLegacyAccess = false;
 let usesLegacyAnchor = false;
 let profileExtendsWorkspace = false;
+let hasProfileInheritance = false;
 const additionalDenyPatterns = new Set();
 const activeDenyPatterns = new Set();
+const legacyDenyPatterns = new Set();
+const removedAccessRules = new Set();
 // Check active profile metadata before deciding whether workspace inheritance needs repair.
 for (const region of profileRegions) {
   // Inspect each metadata line without treating unrelated TOML tables as profile choices.
   for (let j = region.start; j < region.end; j += 1) {
+    if (/^\s*extends\s*=/u.test(lines[j])) hasProfileInheritance = true;
     // Workspace inheritance already supplies the base editing permissions for this profile.
     if (/^\s*extends\s*=\s*":workspace"\s*(?:#.*)?$/u.test(lines[j])) {
       profileExtendsWorkspace = true;
@@ -3037,20 +3084,28 @@ for (const region of profileRegions) {
 for (const region of regions) {
   // Read each active permission line before rebuilding the selected profile.
   for (let j = region.start; j < region.end; j += 1) {
-    const line = lines[j];
+    // Ignore comments while keeping hash characters inside quoted path patterns.
+    const line = lines[j].replace(
+      /"(?:\\.|[^"\\])*"|'[^']*'|#.*$/gu,
+      (token) => token.startsWith("#") ? "" : token,
+    );
     // The retired project-root anchor needs the current workspace-root spelling.
     if (legacyProjectRootsPattern.test(line)) usesLegacyAnchor = true;
     // The retired none access value needs the current deny spelling.
     if (legacyAccessPattern.test(line) || legacyInlineAccessPattern.test(line)) {
       usesLegacyAccess = true;
     }
-    // Collect each explicit deny entry so the refresh can retain the user's additional restrictions.
+    // Retain additional denies and record explicit access grants that the rebuilt profile removes.
     for (const entry of line.matchAll(filesystemAccessEntryPattern)) {
       const pattern = tomlKeyFromMatch(entry);
       const mode = tomlModeFromMatch(entry);
+      if (mode === "read" || mode === "write") {
+        removedAccessRules.add(`${JSON.stringify(pattern)} = ${JSON.stringify(mode)}`);
+      }
       // A named none or deny entry contributes to the active restriction list.
       if ((mode === "none" || mode === "deny") && pattern) {
         activeDenyPatterns.add(pattern);
+        if (mode === "none") legacyDenyPatterns.add(pattern);
       }
       // A noncanonical, nonretired deny pattern is retained as the user's additional restriction.
       if (
@@ -3107,11 +3162,6 @@ if (
   console.log("unchanged");
   process.exit(0);
 }
-// Name each dropped pattern so a user who added the same text by hand can put it back deliberately.
-for (const pattern of retiredDenyPatterns) {
-  console.error(`  - retired Codex deny pattern removed: ${pattern}`);
-}
-
 const canonicalBlock = [
   `[permissions.${activeProfile}]`,
   'description = "goat-flow workspace editing with secret-path read denies."',
@@ -3199,6 +3249,30 @@ if (trailingStart < after.length) {
 }
 
 fs.writeFileSync(path, rebuilt.join(eol) + (hadFinalNewline ? eol : ""));
+// Report permission deltas only; unrelated values and profile descriptions are never echoed.
+for (const pattern of retiredDenyPatterns) {
+  console.error(`  - retired Codex deny pattern removed: ${JSON.stringify(pattern)}`);
+}
+for (const rule of removedAccessRules) {
+  console.error(`  - Codex filesystem access rule removed: ${rule}`);
+}
+for (const pattern of canonicalDenyPatterns) {
+  if (!activeDenyPatterns.has(pattern)) {
+    console.error(`  + Codex deny pattern added: ${JSON.stringify(pattern)}`);
+  }
+}
+for (const pattern of legacyDenyPatterns) {
+  if (!oldGeneratedPatterns.has(pattern)) {
+    console.error(`  ~ Codex deny mode rewritten: ${JSON.stringify(pattern)}: none -> deny`);
+  }
+}
+if (usesLegacyAnchor) {
+  console.error("  ~ Codex permission anchor rewritten: :project_roots -> :workspace_roots");
+}
+if (!profileExtendsWorkspace) {
+  const change = hasProfileInheritance ? "~ Codex permission inheritance rewritten" : "+ Codex permission inheritance added";
+  console.error(`  ${change}: extends = ":workspace"`);
+}
 console.log("migrated");
 NODE
   )"; then
@@ -3209,7 +3283,7 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
-# Repair existing Claude permission lists during refresh so launch warnings stop and sample environment files remain usable.
+# Repair existing Claude denies during refresh while preserving saved allow/ask choices.
 #
 # Retire removed tools, rename unsupported file-rule tools and expand broad environment denies while retaining valid user rules in order.
 # Report migrated or unchanged; a current settings file keeps its original bytes and formatting.
@@ -3331,66 +3405,64 @@ if (!perms || typeof perms !== "object") {
 const parseRule = (entry) =>
   typeof entry === "string" ? entry.match(/^([A-Za-z]+)\((.*)\)$/u) : null;
 
+// Normalize tool spelling before classifying a deny, so its new form is fully migrated in this install.
+const normalizeRule = (entry) => {
+  const rule = parseRule(entry);
+  return rule && UNMATCHED_RULE_REWRITES.has(rule[1])
+    ? `${UNMATCHED_RULE_REWRITES.get(rule[1])}(${rule[2]})`
+    : entry;
+};
+
 // Replace a stale permission rule; an empty list retires it, while null keeps the user's existing rule.
-// Only deny rules receive retirement, environment expansion and paired store protection; allow or ask choices remain as saved.
-const replacementsFor = (entry, isDenyList, savedRules) => {
-  // A retired deny rule has no replacement; the user's allow and ask rules do not enter this retirement.
-  if (isDenyList && RETIRED_DENY_RULES.has(entry)) return [];
+// Only normalized denies enter this function; allow and ask arrays are never transformed.
+const replacementsFor = (entry, savedRules) => {
+  if (RETIRED_DENY_RULES.has(entry)) return [];
   const credentialPair = credentialStoreRulePairs.get(entry);
   // Complete pairs already protect both locations; preserve their positions so reinstalling stays byte-stable.
-  if (isDenyList && credentialPair && credentialPair.every((rule) => savedRules.has(rule))) return null;
+  if (credentialPair && credentialPair.every((rule) => savedRules.has(rule))) return null;
   // Legacy Docker and Kubernetes file rules receive the current store pair without losing project coverage.
-  if (isDenyList && HOME_ANCHOR_REWRITES.has(entry)) {
+  if (HOME_ANCHOR_REWRITES.has(entry)) {
     return credentialStoreRulePairs.get(HOME_ANCHOR_REWRITES.get(entry));
   }
   // A home-only upgrade or a project-only rule receives its missing partner.
-  if (isDenyList && credentialStoreRulePairs.has(entry)) return credentialStoreRulePairs.get(entry);
+  if (credentialStoreRulePairs.has(entry)) return credentialStoreRulePairs.get(entry);
   // A broad retired environment deny expands into the current explicit sensitive-file rules.
-  if (isDenyList && ENV_DENY_EXPANSIONS.has(entry)) {
+  if (ENV_DENY_EXPANSIONS.has(entry)) {
     return ENV_DENY_EXPANSIONS.get(entry);
-  }
-  const rule = parseRule(entry);
-  // A renamed permission tool gets the current rule spelling while retaining the user's path pattern.
-  if (rule && UNMATCHED_RULE_REWRITES.has(rule[1])) {
-    return [`${UNMATCHED_RULE_REWRITES.get(rule[1])}(${rule[2]})`];
   }
   return null;
 };
 
 // Repair stale permission rules and avoid duplicate replacements while retaining untouched user rules in order.
 // Return the repaired array, or null when the saved list needs no change.
-const repairRules = (rules, isDenyList) => {
+const repairRules = (rules) => {
   // A missing or malformed rule list returns null so setup leaves that setting untouched.
   if (!Array.isArray(rules)) return null;
   const survivors = rules.filter((entry) => {
     const rule = parseRule(entry);
     return !(rule && REMOVED_CLAUDE_TOOLS.has(rule[1]));
   });
-  const savedRules = new Set(survivors);
+  const normalized = survivors.map(normalizeRule);
+  const savedRules = new Set(normalized);
+  const replacements = normalized.map((entry, index) =>
+    replacementsFor(entry, savedRules) ?? (entry === survivors[index] ? null : [entry]),
+  );
   const present = new Set(
-    survivors.filter((entry) => replacementsFor(entry, isDenyList, savedRules) === null),
+    survivors.filter((entry, index) => replacements[index] === null),
   );
   const kept = [];
   // Repair surviving rules in order so unrelated user permissions keep their positions.
-  for (const entry of survivors) {
-    const replacements = replacementsFor(entry, isDenyList, savedRules);
+  for (const [index, entry] of survivors.entries()) {
+    const replacementRules = replacements[index];
     // A rule needing no replacement is retained exactly as the user saved it.
-    if (replacements === null) {
+    if (replacementRules === null) {
       kept.push(entry);
       continue;
     }
-    // A retired rule has no replacement; name it so a user who typed the same rule can restore it on purpose.
-    if (replacements.length === 0) {
-      console.error(`  - retired Claude deny rule removed: ${entry}`);
-    }
     // Append each replacement once without duplicating a restriction already present.
-    for (const replacement of replacements) {
+    for (const replacement of replacementRules) {
       // An existing equivalent rule already expresses this permission choice.
       if (present.has(replacement)) continue;
-      // New credential coverage is visible in the upgrade output so the developer can review the added restriction.
-      if (isDenyList && credentialStoreRulePairs.has(replacement) && !rules.includes(replacement)) {
-        console.error(`  + paired Claude credential deny rule added: ${replacement}`);
-      }
       present.add(replacement);
       kept.push(replacement);
     }
@@ -3401,32 +3473,39 @@ const repairRules = (rules, isDenyList) => {
   return changed ? kept : null;
 };
 
-let migrated = false;
-// Only denies receive environment expansion and paired store protection; applying these to allows would revoke the user's .env.example read choice.
-for (const [arrayName, isDenyList] of [
-  ["deny", true],
-  ["allow", false],
-  ["ask", false],
-]) {
-  const repaired = repairRules(perms[arrayName], isDenyList);
-  // Replace a permission array only when its repaired rules differ from the user's saved array.
-  if (repaired) {
-    perms[arrayName] = repaired;
-    migrated = true;
-  }
-}
-
-// If every permission list is current, preserve the user's settings file unchanged.
-if (!migrated) {
+const previousRules = perms.deny;
+const repaired = repairRules(previousRules);
+// A current deny list leaves the entire settings file byte-identical, including inert allow/ask spellings.
+if (!repaired) {
   console.log("unchanged");
   process.exit(0);
 }
+perms.deny = repaired;
 const eol = raw.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(raw);
 let out = JSON.stringify(settings, null, 2);
 // Restore Windows newlines when that was the user's existing settings style.
 if (eol === "\r\n") out = out.replace(/\n/gu, "\r\n");
 fs.writeFileSync(path, out + (hadFinalNewline ? eol : ""));
+// Report final set differences, not intermediate expansions or replacements already present.
+const previousSet = new Set(previousRules);
+const repairedSet = new Set(repaired);
+for (const entry of previousSet) {
+  if (typeof entry !== "string" || repairedSet.has(entry)) continue;
+  const label = RETIRED_DENY_RULES.has(normalizeRule(entry)) ? "retired Claude" : "Claude";
+  console.error(`  - ${label} deny rule removed: ${JSON.stringify(entry)}`);
+}
+for (const entry of repairedSet) {
+  if (typeof entry !== "string" || previousSet.has(entry)) continue;
+  const label = credentialStoreRulePairs.has(entry) ? "paired Claude credential" : "Claude";
+  console.error(`  + ${label} deny rule added: ${JSON.stringify(entry)}`);
+}
+// Retiring the broad filename rule calls for reviewed exact replacements, never automatic additions.
+const exactCredentialRules = ["Read(**/credentials.json)", "Edit(**/credentials.json)"];
+if ([...previousSet].some((entry) => ["Read(**/credentials*)", "Edit(**/credentials*)"].includes(normalizeRule(entry))) &&
+    !exactCredentialRules.every((rule) => repairedSet.has(rule))) {
+  console.error(`  ! Review replacement denies: ${exactCredentialRules.join(", ")}. Show the diff and obtain approval before adding missing rules; install did not add them.`);
+}
 console.log("migrated");
 NODE
   )"; then
@@ -3742,15 +3821,85 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-agent-facing-instru
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-sentence-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-structure-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-human-facing-prose.md" ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md"
-# Retired playbooks may contain local guidance that users still need while adopting the replacement documents.
-for retired_writing_playbook in \
-  ".goat-flow/skill-docs/playbooks/writing-for-agents.md" \
-  ".goat-flow/skill-docs/playbooks/writing-style.md"; do
-  # An upgrade may find a locally edited copy; leave review and removal to the project owner.
-  if [[ -f "$retired_writing_playbook" ]]; then
-    echo "  - retained retired $retired_writing_playbook; review local content before removing it"
+# Retire only these renamed copies after their replacement copies have been written.
+for writing_playbook_rename in \
+  "writing-for-agents.md:writing-agent-facing-instructions.md" \
+  "writing-style.md:writing-human-facing-prose.md"; do
+  IFS=: read -r old_writing_playbook replacement_writing_playbook <<< "$writing_playbook_rename"
+  retired_writing_playbook=".goat-flow/skill-docs/playbooks/$old_writing_playbook"
+  replacement_writing_playbook=".goat-flow/skill-docs/playbooks/$replacement_writing_playbook"
+  # A linked copy is outside this regular-file cleanup; never read its destination to infer ownership.
+  if [[ -L "$retired_writing_playbook" ]]; then
+    echo "  · $retired_writing_playbook (kept symlink; use $replacement_writing_playbook)"
+    continue
   fi
+  [[ -f "$retired_writing_playbook" ]] || continue
+  if [[ ! -f "$replacement_writing_playbook" ]]; then
+    echo "ERROR: replacement playbook is missing: $replacement_writing_playbook; old copy was preserved" >&2
+    exit 1
+  fi
+  # Match audit's YAML-frontmatter ownership exception, including quoted values and CRLF files.
+  writing_playbook_ownership="$(node - "$GOAT_FLOW_ROOT" "$retired_writing_playbook" <<'NODE'
+const fs = require("node:fs");
+const [frameworkRoot, oldPath] = process.argv.slice(2);
+const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
+const markdown = fs.readFileSync(oldPath, "utf8");
+const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u);
+let metadata;
+try {
+  metadata = match ? yaml.load(match[1]) : null;
+} catch {
+  // Malformed metadata cannot declare the ownership exception, matching artifact audit.
+  metadata = null;
+}
+const userOwned = metadata !== null && typeof metadata === "object" &&
+  !Array.isArray(metadata) && metadata["goat-flow-ownership"] === "user-owned";
+console.log(userOwned ? "user-owned" : "system-owned");
+NODE
+)"
+  if [[ "$writing_playbook_ownership" == "user-owned" ]]; then
+    echo "  · $retired_writing_playbook (kept user-owned playbook; use $replacement_writing_playbook)"
+    continue
+  fi
+  rm -f -- "$retired_writing_playbook"
+  REMOVED=$((REMOVED + 1))
+  echo "  ✗ $retired_writing_playbook (removed renamed playbook; use $replacement_writing_playbook)"
 done
+
+# Report the manifest's instruction-file references without changing project-owned instructions.
+node - "$MANIFEST_PATH" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const renames = {
+  "writing-for-agents.md": "writing-agent-facing-instructions.md",
+  "writing-style.md": "writing-human-facing-prose.md",
+};
+const instructionPaths = [...new Set(Object.values(manifest.agents)
+  .map((agent) => agent.instruction_file))];
+let printedHeading = false;
+for (const instructionPath of instructionPaths) {
+  // Missing or linked instruction paths are outside this read-only project reference scan.
+  const parts = instructionPath.split("/");
+  const safe = parts.every((_, index) => {
+    const info = fs.lstatSync(path.join(...parts.slice(0, index + 1)), { throwIfNoEntry: false });
+    return info && (index === parts.length - 1 ? info.isFile() : info.isDirectory());
+  });
+  if (!safe) continue;
+  const lines = fs.readFileSync(instructionPath, "utf8").split(/\r?\n/u);
+  lines.forEach((line, index) => {
+    for (const [oldName, newName] of Object.entries(renames)) {
+      if (!line.includes(oldName)) continue;
+      if (!printedHeading) {
+        console.log("Update these instruction references to renamed writing playbooks:");
+        printedHeading = true;
+      }
+      console.log(`  ${instructionPath}:${index + 1}: ${line}`);
+      console.log(`    ${oldName} → .goat-flow/skill-docs/playbooks/${newName}`);
+    }
+  });
+}
+NODE
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-docs/skill-quality-testing/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md"
@@ -3820,10 +3969,10 @@ assert_file_ownership "$CONFIG_PATH" "user-owned"
 if [[ -f "$CONFIG_PATH" ]]; then
   CONFIG_CHANGED=false
   CONFIG_NOTES=()
-  # Change the saved framework version only when the user requested a version refresh.
+  # Record a valid older release or the user's explicit same-version refresh.
   if $UPDATE_CONFIG_VERSION; then
     # Replace the existing version entry; a config without one receives a new entry.
-    if grep -q "^version:" "$CONFIG_PATH"; then
+    if grep -Eq "^(version|\"version\"|'version')[[:blank:]]*:" "$CONFIG_PATH"; then
       update_config_version_line "$CONFIG_PATH"
       CONFIG_CHANGED=true
       CONFIG_NOTES+=("version updated to $VERSION")
@@ -4110,12 +4259,13 @@ if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/deny-dangerous.sh" ]
   # Show Claude users where to merge the preserved project instructions after refresh.
   if [[ "$AGENT" == "claude" ]]; then
     echo ""
-    echo "  For Claude, reconcile $SETTINGS_DST, then run:"
-    echo "    npx @blundergoat/goat-flow@$VERSION hooks sync"
+    echo "  For Claude, review $SETTINGS_DST against your saved hook choices."
+    echo "  Keep intentionally disabled hooks disabled."
   # Show Codex users where to merge the preserved project instructions after refresh.
   elif [[ "$AGENT" == "codex" ]]; then
     echo ""
-    echo "  For Codex, sync hooks or mirror workflow/hooks/agent-config/codex-hooks.json."
+    echo "  For Codex, review registrations against your saved hook choices."
+    echo "  Keep intentionally disabled hooks disabled."
     echo "  Do not restore a direct .goat-flow/hooks/deny-dangerous.sh command; Codex hooks"
     echo "  run from the session cwd and need the Node git-root launcher."
   fi
@@ -4154,7 +4304,11 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   fi
 fi
 
-echo "Next steps:"
-echo "  1. Run the setup steps to create project-specific content"
-echo "     (CLAUDE.md, architecture.md, code-map.md, footguns, lessons)"
-echo "  2. Run: goat-flow audit . --agent $AGENT"
+# CLI admission leaves next steps to its verified completion owner; direct use still needs explicit guidance.
+if [[ "${GOAT_FLOW_INSTALL_ADMISSION:-}" != "v2" ]]; then
+  echo "Next steps (managed files and install state have not been verified by the CLI):"
+  echo "  1. Run the setup steps to create project-specific content"
+  echo "     (agent instructions, architecture.md, code-map.md, footguns, lessons)"
+  echo "  2. Run: npx @blundergoat/goat-flow@$VERSION install . --agent $AGENT"
+  echo "  3. Run: npx @blundergoat/goat-flow@$VERSION audit . --agent $AGENT"
+fi

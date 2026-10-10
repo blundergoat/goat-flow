@@ -38,7 +38,7 @@ last_reviewed: 2026-09-26
 
 **Prevention:** For defensive filesystem tests, assert the stable contract first (`ok === false`, warning emitted, no throw) and keep errno matching broad enough for equivalent failure modes such as `EEXIST`, `ENOTDIR`, or "not a directory". Evidence anchors: `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`), `src/cli/evidence/envelope.ts` (search: `appendEvidenceEnvelope`).
 
-**What happened:** While adding M08 evidence-envelope tests, the first focused run failed because the non-fatal append-failure test expected `ENOTDIR` or "not a directory". The actual Node error for a file blocking `mkdirSync(..., { recursive: true })` was `EEXIST: file already exists`. The production behavior was correct: `appendEvidenceEnvelope()` returned `{ ok: false }` and emitted a warning without throwing, but the assertion overfit one possible filesystem errno.
+**What happened:** While adding evidence-envelope tests, the first focused run failed because the non-fatal append-failure test expected `ENOTDIR` or "not a directory". The actual Node error for a file blocking `mkdirSync(..., { recursive: true })` was `EEXIST: file already exists`. The production behavior was correct: `appendEvidenceEnvelope()` returned `{ ok: false }` and emitted a warning without throwing, but the assertion overfit one possible filesystem errno.
 
 **Root cause:** I asserted incidental OS/Node error text instead of the behavioral contract. For non-fatal IO paths, the important proof is that the caller receives a failure result and the operation does not throw; errno strings vary with which path segment blocks directory creation.
 
@@ -53,6 +53,6 @@ last_reviewed: 2026-09-26
 
 **Prevention:** Type filesystem wrappers from the behavior they expose (`Stats | null` here), then run typecheck before treating runtime tests as proof. Evidence: `src/cli/skill-author.ts` (search: `function lstatIfPresent`) and `src/cli/skill-author.ts` (search: `type Stats`).
 
-**What happened:** M10 wrapped `lstatSync` as `ReturnType<typeof lstatSync> | null`. The first `npm run typecheck` reported the returned stats as possibly `undefined` because Node's overload set includes the `throwIfNoEntry: false` result, even though the wrapper never calls that overload.
+**What happened:** The change wrapped `lstatSync` as `ReturnType<typeof lstatSync> | null`. The first `npm run typecheck` reported the returned stats as possibly `undefined` because Node's overload set includes the `throwIfNoEntry: false` result, even though the wrapper never calls that overload.
 
 **Root cause:** `ReturnType` reflected the overloaded declaration surface instead of the wrapper's stronger contract: return concrete `Stats`, return `null` for `ENOENT`, and throw for every other inspection failure.

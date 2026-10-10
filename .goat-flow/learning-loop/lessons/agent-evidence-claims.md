@@ -1,9 +1,11 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-09-19
+last_reviewed: 2026-10-10
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
+
+Related evidence moved intact to [evidence-attribution.md](evidence-attribution.md).
 
 ## Lesson: A config change that fails to fix a symptom is not proof of the mechanism
 
@@ -22,6 +24,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Agent cited gitignored content as evidence in committed docs
 
 **Status:** active | **Created:** 2026-05-11
+**Severity:** INTEGRATION
 **Decision changed:** Before citing a local file as durable evidence, verify that Git tracks it or cite the committed detector or source that supports the claim.
 **Incident count:** 5 | **Latest occurrence:** 2026-09-03
 
@@ -58,13 +61,13 @@ last_reviewed: 2026-09-19
 
 **Prevention:** When claiming a single writable authority, run a cold-path pass for hardcoded enums, literal allowlists, and docs or templates restating the same contract. The migration is complete only when manifest, installer, config validation, audit failures, and frontend payload readers agree on one authority.
 
-**What happened:** M12 moved agent support metadata into `workflow/manifest.json`, but a follow-up review still found parallel authority: Codex had a fictional `post_turn: "Stop"` event in the manifest, the dashboard frontend narrowed injected agent ids back to `claude | codex | gemini`, and unknown `.goat-flow/config.yaml` `agents:` ids only warned, so audit status stayed green.
+**What happened:** The change moved agent support metadata into `workflow/manifest.json`, but a follow-up review still found parallel authority: Codex had a fictional `post_turn: "Stop"` event in the manifest, the dashboard frontend narrowed injected agent ids back to `claude | codex | gemini`, and unknown `.goat-flow/config.yaml` `agents:` ids only warned, so audit status stayed green.
 
 ---
 
 ## Lesson: Verify agent capabilities against official docs, not assumptions
 
-**Status:** active | **Created:** 2026-04-15 | **Merged during:** M11 learning-loop consolidation
+**Status:** active | **Created:** 2026-04-15 | **Merged during:** learning-loop consolidation
 
 **Prevention:** When a profile field says an agent cannot do something, verify against current product docs and runtime evidence before building a workaround. For Codex permission grammar the anchors are `workflow/hooks/agent-config/codex.toml` (search: `hooks = true`), `.goat-flow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), and `src/cli/facts/agent/settings.ts` (search: `collectCodexWorkspaceRootEntries`).
 
@@ -77,7 +80,8 @@ last_reviewed: 2026-09-19
 ## Lesson: Absence claims need untruncated searches
 
 **Status:** active | **Created:** 2026-07-03 | **Evidence:** OBSERVED
-**Incident count:** 7 | **Latest occurrence:** 2026-09-11
+**Severity:** CORRECTNESS
+**Incident count:** 9 | **Latest occurrence:** 2026-10-10
 
 **Prevention:** Before claiming a pattern is absent, rerun the exact single pattern with no `head` or `tail` truncation, or count with `grep -c`. For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Derive an exact-count claim from the widest search it implies, `git grep` over the tracked tree, before pinning it into a stop condition. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
 
@@ -91,9 +95,11 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 
 - **Recurrence 2026-08-12:** A six-directory census found seven five-call paths; the tracked-tree search found eight. The missed path was `.goat-flow/learning-loop/decisions/ADR-042-cross-harness-invocation-ask-first.md` (search: `5-call`).
 - **Recurrence 2026-08-16:** A contiguous-name filter missed `src/cli/hooks-configured-runtime-evidence.ts` (search: `readManagedConfiguredHookState`); an exact existence check disproved the absence claim.
-- **Recurrence 2026-09-09:** M50's all-copy baseline JSON and lessons INDEX captures exceeded output budgets. Bounded fifty-line reads and exact character counts recovered them before source edits; failed captures earned no baseline credit. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
-- **Recurrence 2026-09-11:** M42 guidance and drift captures truncated; M43 repeated the problem and printed full export rows after treating an array as an object. Complete in-memory parsing recovered the evidence. DG-03 also lost required input when five file reads shared one response despite large budgets; that attempt was invalidated. Emit each complete input separately and distinguish command success from evidence delivery. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `## Proof Gate`); affected guidance: `workflow/skills/goat-debug/SKILL.md` (search: `Post-Fix Verification`).
-- **Recurrence 2026-09-11 (M39):** Combined source reads, context JSON and a full plan export exceeded capture budgets; increasing the export budget still failed. Parsing the complete export inside the command process and emitting scalar assertions recovered its 72-record graph. Filename guesses also missed existing inputs. An oversized preparation command was rejected by the 16 KB hook before execution. Discover exact paths, keep commands inspectable, reconcile capture lengths and retain rejected attempts separately. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`, `## Proof Gate`); export owner: `src/cli/plans-export.ts` (search: `loadPlanExportRecords`).
+- **Recurrence 2026-09-09:** The all-copy baseline JSON and lessons INDEX captures exceeded output budgets. Bounded fifty-line reads and exact character counts recovered them before source edits; failed captures earned no baseline credit. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
+- **Recurrence 2026-09-11:** Guidance and drift captures truncated; another capture repeated the problem and printed full export rows after treating an array as an object. Complete in-memory parsing recovered the evidence. DG-03 also lost required input when five file reads shared one response despite large budgets; that attempt was invalidated. Emit each complete input separately and distinguish command success from evidence delivery. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `## Proof Gate`); affected guidance: `workflow/skills/goat-debug/SKILL.md` (search: `Post-Fix Verification`).
+- **Recurrence 2026-09-11:** Combined source reads, context JSON and a full plan export exceeded capture budgets; increasing the export budget still failed. Parsing the complete export inside the command process and emitting scalar assertions recovered its 72-record graph. Filename guesses also missed existing inputs. An oversized preparation command was rejected by the 16 KB hook before execution. Discover exact paths, keep commands inspectable, reconcile capture lengths and retain rejected attempts separately. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`, `## Proof Gate`); export owner: `src/cli/plans-export.ts` (search: `loadPlanExportRecords`).
+- **Recurrence 2026-10-02:** Recall closeout notes stated 650 test lines before final measurement; `wc -l` measured 653. A learning draft then emitted its full 34 KB bucket and exceeded the tool capture budget; bounded patch-only output recovered the proposal. Measure final bytes before exact-count claims, and keep full draft state in memory while emitting only the reviewed patch. `test/unit/learning-loop-recall.test.ts` (search: `recall citation freshness`); capture contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
+- **Recurrence 2026-10-10:** During learning-loop cleanup and its subsequent review, a recursive search across ignored logs and plans, whole-draft previews and combined file reads exceeded tool output limits. A growing inline helper then hit the enforced command-inspection limit before execution. Review persistence also rejected a pipe into the source CLI; the version-matched executable and direct stdin supplied allowed input without a raw draft on disk. Restrict discovery to the relevant files, display bounded changed spans, and use a reviewed file helper for large transformations. Complete patch captures and source hashes were checked before writes; truncated captures were not credited as complete evidence. Capture contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
 
 ---
 
@@ -120,15 +126,18 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 ## Lesson: Final verification gates need supported scopes and captured logs
 
 **Status:** active | **Created:** 2026-05-19
+**Severity:** CORRECTNESS
 **Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove.
 **Trigger phase:** VERIFY
-**Incident count:** 28 | **Latest occurrence:** 2026-09-18
+**Incident count:** 29 | **Latest occurrence:** 2026-10-10
 
-**Prevention:** Run supported format, lint, Knip, and test gates with captured output, one command per gate. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`).
+**Prevention:** Run `npm run check:touched` for its supported format, source lint, typecheck, Gruff, and guidance scopes; capture every selected check's result line. Run the repository-owned Knip and owning test gates separately with captured output. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`).
 
 **What happened:** Several closeouts sent ignored tests or workflow `.mjs` files to TypeScript-only ESLint, and one ran `npm test` beside expensive checks and lost the failing block; a captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
 
 **Root cause:** Repo-supported verification scopes were mixed with improvised paths, and parallel final gates were treated as interchangeable with a clean final evidence run, so the first failure was ambiguous and had to be rerun.
+
+**Recurrence 2026-10-10:** Invoking the managed-hook generator with plain Node failed with `ERR_MODULE_NOT_FOUND` before checking the contract: its TypeScript imports require the repository loader. The package-owned command in `package.json` (search: `"check:managed-hook-contract"`) supplies `--import tsx`; that exact check reported `managed-hook contract current`. Read the script owner before improvising a verification invocation, and preserve the failed launch separately from the completed check.
 
 **Recurrences 2026-05-19 and 2026-08-08:** Commit-guidance helpers passed focused tests, but preflight reported `Knip: 2 unused exports/types`; making internal types private fixed it. Later, removing the history detector also removed the cited `CommitGuidanceStatus`, so audit failed on a stale anchor until the type was kept as the template-copy status. Run `goat-flow stats --check` before deleting cited symbols. `src/cli/prompt/commit-guidance.ts` (search: `type CommitGuidanceStatus`).
 **Recurrence 2026-05-19 (perf fixture):** A dashboard Markdown performance test used a newline-heavy 500KB fixture; focused runs passed, but preflight's concurrent fast suite exceeded the 100ms budget, and the fixture was changed to measure plain Markdown throughput.
@@ -138,9 +147,9 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **Recurrence 2026-07-12:** A gate listed ignored unit and integration files in `npx eslint --max-warnings 0`; the corrected gate linted only changed `src/cli/audit/` files. `eslint.config.mjs` (search: `"test/**"`).
 **Recurrence 2026-07-13:** A context-report gate hit Prettier on three files, ESLint on out-of-project tests, and Knip on four internal exports. `test/unit/context-report.test.ts` (search: `static context report`).
 **Recurrence 2026-07-31:** Two audit batches caught ESLint complexity, a Node directory target, a probe without `PATH`, and stale terminal-environment smoke expectations; the fixes extracted a helper, targeted `*.test.ts` (91/91), reused `process.env`, and aligned the smoke contract (20/20). `src/cli/audit/check-factual-claims.ts`, `test/smoke/dashboard-endpoints.test.ts` (search: `GOAT_CLAUDE_REPORTING_SETTINGS`).
-**Recurrence 2026-08-07:** An EXIT-trap cleanup made the executor reject M05's `test:fast` wrapper before npm ran; retaining the printed `mktemp` log produced `1580` passes and `0` failures, and gate wrappers no longer bundle destructive cleanup.
+**Recurrence 2026-08-07:** An EXIT-trap cleanup made the executor reject the `test:fast` wrapper before npm ran; retaining the printed `mktemp` log produced `1580` passes and `0` failures, and gate wrappers no longer bundle destructive cleanup.
 **Recurrence 2026-08-09:** A runtime-adapter check sent workflow `.mjs` to TypeScript-only ESLint; workflow modules use `node --check`, Prettier, targeted Gruff, runtime fixtures, and preflight instead. `workflow/hooks/hook-provider-adapters.mjs` (search: `Decodes bounded provider-neutral hook results`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`).
-**Recurrence 2026-08-14:** M03 ran `scripts/generate-managed-hook-desired-state.mjs` with plain Node, which could not resolve `registry.ts`'s `.js` import of the TypeScript manifest; the `check:managed-hook-contract` package script supplied `--import tsx`. `package.json` (search: `check:managed-hook-contract`), `src/cli/agents/registry.ts` (search: `loadManifest`), `scripts/generate-managed-hook-desired-state.mjs` (search: `managed-hook contract current`).
+**Recurrence 2026-08-14:** The change ran `scripts/generate-managed-hook-desired-state.mjs` with plain Node, which could not resolve `registry.ts`'s `.js` import of the TypeScript manifest; the `check:managed-hook-contract` package script supplied `--import tsx`. `package.json` (search: `check:managed-hook-contract`), `src/cli/agents/registry.ts` (search: `loadManifest`), `scripts/generate-managed-hook-desired-state.mjs` (search: `managed-hook contract current`).
 **Recurrence 2026-08-14 (path integrity):** Full preflight rejected the slash-joined "workflow" and "job permissions" phrase in all three goat-security mirrors as a framework-local path, the generic skill-creator validator rejected the required `goat-flow-skill-version`, and backticking the slash phrase while recording the incident triggered `stale-ref`. `scripts/check-path-integrity.sh` (search: `framework-local`), `scripts/check-versions.mjs` (search: `goat-flow-skill-version`), `src/cli/facts/shared/reference-paths.ts` (search: `export function isFileRef`), `workflow/skills/goat-security/references/supply-chain-and-cicd.md` (search: `workflow and job permissions`).
 **Recurrence 2026-08-15:** Four PR-backed skill RED attempts spent their bounded implementation calls reproducing fixture seals with unavailable isolate hashing, over-limit segments, or cleanup displacing final-state verification; all four were excluded, and host preflight now seals fixtures. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command has more than 50 chained segments`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`), `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Each phase is one isolated evaluator run`).
 **Recurrence 2026-08-15 (owner comparison):** An exact-owner comparison repeated the over-50-segment failure and proved nothing; one bounded read per owner with immediate completion evidence replaced it. `AGENTS.md` (search: `Sub-agents: ONE objective`).
@@ -148,7 +157,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **Recurrence 2026-08-27 (formatter scope):** `npx prettier --check` was given `workflow/install-goat-flow.sh` beside supported paths and exited 2 with no parser for the shell file; use `npm run format:check` and keep shell proof in the shell gates.
 **Recurrence 2026-08-27 (Knip heap):** Ad-hoc `npx knip` reached Node's default heap and aborted with exit 134; the repository command `node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress --no-gitignore` exited zero. `scripts/preflight-checks.sh` (search: `The project graph exceeds`).
 **Recurrence 2026-08-27 (yielded handle):** Three commands in one orchestrated call, then `Promise.all`, discarded a live session identifier and terminal status from the long install matrix; the process was terminated by PID and rerun serially to `# tests 13`, `# pass 13`, `# fail 0`. `AGENTS.md` (search: `literal pass/fail line copied verbatim`).
-**Recurrence 2026-08-27 (plan command shape):** `plans check --strict` was given a milestone file and rejected it with `ENOTDIR`; it consumes the version directory while `plans time` consumes one file. `src/cli/help.ts` (search: `goat-flow plans check .goat-flow/plans/1.17.0 --strict`), `src/cli/plans-export.ts` (search: `Cannot read plan directory`).
+**Recurrence 2026-08-27 (plan command shape):** `plans check --strict` was given a milestone file and rejected it with `ENOTDIR`; it consumes the version directory while `plans time` consumes one file. `src/cli/help.ts` (search: `goat-flow plans check`), `src/cli/plans-export.ts` (search: `Cannot read plan directory`).
 **Recurrence 2026-08-27 (ignored lint):** `npx eslint test/integration/preflight-progress.test.ts` exited zero with an ignored-file diagnostic and was labelled PASS; `eslint.config.mjs` (search: `"test/**"`) keeps that path outside the lint scope, so cover ignored tests with typecheck, Prettier, and their runtime suite.
 **Recurrence 2026-08-28 (export capture):** A full plan export exited 0 but the tool truncated its 10,093 JSON lines; piping it into inline `node -e` was blocked as `Pipe to interpreter`, and a bounded `jq` selector exposed the required fields. `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Known language runtimes may consume local data only when their program is explicit`), `src/cli/plans-export.ts` (search: `No output path is the safe preview mode`).
 **Recurrence 2026-08-28 (proof scope):** A line-budget command scanned every physical line in eight instruction files although the claim covered only ACT-local reminders, and exited 1 on a 1,677-character READ line measured before the edit; baseline bespoke proof before editing and scope it to the claim. `workflow/setup/reference/execution-loop.md` (search: `MUST read relevant files before changes`), `test/contract/command-phrases.test.ts` (search: `assertMilestoneReminder`).
@@ -178,49 +187,22 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 
 ---
 
-## Lesson: Naming the component that satisfies a rule is a claim about its code
-
-**Status:** active | **Created:** 2026-09-07
-**Decision changed:** Before writing that a named tool provides a guarantee, read that tool's implementation, including its failure paths, and claim only the property its code establishes.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** Correcting an unreachable instruction usually means naming the component that really performs the work. That rewrite silently converts a requirement into an assertion about an implementation, so it needs the same evidence as any other claim: open the source, follow the success path and every rejection path, and describe only what you find. Never carry an adjective from the old requirement onto the new attribution. Describe outcome vocabularies in terms of end states an agent can observe, because a failure path that leaves a partial artifact will not match a state named after what the code intended to do.
-
-**What happened:** In 1.17.0 M45 the goat-security Persist Gate was corrected to name the redactor as the component performing the parent traversal, and the phrase "race-safe" was carried over from the requirement being replaced. Three independent reviewers found the redactor's parent walk is a pathname `lstat` sequence, not a descriptor-anchored one, and that the claim contradicted a sibling reference in the same skill forbidding exactly that substitution. The same reviewers found the new outcome vocabulary said "no artifact created" while a real rejection path leaves a zero-byte file at the destination, so an agent would report the artifact as skipped.
-
-**Root cause:** Attribution was treated as editorial phrasing rather than as a factual claim about code. Carrying an adjective across a rewrite is the specific move that hides the error, because the sentence still reads like the sentence that was approved. Evidence anchors: `src/cli/redact-command.ts` (search: `assertRedactDirectories`) walks parents with `lstatSync` by pathname, while `assertRedactAllocation` compares `fstatSync` against `lstatSync` before and after the write; `workflow/skills/goat-security/references/common-threats.md` (search: `MUST NOT emulate containment with a status check`) is the sibling rule the false claim contradicted.
-
----
-
-## Lesson: Reused evidence expires the moment you edit what it depended on
-
-**Status:** active | **Created:** 2026-09-07
-**Decision changed:** After every source edit, re-check which retained results read the file you changed, and mark those results stale before reusing them.
-**Trigger phase:** VERIFY
-**Caught at:** VERIFY
-
-**Prevention:** Reusing an earlier run to close a criterion is legitimate only while its inputs are unchanged, so record which files each reused run read. Before an evidence record is offered for approval, diff the session's writes against those input lists and re-run anything whose inputs moved. Treat a fix that broadens a rule as a candidate regression on every behaviour the narrow rule also protected, not only the one it targeted.
-
-**What happened:** In 1.17.0 M26 a shipped template reference said "do not combine templates from different phases", which was overriding the skill and causing a Standard test-plan response to drop its risk map. The fix replaced it with a mode-level ban plus an explicit Standard exception. The old rule had been categorical and had also kept Audit's gap report separate from its post-gate plan, because that reference holds two Audit phases; the replacement forbade only cross-mode combination and left Audit unprotected at render time. The same record had already closed the Audit gate criterion by reusing two earlier runs, and those runs had read the pre-fix reference. The reuse was sound when written and was invalidated by the later edit. A self-audit caught both, the rule was rewritten to ban combining any gate report with the plan that follows it and to name Audit explicitly, and an extra isolated run confirmed the Audit gate still holds.
-
-**Root cause:** Reuse was treated as a property of the earlier run rather than as a claim about the current tree. A narrow replacement for a broad rule silently drops whatever else the broad rule covered, and nothing in the change itself surfaces the loss. Recurrence is likeliest when one file governs several routes and a fix targets one of them. Evidence anchors: `workflow/skills/goat-qa/references/output-templates.md` (search: `never combine a gate report with the plan that follows it`), `test/contract/skill-hardening-skills-2.test.ts` (search: `lets an auto-released goat-qa gate carry both phases in one response`).
-
 ## Lesson: Calling text a duplicate is a claim that its rule survives elsewhere
 
 **Status:** active | **Created:** 2026-09-08
+**Severity:** CORRECTNESS
 **Decision changed:** Before cutting a sentence as redundant, name the exact surviving location, confirm every reader who needed the rule loads that location first, and add or re-point a contract assertion there before the cut.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
 **Prevention:** Treat "already said elsewhere" as an evidence claim with three parts: where, reachable by whom, asserted how. Before cutting the old wording, search inbound semantic anchors as well as contract assertions; preserve a cited phrase or explicitly migrate its consumers. A cut that cannot fill all three is not a cut. Measure the token delta per pair first; pipe-joined lists are nearly free under a whitespace cap, prose is not, and the cheapest-looking cut is often a single-owner rule.
 
-**What happened:** In 1.17.0 M47 the goat-security root had one word of headroom and needed a posture field, a conclusion definition and a loading contract. Two cuts were justified as duplicates and were not: the Phase 6 requirement to verify referenced submodule content (search: `verify referenced content`), which no other line carried, and the Quick output clause excluding Full-only rows, whose loss let a trial evaluator add inventory-integrity rows to a Quick report. The contract suite caught the first; the paired-arm adjudicator caught the second. Both were restored and paid for by cuts whose survivor was named and asserted.
+**What happened:** In 1.17.0 the goat-security root had one word of headroom and needed a posture field, a conclusion definition and a loading contract. Two cuts were justified as duplicates and were not: the Phase 6 requirement to verify referenced submodule content (search: `verify referenced content`), which no other line carried, and the Quick output clause excluding Full-only rows, whose loss let a trial evaluator add inventory-integrity rows to a Quick report. The contract suite caught the first; the paired-arm adjudicator caught the second. Both were restored and paid for by cuts whose survivor was named and asserted.
 
 **Root cause:** A nearby sentence on the same topic was read as the same rule. Overlap in subject is not identity of obligation, and a reader who reaches one line need not reach the other.
 
 
-**Recurrence 2026-09-18:** Quality follow-up M07 retained the accepted-risk and unavailable-tool rules in goat-security Phases 5/6, but removed the Constraints sentence cited by a lesson. All 240 skill contracts passed; `stats --check` then reported a stale reference. Rule equivalence did not preserve citation identity. Evidence: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `A written repair list is a diagnosis, not a proof`) cites `workflow/skills/goat-security/SKILL.md` (search: `MUST NOT let accepted risk`). Preserve that anchor in the smaller proposed cut; validate learning references before declaring a trim complete.
+**Recurrence 2026-09-18:** The quality follow-up retained the accepted-risk and unavailable-tool rules in goat-security Phases 5/6, but removed the Constraints sentence cited by a lesson. All 240 skill contracts passed; `stats --check` then reported a stale reference. Rule equivalence did not preserve citation identity. Evidence: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `A written repair list is a diagnosis, not a proof`) cites `workflow/skills/goat-security/SKILL.md` (search: `MUST NOT let accepted risk`). Preserve that anchor in the smaller proposed cut; validate learning references before declaring a trim complete.
 
 ---
 
@@ -231,9 +213,9 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **Trigger phase:** SCOPE
 **Caught at:** ACT
 
-**Prevention:** A decision record and an allowlist sent for approval describe what the code will do. Read the function that emits the bytes before writing either. For hook registrations, check which providers ADR-052 and ADR-053 freeze, and confirm the reach with the generated contract diff, not with the template file names. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `ADR-052 freezes deferred provider registrations`), `src/cli/server/agent-hook-command.ts` (search: `provider-project-first`), `.goat-flow/learning-loop/decisions/ADR-066-gruff-edit-scope-from-edited-file.md` (search: `narrowed to Claude's registration`).
+**Prevention:** A decision record and an allowlist sent for approval describe what the code will do. Read the function that emits the bytes before writing either. For hook registrations, check which providers ADR-053 freezes, and confirm the reach with the generated contract diff, not with the template file names. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `LEGACY_REGISTRATION_RECOGNITION_FRAGMENT`), `src/cli/server/agent-hook-command.ts` (search: `provider-project-first`), `.goat-flow/learning-loop/decisions/ADR-066-gruff-edit-scope-from-edited-file.md` (search: `narrowed to Claude's registration`).
 
-**What happened:** A milestone drafted ADR-066 and asked the user to approve a wider allowlist. Both said the Gruff launcher change would alter every provider's registration, four agent-config templates and three installed agent configs. The user approved. Implementation then reached the generator, whose comment says ADR-052 freezes the Codex, Copilot and Antigravity registrations byte for byte. The change was narrowed to Claude's structured bootstrap, ADR-066 was corrected after acceptance, and the generated contract diff showed three changed rows, all Claude's Gruff handlers. The template named in the request holds no Gruff row at all.
+**What happened:** A milestone drafted ADR-066 and asked the user to approve a wider allowlist. Both said the Gruff launcher change would alter every provider's registration, four agent-config templates and three installed agent configs. The user approved. Implementation then reached the generator, whose recognizer preserves the Codex, Copilot and Antigravity registration bytes under ADR-053. The change was narrowed to Claude's structured bootstrap, ADR-066 was corrected after acceptance, and the generated contract diff showed three changed rows, all Claude's Gruff handlers. The template named in the request holds no Gruff row at all.
 
 **Root cause:** The request was written from the measured incident and the file names that mention the bootstrap, without reading the generator that owns those bytes. The accepted decisions that constrain it were found only while editing.
 
@@ -242,6 +224,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 ## Lesson: A run record is read from the session's command outputs, not recalled
 
 **Status:** active | **Created:** 2026-09-19
+**Severity:** CORRECTNESS
 **Decision changed:** Before writing which harness, model and effort ran a piece of work, search the session for the requester's model and effort commands and copy what their outputs say.
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY

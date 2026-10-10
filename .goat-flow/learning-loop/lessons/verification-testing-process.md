@@ -1,6 +1,6 @@
 ---
 category: verification-testing-process
-last_reviewed: 2026-09-19
+last_reviewed: 2026-10-10
 ---
 
 **Scope:** Process-lifecycle tests - timeout deadlines independent of child close, observable readiness before termination signals, and delegated multi-turn runs that must keep recoverable session state. What a test must establish in general is [verification-testing.md](verification-testing.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -8,12 +8,16 @@ last_reviewed: 2026-09-19
 ## Lesson: Timeout completion needs a deadline independent of child close
 
 **Status:** active | **Created:** 2026-07-12
-**Decision changed:** Treat a timeout response as incomplete proof until the host-facing call also returns within its wall-clock bound.
+**Severity:** CORRECTNESS
+**Decision changed:** Prove both a prompt timeout response and termination of owned descendants; unrelated processes must remain alive.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-09
+**Incident count:** 5 | **Latest occurrence:** 2026-10-10
 **Merged:** 2026-09-15 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split along the process-lifecycle seam to recover its headroom.
 
-**Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert the marker, response mode, timeout message, and wall-clock bound; a kill signal or timeout message alone does not prove the user regains control. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`), `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
+**Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert readiness, response mode, timeout message, return deadline, owned-process termination and an unrelated live control; a kill signal or timeout message alone does not prove the user regains control. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`), `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
+
+Enforce an approved live-capture deadline with a process timer independent of agent polling, so context compaction cannot extend the session.
+Verify the returned status and process cleanup; Node may represent SIGKILL as a null status plus signal rather than shell exit 137.
 
 **What happened:** The seven-skill pressure matrix reproduced a preflight runner that exceeded its hard timeout after process-group escalation: a detached test helper escaped the group, inherited stdout and stderr, and held those pipes open, so Node delayed the child's `close` event after the direct process exited. The runner now uses a one-shot cleanup deadline and closes its local capture streams; the hook launcher starts a detached POSIX process group, uses Windows tree termination on native Windows, stops the tree at the deadline, and delivers one timeout result without waiting for a late close.
 
@@ -21,11 +25,40 @@ last_reviewed: 2026-09-19
 
 **Recurrence 2026-08-09:** A preflight run reported `bounds gruff hooks with a timeout-specific response` as transient because its full-suite retry passed. Running the named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound, and a fixture that wrote a marker after starting the background child reproduced the wait. `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`), `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
 
+**Recurrence 2026-10-02:** The approved five-minute Codex discovery depended on operator polling through context compaction.
+The first turn finished in six seconds, but closure occurred after 354 seconds; two required explicit turns were never submitted.
+
+The capture stayed inconclusive. Direct outer-timer controls returned shell exits 124 and 137 for ordinary and TERM-resistant children.
+A Node comparison initially expected numeric 137 instead of its SIGKILL signal result; direct shell observation corrected that wrapper assumption.
+The approved follow-up uses an independent TERM/KILL deadline and must still verify native completion and fixture-process cleanup.
+
+Evidence: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`) owns the independent-return pattern.
+Workflow-local receipts retain the measured deadline breach; they are not shipped provider-support evidence.
+
+
+**Recurrence 2026-10-03:** The outer launcher returned its timeout block at 1,200 ms while the controller's detached Bash child and sleeper remained alive.
+The earlier timeout assertion checked the response, so it missed those surviving processes.
+
+The launcher now stops detached descendant groups before its own group; the regression checks both owned processes and an unrelated live control.
+The first fixture edit collapsed Bash `$$` in a JavaScript replacement string, producing an invalid PID and incomplete cleanup.
+
+A replacement callback preserves `$$`; the fixture checks positive integer PIDs and always cleans up its unrelated control.
+Evidence: `workflow/hooks/run-with-bash.mjs` (search: `findDetachedHookProcessGroups`).
+The owning regression is `test/integration/post-turn-launcher-recovery.test.ts` (search: `terminates detached controller children`).
+
+**Recurrence 2026-10-10:** The shared command-capture helper returned `ENOBUFS` and `ETIMEDOUT` after killing its direct child, but a confirmed-started grandchild remained alive in both reproductions.
+Closing the local streams bounded capture completion without stopping the worker that inherited them.
+
+Capture now owns a POSIX process group and uses Windows tree termination when a limit fires.
+The regression checks overflow and timeout, confirms descendant readiness, verifies termination and keeps an unrelated live process as a control.
+Evidence: `scripts/capture-command.mjs` (search: `process.kill(-child.pid, "SIGKILL")`), `test/unit/check-touched.test.ts` (search: `terminates owned tool descendants on overflow and timeout without stopping unrelated work`).
+
 ---
 
 ## Lesson: Real-timer terminal smoke tests need isolated verification
 
 **Status:** active | **Created:** 2026-05-30
+**Severity:** CORRECTNESS
 **Decision changed:** Process-lifecycle tests wait for an observable ready state before sending termination signals; elapsed time alone is never readiness.
 **Trigger phase:** VERIFY
 **Incident count:** 6 | **Latest occurrence:** 2026-09-19

@@ -264,7 +264,10 @@ function validatePreExistingGateIssue(
     );
 }
 
-/** Bind required gate consequences to real active IDs; skipped commands and unrelated findings cannot supply failure proof. */
+/**
+ * Bind required gate consequences to real active IDs; skipped commands or unrelated findings cannot prove failure.
+ * A missing or bad link reports a violation.
+ */
 function validateGateFindingLinks(
   gates: JsonRecord[],
   integrity: IntegrityResult,
@@ -310,7 +313,7 @@ function validateGateFindingLinks(
   }
 }
 
-/** Reject missing, historical, or incompatible finding links so each failure keeps its required visible consequence. */
+/** Each failure must keep its required visible consequence, so missing, historical, or incompatible finding links are rejected. */
 function validateLinkedGateFindings(
   gate: JsonRecord,
   ids: JsonValue | undefined,
@@ -716,7 +719,7 @@ export function handleReviewCommand(options: ParsedCLI): void {
   dispatchReviewInput(options, projectRoot, input);
 }
 
-/** Refuse unsupported operations or validator versions before reading the operator's input. */
+/** Refuse unsupported operations or validator versions before reading the operator's input; each refusal throws a usage error. */
 function validateReviewCommandUsage(options: ParsedCLI): void {
   const actualVersion = getPackageVersion();
   // A skill can reject an older PATH binary before it reads report data or asks the operator for stdin.
@@ -778,7 +781,7 @@ function dispatchReviewInput(
   if (result.status === "fail") process.exitCode = 1;
 }
 
-/** Resolve the operator's chosen project once before any saved input is read; a missing directory is a usage error. */
+/** Resolve the operator's chosen project once before any saved input is read; a missing directory throws a usage error. */
 function resolveReviewedProject(selectedPath: string): string {
   try {
     const projectRoot = realpathSync(selectedPath);
@@ -926,7 +929,7 @@ function validateGateAttempt(
   validateRecordedAttempt(value, gate, snapshot, uncredited);
 }
 
-/** Match one recorded before/after state to the selected review and full execution source. */
+/** A recorded before/after state must match the selected review fingerprint and full execution source. */
 function attemptMatches(
   attempt: JsonRecord,
   gate: JsonRecord,
@@ -1079,7 +1082,7 @@ function validateGate(
 }
 
 /**
- * Validate recorded gate provenance and source-state consistency without executing a command.
+ * Validate recorded gate provenance and source-state consistency without executing a command; an inconsistent record reports a violation.
  *
  * @param text - exactly one canonical gates record; an empty gate list means no execution credit
  *

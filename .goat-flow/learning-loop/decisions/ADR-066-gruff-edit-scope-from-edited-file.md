@@ -2,8 +2,9 @@
 
 **Status:** Accepted
 **Date:** 2026-09-19
-**Ticket/Context:** `.goat-flow/plans/quality-assessment-followup-2026-09-13/M19-gruff-contract-baseline.md` and `M20-gruff-project-scope.md` (local working state, not committed evidence)
-**Updated:** 2026-09-19 - before implementation, the entry rule was narrowed to Claude's registration: ADR-052 and ADR-053 freeze the other providers' registration bytes.
+**Updated:** 2026-09-19 - before implementation, the entry rule was narrowed to Claude's registration: ADR-053 freezes the other providers' registration bytes.
+
+**Updated:** 2026-10-10 - registration freezes now cite ADR-053 and result coverage cites its executable contract.
 
 ## Context
 
@@ -24,7 +25,7 @@ Disabling Gruff removes its registration and leaves the script copy in place (`s
 For the Gruff edit hook only, the edited file decides which install, analyzer config and Git repository apply. The shell cwd decides none of them.
 
 1. **Boundary.** Gruff analyses only paths inside the provider project directory, `CLAUDE_PROJECT_DIR` where the provider sets it. Where no such directory is exposed, the entry install's root is the boundary.
-2. **Entry install.** The entry install supplies the only hook runtime that executes. Claude's Gruff registration inspects the provider project directory first and selects it when it holds a complete install. Otherwise the ADR-053 order applies. A directory that holds a script copy but does not register Gruff is passed over, not treated as corrupt. A candidate that registers Gruff but lacks its launcher or script is still corrupt and reports unavailable. Codex, Copilot and Antigravity keep their ADR-053 registrations byte for byte, because ADR-052 freezes them until a fresh provider capture approves a change. They keep the shell-cwd entry order and still receive rules 3 to 8 through the hook script.
+2. **Entry install.** The entry install supplies the only hook runtime that executes. Claude's Gruff registration inspects the provider project directory first and selects it when it holds a complete install. Otherwise the ADR-053 order applies. A directory that holds a script copy but does not register Gruff is passed over, not treated as corrupt. A candidate that registers Gruff but lacks its launcher or script is still corrupt and reports unavailable. Codex, Copilot and Antigravity keep their ADR-053 registrations byte for byte, because ADR-053 freezes them until an applicable provider capture approves a change. They keep the shell-cwd entry order and still receive rules 3 to 8 through the hook script.
 3. **Owner install.** For each edited file, the owner is the nearest ancestor inside the boundary that holds a goat-flow install. The owner supplies the saved Gruff choice and the analyzer binary overrides (`workflow/hooks/gruff-code-quality.sh`, search: `config_binary_override() {`). ADR-032's containment rule applies relative to the owner's root. No script from an owner install runs unless it is also the entry install.
 4. **Nested opt-out.** `hooks.gruff-code-quality.enabled: false` in the owner's `.goat-flow/config.yaml` opts out the files under that install. They are skipped, and no parent analyses them. Files elsewhere are unaffected. An owner config that cannot be read or parsed is reported as unavailable for that file and is never read as an opt-out.
 5. **Analyzer config.** The nearest analyzer config above the file still owns it, bounded by the owner's root.
@@ -41,8 +42,8 @@ deny-dangerous, deny-git-mutations and post-turn safety keep ADR-053's root cont
 | Keep cwd selection and resolve only config and Git per file | Strongest case: no registration bytes change and no consumer needs a re-sync. It fails because the disabled-child stop happens in the bootstrap, before any managed code runs, and a cwd inside a child still selects that child's older runtime | Rejected |
 | Run the owner install's own script copy | Strongest case: each project runs the version it installed. It fails because nested copies can lag (four measured at 1.15.1 beside a 1.16.0 parent) and would run code the fired registration never named | Rejected |
 | Let the parent analyse files under a disabled child | Strongest case: more coverage. It overrides a saved project choice | Rejected |
-| Treat any Git failure as "no repository" | Strongest case: one simple fallback. It turns failed attribution into a completed result, while ADR-052 requires complete declared coverage for a pass | Rejected |
-| Change every provider's Gruff bootstrap | Strongest case: one entry rule for every provider. ADR-052 and ADR-053 freeze the Codex, Copilot and Antigravity registration bytes until a fresh capture of that provider exists, and every measured incident came from Claude sessions | Rejected |
+| Treat any Git failure as "no repository" | Strongest case: one simple fallback. It turns failed attribution into a completed result, while `src/cli/hook-contracts.ts` (search: `pass requires complete coverage`) requires complete declared coverage for a pass | Rejected |
+| Change every provider's Gruff bootstrap | Strongest case: one entry rule for every provider. ADR-053 freezes the Codex, Copilot and Antigravity registration bytes until an applicable capture of that provider exists, and every measured incident came from Claude sessions | Rejected |
 | Apply the new entry rule to policy hooks | Strongest case: one contract for every hook. No incident shows a policy hook failing this way, and their fail-closed classification is security-sensitive | Rejected |
 | Entry from the provider project for Claude, owner per file, explicit opt-out, Git per file, labelled whole-file fallback | Older Claude registrations keep today's behaviour until re-synced; the frozen providers keep the cwd entry order | Accepted |
 
@@ -53,7 +54,7 @@ deny-dangerous, deny-git-mutations and post-turn safety keep ADR-053's root cont
 - A Claude consumer gets the new entry rule only after `hooks sync` or a reinstall rewrites its Gruff registration. The per-file owner, Git and opt-out rules arrive with the hook script.
 - Files under a disabled nested install produce no Gruff message. How skipped and out-of-boundary edits are reported is decided separately and must not present them as completed analysis.
 - Whether Claude edit payloads carry usable changed ranges is unverified, so rule 7 currently resolves to the whole-file branch for Claude.
-- This decision claims no provider delivery. ADR-052's evidence rules are unchanged.
+- This decision claims no provider delivery. The architecture's trusted-capture and delivery requirements still apply.
 - ADR-053 carries an `Updated` line pointing here for the Gruff exception.
 
 ## Reversibility
