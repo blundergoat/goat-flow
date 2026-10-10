@@ -183,6 +183,7 @@ export function selectChecks(root, changes) {
   const hasGuidanceChanges = paths.some(
     (path) =>
       INSTRUCTIONS.has(path) ||
+      path === "workflow/manifest.json" ||
       GUIDANCE.some((prefix) => path.startsWith(prefix)),
   );
   return {

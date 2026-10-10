@@ -3,8 +3,15 @@
  * Local edits and disabled hooks exercise actual writes; child-only Bash wrappers reproduce incomplete apply without changing production code.
  */
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { createHash } from "node:crypto";
+import { delimiter, dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import {
@@ -20,6 +27,44 @@ const LOCAL_PATH = ".goat-flow/hooks/run-with-bash.mjs";
 const SUMMARY = "Install verified for";
 
 describe("verified install summary", () => {
+  // A retained legacy baseline puts both renamed paths in the admitted preview before installer cleanup removes them.
+  it("counts renamed managed playbook removals in the public closing summary", () => {
+    const root = makeTempProject();
+    const retired = ["writing-for-agents.md", "writing-style.md"].map(
+      (name) => `.goat-flow/skill-docs/playbooks/${name}`,
+    );
+    const bytes = "Retired managed playbook fixture\n";
+    for (const path of retired) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), bytes);
+    }
+    const state = join(root, ".goat-flow/state/install/codex.json");
+    mkdirSync(dirname(state), { recursive: true });
+    writeFileSync(
+      state,
+      JSON.stringify(
+        {
+          schemaVersion: "goat-flow.install-state.v1",
+          agent: "codex",
+          goatFlowVersion: "1.16.0",
+          files: retired.map((path) => ({
+            path,
+            expectedSha256: createHash("sha256").update(bytes).digest("hex"),
+          })),
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    const install = runCliInstaller(root, "--agent", "codex");
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    assert.ok(retired.every((path) => !existsSync(join(root, path))));
+    assert.match(
+      install.stdout.slice(install.stdout.indexOf(SUMMARY)),
+      /Files changed: .*2 removed;/u,
+    );
+  });
+
   it("names replaced local content and disabled registration removals after verification", () => {
     const projectPath = join(makeTempProject(), "project with spaces");
     mkdirSync(projectPath);

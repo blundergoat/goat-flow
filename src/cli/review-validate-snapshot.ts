@@ -27,8 +27,8 @@ function objectName(
         ? /^[a-f0-9]{40}$/u
         : format === "sha256"
           ? /^[a-f0-9]{64}$/u
-          : /$a/u
-      ).test(value),
+          : null
+      )?.test(value) === true,
     "invalid captured Git object name",
   );
 }

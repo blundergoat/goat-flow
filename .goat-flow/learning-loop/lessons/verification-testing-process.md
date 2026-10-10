@@ -1,6 +1,6 @@
 ---
 category: verification-testing-process
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-10
 ---
 
 **Scope:** Process-lifecycle tests - timeout deadlines independent of child close, observable readiness before termination signals, and delegated multi-turn runs that must keep recoverable session state. What a test must establish in general is [verification-testing.md](verification-testing.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -11,7 +11,7 @@ last_reviewed: 2026-10-03
 **Severity:** CORRECTNESS
 **Decision changed:** Prove both a prompt timeout response and termination of owned descendants; unrelated processes must remain alive.
 **Trigger phase:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-10-03
+**Incident count:** 5 | **Latest occurrence:** 2026-10-10
 **Merged:** 2026-09-15 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split along the process-lifecycle seam to recover its headroom.
 
 **Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert readiness, response mode, timeout message, return deadline, owned-process termination and an unrelated live control; a kill signal or timeout message alone does not prove the user regains control. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`), `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
@@ -45,6 +45,13 @@ The first fixture edit collapsed Bash `$$` in a JavaScript replacement string, p
 A replacement callback preserves `$$`; the fixture checks positive integer PIDs and always cleans up its unrelated control.
 Evidence: `workflow/hooks/run-with-bash.mjs` (search: `findDetachedHookProcessGroups`).
 The owning regression is `test/integration/post-turn-launcher-recovery.test.ts` (search: `terminates detached controller children`).
+
+**Recurrence 2026-10-10:** The shared command-capture helper returned `ENOBUFS` and `ETIMEDOUT` after killing its direct child, but a confirmed-started grandchild remained alive in both reproductions.
+Closing the local streams bounded capture completion without stopping the worker that inherited them.
+
+Capture now owns a POSIX process group and uses Windows tree termination when a limit fires.
+The regression checks overflow and timeout, confirms descendant readiness, verifies termination and keeps an unrelated live process as a control.
+Evidence: `scripts/capture-command.mjs` (search: `process.kill(-child.pid, "SIGKILL")`), `test/unit/check-touched.test.ts` (search: `terminates owned tool descendants on overflow and timeout without stopping unrelated work`).
 
 ---
 

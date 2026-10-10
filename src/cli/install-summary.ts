@@ -132,6 +132,10 @@ export function renderInstallSummary(
   const created = changed.filter(
     ({ file }) => file.currentStatus === "missing",
   ).length;
+  const removed = outcomes.filter(
+    ({ file, target }) =>
+      file.currentStatus === "regular" && target.status === "missing",
+  ).length;
   const preserved = outcomes.filter(
     ({ file, target }) =>
       file.state === "local-preserved" && target.sha256 === file.currentSha256,
@@ -146,7 +150,8 @@ export function renderInstallSummary(
   const lines = [
     "",
     `Install verified for ${preview.agent} (${getPackageVersion()}).`,
-    `Files changed: ${created} created, ${changed.length - created} updated; ${preserved} local change(s) preserved.`,
+    `Files changed: ${created} created, ${changed.length - created} updated, ${removed} removed; ${preserved} local change(s) preserved.`,
+    "File counts cover previewed paths; other installer cleanup is reported separately.",
     ...replaced.map(({ file }) => `Replaced local content: ${file.path}`),
   ];
   const hookChanges = completedHookChanges(projectPath, hookObservations);

@@ -6,6 +6,7 @@
  */
 import assert from "node:assert/strict";
 import childProcess, {
+  spawn,
   spawnSync,
   type SpawnSyncReturns,
 } from "node:child_process";
@@ -100,6 +101,73 @@ it("terminates silent tools at the capture deadline", async () => {
   );
   assert.equal(result.error?.code, "ETIMEDOUT");
   assert.notEqual(result.status, 0);
+});
+
+it("terminates owned tool descendants on overflow and timeout without stopping unrelated work", async (t) => {
+  const root = directory(t);
+  const control = spawn(
+    process.execPath,
+    ["-e", "setInterval(() => {}, 1000)"],
+    {
+      stdio: "ignore",
+    },
+  );
+  t.after(() => control.kill("SIGKILL"));
+  const controlPid = control.pid;
+  assert.ok(controlPid);
+  for (const kind of ["overflow", "timeout"]) {
+    const marker = join(root, `${kind}.pid`);
+    const worker =
+      "require('node:fs').writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)";
+    const program =
+      `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(worker)}, process.argv[1]], { stdio: ['ignore', 'inherit', 'inherit'] });` +
+      (kind === "overflow"
+        ? "const ready = setInterval(() => { if (require('node:fs').existsSync(process.argv[1])) { clearInterval(ready); process.stdout.write(Buffer.alloc(8192)); } }, 10);"
+        : "") +
+      "setInterval(() => {}, 1000);";
+    let workerPid: number | undefined;
+    try {
+      const result = await captureCommand(
+        [process.execPath, "-e", program, marker],
+        {
+          cwd: root,
+          maxBuffer: 4096,
+          timeout: 2000,
+        },
+      );
+      const readyPid = Number(readFileSync(marker, "utf8"));
+      assert.ok(Number.isSafeInteger(readyPid) && readyPid > 0);
+      workerPid = readyPid;
+      assert.equal(
+        result.error?.code,
+        kind === "overflow" ? "ENOBUFS" : "ETIMEDOUT",
+      );
+      if (process.platform === "win32") {
+        assert.throws(() => process.kill(readyPid, 0));
+      } else {
+        const state = spawnSync(
+          "ps",
+          ["-p", String(workerPid), "-o", "stat="],
+          { encoding: "utf8" },
+        );
+        assert.equal(state.error, undefined);
+        assert.ok(
+          state.status === 1 || /^Z/u.test(state.stdout.trim()),
+          "owned descendant survived capture failure",
+        );
+      }
+      assert.doesNotThrow(() => process.kill(controlPid, 0));
+    } finally {
+      if (workerPid) {
+        try {
+          process.kill(workerPid, "SIGKILL");
+        } catch (error) {
+          assert.ok(error instanceof Error && "code" in error);
+          assert.equal(error.code, "ESRCH");
+        }
+      }
+    }
+  }
 });
 
 /** Create a private temporary filesystem folder that the test removes when it finishes. */
@@ -372,6 +440,13 @@ it("collects staged renames/deletions, unstaged edits and untracked paths from r
   assert.equal(selectChecks(root, changes).typecheck, true);
 });
 
+it("selects guidance contracts for a manifest-only edit", (t) => {
+  const selected = selectChecks(directory(t), [
+    { status: "M", paths: ["workflow/manifest.json"] },
+  ]);
+  assert.equal(selected.guidance, true);
+});
+
 it("keeps source, configuration and guidance triggers for deletions and renames away", (t) => {
   const root = directory(t);
   const cases = [
@@ -384,6 +459,7 @@ it("keeps source, configuration and guidance triggers for deletions and renames 
     ["AGENTS.md", false, false, true],
     ["CLAUDE.md", false, false, true],
     [".github/copilot-instructions.md", false, false, true],
+    ["workflow/manifest.json", false, false, true],
     ["workflow/skills/gone/SKILL.md", false, false, true],
     ["workflow/setup/gone.md", false, false, true],
     ["workflow/evaluation/footguns.md", false, false, true],

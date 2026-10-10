@@ -6,9 +6,9 @@
  * Agent-written reports are non-blocking: malformed files become warnings while valid history stays visible.
  * Finding ids are attached at load time so users can compare runs without trusting agent-written ids.
  */
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { readProjectTextFile } from "../project-file.js";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { AgentId } from "../types.js";
 import type {
   QualityMode,
@@ -336,61 +336,9 @@ export function loadQualityHistory(projectPath: string): {
     const parsedName = parseHistoryFilename(filename);
     // JSON files with non-history names are ignored so the table stays well-formed.
     if (!parsedName) continue;
-    const fullPath = join(dir, filename);
-    let raw: unknown;
-    try {
-      raw = JSON.parse(
-        readProjectTextFile(projectPath, fullPath, 2 * 1024 * 1024),
-      );
-    } catch (error) {
-      // A hand-edited JSON file or a report removed during loading produces a warning while other saved runs remain visible.
-      warnings.push(
-        `Skipping malformed quality history file ${filename}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      continue;
-    }
-    const parsedReport = parseQualityReport(raw, {
-      requireCurrentFields: false,
-    });
-    // Schema-invalid reports warn but do not hide other history rows.
-    if (!parsedReport.ok) {
-      warnings.push(
-        `Skipping malformed quality history file ${filename}: ${parsedReport.error}`,
-      );
-      continue;
-    }
-    if (parsedReport.report.agent !== parsedName.agent) {
-      warnings.push(
-        `Skipping malformed quality history file ${filename}: report agent does not match filename agent`,
-      );
-      continue;
-    }
-    const withIds = attachFindingIds(parsedReport.report);
-    // Reports without stable finding ids cannot participate in history/diff views.
-    if (!withIds.ok) {
-      warnings.push(
-        `Skipping malformed quality history file ${filename}: ${withIds.error}`,
-      );
-      continue;
-    }
-
-    entries.push({
-      id: filename.replace(/\.json$/, ""),
-      path: fullPath,
-      date: parsedName.date,
-      time: parsedName.time,
-      agent: parsedName.agent,
-      randomId: parsedName.randomId,
-      report: withIds.report,
-      concernCounts: countQualityConcerns(withIds.report),
-      fixRecords: describeQualityFixes(
-        projectPath,
-        withIds.report,
-        filename.replace(/\.json$/, ""),
-      ),
-    });
+    const parsed = tryParseHistoryFile(projectPath, dir, filename, parsedName);
+    if (parsed.warning) warnings.push(parsed.warning);
+    if (parsed.entry) entries.push(parsed.entry);
   }
 
   entries.sort(compareEntriesDesc);
@@ -492,6 +440,20 @@ function tryParseHistoryFile(
     return {
       entry: null,
       warning: `Skipping malformed quality history file ${filename}: report agent does not match filename agent`,
+    };
+  }
+  let hasProjectOwnership = false;
+  try {
+    hasProjectOwnership =
+      realpathSync(resolve(parsedReport.report.project_path)) ===
+      realpathSync(resolve(projectPath));
+  } catch {
+    // Missing prior roots cannot establish ownership after a report or project moves.
+  }
+  if (!hasProjectOwnership) {
+    return {
+      entry: null,
+      warning: `Skipping quality history file ${filename}: report project does not match the selected project. Review report.project_path before importing or relocating history.`,
     };
   }
   const withIds = attachFindingIds(parsedReport.report);

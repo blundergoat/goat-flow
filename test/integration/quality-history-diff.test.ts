@@ -59,6 +59,17 @@ const FIXTURE_DIR = resolve(
 );
 const disposables: string[] = [];
 
+/** Bind retained fixture scores and findings to the disposable project that owns this history. */
+function historyFixture(
+  projectPath: string,
+  id: string,
+): Record<string, unknown> {
+  const report = JSON.parse(
+    readFileSync(join(FIXTURE_DIR, `${id}.json`), "utf8"),
+  ) as Record<string, unknown>;
+  return { ...report, project_path: projectPath };
+}
+
 /** Hash retained fixture bytes exactly as a report author does for evidence references. */
 function digest(text: string | Buffer): string {
   return createHash("sha256").update(text).digest("hex");
@@ -760,9 +771,7 @@ describe("quality history and diff CLI", () => {
       "2026-04-29-1100-claude-ccccc",
     ];
     for (const [index, id] of ids.entries()) {
-      const report = JSON.parse(
-        readFileSync(join(FIXTURE_DIR, `${id}.json`), "utf8"),
-      );
+      const report = historyFixture(root, id);
       if (index === 1) report.rubric_version = "1.17.0";
       if (index === 2)
         report.rubric_version = getQualityRubricId("agent-setup");
@@ -831,7 +840,7 @@ describe("quality history and diff CLI", () => {
     for (const id of fixtures) {
       writeFileSync(
         join(root, ".goat-flow", "logs", "quality", `${id}.json`),
-        readFileSync(join(FIXTURE_DIR, `${id}.json`), "utf-8"),
+        JSON.stringify(historyFixture(root, id)),
         "utf-8",
       );
     }
@@ -851,12 +860,7 @@ describe("quality history and diff CLI", () => {
     );
     // Seed a codex-agent entry by cloning the latest claude fixture so history
     // filtering has cross-agent data to discriminate.
-    const codexSource = JSON.parse(
-      readFileSync(
-        join(FIXTURE_DIR, "2026-04-29-1100-claude-ccccc.json"),
-        "utf-8",
-      ),
-    );
+    const codexSource = historyFixture(root, "2026-04-29-1100-claude-ccccc");
     writeFileSync(
       join(
         root,
@@ -976,18 +980,8 @@ describe("quality history and diff CLI", () => {
     const root = makeTempProject();
     // Fixture uses two mode variants with matching timestamps so implicit diff
     // selection must reject cross-mode comparisons instead of pairing by date.
-    const first = JSON.parse(
-      readFileSync(
-        join(FIXTURE_DIR, "2026-04-01-0900-claude-aaaaa.json"),
-        "utf-8",
-      ),
-    );
-    const second = JSON.parse(
-      readFileSync(
-        join(FIXTURE_DIR, "2026-04-15-1000-claude-bbbbb.json"),
-        "utf-8",
-      ),
-    );
+    const first = historyFixture(root, "2026-04-01-0900-claude-aaaaa");
+    const second = historyFixture(root, "2026-04-15-1000-claude-bbbbb");
     writeFileSync(
       join(
         root,

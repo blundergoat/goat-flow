@@ -45,8 +45,8 @@ export function isLegacyQualityRubric(
 /**
  * Decide whether two saved reports score the same target, so `quality history`, `quality diff` and the dashboard compare only like runs.
  *
- * The project path is not compared: `quality save` admits only reports whose path resolves to this checkout, so another spelling is the same
- * project opened through a symlink or after a move.
+ * The project path is not compared here: saving and loading history require it to resolve to the selected project.
+ * Symlink aliases remain equivalent; history from an old project location needs its ownership reconciled before loading.
  *
  * @param olderReport - previous report; its stored rubric and scope are compared unchanged
  * @param newerReport - subsequent report; a scope omitted by a legacy report matches only another omitted scope

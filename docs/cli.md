@@ -139,6 +139,8 @@ The status is `static-pass` when all selected skills are statically eligible and
 
 List saved quality reports and setup/system deltas against the nearest older run for the same agent and mode. Deltas are null across rubric or scope boundaries; package-semver and missing rubric versions share one legacy segment per mode. By default the text view shows the 20 most recent runs; `--all` lifts that limit.
 
+History readers require the report's agent to match its filename and its `project_path` to resolve to the selected project. Symlink aliases are accepted. Foreign or unresolvable project paths produce a warning and skip that report while valid reports remain usable. After moving a project, review and reconcile its saved report paths before loading the old history.
+
 History and diff also show rerun sample size, median, minimum, maximum and range for each score, out of 100. Statistics use the full matching history before the display limit. Controlled groups require the same agent, mode, rubric, scope, unchanged assessed bytes, model/tool identity, prompt/settings fingerprints and recorded fixed-input protocol. Historical reports without assessment identity form separate observational groups, also split by scope. Singleton groups and incomplete new identities show `no comparable reruns`. These descriptive statistics do not establish significance or a universal noise threshold. History JSON adds `repeat_spread` to each delta; diff JSON adds `repeatSpread` for both reports.
 
 ```bash

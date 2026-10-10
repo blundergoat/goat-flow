@@ -7,7 +7,7 @@
  */
 import { createHash } from "node:crypto";
 import {
-  closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync,
+  closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -15,6 +15,7 @@ import { StringDecoder } from "node:string_decoder";
 const VERIFIED_CODEX_STOP_MODE = "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
 const STOP_INPUT_LIMIT_BYTES = 1_048_576; // Cap: accepts a native Stop payload, including any long final message it carries, without an unbounded wait or buffer.
 const STOP_RECOVERY_FAILURE_CODE_LIMIT = 64; // Cap: leaves room for the recovery explanation inside the user's provider reply.
+const STOP_RECOVERY_PUBLICATION_WAIT_MS = 250; // Cap: lets a concurrent initial writer finish without an unbounded Stop wait.
 const STOP_RECOVERY_RECORD_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // Cap: no Stop cycle lasts a week, so older sibling records are stale.
 
 /** Validate the native Stop identity once, before a missing scanner or broken adapter can bypass recovery.
@@ -180,12 +181,32 @@ function openStopRecoveryAllowance(stopContext, statePath) {
  * @returns {boolean} True for a private, complete matching record; false leaves state unavailable.
  */
 function stopRecoveryRecordIsSafe(stateDescriptor, ownerId, cycleKey) {
-  const stateShape = fstatSync(stateDescriptor);
-  // A hard link, foreign owner, shared mode or oversized record cannot authorize release of the user's turn.
-  if (!stateShape.isFile() || stateShape.nlink !== 1 || stateShape.size > 512 ||
-      (ownerId !== null && (stateShape.uid !== ownerId || (stateShape.mode & 0o777) !== 0o600))) return false;
-  const record = JSON.parse(readFileSync(stateDescriptor, "utf8"));
-  return record.version === 1 && record.cycleKey === cycleKey && record.retrySpent === true &&
+  const publicationDeadline = Date.now() + STOP_RECOVERY_PUBLICATION_WAIT_MS;
+  const waitSignal = new Int32Array(new SharedArrayBuffer(4));
+  const bytes = Buffer.alloc(513);
+  for (;;) {
+    const stateShape = fstatSync(stateDescriptor);
+    // A hard link, foreign owner, shared mode or oversized record cannot authorize release of the user's turn.
+    if (!stateShape.isFile() || stateShape.nlink !== 1 || stateShape.size > 512 ||
+        (ownerId !== null && (stateShape.uid !== ownerId || (stateShape.mode & 0o777) !== 0o600))) return false;
+    let record;
+    try {
+      // Read from the start again so partial JSON cannot advance the retained descriptor past the completed record.
+      const byteCount = readSync(stateDescriptor, bytes, 0, bytes.length, 0);
+      record = JSON.parse(bytes.subarray(0, byteCount).toString("utf8"));
+    } catch {
+      // A concurrent creator may have opened the record before writing; persistent corruption still stays unavailable.
+      if (Date.now() >= publicationDeadline) return false;
+      Atomics.wait(waitSignal, 0, 0, 10);
+      continue;
+    }
+    return stopRecoveryRecordMatchesTurn(record, cycleKey);
+  }
+}
+
+/** Require the complete saved allowance for this exact turn; a different or malformed record cannot prove exhaustion. */
+function stopRecoveryRecordMatchesTurn(record, cycleKey) {
+  return record !== null && record.version === 1 && record.cycleKey === cycleKey && record.retrySpent === true &&
     typeof record.failureKey === "string" && /^[a-f0-9]{64}$/u.test(record.failureKey) && Object.keys(record).length === 4;
 }
 

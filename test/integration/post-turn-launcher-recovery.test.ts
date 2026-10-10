@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import {
   appendBoundedHookOutput,
@@ -515,17 +516,95 @@ describe("continuation recovery", () => {
       assert.equal(readdirSync(projectRoot).includes("scanner-ran"), false);
     }));
 
+  it(
+    "waits for concurrent recovery record publication before classifying retained state",
+    { timeout: 5000 },
+    async (t) => {
+      const projectRoot = mkdtempSync(join(tmpdir(), "goat-stop-publication-"));
+      t.after(() => rmSync(projectRoot, { recursive: true, force: true }));
+      mkdirSync(join(projectRoot, ".goat-flow/scratchpad"), {
+        recursive: true,
+        mode: 0o700,
+      });
+      const cycleKey = "a".repeat(64);
+      const statePath = join(
+        projectRoot,
+        ".goat-flow/scratchpad",
+        `post-turn-launcher-recovery-v1-${cycleKey}.state`,
+      );
+      const record = JSON.stringify({
+        version: 1,
+        cycleKey,
+        failureKey: "b".repeat(64),
+        retrySpent: true,
+      });
+      const scan = scanResult("unavailable");
+      const unavailable = {
+        ...scan,
+        execution: { ...scan.execution, failureClass: "infrastructure" },
+      };
+      for (const partial of ["", '{"version":']) {
+        writeFileSync(statePath, partial, { mode: 0o600 });
+        const worker = new Worker(
+          `
+        const { parentPort, workerData } = require('node:worker_threads');
+        const fs = require('node:fs');
+        const originalRead = fs.readSync;
+        let notified = false;
+        fs.readSync = (...args) => {
+          const count = originalRead(...args);
+          if (!notified) { notified = true; parentPort.postMessage('reading'); }
+          return count;
+        };
+        require('node:module').syncBuiltinESMExports();
+        import(workerData.module).then(({ applyManagedStopRecovery }) => {
+          parentPort.postMessage(applyManagedStopRecovery(workerData.result, {
+            state: 'valid', projectRoot: workerData.projectRoot, cycleKey: workerData.cycleKey, isContinuation: false,
+          }));
+          parentPort.close();
+        });
+      `,
+          {
+            eval: true,
+            workerData: {
+              module: pathToFileURL(
+                resolve("workflow/hooks/hook-launch-runtime.mjs"),
+              ).href,
+              projectRoot,
+              cycleKey,
+              result: unavailable,
+            },
+          },
+        );
+        t.after(() => worker.terminate());
+        const result = await new Promise<{
+          execution: { recovery: { state: string } };
+        }>((resolveResult, reject) => {
+          worker.on("message", (message) => {
+            if (message === "reading") writeFileSync(statePath, record);
+            else resolveResult(message);
+          });
+          worker.once("error", reject);
+        });
+        assert.equal(result.execution.recovery.state, "exhausted", partial);
+        assert.equal(readFileSync(statePath, "utf8"), record);
+      }
+    },
+  );
+
   it("warns on corrupt or publicly readable state without overwriting it", () =>
     withProject((projectRoot) => {
       writeScanner(projectRoot, "exit 3");
       assertBlocked(launchStop(projectRoot, "turn-one"));
       const [statePath] = recoveryPaths(projectRoot);
-      writeFileSync(statePath, "corrupt");
-      assertWarning(
-        launchStop(projectRoot, "turn-one", true),
-        "state-unavailable",
-      );
-      assert.equal(readFileSync(statePath, "utf8"), "corrupt");
+      for (const bytes of ["corrupt", "", '{"version":']) {
+        writeFileSync(statePath, bytes);
+        assertWarning(
+          launchStop(projectRoot, "turn-one", true),
+          "state-unavailable",
+        );
+        assert.equal(readFileSync(statePath, "utf8"), bytes);
+      }
       chmodSync(statePath, 0o644);
       assertWarning(
         launchStop(projectRoot, "turn-one", true),

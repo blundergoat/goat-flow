@@ -1,5 +1,5 @@
 /** Capture tool output in memory with a live per-stream limit and a deadline. */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 /**
  * Spawn literal tool arguments and return bounded raw streams and completion metadata.
@@ -14,6 +14,7 @@ export function captureCommand(argv, { cwd, maxBuffer, timeout = 300_000 }) {
     let error;
     const child = spawn(argv[0], argv.slice(1), {
       cwd,
+      detached: process.platform !== "win32",
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -21,7 +22,21 @@ export function captureCommand(argv, { cwd, maxBuffer, timeout = 300_000 }) {
     const stop = (code, message) => {
       if (error) return;
       error = Object.assign(new Error(message), { code });
-      child.kill("SIGKILL");
+      try {
+        if (child.pid && process.platform === "win32") {
+          const stopped = spawnSync(
+            "taskkill.exe",
+            ["/PID", String(child.pid), "/T", "/F"],
+            { windowsHide: true, stdio: "ignore", timeout: 1000 },
+          );
+          if (stopped.error || stopped.status !== 0) child.kill("SIGKILL");
+        } else if (child.pid) {
+          process.kill(-child.pid, "SIGKILL");
+        }
+      } catch {
+        // The process may exit between the capture failure and tree termination.
+        child.kill("SIGKILL");
+      }
       child.stdout.destroy();
       child.stderr.destroy();
     };
