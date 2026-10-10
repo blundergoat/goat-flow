@@ -3,7 +3,6 @@
 **Status:** Implemented
 **Date:** 2026-09-20
 **Updated:** 2026-09-20
-**Ticket/Context:** `.goat-flow/plans/forecast-accuracy/M07-narrow-the-default-forecast-range.md` and that plan's `EXECUTION.md`, "Replan 2026-09-19" (local working state, not committed evidence)
 
 ## Context
 

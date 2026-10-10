@@ -16,7 +16,7 @@ last_reviewed: 2026-08-15
 
 **Root cause:** The browser-side dashboard reader dropped `check.type` when decoding `/api/audit` payloads. Later, the opposite bug appeared in the view layer: filtering metrics out of dashboard percentages hid score-only verification gaps and restored misleading 100% headlines.
 
-**Recurrence update (2026-07-12):** M30's first GREEN slice made expanded Home concern rows and the Quality baseline show `Evidence limit`, but the collapsed Home agent cards still said `All checks passing`. The focused helper tests had not asserted that primary headline. Fresh browser state exposed the contradiction; a new RED assertion now requires `recommendationSummary` to count concern limits before it can emit the clean-state copy. Evidence anchors: `src/dashboard/views/home.html` (search: `evidenceLimitCount`), `test/unit/dashboard-home.test.ts` (search: `2 evidence limits`).
+**Recurrence update (2026-07-12):** The first GREEN slice made expanded Home concern rows and the Quality baseline show `Evidence limit`, but the collapsed Home agent cards still said `All checks passing`. The focused helper tests had not asserted that primary headline. Fresh browser state exposed the contradiction; a new RED assertion now requires `recommendationSummary` to count concern limits before it can emit the clean-state copy. Evidence anchors: `src/dashboard/views/home.html` (search: `evidenceLimitCount`), `test/unit/dashboard-home.test.ts` (search: `2 evidence limits`).
 
 ---
 
@@ -27,7 +27,7 @@ last_reviewed: 2026-08-15
 
 **Prevention:** When testing browser classic-script helpers through `node:vm`, normalize VM-produced arrays/objects with host constructors before strict structural assertions, or compare scalar fields. Evidence anchor: `test/unit/dashboard-custom-prompts.test.ts` (search: `Array.from(helpers.dashboardValidateCustomPromptDraft(ctx))`).
 
-**What happened:** M03 added a VM-loaded browser helper test for `dashboard-custom-prompts.ts`. The first focused run failed even though the expected and actual arrays had the same printed contents, because `assert.deepEqual` compared an array created inside the VM realm against a host-realm array literal.
+**What happened:** The change added a VM-loaded browser helper test for `dashboard-custom-prompts.ts`. The first focused run failed even though the expected and actual arrays had the same printed contents, because `assert.deepEqual` compared an array created inside the VM realm against a host-realm array literal.
 
 **Recurrence 2026-05-02:**  custom prompt form tests repeated this trap for validation arrays, surface tag arrays, and flag group arrays returned from the VM context. On 2026-05-16, the manifest-backed runner hint test hit the same issue for `dashboardValidateCustomPromptDraft(ctx)`. On 2026-05-20, the dashboard readers enforcement-summary regression failed with "Values have same structure but are not reference-equal" because `readDashboardReport` returned a VM-realm plain object. The helper behavior was correct; the assertions needed `Array.from(...)`, host-realm normalization, or scalar field comparisons.
 

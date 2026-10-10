@@ -2,7 +2,6 @@
 
 **Status:** Accepted
 **Date:** 2026-09-02
-**Ticket/Context:** `.goat-flow/plans/permissions-rebalance/M01-rebalance-secret-denies.md` (local working state, not committed evidence)
 **Updated:** 2026-10-08 - add the exact `credentials.json` exception for Claude file tools; retain paired home/project stores and reviewed reconciliation for absent rules.
 
 ## Context
@@ -26,7 +25,7 @@ Upgrades carry the change through narrow, printed migrations, never wholesale re
 
 The earlier home-only migration removed project coverage. The September 25 review reproduced that loss through the installer; `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`) now checks both locations. The owner chose paired protection because home-only and project-only rules each leave a credential copy reachable through Read or Edit.
 
-Existing Claude settings that lack the exact `credentials.json` pair keep it absent during normal installation. The reviewed setup reconcile step may add it while preserving user allow/ask choices and unrelated rules. Retirement advice for `credentials*` must name the exact pair as a reviewed replacement, never add it automatically; that message is scheduled in M11 of the local `1.18.0-part2` plan. The preservation assertion is in `test/integration/setup-install.test.ts` (search: `new exact credential rules require reviewed reconciliation`).
+Existing Claude settings that lack the exact `credentials.json` pair keep it absent during normal installation. The reviewed setup reconcile step may add it while preserving user allow/ask choices and unrelated rules. Retirement advice for `credentials*` must name the exact pair as a reviewed replacement, never add it automatically. The preservation assertion is in `test/integration/setup-install.test.ts` (search: `new exact credential rules require reviewed reconciliation`).
 
 ## Failure Mode Comparison
 

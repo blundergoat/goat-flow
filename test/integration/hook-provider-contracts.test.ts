@@ -138,7 +138,6 @@ function documentedProviderRecord(): HookProviderEvidenceRecord & {
     documentation: {
       sourceUrl: "https://developers.openai.com/codex/hooks",
       checkedAt: "2026-08-09T00:00:00.000Z",
-      expiresAt: "2026-09-08T00:00:00.000Z",
       isSupportDeclared: true,
     },
   };
@@ -146,7 +145,7 @@ function documentedProviderRecord(): HookProviderEvidenceRecord & {
 
 /**
  * Build one fresh trusted capture, with named overrides for the user state under test.
- * Use when a fixture needs to isolate expiry, trust, or result-delivery behavior.
+ * Use when a fixture needs to isolate observation dates, trust, or result delivery.
  *
  * @param captureOverrides - changed capture fields; empty means a fresh delivered result
  * @returns complete capture evidence; no field is empty in the default user-success path
@@ -162,7 +161,6 @@ function freshProviderCapture(
     configurationSource: "project",
     trustState: "trusted",
     capturedAt: "2026-08-09T00:00:00.000Z",
-    expiresAt: "2026-09-08T00:00:00.000Z",
     supportOutcome: "supported",
     observedPayloadFields: ["hook_event_name", "last_assistant_message"],
     responseChannels: DELIVERED_RESPONSE_CHANNELS,
@@ -214,7 +212,7 @@ function assertCurrentCodexStopEvidence(
   const stopParagraph = stopParagraphs[0]!;
   assert.match(stopParagraph, /Codex CLI 0\.154\.0/iu, source);
   assert.match(stopParagraph, /registered Stop/iu, source);
-  assert.match(stopParagraph, /2026-10-17/iu, source);
+  assert.doesNotMatch(stopParagraph, /expires?|expiring/iu, source);
   assert.match(stopParagraph, /scenario-unverified/iu, source);
   assert.doesNotMatch(
     documentation,
@@ -244,7 +242,7 @@ function assertCurrentCodexDenyEvidence(
   );
   assert.match(denyParagraph, /PreToolUse/iu, source);
   assert.match(denyParagraph, /both deny hooks/iu, source);
-  assert.match(denyParagraph, /2026-10-21T00:00:00Z/iu, source);
+  assert.doesNotMatch(denyParagraph, /expires?|expiring/iu, source);
   assert.match(denyParagraph, /scenario-unverified/iu, source);
 }
 
@@ -261,26 +259,13 @@ describe("hook provider contracts", () => {
       "utf8",
     );
     assert.equal(stopEvidence?.effectiveSupportGate, "scenario-unverified");
-    assert.equal(stopEvidence?.expiresAt, "2026-10-17T00:00:00Z");
     // Both policies delivered denials in the same live session; neither may skip its separate local scenario proof.
     for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
       const denyEvidence = getHookSpec(hookId)?.providerEvidence.codex;
       assert.ok(denyEvidence, hookId);
-      assert.equal(denyEvidence.expiresAt, "2026-10-21T00:00:00Z", hookId);
       assert.equal(
-        currentHookProviderSupportGate(
-          denyEvidence,
-          new Date("2026-09-22T00:00:00Z"),
-        ),
+        currentHookProviderSupportGate(denyEvidence),
         "scenario-unverified",
-        hookId,
-      );
-      assert.equal(
-        currentHookProviderSupportGate(
-          denyEvidence,
-          new Date("2026-10-21T00:00:00.001Z"),
-        ),
-        "provider-capture-stale",
         hookId,
       );
     }
@@ -324,7 +309,7 @@ describe("hook provider contracts", () => {
     );
     assert.match(
       hookReadme,
-      /To renew a dated Codex provider row[\s\S]+hooks verify[\s\S]+cannot renew live delivery by itself/iu,
+      /To revalidate a Codex provider row[\s\S]+hooks verify[\s\S]+cannot establish live delivery by itself/iu,
     );
   });
 
@@ -347,19 +332,44 @@ describe("hook provider contracts", () => {
     );
   });
 
-  // Expired source and runtime evidence tell the user to re-check the provider.
-  it("marks dated documentation and capture stale", () => {
+  it("keeps documentation and capture valid as time advances", () => {
     const providerRecord = documentedProviderRecord();
-    providerRecord.documentation = {
-      ...providerRecord.documentation,
+    providerRecord.capture = freshProviderCapture();
+    // Older records may carry deadlines; these cannot invalidate unchanged evidence.
+    Object.assign(providerRecord.documentation, {
       expiresAt: "2026-08-08T00:00:00.000Z",
-    };
-    providerRecord.capture = freshProviderCapture({
+    });
+    Object.assign(providerRecord.capture, {
       expiresAt: "2026-08-08T00:00:00.000Z",
     });
 
+    for (const currentDate of [
+      SUPPORT_CHECK_DATE,
+      new Date("2036-08-09T12:00:00.000Z"),
+    ]) {
+      assert.deepEqual(
+        assessHookProviderEvidence(providerRecord, currentDate),
+        { documentation: "fresh-supported", capture: "fresh-supported" },
+        currentDate.toISOString(),
+      );
+    }
+  });
+
+  it("rejects invalid or future observation dates without imposing an age limit", () => {
+    for (const observedAt of ["", "not-a-date", "2026-08-10T00:00:00Z"]) {
+      const providerRecord = documentedProviderRecord();
+      providerRecord.documentation.checkedAt = observedAt;
+      providerRecord.capture = freshProviderCapture({ capturedAt: observedAt });
+      assert.deepEqual(
+        assessHookProviderEvidence(providerRecord, SUPPORT_CHECK_DATE),
+        { documentation: "stale", capture: "stale" },
+        observedAt,
+      );
+    }
+    const providerRecord = documentedProviderRecord();
+    providerRecord.capture = freshProviderCapture();
     assert.deepEqual(
-      assessHookProviderEvidence(providerRecord, SUPPORT_CHECK_DATE),
+      assessHookProviderEvidence(providerRecord, new Date(Number.NaN)),
       { documentation: "stale", capture: "stale" },
     );
   });

@@ -15,8 +15,6 @@ export const HOOK_RESULT_ENVELOPE_LIMIT_BYTES = 65_536; // Cap: retains scan fin
 const HOOK_STDERR_RETENTION_LIMIT_BYTES = 4096; // Cap: retains useful diagnostics without a second copy of the scan.
 const HOOK_STDERR_FLOOD_LIMIT_BYTES = 1_048_576; // Cap: ordinary excess is drained; a flood ends the child.
 const STOP_RECOVERY_FAILURE_CODE_LIMIT = 64; // Cap: leaves room for the recovery explanation inside the user's provider reply.
-/** Cap: the 30-day revalidation window ADR-052 documents for documentation and capture records. */
-const HOOK_EVIDENCE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Provider-neutral lifecycle points shown consistently across hook screens. */
 export type HookLifecycleEvent = "pre-tool" | "post-tool" | "turn-stop";
@@ -25,7 +23,6 @@ export type HookLifecycleEvent = "pre-tool" | "post-tool" | "turn-stop";
 export interface HookProviderDocumentationEvidence {
   sourceUrl: string;
   checkedAt: string;
-  expiresAt: string;
   isSupportDeclared: boolean;
 }
 
@@ -42,7 +39,6 @@ export interface HookProviderCaptureEvidence {
   configurationSource: "managed" | "user" | "project" | "plugin" | "session";
   trustState: "trusted" | "untrusted" | "unknown";
   capturedAt: string;
-  expiresAt: string;
   supportOutcome: "supported" | "unsupported" | "inconclusive";
   observedPayloadFields: string[];
   responseChannels: HookProviderResponseChannel[];
@@ -85,44 +81,27 @@ export interface HookProviderEvidenceAssessment {
 }
 
 /**
- * Decide whether dated evidence can still back a support label shown to users.
+ * Reject malformed or future observations before they back a support label.
  * Use before documentation or capture advances a hook toward effective coverage.
  *
- * Enforce both the declared expiry and ADR-052's observation window so an author cannot keep a stale support badge fresh.
- *
  * @param observedAt - ISO date the record was checked or captured; empty or invalid text is stale
- * @param expiresAt - ISO expiry from the evidence record; empty or invalid text means users see stale evidence
  * @param currentDate - time of the support check; an invalid date cannot establish fresh evidence
- * @returns `true` when the record is expired, too old, or invalid, so support remains unverified
+ * @returns `true` for invalid or not-yet-observed evidence; elapsed time never invalidates an observation
  */
-function hookEvidenceHasExpired(
+function hookEvidenceObservationIsInvalid(
   observedAt: string,
-  expiresAt: string,
   currentDate: Date,
 ): boolean {
-  const expiryMilliseconds = Date.parse(expiresAt);
   const observedMilliseconds = Date.parse(observedAt);
   const currentMilliseconds = currentDate.getTime();
 
   // Invalid dates cannot justify a fresh support badge for the user.
-  if (
-    Number.isNaN(expiryMilliseconds) ||
-    Number.isNaN(observedMilliseconds) ||
-    Number.isNaN(currentMilliseconds)
-  ) {
+  if (Number.isNaN(observedMilliseconds) || Number.isNaN(currentMilliseconds)) {
     return true;
   }
 
   // Evidence recorded in the future cannot describe an observation the user can trust.
-  if (observedMilliseconds > currentMilliseconds) return true;
-
-  // The documented window caps the author's expiry so no record outlives revalidation.
-  if (currentMilliseconds - observedMilliseconds > HOOK_EVIDENCE_MAX_AGE_MS) {
-    return true;
-  }
-
-  // Evidence remains fresh through its expiry instant, then asks for a new check.
-  return expiryMilliseconds < currentMilliseconds;
+  return observedMilliseconds > currentMilliseconds;
 }
 
 /**
@@ -140,14 +119,8 @@ function classifyProviderDocumentation(
   // No official record means the UI can only show that support is unverified.
   if (!documentation) return "absent";
 
-  // Expired documentation prompts re-checking instead of preserving a timeless claim.
-  if (
-    hookEvidenceHasExpired(
-      documentation.checkedAt,
-      documentation.expiresAt,
-      currentDate,
-    )
-  ) {
+  // Invalid or future observations cannot establish documented support.
+  if (hookEvidenceObservationIsInvalid(documentation.checkedAt, currentDate)) {
     return "stale";
   }
 
@@ -159,7 +132,7 @@ function classifyProviderDocumentation(
 }
 
 /**
- * Classify live capture while keeping trust, age, and delivery failures visible.
+ * Classify live capture while keeping trust, observation, and delivery failures visible.
  * Use before setup or audit treats a provider event as live-supported.
  *
  * @param capture - exact provider capture; `undefined` means no runtime proof exists for this combination
@@ -176,10 +149,8 @@ function classifyProviderCapture(
   // Unreviewed checkout or provider config cannot establish trusted hook behavior.
   if (capture.trustState !== "trusted") return "untrusted";
 
-  // An expired provider/version observation asks the user to re-run live verification.
-  if (
-    hookEvidenceHasExpired(capture.capturedAt, capture.expiresAt, currentDate)
-  ) {
+  // A malformed or future capture cannot establish an observed provider result.
+  if (hookEvidenceObservationIsInvalid(capture.capturedAt, currentDate)) {
     return "stale";
   }
 
@@ -203,7 +174,7 @@ function classifyProviderCapture(
  * Use when a user opens setup, audit, or hook status after provider metadata changes.
  *
  * @param evidenceRecord - versioned provider record; missing optional evidence keeps that layer `absent`
- * @param currentDate - time used for expiry; invalid dates make present evidence stale
+ * @param currentDate - time used to reject future observations; invalid dates make present evidence stale
  * @returns separate documentation and capture states; neither field is empty
  */
 export function assessHookProviderEvidence(
@@ -269,7 +240,7 @@ function classifyProviderEvidenceState(
     return { status: "provider-undocumented", severity: "warning" };
   }
 
-  // Old provider documentation asks for a source re-check before setup proceeds.
+  // Invalidated provider documentation asks for a source re-check before setup proceeds.
   if (stateFacts.providerDocumentation === "stale") {
     return { status: "provider-documentation-stale", severity: "warning" };
   }
@@ -289,7 +260,7 @@ function classifyProviderEvidenceState(
     return { status: "provider-capture-absent", severity: "warning" };
   }
 
-  // An expired capture asks the user to re-verify the exact provider combination.
+  // Invalidated capture evidence asks the user to re-verify the exact provider combination.
   if (stateFacts.providerCapture === "stale") {
     return { status: "provider-capture-stale", severity: "warning" };
   }

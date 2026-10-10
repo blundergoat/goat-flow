@@ -17,10 +17,12 @@ GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `den
 
 | Agent | Runtime mechanism | Primary locations |
 | --- | --- | --- |
-| Claude Code | `PreToolUse` config entries invoking central hooks plus settings deny patterns | `.claude/settings.json`, `.goat-flow/hooks/` |
+| Claude Code | `PreToolUse` entries matching `Bash\|PowerShell` and invoking central hooks, plus settings deny patterns | `.claude/settings.json`, `.goat-flow/hooks/` |
 | Codex | `PreToolUse` config entries invoking central hooks plus config TOML permission profile | `.codex/hooks.json`, `.codex/config.toml`, `.goat-flow/hooks/` |
 | Copilot CLI | `preToolUse` hooks registered in `.github/hooks/hooks.json` and invoking central hooks | `.github/hooks/hooks.json`, `.goat-flow/hooks/` |
 | Antigravity | `PreToolUse` hooks registered in `.agents/hooks.json` and invoking central hooks | `.agents/hooks.json`, `.goat-flow/hooks/` |
+
+Enabled Claude Code deny hooks block native PowerShell tool requests and direct the agent to the Bash tool with Git Bash. To refresh existing Claude registrations, run `goat-flow hooks sync .` in the selected project and restart Claude Code.
 
 ## Verification
 

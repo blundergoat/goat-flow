@@ -2,7 +2,6 @@
 
 **Status:** Accepted
 **Date:** 2026-08-27
-**Ticket/Context:** M41, goat-flow 1.17.0 managed install-state work
 **Updated:** 2026-09-06 - accepted hook-only baseline publication under the existing schema and complete ADR-048 claims; full-install receipts remain exclusive to public install.
 
 ## Context

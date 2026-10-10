@@ -81,6 +81,6 @@ last_reviewed: 2026-09-05
 
 **Prevention:** Scope verification prompts and audit checks to goat-flow's own domain: list the `goat-*` directories, not every directory. Project-specific skills are not goat-flow's business.
 
-**What happened:** An M1 human testing gate prompt said to list all directories under the installed skills path and named the only ones allowed, which would report any project's own skills as violations.
+**What happened:** A human testing gate prompt said to list all directories under the installed skills path and named the only ones allowed, which would report any project's own skills as violations.
 
 **Root cause:** A check written against this repository's contents was phrased as a universal invariant.

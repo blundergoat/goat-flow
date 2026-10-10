@@ -114,4 +114,4 @@ last_reviewed: 2026-09-20
 
 **Original symptoms:** `stats --check` existence-checked only `` `file:line` ``, `` `file` (search: `needle`) ``, and `(search: "needle")`, so the `Evidence anchors:` convention used in 15 files as of 2026-06-01 bypassed the gate while lessons cited two deleted tests and a deleted milestone; a Codex quality run found them by hand.
 
-**Invariant:** Durable learning-loop evidence uses the `(search: "needle")` form when content identity matters, and never anchors to `.goat-flow/plans/**` milestone files, which are gitignored WIP.
+**Invariant:** Durable learning-loop evidence uses the `(search: "needle")` form when content identity matters, and never anchors to `.goat-flow/plans/**` milestone files, which are gitignored WIP. Identify incidents by their observed behaviour and date, with committed file and semantic anchors rather than local milestone identities.

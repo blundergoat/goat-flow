@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { HookManagedInstallationError } from "../../src/cli/server/hook-managed-installation.js";
 import { syncHookStates } from "../../src/cli/server/hook-registrar.js";
 import { readPolicyChoices } from "../../workflow/hooks/hook-policy-state.cjs";
@@ -35,7 +36,7 @@ function pendingPolicyUpgradeProject(): string {
   });
   writeFileSync(
     join(projectPath, ".goat-flow/config.yaml"),
-    "hooks: {deny-dangerous: {enabled: true}, deny-git-mutations: {enabled: false}}\n",
+    `version: "${AUDIT_VERSION}"\nhooks: {deny-dangerous: {enabled: true}, deny-git-mutations: {enabled: false}}\n`,
   );
   writeFileSync(
     join(projectPath, ".goat-flow/hooks/deny-dangerous.sh"),
@@ -413,7 +414,7 @@ describe("installer dependency preflight", () => {
     mkdirSync(join(root, ".goat-flow"));
     writeFileSync(
       join(root, ".goat-flow/config.yaml"),
-      "hooks: {deny-dangerous: {enabled: false}, deny-git-mutations: {enabled: false}}\n",
+      `version: "${AUDIT_VERSION}"\nhooks: {deny-dangerous: {enabled: false}, deny-git-mutations: {enabled: false}}\n`,
     );
     let previous: string | undefined;
     // Repeat setup to prove current provider config stays stable after its first completed install.

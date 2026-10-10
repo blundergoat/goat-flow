@@ -2,7 +2,6 @@
 
 **Status:** Implemented
 **Date:** 2026-09-20
-**Ticket/Context:** `.goat-flow/plans/forecast-accuracy/M09-decide-how-fast-plans-get-their-own-range.md` and `M10-give-fast-plans-their-own-range.md` (local working state, not committed evidence)
 
 ## Context
 

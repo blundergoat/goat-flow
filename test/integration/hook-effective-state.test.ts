@@ -314,8 +314,7 @@ describe("effective hook state", () => {
     );
   });
 
-  /** Each published Codex capture stays current through its deadline and expires immediately afterward. */
-  it("expires exact Codex deny, Gruff and Stop proof", () => {
+  it("keeps Codex deny, Gruff and Stop proof valid as time advances", (testContext) => {
     const denySpec = getHookSpec("deny-dangerous");
     const gruffSpec = getHookSpec("gruff-code-quality");
     const postTurnSpec = getHookSpec("post-turn-safety");
@@ -329,51 +328,26 @@ describe("effective hook state", () => {
     assert.ok(gruffCodexEvidence);
     assert.ok(postTurnCodexEvidence);
 
-    assert.equal(
-      currentHookProviderSupportGate(
+    testContext.mock.timers.enable({
+      apis: ["Date"],
+      now: new Date("2026-09-22T00:00:00Z"),
+    });
+    for (const now of ["2026-09-22T00:00:00Z", "2036-09-22T00:00:00Z"]) {
+      testContext.mock.timers.setTime(new Date(now).getTime());
+      for (const evidence of [
         denyCodexEvidence,
-        new Date("2026-10-21T00:00:00.000Z"),
-      ),
-      "scenario-unverified",
-    );
-    assert.equal(
-      currentHookProviderSupportGate(
-        denyCodexEvidence,
-        new Date("2026-10-21T00:00:00.001Z"),
-      ),
-      "provider-capture-stale",
-    );
-
-    assert.equal(
-      currentHookProviderSupportGate(
+        getHookSpec("deny-git-mutations")?.providerEvidence?.codex,
         gruffCodexEvidence,
-        new Date("2026-09-25T20:17:22.830Z"),
-      ),
-      "scenario-unverified",
-    );
-    assert.equal(
-      currentHookProviderSupportGate(
-        gruffCodexEvidence,
-        new Date("2026-09-25T20:17:22.831Z"),
-      ),
-      "provider-capture-stale",
-    );
-
-    assert.equal(postTurnCodexEvidence.expiresAt, "2026-10-17T00:00:00Z");
-    assert.equal(
-      currentHookProviderSupportGate(
         postTurnCodexEvidence,
-        new Date("2026-10-17T00:00:00.000Z"),
-      ),
-      "scenario-unverified",
-    );
-    assert.equal(
-      currentHookProviderSupportGate(
-        postTurnCodexEvidence,
-        new Date("2026-10-17T00:00:00.001Z"),
-      ),
-      "provider-capture-stale",
-    );
+      ]) {
+        assert.ok(evidence);
+        assert.equal(
+          currentHookProviderSupportGate(evidence),
+          "scenario-unverified",
+          `${evidence.identity} at ${now}`,
+        );
+      }
+    }
   });
 
   // A desired hook with no exact registration is not protected merely because the registry lists it.
@@ -992,10 +966,10 @@ describe("effective hook state", () => {
     "replays Codex deny scenarios through the Windows override",
     { skip: process.platform !== "win32" },
     (testContext) => {
-      // Keep replay proof independent of today's date, then cross the provider's expiry.
+      // Exercise the Windows command after the historical capture date, then advance the clock.
       testContext.mock.timers.enable({
         apis: ["Date"],
-        now: new Date("2026-10-21T00:00:00.000Z"),
+        now: new Date("2036-10-21T00:00:00.000Z"),
       });
       const projectPath = createCodexProject();
       syncHookStates(projectPath);
@@ -1017,10 +991,10 @@ describe("effective hook state", () => {
         codexHookState(projectPath, "deny-dangerous").effectiveState,
         { status: "effective", severity: "success" },
       );
-      testContext.mock.timers.tick(1);
+      testContext.mock.timers.tick(365 * 24 * 60 * 60 * 1000);
       assert.deepEqual(
         codexHookState(projectPath, "deny-dangerous").effectiveState,
-        { status: "provider-capture-stale", severity: "warning" },
+        { status: "effective", severity: "success" },
       );
     },
   );
@@ -1065,12 +1039,11 @@ describe("effective hook state", () => {
     );
   });
 
-  // Writes a merge-conflict file so the valid Stop probe has a real finding; a clock past the capture deadline keeps provider proof stale.
-  it("replays Codex Stop results without upgrading stale provider proof", (testContext) => {
-    // Local replay cannot renew a capture after its published deadline.
+  // Writes a merge-conflict file in a disposable Git project to verify Stop; elapsed time must not invalidate the separate provider capture.
+  it("replays Codex Stop results without expiring provider proof", (testContext) => {
     testContext.mock.timers.enable({
       apis: ["Date"],
-      now: new Date("2026-10-17T00:00:00.001Z"),
+      now: new Date("2036-10-17T00:00:00.001Z"),
     });
     const projectPath = createCodexProject();
     initializeDisposableGitProject(projectPath);
@@ -1083,6 +1056,10 @@ describe("effective hook state", () => {
     );
     syncHookStates(projectPath);
 
+    assert.equal(
+      codexHookState(projectPath, "post-turn-safety").effectiveState.status,
+      "scenario-unverified",
+    );
     const report = verifyManagedConfiguredHook({
       projectPath,
       agent: "codex",
@@ -1097,7 +1074,7 @@ describe("effective hook state", () => {
     );
     assert.deepEqual(
       codexHookState(projectPath, "post-turn-safety").effectiveState,
-      { status: "provider-capture-stale", severity: "warning" },
+      { status: "effective", severity: "success" },
     );
   });
 

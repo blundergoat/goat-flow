@@ -43,7 +43,7 @@ last_reviewed: 2026-10-09
 
 **Why it happens:** The project filesystem abstraction returns an empty array on missing or unreadable directories, so a `try/catch` around `listDir()` is not an existence check. `exists()` alone was also insufficient: when `.goat-flow/plans` or `.goat-flow/logs/sessions` was an ordinary file, `exists()` returned true and `listDir()` collapsed `ENOTDIR` to `[]`.
 
-**Evidence:** `src/cli/facts/fs.ts` (search: `swallows readdir errors as a cached [] fallback`); `src/cli/audit/harness/check-recovery.ts` (search: `if (!ctx.fs.isReadableDirectory(logsDir))`). Runtime probe 2026-05-05: `exists(".goat-flow/logs/sessions")` returned `false` while `listDir` returned `[]`. **Recurrence 2026-07-12 (M33):** `ReadonlyFS.isReadableDirectory` now shares the adapter's cached directory read, and `test/integration/audit-quality.test.ts` (search: `fails setup and recovery when required storage paths are files`) fails unusable paths while valid empty directories pass.
+**Evidence:** `src/cli/facts/fs.ts` (search: `swallows readdir errors as a cached [] fallback`); `src/cli/audit/harness/check-recovery.ts` (search: `if (!ctx.fs.isReadableDirectory(logsDir))`). Runtime probe 2026-05-05: `exists(".goat-flow/logs/sessions")` returned `false` while `listDir` returned `[]`. **Recurrence 2026-07-12:** `ReadonlyFS.isReadableDirectory` now shares the adapter's cached directory read, and `test/integration/audit-quality.test.ts` (search: `fails setup and recovery when required storage paths are files`) fails unusable paths while valid empty directories pass.
 
 ---
 
@@ -140,4 +140,4 @@ last_reviewed: 2026-10-09
 
 **Status:** resolved | **Created:** 2026-04-18 | **Resolved:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED
 
-**Resolution:** M05 defined the `CheckEvidence` schema and M11 back-filled it onto all 33 then-live checks. `BuildCheck` and `HarnessCheck` require `provenance`, `runAudit()` validates every record via `validateProvenance()`, per-check JSON carries the object, and CONTRIBUTING requires new checks to ship provenance.
+**Resolution:** The provenance rollout defined the `CheckEvidence` schema and back-filled it onto all 33 then-live checks. `BuildCheck` and `HarnessCheck` require `provenance`, `runAudit()` validates every record via `validateProvenance()`, per-check JSON carries the object, and CONTRIBUTING requires new checks to ship provenance.

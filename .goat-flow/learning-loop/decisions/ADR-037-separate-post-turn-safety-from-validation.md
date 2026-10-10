@@ -2,7 +2,9 @@
 
 **Status:** Accepted
 **Date:** 2026-06-12
-**Updated:** 2026-09-05 - condensed; Copilot wording aligned with ADR-052 (delivery unverified rather than unsupported) and reversibility updated for the shipped hook. Earlier amendments named the owner of timing and clarity reminders (2026-08-29) and absorbed now-removed ADR-015 (`stop-lint.sh`) and the ADR-038/ADR-039 plan-checkbox-guard pair (2026-08-15).
+**Updated:** 2026-09-05 - condensed; Copilot wording changed to delivery unverified rather than unsupported and reversibility updated for the shipped hook. Earlier amendments named the owner of timing and clarity reminders (2026-08-29) and absorbed now-removed ADR-015 (`stop-lint.sh`) and the ADR-038/ADR-039 plan-checkbox-guard pair (2026-08-15).
+
+**Updated:** 2026-10-10 - hook evidence guidance now points to the surviving architecture.
 
 ## Context
 
@@ -20,7 +22,7 @@ Ship one goat-flow post-turn hook: `post-turn-safety`.
 2. It must not run builds, tests, linters, typecheckers, or formatters, and must not print or feed audit evidence that says project validation passed.
 3. goat-flow does not ship a generated project-validation Stop hook. `post-turn-validate` and the `toolchain.post-turn-fast` profile were removed unreleased; do not recreate the script or a compatibility shim without a superseding ADR.
 4. Audit, dashboard, docs, and drift wording distinguish the safety guard from project verification. A project with only `post-turn-safety` has a universal safety guard, not validation evidence.
-5. Copilot documents an `agentStop` event, but its delivery is unverified under ADR-052, so no Copilot Stop registration ships and none is invented.
+5. Copilot documents an `agentStop` event, but its delivery is unverified under the architecture's hook provider contract, so no Copilot Stop registration ships and none is invented.
 6. Milestone timing and post-source clarity reminders are always-loaded ACT instruction obligations, not hook-enforced. The instruction files own the reminder; `goat-plan` owns timing-receipt mechanics and `goat-clarity` the bounded selector pass only once invoked. Neither restates the reminder, and no Stop hook enforces either. A future hook proposal needs observed bypass evidence plus a superseding ADR.
 
 ### Removed Stop hooks

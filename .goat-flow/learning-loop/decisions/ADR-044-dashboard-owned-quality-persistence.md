@@ -4,6 +4,8 @@
 **Date:** 2026-07-31
 **Updated:** 2026-09-05 - condensed; the 2026-08-03 amendment is folded in and a deleted local milestone reference is dropped.
 
+**Updated:** 2026-10-10 - removed the analogy to the deleted hook-trust decision; the persistence boundary remains described below.
+
 ## Context
 
 Dashboard-launched Claude reporting sessions must be mechanically prevented from editing tracked target files while still producing durable quality reports. The enforcement overlay from `src/cli/server/terminal-reporting-profile.ts` (search: `buildClaudeReportingSettings`) proved out for reads and file-tool writes. Measured probes on Claude Code 2.1.220 (2026-07-31) showed that no settings allow-rule form matches the multi-line quoted-heredoc `quality save` Bash invocation: exact rules, a mid-pattern wildcard, and the documented trailing `:*` prefix all failed while the probe's positive-control row executed. In-session Bash persistence and source-write denial cannot coexist through Claude settings rules alone. The kill criterion fired, and the human chose dashboard-owned persistence over read-only sessions, because per-agent `quality history` and `quality diff` must keep working for enforced Claude runs.
@@ -17,7 +19,7 @@ The enforced reporting session never persists the report; the dashboard server d
 3. The Claude overlay drops the dead saver and `--version` Bash allow rules, keeps the staging path writable through the logs allow, and denies agent edits to finalized `.goat-flow/logs/quality/*.json`.
 4. Unenforced runs (CLI-generated prompts executed manually) keep the bounded heredoc `quality save` path unchanged.
 
-Accepted residual risk: an unredacted draft exists briefly on gitignored disk before server-side redaction. The staging directory is created `0700`, drafts are processed on appearance, per-draft claims prevent duplicate persistence across server processes, stale owners fail closed, the path is never inside a tracked directory, and final reports keep `0600` exclusive-create semantics. An unclaimed incomplete draft may outlive one server process. Like ADR-052's heredoc boundary, this is a declared boundary, not a silent gap.
+Accepted residual risk: an unredacted draft exists briefly on gitignored disk before server-side redaction. The staging directory is created `0700`, drafts are processed on appearance, per-draft claims prevent duplicate persistence across server processes, stale owners fail closed, the path is never inside a tracked directory, and final reports keep `0600` exclusive-create semantics. An unclaimed incomplete draft may outlive one server process.
 
 ## Failure Mode Comparison
 

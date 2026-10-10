@@ -60,7 +60,7 @@ last_reviewed: 2026-09-05
 
 **Why it happens:** A full-repository analyzer silently depends on gitignored local state that the developer tree has and a clean checkout lacks.
 
-**Evidence:** Measured from a clean `git archive` on 2026-08-07: the ratchet emitted stable identity `75483f7900f8f4f6` before the build and passed after `npm run build` with 449 analysed files. Anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`) and `.github/workflows/ci.yml` (search: `Build package binary`). **Recurrence 2026-09-04:** M15's installer round-trip fixture copied the live checkout and inherited its gitignored managed-install receipt, so the disposable repo failed its first-install assumption at the admission guard; the fixture now excludes the install-state directory, per `test/integration/audit-drift.helpers.ts` (search: `localInstallStateDirectory`).
+**Evidence:** Measured from a clean `git archive` on 2026-08-07: the ratchet emitted stable identity `75483f7900f8f4f6` before the build and passed after `npm run build` with 449 analysed files. Anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`) and `.github/workflows/ci.yml` (search: `Build package binary`). **Recurrence 2026-09-04:** the installer round-trip fixture copied the live checkout and inherited its gitignored managed-install receipt, so the disposable repo failed its first-install assumption at the admission guard; the fixture now excludes the install-state directory, per `test/integration/audit-drift.helpers.ts` (search: `localInstallStateDirectory`).
 
 ## Footgun: Nested template literals can blind the gruff-ts block scanner to everything after them
 

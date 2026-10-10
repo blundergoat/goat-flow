@@ -238,7 +238,7 @@ workflow/                        = packaged template source copied into target p
 │   ├── agent-config/            = claude, codex, antigravity, copilot hook config templates
 │   └── vendor/                  = locked js-yaml and graphql parsers bundled for dependency-free installed hooks
 │
-└── evaluation/                  = quality-assessment prompt templates
+└── evaluation/                  = footgun, lesson, and pattern capture templates
 ```
 
 ## scripts/ -- Shell scripts

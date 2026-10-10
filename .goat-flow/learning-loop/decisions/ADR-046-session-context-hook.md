@@ -2,17 +2,17 @@
 
 **Status:** Proposed
 **Date:** 2026-08-23
-**Updated:** 2026-09-05 - status changed from Accepted to Proposed: nothing has shipped, no milestone owns the slice, and the 2026-08-23 captures expire under ADR-052 on 2026-09-22. The 2026-09-03 amendment had replaced a dead milestone owner with unplanned status.
+**Updated:** 2026-10-10 - calendar expiry removed from the evidence contract. Status remains Proposed, as set on 2026-09-05: nothing has shipped and no milestone owns the slice. The 2026-09-03 amendment had replaced a dead milestone owner with unplanned status.
 
 ## Context
 
 Agents start and resume without a compact pointer to the active plan or latest handoff. Step 0 recovers that state after deliberate reads, but nothing places bounded orientation in the first model request.
 
-M12 tested the installed providers with a fresh nonce returned as session context. Claude Code 2.1.240 delivered it for `startup`, `resume`, and `fork`. Codex CLI 0.149.0 delivered for `startup` and `resume`; `codex exec fork` made a distinct thread but classified its hook as `startup`. GitHub Copilot CLI 1.0.80 delivered for `new` and `resume`, but project `sessionStart` hooks cannot be source-filtered and interactive `startup` stayed uncaptured. Antigravity 1.1.15 documents no session-start event. The capture also reproduced a configuration interaction: Copilot combines `.github/hooks/*.json` with repository `.claude/settings.json`, so one fixture process ran both entries until the runner selected a provider explicitly (`.goat-flow/learning-loop/footguns/hooks.md`, search: `## Footgun: Copilot combines native and Claude project hook registrations`).
+A native capture tested the installed providers with a fresh nonce returned as session context. Claude Code 2.1.240 delivered it for `startup`, `resume`, and `fork`. Codex CLI 0.149.0 delivered for `startup` and `resume`; `codex exec fork` made a distinct thread but classified its hook as `startup`. GitHub Copilot CLI 1.0.80 delivered for `new` and `resume`, but project `sessionStart` hooks cannot be source-filtered and interactive `startup` stayed uncaptured. Antigravity 1.1.15 documents no session-start event. The capture also reproduced a configuration interaction: Copilot combines `.github/hooks/*.json` with repository `.claude/settings.json`, so one fixture process ran both entries until the runner selected a provider explicitly (`.goat-flow/learning-loop/footguns/hooks.md`, search: `## Footgun: Copilot combines native and Claude project hook registrations`).
 
 ## Decision
 
-Ship one read-only session-orientation hook only where a fresh ADR-052 capture and the effective multi-agent config path both prove bounded delivery; the first admitted slice is Codex `startup` and `resume`.
+Ship one read-only session-orientation hook only where a trusted capture applicable to the provider and configuration, and the effective multi-agent config path, both prove bounded delivery; the first admitted slice is Codex `startup` and `resume`.
 
 The hook supplies pointers, not file contents, instructions, validation evidence, or permission to act. Its canonical payload is one line:
 
@@ -64,12 +64,12 @@ This does not conflict with ADR-037: it uses a different lifecycle surface, read
 | Option | What fails | Verdict |
 | --- | --- | --- |
 | Instruction-only retrieval | Orientation depends on a later deliberate read | Fallback for every deferred provider and if rollout evidence fails |
-| Enable every documented provider | Documentation cannot prove trust, delivery, or model visibility; M12 showed source mismatches and cross-tool loading that a support table would hide | Rejected |
+| Enable every documented provider | Documentation cannot prove trust, delivery, or model visibility; the capture showed source mismatches and cross-tool loading that a support table would hide | Rejected |
 | Capture-verified, independently routable sources only | A small claim with an honest null for unsupported providers | Accepted as the design |
 
 ## Consequences
 
-- Nothing ships until a fresh capture renews the evidence and a milestone admits the Codex slice; the implementation must sweep manifest, registry, registrar, installed mirror, audit, tests, docs, and hook verification together.
+- Nothing ships until the capture is confirmed against the provider and configuration being shipped and a milestone admits the Codex slice; a relevant change requires a new capture. The implementation must sweep manifest, registry, registrar, installed mirror, audit, tests, docs, and hook verification together.
 - Claude and Copilot stay off despite successful captures; Antigravity keeps instruction-based Step 0 retrieval.
 
 ## Reversibility

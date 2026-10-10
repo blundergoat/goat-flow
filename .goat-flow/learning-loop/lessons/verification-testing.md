@@ -93,7 +93,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
   `test/contract/comment-playbook-doctrine.test.ts` (search: `translates broad reviewability prompts into exhaustive diagnosis`),
   `scripts/build-dashboard-assets.mjs` (search: `preset-prompts.json`), `test/contract/skill-quality-testing-doctrine.test.ts` (search: `does not
   validate a specific skill`).
-- **Recurrence 2026-08-29 (M71 lesson anchor):** A recurrence cited `Score rationale`, absent from the target file in that case; `stats --check`
+- **Recurrence 2026-08-29 (lesson anchor):** A recurrence cited `Score rationale`, absent from the target file in that case; `stats --check`
   rejected it, and the literal suite name restored the evidence chain. `test/unit/quality-diff-delta-tag.test.ts` (search: `quality diff score
   rationale`).
 
@@ -108,7 +108,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
   drift-safe selector inventories and content identity`).
 
 
-- **Recurrence 2026-09-09 (M50):** A claimed complete critique fixture omitted its second-pass prompt and clean marker. One original-loaded reader
+- **Recurrence 2026-09-09:** A claimed complete critique fixture omitted its second-pass prompt and clean marker. One original-loaded reader
   rejected it while another accepted it; rebuilding the control from a complete native return restored valid admission in four independent originals.
   The first new contract batch also exceeded the 1000-substantive-line limit; grouping unchanged assertions restored the size gate without removing
   a case. Owners: `workflow/skills/goat-critique/references/sub-agent-directives.md` (search: `Clean-result attestation`),
@@ -121,7 +121,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 ---
 
-**Recurrence 2026-10-01 (M08):** Three text assertions failed against the CLI's default JSON output. Read format defaults; explicit `--format text` restored the suite. `test/integration/quality-history-diff.test.ts` (search: `retains workspace conclusions`).
+**Recurrence 2026-10-01:** Three text assertions failed against the CLI's default JSON output. Read format defaults; explicit `--format text` restored the suite. `test/integration/quality-history-diff.test.ts` (search: `retains workspace conclusions`).
 
 ## Lesson: Mid-implementation proof gates split edit batches
 
@@ -163,13 +163,13 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 ## Lesson: Dated provider evidence must be resolved at publication time
 
 **Status:** active | **Created:** 2026-09-21
-**Decision changed:** Before publishing a provider-support claim, resolve the dated registry record through the same current-state function the product uses; never describe only its raw pre-expiry gate.
+**Decision changed:** Before publishing a provider-support claim, resolve the registry record through the same current-state function the product uses and preserve the capture's provider and configuration limits.
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
 
-**Prevention:** For every dated provider row, compare the documentation with `currentHookProviderSupportGate` at release time and test both the stored gate and the post-expiry result. A structural audit or a contract that asserts only `effectiveSupportGate` cannot establish the current user-visible state. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `Expire live provider proof before a hook screen presents it as current`) and `test/integration/hook-provider-contracts.test.ts` (search: `assertCurrentCodexDenyEvidence`).
+**Prevention:** Compare support prose with `currentHookProviderSupportGate` and the applicable capture history. Calendar expiry was removed on 2026-10-10: elapsed time must leave the gate unchanged; trust, registration, result delivery, and local scenario proof still gate effectiveness. Evidence: `src/cli/server/hooks-registry.ts` (search: `currentHookProviderSupportGate`) and `test/integration/hook-provider-contracts.test.ts` (search: `assertCurrentCodexDenyEvidence`).
 
-**What happened:** The v1.17.0 documentation alignment correctly restored fresh Codex Stop evidence but described all three dated captures as `scenario-unverified`. During final release verification, the current resolver reported both deny hooks as `provider-capture-stale` because their shared PreToolUse capture had expired earlier that day. The docs and contract were corrected without extending the evidence date.
+**What happened:** Under the previous calendar-expiry rule, the v1.17.0 documentation alignment correctly restored fresh Codex Stop evidence but described all three dated captures as `scenario-unverified`. During final release verification, the current resolver reported both deny hooks as `provider-capture-stale` because their shared PreToolUse capture had expired earlier that day. The docs and contract were corrected without extending the evidence date.
 
 **Root cause:** The first contract compared prose with the registry's stored gate and expiry fields. It did not execute the resolver that turns an elapsed date into the current support state.
 
@@ -236,12 +236,12 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 **Recurrence 2026-08-12:** Two verification corrections pushed `.goat-flow/learning-loop/lessons/verification-preflight.md` to 40,736 bytes; consolidating the new gate rule into its existing Prevention reduced it to 39,999 without dropping the decision or anchor. `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` (search: `A predecessor may exempt one named RED fixture`).
 **Recurrence 2026-08-23:** The evidence matrix raised the always-loaded skill preamble to 1,507 words against its strict sub-1,500 cap; the focused 16-test doctrine contract passed, `npm run test:fast` exposed the budget regression, and compressing only the new wording to 1,489 words kept every tested control. `workflow/skills/reference/skill-preamble.md` (search: `Claim controls set minimum evidence without changing proof classes`), `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
 **Recurrence 2026-08-23 (module size):** Placing all refutation-ledger validation inside `src/cli/quality/schema-parser.ts` raised it to 1,377 lines and created the Gruff identity `design.large-module-concentration`; moving it into the focused ledger parser removed the identity while preserving the three-item baseline. `src/cli/quality/schema-refuted-candidates.ts` (search: `parseReportRefutedCandidates`), `src/cli/quality/schema-parser.ts` (search: `parseReportCollections`).
-**Recurrence 2026-08-28:** M41 Task 9 ignored the already-read "Hold the file-length line continuously, not in a cleanup pass" pattern and expanded `src/cli/managed-setup-preview.ts` to 1,224 substantive lines, above Gruff's 1,000-line error threshold; the status collector moved to `src/cli/managed-install-evidence.ts` before CLI wiring or verification. `src/cli/managed-setup-preview.ts` (search: `selectedManagedReceiptProblems`), `src/cli/managed-install-evidence.ts` (search: `buildManagedInstallEvidenceReport`).
-**Recurrence 2026-08-29:** M71 placed score-rationale cases in `test/unit/quality-subcommands.test.ts` and `test/unit/quality-report-contract.test.ts`, raising them to 1,049 and 1,005 substantive lines against Gruff's 1,000-line threshold; a focused owner restored both. `test/unit/quality-score-rationale.test.ts` (search: `quality score rationale schema`).
-**Recurrence 2026-09-04:** Recording M15's activation-order recurrence made `milestone-accounting.md` 40,053 bytes, so `stats --check` stopped the integration gate; compressing only the new recurrence reduced it to 39,908 bytes with its decision and anchor intact. `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `go-live M15 activation`), `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
+**Recurrence 2026-08-28:** The test-contract change ignored the already-read "Hold the file-length line continuously, not in a cleanup pass" pattern and expanded `src/cli/managed-setup-preview.ts` to 1,224 substantive lines, above Gruff's 1,000-line error threshold; the status collector moved to `src/cli/managed-install-evidence.ts` before CLI wiring or verification. `src/cli/managed-setup-preview.ts` (search: `selectedManagedReceiptProblems`), `src/cli/managed-install-evidence.ts` (search: `buildManagedInstallEvidenceReport`).
+**Recurrence 2026-08-29:** The change placed score-rationale cases in `test/unit/quality-subcommands.test.ts` and `test/unit/quality-report-contract.test.ts`, raising them to 1,049 and 1,005 substantive lines against Gruff's 1,000-line threshold; a focused owner restored both. `test/unit/quality-score-rationale.test.ts` (search: `quality score rationale schema`).
+**Recurrence 2026-09-04:** Recording the activation-order recurrence made `milestone-accounting.md` 40,053 bytes, so `stats --check` stopped the integration gate; compressing only the new recurrence reduced it to 39,908 bytes with its decision and anchor intact. `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `go-live activation`), `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
 **Recurrence 2026-09-10:** New critique persistence assertions took `test/contract/skill-hardening-skills-2.test.ts` above Gruff's 1,000-substantive-line threshold; `scripts/check-gruff-warning-ratchet.mjs` rejected the narrowed 1,018-line draft. Rewinding the test draft, extending the existing host-owned producer check and grouping the existing redactor-owner assertions removed the size finding without dropping an earlier obligation. Evidence: the cases `keeps goat-critique host-owned so human gates cannot auto-convert` and `redacts goat-critique persistence before disk and preserves the human gate`; the final targeted Gruff run reported zero findings.
 
-**Recurrence 2026-09-14:** M03 history tests raised the forecast owner to 1,045 substantive lines. User-approved `test/unit/plans-check-history.test.ts` (search: `bounded project history`) retained those cases; the original owner was restored. Run scoped lint during each batch too: six new complexity errors needed two bounded corrections before passing.
+**Recurrence 2026-09-14:** History tests raised the forecast owner to 1,045 substantive lines. User-approved `test/unit/plans-check-history.test.ts` (search: `bounded project history`) retained those cases; the original owner was restored. Run scoped lint during each batch too: six new complexity errors needed two bounded corrections before passing.
 
 **Recurrence 2026-09-29:** A managed-process repair added capture and cleanup logic to the nearly full registrar before measuring its remaining headroom. Its 17-case behavioral suite passed, but Gruff reported 1020 substantive lines against the 1000-line limit. The approved extraction moved the three path checks into `src/cli/server/hook-scan-paths.ts` (search: `gitTopLevel`, `physicalDirectory`, `relativePathEscapesRoot`); scoped analysis then reported zero errors. The two learning references to moved symbols were repaired too. Measure the formatted gate result before proposing a patch, not after behavior alone appears correct.
 
@@ -271,7 +271,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 **Prevention:** Hash the file buffer before decoding. Malformed UTF-8 changed the hash in `src/cli/plans-forecast-history.ts` (search: `readHistoryPlan`); the raw-buffer correction passed the same reproduction. `test/unit/plans-check-history.test.ts` (search: `Buffer.from([0xff])`) preserves that case.
 
-**Recurrence 2026-10-01:** M08 rejected a raw hash after decoding `0xff`. `test/integration/quality-history-diff.test.ts` (search: `hashes original evidence bytes`) failed before correction. `src/cli/project-file.ts` (search: `readProjectFileBytes`) supplies guarded bytes to `src/cli/quality/fix-references.ts` (search: `function sha256`); Git output also stays raw until hashed.
+**Recurrence 2026-10-01:** The change rejected a raw hash after decoding `0xff`. `test/integration/quality-history-diff.test.ts` (search: `hashes original evidence bytes`) failed before correction. `src/cli/project-file.ts` (search: `readProjectFileBytes`) supplies guarded bytes to `src/cli/quality/fix-references.ts` (search: `function sha256`); Git output also stays raw until hashed.
 
 ## Lesson: Exercise reference identity and availability independently
 
@@ -281,7 +281,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 **Prevention:** Pair accepted project aliases with a foreign-project control. Restore evidence without changing saved admission. Check metadata alongside hashes.
 
-M08 rejected an alias, hid restored evidence and admitted a capture without source identity. Each regression failed before correction and passed afterward. Requiring canonical JSON then broke three workspace cases; hashes already bind artifact bytes. Evidence: `test/integration/quality-history-diff.test.ts` (search: `project aliases`, `restored references`, `missing source identity`, `binds workspace static proof`).
+The change rejected an alias, hid restored evidence and admitted a capture without source identity. Each regression failed before correction and passed afterward. Requiring canonical JSON then broke three workspace cases; hashes already bind artifact bytes. Evidence: `test/integration/quality-history-diff.test.ts` (search: `project aliases`, `restored references`, `missing source identity`, `binds workspace static proof`).
 
 ## Lesson: Preserve repository-owned verification flags
 
@@ -293,4 +293,4 @@ M08 rejected an alias, hid restored evidence and admitted a capture without sour
 
 **Recurrence 2026-10-01:** Preflight found an unused export after scoped checks passed. Keeping `QualityConcern` private fixed it. Run the preflight-owned Knip gate too; `check:touched` omits it. `src/cli/quality/schema-types.ts` (search: `type QualityConcern =`).
 
-**Recurrence 2026-09-14:** M04 tried nonexistent `tsconfig.cli.json`; `package.json` (search: `"typecheck"`) owns the two-project check.
+**Recurrence 2026-09-14:** The change tried nonexistent `tsconfig.cli.json`; `package.json` (search: `"typecheck"`) owns the two-project check.

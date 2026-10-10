@@ -25,7 +25,7 @@ Verify the returned status and process cleanup; Node may represent SIGKILL as a 
 
 **Recurrence 2026-08-09:** A preflight run reported `bounds gruff hooks with a timeout-specific response` as transient because its full-suite retry passed. Running the named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound, and a fixture that wrote a marker after starting the background child reproduced the wait. `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`), `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
 
-**Recurrence 2026-10-02:** M13's approved five-minute Codex discovery depended on operator polling through context compaction.
+**Recurrence 2026-10-02:** The approved five-minute Codex discovery depended on operator polling through context compaction.
 The first turn finished in six seconds, but closure occurred after 354 seconds; two required explicit turns were never submitted.
 
 The capture stayed inconclusive. Direct outer-timer controls returned shell exits 124 and 137 for ordinary and TERM-resistant children.
@@ -33,10 +33,10 @@ A Node comparison initially expected numeric 137 instead of its SIGKILL signal r
 The approved follow-up uses an independent TERM/KILL deadline and must still verify native completion and fixture-process cleanup.
 
 Evidence: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`) owns the independent-return pattern.
-Workflow-local M13 receipts retain the measured deadline breach; they are not shipped provider-support evidence.
+Workflow-local receipts retain the measured deadline breach; they are not shipped provider-support evidence.
 
 
-**Recurrence 2026-10-03:** M13's outer launcher returned its timeout block at 1,200 ms while the controller's detached Bash child and sleeper remained alive.
+**Recurrence 2026-10-03:** The outer launcher returned its timeout block at 1,200 ms while the controller's detached Bash child and sleeper remained alive.
 The earlier timeout assertion checked the response, so it missed those surviving processes.
 
 The launcher now stops detached descendant groups before its own group; the regression checks both owned processes and an unrelated live control.

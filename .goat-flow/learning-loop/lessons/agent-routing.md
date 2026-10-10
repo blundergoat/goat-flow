@@ -33,9 +33,9 @@ last_reviewed: 2026-09-05
 
 **Status:** active | **Created:** 2026-04-04
 
-**Prevention:** Listen for the verb. "Update the plan", "create M31", and "write a plan" mean write Markdown only; "execute", "implement", "do it", and "fix it" mean change code. If the verb is absent or ambiguous, write the plan and ask whether to execute it, and never auto-execute a plan the user has just asked you to write.
+**Prevention:** Listen for the verb. "Update the plan", "create a plan", and "write a plan" mean write Markdown only; "execute", "implement", "do it", and "fix it" mean change code. If the verb is absent or ambiguous, write the plan and ask whether to execute it, and never auto-execute a plan the user has just asked you to write.
 
-**What happened:** The user asked to create an M31 plan and later to update it with a detailed design spec. The agent wrote the plan file, then launched a sub-agent to rewrite `index.html`, implementing the plan unasked, and the user interrupted with "dont change anything. just update this plan."
+**What happened:** The user asked to create a plan and later to update it with a detailed design spec. The agent wrote the plan file, then launched a sub-agent to rewrite `index.html`, implementing the plan unasked, and the user interrupted with "dont change anything. just update this plan."
 
 **Root cause:** Writing a plan and executing one were collapsed into a single action, although the user controls when code changes happen and may want to review, share, or revise first.
 

@@ -10,7 +10,7 @@ last_reviewed: 2026-08-31
 
 **Prevention:** Keep `.gruff-ts.yaml` `placeholderNames` focused on throwaway placeholders (`foo`, `bar`, `baz`, `tmp`, `temp`, `thing`, `stuff`). Rename numbered or domain-ambiguous symbols case-by-case, but do not churn boundary validators away from `value` or `data` unless the narrower domain is already known. Evidence anchors: `.gruff-ts.yaml` (search: `placeholderNames`).
 
-**What happened:** During the M00 gruff cleanup, `naming.identifier-quality` reported 124 advisory findings. Most were `value` or `data` in decoders, validators, event readers, and safe JSON boundary code where the symbol intentionally represents an unknown inbound payload.
+**What happened:** During the gruff cleanup, `naming.identifier-quality` reported 124 advisory findings. Most were `value` or `data` in decoders, validators, event readers, and safe JSON boundary code where the symbol intentionally represents an unknown inbound payload.
 
 **Root cause:** The default placeholder list treats `value`, `data`, and `item` as generic local names. That is useful in business logic, but too broad for goat-flow's boundary-heavy code, where validators often start with unknown input and narrow it by shape.
 
@@ -22,7 +22,7 @@ last_reviewed: 2026-08-31
 
 **Prevention:** Keep `.gruff-ts.yaml` `acceptedAbbreviations` limited to domain-standard two-letter terms, and rename concentrated one-letter locals where a clearer name is obvious. Do not add broad one-letter names such as `r`, `a`, `b`, or `m` to the allowlist. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedAbbreviations:`).
 
-**What happened:** The M00 short-variable pass found a mix of real rename targets (`r`, `af`, `a`, `b`, `m`) and project-standard abbreviations (`md`, `ws`, `fd`, `ms`, `tc`, `rl`). Renaming all short symbols would have created churn, while accepting every one-letter test local would have hidden unclear code.
+**What happened:** The short-variable pass found a mix of real rename targets (`r`, `af`, `a`, `b`, `m`) and project-standard abbreviations (`md`, `ws`, `fd`, `ms`, `tc`, `rl`). Renaming all short symbols would have created churn, while accepting every one-letter test local would have hidden unclear code.
 
 **Root cause:** `naming.short-variable` is intentionally syntax-local. It cannot distinguish a throwaway `r` from a conventional `ws` WebSocket handle or `md` Markdown renderer without project vocabulary.
 
@@ -34,7 +34,7 @@ last_reviewed: 2026-08-31
 
 **Prevention:** For one-letter identifiers, inspect the local AST-shaped context or use a narrower pattern such as `const m =` plus explicit call-site replacements. Always run the focused test after the rename and before expanding the rename pattern to other files. Evidence anchors: `test/unit/manifest.test.ts` (search: `renderManifestMarkdown`).
 
-**What happened:** During the M00 short-variable pass, a mechanical `m`→`manifestJson` word-boundary rewrite in `test/unit/manifest.test.ts` also rewrote the `m` regex flag on manifest markdown assertions. The focused TypeScript test caught the syntax break before the milestone moved on.
+**What happened:** During the short-variable pass, a mechanical `m`→`manifestJson` word-boundary rewrite in `test/unit/manifest.test.ts` also rewrote the `m` regex flag on manifest markdown assertions. The focused TypeScript test caught the syntax break before the milestone moved on.
 
 **Root cause:** Word-boundary replacement is not safe for one-letter identifiers in TypeScript source because regex flags, string literals, and other syntax-adjacent one-letter tokens can also sit on word boundaries.
 
@@ -46,7 +46,7 @@ last_reviewed: 2026-08-31
 
 **Prevention:** Use `.gruff-ts.yaml` `acceptedBooleanNames` for exact boundary flags and reserve `booleanPrefixes` for genuine project-wide prefix grammar. Do not use the prefix list to hide exact lowercase flag names because gruff requires an uppercase boundary after a prefix. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedBooleanNames:`), `.gruff-ts.yaml` (search: `booleanPrefixes:`).
 
-**What happened:** During the M00 boolean-prefix pass, gruff reported 156 advisory findings across dashboard state, CLI flags, hook JSON, setup-detect DTOs, and tests. Many were not ambiguous booleans; they mirrored persisted JSON or operator flags such as `show*`, `loading*`, `fresh`, `verbose`, `enabled`, `instructionsPathScoped`, and `customPromptSubmitAttempted`.
+**What happened:** During the boolean-prefix pass, gruff reported 156 advisory findings across dashboard state, CLI flags, hook JSON, setup-detect DTOs, and tests. Many were not ambiguous booleans; they mirrored persisted JSON or operator flags such as `show*`, `loading*`, `fresh`, `verbose`, `enabled`, `instructionsPathScoped`, and `customPromptSubmitAttempted`.
 
 **Root cause:** `naming.boolean-prefix` enforces an `is/has/can`-style grammar, but goat-flow has two other boolean naming grammars: UI state (`show*`, `loading*`, `selected*`, `terminal*`) and CLI/API flag names that intentionally match query params, JSON fields, or argv switches. Renaming those mechanically would make boundary code less traceable.
 

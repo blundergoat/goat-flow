@@ -13,7 +13,7 @@ last_reviewed: 2026-09-26
 
 **Why it happens:** A classifier is a chain of guarded returns. Adding a branch changes the reachability of every branch below it that shares a condition, and TypeScript checks exhaustiveness of the union, not reachability of its members.
 
-**Evidence:** 1.16.0 M02 added `local-preserved` to `src/cli/managed-setup-preview.ts` (search: `The package has nothing new to deliver here`). That branch owns `newExpectedSha256 === oldExpectedSha256`, the only producer of `local-edited`, which stayed exported in `ManagedSetupFileState`, listed in `BLOCKING_STATES`, documented in `docs/cli.md`, and asserted by three fixtures. Removing it meant repointing those fixtures at `both-changed`, the only managed conflict that still blocks.
+**Evidence:** The 1.16.0 change added `local-preserved` to `src/cli/managed-setup-preview.ts` (search: `The package has nothing new to deliver here`). That branch owns `newExpectedSha256 === oldExpectedSha256`, the only producer of `local-edited`, which stayed exported in `ManagedSetupFileState`, listed in `BLOCKING_STATES`, documented in `docs/cli.md`, and asserted by three fixtures. Removing it meant repointing those fixtures at `both-changed`, the only managed conflict that still blocks.
 
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
 
