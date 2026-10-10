@@ -1,11 +1,8 @@
 # ADR-053: Provider-specific structured and Windows hook descriptors
 
-**Status:** Implemented
+**Status:** Accepted
 **Date:** 2026-08-13
-**Updated:** 2026-09-05 - condensed; the deleted local spawn-matrix reproduction is replaced by the CI job that runs it. The 2026-08-22 amendment added Codex `commandWindows`; the 2026-08-25 amendment added Claude's inert Copilot routing fields.
-**Updated:** 2026-09-19 - ADR-066 changes root selection for the Gruff edit hook only; policy and Stop hooks keep this contract.
-
-**Updated:** 2026-10-10 - retargeted evidence requirements after the hook-trust ADR was removed; later Codex captures no longer inherit the original stale-state wording.
+**Updated:** 2026-10-11 - the descriptor field list now lives in code, and the retired Implemented status became Accepted. ADR-066 (2026-09-19) changes root selection for the Gruff edit hook only; policy and Stop hooks keep this contract.
 
 ## Context
 
@@ -23,24 +20,9 @@ The repository already ships `run-with-bash.mjs`, `hook-launch-runtime.mjs`, and
 
 Use provider-specific descriptors: Claude keeps a structured exec-form handler with inert Copilot routing fields, Codex keeps its `command` byte-for-byte and adds `commandWindows`, and Copilot and Antigravity keep their registrations until applicable exact-version evidence approves a change.
 
-The writer emits this complete shape for every managed Claude hook:
+For every managed Claude hook the writer emits `type: "command"`, `command: "node"`, an ordered `args` tuple (the `-e` bootstrap source, the project-relative hook script path, the launch mode, the project-directory variable name, the settings path, and the project-relative `run-with-bash.mjs` path), the inert `bash: "exit 0"` and `powershell: "exit 0"` fields, and the hook's existing Claude timeout. The exact tuple is owned by `src/cli/server/agent-hook-command.ts` (search: `buildAgentHookDescriptor`).
 
-```text
-type: "command"
-command: "node"
-args[0]: "-e"
-args[1]: structuredHookLaunchBootstrap(hookLaunchMode)
-args[2]: project-relative managed hook script path
-args[3]: versioned or legacy hook launch mode
-args[4]: "CLAUDE_PROJECT_DIR"
-args[5]: ".claude/settings.json"
-args[6]: project-relative ".goat-flow/hooks/run-with-bash.mjs"
-bash: "exit 0"
-powershell: "exit 0"
-timeout: the existing hook-specific Claude timeout
-```
-
-`args` is an ordered tuple in exec form: the host passes each element without a shell, so no transport retokenizes the source or operands. The bootstrap keeps the legacy root contract (Git root via `rev-parse --show-toplevel`, then real cwd ancestors, then `CLAUDE_PROJECT_DIR`), classifies absent, corrupt, and complete managed roots, rejects symlinked, multiply linked, escaping, or incomplete files, imports the shipped `run-with-bash.mjs` through a file URL, verifies `runHookWithBash` is callable, and invokes it with root, hook path, and response mode, replacing the former second Node process. Owners: `src/cli/server/agent-hook-command.ts` (search: `structuredHookLaunchBootstrap`, `buildAgentHookDescriptor`).
+`args` is an ordered tuple in exec form: the host passes each element without a shell, so no transport retokenizes the source or operands. The bootstrap (`src/cli/server/agent-hook-command.ts`, search: `structuredHookLaunchBootstrap`) keeps the legacy root contract (Git root via `rev-parse --show-toplevel`, then real cwd ancestors, then `CLAUDE_PROJECT_DIR`), classifies absent, corrupt, and complete managed roots, rejects symlinked, multiply linked, escaping, or incomplete files, imports the shipped `run-with-bash.mjs` through a file URL, and invokes `runHookWithBash` with root, hook path, and response mode, replacing the former second Node process.
 
 Claude executes `command` plus `args` and ignores the shell-routing fields. A Copilot process that also loads the Claude file selects `bash` or `powershell`, receives `exit 0`, and leaves enforcement to the one native row in `.github/hooks/hooks.json`. The two no-op fields are part of exact managed identity, so a missing or changed field is drift that `hooks sync` repairs. The Claude no-op row never counts as Copilot protection. Copilot's Bash selection is live-measured; its PowerShell field is provider-documented only.
 

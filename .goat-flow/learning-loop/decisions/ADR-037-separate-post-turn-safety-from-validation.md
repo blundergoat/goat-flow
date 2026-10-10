@@ -2,9 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-12
-**Updated:** 2026-09-05 - condensed; Copilot wording changed to delivery unverified rather than unsupported and reversibility updated for the shipped hook. Earlier amendments named the owner of timing and clarity reminders (2026-08-29) and absorbed now-removed ADR-015 (`stop-lint.sh`) and the ADR-038/ADR-039 plan-checkbox-guard pair (2026-08-15).
-
-**Updated:** 2026-10-10 - hook evidence guidance now points to the surviving architecture.
+**Updated:** 2026-10-10 - hook evidence guidance points to the surviving architecture. Absorbed (removed): ADR-015-remove-stop-lint-from-core, ADR-038-plan-checkbox-guard, ADR-039-remove-plan-checkbox-guard.
 
 ## Context
 

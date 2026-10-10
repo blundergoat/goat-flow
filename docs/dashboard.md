@@ -102,7 +102,6 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/quality` | GET | Generate quality-assessment prompt, including `auditCacheStatus` (`hit`, `miss`, or `bypass`) for dashboard cache visibility |
 | `/api/quality/history` | GET | Persisted quality-history rows and latest trend summary |
 | `/api/quality/evaluate` | POST | Score uploaded markdown (skill or shared-reference) and return a deterministic report plus improvement tips. Read-only; canonical from v1.6.0. |
-| `/api/quality/analyse` | POST | Deprecated alias for `/api/quality/evaluate`. Returns the same body with `Deprecation: true` and `Link: </api/quality/evaluate>; rel="successor-version"` headers. |
 | `/api/skill-quality/inventory` | GET | List installed skill/reference artifacts the dashboard can score |
 | `/api/skill-quality` | GET | Score one installed skill/reference artifact and return the metric breakdown plus a runner-prompt preview |
 | `/api/agents/installed` | GET | Detect installed agent runtimes |

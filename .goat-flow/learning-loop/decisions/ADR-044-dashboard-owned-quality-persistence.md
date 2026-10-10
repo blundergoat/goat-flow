@@ -2,9 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-31
-**Updated:** 2026-09-05 - condensed; the 2026-08-03 amendment is folded in and a deleted local milestone reference is dropped.
-
-**Updated:** 2026-10-10 - removed the analogy to the deleted hook-trust decision; the persistence boundary remains described below.
+**Updated:** 2026-10-10 - the analogy to the deleted hook-trust decision is removed; the persistence boundary is described below.
 
 ## Context
 

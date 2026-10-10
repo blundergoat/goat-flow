@@ -59,13 +59,10 @@ Skill and playbook prose also receives an advisory fit note for unconditioned ph
 | `gate-vocabulary` | Regex sources for verification gates, explicit pass/fail language, and human-stop language. |
 | `tool-keywords-regex` | Regex source for external tool dependencies. |
 | `subtypes` | Detection rules, metric profile caps, and notes for artifact subtypes. |
-| `fixture-path` | Primary expected-score fixture for the current project. |
-| `additional-fixtures` | Extra expected-score fixtures for consumer corpora. |
 
 ## Guardrails
 
 - Keep config project-scoped. Do not store consumer overrides in `workflow/manifest.json`.
-- Add a fixture when changing subtype profiles so score drift is intentional.
 - Prefer extending defaults. Replace defaults only when the project convention is incompatible.
 - Avoid brittle provider-specific regexes unless a real project artifact needs them.
 - Keep the scoring rubric portable. Generic or uploaded skills must earn cold-start and evidence credit through explicit context, prerequisites, gates, and evidence rules; they should not be required to reference goat-flow's shared preamble unless they are installed goat-flow skills that actually inherit it.

@@ -1,6 +1,6 @@
 ---
 category: architecture
-last_reviewed: 2026-09-05
+last_reviewed: 2026-10-11
 ---
 
 ## Pattern: UNSET sentinel + recursive merge for layered CLI overlays
@@ -52,3 +52,11 @@ last_reviewed: 2026-09-05
 **Approach:** Set the waiting state from output but clear it only from input-side or lifecycle signals: user keystrokes, dashboard sends, session exit, explicit termination. Output can prove "the runner is asking"; it cannot prove "the user answered", because spinner and status chunks are unbounded across runner versions. If the UI runs unattended for hours and out-of-band answers are common, add an inactivity timeout rather than trying to recover symmetric classification.
 
 **Evidence (ACTUAL_MEASURED):** `src/dashboard/dashboard-terminal-connect.ts` (search: `Round-6 design: the awaitingInput badge is NEVER cleared by output`) and `test/unit/dashboard-terminal-launch/launch-flow-05.test.ts` (search: `badge persists across arbitrary output volume`) pin the trade-off; the five-round incident is in `.goat-flow/learning-loop/footguns/dashboard-terminal.md` (search: `Round-6 design: the awaitingInput badge is NEVER cleared by output`).
+
+## Pattern: Two ceilings for an orchestrated long-lived resource
+
+**Context:** A consumer loop (an agent loop, a WebSocket reader, a poller) operates against a resource that has its own cleanup: a container TTL, a `--rm` flag, a PTY idle timeout, kernel reaping. The resource ceiling protects the system, but nothing tells the consumer the resource is gone, so it keeps issuing operations that fail, no-op, or spend budget.
+
+**Approach:** Give the consumer its own ceiling (`wall_time_limit_seconds`, `max_iterations`, `max_polls`) set strictly shorter than the resource TTL, with enough gap to write final state and exit through normal control flow. Introduce or tune a resource TTL and its consumer ceiling in the same commit so a grep for the TTL field returns both, and test the case where the consumer ceiling fires first. A refactor that "simplifies by removing the inner ceiling" is the failure this pattern exists to resist. The rule was ADR-029 from 2026-05-25 to 2026-10-11 and moved here because it is a reusable principle with no goat-flow incident behind it.
+
+**Evidence (EXTERNAL_REFERENCE):** mini-swe-agent PR #832 (2026-05-20): a two-hour `container_timeout` reaped the container while the agent loop kept issuing `docker exec` calls, each paying an LM API charge before failing, and the fix added `wall_time_limit_seconds` inside the loop. Local surface: `src/cli/server/terminal.ts` (search: `pty.onExit`) emits one `exit` event when a PTY ends, and `DEFAULT_IDLE_TIMEOUT_MINUTES` in the same file is the resource ceiling. The incident shape is in `.goat-flow/learning-loop/footguns/cleanup-layering.md` (search: `Resource cleanup at one layer leaves the consumer loop running`).

@@ -967,22 +967,6 @@ export function readClaudeGruffCommands(settingsJson: string): string[] {
   return generatedHookCommands(config.hooks?.PostToolUse);
 }
 
-/** Read the generated Antigravity gruff hook command because hooks are grouped by hook id.
- *
- * @param hooksJson - raw hooks.json text as the registrar wrote it
- * @returns the single Antigravity gruff command; missing entries fail loudly
- */
-export function readAntigravityGruffCommand(hooksJson: string): string {
-  const config = JSON.parse(hooksJson) as {
-    "gruff-code-quality"?: {
-      PostToolUse?: GeneratedHookEntry[];
-    };
-  };
-  return (
-    generatedHookCommands(config["gruff-code-quality"]?.PostToolUse)[0] ?? ""
-  );
-}
-
 /** Read matcherless Stop hook commands from Claude/Codex-style hook config.
  *
  * @param settingsJson - raw .claude/settings.json text as the registrar wrote it
@@ -1037,23 +1021,6 @@ export function writePostTurnCapableSurfaces(root: string): void {
   writeFileSync(join(root, ".codex", "config.toml"), "\n");
   writeFileSync(join(root, ".agents", "hooks.json"), "{}\n");
   writeFileSync(join(root, ".github", "hooks", "hooks.json"), "{}\n");
-}
-
-/** Execute a generated shell launcher with a runtime-shaped payload.
- *
- * @param command - generated shell command line to execute
- * @param cwd - working directory the process runs in
- * @param payload - hook JSON delivered on stdin, as an agent host would send it
- * @param env - extra environment merged onto the process env; absent means the plain env
- * @returns the finished launcher process with captured streams
- */
-export function runLauncherWithPayload(
-  command: string,
-  cwd: string,
-  payload: string,
-  env: NodeJS.ProcessEnv = process.env,
-): ReturnType<typeof spawnSync> {
-  return runPayloadProcess("bash", ["-c", command], cwd, payload, env);
 }
 
 /** Spawns the requested launcher with finite stdin and private output files.

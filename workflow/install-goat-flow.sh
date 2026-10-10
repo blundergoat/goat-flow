@@ -4208,7 +4208,7 @@ echo ""
 # ==========================================================================
 # 10. Write .active marker if exactly one version-named subdir exists
 # ==========================================================================
-# The goat and goat-plan skills read .goat-flow/plans/.active to select the user's current plan (ADR-017).
+# The goat-plan skill reads .goat-flow/plans/.active to select the user's current plan; the goat dispatcher does not (ADR-017).
 # Write this one-line directory marker automatically only when exactly one plan can be selected.
 echo "Active plan marker:"
 ACTIVE_FILE=".goat-flow/plans/.active"

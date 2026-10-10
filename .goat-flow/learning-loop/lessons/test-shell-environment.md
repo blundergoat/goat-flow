@@ -77,7 +77,7 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 **Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-28
 
-**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only descriptor or shell redirection rather than the runner's `input` option. Capture hook stderr explicitly when the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runLauncherWithPayload`).
+**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only descriptor or shell redirection rather than the runner's `input` option. Capture hook stderr explicitly when the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runPayloadProcess`).
 
 **What happened:** A hook integration test repeatedly timed out when it invoked the hook through `spawnSync` with an `input` string. Tracing with `bash -x` showed the hook stalled at its `payload="$(cat)"` line: the child saw the payload bytes but never received EOF in this sandbox. The same sequence completed from a normal shell with file redirection and produced the expected exit codes.
 

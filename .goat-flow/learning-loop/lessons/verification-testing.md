@@ -31,7 +31,7 @@ Related evidence moved intact to [platform-verification.md](platform-verificatio
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** OBSERVED
 **Severity:** INTEGRATION
-**Incident count:** 26 | **Latest occurrence:** 2026-10-01
+**Incident count:** 27 | **Latest occurrence:** 2026-10-11
 
 **Prevention:** Before changing prose, a path, or an adjacent command, search the tests and durable semantic anchors for the exact old text; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest. When fixture size feeds a derived assertion, recompute it with the production formula after every fixture edit. Update a contract only when product semantics change. Before drafting in a near-cap skill, measure the current word budget and pay for additions from unpinned text; before quoting a budget or score outcome, measure the exact sizes with the function the gate uses and state the margin.
 
@@ -123,6 +123,8 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 **Recurrence 2026-10-01:** Three text assertions failed against the CLI's default JSON output. Read format defaults; explicit `--format text` restored the suite. `test/integration/quality-history-diff.test.ts` (search: `retains workspace conclusions`).
 
+**Recurrence 2026-10-11:** Removing the runner's performance mode also rewrote the adjacent concurrency ternary; the first fast suite failed one source-regex pin that the grep for the removed mode's names could not find. Restoring the pinned line fixed it: search each adjacent edited line for its exact text. `scripts/run-tests.mjs` (search: `mode === "slow" ? "1" : mode === "fast" ? "8" : "8"`), `test/integration/preflight-progress.test.ts` (search: `keeps fast concurrency bounded`).
+
 ## Lesson: Mid-implementation proof gates split edit batches
 
 **Status:** active | **Created:** 2026-08-23
@@ -155,7 +157,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 **Root cause:** A failure inside the final gate was read as a task regression; the changing test names and the direct pass showed the task fix was complete and the wrapper was surfacing intermittent failures needing separate investigation. An earlier version of this Prevention described a one-shot `test:fast` retry; that retry was removed on 2026-08-16 (`refactor(core): consolidate setup preflight checks`), the removal is test-pinned, and two quality reports flagged the stale claim on 2026-08-18.
 
-**Recurrence 2026-08-17:** After an ESLint fix cleared preflight's TypeScript stage, the fast suite observed a changelog mirror mismatch while playbook edits were in progress; the isolated sync suite passed `26/26` and a direct diff between `.goat-flow/skill-docs/playbooks/changelog.md` and `workflow/skills/playbooks/changelog.md` was empty, so no task file changed. Rerun the full gate only after mirrored writes are quiescent. `test/integration/preamble-sync.test.ts` (search: `template and installed changelog.md match`).
+**Recurrence 2026-08-17:** After an ESLint fix cleared preflight's TypeScript stage, the fast suite observed a changelog mirror mismatch while playbook edits were in progress; the isolated sync suite passed `26/26` and a direct diff between `.goat-flow/skill-docs/playbooks/changelog.md` and `workflow/skills/playbooks/changelog.md` was empty, so no task file changed. Rerun the full gate only after mirrored writes are quiescent. `test/integration/preamble-sync.test.ts` (search: `SHARED_ARTIFACT_MIRRORS`).
 **Recurrence 2026-09-04:** A release repair's first `npm run test:full` stopped after the fast phase with `tests 2650`, `pass 2644`, `fail 1`, `skipped 5`, but truncated output no longer held the failing case. An immediate `npm run test:fast` captured to a fresh path exited 0 with `pass 2645`, and the exact full retry passed that plus the slow suite's `tests 474`, `pass 472`, `fail 0`, `skipped 2`. `package.json` (search: `"test:full": "npm run test:fast && npm run test:slow"`).
 
 ---

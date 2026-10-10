@@ -24,7 +24,7 @@ TypeScript spans the **Node.js CLI and server** under `src/cli/` and the **brows
 - Run: `npm test` for the fast preflight suite; use `npm run test:slow` for the nested preflight/dashboard integration suite and `npm run test:full` before release-sensitive changes.
 - Tests in `test/` mirroring `src/cli/` structure
 - Integration tests isolate the filesystem with a real temp dir (`fs.mkdtemp` under `os.tmpdir()`) - never touch the real project tree
-- Process/global-state helpers in `test/helpers/`: `setEnv` and `withStubbedDate` (`global-fixtures.ts`), `assertExists` (`assert-exists.ts`)
+- Process/global-state helpers in `test/helpers/`: `setEnv` and `withEnv` (`global-fixtures.ts`), `assertExists` (`assert-exists.ts`)
 
 ## Build Check Pattern
 

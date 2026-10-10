@@ -49,6 +49,8 @@ describe("plans check: lifecycle states and timing receipts", () => {
           statusReason: ["complete", "not-started"].includes(status)
             ? undefined
             : "Human assigned the remaining work to M01.",
+          // The not-started milestone joins the complete and blocked ones, so the plan has one ending.
+          dependsOn: status === "not-started" ? "M01, M03" : undefined,
           isTaskChecked: isComplete,
           includeActual: isComplete,
           proofLines: [
@@ -97,17 +99,19 @@ describe("plans check: lifecycle states and timing receipts", () => {
         "in-progress",
         "testing-gate",
         "human-verification-pending",
+        "not-started",
       ].entries()) {
         const id = `M0${index + 1}`;
-        const pending = status === "human-verification-pending";
         files[`${id}-fixture.md`] =
           canonicalMilestoneBody({
             title: `${id}: Active state`,
             status,
-            isTaskChecked: status !== "in-progress",
-            includeActual: pending,
+            // The inactive last milestone joins the three active ones, so the plan has one ending.
+            dependsOn: status === "not-started" ? "M01, M02, M03" : undefined,
+            isTaskChecked: !["in-progress", "not-started"].includes(status),
+            includeActual: status === "human-verification-pending",
             proofLines: [
-              `- [${pending ? "x" : " "}] Outcome is proven. [automated] (est: 1 min proof)`,
+              `- [${status === "human-verification-pending" ? "x" : " "}] Outcome is proven. [automated] (est: 1 min proof)`,
             ],
           }) + `\nLane: lane-${index}\n`;
       }

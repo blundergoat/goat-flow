@@ -26,15 +26,8 @@ import {
   type ManagedInstallStateV2,
 } from "../../src/cli/managed-setup-state.js";
 
-/** Codex mirror of the newest skill, used by baseline-downgrade fixtures. */
-const CODEX_GOAT_CLARITY_PATH = ".agents/skills/goat-clarity/SKILL.md";
-
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 export const disposables: string[] = [];
-export const gitAvailable =
-  spawnSync("git", ["--version"], {
-    encoding: "utf-8",
-  }).status === 0;
 const postTurnSafetyHookSpec = getHookSpec("post-turn-safety");
 assert.ok(
   postTurnSafetyHookSpec?.timeoutSec,
@@ -198,19 +191,6 @@ export function git(root: string, args: string[]): void {
 }
 
 /**
- * Append a line to the fixture's history.txt and commit it under the deterministic test identity,
- * building the commit history that upgrade-path tests replay. Writes the file and spawns git.
- *
- * @param root - working directory of the fixture repo to write and commit into
- * @param subject - the history line content and the commit message subject
- */
-export function addCommit(root: string, subject: string): void {
-  writeFileSync(join(root, "history.txt"), `${subject}\n`, { flag: "a" });
-  git(root, ["add", "history.txt"]);
-  git(root, ["commit", "-m", subject]);
-}
-
-/**
  * Rewrite recorded baseline hashes so the named paths read as changed package templates.
  *
  * A fixture that needs a blocking managed conflict must also move the baseline, because divergent bytes alone are preserved.
@@ -342,35 +322,6 @@ export function symlinkFileOrSkip(
     }
     throw error;
   }
-}
-
-/**
- * Rewrite one disposable Codex install-state file without its goat-clarity row.
- * Reads and replaces only the fixture baseline so the next installer run sees a loaded seven-skill state.
- *
- * @param projectPath - disposable consumer whose install state is downgraded
- */
-export function downgradeCodexBaselineToSevenSkills(projectPath: string): void {
-  const statePath = join(
-    projectPath,
-    ".goat-flow",
-    "state",
-    "install",
-    "codex.json",
-  );
-  const state = JSON.parse(readFileSync(statePath, "utf-8")) as {
-    files: Array<{ path: string; expectedSha256: string }>;
-  };
-  const originalFileCount = state.files.length;
-  state.files = state.files.filter(
-    (file) => file.path !== CODEX_GOAT_CLARITY_PATH,
-  );
-  assert.equal(
-    state.files.length,
-    originalFileCount - 1,
-    "the installed baseline must contain goat-clarity before the fixture removes it",
-  );
-  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
 export {

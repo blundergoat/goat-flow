@@ -185,7 +185,7 @@ High-risk detail has no safety-reducing cap; above 1,200 words, name the safety 
 
 ## Lane lifecycle
 
-Read `../SKILL.md`: Phase 2 Mode 0 owns cap provenance and session selection; Phase 3 owns activation, gates, writer ownership, and the final dependency join. Omitted or empty Lane means `default`; all three active statuses consume their lane and the global cap. Strict scheduling success alone never proves the final join.
+Read `../SKILL.md`: Phase 2 Mode 0 owns cap provenance and session selection; Phase 3 owns activation, gates, writer ownership, and the final dependency join. Omitted or empty Lane means `default`; all three active statuses consume their lane and the global cap.
 
 ### Downgrade recovery
 

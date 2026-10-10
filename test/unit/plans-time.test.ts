@@ -149,6 +149,7 @@ describe("plans time", () => {
         "M17-shared-baseline.md",
         "M18-go-precision.md",
         "M19-php-precision.md",
+        "M20-merge-precision.md",
       ]) {
         writeFileSync(
           join(plan, name),

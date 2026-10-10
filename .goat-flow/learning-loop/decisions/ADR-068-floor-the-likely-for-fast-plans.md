@@ -1,7 +1,8 @@
 # ADR-068: Floor the likely at one minute per unit so fast plans can use their own history
 
-**Status:** Implemented
+**Status:** Accepted
 **Date:** 2026-09-20
+**Updated:** 2026-10-11 - the retired Implemented status became Accepted.
 
 ## Context
 

@@ -69,8 +69,6 @@ export const KNOWN_NESTED_KEYS = new Map<string, ReadonlySet<string>>([
       "gate-vocabulary",
       "tool-keywords-regex",
       "subtypes",
-      "fixture-path",
-      "additional-fixtures",
     ]),
   ],
   ["quality.walk-roots", new Set(["skills", "references"])],

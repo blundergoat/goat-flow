@@ -466,6 +466,7 @@ describe("plans check: quantile-based reforecasting", () => {
         ["- [ ] Build the result (est: 3 min product)"],
         {
           title: "M04: Future milestone",
+          dependsOn: "M01, M02, M03",
           forecastBasisLine:
             "Forecast basis: 3 agent work units; 0.5-3-10 min/unit low-likely-high; source: recorded fixture basis",
           forecastRangeLine:
@@ -574,6 +575,7 @@ describe("plans check: quantile-based reforecasting", () => {
           [`- [ ] Build the result (est: ${testCase.product} min product)`],
           {
             title: "M04: Future milestone",
+            dependsOn: "M01, M02, M03",
             forecastBasisLine: `Forecast basis: 3 agent work units; ${testCase.rates} min/unit low-likely-high; source: recorded fixture basis`,
             forecastRangeLine: `Forecast range: ${testCase.low}-${testCase.high} agent-time minutes on one recorded-unpaused milestone timeline; likely ${testCase.likely}; recorded fixture range`,
             planAdminOverhead: "3 min other",
@@ -840,7 +842,11 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
         "Actual: ~15 min agent-time (5 product / 10 proof / 0 other) - rough retrospective guess; timing was not instrumented, so treat this figure as low-confidence",
         "complete",
       ),
-      "M03-empty.md": legacyBody("M03", "Actual: _", "not-started"),
+      // The unfinished milestone joins both finished ones, so the plan has one ending.
+      "M03-empty.md": legacyBody("M03", "Actual: _", "not-started").replace(
+        "Depends on: none",
+        "Depends on: M01, M02",
+      ),
     });
 
     try {
@@ -860,11 +866,12 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-gate-"));
     const planPath = writeCheckPlan(temporaryRoot, {
       "M01-approved.md": eligibleSampleBody(300),
+      // The pending milestone follows the approved one, so the plan has one ending.
       "M02-pending.md": eligibleSampleBody(
         600,
         "M02",
         "human-verification-pending",
-      ),
+      ).replace("Depends on: none", "Depends on: M01"),
     });
 
     try {
@@ -915,6 +922,7 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
       ],
       {
         title: "M04: Future milestone",
+        dependsOn: "M01, M02, M03",
         forecastBasisLine:
           "Forecast basis: 4 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
         forecastRangeLine:

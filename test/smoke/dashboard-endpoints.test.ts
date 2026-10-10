@@ -1,5 +1,5 @@
 /**
- * Check dashboard exports and terminal behavior using fake sockets and PTYs.
+ * Check terminal behavior using fake sockets and PTYs.
  *
  * These smoke tests cover prompt timing, browser reconnection, input validation, and session limits.
  * Use the integration suite for HTTP behavior; this file does not launch a real terminal.
@@ -264,19 +264,7 @@ function makeSpawnedPty(): {
   };
 }
 
-describe("dashboard server exports", () => {
-  it("serveDashboard is exported as a function", async () => {
-    const moduleExports = await import("../../src/cli/server/dashboard.js");
-    assert.equal(typeof moduleExports.serveDashboard, "function");
-  });
-});
-
-describe("terminal exports", () => {
-  it("TerminalManager is exported as a class", async () => {
-    const moduleExports = await import("../../src/cli/server/terminal.js");
-    assert.equal(typeof moduleExports.TerminalManager, "function");
-  });
-
+describe("terminal manager", () => {
   it("rejects missing and file project paths before PTY launch", () => {
     assert.throws(
       () => validateProjectPath("/definitely/missing/goat-flow/project"),

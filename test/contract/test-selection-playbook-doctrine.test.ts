@@ -595,13 +595,6 @@ const ENROLLMENT_OWNERS = [
     required: ["test-selection.md"],
   },
   {
-    path: "test/integration/preamble-sync.test.ts",
-    required: [
-      "workflow/skills/playbooks/test-selection.md",
-      ".goat-flow/skill-docs/playbooks/test-selection.md",
-    ],
-  },
-  {
     path: "test/unit/playbook-contract.test.ts",
     required: [".goat-flow/skill-docs/playbooks/test-selection.md"],
   },

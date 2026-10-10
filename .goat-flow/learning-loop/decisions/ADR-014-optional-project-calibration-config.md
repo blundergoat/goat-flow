@@ -1,8 +1,8 @@
 # ADR-014: Treat `toolchain` and `ask_first` as optional project calibration
 
 **Date:** 2026-04-15
-**Status:** Implemented
-**Updated:** 2026-09-05 - condensed; this record owns the `agents` field semantics that ADR-033 defers to. Earlier amendments (2026-05-18, 2026-05-19) marked `agents:` legacy.
+**Status:** Accepted
+**Updated:** 2026-10-11 - the retired Implemented status became Accepted; this record owns the `agents` field semantics that ADR-033 defers to.
 
 ## Context
 

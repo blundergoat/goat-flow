@@ -478,43 +478,6 @@ export function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
 }
 
 /**
- * Build project facts around a real directory so a test can exercise checks that read the filesystem.
- *
- * @param root - project root the facts describe
- * @param agents - agent facts to attach; empty means the project has no supported agent installed
- * @returns project facts ready to drop into an audit context
- */
-export function makeProjectFacts(
-  root: string,
-  agents: AgentFacts[] = [],
-): ProjectFacts {
-  const baseFacts = makeCtx().facts;
-  return {
-    ...baseFacts,
-    root,
-    agents,
-  };
-}
-
-/**
- * Writes one file into a fixture project, creating parent directories as needed.
- *
- * @param root - fixture project root
- * @param relativePath - path within the project; missing parent directories are created rather than failing
- * @param content - file contents; the default empty string creates a present but empty file, which several checks treat differently from absent
- * @returns nothing; the file exists once this resolves
- */
-export async function writeProjectFile(
-  root: string,
-  relativePath: string,
-  content = "",
-): Promise<void> {
-  const fullPath = join(root, relativePath);
-  await mkdir(dirname(fullPath), { recursive: true });
-  await writeFile(fullPath, content);
-}
-
-/**
  * Create a temporary project, run one setup function against it, and hand back its cleanup.
  *
  * It writes a temporary directory on disk and throws only after removing it again, so a broken fixture cannot leave scratch directories behind.
@@ -537,116 +500,6 @@ export async function makeTempProject(
     root,
     cleanup: () => rm(root, { recursive: true, force: true }),
   };
-}
-
-/**
- * Populate a fixture project with the setup artifacts the audit expects to find.
- *
- * The options toggle exactly the artifacts whose presence changes a check result, so one helper covers the pass and fail shapes.
- *
- * @param root - fixture project root
- * @param options - which optional artifacts to create; omitting one is how a test drives that check to fail
- * @returns nothing; the fixture is on disk once this resolves
- */
-/**
- * Report whether a manifest path belongs to the shared skill-docs pack.
- *
- * @param manifestPath - a required file or directory from the manifest
- * @returns true when the path sits under the skill-docs tree, so the fixture can omit it on request
- */
-function isSkillDocsPath(manifestPath: string): boolean {
-  return (
-    manifestPath.startsWith(".goat-flow/skill-docs/") ||
-    manifestPath === ".goat-flow/skill-docs/" ||
-    manifestPath === ".goat-flow/skill-docs/playbooks/"
-  );
-}
-
-/**
- * Supply the contents one fixture file needs to pass its own audit check.
- *
- * Two files carry real content because checks parse them: the config is read for its version, and the gitignore is
- * compared against the shipped template. Everything else only needs to exist.
- *
- * @param file - manifest-relative path being written
- * @returns the file contents to write
- */
-function auditFixtureFileContent(file: string): string {
-  if (file === ".goat-flow/config.yaml") {
-    return `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`;
-  }
-  if (file === ".goat-flow/.gitignore") {
-    return readFileSync(
-      join(PROJECT_ROOT, "workflow/setup/reference/goat-flow-gitignore"),
-      "utf-8",
-    );
-  }
-  return "# Stub\n";
-}
-
-/**
- * Populate a fixture project with the setup artifacts the audit expects to find.
- *
- * The options toggle exactly the artifacts whose presence changes a check result, so one helper covers the pass shape and
- * both failure shapes without a test hand-building the manifest itself.
- *
- * @param root - fixture project root
- * @param options - which optional artifacts to create; omitting one is how a test drives that check to fail
- * @returns nothing; the fixture is on disk once this resolves. It writes directories and files into the fixture project on disk.
- */
-export async function writeAuditSetupFixture(
-  root: string,
-  options: {
-    skillReferenceDir: boolean;
-    skillReferenceReadme?: boolean;
-    instructionPointer: boolean;
-  },
-): Promise<void> {
-  const manifest = JSON.parse(
-    readFileSync(join(PROJECT_ROOT, "workflow/manifest.json"), "utf-8"),
-  ) as { required_files: string[]; required_dirs: string[] };
-
-  for (const dir of manifest.required_dirs) {
-    // Omitting the skill-docs tree is how a test drives the "reference pack missing" checks to fail.
-    if (!options.skillReferenceDir && isSkillDocsPath(dir)) continue;
-    await mkdir(join(root, dir), { recursive: true });
-  }
-
-  for (const file of manifest.required_files) {
-    if (!options.skillReferenceDir && isSkillDocsPath(file)) continue;
-    // Omitting just the README exercises the narrower "pack present but unreadable" case.
-    if (
-      options.skillReferenceReadme === false &&
-      file === ".goat-flow/skill-docs/README.md"
-    ) {
-      continue;
-    }
-    await writeProjectFile(root, file, auditFixtureFileContent(file));
-  }
-
-  const instructionContent = options.instructionPointer
-    ? `# CLAUDE.md
-
-## Execution Loop: READ -> SCOPE -> ACT -> VERIFY
-
-### READ
-Before declaring any tool or capability unavailable, read the matching playbook in .goat-flow/skill-docs/playbooks/ and run that doc's "Availability Check" section verbatim.
-
-### SCOPE
-
-### ACT
-
-### VERIFY
-
-## Router Table
-
-| Resource | Path |
-|----------|------|
-| Skill playbooks | .goat-flow/skill-docs/playbooks/ |
-`
-    : "# CLAUDE.md\n";
-
-  await writeProjectFile(root, "CLAUDE.md", instructionContent);
 }
 
 /**
@@ -752,40 +605,6 @@ export function makeReportWithDetails(
     [],
     scope.checks,
   );
-}
-
-/**
- * Create a profile span recorder for audit-cache instrumentation assertions.
- *
- * @returns the profiler to pass into an audit plus the shared `names` array, which fills with span labels in call order
- */
-export function createSpanRecorder(): {
-  /** Profiler seam accepted by the audit entry points. */
-  profile: { span<T>(name: string, block: () => T): T };
-  names: string[];
-} {
-  const names: string[] = [];
-  return {
-    names,
-    profile: {
-      /** Record this span's label, then run the block untouched so timing never changes what the audit produces. */
-      span<T>(name: string, block: () => T): T {
-        names.push(name);
-        return block();
-      },
-    },
-  };
-}
-
-/**
- * Count recorded profile spans with the exact requested name.
- *
- * @param names - recorded span names in the order they were emitted by the span recorder
- * @param name - the exact span name to match (no prefix or substring matching)
- * @returns how many entries in `names` equal `name`, used to assert a span ran the expected number of times
- */
-export function countSpan(names: string[], name: string): number {
-  return names.filter((entry) => entry === name).length;
 }
 
 // ---------------------------------------------------------------------------

@@ -84,14 +84,21 @@ describe("plans check: parallel lanes", () => {
       const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-lanes-"));
       try {
         const files: Record<string, string> = {};
+        const laneIds: string[] = [];
         for (const [index, lane] of testCase.lanes.entries()) {
           const id = `M${18 + index}`;
+          laneIds.push(id);
           files[`${id}-fixture.md`] =
             canonicalMilestoneBody({
               title: `${id}: Active work`,
               status: "in-progress",
             }) + (lane === undefined ? "" : `\nLane: ${lane}\n`);
         }
+        // A not-started join keeps each case about lanes and caps rather than the plan's separate endings.
+        files["M30-join.md"] = canonicalMilestoneBody({
+          title: "M30: Join lanes",
+          dependsOn: laneIds.join(", "),
+        });
         const result = runPlansCheck(
           writeCheckPlan(root, files),
           "--strict",
@@ -142,12 +149,12 @@ describe("plans check: parallel lanes", () => {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(result.stderr, "");
       const lines = result.stdout.split("\n");
-      assert.deepEqual(lines.slice(3, 6), [
+      assert.deepEqual(lines.slice(4, 7), [
         "active: M18 (in-progress) | lane: go",
         "active: M19 (in-progress) | lane: php",
         "plan: 2 active milestones (cap 2)",
       ]);
-      assert.match(lines[6] ?? "", /^plan: 9 min estimated/u);
+      assert.match(lines[7] ?? "", /^plan: 12 min estimated/u);
     }
     const legacy = runPlansCheck(
       PARALLEL_PLAN,
@@ -932,6 +939,157 @@ describe("plans check: structure, identity, and dependencies", () => {
         assert.equal(result.status, 1, result.stdout + result.stderr);
         assertSourceLabelledErrors(result.stdout);
         assert.match(result.stdout, testCase.expected);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  /** Reasons strict validation requires for each exceptional status a join case uses. */
+  const joinStatusReasons: Record<string, string> = {
+    abandoned: "Human approved stopping after the premise failed.",
+    blocked: "Waiting for the provider capture before resuming.",
+    deferred: "Moved to the next release after review.",
+    superseded: "Superseded by M02, which carries the remainder.",
+  };
+
+  /**
+   * Build one join-case milestone that strict validation accepts apart from plan shape.
+   *
+   * @param id - milestone ID used for the `<id>-case.md` filename and the title
+   * @param status - lifecycle status; complete adds checked work and an Actual, exceptional states add their reason
+   * @param dependsOn - declared dependencies; `none` starts the plan
+   * @returns milestone Markdown for the join fixture
+   */
+  function joinCaseMilestone(
+    id: string,
+    status = "not-started",
+    dependsOn = "none",
+  ): string {
+    const isComplete = status === "complete";
+    return canonicalMilestoneBody({
+      title: `${id}: Join case`,
+      status,
+      statusReason: joinStatusReasons[status],
+      dependsOn,
+      isTaskChecked: isComplete,
+      includeActual: isComplete,
+      proofLines: isComplete
+        ? [
+            "- [x] Outcome is proven → focused check passes. [automated] (est: 1 min proof)",
+          ]
+        : undefined,
+    });
+  }
+
+  // Each row lists milestones as [ID, status, Depends on]; a missing status means not-started and missing dependencies mean `none`.
+  const finalJoinCases: Array<{
+    name: string;
+    milestones: Array<[id: string, status?: string, dependsOn?: string]>;
+    errors: string[];
+    warnings: string[];
+  }> = [
+    {
+      name: "rejects open work that ends in two milestones",
+      milestones: [
+        ["M01", "complete"],
+        ["M02", undefined, "M01"],
+        ["M03", undefined, "M01"],
+      ],
+      errors: [
+        "error: M02-case.md: plan has 2 endings (M02, M03); add a final milestone that depends on both",
+        "error: M03-case.md: plan has 2 endings (M02, M03); add a final milestone that depends on both",
+      ],
+      warnings: [],
+    },
+    {
+      name: "accepts open work joined by one final milestone",
+      milestones: [
+        ["M01", "complete"],
+        ["M02", undefined, "M01"],
+        ["M03", undefined, "M01"],
+        ["M04", undefined, "M02, M03"],
+      ],
+      errors: [],
+      warnings: [],
+    },
+    {
+      name: "keeps a finished plan with two endings advisory",
+      milestones: [
+        ["M01", "complete"],
+        ["M02", "complete"],
+      ],
+      errors: [],
+      warnings: [
+        "warning: plan: finished plan has 2 endings (M01, M02); any new milestone must depend on both",
+      ],
+    },
+    {
+      name: "accepts a plan whose milestones all left it",
+      milestones: [
+        ["M01", "abandoned"],
+        ["M02", "deferred"],
+        ["M03", "superseded"],
+      ],
+      errors: [],
+      warnings: [],
+    },
+    {
+      name: "accepts one participant as its own final milestone",
+      milestones: [["M01"], ["M02", "abandoned"]],
+      errors: [],
+      warnings: [],
+    },
+    {
+      name: "counts blocked work as an ending",
+      milestones: [["M01", "blocked"], ["M02"], ["M03"]],
+      errors: ["M01", "M02", "M03"].map(
+        (id) =>
+          `error: ${id}-case.md: plan has 3 endings (M01, M02, M03); add a final milestone that depends on all 3`,
+      ),
+      warnings: [],
+    },
+    {
+      name: "joins work through a deferred milestone's link",
+      milestones: [
+        ["M01", "complete"],
+        ["M02", "deferred", "M01"],
+        ["M03", undefined, "M02"],
+      ],
+      errors: [],
+      warnings: [],
+    },
+  ];
+
+  // Each row is one agreed final-milestone rule; a plain `plans check` must stay silent because only `--strict` enforces it.
+  for (const testCase of finalJoinCases) {
+    it(`final join: ${testCase.name}`, () => {
+      const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-join-"));
+      try {
+        const files: Record<string, string> = {};
+        // Each tuple becomes one milestone file in a throwaway plan folder.
+        for (const [id, status, dependsOn] of testCase.milestones) {
+          files[`${id}-case.md`] = joinCaseMilestone(id, status, dependsOn);
+        }
+        const planPath = writeCheckPlan(temporaryRoot, files);
+        const strict = runPlansCheck(planPath, "--strict");
+        assert.equal(
+          strict.status,
+          testCase.errors.length > 0 ? 1 : 0,
+          strict.stdout + strict.stderr,
+        );
+        const lines = strict.stdout.split("\n");
+        assert.deepEqual(
+          lines.filter((line) => line.startsWith("error:")),
+          testCase.errors,
+        );
+        assert.deepEqual(
+          lines.filter(
+            (line) => line.startsWith("warning:") && line.includes("endings ("),
+          ),
+          testCase.warnings,
+        );
+        assert.doesNotMatch(runPlansCheck(planPath).stdout, /endings \(/u);
       } finally {
         rmSync(temporaryRoot, { recursive: true, force: true });
       }

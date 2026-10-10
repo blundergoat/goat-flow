@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-15
-**Updated:** 2026-09-05 - condensed.
+**Updated:** 2026-10-11 - D4 is settled: the decisions README moves to system ownership.
 
 ## Context
 
@@ -19,9 +19,9 @@ All seventeen records keep system ownership, and consumer extension is handled b
 | D1 | Every currently system-owned managed doc and `.gitignore` keeps system ownership. |
 | D2 | Divergent local bytes under an unchanged package template are preserved, not blocked and not replaced; the `local-preserved` / `none` classification decides this without an ownership change. |
 | D3 | A genuine template change against divergent local bytes still asks the user to decide; no rule may resolve it silently. |
-| D4 | `.goat-flow/learning-loop/decisions/README.md` keeps its existing `user-owned` policy. Its asymmetry with the three sibling bucket READMEs is recorded here, not settled. |
+| D4 | `.goat-flow/learning-loop/decisions/README.md` moves to system ownership like the three sibling bucket READMEs: its content is framework doctrine, and D2 preserves a consumer's additions under an unchanged template. The manifest and installer change ships in 1.18.0. |
 
-Refresh reach is the point of system ownership. These templates carry doctrine that must reach existing installs when it changes, such as the local-state contract in `workflow/setup/reference/plans-readme.md` (search: `## Data Boundary`); `user-owned` is create-only, so a doctrine correction would reach new projects and never the ones running the wrong contract. The measured incident is entirely an unchanged-template case, which D2 resolves without giving up refresh on seventeen paths. The decisions-README split has no explanation in the templates or the manifest: `workflow/setup/reference/decisions-readme.md` (search: `## When To Write An ADR`) and `workflow/setup/reference/lessons-readme.md` (search: `Mistakes the agent made`) both read as framework doctrine, so the ambiguous case preserves the status quo pending a separate reviewed migration.
+Refresh reach is the point of system ownership. These templates carry doctrine that must reach existing installs when it changes, such as the local-state contract in `workflow/setup/reference/plans-readme.md` (search: `## Data Boundary`); `user-owned` is create-only, so a doctrine correction would reach new projects and never the ones running the wrong contract. The measured incident is entirely an unchanged-template case, which D2 resolves without giving up refresh on seventeen paths. The decisions-README split had no explanation in the templates or the manifest: `workflow/setup/reference/decisions-readme.md` (search: `## When To Write An ADR`) and `workflow/setup/reference/lessons-readme.md` (search: `Mistakes the agent made`) both read as framework doctrine, which is why D4 settles it as system-owned.
 
 ## Failure Mode Comparison
 
@@ -35,4 +35,4 @@ Refresh reach is the point of system ownership. These templates carry doctrine t
 
 - A consumer who extends a managed doc keeps that content across upgrades while the template is stable, with no flag and no data loss; when the template changes they see a conflict row and choose.
 - The seventeen paths keep their `required_files` and `assert_file_ownership` bindings unchanged.
-- The decisions-README ownership asymmetry stays open until evidence shows whether ADR capture policy is project-chosen.
+- The decisions README joins the refresh-reaching set once its ownership change ships; until then its `user-owned` manifest record stands.

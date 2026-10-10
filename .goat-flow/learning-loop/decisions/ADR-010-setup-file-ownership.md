@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-06
-**Updated:** 2026-09-05 - condensed; scoping now names the ADR-020 roster instead of two agents, and a stale reference to the removed scanner is gone. Earlier amendments added the ADR-051 commit-guidance seed (2026-08-08) and absorbed now-removed ADR-003 on reference-based prompts (2026-08-15).
+**Updated:** 2026-09-05 - condensed; scoping names the ADR-020 roster and the stale scanner reference is gone. Absorbed (removed): ADR-003-reference-based-setup-prompts.
 
 ## Context
 

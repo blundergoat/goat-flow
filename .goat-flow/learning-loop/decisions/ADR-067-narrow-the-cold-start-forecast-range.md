@@ -1,8 +1,8 @@
 # ADR-067: Narrow the cold-start forecast range to 1.0-2.5-6 minutes per work unit
 
-**Status:** Implemented
+**Status:** Accepted
 **Date:** 2026-09-20
-**Updated:** 2026-09-20
+**Updated:** 2026-10-11 - the comparison table verdicts now match the 1.0 low rate adopted on 2026-09-20, and the retired Implemented status became Accepted.
 
 ## Context
 
@@ -47,9 +47,9 @@ The table records the original decision, before the maintainer's low-rate amendm
 | 0.5-2.5-7.5 | Strongest case: 90% coverage, with 8 over the top instead of 15. The maintainer considered it on 2026-09-19 and declined it, preferring the narrower range at 85% | Rejected |
 | 0.5-2.5-5 | Strongest case: ten minutes narrower again for two more misses. It sits below the measured 90th percentile, so the high would no longer be a measured figure | Rejected |
 | 0.5-1.25-5, fitted to the fastest plan | Strongest case: frozen before ten later milestones of that plan ran, it held nine of them, as the shipped default did, with a median error of 10.0 minutes against 22.7. Pooled, only 35 of 133 samples finish under its likely and actual totals run 2.54 times its summed likely, so every slower project would be under-forecast | Rejected |
-| Raise the low to 0.75 or 1 | Strongest case: a narrower range from the other side. Misses below the low rise from 5 to 11 or 22 | Rejected |
+| Raise the low to 0.75 or 1 | Strongest case: a narrower range from the other side. Misses below the low rise from 5 to 11 or 22 | Rejected on 2026-09-19; the low of 1.0 was accepted on 2026-09-20 at the maintainer's request |
 | Wait for a second prospective pilot | Strongest case: a prospective test is stronger evidence than known outcomes. The first pilot ran across a 27-milestone plan and could not reach a verdict, and the default governs only a plan's first three milestones | Rejected |
-| 0.5-2.5-6 | Slow milestones exceed the range more often: 15 of 133 against 3 | Accepted |
+| 0.5-2.5-6 | Slow milestones exceed the range more often: 15 of 133 against 3 | Accepted on 2026-09-19; replaced by 1.0-2.5-6 on 2026-09-20 |
 
 The amendment accepts `1.0-2.5-6` for a narrower optimistic bound. Keeping 0.5 would retain more known outcomes inside the range; raising it leaves 22 below instead of 5, without changing the likely or high. The maintainer's explicit choice supersedes the original rejection of a low rate of 1.
 

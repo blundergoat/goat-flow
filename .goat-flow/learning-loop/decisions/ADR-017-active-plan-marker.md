@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-17
-**Updated:** 2026-09-05 - condensed. The 2026-08-15 amendment corrected the status from "Superseded by ADR-033": ADR-033 moved the marker from `tasks/` to `plans/` and left these semantics in force.
+**Updated:** 2026-09-05 - condensed; the 2026-08-15 amendment corrected the status from "Superseded by ADR-033", because ADR-033 moved only the marker path and left these semantics in force.
 **Related:** ADR-033 (marker path); `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Cross-reference fragility across docs`).
 
 ## Context

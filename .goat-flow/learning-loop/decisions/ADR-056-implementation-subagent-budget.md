@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-23
-**Updated:** 2026-09-05 - condensed; the goat-clarity anchor was corrected to a literal that resolves. The 2026-08-29 amendment recorded the rollout across all six surfaces.
+**Updated:** 2026-10-11 - test coverage is stated per surface; only the skill-conventions wording is pinned.
 
 ## Context
 
@@ -38,5 +38,5 @@ Ownership is unchanged: a delegated return is product evidence, while the host r
 ## Consequences
 
 - The cap derives from notation goat-plan already requires. The formula is a policy limit, not a calibrated calls-per-minute ratio, and measured data can change the base or ceiling without reopening the two-tier decision.
-- Rolled out 2026-08-29 as single-line replacements in `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.goat-flow/skill-docs/skill-conventions.md`, `workflow/skills/reference/skill-conventions.md`, and `workflow/setup/reference/execution-loop.md`, pinned by `test/contract/skill-hardening-skills-2.test.ts` (search: `Scouts get 5 tool calls; implementation gets 5 plus`).
+- Rolled out 2026-08-29 as single-line replacements in `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.goat-flow/skill-docs/skill-conventions.md`, `workflow/skills/reference/skill-conventions.md`, and `workflow/setup/reference/execution-loop.md`. Only the skill-conventions wording is pinned, by `test/contract/skill-hardening-skills-2.test.ts` (search: `Scouts get 5 tool calls; implementation gets 5 plus`). The three instruction files share their sentence under the ADR-020 `Hard Rules` parity check, and `execution-loop.md` states the rule in its own words; no test pins either wording to this record.
 - ADR-042 points at this tier for native sub-agents; goat-critique's specialist ceilings and every installed goat-critique mirror stay byte-identical.

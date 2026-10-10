@@ -1,9 +1,24 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-09-27
+last_reviewed: 2026-10-10
 ---
 
-**Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, naming the real failure class in retrieval terms, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
+**Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, naming the real failure class in retrieval terms, sizing a proposal to the reproduced defect, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
+
+## Lesson: A plan proposed a module and suite per milestone for a one-function checker fix
+
+**Status:** active | **Created:** 2026-10-10 | **Evidence:** OBSERVED
+**Decision changed:** Size a plan to the reproduced defect before adding modules, commands, suites or design references.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Before writing a milestone that adds a new source module, CLI command or test suite, name the reproduced failure it fixes and the smallest existing owner that can hold the change. Count new modules, commands and suites across the plan; when that count approaches the milestone count, cut to the reproduced defects and leave the rest out. External architecture references do not justify scope that no local incident needs.
+
+**What happened:** On 2026-10-10 the local graph investigation planned six milestones for the Markdown plan checker: six new modules under `src/cli/`, a `plans ready` command with JSON reason codes, three new integration suites, a dashboard SVG view, verification receipts and transition guards, with Bazel Skyframe, W3C PROV-O and LangGraph cited as design references. The only reproduced defect was that `plans check --strict` passes a plan with two final milestones. The user deleted four of the six and asked for the remaining two to be cut to a reachability check inside the existing structure checker and readiness lines in the existing `plans check` output.
+
+**Root cause:** The plan grew from the design space the investigation explored, not from the defects it reproduced. Each explored idea received its own milestone, module and suite, and no step compared the proposal's size with the reproduced defect or asked whether an existing owner already held the data. Owner of the reproduced defect: `src/cli/plans-check-structure.ts` (search: `collectPlanStructureErrors`).
+
+---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
 

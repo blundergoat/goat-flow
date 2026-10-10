@@ -8,7 +8,7 @@ last_reviewed: 2026-09-05
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
 
 **Prevention:**
-1. Two ceilings: for any orchestrated resource with its own TTL, the consumer's loop has its own, shorter ceiling. Resource cleanup protects the system; the loop ceiling protects the consumer. ADR-029 records the rule so a later "simplify by removing the inner ceiling" refactor has to argue with it.
+1. Two ceilings: for any orchestrated resource with its own TTL, the consumer's loop has its own, shorter ceiling. Resource cleanup protects the system; the loop ceiling protects the consumer. The pattern in `.goat-flow/learning-loop/patterns/architecture.md` (search: `Two ceilings for an orchestrated long-lived resource`) records the rule so a later "simplify by removing the inner ceiling" refactor has to argue with it.
 2. Every resource ceiling has a test that exercises the consumer when the ceiling fires.
 3. When introducing or tuning a resource TTL, name the matching consumer-loop ceiling in the same commit, so a grep for the TTL field surfaces it.
 

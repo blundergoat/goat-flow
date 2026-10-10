@@ -44,6 +44,7 @@ describe("plans check: likely floor for fast plans", () => {
           ["- [ ] Build the result (est: 2 min product)"],
           {
             title: "M04: Future milestone",
+            dependsOn: "M01, M02, M03",
             forecastBasisLine:
               "Forecast basis: 3 agent work units; 0.5-2.5-6 min/unit low-likely-high; source: cold-start prior",
             forecastRangeLine:
@@ -75,6 +76,7 @@ describe("plans check: likely floor for fast plans", () => {
           ["- [ ] Build the result (est: 1 min product)"],
           {
             title: "M04: Future milestone",
+            dependsOn: "M01, M02, M03",
             forecastBasisLine:
               "Forecast basis: 3 agent work units; 0.56-1.00-1.76 min/unit low-likely-high; source: local p10/p90 receipt history, likely floored at 1.00 from 0.80",
             forecastRangeLine:

@@ -123,7 +123,7 @@ The full gates then caught an unsupported standalone `Evidence` metadata label a
 
 **Root cause:** Quality reports detect weak presentation, but they do not automatically know which non-gating limits are intentional.
 
-**Recurrence 2026-10-04:** An improvement report recommended removing hook version stamps, passing the drift audit on declared anchors, and having the installer add missing credential-store denies. It had skipped the decisions INDEX search; the now-removed ADR-052-define-hook-trust-evidence-and-results, ADR-058 and ADR-065 covered all three at the time. An independent review and a second pass caught it before any milestone was planned. Reconcile when writing a recommendation, not only when implementing one. Evidence: `src/cli/audit/check-goat-flow.ts` (search: `const hookVersionCurrent`) and `.goat-flow/learning-loop/decisions/ADR-065-content-shape-secret-denies.md` (search: `a normal install does not silently add those denies`).
+**Recurrence 2026-10-04:** An improvement report recommended removing hook version stamps, passing the drift audit on declared anchors, and having the installer add missing credential-store denies. It had skipped the decisions INDEX search; the now-removed ADR-052-define-hook-trust-evidence-and-results and ADR-058-managed-accepted-delta-seam, with ADR-065, covered all three at the time. An independent review and a second pass caught it before any milestone was planned. Reconcile when writing a recommendation, not only when implementing one. Evidence: `src/cli/audit/check-goat-flow.ts` (search: `const hookVersionCurrent`) and `.goat-flow/learning-loop/decisions/ADR-065-content-shape-secret-denies.md` (search: `a normal install does not silently add those denies`).
 
 ---
 

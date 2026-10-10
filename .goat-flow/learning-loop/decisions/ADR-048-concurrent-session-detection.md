@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-23
-**Updated:** 2026-09-26 - public index generation and operator recovery now coordinate on path-keyed claims and guards.
+**Updated:** 2026-10-11 - the unplanned-writer list is removed; public index generation and operator recovery coordinate on path-keyed claims and guards (2026-09-26).
 
 ## Context
 
@@ -59,7 +59,7 @@ Config and provider writers invoked outside this registrar path retain their exi
 
 Shipped: the reusable claim and identity helper (`src/cli/path-write-claim.ts`), cross-process tests, stable diagnostics, sorted multi-target admission, and the managed-install transaction guard. `install` claims every previewed destination including config and managed agent-config paths; `learn new`, public `index`, and dashboard index regeneration claim all four generated indexes; ADR-064 is the first full-lifecycle consumer. Evidence: `src/cli/learning-loop-index/generate.ts` (search: `generateIndexesWithClaims`).
 
-Unplanned until a roadmap admits them: moving the `plans time` identity comparison inside the claim, guarding dashboard active-plan writes with a revision from the plan read route, covering config writers outside `install` and the guarded hook registrar, dashboard project-state revisioning, and session-log output. A future guarded writer must retain supported-platform proof for exclusive creation and cleanup; a platform that cannot provide it stops the dependent work for a revised decision rather than falling back to re-read-only checks.
+A future guarded writer must retain supported-platform proof for exclusive creation and cleanup; a platform that cannot provide it stops the dependent work for a revised decision rather than falling back to re-read-only checks.
 
 Until a writer is guarded, goat-plan re-reads the exact milestone or marker immediately before a direct edit, compares it with the snapshot used to prepare the edit, and stops on any sibling change. These steps are advisory and must be described as such, never as a lock.
 

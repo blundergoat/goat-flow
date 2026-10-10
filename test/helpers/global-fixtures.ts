@@ -50,20 +50,3 @@ export async function withEnv<T>(
     restore();
   }
 }
-
-/**
- * Pin the global clock for a synchronous test of date-dependent user output, then restore the original constructor.
- *
- * @param fake - Date constructor supplying the test's chosen time
- * @param block - synchronous test work to finish before restoring the clock
- * @returns the callback's result after restoration; callback failures propagate
- */
-export function withStubbedDate<T>(fake: DateConstructor, block: () => T): T {
-  const originalDate = globalThis.Date;
-  globalThis.Date = fake;
-  try {
-    return block();
-  } finally {
-    globalThis.Date = originalDate;
-  }
-}

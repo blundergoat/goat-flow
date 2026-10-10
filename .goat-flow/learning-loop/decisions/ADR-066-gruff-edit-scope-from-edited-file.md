@@ -2,9 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-19
-**Updated:** 2026-09-19 - before implementation, the entry rule was narrowed to Claude's registration: ADR-053 freezes the other providers' registration bytes.
-
-**Updated:** 2026-10-10 - registration freezes now cite ADR-053 and result coverage cites its executable contract.
+**Updated:** 2026-10-10 - registration freezes cite ADR-053 and result coverage cites its executable contract; before implementation (2026-09-19) the entry rule was narrowed to Claude's registration because ADR-053 freezes the other providers' registration bytes.
 
 ## Context
 

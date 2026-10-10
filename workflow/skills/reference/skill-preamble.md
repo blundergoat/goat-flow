@@ -40,7 +40,7 @@ Order by severity, not discovery order.
 
 ## Evidence Standard
 
-- Live findings and durable learning artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function, or unique string); line numbers only navigate.
+- Live findings and durable learning artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function, or unique string); never line numbers.
 - For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible work, read `.goat-flow/skill-docs/playbooks/browser-use.md` and run `command -v browser-use || command -v browser-use-python` before declaring automation unavailable.
 - Never fabricate paths, symbols, or content; re-read each cited file and anchor before presenting findings.
 - Tag evidence quality: **OBSERVED** (verified) | **INFERRED** (name missing proof) | **UNVERIFIED** (cannot re-read) | **HUMAN-PENDING: \<what needs checking\>**.

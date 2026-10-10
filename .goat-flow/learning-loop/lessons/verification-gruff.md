@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-09-19
+last_reviewed: 2026-10-11
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-testing.md](verification-testing.md).
@@ -158,3 +158,18 @@ last_reviewed: 2026-09-19
 **What happened:** Eighteen `test-quality.loop-in-test` findings were classified by hand from the rule description ("loops whose assertions do not identify the failing item"): 13 with interpolated loop variables were called false positives and 5 with missing messages were edited across `test/contract/test-selection-playbook-doctrine.test.ts`, `test/unit/dashboard-hooks-view.test.ts`, `test/unit/manifest.test.ts`, `test/unit/playbook-contract.test.ts`, and `test/integration/setup-install-agent-matrix.test.ts`. The rerun still reported 18. An isolated probe showed the real trigger: the rule reads the message only when the assertion call sits on one line, so every Prettier-wrapped assertion looks message-less, and a message built from a loop-derived local is not credited either.
 
 **Root cause:** The mechanism was inferred from the finding's prose and a model of what the rule ought to check; the implementation keyed on line shape, and five edits were spent on that model before a two-probe measurement contradicted it.
+
+---
+
+## Lesson: A Gruff identity diff that extracts zero rows proves nothing
+
+**Status:** active | **Created:** 2026-10-11
+**Decision changed:** Before trusting a before/after Gruff identity comparison, reconcile the extracted row count with the same run's `summary.total`; a zero-row extraction on a run that reports findings is a broken filter, not a clean file.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** When comparing `gruff-ts analyse --format json` runs by `stableIdentity`, read `summary.total` from each JSON first and require the extracted identity count to equal it before computing introduced or removed sets. The JSON is pretty-printed, so the key is `"stableIdentity": "` with a space; a pattern without the space matches nothing. Treat `before=0 after=0` as unproven until both counts reconcile. The comparison method itself is in `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Comment and Documentation Passes`).
+
+**What happened:** A comment pass on `src/cli/plans-check-structure.ts` (search: `collectPlanStructureAdvisories`) dropped two `Invariant:` lines and the word "must" from three doc comments. The identity grep used `"stableIdentity":"` without the space, reported `before=0 after=0 introduced=0`, and the pass was called clean. The goat-clarity baseline run on the same paths then showed three `docs.missing-invariant-doc` advisories on those functions, and the earlier JSON's `summary` had reported `advisory: 3` all along.
+
+**Root cause:** The filter was never checked against the run's own total, so an empty extraction was read as an empty finding set even though the same file carried the count that would have exposed the mismatch.

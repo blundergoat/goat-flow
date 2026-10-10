@@ -398,8 +398,6 @@ quality:
   gate-vocabulary:
     verification-gate: ["runs? tests"]
   tool-keywords-regex: "browser-use"
-  fixture-path: test/fixtures/quality-scores.json
-  additional-fixtures: []
   subtypes:
     workflow:
       notes: tuned for this project
@@ -871,6 +869,7 @@ describe("plans check: active cap input and project authority", () => {
         "M17-shared-baseline.md",
         "M18-go-precision.md",
         "M19-php-precision.md",
+        "M20-merge-precision.md",
       ]) {
         files[name] = readFileSync(
           join(

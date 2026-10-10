@@ -47,8 +47,6 @@ UNSAFE_TEST_PATHS=(
     'test/integration/packaged-hook-install.test.ts'
     # Asserts process-wide constraint isolation that concurrent mutant runners break.
     'test/integration/quality-constraint-isolation.test.ts'
-    # Timing budgets are meaningless while mutant runners saturate the machine.
-    'test/performance/*.test.ts'
 )
 
 # Individual cases that read the live repository or its build output instead of a fixture, so they

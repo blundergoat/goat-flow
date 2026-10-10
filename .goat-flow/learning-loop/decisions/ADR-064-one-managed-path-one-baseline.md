@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-27
-**Updated:** 2026-09-06 - accepted hook-only baseline publication under the existing schema and complete ADR-048 claims; full-install receipts remain exclusive to public install.
+**Updated:** 2026-10-11 - the schema, canonical-byte, and lifecycle detail is replaced by pointers to the code that owns it; hook-only baseline publication was accepted on 2026-09-06.
 
 ## Context
 
@@ -16,61 +16,11 @@ ADR-048 (search: `path-keyed exclusive claim plus expected content identity`) de
 
 Agent selection chooses which current skill mirror and receipt an install handles. It never chooses a baseline for a path, and current target bytes, incoming template bytes, directory presence, filename, modification time, and selected-agent order never resolve conflicting history. The ADR-048 helper stays under `src/cli/` for reuse by other writers; no managed-install-only lock is permitted.
 
-### Normative v2 schema
+### Schema and canonical bytes
 
-```ts
-type ManagedInstallStateV2 = {
-  schemaVersion: "goat-flow.install-state.v2";
-  files: ManagedPathRow[];
-  receipts: ManagedInstallReceipt[];
-};
+The v2 file (`goat-flow.install-state.v2`) holds sorted `files` rows of path, expected package hash, generation, and provenance (`verified-install` with the package version, or `legacy-v1-bootstrap` with its per-agent observations), plus hashless per-agent `receipts` that reference rows by path and generation. `src/cli/managed-setup-state.ts` (search: `ManagedInstallStateV2`) owns the shape and its validation: unknown keys, duplicate paths or agents, unsafe paths, unknown agents, empty versions, invalid hashes, unsorted arrays, and non-canonical bytes are malformed-blocking. A receipt that references a missing row or a different generation is valid stale evidence, not a parse error, so normal row replacement can stale another agent's receipt without corrupting the file. `expectedSha256` is the package hash from the last verified public install, guarded hook operation, or clean legacy bootstrap, never computed from current target bytes; receipts carry no content hash.
 
-type ManagedPathRow = {
-  path: SafeProjectRelativePath;
-  expectedSha256: LowercaseSha256;
-  generation: LowercaseSha256;
-  provenance: VerifiedInstallProvenance | LegacyBootstrapProvenance;
-};
-
-type VerifiedInstallProvenance = {
-  kind: "verified-install";
-  goatFlowVersion: NonEmptyString;
-};
-
-type LegacyBootstrapProvenance = {
-  kind: "legacy-v1-bootstrap";
-  observations: Array<{
-    agent: KnownAgentId;
-    goatFlowVersion: NonEmptyString;
-  }>;
-};
-
-type ManagedInstallReceipt = {
-  agent: KnownAgentId;
-  goatFlowVersion: NonEmptyString;
-  files: Array<{
-    path: SafeProjectRelativePath;
-    generation: LowercaseSha256;
-  }>;
-};
-```
-
-Objects accept exactly the keys shown. Unknown keys, duplicate file-row paths, duplicate receipt agents, duplicate paths within a receipt, unsafe paths, unknown agents, empty versions, invalid hashes or generations, unsorted arrays, and non-canonical bytes are malformed-blocking. A receipt reference to a missing row or a different generation is valid stale evidence, not a parse error, so normal row replacement can stale another agent's receipt without corrupting the file. `expectedSha256` is the package hash from the last verified public install, guarded hook operation, or clean legacy bootstrap, never computed from current target bytes; receipts carry no content hash.
-
-### Deterministic row generations and canonical bytes
-
-A row generation is lowercase SHA-256 over these UTF-8 bytes, so equivalent final state does not depend on install order:
-
-```text
-goat-flow.install-state.row-generation.v1 NUL
-path NUL
-expectedSha256 NUL
-canonical-provenance-json
-```
-
-Legacy observations sort by agent then raw version before the generation is computed. Changing the path, expected hash, provenance kind, verified version, or observations changes the generation; re-verifying the same triple preserves it. A monotonic counter is rejected because installing Antigravity then Claude would assign different generations than the reverse order.
-
-Canonical bytes order top-level keys `schemaVersion`, `files`, `receipts`; row keys `path`, `expectedSha256`, `generation`, `provenance`; provenance keys in schema order; receipt keys `agent`, `goatFlowVersion`, `files`; reference keys `path`, `generation`. Rows and references sort by ascending UTF-8 path bytes, receipts by agent, observations by agent then raw version, with two-space indentation and one trailing newline. A reader parses, validates, reserializes, and requires exact byte equality before the state can authorize a replacement.
+A row generation is a SHA-256 over the path, expected hash, and canonical provenance (`src/cli/managed-setup-state.ts`, search: `row-generation.v1`), so equivalent final state does not depend on install order; re-verifying the same triple preserves it, and a monotonic counter was rejected because installing Antigravity then Claude would assign different generations than the reverse order. The file has one canonical byte form (fixed key order; rows, receipts, and observations sorted; two-space indentation; one trailing newline), and a reader parses, validates, reserializes, and requires exact byte equality before the state can authorize a replacement.
 
 ### Row and receipt transitions
 
@@ -82,11 +32,7 @@ A stored receipt is `confirmed` only when its package version equals the executi
 
 A guarded hook sync or toggle may publish canonical rows for the exact bundled hook dependencies it has just verified. It records the incoming package hash with existing `verified-install` provenance for the executing version and derives generations through the existing row constructor. It preserves unrelated rows and every existing agent receipt, and it neither creates nor refreshes a full-install receipt. A receipt that references a changed generation becomes stale under the existing receipt rules.
 
-Hook operations use the existing receipt-free bootstrap and cutover order only after clean missing or valid legacy evidence is admitted. Malformed, conflicting, or already cutover-incompatible state blocks before target mutation; public install remains the cutover-recovery owner. Claims cover the complete operation, including state and marker destinations, until target verification and canonical publication finish. Schema, provenance shape, generation inputs, bootstrap precedence, and marker semantics stay unchanged.
-
-Missing history does not authorize replacement of differing local files. Missing or byte-identical official files may be adopted after admission; differing unclassified files and proven divergence require explicit replacement intent bound to the selected project, action, destination identities, persisted choices, baseline/markers, and incoming bundle. A changed review requires a fresh decision. Unsafe paths, newer scripts, and invalid history cannot be overridden.
-
-This writer uses `src/cli/server/hook-operation.ts` (search: `executeHookChange`) and `src/cli/managed-setup-preview.ts` (search: `recordManagedHookAfterVerification`). The admission regression in `test/integration/managed-divergence-messaging.test.ts` (search: `before changing any hook destination`) reproduced config mutation before malformed-provider refusal, unclassified replacement without confirmation, and ignored unsafe install-state evidence in the former registrar path.
+Hook operations admit only clean missing or valid legacy evidence; malformed, conflicting, or cutover-incompatible state blocks before target mutation, and public install remains the cutover-recovery owner. Claims cover the complete operation, including state and marker destinations, until target verification and canonical publication finish. Missing history never authorizes replacing differing local files: differing unclassified files and proven divergence require explicit replacement intent bound to the selected project, action, destination identities, persisted choices, baseline and markers, and incoming bundle, and a changed review requires a fresh decision. Unsafe paths, newer scripts, and invalid history cannot be overridden. The writer is `src/cli/server/hook-operation.ts` (search: `executeHookChange`) with `src/cli/managed-setup-preview.ts` (search: `recordManagedHookAfterVerification`); `test/integration/managed-divergence-messaging.test.ts` (search: `before changing any hook destination`) reproduces the former registrar path mutating config before a malformed-provider refusal, replacing unclassified files without confirmation, and ignoring unsafe install-state evidence.
 
 ### Public status vocabulary
 
@@ -96,18 +42,7 @@ Preview's `baselineStatus` is exactly one of `missing`, `loaded`, `malformed-blo
 
 When `managed.json` is absent, every known `.goat-flow/state/install/<agent>.json` is inventoried before any selected-agent preview can authorize a write. Each must be a safe regular file passing the complete v1 schema, agent, path, uniqueness, hash, and version checks, and one malformed file, selected or not, makes the global result `malformed-blocking` with nothing written. For each path in a clean inventory: identical hashes are accepted with every agreeing observation recorded; differing hashes require every version to pass the plain `X.Y.Z` comparator in `src/cli/version-compare.ts` (search: `isReleaseVersion`), keep only the highest-precedence observations, and accept them when they agree; an unrankable disagreeing observation or an equal-precedence disagreement returns `conflicting` and blocks the whole bootstrap. Current bytes and templates never invent history, so both selection orders produce identical virtual v2 bytes or the same refusal.
 
-A dry run reports without writing. An applying install acquires the complete ADR-048 claim batch, repeats inventory and resolution, publishes a receipt-free canonical `managed.json`, then replaces or creates every known agent file as a hashless cutover marker:
-
-```ts
-type LegacyCutoverMarker = {
-  schemaVersion: "goat-flow.install-state.v1-cutover";
-  agent: KnownAgentId;
-  managedState: "managed.json";
-  legacyEvidence: "migrated" | "absent";
-};
-```
-
-Existing files are replaced in place, never deleted or renamed; imported hashes exist only in `managed.json`. If marker publication fails, no target mutation or confirmed receipt occurs and a later install retries the markers. Once `managed.json` exists, v1 hashes are never read as authority; a newly appearing v1 file is `cutover-incompatible`, stales receipts, and is converted only by a claimed public install.
+A dry run reports without writing. An applying install acquires the complete ADR-048 claim batch, repeats inventory and resolution, publishes a receipt-free canonical `managed.json`, then replaces or creates every known agent file in place as a hashless cutover marker (`src/cli/managed-setup-preview.ts`, search: `v1-cutover`) that names `managed.json` and whether legacy evidence was migrated or absent. Imported hashes exist only in `managed.json`. If marker publication fails, no target mutation or confirmed receipt occurs and a later install retries the markers. Once `managed.json` exists, v1 hashes are never read as authority; a newly appearing v1 file is `cutover-incompatible`, stales receipts, and is converted only by a claimed public install.
 
 ### Old-reader and direct-installer cutover
 
@@ -115,15 +50,9 @@ The markers deliberately make a v1-only CLI reject every agent's state as an unk
 
 ### Claimed install lifecycle
 
-1. Build the complete preview and capture expected identities for every target the installer may write, `managed.json`, and every legacy marker path.
-2. Sort the complete project-relative path set by UTF-8 bytes and acquire all claims. Contention exits non-zero at once with `Managed install is busy: another process owns <relative-path>. No target files were changed.`; owned claims are released and nothing mutates.
-3. Re-read every identity, rebuild the preview, and repeat bootstrap or v2 validation under the claims; any change aborts before staging.
-4. Complete the receipt-free bootstrap and cutover markers when required.
-5. Invoke Bash with v2 admission while holding every claim, apply the targets, and verify every expected system-owned byte.
-6. Build and atomically replace the one canonical state candidate containing the selected confirmed receipt.
-7. Release only claims whose owner identity still matches.
+An applying install captures expected identities for every target it may write, `managed.json`, and every legacy marker path; acquires the complete sorted ADR-048 claim batch, where contention exits non-zero before any mutation (`src/cli/install-command.ts`, search: `Managed install is busy`); re-reads every identity and rebuilds the preview under the claims, aborting on any change; completes the receipt-free bootstrap and cutover markers when required; applies the targets with v2 admission and verifies every expected system-owned byte; atomically replaces the one canonical state candidate containing the selected confirmed receipt; and releases only claims whose owner identity still matches.
 
-The claim protects the whole read, admission, mutation, verification, and publication interval; it does not turn several renames into a filesystem transaction or cover non-cooperating manual edits. If staging, flush, or replacement of the state candidate fails after targets verified, the previous `managed.json` stays byte-identical, no receipt appears, and the command exits non-zero printing that managed files were verified but install state was not recorded, with the rerun command as the recovery. Rerunning after repairing write access needs no force.
+The claim protects the whole read, admission, mutation, verification, and publication interval; it does not turn several renames into a filesystem transaction or cover non-cooperating manual edits. If the state candidate cannot be staged, flushed, or replaced after targets verified, the previous `managed.json` stays byte-identical, no receipt appears, and the command exits non-zero saying that managed files were verified but install state was not recorded, with the rerun command as the recovery; rerunning after repairing write access needs no force.
 
 ### Orphans
 

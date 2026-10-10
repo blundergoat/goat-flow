@@ -950,7 +950,6 @@ function decodeEvaluateFiles(
  * Accept one source of Markdown for the Skills evaluator before scoring begins.
  *
  * This stays explicit because pasted content and uploaded bundles need the same field errors for ambiguous requests.
- * The deprecated /api/quality/analyse alias preserves this request contract.
  *
  * @param body - raw request body; empty or malformed JSON means no evaluation starts
  * @returns evaluation payload, or a field error shown before scoring

@@ -133,7 +133,6 @@ const SIDE_EFFECTFUL_EXACT_API_ROUTES = new Set([
   "POST /api/tasks",
   "POST /api/index/regenerate",
   "POST /api/quality/evaluate",
-  "POST /api/quality/analyse",
   "POST /api/terminal/create",
 ]);
 const HOOK_TOGGLE_API_ROUTE = /^\/api\/hooks\/[^/]+\/toggle$/u;

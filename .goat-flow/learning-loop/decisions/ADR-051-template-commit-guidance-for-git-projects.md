@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-08
-**Updated:** 2026-09-05 - condensed. The 2026-08-30 amendment documented the installed-instruction reference preflight and byte-parity enforcer; the 2026-08-15 amendment absorbed now-removed ADR-031 (single canonical commit doc) and ADR-043 (prefer `git-commit-message.md`).
+**Updated:** 2026-09-05 - condensed; the installed-instruction reference preflight and byte-parity enforcer were documented on 2026-08-30. Absorbed (removed): ADR-031-single-canonical-commit-doc, ADR-043-rename-canonical-commit-doc.
 
 ## Context
 

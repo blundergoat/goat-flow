@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-19
-**Updated:** 2026-09-05 - condensed; the "~130 lines" size claim is dropped because the skill is about 210 lines. Earlier amendments absorbed now-removed ADR-011 (critique is a core feature) on 2026-08-15 and made the lifecycle host-owned on 2026-08-30.
+**Updated:** 2026-10-11 - the skill size claim is dropped; the lifecycle became host-owned on 2026-08-30. Absorbed (removed): ADR-011-critique-mob-core-features.
 
 ## Context
 

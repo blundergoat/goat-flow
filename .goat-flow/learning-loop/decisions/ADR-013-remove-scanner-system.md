@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-13
 **Status:** Accepted
-**Updated:** 2026-09-05 - condensed; the implementation inventory and check counts are dropped now that the removal has shipped. Earlier amendments removed a drift-prone line-count claim (2026-05-18), refreshed handler anchors (2026-08-04), and absorbed the determinism constraint from now-removed ADR-012 (2026-08-15).
+**Updated:** 2026-09-05 - condensed; the implementation inventory and check counts are dropped now that the removal has shipped. Absorbed (removed): ADR-012-quality-checks-expansion, which carried the determinism constraint.
 
 ## Context
 

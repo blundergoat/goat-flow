@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-20
 **Status:** Accepted
-**Updated:** 2026-09-05 - condensed; the measurement tables are dropped because `test/contract/skill-hardening-contracts.test.ts` (search: `ADR-023 word budget tiers`) now enforces the tiers. Earlier amendments absorbed now-removed ADR-008 (instruction budget), ADR-007 (shared conventions), and ADR-027 (no per-language packs), raised the dispatcher budget twice, and added the line-density guard and the scorer window.
+**Updated:** 2026-10-11 - the instruction-file cut order is removed because it named sections that no longer exist, and the authoring-index cap is recorded; `test/contract/skill-hardening-contracts.test.ts` (search: `ADR-023 word budget tiers`) enforces the tiers. Absorbed (removed): ADR-008-instruction-budget-constraint, ADR-007-extract-skill-conventions, ADR-027-remove-ddt-layer-reference-packs.
 
 ## Context
 
@@ -14,7 +14,7 @@ The same scarcity governs the hot path. Instruction files load every session, so
 
 Every agent-read surface has a tier budget, and instruction files stay under 150 lines with every rule applying to every session.
 
-**Instruction files (hot path).** `CLAUDE.md` and its peers stay under 150 lines, target 125. No physical line exceeds 800 characters; the line ceiling does not excuse compressing unrelated rules into one scan-resistant paragraph. Situation-specific guidance belongs in skills, playbooks, or local instruction files. When over target, cut in this order: essential commands to a referenced file, then the structural-debt trigger, communication-when-blocked, sub-agent objectives, and working-memory details. Never cut the execution loop, autonomy tiers, or definition of done. The Router Table sits last, where end-of-context attention is highest.
+**Instruction files (hot path).** `CLAUDE.md` and its peers stay under 150 lines, target 125. No physical line exceeds 800 characters; the line ceiling does not excuse compressing unrelated rules into one scan-resistant paragraph. Situation-specific guidance belongs in skills, playbooks, or local instruction files. When over target, move situational content out before cutting rules, and never cut the execution loop, autonomy tiers, or definition of done. The Router Table sits last, where end-of-context attention is highest.
 
 **Skills and reference packs.**
 
@@ -25,7 +25,7 @@ Every agent-read surface has a tier budget, and instruction files stay under 150
 | Always-loaded shared content | <1500 words per file | `skill-preamble.md`, `skill-conventions.md` |
 | Progressive reference pack | <3000 words per file | per-skill `references/`, `.goat-flow/skill-docs/skill-quality-testing/`, `.goat-flow/skill-docs/playbooks/` |
 
-The budget rule lives in `.goat-flow/skill-docs/skill-quality-testing/deployment.md` (search: `Token budget met per the four-tier model`). The former monolith is a short README index plus three topical files: `tdd-iteration.md` for authoring or hardening a discipline skill, `adversarial-framing.md` for review-class skills, and `deployment.md` for finalising any skill. Authors load only the file their skill type needs.
+The budget rule lives in `.goat-flow/skill-docs/skill-quality-testing/deployment.md` (search: `Token budget met per the four-tier model`). The `skill-quality-testing/README.md` index that routes authors to the topical files has its own 400-word cap in the same contract test. The former monolith is that short README index plus three topical files: `tdd-iteration.md` for authoring or hardening a discipline skill, `adversarial-framing.md` for review-class skills, and `deployment.md` for finalising any skill. Authors load only the file their skill type needs.
 
 **Shared conventions, extracted once.** Conventions live in `.goat-flow/skill-docs/skill-conventions.md`, copied from `workflow/skills/reference/skill-conventions.md`. Each skill carries a pointer header, not a fallback:
 

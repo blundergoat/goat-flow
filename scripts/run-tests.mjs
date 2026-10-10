@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Runs the test mode a maintainer selects: fast, coverage, slow, or performance.
+// Runs the test mode a maintainer selects: fast, coverage, or slow.
 //
-// Fast runs omit slow and performance suites; --shard=<index>/<total> distributes a mode across separate CI machines.
+// Fast runs omit the slow suite; --shard=<index>/<total> distributes a mode across separate CI machines.
 // Slow tests run one at a time because they share repository state such as .goat-flow/dashboard-state.json.
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
@@ -72,16 +72,6 @@ function isSlowTest(path) {
 }
 
 /**
- * Identify benchmarks a maintainer must request through performance mode and its GOAT_FLOW_PERF_TESTS environment gate.
- *
- * @param path - Posix-style test file path to classify.
- * @returns `true` when the file is a performance test.
- */
-function isPerformanceTest(path) {
-  return /^test\/performance\/[^/]*\.test\.ts$/u.test(path);
-}
-
-/**
  * Select the tests requested by the maintainer's CLI mode before any shard split.
  * An unknown mode exits with code 2 and lists valid choices instead of running an unintended suite.
  *
@@ -92,16 +82,12 @@ function filesForMode(allFiles) {
   switch (mode) {
     case "fast":
     case "coverage":
-      return allFiles.filter(
-        (path) => !isSlowTest(path) && !isPerformanceTest(path),
-      );
+      return allFiles.filter((path) => !isSlowTest(path));
     case "slow":
       return allFiles.filter(isSlowTest);
-    case "performance":
-      return allFiles.filter(isPerformanceTest);
     default:
       console.error(
-        `Unknown test mode "${mode}". Expected fast, coverage, slow, or performance.`,
+        `Unknown test mode "${mode}". Expected fast, coverage, or slow.`,
       );
       process.exit(2);
   }
@@ -197,11 +183,6 @@ const testFilesToRun = shard
 if (testFilesToRun.length === 0) {
   console.error(`No ${mode} test files found.`);
   process.exit(1);
-}
-
-// Explicit performance mode enables benchmarks that ordinary verification leaves gated off.
-if (mode === "performance") {
-  process.env.GOAT_FLOW_PERF_TESTS = "1";
 }
 
 const testRunnerArguments = [

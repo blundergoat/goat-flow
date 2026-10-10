@@ -65,8 +65,19 @@ describe("registered work forecast model", () => {
         saved.set(registration, readFileSync(registration, "utf8"));
       }
       const target = registeredHistoryFixture(10000, 23, false);
-      const selected = writeRegisteredHistory(join(plans, "selected"), target);
-      saved.set(join(selected, "M01-work.md"), target.body);
+      // Only the selected plan holds the three finished legacy milestones, so only its target copy joins them into one ending.
+      const selectedTarget = {
+        ...target,
+        body: target.body.replace(
+          "Depends on: none",
+          "Depends on: M02, M03, M04",
+        ),
+      };
+      const selected = writeRegisteredHistory(
+        join(plans, "selected"),
+        selectedTarget,
+      );
+      saved.set(join(selected, "M01-work.md"), selectedTarget.body);
       for (const [index, seconds] of [1200, 2400, 3600].entries()) {
         const id = `M0${index + 2}`;
         const path = join(selected, `${id}-legacy.md`);

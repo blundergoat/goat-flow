@@ -1,9 +1,24 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-10-02
+last_reviewed: 2026-10-10
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
+
+## Lesson: Decision spikes need executable no-change exits
+
+**Status:** active | **Created:** 2026-10-10 | **Evidence:** OBSERVED
+**Decision changed:** Check negative decision branches against Tasks, Proof and dependent milestones before handing off a spike.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** For each accepted no-change, no-go or insufficient-evidence outcome, identify which work still runs and how the remaining checklist closes. Never credit unrun proof. Require an accepted bounded amendment that preserves the issued forecast, removes unexecuted work, recounts/reforecasts and reconciles dependent milestones before completion. Make prototypes conditional on demonstrated uncertainty or value rather than mandatory preparation for a decision.
+
+**What happened:** On 2026-10-10, the local humaniser plan accepted no-change in M28 while its Exit still required six outcomes and candidate improvement. M30 accepted no-go but treated an absent consumer as a stop. The observed conflicting clauses were M28's `The six registered outcomes and limitations are retained` beside `A no-change outcome is valid`, and M30's `no supported consumer exists` stop beside `A no-go decision completes this pilot`. Strict plan validation accepted both structures. The review corrected these completion paths and separated the existing-tool pilot from optional prototype work.
+
+**Root cause:** The narrative decision was checked separately from the positive-only execution checklist. Structural acceptance cannot establish that a negative outcome is executable. Workflow owner: `workflow/skills/goat-plan/SKILL.md` (search: `If scope changes, reforecast before implementation`; `Re-derive`).
+
+---
 
 ## Lesson: Git status cannot prove milestone work disappeared after HEAD moves
 
@@ -155,7 +170,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Severity:** INTEGRATION
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient.
 **Trigger phase:** VERIFY
-**Incident count:** 13 | **Latest occurrence:** 2026-09-30
+**Incident count:** 14 | **Latest occurrence:** 2026-10-10
 
 **Prevention:** After the final write, run `goat-flow plans check <plan-directory> --strict`, require warning-free exporter records, and check cited paths/anchors. Keep one live metadata value; fence history. Current strict plans require a numeric effort split even when runtime is unknown; label the forecast provisional and name the measurement/reforecast checkpoint rather than omitting required fields. Exercise compact/expanded fixtures through `parseMilestoneMarkdown` and plan commands against prepared disposable paths. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Preserve Status, Scope, Tasks, Proof, Exit/Exit criteria and Stop/rescope; compact Stop/rescope belongs inside Exit. Anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`; `readStopMarkdown`), `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
@@ -177,6 +192,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-09-27:** A release replan replaced two uncertain numeric forecasts with unestimated status. Strict validation rejected both with `strict mode requires an Effort estimate with a product/proof/other split`. Restore the current-format estimate fields, count bulk work explicitly, and disclose unmeasured runtime without inventing timing evidence. Source: `src/cli/plans-check.ts` (search: `strict mode requires an Effort estimate with a product/proof/other split`). Evidence: ACTUAL_MEASURED.
 
 **Recurrence 2026-09-30:** An execution note began with `Scope:` beneath a milestone that already had `## Scope`. Strict checking rejected the two representations; changing the note label to `Execution class:` restored exit 0. Keep parser-owned field labels out of narrative notes, even outside the header. Source: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`); rejection coverage: `test/unit/plans-check-structure.test.ts` (search: `strict mode rejects conflicting canonical and legacy aliases`). Evidence: ACTUAL_MEASURED.
+
+**Recurrence 2026-10-10 (ACTUAL_MEASURED):** Six graph milestone drafts put stop conditions in ordinary Exit prose. The strict plan command returned six `missing stop/rescope` errors after a custom topology/arithmetic precheck had succeeded. Use the canonical Stop / rescope section or the explicitly parsed compact Exit stop line, and run the full strict checker before handoff. Sources: `src/cli/plans-export.ts` (search: `readStopMarkdown`; `readObjective`) and `src/cli/plans-check.ts` (search: `missing stop/rescope`). The correction uses supported bold Objective metadata and dedicated stop sections.
 
 ---
 
