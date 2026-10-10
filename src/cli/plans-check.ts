@@ -34,6 +34,7 @@ import {
   renderCalibrationSummary,
   renderForecastHistorySummary,
   renderActivePlanSummary,
+  renderReadinessSummary,
   renderMilestoneLine,
   renderPlanSummary,
 } from "./plans-check-summary.js";
@@ -814,9 +815,11 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
     .map(renderMilestoneLine)
     .filter((line): line is string => line !== null);
   const planSummary = renderPlanSummary(records);
+  // Readiness follows the active rows so the author reads what is running, then what can start next, before the totals.
   const reportLines = [
     ...milestoneLines,
     ...renderActivePlanSummary(records, maxActive),
+    ...renderReadinessSummary(records, maxActive),
     ...planSummary,
   ];
 

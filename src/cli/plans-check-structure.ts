@@ -383,7 +383,7 @@ function collectStrictPlainLanguageErrors(
 }
 
 /** One milestone file as the dependency checks see it: its ID, the file it came from, and what it depends on. */
-interface MilestoneIdentity {
+export interface MilestoneIdentity {
   id: string;
   /** Milestone number without leading zeros, so `M03` and `M3` are caught as the same milestone. */
   numericId: string;
@@ -721,11 +721,26 @@ function collectSupersededSuccessorErrors(
 }
 
 /** One milestone holding an active slot, as shown in the `active:` lines and counted against the cap. */
-interface ActiveMilestone {
+export interface ActiveMilestone {
   id: string;
   status: string;
   /** Null marks an invalid or repeated Lane value; a missing or empty Lane means `default`. */
   lane: string | null;
+}
+
+/**
+ * Read the lane a milestone declared, as the `active:` rows and readiness lines show it.
+ *
+ * @param record - parsed milestone; a missing or empty Lane field means the shared `default` lane
+ * @returns the lane name, or null when the Lane field is repeated or holds a value like `Bad!` that cannot name a lane
+ */
+export function readDeclaredLane(record: PlanExportRecord): string | null {
+  const declaredLane = record.lane ?? "";
+  // A repeated Lane line or a value like `Bad!` cannot name a lane, so callers print `<invalid>` instead of leaking the text.
+  const isLaneInvalid =
+    record.warnings.includes("multiple Lane values supplied") ||
+    (declaredLane !== "" && !/^[a-z0-9][a-z0-9-]{0,39}$/u.test(declaredLane));
+  return isLaneInvalid ? null : declaredLane || "default";
 }
 
 /**
@@ -746,16 +761,8 @@ export function readActiveMilestones(
     const identity = readMilestoneIdentity(record);
     // A file without an `M<digits>` name has no ID to show in the `active:` line.
     if (identity === null) continue;
-    const declaredLane = record.lane ?? "";
-    // A repeated Lane line or a value like `Bad!` cannot name a lane, but the milestone still counts toward the overall cap.
-    const isLaneInvalid =
-      record.warnings.includes("multiple Lane values supplied") ||
-      (declaredLane !== "" && !/^[a-z0-9][a-z0-9-]{0,39}$/u.test(declaredLane));
-    active.push({
-      id: identity.id,
-      status,
-      lane: isLaneInvalid ? null : declaredLane || "default",
-    });
+    // An invalid lane still counts toward the overall cap.
+    active.push({ id: identity.id, status, lane: readDeclaredLane(record) });
   }
   return active;
 }
@@ -806,18 +813,18 @@ function collectActiveStateErrors(
 }
 
 /** A plan's milestones with their dependencies filled in, plus lookups by ID and by number. */
-interface DependencyGraph extends MilestoneIndexes {
+export interface DependencyGraph extends MilestoneIndexes {
   identities: MilestoneIdentity[];
 }
 
 /**
- * Read every milestone's ID and dependencies once, so all plan-wide checks agree on what depends on what.
+ * Read every milestone's ID and dependencies once, so all plan-wide checks and the readiness lines agree on what depends on what.
  *
  * @param records - every milestone parsed from the plan directory
  * @param errors - receives identity and dependency errors; pass a throwaway list when the caller only needs the graph
  * @returns milestones in file order plus ID and number lookups; files without an `M<digits>` name are left out
  */
-function readDependencyGraph(
+export function readDependencyGraph(
   records: PlanExportRecord[],
   errors: string[],
 ): DependencyGraph {

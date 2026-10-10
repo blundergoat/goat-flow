@@ -149,12 +149,13 @@ describe("plans check: parallel lanes", () => {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(result.stderr, "");
       const lines = result.stdout.split("\n");
-      assert.deepEqual(lines.slice(4, 7), [
+      assert.deepEqual(lines.slice(4, 8), [
         "active: M18 (in-progress) | lane: go",
         "active: M19 (in-progress) | lane: php",
         "plan: 2 active milestones (cap 2)",
+        "waiting: M20 | needs M18 (in-progress), M19 (in-progress); cap 2 full: M18 (in-progress), M19 (in-progress)",
       ]);
-      assert.match(lines[7] ?? "", /^plan: 12 min estimated/u);
+      assert.match(lines[8] ?? "", /^plan: 12 min estimated/u);
     }
     const legacy = runPlansCheck(
       PARALLEL_PLAN,

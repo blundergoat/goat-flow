@@ -1,8 +1,8 @@
 /**
  * Builds the summary a user reads at the end of `plans check`.
  *
- * Where the checkers answer "is anything wrong", this answers "how is the plan going": one line per milestone, the effort split totalled across the
- * plan, and - once there is enough history - how the author's estimates have been comparing to reality.
+ * Where the checkers answer "is anything wrong", this answers "how is the plan going": one line per milestone, which unstarted milestones can
+ * start, the effort split totalled across the plan, and - once there is enough history - how the author's estimates have been comparing to reality.
  *
  * Estimate-to-Actual calibration and work-unit rates need at least three eligible finished milestones.
  * Coverage and plan-total diagnostics describe even smaller cohorts and always display their sample counts; they do not establish estimator bias.
@@ -24,7 +24,14 @@ import {
 } from "./plans-effort.js";
 import type { PlanForecastRecord } from "./plans-forecast-context.js";
 import type { PlanExportRecord } from "./plans-export.js";
-import { readActiveMilestones } from "./plans-check-structure.js";
+import {
+  readActiveMilestones,
+  readDeclaredLane,
+  readDependencyGraph,
+  type ActiveMilestone,
+  type DependencyGraph,
+  type MilestoneIdentity,
+} from "./plans-check-structure.js";
 import { DEFAULT_FORECAST_BAND_QUANTILES } from "./config/config-vocabulary.js";
 import type { ForecastBandQuantiles } from "./config/types.js";
 
@@ -112,6 +119,103 @@ export function renderActivePlanSummary(
     ),
     `plan: ${active.length} active milestones (cap ${maxActive})`,
   ];
+}
+
+/** Statuses that get a readiness line: not-started work and blocked work that cannot continue; active, finished and dropped work gets none. */
+const UNSTARTED_STATUSES = new Set(["not-started", "blocked"]);
+
+/** Render `M18 (in-progress), M19 (in-progress)` for the milestones holding active slots. */
+function renderOccupants(occupants: ActiveMilestone[]): string {
+  return occupants
+    .map((milestone) => `${milestone.id} (${milestone.status})`)
+    .join(", ");
+}
+
+/**
+ * Name the prerequisites of one unstarted milestone that are not complete yet, each with its status.
+ *
+ * @param identity - unstarted milestone whose `Depends on` list is read
+ * @param graph - plan graph; a dependency outside the plan reads `missing` and already has its own strict error
+ * @returns `M21 (not-started)`-style entries in declared order; empty when every prerequisite is complete
+ */
+function listUnmetPrerequisites(
+  identity: MilestoneIdentity,
+  graph: DependencyGraph,
+): string[] {
+  const unmet: string[] = [];
+  for (const dependency of identity.dependencies) {
+    // A milestone that waits on itself has its own error and is never something the author can finish first.
+    if (dependency === identity.id) continue;
+    const dependencyRecord = graph.byId.get(dependency)?.record;
+    const dependencyStatus = dependencyRecord
+      ? dependencyRecord.status.trim().toLowerCase() || "no status"
+      : "missing";
+    if (dependencyStatus !== "complete") {
+      unmet.push(`${dependency} (${dependencyStatus})`);
+    }
+  }
+  return unmet;
+}
+
+/**
+ * Find the active milestones sharing one unstarted milestone's lane.
+ *
+ * @param lane - the unstarted milestone's lane; null means its Lane field is invalid and matches nothing
+ * @param active - milestones holding active slots
+ * @param maxActive - resolved cap; at cap one lanes never gate work, matching the `active:` rows that also appear only above it
+ * @returns the occupants; empty when the lane is free or lanes do not apply
+ */
+function listLaneOccupants(
+  lane: string | null,
+  active: ActiveMilestone[],
+  maxActive: number,
+): ActiveMilestone[] {
+  if (maxActive === 1 || lane === null) return [];
+  return active.filter((milestone) => milestone.lane === lane);
+}
+
+/**
+ * Tell the author which unstarted milestones can start now and what blocks the rest, so picking the next one needs no file reading.
+ *
+ * Prints at every cap because cap one is the usual case; lanes are named only above cap one, where they affect eligibility.
+ * The lines report eligibility only: choosing the next milestone stays a human decision, and a `ready:` line grants no writer ownership.
+ *
+ * @param records - every parsed milestone in file order; only `not-started` and `blocked` ones get a line
+ * @param maxActive - resolved active cap; once the active count reaches it, every waiting line names the occupants
+ * @returns one `ready:` or `waiting:` line per unstarted milestone; empty when the plan has none
+ */
+export function renderReadinessSummary(
+  records: PlanExportRecord[],
+  maxActive: number,
+): string[] {
+  const graph = readDependencyGraph(records, []);
+  const active = readActiveMilestones(records);
+  const lines: string[] = [];
+  for (const identity of graph.identities) {
+    const status = identity.record.status.trim().toLowerCase();
+    // Active, finished and dropped milestones are not waiting to start, so they get no line.
+    if (!UNSTARTED_STATUSES.has(status)) continue;
+    // Blocked work waits on whatever its Status reason records, even when its prerequisites are done.
+    const clauses = status === "blocked" ? ["status blocked"] : [];
+    const unmet = listUnmetPrerequisites(identity, graph);
+    if (unmet.length > 0) clauses.push(`needs ${unmet.join(", ")}`);
+    const lane = readDeclaredLane(identity.record);
+    const occupants = listLaneOccupants(lane, active, maxActive);
+    if (occupants.length > 0) {
+      clauses.push(`lane ${lane} occupied by ${renderOccupants(occupants)}`);
+    }
+    // A full cap holds every unstarted milestone until something finishes, whatever its prerequisites say.
+    if (active.length >= maxActive) {
+      clauses.push(`cap ${maxActive} full: ${renderOccupants(active)}`);
+    }
+    const laneText = maxActive > 1 ? ` | lane ${lane ?? "<invalid>"}` : "";
+    lines.push(
+      clauses.length === 0
+        ? `ready: ${identity.id}${laneText}`
+        : `waiting: ${identity.id} | ${clauses.join("; ")}`,
+    );
+  }
+  return lines;
 }
 
 /**

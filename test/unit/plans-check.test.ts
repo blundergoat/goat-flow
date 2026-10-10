@@ -18,13 +18,150 @@ import {
   receiptStamp,
 } from "./plans-check.helpers.js";
 
+/** Build a finished milestone that both checker modes accept, so readiness cases turn only on the unstarted ones. */
+function completedMilestone(title: string): string {
+  return canonicalMilestoneBody({
+    title,
+    status: "complete",
+    isTaskChecked: true,
+    includeActual: true,
+    proofLines: [
+      "- [x] Outcome is proven → focused check passes. [automated] (est: 1 min proof)",
+    ],
+  });
+}
+
+describe("plans check: milestone readiness", () => {
+  // Each row is one readiness rule an author reads off the report; lanes appear only above cap one, so cap-one rows expect bare IDs.
+  const readinessCases: Array<{
+    name: string;
+    cap: number;
+    files: Record<string, string>;
+    expected: string[];
+  }> = [
+    {
+      name: "marks a milestone ready once its prerequisite is complete",
+      cap: 1,
+      files: {
+        "M01-done.md": completedMilestone("M01: Done"),
+        "M02-next.md": canonicalMilestoneBody({
+          title: "M02: Next",
+          dependsOn: "M01",
+        }),
+      },
+      expected: ["ready: M02"],
+    },
+    {
+      name: "names an unfinished prerequisite with its status",
+      cap: 1,
+      files: {
+        "M01-first.md": canonicalMilestoneBody({ title: "M01: First" }),
+        "M02-second.md": canonicalMilestoneBody({
+          title: "M02: Second",
+          dependsOn: "M01",
+        }),
+      },
+      expected: ["ready: M01", "waiting: M02 | needs M01 (not-started)"],
+    },
+    {
+      name: "names the occupant when the cap is full",
+      cap: 1,
+      files: {
+        "M01-running.md": canonicalMilestoneBody({
+          title: "M01: Running",
+          status: "in-progress",
+        }),
+        "M02-next.md": canonicalMilestoneBody({ title: "M02: Next" }),
+      },
+      expected: ["waiting: M02 | cap 1 full: M01 (in-progress)"],
+    },
+    {
+      name: "names the lane occupant above cap one",
+      cap: 2,
+      files: {
+        "M01-running.md":
+          canonicalMilestoneBody({
+            title: "M01: Running",
+            status: "in-progress",
+          }) + "\nLane: go\n",
+        "M02-next.md":
+          canonicalMilestoneBody({ title: "M02: Next" }) + "\nLane: go\n",
+      },
+      expected: ["waiting: M02 | lane go occupied by M01 (in-progress)"],
+    },
+    {
+      name: "names the lane of a ready milestone above cap one",
+      cap: 2,
+      files: {
+        "M01-done.md": completedMilestone("M01: Done"),
+        "M02-next.md":
+          canonicalMilestoneBody({ title: "M02: Next", dependsOn: "M01" }) +
+          "\nLane: graph\n",
+      },
+      expected: ["ready: M02 | lane graph"],
+    },
+    {
+      name: "reports blocked work by its status",
+      cap: 1,
+      files: {
+        "M01-stuck.md": canonicalMilestoneBody({
+          title: "M01: Stuck",
+          status: "blocked",
+          statusReason: "Waiting for the provider capture before resuming.",
+        }),
+      },
+      expected: ["waiting: M01 | status blocked"],
+    },
+    {
+      name: "prints nothing for finished or dropped work",
+      cap: 1,
+      files: {
+        "M01-done.md": completedMilestone("M01: Done"),
+        "M02-later.md": canonicalMilestoneBody({
+          title: "M02: Later",
+          status: "deferred",
+          statusReason: "Moved to the next release after review.",
+        }),
+        "M03-gone.md": canonicalMilestoneBody({
+          title: "M03: Gone",
+          status: "abandoned",
+          statusReason: "Human approved stopping after the premise failed.",
+        }),
+      },
+      expected: [],
+    },
+  ];
+
+  for (const testCase of readinessCases) {
+    it(testCase.name, () => {
+      const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-readiness-"));
+      try {
+        const result = runPlansCheck(
+          writeCheckPlan(root, testCase.files),
+          "--max-active",
+          String(testCase.cap),
+        );
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.deepEqual(
+          result.stdout
+            .split("\n")
+            .filter((line) => /^(?:ready|waiting): /u.test(line)),
+          testCase.expected,
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
 describe("plans check: effort arithmetic and plan shapes", () => {
   /** Writes temporary plans and compares complete stdout, stderr, and exit status across equivalent cap-one policies. */
   it("reports the same cap-one transcript with omitted and explicit policy", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-golden-"));
     const expected = {
       stdout:
-        'M18-go.md: ~2 min (1 product / 1 proof / 0 other)\nM19-php.md: ~2 min (1 product / 1 proof / 0 other)\nM20-join.md: ~2 min (1 product / 1 proof / 0 other)\nplan: 6 min estimated - mix 50% product / 50% proof / 0% other (rough guide ~70/20/10)\nadvisory: plan mix drifts more than 15 percentage points from the rough ~70/20/10 guide - check for duplicated proof or missing verification; keep and explain the mix when task risk warrants it\ncalibration: uncalibrated - 0 of 3 eligible measured samples\nband coverage: 0 of 0 inside (n/a) - 0 below, 0 above; median width n/a\nplan total: unavailable over 0 measured\nwork-unit calibration: uncalibrated - 0 of 3 eligible measured samples with countable bases\nforecast rule: historical p10/p90; nominal span 80 percentage points is not a future coverage promise\nrule coverage: scored 0 of 0 eligible work-unit samples; no score (n/a); skipped 0 insufficient history, 0 missing completion time\nwarning: M18-go.md: legacy-compatible plain-language problem section is missing; expected "## What problem are we solving or ## The problem"; received "no matching section"\nwarning: M18-go.md: legacy-compatible plain-language benefit section is missing; expected "## Who benefits and how or ## What you get"; received "no matching section"\nwarning: M19-php.md: legacy-compatible plain-language problem section is missing; expected "## What problem are we solving or ## The problem"; received "no matching section"\nwarning: M19-php.md: legacy-compatible plain-language benefit section is missing; expected "## Who benefits and how or ## What you get"; received "no matching section"\nwarning: M20-join.md: legacy-compatible plain-language problem section is missing; expected "## What problem are we solving or ## The problem"; received "no matching section"\nwarning: M20-join.md: legacy-compatible plain-language benefit section is missing; expected "## Who benefits and how or ## What you get"; received "no matching section"\nerror: plan: multiple active milestones: M18, M19\n',
+        'M18-go.md: ~2 min (1 product / 1 proof / 0 other)\nM19-php.md: ~2 min (1 product / 1 proof / 0 other)\nM20-join.md: ~2 min (1 product / 1 proof / 0 other)\nwaiting: M20 | needs M18 (in-progress), M19 (in-progress); cap 1 full: M18 (in-progress), M19 (in-progress)\nplan: 6 min estimated - mix 50% product / 50% proof / 0% other (rough guide ~70/20/10)\nadvisory: plan mix drifts more than 15 percentage points from the rough ~70/20/10 guide - check for duplicated proof or missing verification; keep and explain the mix when task risk warrants it\ncalibration: uncalibrated - 0 of 3 eligible measured samples\nband coverage: 0 of 0 inside (n/a) - 0 below, 0 above; median width n/a\nplan total: unavailable over 0 measured\nwork-unit calibration: uncalibrated - 0 of 3 eligible measured samples with countable bases\nforecast rule: historical p10/p90; nominal span 80 percentage points is not a future coverage promise\nrule coverage: scored 0 of 0 eligible work-unit samples; no score (n/a); skipped 0 insufficient history, 0 missing completion time\nwarning: M18-go.md: legacy-compatible plain-language problem section is missing; expected "## What problem are we solving or ## The problem"; received "no matching section"\nwarning: M18-go.md: legacy-compatible plain-language benefit section is missing; expected "## Who benefits and how or ## What you get"; received "no matching section"\nwarning: M19-php.md: legacy-compatible plain-language problem section is missing; expected "## What problem are we solving or ## The problem"; received "no matching section"\nwarning: M19-php.md: legacy-compatible plain-language benefit section is missing; expected "## Who benefits and how or ## What you get"; received "no matching section"\nwarning: M20-join.md: legacy-compatible plain-language problem section is missing; expected "## What problem are we solving or ## The problem"; received "no matching section"\nwarning: M20-join.md: legacy-compatible plain-language benefit section is missing; expected "## Who benefits and how or ## What you get"; received "no matching section"\nerror: plan: multiple active milestones: M18, M19\n',
       stderr: "",
       status: 1,
     };
