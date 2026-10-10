@@ -250,6 +250,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── run-tests.mjs                = Node test runner used by npm test scripts
 ├── build-dashboard-assets.mjs   = copies dashboard assets/views/vendor files into dist
 ├── bump-version.sh              = version sync across package/config/skills/docs
+├── capture-command.mjs         = bounded asynchronous tool output with live byte limits and a deadline
 ├── check-gruff-warning-ratchet.mjs = reviewed Gruff warning-debt ratchet: launches the analyzer, prints the verdict
 ├── gruff-warning-ratchet-checks.mjs = ratchet comparison rules: manifest load/validate, scan shape, debt diff
 ├── ratchet-failure-report.mjs   = bounded per-category failure collector shared by the ratchet modules

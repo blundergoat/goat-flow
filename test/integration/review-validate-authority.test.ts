@@ -25,6 +25,12 @@ import {
   readReviewAuthority,
   reviewGateId,
 } from "../../src/cli/review-validate-authority.js";
+import { parseRetainedReviewAuthority } from "../../src/cli/review-validate-snapshot.js";
+import {
+  taggedHash,
+  type JsonRecord,
+  type ReviewAuthoritySnapshot,
+} from "../../src/cli/review-validate-common.js";
 import {
   CLI_PATH,
   createReviewedProject,
@@ -41,6 +47,129 @@ import {
 } from "../unit/review-validate.helpers.js";
 
 describe("review authority across real repository state", () => {
+  // Writes distinct Git, index and editor fixture bytes to check producer compatibility after a later edit.
+  it("accepts retained captures for every source variant without recapturing live files", (test) => {
+    const { root } = repository(test);
+    writeFileSync(join(root, "src/example.ts"), "staged declaration\n");
+    git(root, ["add", "src/example.ts"]);
+    writeFileSync(join(root, "src/example.ts"), "live declaration\n");
+    const sources: JsonRecord[] = [
+      { kind: "pr", target: "HEAD", head: "HEAD" },
+      { kind: "branch", target: "HEAD", head: "HEAD" },
+      { kind: "range", left: "HEAD", right: "HEAD", operator: ".." },
+      { kind: "range", left: "HEAD", right: "HEAD", operator: "..." },
+      { kind: "commit", commit: "HEAD", parent: null },
+      { kind: "staged", base: "HEAD" },
+      { kind: "unstaged" },
+      { kind: "worktree", base: "HEAD", untracked: { mode: "exclude" } },
+      { kind: "area", roots: ["src"], sample: null },
+      { kind: "area", roots: ["src"], sample: ["src/example.ts"] },
+      ...["live", "index", "git"].map((from) => ({
+        kind: "paths",
+        paths: [
+          {
+            path: "src/example.ts",
+            from,
+            ...(from === "git" ? { revision: "HEAD" } : {}),
+          },
+        ],
+      })),
+    ];
+    const snapshots = sources.map((source) => capture(root, source).authority);
+    writeFileSync(join(root, "src/example.ts"), "a later edit\n");
+    for (const snapshot of snapshots)
+      assert.deepEqual(
+        parseRetainedReviewAuthority(snapshot),
+        snapshot,
+        JSON.stringify(snapshot.source),
+      );
+  });
+
+  // Writes Git-backed captures, then changes and rehashes each fixture to exercise contradictory source relationships.
+  it("rejects rehashed retained captures with contradictory source relationships", (test) => {
+    const { root } = repository(test);
+    writeFileSync(join(root, "src/example.ts"), "live declaration\n");
+    const cases: {
+      label: string;
+      source: JsonRecord;
+      mutate: (snapshot: ReviewAuthoritySnapshot) => void;
+    }[] = [
+      {
+        label: "two-dot base",
+        source: { kind: "range", left: "HEAD", right: "HEAD", operator: ".." },
+        mutate: (snapshot) => {
+          snapshot.source.comparisonBase = "a".repeat(40);
+        },
+      },
+      {
+        label: "implicit second parent",
+        source: { kind: "commit", commit: "HEAD", parent: null },
+        mutate: (snapshot) => {
+          snapshot.source.parentNumber = 2;
+          snapshot.source.comparisonBase = snapshot.source.head;
+        },
+      },
+      {
+        label: "null requested base",
+        source: { kind: "staged", base: "HEAD" },
+        mutate: (snapshot) => {
+          (snapshot.source.requested as JsonRecord).base = null;
+        },
+      },
+      {
+        label: "Git path revision",
+        source: {
+          kind: "paths",
+          paths: [{ path: "src/example.ts", from: "git", revision: "HEAD" }],
+        },
+        mutate: (snapshot) => {
+          const current = snapshot.inventory[0].new;
+          assert.ok(current.kind === "file");
+          current.revision = "a".repeat(40);
+        },
+      },
+      {
+        label: "index comparison origin",
+        source: { kind: "unstaged" },
+        mutate: (snapshot) => {
+          const old = snapshot.inventory[0].old;
+          assert.ok(old?.kind === "file");
+          old.from = "live";
+          delete old.blob;
+        },
+      },
+      {
+        label: "unchanged comparison",
+        source: { kind: "unstaged" },
+        mutate: (snapshot) => {
+          const { old, new: current } = snapshot.inventory[0];
+          assert.ok(old?.kind === "file" && current.kind === "file");
+          current.sha256 = old.sha256;
+          current.mode = old.mode;
+        },
+      },
+      {
+        label: "index outside Git",
+        source: { kind: "unstaged" },
+        mutate: (snapshot) => {
+          snapshot.objectFormat = null;
+          snapshot.inventory = [];
+        },
+      },
+    ];
+    for (const { label, source, mutate } of cases) {
+      const snapshot = capture(root, source).authority;
+      mutate(snapshot);
+      const { fingerprint: _old, ...unsigned } = snapshot;
+      snapshot.fingerprint = taggedHash("authority", unsigned);
+      assert.throws(
+        () => parseRetainedReviewAuthority(snapshot),
+        undefined,
+        label,
+      );
+    }
+  });
+
   // Writes distinct HEAD, staged, and editor contents so the selected byte source is observable; assertReviewResult checks fixture mutation.
   it("uses staged bytes, refuses HEAD/live substitutions, and detects index drift", (test) => {
     const { root } = repository(test);

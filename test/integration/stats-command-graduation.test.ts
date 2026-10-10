@@ -10,6 +10,25 @@ import {
 import { loadReport } from "./stats-command.helpers.js";
 
 describe("goat-flow stats - graduation candidates", () => {
+  it("preserves severity and enforcement in pipe-separated leading metadata", () => {
+    const report = loadReport({
+      footguns: {},
+      lessons: {
+        "inline.md":
+          "---\ncategory: inline\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: inline fields\n\n**Status:** active | **Severity:** SECURITY | **Enforced-by:** source.ts (search: guard)\n**Incident count:** 2\n\nBody prose.\n",
+      },
+    });
+    const candidate = report.lessons.buckets[0].graduationCandidates[0];
+    assert.equal(candidate.severity, "SECURITY");
+    assert.equal(candidate.enforcedBy, "source.ts (search: guard)");
+    assert.doesNotMatch(renderStatsText(report), /inline.md :: inline fields/u);
+    assert.equal(
+      renderStatsJson(report).includes(
+        '"enforcedBy": "source.ts (search: guard)"',
+      ),
+      true,
+    );
+  });
   /** Fixture spanning legacy markers, canonical markers, declared totals, and resolved entries. */
   function loadRecurrenceReport() {
     return loadReport({

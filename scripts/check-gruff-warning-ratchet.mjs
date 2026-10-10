@@ -7,16 +7,8 @@
  * maintainer reads one summary line on pass, or a short bounded list of what regressed on fail.
  * Exit codes: 0 debt unchanged or reduced, 1 policy or manifest failure, 2 analyzer could not run.
  */
-import { spawnSync } from "node:child_process";
-import {
-  closeSync,
-  fstatSync,
-  mkdtempSync,
-  openSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
+import { captureCommand } from "./capture-command.mjs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
@@ -57,49 +49,6 @@ function resolveAnalyzerLaunchCommand() {
 }
 
 /**
- * Spawns the installed analyzer with its output in private files, then removes them.
- * Each stream is checked against 64 MiB after exit and before decoding, and a larger one throws; process metadata is returned unchanged.
- *
- * @param command - resolved installed entrypoint or the Node fixture executable
- * @param args - literal analyzer arguments, never a shell program
- * @returns process metadata and decoded output for the gate's completion and schema checks
- */
-function captureAnalyzerOutput(command, args) {
-  const captureDirectory = mkdtempSync(
-    join(tmpdir(), "goat-gruff-ratchet-output-"),
-  );
-  const stdoutPath = join(captureDirectory, "stdout");
-  const stderrPath = join(captureDirectory, "stderr");
-  const descriptors = [];
-  try {
-    for (const path of [stdoutPath, stderrPath]) {
-      descriptors.push(openSync(path, "wx", 0o600));
-    }
-    const result = spawnSync(command, args, {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      shell: false,
-      stdio: ["ignore", ...descriptors],
-    });
-    if (
-      descriptors.some(
-        (descriptor) => fstatSync(descriptor).size > 64 * 1024 * 1024,
-      )
-    ) {
-      throw new Error("analyzer output exceeded 64 MiB");
-    }
-    return {
-      ...result,
-      stdout: readFileSync(stdoutPath, "utf8"),
-      stderr: readFileSync(stderrPath, "utf8"),
-    };
-  } finally {
-    for (const descriptor of descriptors) closeSync(descriptor);
-    rmSync(captureDirectory, { recursive: true, force: true });
-  }
-}
-
-/**
  * Scan the whole repository once and hand back the analyzer's JSON report.
  * This is the evidence every comparison reads, so it asks for `--fail-on none`: ordinary findings are
  * this gate's subject matter and must not look like the analyzer breaking.
@@ -110,7 +59,7 @@ function captureAnalyzerOutput(command, args) {
  * @returns the parsed report, or a `failure` message when the analyzer could not produce one;
  *   `scan` absent means the maintainer sees an analyzer problem rather than a debt verdict
  */
-function scanRepositoryWithAnalyzer() {
+async function scanRepositoryWithAnalyzer() {
   let launchCommand;
   try {
     launchCommand = resolveAnalyzerLaunchCommand();
@@ -122,13 +71,10 @@ function scanRepositoryWithAnalyzer() {
   const { command, prefixArgs } = launchCommand;
   let analyzerRun;
   try {
-    analyzerRun = captureAnalyzerOutput(command, [
-      ...prefixArgs,
-      "analyse",
-      "--format=json",
-      "--fail-on",
-      "none",
-    ]);
+    analyzerRun = await captureCommand(
+      [command, ...prefixArgs, "analyse", "--format=json", "--fail-on", "none"],
+      { cwd: REPO_ROOT, maxBuffer: 64 * 1024 * 1024 },
+    );
   } catch (error) {
     return {
       failure: `analyzer failure: output capture failed (${error.message})`,
@@ -145,16 +91,17 @@ function scanRepositoryWithAnalyzer() {
   // The analyzer ran but gave up, so its own first line explains more than a debt diff would.
   if (analyzerRun.status !== 0) {
     const firstStderrLine =
-      (analyzerRun.stderr ?? "").trim().split("\n")[0] ?? "";
+      (analyzerRun.stderr ?? "").toString().trim().split("\n")[0] ?? "";
     return {
       failure: `analyzer failure: exit ${analyzerRun.status} (${firstStderrLine})`,
     };
   }
   try {
-    return { scan: JSON.parse(analyzerRun.stdout) };
+    return { scan: JSON.parse(analyzerRun.stdout.toString("utf8")) };
   } catch (error) {
     // Output was not JSON - for example a plugin printed a banner onto stdout ahead of the report.
     const outputStart = (analyzerRun.stdout ?? "")
+      .toString()
       .slice(0, 120)
       .replaceAll("\n", " ");
     return {
@@ -210,7 +157,7 @@ function printAcceptedDebtSummary(
  * @returns 0 when debt is unchanged or reduced, 1 for a policy or manifest failure, 2 when the
  *   analyzer could not run at all
  */
-function main() {
+async function main() {
   // e.g. a maintainer ran `bash scripts/preflight-checks.sh` before tagging a release, or CI started
   // the Node 22 ratchet job on a pull request.
   const failures = new RatchetFailureReport();
@@ -220,7 +167,7 @@ function main() {
     for (const line of failures.renderReportLines()) console.error(line);
     return 1;
   }
-  const analyzerResult = scanRepositoryWithAnalyzer();
+  const analyzerResult = await scanRepositoryWithAnalyzer();
   // No usable scan means an operational problem to fix, told apart from a debt regression by exit 2.
   if (analyzerResult.failure) {
     console.error(analyzerResult.failure);
@@ -256,4 +203,4 @@ function main() {
   return 0;
 }
 
-process.exit(main());
+process.exitCode = await main();

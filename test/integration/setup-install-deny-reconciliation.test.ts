@@ -71,6 +71,33 @@ function cliSetup(root: string, agent: "claude" | null = "claude"): string {
 }
 
 describe("reviewed deny reconciliation", () => {
+  it("shows version blockers and their next action without recommending installation", () => {
+    const root = installedClaude();
+    const configPath = join(root, ".goat-flow/config.yaml");
+    for (const [config, guidance] of [
+      ['version: "999.0.0"\n', /Upgrade the CLI before installing/u],
+      ['version: "unrankable"\n', /use a numeric X.Y.Z release/u],
+      [
+        "version: >-\n  1.17.0\n",
+        /put the version on a single top-level line/u,
+      ],
+    ] as const) {
+      writeFileSync(configPath, config);
+      const fs = createFS(root);
+      const report = runAudit(fs, root, {
+        agentFilter: "claude",
+        harness: true,
+      });
+      const facts = extractProjectFacts(fs, {
+        agentFilter: "claude",
+        projectPath: root,
+        configState: loadConfig(root, fs),
+      });
+      const output = composeSetup(report, facts, "claude")!;
+      assert.match(output, guidance);
+      assert.doesNotMatch(output, /Step 1 - Install files|setup install/u);
+    }
+  });
   // Writes missing-store settings and spawns install/setup to verify reviewed repair remains reachable.
   it("names missing required stores after install and reaches current-project reconciliation", () => {
     const root = installedClaude();

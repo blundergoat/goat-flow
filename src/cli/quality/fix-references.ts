@@ -4,19 +4,13 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { readProjectFileBytes, readProjectTextFile } from "../project-file.js";
-import {
-  exactKeys,
-  parseReviewJson,
-  record,
-  requireAuthority,
-  taggedHash,
-  textField,
-} from "../review-validate-common.js";
+import { parseReviewJson, record } from "../review-validate-common.js";
+import { parseRetainedReviewAuthority } from "../review-validate-snapshot.js";
+import type { ReviewAuthoritySnapshot } from "../review-validate-common.js";
 import { KNOWN_AGENT_IDS } from "../agents/registry.js";
 import type { AgentId } from "../types.js";
 import { attachFindingIds } from "./ids.js";
 import { parseQualityReport } from "./schema.js";
-import { isRecord } from "./schema-expectations.js";
 import {
   QUALITY_CONCERNS,
   type QualityConcernCounts,
@@ -136,6 +130,8 @@ function checkPriorFinding(projectRoot: string, fix: QualityFix): void {
   ) as unknown;
   const parsed = parseQualityReport(raw, { requireCurrentFields: false });
   if (!parsed.ok) throw new Error("prior report is unavailable or invalid");
+  if (REPORT_ID.exec(reportId)?.[1] !== parsed.report.agent)
+    throw new Error("prior report agent does not match filename agent");
   if (
     realpathSync(resolve(parsed.report.project_path)) !==
     realpathSync(resolve(projectRoot))
@@ -156,72 +152,27 @@ function readWorkspaceCapture(
     NonNullable<QualityFix["target"]>,
     { kind: "workspace-snapshot" }
   >,
-): Record<string, unknown> {
+): ReviewAuthoritySnapshot {
   const saved = record(
     parseReviewJson(readReference(projectRoot, target.capture)),
     "workspace capture",
   );
-  const capture = record(saved.authority ?? saved, "capture authority");
-  exactKeys(capture, [
-    "schema",
-    "objectFormat",
-    "source",
-    "index",
-    "inventory",
-    "renames",
-    "workspace",
-    "fingerprint",
-  ]);
-  requireAuthority(
-    capture.schema === "goat-review-authority/v1",
-    "workspace capture schema is invalid",
-  );
-  requireAuthority(
-    capture.objectFormat === null ||
-      capture.objectFormat === "sha1" ||
-      capture.objectFormat === "sha256",
-    "workspace capture object format is invalid",
-  );
-  const source = record(capture.source, "capture source");
-  textField(source.kind, "capture source kind");
-  record(source.requested, "capture source request");
-  requireAuthority(
-    capture.index === null || typeof capture.index === "string",
-    "workspace capture index is invalid",
-  );
-  requireAuthority(
-    Array.isArray(capture.inventory) && Array.isArray(capture.renames),
-    "workspace capture inventory or renames are invalid",
-  );
-  requireAuthority(
-    capture.workspace === null ||
-      /^workspace-v1:sha256:[a-f0-9]{64}$/u.test(
-        textField(capture.workspace, "workspace"),
-      ),
-    "execution workspace identity is invalid",
-  );
-  const { fingerprint, ...unsigned } = capture;
-  if (
-    fingerprint !== target.fingerprint ||
-    taggedHash("authority", unsigned) !== fingerprint
-  )
+  const capture = parseRetainedReviewAuthority(saved.authority ?? saved);
+  if (capture.fingerprint !== target.fingerprint)
     throw new Error("workspace capture fingerprint does not match");
   return capture;
 }
 
 /** Static proof must identify the exact captured source bytes, or the check throws; runtime proof names a retained result instead. */
 function checkCapturedSource(
-  capture: Record<string, unknown>,
+  capture: ReviewAuthoritySnapshot,
   fix: QualityFix,
 ): void {
   const evidence = fix.evidence;
   if (!evidence || evidence.method !== "static-analysis") return;
-  const inventory = capture.inventory as unknown[];
-  const found = inventory.some(
+  const found = capture.inventory.some(
     (row) =>
-      isRecord(row) &&
       row.path === evidence.file &&
-      isRecord(row.new) &&
       row.new.kind === "file" &&
       row.new.sha256 === evidence.sha256,
   );

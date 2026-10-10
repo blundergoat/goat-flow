@@ -361,6 +361,12 @@ export function loadQualityHistory(projectPath: string): {
       );
       continue;
     }
+    if (parsedReport.report.agent !== parsedName.agent) {
+      warnings.push(
+        `Skipping malformed quality history file ${filename}: report agent does not match filename agent`,
+      );
+      continue;
+    }
     const withIds = attachFindingIds(parsedReport.report);
     // Reports without stable finding ids cannot participate in history/diff views.
     if (!withIds.ok) {
@@ -480,6 +486,12 @@ function tryParseHistoryFile(
     return {
       entry: null,
       warning: `Skipping malformed quality history file ${filename}: ${parsedReport.error}`,
+    };
+  }
+  if (parsedReport.report.agent !== parsedName.agent) {
+    return {
+      entry: null,
+      warning: `Skipping malformed quality history file ${filename}: report agent does not match filename agent`,
     };
   }
   const withIds = attachFindingIds(parsedReport.report);

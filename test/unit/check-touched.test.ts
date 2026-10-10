@@ -10,6 +10,8 @@ import childProcess, {
   type SpawnSyncReturns,
 } from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -34,9 +36,71 @@ import {
   scanUnicodeFiles,
   selectChecks,
 } from "../../scripts/check-touched.mjs";
+import { captureCommand } from "../../scripts/capture-command.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const script = join(repo, "scripts/check-touched.mjs");
+
+/** Model process completion metadata; real-process cases below own stream and termination behavior. */
+function scriptedProcess(
+  stdout: Buffer,
+  scenario: {
+    status: number | null;
+    signal: string | null;
+    code?: string | undefined;
+  },
+) {
+  const child = Object.assign(new EventEmitter(), {
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+  });
+  queueMicrotask(() => {
+    child.stdout.emit("data", stdout);
+    if (scenario.status === 1)
+      child.stderr.emit("data", Buffer.from("Git read failed"));
+    if (scenario.code)
+      child.emit(
+        "error",
+        Object.assign(new Error(scenario.code), { code: scenario.code }),
+      );
+    child.emit("close", scenario.status, scenario.signal);
+  });
+  return child;
+}
+
+it("terminates continuously noisy tools at the live stream limit", async () => {
+  for (const stream of ["stdout", "stderr"]) {
+    const result = await captureCommand(
+      [
+        process.execPath,
+        "-e",
+        `setInterval(() => process.${stream}.write(Buffer.alloc(8192)), 1)`,
+      ],
+      {
+        cwd: repo,
+        maxBuffer: 4096,
+        timeout: 5000,
+      },
+    );
+    assert.equal(result.error?.code, "ENOBUFS", stream);
+    assert.ok(result.stdout.length <= 4096);
+    assert.ok(result.stderr.length <= 4096);
+    assert.notEqual(result.status, 0);
+  }
+});
+
+it("terminates silent tools at the capture deadline", async () => {
+  const result = await captureCommand(
+    [process.execPath, "-e", "setInterval(() => {}, 1000)"],
+    {
+      cwd: repo,
+      maxBuffer: 4096,
+      timeout: 100,
+    },
+  );
+  assert.equal(result.error?.code, "ETIMEDOUT");
+  assert.notEqual(result.status, 0);
+});
 
 /** Create a private temporary filesystem folder that the test removes when it finishes. */
 function directory(t: TestContext): string {
@@ -172,7 +236,7 @@ it("rejects incomplete change inventories instead of reporting a clean tree", ()
 });
 
 // Each case pairs an exit status, signal and error code with whether the inventory must accept it; the mocked Git writes its captures.
-it("accepts completed Git output with EPERM metadata while rejecting failed or incomplete processes", (t) => {
+it("accepts completed Git output with EPERM metadata while rejecting failed or incomplete processes", async (t) => {
   const cases = [
     { status: 0, signal: null, code: undefined, accepted: true },
     { status: 0, signal: null, code: "EPERM", accepted: true },
@@ -185,34 +249,21 @@ it("accepts completed Git output with EPERM metadata while rejecting failed or i
   ];
   try {
     for (const scenario of cases) {
-      t.mock.method(childProcess, "spawnSync", (_command, args, options) => {
-        writeFileSync(
-          options.stdio[1],
-          args[0] === "diff" ? "M\0README.md\0" : "",
-        );
-        writeFileSync(
-          options.stdio[2],
-          scenario.status === 1 ? "Git read failed" : "",
-        );
-        return {
-          status: scenario.status,
-          signal: scenario.signal,
-          error: scenario.code
-            ? Object.assign(new Error(scenario.code), { code: scenario.code })
-            : undefined,
-          stdout: Buffer.from(args[0] === "diff" ? "M\0README.md\0" : ""),
-          stderr: Buffer.from(scenario.status === 1 ? "Git read failed" : ""),
-        };
-      });
+      t.mock.method(childProcess, "spawn", (_command, args) =>
+        scriptedProcess(
+          args[0] === "diff" ? Buffer.from("M\0README.md\0") : Buffer.alloc(0),
+          scenario,
+        ),
+      );
       syncBuiltinESMExports();
       if (scenario.accepted) {
         assert.deepEqual(
-          collectChangedPaths(repo),
+          await collectChangedPaths(repo),
           [{ status: "M", paths: ["README.md"] }],
           `accepted scenario ${JSON.stringify(scenario)}`,
         );
       } else {
-        assert.throws(
+        await assert.rejects(
           () => collectChangedPaths(repo),
           /Git diff failed/,
           `rejected scenario ${JSON.stringify(scenario)}`,
@@ -226,7 +277,7 @@ it("accepts completed Git output with EPERM metadata while rejecting failed or i
   }
 });
 
-it("preserves real Git inventory when completed EPERM results lose pipe output", (t) => {
+it("collects real Git inventory without synchronous pipe captures", async (t) => {
   const root = checkout(t);
   put(
     root,
@@ -234,24 +285,14 @@ it("preserves real Git inventory when completed EPERM results lose pipe output",
     readFileSync(join(root, "README.md"), "utf8") + "\nInventory regression.\n",
   );
   put(root, "untracked note.txt", "untracked\n");
-  const expected = collectChangedPaths(root);
+  const expected = await collectChangedPaths(root);
   assert.equal(expected.length, 2);
-  const realSpawn = childProcess.spawnSync;
-  t.mock.method(childProcess, "spawnSync", (command, args, options) => {
-    const result = realSpawn(command, args, options);
-    assert.equal(result.status, 0, result.error?.message);
-    return {
-      ...result,
-      error: Object.assign(new Error("completed transport fault"), {
-        code: "EPERM",
-      }),
-      stdout: Buffer.alloc(0),
-      stderr: Buffer.alloc(0),
-    };
+  t.mock.method(childProcess, "spawnSync", () => {
+    throw new Error("synchronous pipes unavailable");
   });
   syncBuiltinESMExports();
   try {
-    assert.deepEqual(collectChangedPaths(root), expected);
+    assert.deepEqual(await collectChangedPaths(root), expected);
   } finally {
     t.mock.restoreAll();
     syncBuiltinESMExports();
@@ -259,22 +300,21 @@ it("preserves real Git inventory when completed EPERM results lose pipe output",
 });
 
 // The mocked Git writes a partial, empty-path or non-UTF-8 untracked listing; collection must throw instead of returning a short inventory.
-it("rejects incomplete or non-UTF-8 untracked inventories", (t) => {
+it("rejects incomplete or non-UTF-8 untracked inventories", async (t) => {
   try {
     for (const output of [
       Buffer.from("partial"),
       Buffer.from("one\0\0"),
       Buffer.from([0xff, 0]),
     ]) {
-      t.mock.method(childProcess, "spawnSync", (_command, args, options) => {
-        writeFileSync(
-          options.stdio[1],
-          args[0] === "ls-files" ? output : Buffer.alloc(0),
-        );
-        return { status: 0, signal: null };
-      });
+      t.mock.method(childProcess, "spawn", (_command, args) =>
+        scriptedProcess(args[0] === "ls-files" ? output : Buffer.alloc(0), {
+          status: 0,
+          signal: null,
+        }),
+      );
       syncBuiltinESMExports();
-      assert.throws(() => collectChangedPaths(repo));
+      await assert.rejects(() => collectChangedPaths(repo));
       t.mock.restoreAll();
     }
   } finally {
@@ -283,7 +323,7 @@ it("rejects incomplete or non-UTF-8 untracked inventories", (t) => {
   }
 });
 
-it("collects staged renames/deletions, unstaged edits and untracked paths from real Git", (t) => {
+it("collects staged renames/deletions, unstaged edits and untracked paths from real Git", async (t) => {
   const root = checkout(t);
   renameSync(
     join(root, "src/cli/constants.ts"),
@@ -305,7 +345,7 @@ it("collects staged renames/deletions, unstaged edits and untracked paths from r
   );
   const unusual = "notes with spaces.txt";
   put(root, unusual, "untracked\n");
-  const changes = collectChangedPaths(root);
+  const changes = await collectChangedPaths(root);
   assert.ok(
     changes.some(
       (change) =>
@@ -546,7 +586,7 @@ it("catches a real formatting slip, continues later checks and never autofixes",
   assert.deepEqual(snapshot(root), before);
 });
 
-it("refuses temporary tool output inside the repository without changing its files", (t) => {
+it("runs with the temporary directory inside the repository without changing its files", (t) => {
   const root = checkout(t);
   put(root, "test/touched-temp.test.ts", "export {};\n");
   const before = snapshot(root);
@@ -555,14 +595,11 @@ it("refuses temporary tool output inside the repository without changing its fil
     TMPDIR: root,
     TEMP: root,
     TMP: root,
+    NODE_DISABLE_COMPILE_CACHE: "1",
+    TSX_DISABLE_CACHE: "1",
   });
-  assert.equal(result.status, 1, result.output);
-  assert.match(
-    result.output,
-    /Temporary output directory must be outside the repository/,
-  );
-  assert.match(result.output, /^FAIL Change selection /m);
-  assert.doesNotMatch(result.output, /^PASS Total /m);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /^PASS Total /m);
   assert.deepEqual(snapshot(root), before);
 });
 

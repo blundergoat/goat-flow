@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-10
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
@@ -174,7 +174,7 @@ Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `1638
 **Status:** active | **Created:** 2026-10-03
 **Severity:** INTEGRATION
 
-**Incident count:** 2 | **Latest occurrence:** 2026-10-03
+**Incident count:** 3 | **Latest occurrence:** 2026-10-10
 **Decision changed:** Before adding a test or assertion messages to a large test file, compare its substantive line count with Gruff's 1,000-line `size.file-length` limit and leave room for Prettier wrapping.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -184,6 +184,10 @@ Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `1638
 **What happened:** Two edits on 2026-10-03 pushed test files past Gruff's 1,000-line limit, an error-level finding that fails the warning ratchet. A new Codex Stop test pushed `test/integration/hook-effective-state.test.ts` to 1,017 substantive lines, so the test moved to the smaller hooks runtime evidence suite. Case labels on loop assertions then pushed `test/unit/review-validate.test.ts` to 1,006, and one-line labels brought it back under the limit.
 
 **Root cause:** I sized each edit by its intent rather than by the lines Prettier would produce.
+
+**Recurrence 2026-10-10:** The PR #67 response added a real-child Git-root regression to `test/unit/hook-registrar.test.ts` (search: `resolves a Git root when it contains the temporary directory`) without checking its headroom. Gruff reported 1,004 substantive lines. Replacing the child fixture with the real Git reader and a scoped `tmpdir` mock retained the path-containment assertion within the file limit. The child fixture also created tsx cache files inside its selected temp root; the separate `test/unit/check-touched.test.ts` regression (search: `runs with the temporary directory inside the repository`) now disables tool caches to isolate capture writes. Check formatted size and fixture-owned side effects before broad verification.
+
+The same batch put the controller YAML bundle in every temporary project, which populated the linked-project negative control before the hook ran. Install scanner dependencies in `test/integration/post-turn-launcher-recovery.test.ts` (search: `writeScanner`), and leave `withProject` empty; the unchanged `refuses linked state directories without writing into the linked project` assertion then passed. Fixture setup must preserve the absence that a negative control measures.
 
 ## Lesson: Check each Gruff-driven comment against the code it describes
 

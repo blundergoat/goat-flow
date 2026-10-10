@@ -10,30 +10,10 @@
  *
  * Every check prints PASS, FAIL or SKIP with elapsed seconds and any FAIL exits 1; owning tests and preflight remain required.
  */
-import { spawnSync } from "node:child_process";
-import {
-  closeSync,
-  existsSync,
-  fstatSync,
-  lstatSync,
-  mkdtempSync,
-  openSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { captureCommand } from "./capture-command.mjs";
+import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import {
-  delimiter,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 
@@ -86,8 +66,11 @@ function processCompleted(result) {
 }
 
 /** Run Git with private captures; throws on a capture or command failure, so a failed run never supplies raw bytes. */
-function gitOutput(root, args) {
-  const result = captureCommand(root, ["git", ...args]);
+async function gitOutput(root, args) {
+  const result = await captureCommand(["git", ...args], {
+    cwd: root,
+    maxBuffer: 32 * 1024 * 1024,
+  });
   if (processCompleted(result) && result.status === 0) return result.stdout;
   const reason = processCompleted(result)
     ? `exit ${result.status}: ${result.stderr.toString("utf8").trim()}`
@@ -127,15 +110,22 @@ export function parseNameStatus(output) {
  *
  * @param root - Git working-tree root used as the child processes' working directory.
  */
-export function collectChangedPaths(root) {
+export async function collectChangedPaths(root) {
   const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   const changes = parseNameStatus(
     decoder.decode(
-      gitOutput(root, ["diff", "--name-status", "-z", "-M", "HEAD", "--"]),
+      await gitOutput(root, [
+        "diff",
+        "--name-status",
+        "-z",
+        "-M",
+        "HEAD",
+        "--",
+      ]),
     ),
   );
   const untracked = decoder.decode(
-    gitOutput(root, ["ls-files", "--others", "--exclude-standard", "-z"]),
+    await gitOutput(root, ["ls-files", "--others", "--exclude-standard", "-z"]),
   );
   if (untracked !== "" && !untracked.endsWith("\0"))
     throw new Error("Git untracked inventory is not NUL-terminated");
@@ -315,57 +305,12 @@ function contractCommand(root) {
   ];
 }
 
-/**
- * Spawns the tool with its output in private temporary files, because managed pipes can lose child output.
- *
- * Keeps those files outside the working tree and removes them even when the tool or read fails.
- * Returns raw bytes for strict Git filename decoding; throws when the temporary folder is inside the repository or a stream is over 32 MiB at exit.
- */
-function captureCommand(root, argv) {
-  const temporaryRoot = realpathSync(tmpdir());
-  const relativeTemporaryRoot = relative(realpathSync(root), temporaryRoot);
-  if (
-    relativeTemporaryRoot === "" ||
-    (!isAbsolute(relativeTemporaryRoot) &&
-      relativeTemporaryRoot !== ".." &&
-      !relativeTemporaryRoot.startsWith(`..${sep}`))
-  ) {
-    throw new Error(
-      "Temporary output directory must be outside the repository",
-    );
-  }
-  const outputRoot = mkdtempSync(join(temporaryRoot, "goat-touched-command-"));
-  const descriptors = [];
-  try {
-    for (const name of ["stdout", "stderr"]) {
-      descriptors.push(openSync(join(outputRoot, name), "wx+", 0o600));
-    }
-    const result = spawnSync(argv[0], argv.slice(1), {
-      cwd: root,
-      shell: false,
-      stdio: ["ignore", ...descriptors],
-    });
-    if (
-      descriptors.some(
-        (descriptor) => fstatSync(descriptor).size > 32 * 1024 * 1024,
-      )
-    ) {
-      throw new Error("Tool output exceeded the 32 MiB capture limit");
-    }
-    return {
-      ...result,
-      stdout: readFileSync(join(outputRoot, "stdout")),
-      stderr: readFileSync(join(outputRoot, "stderr")),
-    };
-  } finally {
-    for (const descriptor of descriptors) closeSync(descriptor);
-    rmSync(outputRoot, { recursive: true, force: true });
-  }
-}
-
 /** Failed tools retain bounded diagnostics; successful tools need just their row. */
-function runCommand(root, argv) {
-  const result = captureCommand(root, argv);
+async function runCommand(root, argv) {
+  const result = await captureCommand(argv, {
+    cwd: root,
+    maxBuffer: 32 * 1024 * 1024,
+  });
   const completed = processCompleted(result);
   const passed = completed && result.status === 0;
   const output = [
@@ -413,9 +358,9 @@ function runUnicodeCheck(root, paths) {
 }
 
 /** Run every applicable check even after one fails, because a later check can find a different problem; a check that throws reports FAIL. */
-function runTouchedChecks(root) {
+async function runTouchedChecks(root) {
   const started = performance.now();
-  const selected = selectChecks(root, collectChangedPaths(root));
+  const selected = selectChecks(root, await collectChangedPaths(root));
   console.log(
     `Working-tree content: ${selected.paths.length} changed path(s), including deletions and rename endpoints.`,
   );
@@ -487,7 +432,7 @@ function runTouchedChecks(root) {
     if (enabled) {
       try {
         if (command) {
-          status = runCommand(root, command()) ? "PASS" : "FAIL";
+          status = (await runCommand(root, command())) ? "PASS" : "FAIL";
         } else {
           ({ status, detail } = runUnicodeCheck(root, selected.unicode));
         }
@@ -508,7 +453,7 @@ function runTouchedChecks(root) {
 }
 
 /** Reject unsupported options before running checks; help states the byte scope, and a selection error reports FAIL with status 1. */
-function main() {
+async function main() {
   if (process.argv.length === 3 && ["--help", "-h"].includes(process.argv[2])) {
     console.log(
       "Usage: npm run check:touched [-- --help]\nChecks working-tree bytes for staged, unstaged and untracked changes against HEAD.\nDeletions and both rename paths select checks; content tools use existing regular files.\nRead-only: no autofix. This does not replace preflight or owning test suites.",
@@ -518,10 +463,12 @@ function main() {
   try {
     if (process.argv.length > 2)
       throw new Error("Unsupported arguments; use --help");
-    const root = gitOutput(process.cwd(), ["rev-parse", "--show-toplevel"])
+    const root = (
+      await gitOutput(process.cwd(), ["rev-parse", "--show-toplevel"])
+    )
       .toString("utf8")
       .replace(/\r?\n$/u, "");
-    return runTouchedChecks(root);
+    return await runTouchedChecks(root);
   } catch (error) {
     console.error(`FAIL Change selection - ${printable(error.message)}`);
     return 1;
@@ -532,5 +479,5 @@ if (
   process.argv[1] &&
   fileURLToPath(import.meta.url) === resolve(process.argv[1])
 ) {
-  process.exitCode = main();
+  process.exitCode = await main();
 }

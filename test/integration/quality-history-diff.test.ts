@@ -32,10 +32,17 @@ import type {
 } from "../../src/cli/quality/schema-types.js";
 import { attachFindingIds } from "../../src/cli/quality/ids.js";
 import { captureReviewSnapshot } from "../../src/cli/review-validate-authority.js";
-import { taggedHash } from "../../src/cli/review-validate-common.js";
+import {
+  taggedHash,
+  type JsonRecord,
+} from "../../src/cli/review-validate-common.js";
 import { makeCurrentQualityReport } from "../fixtures/quality-report.js";
 import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
+import {
+  loadQualityHistory,
+  loadQualityHistoryWindow,
+} from "../../src/cli/quality/history.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
@@ -158,6 +165,117 @@ after(() => {
   for (const dir of disposables) {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+describe("retained quality evidence admission", () => {
+  it("rejects inconsistent agent identities while retaining valid history and fixes", () => {
+    const fixture = makeFixProject();
+    const validPath = saveFixReport(fixture, [fixture.fix]);
+    const mismatchedId = "2026-09-01-0900-codex-aaaaa";
+    writeFileSync(
+      join(fixture.root, ".goat-flow/logs/quality", `${mismatchedId}.json`),
+      fixture.priorBytes,
+    );
+    for (const history of [
+      loadQualityHistory(fixture.root),
+      loadQualityHistoryWindow(fixture.root, { agent: "codex", limit: 20 }),
+    ]) {
+      assert.ok(
+        history.entries.every((entry) => entry.agent === entry.report.agent),
+      );
+      assert.ok(
+        history.warnings.some((warning) =>
+          warning.includes("report agent does not match filename agent"),
+        ),
+      );
+    }
+    assert.ok(
+      loadQualityHistory(fixture.root).entries.some(
+        (entry) => entry.path === validPath,
+      ),
+    );
+    const saved = JSON.parse(
+      readFileSync(
+        saveFixReport(fixture, [
+          fixture.fix,
+          { ...fixture.fix, prior_report_id: mismatchedId },
+        ]),
+        "utf8",
+      ),
+    );
+    assert.deepEqual(
+      saved.fixes.map((fix: QualityFix) => fix.reference_check?.status),
+      ["confirmed", "unconfirmed"],
+    );
+  });
+
+  it("rejects correctly rehashed malformed captures without rejecting valid claims", () => {
+    const fixture = makeFixProject();
+    const mutations = [
+      (capture: JsonRecord) => {
+        const source = capture.source as JsonRecord;
+        source.kind = "unsupported";
+      },
+      (capture: JsonRecord) => {
+        const source = capture.source as JsonRecord;
+        source.requested = {};
+      },
+      (capture: JsonRecord) => {
+        capture.index = "invented";
+      },
+      (capture: JsonRecord) => {
+        const rows = capture.inventory as JsonRecord[];
+        delete (rows[0].new as JsonRecord).mode;
+      },
+      (capture: JsonRecord) => {
+        const rows = capture.inventory as JsonRecord[];
+        (rows[0].new as JsonRecord).from = "unsupported";
+      },
+      (capture: JsonRecord) => {
+        const rows = capture.inventory as JsonRecord[];
+        Object.assign(rows[0].new, { from: "index", blob: "a".repeat(40) });
+      },
+      (capture: JsonRecord) => {
+        const rows = capture.inventory as JsonRecord[];
+        rows.push(rows[0]);
+      },
+      (capture: JsonRecord) => {
+        capture.renames = [{}];
+      },
+      (capture: JsonRecord) => {
+        capture.workspace = "invented";
+      },
+    ];
+    for (const mutate of mutations) {
+      const capture = structuredClone(fixture.capture.authority);
+      mutate(capture);
+      const { fingerprint: _old, ...unsigned } = capture;
+      capture.fingerprint = taggedHash("authority", unsigned);
+      const text = JSON.stringify({ authority: capture });
+      writeFileSync(join(fixture.root, fixture.captureFile), text);
+      const saved = JSON.parse(
+        readFileSync(
+          saveFixReport(fixture, [
+            fixture.fix,
+            {
+              ...fixture.fix,
+              finding_id: fixture.findingIds[1],
+              target: {
+                kind: "workspace-snapshot",
+                fingerprint: capture.fingerprint,
+                capture: { file: fixture.captureFile, sha256: digest(text) },
+              },
+            },
+          ]),
+          "utf8",
+        ),
+      );
+      assert.deepEqual(
+        saved.fixes.map((fix: QualityFix) => fix.reference_check?.status),
+        ["confirmed", "unconfirmed"],
+      );
+    }
+  });
 });
 
 /** Writes an isolated project with just enough quality-log structure for CLI tests. */

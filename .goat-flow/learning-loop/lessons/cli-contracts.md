@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-09-21
+last_reviewed: 2026-10-10
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -11,12 +11,16 @@ last_reviewed: 2026-09-21
 **Decision changed:** Compare a validator's accepted fixtures with each documented input branch before treating a green suite as contract coverage.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-10
+**Severity:** CORRECTNESS
 
-**Prevention:** Test a valid input for each materially different evidence branch, its missing-evidence control, and any legacy default. For citation grammar, pair each supported punctuation form with an unrelated-sentence control. A passing check proves only the inputs its parser recognizes; inspect extraction before interpreting an empty findings array as complete validation.
+**Prevention:** Test a valid input for each materially different evidence branch, its missing-evidence control, and any legacy default. For retained evidence, pair producer-generated valid captures with freshly rehashed contradictions between fields; test admission through the public consumer. For citation grammar, pair each supported punctuation form with an unrelated-sentence control. A passing check proves only the inputs its parser recognizes; inspect extraction before interpreting an empty findings array as complete validation.
 
 **What happened:** During the 1.17.0 release follow-up, production scaffold probes rejected technique, pattern and reference receipts for lacking discipline pressure and rationalisation, although the authoring guide permits capability tests. A separate citation probe showed that a period immediately after a file path hid both valid and stale needles. Existing discipline and unrelated-sentence controls passed while those valid-input branches failed.
 
 **Root cause:** The exercised receipt fixtures represented only discipline evidence, and citation extraction treated direct punctuation like intervening prose. The fixes preserve the old discipline default and unrelated-sentence exclusion while accepting the documented alternatives. Evidence: `src/cli/skill-author-red-log.ts` (search: `validateSkillTypeEvidence`), `test/integration/skill-author.test.ts` (search: `skill from capability evidence without invented pressure`), `src/cli/facts/shared/search-anchors.ts` (search: `activeFilePathAfterGap`), and `test/unit/check-content-quality.test.ts` (search: `checks a direct citation after sentence punctuation without borrowing across prose`).
+
+**Recurrence 2026-10-10:** During the PR 67 double-check, I found that my retained-authority fix validated field shapes and hashes but missed relationships between source selection and inventory. A freshly rehashed capture selected live bytes while describing index bytes; the saved-quality path incorrectly confirmed its fix claim. A two-dot range also accepted a comparison base different from its left endpoint. Producer-generated controls now cover each source variant after a later workspace edit, while rehashed negative controls reject contradictory origins, revisions, parents, bases, Git context and unchanged comparison members. Evidence: `src/cli/review-validate-snapshot.ts` (search: `checkInventoryOrigins`), `test/integration/review-validate-authority.test.ts` (search: `rejects rehashed retained captures with contradictory source relationships`), and `test/integration/quality-history-diff.test.ts` (search: `rejects correctly rehashed malformed captures`).
 
 ---
 

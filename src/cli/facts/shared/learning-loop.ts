@@ -328,7 +328,9 @@ function parseGraduationSeverity(
   metadataBlock: string,
 ): GraduationCandidate["severity"] {
   const severityValue = metadataBlock
-    .match(/^\*\*Severity:\*\*[ \t]*([^\r\n]*)/m)?.[1]
+    .match(
+      /(?:^|\|[ \t]*)\*\*Severity:\*\*[ \t]*([^\r\n]*?)(?=[ \t]*\|[ \t]*\*\*[^*\r\n]+:\*\*|$)/m,
+    )?.[1]
     ?.trim();
   switch (severityValue) {
     case "SECURITY":
@@ -346,7 +348,9 @@ function parseGraduationSeverity(
 function parseGraduationEnforcement(metadataBlock: string): string | null {
   return (
     metadataBlock
-      .match(/^\*\*Enforced-by:\*\*[ \t]*([^\r\n]*)/m)?.[1]
+      .match(
+        /(?:^|\|[ \t]*)\*\*Enforced-by:\*\*[ \t]*([^\r\n]*?)(?=[ \t]*\|[ \t]*\*\*[^*\r\n]+:\*\*|$)/m,
+      )?.[1]
       ?.trim() || null
   );
 }

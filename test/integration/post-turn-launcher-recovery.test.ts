@@ -134,6 +134,11 @@ function scanResult(
  */
 function writeScanner(projectRoot: string, scriptBody: string) {
   mkdirSync(join(projectRoot, ".goat-flow/hooks"), { recursive: true });
+  mkdirSync(join(projectRoot, ".goat-flow/hooks/vendor"), { recursive: true });
+  writeFileSync(
+    join(projectRoot, ".goat-flow/hooks/vendor/js-yaml.cjs"),
+    readFileSync(resolve("workflow/hooks/vendor/js-yaml.cjs")),
+  );
   writeFileSync(
     join(projectRoot, scriptArgument),
     "#!/usr/bin/env bash\n" + scriptBody + "\n",

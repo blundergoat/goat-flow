@@ -16,6 +16,9 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
+import os from "node:os";
+import { syncBuiltinESMExports } from "node:module";
+import { gitTopLevel } from "../../src/cli/server/hook-scan-paths.js";
 import {
   deriveManagedHookDesiredState,
   readAgentHookState,
@@ -58,6 +61,20 @@ import {
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: launchers and installation", () => {
+  it("resolves a Git root when it contains the temporary directory", (t) => {
+    withTempProject((root) => {
+      runGit(root, ["init"]);
+      t.mock.method(os, "tmpdir", () => root);
+      syncBuiltinESMExports();
+      try {
+        assert.equal(gitTopLevel(root), root);
+        assert.equal(runGit(root, ["status", "--porcelain"]), "");
+      } finally {
+        t.mock.restoreAll();
+        syncBuiltinESMExports();
+      }
+    });
+  });
   /** Proves installed hooks can find default Git Bash when PATH exposes only WSL. */
   it("finds default Git Bash for hooks when PATH exposes only the WSL shim", () => {
     const defaultGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";

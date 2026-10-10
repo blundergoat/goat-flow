@@ -5,6 +5,7 @@
  * The CLI and report validator share canonical JSON and raw readers; snapshots retain metadata while file contents stay transient.
  * Capture and revalidation never change the project or run a review gate.
  */
+import { parseRetainedReviewAuthority } from "./review-validate-snapshot.js";
 import { existsSync, lstatSync, readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -801,34 +802,7 @@ export function readReviewAuthority(
   violations: ReviewValidationViolation[],
 ): ReviewAuthoritySnapshot | null {
   try {
-    const parsed = record(parseReviewJson(text, true), "authority snapshot");
-    exactKeys(parsed, [
-      "schema",
-      "objectFormat",
-      "source",
-      "index",
-      "inventory",
-      "renames",
-      "workspace",
-      "fingerprint",
-    ]);
-    requireAuthority(
-      parsed.schema === "goat-review-authority/v1",
-      "unsupported authority schema",
-    );
-    record(parsed.source, "resolved source");
-    const { fingerprint, ...unsigned } = parsed;
-    requireAuthority(
-      fingerprint === taggedHash("authority", unsigned),
-      "authority fingerprint does not match its frozen record",
-    );
-    requireAuthority(
-      parsed.workspace === null ||
-        /^workspace-v1:sha256:[0-9a-f]{64}$/u.test(
-          textField(parsed.workspace, "workspace"),
-        ),
-      "invalid execution workspace identity",
-    );
+    const parsed = parseRetainedReviewAuthority(parseReviewJson(text, true));
     // The producer supplies the typed shape only after its canonical bytes match the retained receipt exactly.
     return checkSnapshot(projectRoot, parsed);
   } catch (error) {

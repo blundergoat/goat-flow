@@ -795,6 +795,16 @@ function includeRequiredSecretFailure(
   };
 }
 
+/** Render the attribution step when Claude's full setup prompt requires it. */
+function setupAttributionGuidance(
+  agentId: AgentId,
+  promptScope: SetupPromptScope,
+): string {
+  return agentId === "claude" && promptScope === "full"
+    ? `\n\n**Claude attribution:** Before completing setup, follow the Attribution settings section in \`${displayTemplatePath(SETUP_FILES.claude)}\`. Complete any required installer step first.`
+    : "";
+}
+
 /**
  * Compose the setup prompt that matches the project's current install state.
  *
@@ -813,10 +823,10 @@ export function composeSetup(
   const projectFS = createFS(facts.root);
   const projectState = classifyProjectState(projectFS, agentId);
   const promptScope = options.promptScope ?? "full";
-  const attributionGuidance =
-    agentId === "claude" && promptScope === "full"
-      ? `\n\n**Claude attribution:** Before completing setup, follow the Attribution settings section in \`${displayTemplatePath(SETUP_FILES.claude)}\`. Complete any required installer step first.`
-      : "";
+  if (projectState.state === "error" && projectState.action === "none") {
+    return `# GOAT Flow Setup - ${PROFILES[agentId].name}\n\n${projectState.details}`;
+  }
+  const attributionGuidance = setupAttributionGuidance(agentId, promptScope);
 
   // Nothing usable installed, or a half-finished install: the audit result cannot be trusted as a to-do list, so start from the setup guide.
   if (
