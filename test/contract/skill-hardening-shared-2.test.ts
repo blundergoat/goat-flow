@@ -507,6 +507,8 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       ]);
       assertSectionPatterns(playbookPath, "Integrity", [
         /Never invent an incident/u,
+        // An added cause or eligibility rule is the measured humaniser failure; the noun list alone never named it.
+        /reason, or condition/u,
         /illustrative example must be labelled as illustrative/u,
       ]);
       assertSectionPatterns(playbookPath, "Quick Tests", [
@@ -567,6 +569,8 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
         /Do not run a broad punctuation sweep/u,
         playbookPath,
       );
+      // Edits that only ban the dash reroute it to a semicolon; the guard must name the replacement instead.
+      assert.match(guards, /never a semicolon/u, playbookPath);
       assert.doesNotMatch(
         readProjectFile(playbookPath),
         /\u2014/u,
@@ -580,6 +584,18 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
 
       const workedExample = readMarkdownSection(playbookPath, "Worked Example");
       assert.match(workedExample, /Illustrative example \(not evidence/u);
+    }
+  });
+
+  it("requires prose judges to see the source and score fidelity apart from readability", () => {
+    // Judges shown only the output preferred the arm that invented detail; the evaluation step must name the control.
+    for (const playbookPath of [
+      "workflow/skills/playbooks/writing-agent-facing-instructions.md",
+      ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
+    ]) {
+      assertSectionPatterns(playbookPath, "Behavioural Evaluation", [
+        /must see the source of truth and score fidelity separately from readability/u,
+      ]);
     }
   });
 

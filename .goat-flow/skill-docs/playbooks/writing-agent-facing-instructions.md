@@ -171,7 +171,7 @@ A document's prose is a behavioural hypothesis. Give strong claims a named basis
 4. Classify the failure and write the smallest pointer, instruction, reference, or executable that addresses it.
 5. Test in fresh contexts against a no-guidance or unchanged control. When variance matters, use independent samples. Judge convergence against the declared acceptance rule; divergent valid interpretations mean the wording is not binding. Read outputs rather than trusting counts alone.
 6. Test discovery and execution separately with realistic variations and near-misses not used to draft the rule, and include the mirror case: a rule against one excess can produce the opposite one.
-7. Use objective assertions for mechanical requirements and human review for judgement. Inspect traces where available; plausible output can hide a skipped rule or wasted work.
+7. Use objective assertions for mechanical requirements and human review for judgement. Inspect traces where available; plausible output can hide a skipped rule or wasted work. A judge scoring prose must see the source of truth and score fidelity separately from readability. Without the source, judges prefer fluent output that adds detail the source never gave.
 8. Test only authorised models and harnesses the document claims to support. Record untested scope; do not generalise beyond observed environments.
 9. Remove guidance that does not improve behaviour and watch for regressions in valid flexibility, time, or context use.
 

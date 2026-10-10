@@ -24,6 +24,8 @@
 - **Writing playbooks check both directions** - The prose pass keeps a qualifier that changes what the evidence supports, sentence diagnostics flag labels the reader cannot decode, and structure diagnostics keep prose that states a table's pattern and rejoin arguments split into bullets.
 - **Instruction tests include the mirror failure** - `writing-agent-facing-instructions.md` asks near-miss testing to cover the opposite excess a corrective rule can produce.
 - **BREAKING: strict plan checks require one final milestone** - `plans check --strict` fails a plan with open work that ends in more than one milestone and names each ending; add a final milestone that depends on them. Finished plans get a warning instead.
+- **Read-only prose reviews load the prose playbook** - goat-clarity diagnoses selected documentation the same way with or without edit permission.
+- **Three writing rules** - No invented reasons or conditions; prose judges see the source and score fidelity apart; a removed dash never becomes a semicolon.
 
 ### Fixed
 

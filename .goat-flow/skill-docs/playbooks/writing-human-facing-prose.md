@@ -99,7 +99,7 @@ Put the decision, behaviour, or action where the reader can find it.
 
 These outrank every style rule here. A more readable document that breaks one of them is a worse document.
 
-- **Never invent an incident, example, metric, quotation, or name.** Not for illustration, not to make a point land. This is the hardest rule to keep, because invented specifics always read better than missing ones.
+- **Never invent an incident, example, metric, quotation, name, reason, or condition.** Not for illustration, not to make a point land. This is the hardest rule to keep, because invented specifics always read better than missing ones.
 - **Never manufacture point of view or texture.** Preserve opinions, uncertainty, humour, irritation, and limitations when the source owns them; otherwise leave them out.
 - **An illustrative example must be labelled as illustrative.** A placeholder scenario that reads as a real event becomes evidence in the next reader's hands.
 - **Prefer a visible placeholder to a fabricated detail.** `[NEEDS REAL EXAMPLE]` blocks a release. A convincing invention does not, and ships.

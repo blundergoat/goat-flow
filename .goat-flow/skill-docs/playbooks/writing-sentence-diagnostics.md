@@ -7,7 +7,7 @@ Load this only after `writing-human-facing-prose.md` identifies a sentence-level
 
 ## Availability Check
 
-This is a documentary discipline, not a runnable tool. Confirm the draft is an in-scope human-read surface and that the core correctness pass is complete. Mechanical searches may locate candidates, but no detector proves a defect. If the trigger is document assembly rather than a sentence, use `writing-structure-diagnostics.md` instead.
+This is a documentary discipline, not a runnable tool. Confirm the draft is an in-scope human-read surface and that the core correctness pass is complete. If the trigger is document assembly rather than a sentence, use `writing-structure-diagnostics.md` instead.
 
 ## Project Authority
 
@@ -64,7 +64,7 @@ These patterns diagnose reader cost, not authorship. A found phrase is only a ca
 
 **Counts do not decide.** AI-density, banned-word, and rhythm counts are suspicion signals only. They never diagnose a defect, authorize an edit, or produce a pass/fail result. Use a count to locate a passage, then read it and apply the same evidence gate as any other candidate.
 
-**Punctuation carries meaning.** For new or edited prose, follow active project punctuation policy. Do not run a broad punctuation sweep. Preserve direct quotations, code, approved titles, and untouched history. An em dash, semicolon, fragment, or repeated sentence length is not independently a defect.
+**Punctuation carries meaning.** For new or edited prose, follow active project punctuation policy. Do not run a broad punctuation sweep. Replace a removed dash by the job it did: a colon, a period, parentheses, or a comma, never a semicolon. Preserve direct quotations, code, approved titles, and untouched history. An em dash, semicolon, fragment, or repeated sentence length is not independently a defect.
 
 ## Quick Tests
 
@@ -82,8 +82,7 @@ Before: `This important update improves reliability, ensuring teams can confiden
 
 After: `The exporter retries once after a storage timeout. If the retry fails, it preserves the draft and names the unwritten file.`
 
-The revision assigns actions to the component and replaces unsupported importance and reassurance with observable behaviour. It would still be invalid if those behaviours were not verified.
-
+The revision assigns actions to the component and replaces unsupported importance and reassurance with observable behaviour.
 ## Verification Gate
 
 1. The core correctness and scope gates passed before this playbook loaded.
