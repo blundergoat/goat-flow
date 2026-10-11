@@ -147,7 +147,7 @@ Compare HEAD and uncommitted state with status, tasks, assumptions, and evidence
 
 ### Mode 1: Named-File Update (edit in place)
 
-Edit the named file in place; a path alone does not qualify. Preserve unaffected title/status. Present the delta; stop on scope spill.
+Edit the named file in place; a path alone does not qualify. Preserve unaffected title/status. Present the delta and apply the progress rule for adopted plans; stop on scope spill.
 
 ### Mode 2: Read-Only Analysis (no files)
 
@@ -165,7 +165,7 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 ### File Artifact Rules (Modes 3 and 4)
 
-Fresh plan: honour supplied destinations; otherwise create a slugged directory. Write zero-padded `M*.md`, `investigation-notes` (empty allowed; no filler), and `_PROGRESS.md` containing only `# Plan progress`; follow the plans README. Existing plans adopt notes/progress only explicitly. Only explicit active-plan selection updates `.active`. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` bands and totals.
+Fresh plan: honour supplied destinations; otherwise create a slugged directory. Write zero-padded `M*.md`, `investigation-notes` (empty allowed; no filler), and `_PROGRESS.md` containing only `# Plan and implementation progress`; follow the plans README. Existing plans adopt notes/progress only explicitly. Only explicit active-plan selection updates `.active`. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` bands and totals.
 
 **Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty sections; retain Phase 1 core and claim-based Proof.
 
@@ -177,11 +177,11 @@ Fresh plan: honour supplied destinations; otherwise create a slugged directory. 
 
 **Validate:** Resolve inline references, then run `goat-flow plans check .goat-flow/plans/<active> --strict`; fix errors before the checkpoint.
 
-**Post-plan return:** After Phase 2 finishes, `return-to-implement` hands ordinary ACT the existing build authorization and the progress rule below; new Ask First boundaries still gate. Plan-only stops; Phase 3 gates milestones.
+**Post-plan return:** After Phase 2 finishes, Modes 3/4 apply the progress rule. `return-to-implement` hands ordinary ACT the existing build authorization; new Ask First boundaries still gate. Plan-only stops; Phase 3 gates milestones.
 
 ## Phase 3 - Between Milestones
 
-**Progress:** For adopted plans, at meaningful completed-batch checkpoints/handoffs, unchanged resumes and material approval/check/rework changes, apply `references/issue-format.md` → Plan progress updates. Include this rule in execution handoffs; require scoped clarity before delivery.
+**Progress:** For adopted plans, apply `references/issue-format.md` → Plan progress updates after meaningful planning or implementation batches, at handoff, and for material approval/check/rework changes. Skip unchanged resumes. Carry this rule into execution handoffs; always run scoped `goat-clarity` before delivering new or revised entries.
 
 **Lane eligibility:** Activate not-started work only when every dependency is complete, its lane is free, and the active count is below the cap. For lane or capacity contention, show eligible IDs, lanes, and dependencies; ask, never select by number. Lanes grant no writer ownership; use disjoint scopes, applicable write claims, and an agreed merge boundary. Read `references/milestone-examples.md` → Lane lifecycle for downgrade recovery.
 
