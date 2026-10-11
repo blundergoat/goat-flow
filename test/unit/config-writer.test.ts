@@ -11,7 +11,6 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,11 +38,11 @@ function withTempProject(scenario: (root: string) => void): void {
 }
 
 /**
- * Create the exact executable convention detected by Gruff hook configuration.
+ * Create an executable project-local analyzer that enabling the hook must leave unreferenced.
  * Side effect: writes one disposable console-script fixture below the supplied test root.
  */
-function writeConventionalGruffPy(root: string): string {
-  const binaryDirectory = join(root, "strands_agents", ".venv", "bin");
+function writeProjectGruffPy(root: string): string {
+  const binaryDirectory = join(root, "tools", ".venv", "bin");
   const binaryPath = join(binaryDirectory, "gruff-py");
   mkdirSync(binaryDirectory, { recursive: true });
   writeFileSync(binaryPath, "#!/usr/bin/env python3\n");
@@ -60,7 +59,7 @@ describe("config writer", () => {
       writeFileSync(path, original);
       assert.throws(
         () =>
-          prepareHookConfig(original, root, {
+          prepareHookConfig(original, {
             hookId: "deny-dangerous",
             enabled: false,
           }),
@@ -80,13 +79,13 @@ describe("config writer", () => {
 
   // Sync must preserve saved YAML anchors and missing/default-on policy choices, including spaces before a quoted key's colon.
   it("preserves anchored hook choices during Sync with a spaced quoted key", () => {
-    withTempProject((root) => {
+    withTempProject(() => {
       // Both supported quote styles must retain the anchor used by another project setting.
       for (const quote of ['"', "'"]) {
         const hookHeader = `${quote}hooks${quote} : &saved`;
         const siblings = '"plans" :\n  path: custom-plans/\ncustom: *saved\n';
         const original = `${hookHeader}\n  deny-dangerous:\n    enabled: false\n${siblings}`;
-        const prepared = prepareHookConfig(original, root);
+        const prepared = prepareHookConfig(original);
         const parsed = load(prepared) as Record<string, unknown>;
         assert.ok(prepared.startsWith(hookHeader), `Retain ${quote} header`);
         assert.ok(prepared.endsWith(siblings), `Retain ${quote} siblings`);
@@ -95,19 +94,19 @@ describe("config writer", () => {
           "deny-git-mutations": { enabled: true },
         });
         assert.deepEqual(parsed.custom, parsed.hooks);
-        assert.equal(prepareHookConfig(prepared, root), prepared);
+        assert.equal(prepareHookConfig(prepared), prepared);
       }
     });
   });
 
   it("preserves quoted top-level siblings when preparing a hook toggle", () => {
-    withTempProject((root) => {
+    withTempProject(() => {
       // Users can quote saved YAML keys either way; both forms must retain the following settings and comments.
       for (const quote of ['"', "'"]) {
         const siblings = `${quote}plans${quote} : # keep this comment\n  path: custom-plans/\nui:\n  theme: dark\n`;
         const original = `${quote}hooks${quote} :\n  deny-git-mutations:\n    enabled: true\n${siblings}`;
         const toggle = { hookId: "deny-git-mutations", enabled: false };
-        const prepared = prepareHookConfig(original, root, toggle);
+        const prepared = prepareHookConfig(original, toggle);
         const parsed = load(prepared) as Record<string, unknown>;
         const before = load(original) as Record<string, unknown>;
         assert.ok(prepared.endsWith(siblings), prepared);
@@ -116,7 +115,7 @@ describe("config writer", () => {
         assert.deepEqual(parsed.hooks, {
           "deny-git-mutations": { enabled: false },
         });
-        assert.equal(prepareHookConfig(prepared, root, toggle), prepared);
+        assert.equal(prepareHookConfig(prepared, toggle), prepared);
       }
     });
   });
@@ -137,7 +136,7 @@ describe("config writer", () => {
           } else {
             writeFileSync(
               path,
-              prepareHookConfig(original, root, {
+              prepareHookConfig(original, {
                 hookId: "post-turn-safety",
                 enabled: true,
               }),
@@ -217,7 +216,6 @@ describe("config writer", () => {
         } else {
           const prepared = prepareHookConfig(
             original,
-            root,
             action === "prepare-toggle"
               ? { hookId: "post-turn-safety", enabled: true }
               : undefined,
@@ -295,10 +293,10 @@ describe("config writer", () => {
     });
   });
 
-  // Fixture purpose: creates the nested analyzer that hook enablement must persist; writes stay in the disposable project.
-  it("pins the conventional strands_agents gruff-py when enabling its hook", () => {
+  // Fixture purpose: an executable analyzer sits in the project, and enabling the hook must still write no binaries entry.
+  it("writes no binaries entry when enabling the hook", () => {
     withTempProject((root) => {
-      writeConventionalGruffPy(root);
+      writeProjectGruffPy(root);
 
       setHookEnabled(root, "gruff-code-quality", true);
 
@@ -307,17 +305,22 @@ describe("config writer", () => {
         "utf-8",
       );
       assert.match(next, /gruff-code-quality:\n {4}enabled: true/u);
-      assert.match(
-        next,
-        /binaries:\n {6}py: strands_agents\/\.venv\/bin\/gruff-py/u,
-      );
+      assert.doesNotMatch(next, /binaries:/u);
+
+      // The dashboard and `hooks enable` reach the same choice through the prepared-config path, which must not add one either.
+      const prepared = prepareHookConfig('version: "1.8.0"\n', {
+        hookId: "gruff-code-quality",
+        enabled: true,
+      });
+      assert.match(prepared, /gruff-code-quality:\n {4}enabled: true/u);
+      assert.doesNotMatch(prepared, /binaries:/u);
     });
   });
 
   // Fixture purpose: gives Gruff an empty binary block that enablement must preserve; writes stay in the disposable project.
   it("keeps an empty gruff binaries block authoritative when enabling", () => {
     withTempProject((root) => {
-      writeConventionalGruffPy(root);
+      writeProjectGruffPy(root);
       const configPath = join(root, ".goat-flow", "config.yaml");
       writeFileSync(
         configPath,
@@ -336,33 +339,14 @@ describe("config writer", () => {
       const next = readFileSync(configPath, "utf-8");
       assert.match(next, /gruff-code-quality:\n {4}enabled: true/u);
       assert.match(next, /binaries: \{\}/u);
-      assert.doesNotMatch(next, /strands_agents\/\.venv\/bin\/gruff-py/u);
+      assert.doesNotMatch(next, /tools\/\.venv\/bin\/gruff-py/u);
     });
   });
-
-  // Fixture purpose: removes execute permission from the nested analyzer; writes stay in the disposable project.
-  it(
-    "does not pin a non-executable conventional gruff-py when enabling",
-    { skip: process.platform === "win32" },
-    () => {
-      withTempProject((root) => {
-        chmodSync(writeConventionalGruffPy(root), 0o644);
-
-        setHookEnabled(root, "gruff-code-quality", true);
-
-        const next = readFileSync(
-          join(root, ".goat-flow", "config.yaml"),
-          "utf-8",
-        );
-        assert.doesNotMatch(next, /binaries:/u);
-      });
-    },
-  );
 
   // Covers hook binaries overrides surviving a toggle: writes config, toggles, and expects them preserved.
   it("preserves hook binaries overrides through toggle writes", () => {
     withTempProject((root) => {
-      writeConventionalGruffPy(root);
+      writeProjectGruffPy(root);
       const configPath = join(root, ".goat-flow", "config.yaml");
       writeFileSync(
         configPath,
@@ -381,7 +365,7 @@ describe("config writer", () => {
       const enabled = readFileSync(configPath, "utf-8");
       assert.match(enabled, /gruff-code-quality:\n {4}enabled: true/u);
       assert.match(enabled, /binaries:\n {6}py: tools\/gruff-py/u);
-      assert.doesNotMatch(enabled, /strands_agents\/\.venv\/bin\/gruff-py/u);
+      assert.doesNotMatch(enabled, /tools\/\.venv\/bin\/gruff-py/u);
 
       setHookEnabled(root, "gruff-code-quality", false);
       setHookEnabled(root, "deny-dangerous", true);
@@ -389,35 +373,9 @@ describe("config writer", () => {
       const next = readFileSync(configPath, "utf-8");
       assert.match(next, /gruff-code-quality:\n {4}enabled: false/u);
       assert.match(next, /binaries:\n {6}py: tools\/gruff-py/u);
-      assert.doesNotMatch(next, /strands_agents\/\.venv\/bin\/gruff-py/u);
+      assert.doesNotMatch(next, /tools\/\.venv\/bin\/gruff-py/u);
     });
   });
-
-  // Fixture purpose: redirects the conventional path outside the project; side effects: writes only inside two cleaned temp roots.
-  it(
-    "rejects a conventional gruff-py symlink that resolves outside the project",
-    { skip: process.platform === "win32" },
-    () => {
-      withTempProject((outsideRoot) => {
-        const outsideBinary = join(outsideRoot, "gruff-py");
-        writeFileSync(outsideBinary, "#!/usr/bin/env python3\n");
-        chmodSync(outsideBinary, 0o755);
-        withTempProject((root) => {
-          const binaryDirectory = join(root, "strands_agents", ".venv", "bin");
-          mkdirSync(binaryDirectory, { recursive: true });
-          symlinkSync(outsideBinary, join(binaryDirectory, "gruff-py"));
-
-          setHookEnabled(root, "gruff-code-quality", true);
-
-          const next = readFileSync(
-            join(root, ".goat-flow", "config.yaml"),
-            "utf-8",
-          );
-          assert.doesNotMatch(next, /binaries:/u);
-        });
-      });
-    },
-  );
 
   // Fixture purpose: writes a multi-root YAML block, toggles it, and reads the preserved paths back.
   it("preserves post-turn scan roots through toggle writes", () => {

@@ -234,13 +234,13 @@ hooks:
   gruff-code-quality:
     enabled: true
     binaries:
-      py: strands_agents/.venv/bin/gruff-py
+      py: tools/.venv/bin/gruff-py
 `;
     const result = loadConfig("/tmp", configFS(yaml));
     assert.equal(result.valid, true);
     assert.deepStrictEqual(result.config.hooks["gruff-code-quality"], {
       enabled: true,
-      binaries: { py: "strands_agents/.venv/bin/gruff-py" },
+      binaries: { py: "tools/.venv/bin/gruff-py" },
     });
   });
 
