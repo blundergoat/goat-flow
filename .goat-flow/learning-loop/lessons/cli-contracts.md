@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-11
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -153,3 +153,19 @@ failed both existing estimate-less-plan contracts.
 
 **Root cause:** The final rendered output array was reused as the semantic test for whether effort data existed. An unrelated advisory changed that
 array without changing the plan's effort state.
+
+---
+
+## Lesson: Worst-case report rules need a before-and-after run over real archived inputs
+
+**Status:** active | **Created:** 2026-10-11
+**Decision changed:** Before shipping a conservative rule that adds report text for each unreadable input, snapshot the command over every local plan before and after the change and group the difference by plan and clause.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-10-11
+
+**Prevention:** Capture `plans check` readiness and join lines for every local plan in default, strict and raised-cap modes before editing, rerun after, and group the difference by plan before calling the change narrow. A rule that gives each unreadable milestone a line naming every other unreadable milestone grows with the square of plan size. Evidence anchors: `src/cli/plans-check-summary.ts` (search: `an unreadable Status is not known to be unstarted`) and `test/unit/plans-check.test.ts` (search: `counts an unsupported status as possibly holding the cap`).
+
+**What happened:** Applying "an unreadable field means wait" to a milestone's own Status gave every such milestone a `waiting:` line that also listed the others as possible cap holders. Focused tests passed. A before-and-after snapshot of local plans, measured 2026-10-11, changed 141 plan-and-mode blocks, mostly archived plans written with older Status wording such as `done (date)`. Printing no line for a milestone whose own Status is unreadable, while still counting it as possibly active for others, kept the guarantee and cut the change to 22 blocks, each from a plan that really contained an unreadable field.
+
+**Root cause:** The fixtures placed one invalid milestone among valid ones, so they could not show how the rule scaled when most milestones in a plan used legacy vocabulary.
