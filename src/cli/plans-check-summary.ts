@@ -132,20 +132,30 @@ function renderOccupants(occupants: ActiveMilestone[]): string {
 }
 
 /**
- * Name the prerequisites of one unstarted milestone that are not complete yet, each with its status.
+ * Explain which dependency field or unfinished prerequisites keep a milestone waiting.
  *
  * @param identity - unstarted milestone whose `Depends on` list is read
  * @param graph - plan graph; a dependency outside the plan reads `missing` and already has its own strict error
- * @returns `M21 (not-started)`-style entries in declared order; empty when every prerequisite is complete
+ * @returns waiting clauses with prerequisites in declared order; empty when the field is valid and every prerequisite is complete
  */
-function listUnmetPrerequisites(
+function listDependencyBlockers(
   identity: MilestoneIdentity,
   graph: DependencyGraph,
 ): string[] {
+  if (identity.dependencyIssue !== null) {
+    return [
+      identity.dependencyIssue === "missing"
+        ? "dependencies missing"
+        : "dependency list invalid",
+    ];
+  }
   const unmet: string[] = [];
   for (const dependency of identity.dependencies) {
-    // A milestone that waits on itself has its own error and is never something the author can finish first.
-    if (dependency === identity.id) continue;
+    // Waiting on itself can never be satisfied, even if the field parsed successfully.
+    if (dependency === identity.id) {
+      unmet.push(`${dependency} (itself)`);
+      continue;
+    }
     const dependencyRecord = graph.byId.get(dependency)?.record;
     const dependencyStatus = dependencyRecord
       ? dependencyRecord.status.trim().toLowerCase() || "no status"
@@ -154,7 +164,7 @@ function listUnmetPrerequisites(
       unmet.push(`${dependency} (${dependencyStatus})`);
     }
   }
-  return unmet;
+  return unmet.length > 0 ? [`needs ${unmet.join(", ")}`] : [];
 }
 
 /**
@@ -197,8 +207,7 @@ export function renderReadinessSummary(
     if (!UNSTARTED_STATUSES.has(status)) continue;
     // Blocked work waits on whatever its Status reason records, even when its prerequisites are done.
     const clauses = status === "blocked" ? ["status blocked"] : [];
-    const unmet = listUnmetPrerequisites(identity, graph);
-    if (unmet.length > 0) clauses.push(`needs ${unmet.join(", ")}`);
+    clauses.push(...listDependencyBlockers(identity, graph));
     const lane = readDeclaredLane(identity.record);
     const occupants = listLaneOccupants(lane, active, maxActive);
     if (occupants.length > 0) {

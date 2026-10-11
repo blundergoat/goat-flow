@@ -155,6 +155,161 @@ describe("plans check: milestone readiness", () => {
   }
 });
 
+describe("plans check: dependency validity", () => {
+  // These inputs reproduce false readiness and false endings through the public CLI.
+  const cases = [
+    {
+      name: "malformed list",
+      dependency: "M01 (soft)",
+      clause: "dependency list invalid",
+      error: /dependencies must be/u,
+    },
+    {
+      name: "blank list",
+      dependency: "",
+      clause: "dependencies missing",
+      error: /missing dependencies/u,
+    },
+    {
+      name: "missing milestone",
+      dependency: "M99",
+      clause: "needs M99 (missing)",
+      error: /dependency M99 does not resolve/u,
+    },
+    {
+      name: "self dependency",
+      dependency: "M02",
+      clause: "needs M02 (itself)",
+      error: /milestone cannot depend on itself/u,
+    },
+  ];
+  for (const row of cases) {
+    it(`waits on a ${row.name} without inventing a final join`, () => {
+      const root = mkdtempSync(
+        join(tmpdir(), "goat-flow-dependency-validity-"),
+      );
+      try {
+        const plan = writeCheckPlan(root, {
+          "M01-first.md": canonicalMilestoneBody({ title: "M01: First" }),
+          "M02-next.md": canonicalMilestoneBody({
+            title: "M02: Next",
+            dependsOn: row.dependency,
+          }),
+        });
+        for (const flags of [[], ["--strict"]]) {
+          const result = runPlansCheck(plan, ...flags);
+          assert.equal(
+            result.status,
+            flags.length ? 1 : 0,
+            result.stdout + result.stderr,
+          );
+          assert.deepEqual(
+            result.stdout
+              .split("\n")
+              .filter((line) => /^(ready|waiting): /u.test(line)),
+            ["ready: M01", `waiting: M02 | ${row.clause}`],
+          );
+          assert.doesNotMatch(result.stdout, /endings \(/u);
+          if (flags.length) assert.match(result.stdout, row.error);
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+  for (const omitField of [false, true]) {
+    it(`allows a single milestone with ${omitField ? "omitted" : "blank"} dependencies`, () => {
+      const root = mkdtempSync(join(tmpdir(), "goat-flow-single-dependency-"));
+      try {
+        let body = canonicalMilestoneBody({
+          title: "M01: Single",
+          dependsOn: "",
+        });
+        if (omitField) body = body.replace(/^Depends on:.*\n/mu, "");
+        const plan = writeCheckPlan(root, { "M01-single.md": body });
+        for (const flags of [[], ["--strict"]]) {
+          const result = runPlansCheck(plan, ...flags);
+          assert.equal(result.status, 0, result.stdout + result.stderr);
+          assert.match(result.stdout, /^ready: M01$/mu);
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+  it("suppresses finished-plan join advice for an unresolved dependency", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-finished-dependency-"));
+    try {
+      const plan = writeCheckPlan(root, {
+        "M01-first.md": completedMilestone("M01: First"),
+        "M02-next.md": completedMilestone("M02: Next").replace(
+          "Depends on: none",
+          "Depends on: M99",
+        ),
+      });
+      const result = runPlansCheck(plan, "--strict");
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /dependency M99 does not resolve/u);
+      assert.doesNotMatch(result.stdout, /endings \(/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it("retains join advice when only a title is invalid", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-title-join-"));
+    try {
+      const plan = writeCheckPlan(root, {
+        "M01-first.md": canonicalMilestoneBody({ title: "M01: First" }),
+        "M02-next.md": canonicalMilestoneBody({ title: "M99: Wrong title" }),
+      });
+      const result = runPlansCheck(plan, "--strict");
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /title ID M99 does not match filename ID M02/u,
+      );
+      assert.match(result.stdout, /plan has 2 endings \(M01, M02\)/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  for (const flags of [[], ["--strict"]]) {
+    it(`keeps cyclic dependencies waiting without join advice in ${flags.length ? "strict" : "default"} mode`, () => {
+      const root = mkdtempSync(join(tmpdir(), "goat-flow-cycle-readiness-"));
+      try {
+        const plan = writeCheckPlan(root, {
+          "M01-first.md": canonicalMilestoneBody({
+            title: "M01: First",
+            dependsOn: "M02",
+          }),
+          "M02-next.md": canonicalMilestoneBody({
+            title: "M02: Next",
+            dependsOn: "M01",
+          }),
+        });
+        const result = runPlansCheck(plan, ...flags);
+        assert.equal(
+          result.status,
+          flags.length ? 1 : 0,
+          result.stdout + result.stderr,
+        );
+        assert.deepEqual(
+          result.stdout
+            .split("\n")
+            .filter((line) => /^(ready|waiting): /u.test(line)),
+          [
+            "waiting: M01 | needs M02 (not-started)",
+            "waiting: M02 | needs M01 (not-started)",
+          ],
+        );
+        assert.doesNotMatch(result.stdout, /endings \(/u);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
 describe("plans check: effort arithmetic and plan shapes", () => {
   /** Writes temporary plans and compares complete stdout, stderr, and exit status across equivalent cap-one policies. */
   it("reports the same cap-one transcript with omitted and explicit policy", () => {

@@ -351,8 +351,8 @@ export function collectPlanStructureAdvisories(
   // Plan shape belongs to the strict gate, so a default check stays quiet about a finished plan's endings.
   if (isStrict) {
     const graph = readDependencyGraph(records, []);
-    // A dependency loop already fails strict validation, and endings inside a loop would point the author at the wrong fix.
-    if (!findDependencyCycle(graph.byId)) {
+    // Invalid links or a loop make the apparent endings unreliable until the author repairs the dependencies.
+    if (!graph.hasInvalidDependencies && !findDependencyCycle(graph.byId)) {
       advisories.push(...collectFinalJoinFindings(graph.byId).advisories);
     }
   }
@@ -390,6 +390,8 @@ export interface MilestoneIdentity {
   record: PlanExportRecord;
   /** IDs from the `Depends on` field; empty until the field is parsed, and empty for `none`. */
   dependencies: string[];
+  /** A missing or unreadable field must not be mistaken for an explicit `none`. */
+  dependencyIssue: "missing" | "invalid" | null;
 }
 
 /**
@@ -410,6 +412,7 @@ function readMilestoneIdentity(
     numericId: milestoneFilenameMatch[1].replace(/^0+(?=\d)/u, ""),
     record,
     dependencies: [],
+    dependencyIssue: null,
   };
 }
 
@@ -431,6 +434,7 @@ function readDependencies(
   if (rawDependencies.length === 0) {
     // A one-milestone plan has nothing to order, so only larger plans report the gap.
     if (requiresField) {
+      identity.dependencyIssue = "missing";
       errors.push(
         `${identity.record.sourceFile}: missing dependencies for a multi-milestone plan`,
       );
@@ -441,6 +445,7 @@ function readDependencies(
   if (rawDependencies === "none") return [];
   // Prose such as `M01 (soft)` cannot become a reliable dependency, so the author is shown the accepted shape.
   if (!/^M\d+(?:\s*,\s*M\d+)*$/u.test(rawDependencies)) {
+    identity.dependencyIssue = "invalid";
     errors.push(
       `${identity.record.sourceFile}: dependencies must be \`none\` or comma-separated local milestone IDs`,
     );
@@ -815,6 +820,8 @@ function collectActiveStateErrors(
 /** A plan's milestones with their dependencies filled in, plus lookups by ID and by number. */
 export interface DependencyGraph extends MilestoneIndexes {
   identities: MilestoneIdentity[];
+  /** Dependency errors alone suppress join advice; unrelated title and prose errors do not. */
+  hasInvalidDependencies: boolean;
 }
 
 /**
@@ -833,13 +840,19 @@ export function readDependencyGraph(
     .map(readMilestoneIdentity)
     .filter((identity): identity is MilestoneIdentity => identity !== null);
   const indexes = indexMilestones(identities, records.length > 1, errors);
+  const dependencyErrors: string[] = [];
   collectDependencyReferenceErrors(
     identities,
     indexes.byId,
     records.length > 1,
-    errors,
+    dependencyErrors,
   );
-  return { identities, ...indexes };
+  errors.push(...dependencyErrors);
+  return {
+    identities,
+    ...indexes,
+    hasInvalidDependencies: dependencyErrors.length > 0,
+  };
 }
 
 /**
@@ -956,8 +969,8 @@ export function collectPlanStructureErrors(
   // A dependency loop is reported as the exact route the author must break.
   if (cycle) {
     errors.push(`plan: dependency cycle detected: ${cycle.join(" -> ")}`);
-  } else {
-    // Endings only make sense once the plan has a start order, so the loop error stands alone until the author breaks it.
+  } else if (!indexes.hasInvalidDependencies) {
+    // Endings only make sense once every dependency can be read and resolved.
     errors.push(...collectFinalJoinFindings(indexes.byId).errors);
   }
   errors.push(...collectDependencyStateErrors(identities, indexes.byId));
