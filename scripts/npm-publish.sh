@@ -26,7 +26,9 @@
 #   - node, npm, git
 #   - gh logged in to GitHub, only for the CI-verified quick check
 #   - package.json and build/test scripts configured for the project
-#   - Browser access to npm for login and passkey verification.
+#   - A browser on any machine for npm's login and passkey links. npm prints
+#     them (--browser=false) and never launches a browser: its opener rejects
+#     WSL outright unless BROWSER is set.
 #   - For token-only publishing, use a granular token with package publish
 #     permission and Bypass 2FA enabled, from npm user config, NPM_TOKEN, or
 #     NODE_AUTH_TOKEN. This script treats the latter two as token aliases;
@@ -63,9 +65,10 @@ print_auth_instructions() {
   printf 'Error: %s\n' "$reason" >&2
   cat >&2 <<'EOF'
 
-Browser login (default): rerun the script and choose option 1. Follow npm's
-  browser link and use your passkey/security key. Do not use account recovery
-  codes to publish. npm may request browser verification again when publishing.
+Browser login (default): rerun the script and choose option 1. Open the link
+  npm prints in any browser and use your passkey/security key. Do not use
+  account recovery codes to publish. npm may print another verification link
+  when publishing.
 
 If npm reports an account suspension or security hold, stop and follow npm's
   account instructions. Retrying authentication cannot clear that hold.
@@ -184,11 +187,13 @@ verify_publish_auth() {
   esac
 
   if [[ "$AUTH_MODE" == "web" ]]; then
-    echo "Follow npm's browser link and use your passkey/security key."
+    echo "Open the login link npm prints in any browser and use your passkey/security key."
     echo "Do not use account recovery codes to publish."
-    # An inherited OTP forces npm into legacy auth, even with auth-type=web.
-    # Clear it explicitly and keep npm attached to the terminal for browser auth.
-    if ! npm login --auth-type=web --otp= --registry="$REGISTRY_URL"; then
+    # An inherited OTP forces npm into legacy auth, even with auth-type=web, so
+    # clear it explicitly. --browser=false makes npm print the link and poll for
+    # completion instead of launching a browser: npm's opener rejects WSL unless
+    # BROWSER is set, and a printed link works from any terminal.
+    if ! npm login --auth-type=web --otp= --browser=false --registry="$REGISTRY_URL"; then
       print_auth_instructions "npm browser login failed. See npm's error above."
       exit 1
     fi
@@ -215,7 +220,7 @@ verify_publish_auth() {
   # profile lookup cannot establish whether this credential can publish.
   echo "npm will verify publishing permission and 2FA when publishing."
   if [[ "$AUTH_MODE" == "web" ]]; then
-    echo "npm may open another browser verification prompt after the release check."
+    echo "npm may print another verification link after the release check; open it the same way."
   fi
   echo ""
 }
@@ -282,9 +287,10 @@ while true; do
     exit 1
   fi
 
-  # npm owns the browser challenge. Do not capture or pipe this command:
-  # npm requires an interactive terminal to start its authentication flow.
-  if npm publish --otp= --dry-run=false --ignore-scripts --access public --registry="$REGISTRY_URL"; then
+  # npm owns the 2FA challenge; --browser=false makes it print the link rather
+  # than launch a browser (see the login call). Do not capture or pipe this
+  # command: npm requires an interactive terminal to start its authentication flow.
+  if npm publish --otp= --browser=false --dry-run=false --ignore-scripts --access public --registry="$REGISTRY_URL"; then
     break
   fi
 

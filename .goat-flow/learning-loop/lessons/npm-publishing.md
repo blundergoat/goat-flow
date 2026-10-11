@@ -1,6 +1,6 @@
 ---
 category: npm-publishing
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-11
 ---
 
 ## Lesson: A profile query is not a publishing capability check
@@ -41,7 +41,7 @@ last_reviewed: 2026-10-03
 **Trigger phase:** READ
 **Caught at:** VERIFY
 
-**Prevention:** Use `npm login --auth-type=web --otp=` before release checks and keep `npm publish --otp=` attached to the terminal so npm can open its browser challenge. Do not ask passkey users to supply an authenticator or recovery code. Preserve npm's error output and distinguish cancelled browser authentication from an account security hold when explaining retries. Script tests prove the handoff and config precedence, not successful registry authentication.
+**Prevention:** Use `npm login --auth-type=web --otp= --browser=false` before release checks and keep `npm publish --otp= --browser=false` attached to the terminal so npm can print its challenge link. Do not ask passkey users to supply an authenticator or recovery code. Preserve npm's error output and distinguish cancelled browser authentication from an account security hold when explaining retries. Script tests prove the handoff and config precedence, not successful registry authentication.
 
 **What happened:** The agent added a generic 2FA-code prompt to `scripts/npm-publish.sh` (search: `verify_publish_auth`) and offered fresh-code retries after any publish failure. The maintainer reported that npm only offered passkey setup, that they tried a recovery code while following the code prompt, and that publishing returned a temporary account suspension. The exact recovery action and hold start time were not verified. [npm's recovery documentation](https://docs.npmjs.com/recovering-your-2fa-enabled-account/) describes a 72-hour publishing hold after recovery-code login; it does not establish that submitting a code to the script caused this hold.
 
@@ -72,3 +72,16 @@ last_reviewed: 2026-10-03
 **What happened:** The CI fast path added to `scripts/npm-publish.sh` (search: `ci_verified_head`) prints an abbreviated commit hash. The agent's mock HEAD was `0123456789abcdef0123456789abcdef01234567`, so the new `Running the full gate: CI for 01234567` line matched `/123456|654321/u`. Three tests that check 2FA codes never reach output failed, although no code leaked.
 
 **Evidence:** `test/integration/npm-publish.test.ts` (search: `MOCK_HEAD =`) failed 3 of 14 cases with `The input was expected to not match the regular expression /123456|654321/u`. A letters-only mock hash made all 14 pass without changing the script.
+
+## Lesson: Make npm print its authentication links instead of opening a browser
+
+**Status:** active | **Created:** 2026-10-11 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Pass `--browser=false` to every npm command that can start a web login or 2FA challenge; read a CLI opener's platform branches before relying on its browser hand-off.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+
+**Prevention:** `npm login --auth-type=web --otp= --browser=false` and `npm publish --otp= --browser=false` make npm print `Login at:` or `Authenticate your account at:` with the URL and poll for completion; the maintainer opens the printed URL in any browser. Resolve `browser` through `npm config get` in the test shim so the flag is proven on both commands. Keep one code path: a printed link works on every platform, so no `BROWSER` or `wslview` detection is needed.
+
+**What happened:** The 1.18.0 release run of `scripts/npm-publish.sh` (search: `npm login --auth-type=web`) in WSL2 printed npm's login URL, waited for ENTER, then failed with `npm error Set the BROWSER environment variable to your desired browser.` In npm 10.9.4, `@npmcli/promise-spawn`'s `open()` rejects on a `microsoft` kernel release when `BROWSER` is unset, before trying any command, and npm's open-url helper falls back to printing only on exit code 127. The publish 2FA challenge uses the same opener through `otplease`. `wslview` was not installed.
+
+**Evidence:** A scratch harness calling npm's own `openUrl` with `browser=null` reproduced the exact rejection; with `browser=false`, `openUrlPrompt` printed `Login at:` plus the URL and returned without prompting. `test/integration/npm-publish.test.ts` (search: `publish-browser:false`) resolves `browser=false` on the login command and on both confirmed publish attempts through real npm config. No live login or publish was exercised.
