@@ -6,6 +6,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -19,11 +20,38 @@ import { join } from "node:path";
 
 import {
   makeTempProject,
+  PROJECT_ROOT,
+  runCliInstaller,
   runInstaller,
   runInstallerWithEnvironment,
 } from "./setup-install.helpers.js";
 
 const STAGING_NAME_FRAGMENT = ".goat-flow-stage.";
+
+/** Run an admitted CLI reinstall with failure injection confined to its child process. */
+function runCliInstallerWithEnvironment(
+  projectPath: string,
+  environment: NodeJS.ProcessEnv,
+  ...args: string[]
+) {
+  return spawnSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      join(PROJECT_ROOT, "src/cli/cli.ts"),
+      "install",
+      projectPath,
+      ...args,
+    ],
+    {
+      cwd: PROJECT_ROOT,
+      env: { ...process.env, ...environment },
+      encoding: "utf-8",
+      timeout: process.platform === "win32" ? 120_000 : 30_000,
+    },
+  );
+}
 
 /**
  * Writes a command wrapper that changes one child-process boundary without changing production code.
@@ -80,7 +108,7 @@ describe("installer atomic staging", () => {
     );
     writeFileSync(managedReadmePath, "previous managed bytes\n", "utf-8");
 
-    const reinstall = runInstaller(projectPath, "--agent", "codex");
+    const reinstall = runCliInstaller(projectPath, "--agent", "codex");
 
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
     assert.notEqual(
@@ -111,7 +139,7 @@ exec /bin/cp "$@"
 `,
     );
 
-    const failedInstall = runInstallerWithEnvironment(
+    const failedInstall = runCliInstallerWithEnvironment(
       projectPath,
       environmentWithWrapper(wrapperDirectory),
       "--agent",
@@ -145,7 +173,7 @@ exec /usr/bin/mktemp "$@"
 `,
     );
 
-    const failedInstall = runInstallerWithEnvironment(
+    const failedInstall = runCliInstallerWithEnvironment(
       projectPath,
       environmentWithWrapper(wrapperDirectory),
       "--agent",
@@ -183,7 +211,7 @@ exec /bin/cp "$@"
 `,
     );
 
-    const interruptedInstall = runInstallerWithEnvironment(
+    const interruptedInstall = runCliInstallerWithEnvironment(
       projectPath,
       environmentWithWrapper(wrapperDirectory),
       "--agent",
@@ -219,7 +247,7 @@ exec /bin/mv "$@"
 `,
     );
 
-    const failedInstall = runInstallerWithEnvironment(
+    const failedInstall = runCliInstallerWithEnvironment(
       projectPath,
       environmentWithWrapper(wrapperDirectory),
       "--agent",

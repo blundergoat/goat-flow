@@ -18,6 +18,7 @@ import { composeSetup } from "../../src/cli/prompt/compose-setup.js";
 import {
   makeTempProject,
   PROJECT_ROOT,
+  runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
 
@@ -119,7 +120,7 @@ describe("reviewed deny reconciliation", () => {
     settings.permissions.ask = ["Glob(assets/**)"];
     settings.userMarker = "retain this value";
     writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
-    const install = runInstaller(root, "--agent", "claude");
+    const install = runCliInstaller(root, "--agent", "claude");
     assert.equal(install.status, 0, install.stderr || install.stdout);
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), settings);
 
@@ -214,7 +215,7 @@ describe("reviewed deny reconciliation", () => {
       join(root, "AGENTS.md"),
       readFileSync(join(PROJECT_ROOT, "AGENTS.md")),
     );
-    const install = runInstaller(root, "--agent", "codex");
+    const install = runCliInstaller(root, "--agent", "codex");
     assert.equal(install.status, 0, install.stderr || install.stdout);
     const path = join(root, ".claude/settings.json");
     const settings = JSON.parse(readFileSync(path, "utf8"));
@@ -322,7 +323,7 @@ describe("reviewed deny reconciliation", () => {
       "Write(**/credentials*)",
     );
     writeFileSync(path, JSON.stringify(settings));
-    const result = runInstaller(root, "--agent", "claude");
+    const result = runCliInstaller(root, "--agent", "claude");
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stderr, /Review replacement denies/u);
     for (const rule of exactPair) {
@@ -334,7 +335,7 @@ describe("reviewed deny reconciliation", () => {
     const saved = JSON.parse(readFileSync(path, "utf8"));
     saved.permissions.deny.push(...exactPair, "Read(**/credentials*)");
     writeFileSync(path, JSON.stringify(saved));
-    const covered = runInstaller(root, "--agent", "claude");
+    const covered = runCliInstaller(root, "--agent", "claude");
     assert.equal(covered.status, 0, covered.stderr || covered.stdout);
     assert.doesNotMatch(covered.stderr, /Review replacement denies/u);
   });

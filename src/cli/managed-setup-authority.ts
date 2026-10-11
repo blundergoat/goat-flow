@@ -8,6 +8,9 @@
  * no flag combination overrides it.
  */
 
+import type { ManagedSetupBaselineStatus } from "./managed-setup-preview.js";
+import type { ManagedTargetEvidence } from "./managed-setup-write-set.js";
+
 /** Every authority the user supplied for one install or preview run. */
 export interface ManagedSetupAuthority {
   /** `--force-managed`, or its bare `--force` alias, admits every inspected system-owned conflict. */
@@ -103,4 +106,24 @@ export function unmatchedAuthorityPaths(
   admittedPaths: readonly string[],
 ): string[] {
   return authority.namedPaths.filter((path) => !admittedPaths.includes(path));
+}
+
+/**
+ * Decide whether a loaded baseline leaves an existing, non-package target outside installer ownership.
+ * Use to protect developer-owned bytes while still adopting an existing target that matches the package.
+ */
+export function loadedBaselineProtectsExistingDifferentTarget(
+  baselineStatus: ManagedSetupBaselineStatus,
+  oldExpectedSha256: string | null,
+  currentTarget: ManagedTargetEvidence,
+  newExpectedSha256: string | null,
+): boolean {
+  return (
+    (baselineStatus === "loaded" ||
+      baselineStatus === "cutover-incompatible") &&
+    oldExpectedSha256 === null &&
+    currentTarget.status === "regular" &&
+    newExpectedSha256 !== null &&
+    currentTarget.sha256 !== newExpectedSha256
+  );
 }

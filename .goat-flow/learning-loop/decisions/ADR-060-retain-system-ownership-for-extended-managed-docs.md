@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-15
-**Updated:** 2026-10-11 - D4 is settled: the decisions README moves to system ownership.
+**Updated:** 2026-10-11 - D4 transfers the decisions README with explicit protection for inherited copies without a baseline.
 
 ## Context
 
@@ -18,8 +18,8 @@ All seventeen records keep system ownership, and consumer extension is handled b
 | --- | --- |
 | D1 | Every currently system-owned managed doc and `.gitignore` keeps system ownership. |
 | D2 | Divergent local bytes under an unchanged package template are preserved, not blocked and not replaced; the `local-preserved` / `none` classification decides this without an ownership change. |
-| D3 | A genuine template change against divergent local bytes still asks the user to decide; no rule may resolve it silently. |
-| D4 | `.goat-flow/learning-loop/decisions/README.md` moves to system ownership like the three sibling bucket READMEs: its content is framework doctrine, and D2 preserves a consumer's additions under an unchanged template. The manifest and installer change ships in 1.18.0. |
+| D3 | A genuine template change against divergent local bytes with a recorded baseline still asks the user to decide; no rule may resolve it silently. D4 defines the one absent-baseline ownership-transfer exception. |
+| D4 | `.goat-flow/learning-loop/decisions/README.md` moves to system ownership in 1.18.0. Without a baseline, exact released-template bytes may refresh; unknown copies remain local across later template changes until `--force-path .goat-flow/learning-loop/decisions/README.md` explicitly adopts them. Broad force does not adopt an inherited guide. Once package bytes are verified and recorded, ordinary D2/D3 rules apply. |
 
 Refresh reach is the point of system ownership. These templates carry doctrine that must reach existing installs when it changes, such as the local-state contract in `workflow/setup/reference/plans-readme.md` (search: `## Data Boundary`); `user-owned` is create-only, so a doctrine correction would reach new projects and never the ones running the wrong contract. The measured incident is entirely an unchanged-template case, which D2 resolves without giving up refresh on seventeen paths. The decisions-README split had no explanation in the templates or the manifest: `workflow/setup/reference/decisions-readme.md` (search: `## When To Write An ADR`) and `workflow/setup/reference/lessons-readme.md` (search: `Mistakes the agent made`) both read as framework doctrine, which is why D4 settles it as system-owned.
 
@@ -35,4 +35,6 @@ Refresh reach is the point of system ownership. These templates carry doctrine t
 
 - A consumer who extends a managed doc keeps that content across upgrades while the template is stable, with no flag and no data loss; when the template changes they see a conflict row and choose.
 - The seventeen paths keep their `required_files` and `assert_file_ownership` bindings unchanged.
-- The decisions README joins the refresh-reaching set once its ownership change ships; until then its `user-owned` manifest record stands.
+- The decisions README joins the managed refresh set. Its narrow transfer rule uses pinned released-template hashes for recognition, never as a second baseline store; missing history does not authorize replacing an unknown copy.
+- Preserved inherited guides receive no package baseline or fresh full-install receipt. Existing unrelated rows and receipts retain ADR-064's rules. Named adoption records verified package bytes normally.
+- Unsafe paths and malformed or conflicting history still block. Direct Bash installs with an existing guide require public CLI admission before mutation; fresh installs remain available.

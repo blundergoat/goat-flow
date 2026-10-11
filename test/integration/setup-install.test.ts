@@ -234,7 +234,7 @@ describe("setup --apply installer", () => {
       configPath,
       withGruffBinaryOverride(config, "tools/gruff-py"),
     );
-    const secondResult = runInstaller(root, "--agent", "codex");
+    const secondResult = runCliInstaller(root, "--agent", "codex");
     assert.equal(
       secondResult.status,
       0,
@@ -523,7 +523,7 @@ describe("setup --apply installer", () => {
       "user edited the patterns guide\n",
     );
 
-    const reinstall = runInstaller(projectRoot, "--agent", "codex");
+    const reinstall = runCliInstaller(projectRoot, "--agent", "codex");
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
     assert.equal(
       readFileSync(installedReadmePath, "utf-8"),
@@ -577,7 +577,7 @@ describe("setup --apply installer", () => {
       "# Team security policy\n\nKeep this local rule.\n";
     writeFileSync(securityPolicyPath, customizedPolicy);
 
-    const reinstall = runInstaller(projectRoot, "--agent", "codex");
+    const reinstall = runCliInstaller(projectRoot, "--agent", "codex");
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
     assert.equal(readFileSync(securityPolicyPath, "utf-8"), customizedPolicy);
   });
@@ -600,7 +600,7 @@ describe("setup --apply installer", () => {
     );
     unlinkSync(sessionAnchorPath);
 
-    const reinstall = runInstaller(projectRoot, "--agent", "codex");
+    const reinstall = runCliInstaller(projectRoot, "--agent", "codex");
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
     assert.equal(existsSync(sessionAnchorPath), true);
     assert.equal(readFileSync(sessionAnchorPath, "utf-8"), "");
@@ -1016,7 +1016,7 @@ describe("setup --apply permission upgrade migrations", () => {
     );
 
     // Idempotent: a second upgrade reports no further permission migration.
-    const second = runInstaller(root, "--agent", "claude");
+    const second = runCliInstaller(root, "--agent", "claude");
     assert.equal(second.status, 0, second.stderr || second.stdout);
     assert.doesNotMatch(second.stdout, /stale or superseded permission rules/);
   });

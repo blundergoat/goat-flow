@@ -15,6 +15,7 @@
 
 ### Changed
 
+- **Decisions guides receive managed updates** - Upgrades refresh recognised released copies and keep inherited custom guides until named-path adoption; broad force does not replace them.
 - **BREAKING: `/api/quality/analyse` removed** - Call `/api/quality/evaluate`; the deprecated alias and its `Deprecation` headers no longer ship.
 - **Quality config keys removed** - `quality.fixture-path` and `quality.additional-fixtures` are ignored; delete them from `.goat-flow/config.yaml`.
 - **Stable project headings** - Setup keeps project headings and product versions; removing an old goat-flow release suffix needs instruction-file review.

@@ -419,7 +419,8 @@ describe("installer dependency preflight", () => {
     let previous: string | undefined;
     // Repeat setup to prove current provider config stays stable after its first completed install.
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const result = runInstaller(root, "--agent", "codex");
+      const install = attempt === 0 ? runInstaller : runCliInstaller;
+      const result = install(root, "--agent", "codex");
       assert.equal(result.status, 0, result.stderr || result.stdout);
       const config = readFileSync(join(root, ".codex/hooks.json"), "utf8");
       // Once the first config is captured, later setup must retain the same bytes.

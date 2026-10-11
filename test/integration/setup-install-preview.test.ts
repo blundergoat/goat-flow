@@ -472,7 +472,7 @@ describe("managed setup preview", () => {
 
   /** Fixture purpose: force refreshes one edited managed file while preserving user choices and separate cleanup authority.
    * Filesystem side effects: creates and rewrites a disposable project, then spawns the installer subprocess. */
-  it("limits force to managed conflicts and preserves user-owned content", () => {
+  it("limits force to managed conflicts and preserves user-owned content and inherited guides", () => {
     const projectPath = makeTempProject();
     const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
     assert.equal(
@@ -514,6 +514,12 @@ describe("managed setup preview", () => {
     const userDecisionGuide =
       "# Team decisions\n\nKeep this local decision format.\n";
     writeFileSync(decisionGuidePath, userDecisionGuide);
+    // Prior releases seeded this guide without a baseline; broad force must not adopt it.
+    mutateManagedInstallState(projectPath, (state) => {
+      state.files = state.files.filter(
+        (file) => file.path !== ".goat-flow/learning-loop/decisions/README.md",
+      );
+    });
 
     const configPath = join(projectPath, ".goat-flow", "config.yaml");
     const userConfig = [

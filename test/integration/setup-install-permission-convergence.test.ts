@@ -121,7 +121,7 @@ describe("Claude permission convergence", () => {
           "",
         /repair stale, unmatched, or retired Claude permission rules/u,
       );
-      const first = runInstaller(root, "--agent", "claude");
+      const first = runCliInstaller(root, "--agent", "claude");
       assert.equal(first.status, 0, first.stderr || first.stdout);
       const convergedBytes = readFileSync(path, "utf8");
       const permissions = JSON.parse(convergedBytes).permissions;
@@ -150,7 +150,7 @@ describe("Claude permission convergence", () => {
       );
       // The second install proves convergence; the third guards continuing byte stability.
       for (let repeat = 0; repeat < 2; repeat += 1) {
-        const result = runInstaller(root, "--agent", "claude");
+        const result = runCliInstaller(root, "--agent", "claude");
         assert.equal(result.status, 0, result.stderr || result.stdout);
         assert.equal(readFileSync(path, "utf8"), convergedBytes);
         assert.doesNotMatch(
@@ -183,7 +183,7 @@ describe("Claude permission convergence", () => {
         /repair stale, unmatched, or retired Claude permission rules/u,
       );
     }
-    const result = runInstaller(root, "--agent", "claude");
+    const result = runCliInstaller(root, "--agent", "claude");
     assert.equal(result.status, 0, result.stderr || result.stdout);
     for (const [path, bytes] of saved) {
       assert.equal(readFileSync(join(root, path), "utf8"), bytes);
@@ -212,7 +212,7 @@ describe("Claude permission convergence", () => {
         note: "synthetic-value-not-for-output",
       }),
     );
-    const result = runInstaller(root, "--agent", "claude");
+    const result = runCliInstaller(root, "--agent", "claude");
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const lines = result.stderr
       .split(/\r?\n/u)

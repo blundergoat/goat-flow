@@ -78,6 +78,13 @@ require_managed_install_admission() {
       fi
     fi
   done
+  # Ownership transfer needs the CLI's released-byte recognition and explicit adoption decision before any writes.
+  local decisions_guide="$PROJECT/.goat-flow/learning-loop/decisions/README.md"
+  local legacy_decisions_guide="$PROJECT/.goat-flow/decisions/README.md"
+  if [[ -e "$decisions_guide" || -L "$decisions_guide" || -e "$legacy_decisions_guide" || -L "$legacy_decisions_guide" ]]; then
+    echo "ERROR: decisions guide ownership requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
+    return 1
+  fi
 }
 
 # Read manifest-owned agents, skills and destinations so setup follows the selected provider and file ownership rules.
@@ -3345,7 +3352,7 @@ copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/critiques-readme.md" ".goat-
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/review-readme.md" ".goat-flow/logs/review/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/security-readme.md" ".goat-flow/logs/security/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/session-logs-readme.md" ".goat-flow/logs/sessions/README.md"
-copy_if_missing "$GOAT_FLOW_ROOT/workflow/setup/reference/decisions-readme.md" ".goat-flow/learning-loop/decisions/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/decisions-readme.md" ".goat-flow/learning-loop/decisions/README.md"
 touch_anchor ".goat-flow/logs/sessions/.gitkeep"
 echo ""
 

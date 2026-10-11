@@ -559,7 +559,7 @@ function verifyAgentRepairAndCleanup(agentProfile: AgentProfile): string {
     `${agentProfile.skillsDir}/goat/SKILL.md`,
   );
 
-  const repairInstall = runInstaller(
+  const repairInstall = runCliInstaller(
     targetProjectPath,
     "--agent",
     agentProfile.id,
@@ -852,7 +852,7 @@ function verifyInstallerDuplicateConvergence(
   const configBytesPerRun: string[] = [];
   // Repeated installer runs must converge instead of duplicating the user's managed registrations.
   for (let installerRun = 0; installerRun < 3; installerRun += 1) {
-    const repairRun = runInstaller(
+    const repairRun = runCliInstaller(
       targetProjectPath,
       "--agent",
       agentProfile.id,
@@ -985,7 +985,7 @@ describe("cross-agent install smoke matrix", () => {
       );
     });
 
-    it(`${agentProfile.id} standalone installs converge duplicate and stale deny rows`, () => {
+    it(`${agentProfile.id} reinstalls converge duplicate and stale deny rows`, () => {
       const convergedHookConfigPath =
         verifyInstallerDuplicateConvergence(agentProfile);
       assert.equal(existsSync(convergedHookConfigPath), true);
@@ -1075,7 +1075,7 @@ describe("cross-agent install smoke matrix", () => {
       // Non-alias flow updates preserve the compact line layout of the user's config.
       if (shape !== "alias")
         assert.equal(migrated.split("\n").length, config.split("\n").length);
-      const second = runInstaller(root, "--agent", "claude");
+      const second = runCliInstaller(root, "--agent", "claude");
       assert.equal(second.status, 0, second.stderr);
       assert.equal(readFileSync(path, "utf8"), migrated);
     });
@@ -1101,7 +1101,7 @@ describe("cross-agent install smoke matrix", () => {
       `version: "${AUDIT_VERSION}"\nhooks:\n  guard-secret-paths:\n    enabled: false\n`,
     );
 
-    const migration = runInstaller(
+    const migration = runCliInstaller(
       targetProjectPath,
       "--agent",
       claudeProfile.id,

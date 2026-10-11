@@ -174,7 +174,7 @@ describe("setup --apply installer upgrade migrations", () => {
           JSON.stringify(results),
         );
       }
-      const retried = runInstaller(root, "--agent", "codex");
+      const retried = runCliInstaller(root, "--agent", "codex");
       assert.equal(retried.status, 0, retried.stderr || retried.stdout);
       for (const agent of profiles) {
         assert.ok(readAgentHookState(root, agent, dangerous).installed);
@@ -811,7 +811,7 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.deepEqual(local.permissions?.deny ?? [], ["Edit(**/scratch/**)"]);
 
     // Idempotent: a second upgrade leaves the repaired local file alone.
-    const second = runInstaller(root, "--agent", "claude");
+    const second = runCliInstaller(root, "--agent", "claude");
     assert.equal(second.status, 0, second.stderr || second.stdout);
     assert.doesNotMatch(second.stdout, /settings\.local\.json \(migrated/);
   });
@@ -1040,7 +1040,7 @@ describe("setup --apply installer upgrade migrations", () => {
       '---\ngoat-flow-reference-version: "1.6.0"\n---\n# Old auth reference\n',
     );
 
-    const secondInstall = runInstaller(root, "--agent", "claude");
+    const secondInstall = runCliInstaller(root, "--agent", "claude");
     assert.equal(
       secondInstall.status,
       0,

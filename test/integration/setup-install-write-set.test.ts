@@ -33,6 +33,7 @@ import {
 import {
   PROJECT_ROOT,
   makeTempProject,
+  runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
 
@@ -609,7 +610,7 @@ describe("setup installs with every hook disabled", () => {
         true,
         `${agentId} removed files needed by a later UI toggle`,
       );
-      const repeatedInstall = runInstaller(consumerRoot, "--agent", agentId);
+      const repeatedInstall = runCliInstaller(consumerRoot, "--agent", agentId);
       assert.equal(repeatedInstall.status, 0, repeatedInstall.stderr);
       assert.equal(readFileSync(hookConfigPath, "utf-8"), firstHookConfig);
     });

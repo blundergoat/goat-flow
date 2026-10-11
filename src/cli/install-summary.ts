@@ -3,6 +3,7 @@
  * Build the closing text after verification while claims are held; the caller prints it only after successful claim release.
  */
 import { getAgentProfile, getAgentProfiles } from "./agents/registry.js";
+import { DECISIONS_README_PATH } from "./decisions-readme-transfer.js";
 import { quoteManagedInstallProjectArgument } from "./managed-install-evidence.js";
 import type { ManagedSetupPreview } from "./managed-setup-preview.js";
 import { readManagedTargetEvidence } from "./managed-setup-write-set.js";
@@ -145,7 +146,8 @@ export function renderInstallSummary(
       file.currentStatus === "regular" &&
       (file.state === "both-changed" ||
         file.state === "unmanaged" ||
-        file.authority === "granted-user-owned"),
+        file.authority === "granted-user-owned" ||
+        file.authority === "granted-path"),
   );
   const lines = [
     "",
@@ -159,6 +161,20 @@ export function renderInstallSummary(
   if (hookChanges.length > 0) lines.push("Hook registrations:", ...hookChanges);
   const invocation = `npx @blundergoat/goat-flow@${getPackageVersion()}`;
   const target = quoteManagedInstallProjectArgument(projectPath);
+  // An inherited guide kept outside the package baseline prevents a fresh full-install receipt.
+  if (
+    outcomes.some(
+      ({ file }) =>
+        file.path === DECISIONS_README_PATH &&
+        file.state === "local-preserved" &&
+        file.oldExpectedSha256 === null,
+    )
+  ) {
+    lines.push(
+      `Preserved inherited guide: ${DECISIONS_README_PATH}. No new full-install receipt was recorded.`,
+      `To adopt the package guide: ${invocation} install ${target} --agent ${preview.agent} --force-path ${DECISIONS_README_PATH}`,
+    );
+  }
   lines.push(
     "Remaining review: reconcile preserved local changes, settings and project-specific instructions; audit and runtime checks have not run.",
     `  ${invocation} audit ${target} --agent ${preview.agent}`,

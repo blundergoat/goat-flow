@@ -549,7 +549,7 @@ describe("install version admission", () => {
       configPath,
       original.replace(/^version: "[^"]*"/mu, 'version: "0.0.0"'),
     );
-    const upgrade = runInstaller(root, "--agent", "claude");
+    const upgrade = runCliInstaller(root, "--agent", "claude");
     assert.equal(upgrade.status, 0, upgrade.stderr || upgrade.stdout);
     assert.equal(readFileSync(configPath, "utf8"), original);
   });

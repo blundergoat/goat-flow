@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { dirname, posix } from "node:path";
 import { installStateRelativeDirectory } from "./local-state-migration.js";
+import { readDecisionsReadmeTransfer } from "./decisions-readme-transfer.js";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import { readProjectTextFile } from "./project-file.js";
@@ -39,6 +40,7 @@ import {
 } from "./managed-setup-write-set.js";
 import {
   NO_MANAGED_SETUP_AUTHORITY,
+  loadedBaselineProtectsExistingDifferentTarget,
   resolveAuthorityDecision,
   type ManagedSetupAuthority,
   type ManagedSetupAuthorityDecision,
@@ -111,7 +113,7 @@ type ManagedSetupAction =
 type ManagedSetupVerdict = "ready" | "warning" | "blocked";
 
 /** Whether a usable previous-install baseline was available for comparison. */
-type ManagedSetupBaselineStatus =
+export type ManagedSetupBaselineStatus =
   | "loaded"
   | "missing"
   | "invalid"
@@ -379,7 +381,7 @@ export interface ManagedSetupClassificationInput {
 }
 
 /** One path row shown in JSON or plain-English preview output. */
-interface ManagedSetupPreviewFile {
+export interface ManagedSetupPreviewFile {
   path: string;
   ownership: ManagedSetupOwnership;
   state: ManagedSetupFileState;
@@ -644,37 +646,27 @@ function collectManagedTemplates(agent: AgentId): ManagedTemplateDefinition[] {
 }
 
 /**
- * Decide whether a loaded baseline leaves an existing, non-package target outside installer ownership.
- * Use to protect developer-owned bytes while still adopting an existing target that matches the package.
- */
-function loadedBaselineProtectsExistingDifferentTarget(
-  baselineStatus: ManagedSetupBaselineStatus,
-  oldExpectedSha256: string | null,
-  currentTarget: ManagedTargetEvidence,
-  newExpectedSha256: string | null,
-): boolean {
-  return (
-    (baselineStatus === "loaded" ||
-      baselineStatus === "cutover-incompatible") &&
-    oldExpectedSha256 === null &&
-    currentTarget.status === "regular" &&
-    newExpectedSha256 !== null &&
-    currentTarget.sha256 !== newExpectedSha256
-  );
-}
-
-/**
  * Turn one hash comparison and baseline status into the concise path row shown to users.
  * Use for every managed destination so text and JSON explain the same action and reason.
  */
 function buildPreviewFile(
   managedPath: string,
+  projectPath: string,
   oldExpectedSha256: string | null,
   currentTarget: ManagedTargetEvidence,
   newExpectedSha256: string | null,
   baselineStatus: ManagedSetupBaselineStatus,
   authority: ManagedSetupAuthority,
 ): ManagedSetupPreviewFile {
+  const transfer = readDecisionsReadmeTransfer(
+    managedPath,
+    projectPath,
+    oldExpectedSha256,
+    currentTarget,
+    newExpectedSha256,
+    baselineStatus,
+    authority.namedPaths,
+  );
   const unsafeCurrentTarget =
     newExpectedSha256 !== null &&
     (currentTarget.status === "non-regular" ||
@@ -732,6 +724,8 @@ function buildPreviewFile(
       },
       authority,
     ),
+    // The narrow transfer rule replaces ordinary classification only after checking path safety and history.
+    ...transfer,
   };
 }
 
@@ -1084,6 +1078,7 @@ export function buildManagedSetupPreview(
     files.push(
       buildPreviewFile(
         template.path,
+        projectPath,
         oldExpectedSha256,
         readManagedTargetEvidence(projectPath, template.path),
         hashFile(getTemplatePath(template.sourcePath)),
@@ -1100,6 +1095,7 @@ export function buildManagedSetupPreview(
     files.push(
       buildPreviewFile(
         managedPath,
+        projectPath,
         expectedSha256,
         readManagedTargetEvidence(projectPath, managedPath),
         null,

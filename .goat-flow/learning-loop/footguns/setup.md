@@ -56,13 +56,13 @@ last_reviewed: 2026-10-11
 **Trigger phase:** VERIFY
 
 **Prevention:**
-1. When `setup-install-*` cases fail with `null !== 0`, read `status`, not the message. `spawnSync` returns `status: null` when its `timeout` kills the child, and the helpers pass a fixed 30-second budget: `test/integration/setup-install.helpers.ts` (search: `runInstallerWithEnvironment`), (search: `runCliInstaller`).
+1. When `setup-install-*` cases fail with `null !== 0`, inspect `status` and `error` before diagnosing content. A timeout gives `status: null`. The current helpers allow 120 seconds on Windows and 30 elsewhere: `test/integration/setup-install.helpers.ts` (search: `runInstallerWithEnvironment`), (search: `runCliInstaller`). Copied-package fixtures must retain that platform budget.
 2. Time one install directly before blaming a diff: `bash workflow/install-goat-flow.sh <temp-dir> --agent claude`. A run near or above 30 seconds explains every failing case at once.
 3. Do not treat these suites as a gate for a guidance-text change on a slow host. They belong to the `slow` group, which `npm run test:slow` runs single-concurrency after a build; the `fast` group is the default `npm test`.
 
 **Symptoms:** Twenty-five of twenty-six `cross-agent install smoke matrix` cases fail with a bare `null !== 0` under an install log that shows every step succeeding, each case taking almost exactly 30 seconds. The message reads like an exit-code assertion about installed content, so the natural next move is to hunt the diff.
 
-**Why it happens:** The helpers spawn the installer with `timeout: 30000`. `spawnSync` reports a killed child as `status: null`, and the assertion compares that to `0`, so a wall-clock problem is presented in the vocabulary of a content problem. The installer copies several hundred small files, which is exactly the workload Windows Git Bash is slowest at - the same process and filesystem cost recorded in `.goat-flow/learning-loop/footguns/hook-performance.md` (search: `Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash`).
+**Why it happens:** The incident used a fixed `timeout: 30000`; current helpers give Windows a larger budget. `spawnSync` reports a killed child as `status: null`, and the assertion compares that to `0`, so a wall-clock problem reads as a content failure. Copying hundreds of small files is slow on Windows Git Bash, as recorded in `.goat-flow/learning-loop/footguns/hook-performance.md` (search: `Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash`).
 
 **Evidence:** Measured 2026-09-08 on Windows 11 Pro 10.0.26200 while changing Markdown, one JSON string and two test files. Run serially with `--test-concurrency=1` and nothing else touching the tree, the two suites returned `# tests 51`, `# pass 2`, `# fail 49` - 25 of 26 cases in `setup-install-agent-matrix.test.ts` and 24 of 25 in `setup-install-migrations.test.ts` - each failure around `duration_ms: 30016` with error `null !== 0`. A default-concurrency run returned the same totals, so concurrency is not the cause. A single `bash workflow/install-goat-flow.sh <temp-dir> --agent claude` on the same tree exited 0 in 46 seconds, above the helpers' 30-second budget.
 
@@ -70,7 +70,8 @@ last_reviewed: 2026-10-11
 
 ## Footgun: An ownership flip to system-owned blocks upgrades from install state that never recorded the path
 
-**Status:** active | **Created:** 2026-10-11 | **Evidence:** OBSERVED
+**Status:** active | **Created:** 2026-10-11 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 2 | **Latest occurrence:** 2026-10-11
 **Decision changed:** Before changing a manifest path from `user-owned` to `system-owned`, add a transfer rule and an upgrade test that starts from the previous release's install state; a fresh-install test cannot catch the block.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -81,7 +82,9 @@ last_reviewed: 2026-10-11
 
 **Why it happens:** With a loaded baseline, no row for the path, and current bytes that differ from the new template, the managed preview classifies the file `unmanaged`, which protects it and blocks the install. Without any install state, the classifier returns `adopted`, which replaces a customised copy with only a warning. Neither path knows the file used to belong to the user.
 
-**Evidence:** `src/cli/managed-setup-state.ts` (search: `if (file.ownership !== "system-owned") continue;`), `src/cli/managed-setup-preview.ts` (search: `function loadedBaselineProtectsExistingDifferentTarget`) and (search: `export function classifyManagedSetupFile`); `workflow/manifest.json` (search: `"source": "workflow/setup/reference/decisions-readme.md"`) still declares the README `user-owned` until the transfer rule ships.
+**Evidence:** `src/cli/managed-setup-state.ts` (search: `if (file.ownership !== "system-owned") continue;`), `src/cli/managed-setup-authority.ts` (search: `function loadedBaselineProtectsExistingDifferentTarget`) and `src/cli/managed-setup-preview.ts` (search: `export function classifyManagedSetupFile`) own the ordinary rules. The decisions guide now has a narrow transfer exception in `src/cli/decisions-readme-transfer.ts` (search: `readDecisionsReadmeTransfer`); other ownership flips still need their own migration decision and evidence.
+
+**Recurrence 2026-10-11:** The old `.goat-flow/decisions/README.md` appeared absent at its new destination during preview. Bash then moved and overwrote it, exited 0 and recorded a full receipt. Inspect migration sources before classification. `src/cli/decisions-readme-transfer.ts` (search: `readInheritedGuide`) now does so; `test/integration/setup-install-decisions-readme.test.ts` (search: `preserves a legacy-folder custom guide`) reproduces the loss and verifies preservation.
 
 ## Resolved Entries
 

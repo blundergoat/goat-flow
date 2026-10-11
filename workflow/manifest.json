@@ -122,7 +122,7 @@
       "source": "workflow/setup/reference/footguns-readme.md"
     },
     ".goat-flow/learning-loop/decisions/README.md": {
-      "ownership": "user-owned",
+      "ownership": "system-owned",
       "source": "workflow/setup/reference/decisions-readme.md"
     },
     ".goat-flow/logs/sessions/.gitkeep": {

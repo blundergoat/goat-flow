@@ -16,6 +16,7 @@ import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
   makeTempProject,
   PROJECT_ROOT,
+  runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
 
@@ -124,7 +125,7 @@ describe("codex config migration", () => {
 
       const convergedHookConfig = installedHookConfig;
       const convergedBashRunner = installedBashRunner;
-      const repeatedInstallResult = runInstaller(
+      const repeatedInstallResult = runCliInstaller(
         targetProjectPath,
         "--agent",
         "codex",
@@ -247,7 +248,7 @@ describe("codex config migration", () => {
       ],
     );
     assert.doesNotMatch(result.stderr, /preserved =|model =/u);
-    const second = runInstaller(root, "--agent", "codex");
+    const second = runCliInstaller(root, "--agent", "codex");
     assert.equal(second.status, 0, second.stderr || second.stdout);
     assert.equal(readFileSync(join(codexDir, "config.toml"), "utf8"), config);
     assert.doesNotMatch(

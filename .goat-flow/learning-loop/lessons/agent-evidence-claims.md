@@ -134,13 +134,15 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **Severity:** CORRECTNESS
 **Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove.
 **Trigger phase:** VERIFY
-**Incident count:** 30 | **Latest occurrence:** 2026-10-11
+**Incident count:** 31 | **Latest occurrence:** 2026-10-11
 
 **Prevention:** Run `npm run check:touched` for its supported format, source lint, typecheck, Gruff, and guidance scopes; capture every selected check's result line. Run the repository-owned Knip and owning test gates separately with captured output. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`).
 
 **What happened:** Several closeouts sent ignored tests or workflow `.mjs` files to TypeScript-only ESLint, and one ran `npm test` beside expensive checks and lost the failing block; a captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
 
 **Root cause:** Repo-supported verification scopes were mixed with improvised paths, and parallel final gates were treated as interchangeable with a clean final evidence run, so the first failure was ambiguous and had to be rerun.
+
+**Recurrence 2026-10-11 (decisions-guide transfer):** Noncanonical v1 JSON invalidated the initial RED proof. Checks caught private-type imports, excess complexity, missing fixture imports and a moved anchor. Review found a copied fixture's fixed Windows timeout and a migration source omitted from preview. Validate failure causes and migration inputs; source typecheck excludes tests. Evidence: `test/integration/setup-install-decisions-readme.test.ts` (search: `inheritedTarget`), `src/cli/managed-setup-state.ts` (search: `normalizedLegacyBytes`) and `src/cli/decisions-readme-transfer.ts` (search: `readInheritedGuide`).
 
 **Recurrence 2026-10-11 (dependency readiness):** Adding dependency guards made `renderReadinessSummary` exceed the ESLint complexity limit even though its runtime tests passed. Returning dependency clauses from `listDependencyBlockers` restored the supported gate. Read analyzer symbols and stable identities before choosing a fix: the remaining loop advisory named an unchanged transcript test, not the new cycle cases. Owners: `src/cli/plans-check-summary.ts` (search: `listDependencyBlockers`) and `test/unit/plans-check.test.ts` (search: `reports the same cap-one transcript with omitted and explicit policy`).
 
