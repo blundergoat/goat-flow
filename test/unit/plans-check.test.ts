@@ -1,7 +1,11 @@
 /**
- * How the checker treats the numbers a plan author writes: required task estimates, category sums, legacy estimate-less plans, and mix drift.
- * Every case runs the real CLI against a written milestone, so failures match the guidance users see before implementation rather than internals.
- * Temporary plans are removed after each case, leaving only the asserted terminal contract.
+ * End-to-end tests for `goat-flow plans check`: each case writes milestone files into a temporary plan and runs the real CLI on it.
+ * Assertions read only what the plan author sees, so a failure means the printed report lines or the exit status changed.
+ *
+ * - Readiness: which `ready:` and `waiting:` lines appear, and why a milestone waits on a prerequisite, the active cap or a lane.
+ * - Dependency validity: broken `Depends on` lines, shared IDs and unreadable statuses never yield a false `ready:` or `endings (...)` join advice.
+ * - Effort arithmetic and plan shapes: task estimates, category sums, legacy estimate-less plans, mix drift and timing receipts.
+ * - Cleanup: every case deletes its temporary plan, even when an assertion fails.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -18,7 +22,12 @@ import {
   receiptStamp,
 } from "./plans-check.helpers.js";
 
-/** Build a finished milestone that both checker modes accept, so readiness cases turn only on the unstarted ones. */
+/**
+ * Build a finished milestone that both checker modes accept, so readiness cases turn only on the other milestones.
+ *
+ * @param title - milestone heading such as `M01: Done`; its ID must match the filename or strict mode reports a title mismatch
+ * @returns complete milestone body with its task and proof ticked and an Actual line filled in
+ */
 function completedMilestone(title: string): string {
   return canonicalMilestoneBody({
     title,
@@ -29,6 +38,26 @@ function completedMilestone(title: string): string {
       "- [x] Outcome is proven → focused check passes. [automated] (est: 1 min proof)",
     ],
   });
+}
+
+/**
+ * Two files claim M02, and the finished copy sorts last, so trusting it would wrongly mark M03 ready and name M01 as an ending.
+ *
+ * @returns milestone bodies keyed by filename for a plan with one shared ID
+ */
+function duplicateIdFiles(): Record<string, string> {
+  return {
+    "M01-base.md": canonicalMilestoneBody({ title: "M01: Base" }),
+    "M02-build.md": canonicalMilestoneBody({
+      title: "M02: Build",
+      dependsOn: "M01",
+    }),
+    "M02-copy.md": completedMilestone("M02: Copy"),
+    "M03-ship.md": canonicalMilestoneBody({
+      title: "M03: Ship",
+      dependsOn: "M02",
+    }),
+  };
 }
 
 describe("plans check: milestone readiness", () => {
@@ -130,8 +159,88 @@ describe("plans check: milestone readiness", () => {
       },
       expected: [],
     },
+    {
+      name: "waits on its own invalid lane above cap one",
+      cap: 2,
+      files: {
+        "M01-done.md": completedMilestone("M01: Done"),
+        "M02-next.md":
+          canonicalMilestoneBody({ title: "M02: Next", dependsOn: "M01" }) +
+          "\nLane: Bad!\n",
+      },
+      expected: ["waiting: M02 | lane invalid"],
+    },
+    {
+      name: "treats an active milestone with an invalid lane as a possible occupant of every lane",
+      cap: 3,
+      files: {
+        "M01-done.md": completedMilestone("M01: Done"),
+        "M02-running.md":
+          canonicalMilestoneBody({
+            title: "M02: Running",
+            status: "in-progress",
+            dependsOn: "M01",
+          }) + "\nLane: Go\n",
+        "M03-next.md":
+          canonicalMilestoneBody({ title: "M03: Next", dependsOn: "M01" }) +
+          "\nLane: go\n",
+      },
+      expected: [
+        "waiting: M03 | lane go may be occupied by M02 (in-progress, lane invalid)",
+      ],
+    },
+    {
+      name: "counts an unsupported status as possibly holding the cap",
+      cap: 1,
+      files: {
+        "M01-first.md": canonicalMilestoneBody({
+          title: "M01: First",
+          status: "in progress",
+        }),
+        "M02-other.md": canonicalMilestoneBody({ title: "M02: Other" }),
+      },
+      expected: ["waiting: M02 | cap 1 may be full: M01 (status invalid)"],
+    },
+    {
+      name: "keeps a free lane ready beside a possibly active milestone in another lane",
+      cap: 3,
+      files: {
+        "M01-first.md":
+          canonicalMilestoneBody({ title: "M01: First", status: "wip" }) +
+          "\nLane: go\n",
+        "M02-other.md":
+          canonicalMilestoneBody({ title: "M02: Other" }) + "\nLane: php\n",
+      },
+      expected: ["ready: M02 | lane php"],
+    },
+    {
+      name: "treats repeated Status lines as unreadable",
+      cap: 1,
+      files: {
+        "M01-first.md":
+          completedMilestone("M01: First") + "\nStatus: in-progress\n",
+        "M02-next.md": canonicalMilestoneBody({
+          title: "M02: Next",
+          dependsOn: "M01",
+        }),
+      },
+      expected: [
+        "waiting: M02 | needs M01 (status invalid); cap 1 may be full: M01 (status invalid)",
+      ],
+    },
+    {
+      name: "waits on a milestone ID that two files share",
+      cap: 1,
+      files: duplicateIdFiles(),
+      expected: [
+        "ready: M01",
+        "waiting: M02 | ID duplicated; needs M01 (not-started)",
+        "waiting: M03 | needs M02 (ID duplicated)",
+      ],
+    },
   ];
 
+  // Default mode exits 0 even while milestones wait, so each row compares only the `ready:` and `waiting:` lines from its own temporary plan.
   for (const testCase of readinessCases) {
     it(testCase.name, () => {
       const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-readiness-"));
@@ -156,8 +265,9 @@ describe("plans check: milestone readiness", () => {
 });
 
 describe("plans check: dependency validity", () => {
-  // These inputs reproduce false readiness and false endings through the public CLI.
-  const cases = [
+  // Each row is a broken `Depends on` value on M02: M01 stays ready, M02 waits with the row's clause, and no `endings (...)` join advice appears.
+  // Example: the author wrote `Depends on: M01 (soft)` or pointed M02 at an M99 that the plan does not contain.
+  const brokenDependencyCases = [
     {
       name: "malformed list",
       dependency: "M01 (soft)",
@@ -182,8 +292,16 @@ describe("plans check: dependency validity", () => {
       clause: "needs M02 (itself)",
       error: /milestone cannot depend on itself/u,
     },
+    {
+      // The embedded newline writes a second `Depends on` line, whose M01 the parser would otherwise drop.
+      name: "repeated field",
+      dependency: "none\nDepends on: M01",
+      clause: "dependency list invalid",
+      error: /multiple Depends on values supplied/u,
+    },
   ];
-  for (const row of cases) {
+  // Each broken value becomes its own test, so a failure names the author's mistake, such as "a blank list".
+  for (const row of brokenDependencyCases) {
     it(`waits on a ${row.name} without inventing a final join`, () => {
       const root = mkdtempSync(
         join(tmpdir(), "goat-flow-dependency-validity-"),
@@ -196,6 +314,7 @@ describe("plans check: dependency validity", () => {
             dependsOn: row.dependency,
           }),
         });
+        // Both modes print the same waiting line and no join advice; only `--strict` exits 1.
         for (const flags of [[], ["--strict"]]) {
           const result = runPlansCheck(plan, ...flags);
           assert.equal(
@@ -210,6 +329,7 @@ describe("plans check: dependency validity", () => {
             ["ready: M01", `waiting: M02 | ${row.clause}`],
           );
           assert.doesNotMatch(result.stdout, /endings \(/u);
+          // In strict mode the author also gets the error behind the waiting line, such as "dependency M99 does not resolve".
           if (flags.length) assert.match(result.stdout, row.error);
         }
       } finally {
@@ -217,16 +337,19 @@ describe("plans check: dependency validity", () => {
       }
     });
   }
-  for (const omitField of [false, true]) {
-    it(`allows a single milestone with ${omitField ? "omitted" : "blank"} dependencies`, () => {
+  // A lone milestone has nothing to depend on, so a blank `Depends on:` line and a missing one must both leave it ready.
+  for (const omitDependsOnLine of [false, true]) {
+    it(`allows a single milestone with ${omitDependsOnLine ? "omitted" : "blank"} dependencies`, () => {
       const root = mkdtempSync(join(tmpdir(), "goat-flow-single-dependency-"));
       try {
         let body = canonicalMilestoneBody({
           title: "M01: Single",
           dependsOn: "",
         });
-        if (omitField) body = body.replace(/^Depends on:.*\n/mu, "");
+        // Example: the author deleted the `Depends on:` line entirely because the plan has only one milestone.
+        if (omitDependsOnLine) body = body.replace(/^Depends on:.*\n/mu, "");
         const plan = writeCheckPlan(root, { "M01-single.md": body });
+        // Strict mode must not demand a dependency list from a plan that has only one milestone.
         for (const flags of [[], ["--strict"]]) {
           const result = runPlansCheck(plan, ...flags);
           assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -255,6 +378,45 @@ describe("plans check: dependency validity", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+  it("suppresses join advice while two files share a milestone ID", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-duplicate-id-join-"));
+    try {
+      const result = runPlansCheck(
+        writeCheckPlan(root, duplicateIdFiles()),
+        "--strict",
+      );
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /duplicate milestone ID M02 conflicts/u);
+      assert.doesNotMatch(result.stdout, /endings \(/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  // A written `unknown` must not borrow the exemption the export gives an absent Status, which it also stores as `unknown`.
+  for (const status of ["abandonned", "unknown"]) {
+    it(`suppresses join advice while a Status reads ${status}`, () => {
+      const root = mkdtempSync(join(tmpdir(), "goat-flow-status-join-"));
+      try {
+        // If M02 is really abandoned, M01 is the only ending, so naming two would prescribe a needless join.
+        const plan = writeCheckPlan(root, {
+          "M01-first.md": canonicalMilestoneBody({ title: "M01: First" }),
+          "M02-dropped.md": canonicalMilestoneBody({
+            title: "M02: Dropped",
+            status,
+          }),
+        });
+        const result = runPlansCheck(plan, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.match(
+          result.stdout,
+          new RegExp(`unsupported status \`${status}\``, "u"),
+        );
+        assert.doesNotMatch(result.stdout, /endings \(/u);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
   it("retains join advice when only a title is invalid", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-title-join-"));
     try {
@@ -273,6 +435,7 @@ describe("plans check: dependency validity", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+  // Example: M01 and M02 each list the other under `Depends on`; neither can start, so both stay waiting in either mode.
   for (const flags of [[], ["--strict"]]) {
     it(`keeps cyclic dependencies waiting without join advice in ${flags.length ? "strict" : "default"} mode`, () => {
       const root = mkdtempSync(join(tmpdir(), "goat-flow-cycle-readiness-"));
@@ -311,7 +474,7 @@ describe("plans check: dependency validity", () => {
 });
 
 describe("plans check: effort arithmetic and plan shapes", () => {
-  /** Writes temporary plans and compares complete stdout, stderr, and exit status across equivalent cap-one policies. */
+  /** Writes two in-progress milestones at cap one and pins the full strict report, which omitted and explicit cap-one policy must print alike. */
   it("reports the same cap-one transcript with omitted and explicit policy", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-golden-"));
     const expected = {
@@ -321,6 +484,7 @@ describe("plans check: effort arithmetic and plan shapes", () => {
       status: 1,
     };
     try {
+      // Lanes only matter above cap one, so adding `Lane:` lines must leave this cap-one report unchanged.
       for (const withLane of [false, true]) {
         const plan = writeCheckPlan(root, {
           "M18-go.md":
@@ -339,6 +503,7 @@ describe("plans check: effort arithmetic and plan shapes", () => {
             dependsOn: "M18, M19",
           }),
         });
+        // Omitting `--max-active` must print exactly what `--max-active 1` prints.
         for (const flags of [[], ["--max-active", "1"]]) {
           const actual = runPlansCheck(plan, "--strict", ...flags);
           assert.deepEqual(
@@ -376,9 +541,9 @@ describe("plans check: effort arithmetic and plan shapes", () => {
     },
   ];
 
+  // Each case hand-edits a Timing Receipt into a state that strict mode must reject with that case's error.
+  // Example: the author blocked the milestone but left its timing segment open, or typed the impossible date 1970-02-30.
   for (const testCase of timingEvidenceFailureCases) {
-    /** Fixture purpose: each hand-edited receipt must fail at its exact evidence boundary.
-     * Filesystem side effects: writes and removes one temporary milestone per case. */
     it(`strict mode rejects ${testCase.name}`, () => {
       const temporaryRoot = mkdtempSync(
         join(tmpdir(), "goat-flow-plan-check-"),
@@ -460,7 +625,7 @@ describe("plans check: effort arithmetic and plan shapes", () => {
     }
   });
 
-  // Covers the unauditable aggregate this command exists to catch: writes a split that misses its headline.
+  // Writes a split that does not add up to its headline: 10 + 5 + 2 is 17 min, but the headline says ~25 min, so the check exits 1.
   it("exits 1 when the split does not sum to the headline", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -508,8 +673,8 @@ describe("plans check: effort arithmetic and plan shapes", () => {
     }
   });
 
-  /** Fixture purpose: a user who mistypes several estimate fields should receive every grammar and received value in the first check run.
-   * Filesystem/process side effects: writes one temporary milestone, runs the CLI once, and removes the fixture. */
+  // An author who mistypes several estimate fields must see every expected format and received value in one run, not one error per rerun.
+  // The test writes one milestone where the author put `(est: soon)` on a task and `two min other` as the plan/admin overhead.
   it("reports every malformed estimate grammar and received value together", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-errors-"));
     const planPath = writeCheckFixture(
@@ -552,8 +717,8 @@ describe("plans check: effort arithmetic and plan shapes", () => {
     }
   });
 
-  /** Fixture purpose: nested rationale remains readable without hiding the estimate that keeps the user's totals and forecast reviewable.
-   * Filesystem/process side effects: writes one temporary milestone, runs the CLI once, and removes the fixture. */
+  // An indented note under a task must not hide that task's estimate or make the counted work units disagree with the forecast basis.
+  // The test writes a task the author explained with an indented `- M01 records why this exact edit was denied.` line.
   it("keeps a parent task estimate when indented prose follows it", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-nested-"));
     const planPath = writeCheckFixture(
@@ -638,8 +803,8 @@ describe("plans check: effort arithmetic and plan shapes", () => {
     }
   });
 
-  // Covers derived work that still drifts on mix: writes it and expects a pass with drift left advisory.
-  it("strict mode accepts fully derived work while keeping mix drift advisory", () => {
+  // Writes task, proof and admin estimates that add up to the 18 / 5 / 2 headline: strict mode passes and the near-guide mix prints no advisory.
+  it("strict mode accepts fully derived work with a near-guide mix and no advisory", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
       temporaryRoot,
@@ -739,12 +904,14 @@ describe("plans check: effort arithmetic and plan shapes", () => {
         ].join("\n"),
       });
 
+      // An author may copy any of these shapes, so each must pass strict mode with no `error:` line.
       for (const planPath of [smallPath, standardPath, highRiskPath]) {
         const result = runPlansCheck(planPath, "--strict");
         assert.equal(result.status, 0, result.stdout + result.stderr);
         assert.doesNotMatch(result.stdout, /error:/u);
       }
     } finally {
+      // Remove every plan directory created so far, even when a later shape failed before its check ran.
       for (const root of temporaryRoots) {
         rmSync(root, { recursive: true, force: true });
       }

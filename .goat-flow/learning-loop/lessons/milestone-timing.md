@@ -1,6 +1,6 @@
 ---
 category: milestone-timing
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-11
 ---
 
 **Scope:** Milestone timing receipts - prospective measurement, category changes, activation and finalization. Plan state, estimates and release accounting are in [milestone-accounting.md](milestone-accounting.md).
@@ -90,7 +90,7 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 **Recurrences 2026-08-21, 2026-08-23, 2026-08-24, 2026-08-24:** The same order error, timer before status, on four later activations; each time the guard opened no receipt and the prospective retry after `in-progress` succeeded with no interval backfilled. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`).
 **Recurrence 2026-08-23 (inactive transition):** The change moved from `in-progress` to `blocked` while its product span stayed open; strict validation rejected the inactive milestone with an active receipt until the span was stopped, leaving a paused 466-second receipt.
 **Recurrence 2026-08-24 (reset):** Resetting the Windows hook task to `not-started` while preserving its paused receipt failed `not-started milestone must not include a Timing Receipt`; moving the closed S01 row to Reset history and reopening the checked task passed without erasing measured effort.
-**Recurrence 2026-09-03 (activation):** The unsupported status `active` was written first, then the frozen-contract task was checked while the milestone still read `not-started`. `src/cli/plans-check.ts` (search: `const VALID_STATUSES`), `src/cli/plans-check.ts` (search: `not-started milestone has checked implementation tasks`).
+**Recurrence 2026-09-03 (activation):** The unsupported status `active` was written first, then the frozen-contract task was checked while the milestone still read `not-started`. `src/cli/plans-check-structure.ts` (search: `export const VALID_STATUSES`), `src/cli/plans-check.ts` (search: `not-started milestone has checked implementation tasks`).
 **Recurrence 2026-09-04 (go-live activation):** Timing started while a go-live milestone was still `not-started`, and later a reopen attempt for release-candidate acceptance after `human-verification-pending` was refused by the same guard; the accepted lifecycle update stays unmeasured instead of moving status backward.
 
 **Recurrence 2026-09-06 (go-live proposal label):** A narrative `Status:` label created a second rendered lifecycle field. Timing start refused the file until the narrative used `Proposal state:`. Keep reserved field names out of handoff prose; the forty-second gap stayed unmeasured. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) retains the refusal.

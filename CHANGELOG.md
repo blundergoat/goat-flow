@@ -11,7 +11,7 @@
 - **Ranked repeat problems in `stats`** - Text and Markdown show ten unguarded candidates across lessons and footguns, ordered by incident severity and frequency with remainder counts. JSON keeps every candidate, its rank, and any verified enforcement link; existing checks stay report-only.
 - **Changed-file checks for contributors** - `npm run check:touched` runs applicable formatting, lint, type, quality and guidance checks on working-tree changes, including deletion and rename triggers, with per-check timings and a failing exit status when a check fails; owning tests and preflight remain required.
 - **Invisible-control detection** - Changed text checks report literal invisible controls by file, position and code point, with escaped diagnostic filenames and no rewrites; visible Unicode, emoji, joining characters and leading BOMs stay valid.
-- **Readiness lines in `plans check`** - Unstarted milestones print `ready:`, or `waiting:` with the invalid dependency, unfinished prerequisite, cap or lane that holds them.
+- **Readiness lines in `plans check`** - Unstarted milestones print `ready:`, or `waiting:` with the unfinished prerequisite, cap or lane that holds them; `ready:` never trusts an invalid dependency or status, a duplicate milestone ID, or an invalid lane above cap one.
 
 ### Changed
 
@@ -24,7 +24,7 @@
 - **Quality score comparisons** - Reruns omit prior scores, accept integer axes from 0 to 25, and show history deltas only within the same rubric and scope.
 - **Writing playbooks check both directions** - The prose pass keeps a qualifier that changes what the evidence supports, sentence diagnostics flag labels the reader cannot decode, and structure diagnostics keep prose that states a table's pattern and rejoin arguments split into bullets.
 - **Instruction tests include the mirror failure** - `writing-agent-facing-instructions.md` asks near-miss testing to cover the opposite excess a corrective rule can produce.
-- **BREAKING: strict plan checks require one final milestone** - `plans check --strict` fails a plan with open work that ends in more than one milestone and names each ending; add a final milestone that depends on them. Finished plans get a warning instead; join advice waits until dependency links are valid.
+- **BREAKING: strict plan checks require one final milestone** - `plans check --strict` fails a plan with open work that ends in more than one milestone and names each ending; add a final milestone that depends on them. Finished plans get a warning instead; join advice waits until dependency links and statuses are valid and each milestone number names one file.
 - **Read-only prose reviews load the prose playbook** - goat-clarity diagnoses selected documentation the same way with or without edit permission.
 - **Three writing rules** - No invented reasons or conditions; prose judges see the source and score fidelity apart; a removed dash never becomes a semicolon.
 
@@ -51,6 +51,7 @@
 - **Post-turn hook registration** - Valid Git projects remain eligible when a managed sandbox attaches `EPERM` metadata to a successful root lookup; failed lookups still leave the hook unregistered.
 - **Post-turn hook on Windows checkouts of WSL projects** - When Git for Windows refuses a `\\wsl.localhost` checkout, the Stop result names the dubious-ownership cause and the `safe.directory` remedy, blocks once, then ends the turn instead of re-prompting the agent indefinitely.
 - **Codex Stop retries a failed safety scan once per turn** - When the scan cannot run, the hook blocks once, on native Windows too, then ends the turn with a visible "no clean scan" warning; findings, skipped content and malformed input still block.
+- **Strict checks reject `Status: unknown`** - `plans check --strict` reports a written `unknown` as unsupported; a blank Status still reports `missing status`.
 - **`hooks verify` no longer passes a Stop hook that did not scan** - The `post-turn-hook` scenario reports a blocking unavailable reply or a "no clean scan was recorded" warning as unavailable instead of clean or as a safety finding.
 
 ### Security
