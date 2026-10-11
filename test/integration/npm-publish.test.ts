@@ -97,7 +97,7 @@ case "$1" in
     effective_auth=$(
       cd "$MOCK_WORKSPACE"
       shift
-      "$MOCK_REAL_NPM" config get auth-type otp "$@"
+      "$MOCK_REAL_NPM" config get auth-type otp browser "$@"
     )
     printf 'login-config:%s\\n' "$effective_auth" >> "$MOCK_NPM_LOG"
     printf 'login-userconfig:%s\\n' "$NPM_CONFIG_USERCONFIG" >> "$MOCK_NPM_LOG"
@@ -138,17 +138,13 @@ case "$1" in
     if [[ " $* " == *" --dry-run "* ]]; then exit 0; fi
     # Use npm's real config parser, but never its publish command.
     config_flags=("\${@:2}")
-    effective_otp=$(
-      cd "$MOCK_WORKSPACE"
-      "$MOCK_REAL_NPM" config get otp "\${config_flags[@]}"
-    )
+    effective_otp=$(cd "$MOCK_WORKSPACE" && "$MOCK_REAL_NPM" config get otp "\${config_flags[@]}")
     if [[ "$effective_otp" == null ]]; then effective_otp=""; fi
     printf 'publish-otp:%s\\n' "$effective_otp" >> "$MOCK_NPM_LOG"
-    effective_dry_run=$(
-      cd "$MOCK_WORKSPACE"
-      "$MOCK_REAL_NPM" config get dry-run "\${config_flags[@]}"
-    )
+    effective_dry_run=$(cd "$MOCK_WORKSPACE" && "$MOCK_REAL_NPM" config get dry-run "\${config_flags[@]}")
     printf 'publish-dry-run:%s\\n' "$effective_dry_run" >> "$MOCK_NPM_LOG"
+    effective_browser=$(cd "$MOCK_WORKSPACE" && "$MOCK_REAL_NPM" config get browser "\${config_flags[@]}")
+    printf 'publish-browser:%s\\n' "$effective_browser" >> "$MOCK_NPM_LOG"
     if [[ "$MOCK_FAIL_FIRST_PUBLISH" == 1 && ! -f "$MOCK_FIRST_PUBLISH_MARKER" ]]; then
       : > "$MOCK_FIRST_PUBLISH_MARKER"
       printf 'simulated publish rejection\\n' >&2
@@ -246,6 +242,11 @@ describe("npm publish helper", () => {
       "publish-otp:\n",
       "publish-otp:\n",
     ]);
+    // Both the rejected attempt and the retry must leave npm printing its 2FA link, never launching a browser.
+    assert.deepEqual(log.match(/publish-browser:[^\n]*\n/gu), [
+      "publish-browser:false\n",
+      "publish-browser:false\n",
+    ]);
     assert.equal(log.match(/command:pack /gu)?.length, 3);
   });
 
@@ -254,9 +255,9 @@ describe("npm publish helper", () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(
       log,
-      /^command:login --auth-type=web --otp= --registry=https:\/\/registry\.npmjs\.org\//mu,
+      /^command:login --auth-type=web --otp= --browser=false --registry=https:\/\/registry\.npmjs\.org\//mu,
     );
-    assert.match(log, /login-config:auth-type=web\notp=\n/u);
+    assert.match(log, /login-config:auth-type=web\notp=\nbrowser=false\n/u);
     assert.doesNotMatch(log, /command:profile /u);
     assert.equal(log.match(/command:run publish:check\n/gu)?.length, 1);
     assert.match(log, /publish-otp:\n/u);
@@ -433,7 +434,7 @@ describe("npm publish helper", () => {
       inheritedOtp: "654321",
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(log, /login-config:auth-type=web\notp=\n/u);
+    assert.match(log, /login-config:auth-type=web\notp=\nbrowser=false\n/u);
     assert.match(log, /publish-otp:\n/u);
     assert.doesNotMatch(log + result.stdout + result.stderr, /654321/u);
   });
