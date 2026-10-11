@@ -3,7 +3,7 @@ category: verification-gruff
 last_reviewed: 2026-10-11
 ---
 
-**Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-testing.md](verification-testing.md).
+**Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-size-gates.md](verification-size-gates.md).
 
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
@@ -13,7 +13,7 @@ last_reviewed: 2026-10-11
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **Incident count:** 8 | **Latest occurrence:** 2026-10-11
-**Merged:** 2026-09-05 - one static-gate recurrence (2026-08-09) moved to `.goat-flow/learning-loop/lessons/verification-formatting.md`, three size-gate recurrences (2026-08-09 x2, 2026-08-28) moved to `.goat-flow/learning-loop/lessons/verification-testing.md`, and two ratchet recurrences (2026-08-16, 2026-08-18) moved to the hidden-complexity lesson below; this entry keeps the analyzer-vocabulary incidents.
+**Merged:** 2026-09-05 - one static-gate recurrence (2026-08-09) moved to `.goat-flow/learning-loop/lessons/verification-formatting.md`, three size-gate recurrences (2026-08-09 x2, 2026-08-28) moved to `.goat-flow/learning-loop/lessons/verification-size-gates.md`, and two ratchet recurrences (2026-08-16, 2026-08-18) moved to the hidden-complexity lesson below; this entry keeps the analyzer-vocabulary incidents.
 
 **Prevention:** For Gruff-driven comment work, read `.goat-flow/skill-docs/playbooks/code-comments.md`, patch one file or cohesive cluster, then rerun `npx gruff-ts analyse <path>`. If a clear comment stays flagged, open the installed rule in `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` before changing wording or placement again; the rules match whole-word markers and same-line forms, not meaning. Keep internal boolean state in `is...`/`has...` grammar, give each small outcome set direct assertions instead of a test-level loop, and let one concise fixture comment carry purpose and side effect together when the rule reads only the nearest source shape. If a rename replaces a comment, grep the old identifier. Evidence anchors: `src/cli/server/decoders.ts` (search: `Swallows parse errors into the shared decoder failure shape`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/learning-loop/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
 

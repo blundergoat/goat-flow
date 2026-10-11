@@ -517,9 +517,9 @@ Structural V1–V6/V8 failures, including unknown degradation flags, exit `1`; a
 Validation prints its result to stdout unless `--output` selects a result file.
 
 ```bash
-goat-flow review validate-ledger --expected-version 1.17.0
-goat-flow review validate-draft --project /path/to/reviewed-project --expected-version 1.17.0
-goat-flow review validate review.md --project /path/to/reviewed-project --expected-version 1.17.0
+goat-flow review validate-ledger --expected-version 1.18.0
+goat-flow review validate-draft --project /path/to/reviewed-project --expected-version 1.18.0
+goat-flow review validate review.md --project /path/to/reviewed-project --expected-version 1.18.0
 goat-flow review validate review.md --output validation.txt
 ```
 

@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.17.0
+// goat-flow-hook-version: 1.18.0
 /**
  * Cross-platform launcher for goat-flow's Bash hook scripts.
  *
@@ -349,6 +349,13 @@ function reportLauncherUnavailable(
     outputMeasurement = undefined,
   },
 ) {
+  // Claude's active flag ends only a launcher startup failure, without claiming a clean scan or overriding another hook.
+  if (hookResponseMode === "post-turn" && stopContext?.state === "valid" &&
+      stopContext.provider === "claude" && stopContext.isContinuation) {
+    process.stderr.write(`post-turn-safety: hook unavailable: ${userFacingReason}.\n` +
+      "post-turn-safety: ending repeated Stop after launcher infrastructure failure; no clean scan was recorded.\n");
+    return 0;
+  }
   // A migrated hook can translate launcher failure into the active provider's model response.
   if (launchContract !== null && (providerAdapterRuntime !== null || stopContext !== null)) {
     const providerUnavailableDelivery =
@@ -400,8 +407,7 @@ function hookScriptShapeFailure(projectRoot, hookScriptPath) {
   try {
     hookScriptStats = lstatSync(hookScriptPath);
   } catch {
-    // The file vanished between the existence check and now - for example the
-    // user reinstalled hooks in another window while an agent was working.
+    // Reinstalling hooks in another window can remove this file mid-check; report it missing rather than run a guessed replacement.
     return "hook script was not found";
   }
   // A symlink means the file the user reviewed is not the file that would run.
@@ -412,8 +418,7 @@ function hookScriptShapeFailure(projectRoot, hookScriptPath) {
   if (!hookScriptStats.isFile()) {
     return "hook script is not a regular file";
   }
-  // Extra hard links mean the same content is reachable under another name that
-  // can be swapped independently of the path the user installed.
+  // A hard-linked script can be changed through another path, so it cannot establish the user's reviewed hook identity.
   if (hookScriptStats.nlink > 1) {
     return "hook script has multiple hard links";
   }
@@ -423,16 +428,14 @@ function hookScriptShapeFailure(projectRoot, hookScriptPath) {
     resolvedHookScriptPath = realpathSync(hookScriptPath);
     resolvedProjectRoot = realpathSync(projectRoot);
   } catch {
-    // The path stopped resolving mid-check - for example a synced folder the
-    // user's file-sync tool replaced while the hook was starting.
+    // A file-sync tool can replace the hook folder mid-check; return a repair reason instead of launching unresolved code.
     return "hook script was not found";
   }
   const resolvedRelativeHookPath = relative(
     resolvedProjectRoot,
     resolvedHookScriptPath,
   );
-  // A symlinked parent directory can leave the project even when the plain path
-  // text looks contained, so the fully resolved location is checked as well.
+  // A linked parent can redirect a contained-looking path outside the selected project, so verify its physical location too.
   if (
     resolvedRelativeHookPath === ".." ||
     resolvedRelativeHookPath.startsWith(`..${win32.sep}`) ||
@@ -594,8 +597,8 @@ function runHookProcessUntilDeadline(
   );
   // Verified Stop context reaches the scanner byte-for-byte, including its original whitespace.
   if (acceptedStopInput !== null) {
+    // The scanner can close stdin early; ignore that pipe error and let its real status and envelope determine the user's response.
     hookProcess.stdin.on("error", () => {
-      // A scanner may exit before reading stdin; its status and envelope still determine the user's response.
     });
     hookProcess.stdin.end(acceptedStopInput);
   }
@@ -906,8 +909,7 @@ async function policyChoiceBeforeBash(
 function hookScriptContainmentFailure(projectRoot, hookScriptPath) {
   let containmentProjectRoot;
   let containmentHookScriptPath;
-  // Existing paths are compared by physical identity so a symlinked spelling of the selected
-  // project stays inside it. A path that cannot resolve retains the lexical fail-closed check.
+  // Physical identity accepts a symlinked spelling of the selected project; unresolved paths retain the lexical escape check.
   try {
     containmentProjectRoot = realpathSync(projectRoot);
     containmentHookScriptPath = realpathSync(hookScriptPath);
@@ -937,6 +939,7 @@ function hookScriptContainmentFailure(projectRoot, hookScriptPath) {
 /** Select Bash and its tool search path before the user's registered hook starts.
  *
  * Use native Git Bash on Windows; other hosts keep the normal Bash lookup and supplied environment.
+ *
  * @param {NodeJS.Platform} hostPlatform - Active host; an empty value cannot select a native launcher.
  * @param {NodeJS.ProcessEnv} hookEnvironment - Supplied hook settings; a missing PATH becomes an empty search suffix.
  * @param {object} launchOptions - Optional test discovery overrides; absent settings repeat normal installation discovery.
@@ -983,21 +986,26 @@ export async function runHookWithBash(
   );
   const projectRoot = launchOptions.root ?? process.cwd();
   let hookEnvironment = launchOptions.environment ?? process.env;
-  const stopContext = await readManagedStopContext(hookResponseMode, projectRoot);
+  const stopContext = hookResponseMode === "post-turn" ? null : await readManagedStopContext(hookResponseMode, projectRoot);
   let launchRuntime = stopContext === null ? null : await prepareHookLaunchRuntime(hookResponseMode, hookEnvironment);
-  const verifiedStopContract = stopContext === null ? null : {
-    providerIdentifier: "codex", responseKind: "post-turn", hookEvent: "turn-stop",
-    resultProtocol: "goat-flow.hook-result.v1", adapterVersion: "1", launcherDeadlineMs: 75_000,
-  };
   /** Deliver a startup fault through the verified Stop allowance or the existing provider behavior.
+   *
    * @param {string} reason - Practical startup problem; empty text would hide the repair needed.
    * @param {string} reasonCode - Fixed classification; omitted means unavailable infrastructure.
-   * @returns {number} Provider status; no scanner starts on this path.
+   * @returns {Promise<number>} Provider status; no scanner starts on this path.
    */
-  function reportStartupFailure(reason, reasonCode = "hook-unavailable") {
+  async function reportStartupFailure(reason, reasonCode = "hook-unavailable") {
+    const codexStopLaunchContract = stopContext === null ? null : {
+      providerIdentifier: "codex", responseKind: "post-turn", hookEvent: "turn-stop",
+      resultProtocol: "goat-flow.hook-result.v1", adapterVersion: "1", launcherDeadlineMs: 75_000,
+    };
+    // No child started, so a legacy Claude failure can still validate its original provider input.
+    const startupStopContext = hookResponseMode === "post-turn"
+      ? await readManagedStopContext(hookResponseMode, projectRoot)
+      : stopContext;
     return reportLauncherUnavailable(hookResponseMode, launchRuntime?.providerAdapterRuntime ?? null,
-      launchRuntime?.launchContract ?? verifiedStopContract, hookIdentifier,
-      { unavailableReasonCode: reasonCode, userFacingReason: reason, stopContext });
+      launchRuntime?.launchContract ?? codexStopLaunchContract, hookIdentifier,
+      { unavailableReasonCode: reasonCode, userFacingReason: reason, stopContext: startupStopContext });
   }
   // An invalid native Stop must remain blocking and cannot consume or exhaust a recovery allowance.
   if (stopContext?.state === "invalid") {

@@ -206,6 +206,22 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         skillPath,
       );
       assert.match(skillGuidance, /One session owns one milestone/u, skillPath);
+      const checkpoint = skillGuidance.match(
+        /\*\*CHECKPOINT \(Path-Only Intake\):\*\* ([^\n]+)/u,
+      )?.[1];
+      assert.ok(checkpoint, skillPath);
+      for (const field of [
+        "Plan pointer",
+        "Active set",
+        "Cap provenance",
+        "Session milestone",
+        "Next item",
+      ]) {
+        assert.ok(
+          checkpoint.includes(field),
+          `${skillPath}: checkpoint omits ${field}`,
+        );
+      }
       assert.match(
         skillGuidance,
         /With several active milestones and no selection,[\s\S]*?ask which milestone this session owns/u,
@@ -243,6 +259,12 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         /the bounded follow-up read returns only its first unchecked task line/u,
         examplePath,
       );
+      const pathOnlyOutput = readMarkdownSection(
+        examplePath,
+        "Path-only intake",
+      ).match(/```markdown\n([\s\S]*?)\n```/u)?.[1];
+      assert.ok(pathOnlyOutput, examplePath);
+      assert.match(pathOnlyOutput, /Cap provenance: default one/u, examplePath);
     });
   });
 

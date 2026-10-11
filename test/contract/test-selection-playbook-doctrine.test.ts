@@ -105,6 +105,11 @@ describe("test-selection standalone doctrine", () => {
         playbookPath,
       );
       assert.match(content, /without invoking `goat-qa`/u, playbookPath);
+      assert.doesNotMatch(
+        content,
+        /\.agents\/skills\/goat-qa\/SKILL\.md/u,
+        playbookPath,
+      );
     });
   });
 
@@ -501,6 +506,16 @@ describe("goat-qa application of test-selection doctrine", () => {
         skillPath,
       );
       assert.match(content, /ordinary ACT[\s\S]+re-read/u, skillPath);
+      assert.match(
+        content,
+        /creation, existing-test, added-test, removed-test, and relocated-test dispositions/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        content,
+        /one creation or existing-test disposition for every recommendation/u,
+        skillPath,
+      );
     }
   });
 

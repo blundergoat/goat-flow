@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.17.0
+// goat-flow-hook-version: 1.18.0
 /**
  * Owns bounded execution and recovery for a managed hook.
  *
@@ -18,20 +18,22 @@ const STOP_RECOVERY_FAILURE_CODE_LIMIT = 64; // Cap: leaves room for the recover
 const STOP_RECOVERY_PUBLICATION_WAIT_MS = 250; // Cap: lets a concurrent initial writer finish without an unbounded Stop wait.
 const STOP_RECOVERY_RECORD_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // Cap: no Stop cycle lasts a week, so older sibling records are stale.
 
-/** Validate the native Stop identity once, before a missing scanner or broken adapter can bypass recovery.
+/** Validate Stop identity before a missing scanner or broken adapter can bypass recovery.
  *
  * Error behavior: malformed input and read failures recover to invalid context, keeping the user's turn blocked.
- * Side effects: consumes bounded host stdin; accepted bytes are retained unchanged for the scanner.
+ * Side effects: consumes bounded host stdin; Codex retains accepted bytes unchanged for the scanner, while Claude startup recovery starts no scanner.
  *
  * @param {string} responseMode - registered mode; other modes keep their existing lifecycle behavior
  * @param {string} projectRoot - selected project; an inaccessible root cannot establish a safe cycle
  * @param {NodeJS.ReadableStream} inputStream - original host bytes; empty input is invalid in this verified mode
- * @returns {Promise<object | null>} accepted context and unchanged input, invalid context, or null for an unverified mode
+ * @returns {Promise<object | null>} Valid provider context (with original input for Codex), invalid context, or null for an unverified mode
  */
 export async function readManagedStopContext(responseMode, projectRoot, inputStream = process.stdin) {
-  // Other provider modes retain their established scanner-owned re-entry contract.
-  if (responseMode !== VERIFIED_CODEX_STOP_MODE) return null;
+  const isClaudeStopMode = responseMode === "post-turn";
+  // Claude calls this only after a startup failure; healthy legacy scans retain stdin ownership.
+  if (responseMode !== VERIFIED_CODEX_STOP_MODE && !isClaudeStopMode) return null;
   const deadlineAt = Date.now() + 75_000;
+  // Read the host event once so startup recovery can identify the active turn without an unbounded input wait.
   const acceptedInput = await new Promise((resolveInput) => {
     const inputChunks = [];
     let inputBytes = 0;
@@ -84,13 +86,16 @@ export async function readManagedStopContext(responseMode, projectRoot, inputStr
     // Missing or empty bytes mean this registered Stop has no verified user-cycle context.
     if (acceptedInput === null || acceptedInput.length === 0) return { state: "invalid" };
     const payload = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(acceptedInput));
-    const hasValidIdentity = [payload?.session_id, payload?.turn_id].every((identity) =>
+    const identityFields = isClaudeStopMode ? [payload?.session_id] : [payload?.session_id, payload?.turn_id];
+    const hasValidIdentity = identityFields.every((identity) =>
       typeof identity === "string" && identity.trim().length > 0 && Buffer.byteLength(identity) <= 512);
-    // A wrong event, missing turn or guessed active flag must stay blocking.
+    // A wrong event, missing required identity or guessed active flag must stay blocking.
     if (!hasValidIdentity || payload.hook_event_name !== "Stop" || typeof payload.stop_hook_active !== "boolean") {
       return { state: "invalid" };
     }
     const canonicalProjectRoot = realpathSync(projectRoot);
+    // Claude exposes continuation state without a Codex turn identity; it needs no saved allowance for startup failures.
+    if (isClaudeStopMode) return { state: "valid", provider: "claude", isContinuation: payload.stop_hook_active };
     const cycleKey = createHash("sha256").update(JSON.stringify([
       "codex", canonicalProjectRoot, payload.session_id, payload.turn_id,
     ])).digest("hex");
@@ -173,7 +178,7 @@ function openStopRecoveryAllowance(stopContext, statePath) {
 
 /** Confirm retained state belongs to this user and proves this exact turn already spent its allowance.
  *
- * Error behavior: malformed or unreadable records reach the caller's unavailable-state warning.
+ * File inspection errors throw to the caller's unavailable-state warning; unreadable or malformed JSON returns false after bounded retries.
  *
  * @param {number} stateDescriptor - Open record handle; the caller owns its cleanup.
  * @param {number | null} ownerId - Current OS owner; null on native Windows, where workspace ACLs replace the owner and mode checks.
@@ -184,6 +189,7 @@ function stopRecoveryRecordIsSafe(stateDescriptor, ownerId, cycleKey) {
   const publicationDeadline = Date.now() + STOP_RECOVERY_PUBLICATION_WAIT_MS;
   const waitSignal = new Int32Array(new SharedArrayBuffer(4));
   const bytes = Buffer.alloc(513);
+  // Allow a concurrent first delivery to finish its record, bounded by the publication deadline rather than repeated model turns.
   for (;;) {
     const stateShape = fstatSync(stateDescriptor);
     // A hard link, foreign owner, shared mode or oversized record cannot authorize release of the user's turn.
@@ -250,6 +256,7 @@ function pruneStaleStopRecoveryRecords(currentStatePath, ownerId) {
   const staleBefore = Date.now() - STOP_RECOVERY_RECORD_RETENTION_MS;
   let removedRecordCount = 0;
   try {
+    // Inspect sibling records without touching the current turn or unrelated user scratchpad files.
     for (const recordName of readdirSync(stateDirectory)) {
       const recordPath = join(stateDirectory, recordName);
       // Only this launcher's own hash-named records are candidates; everything else in scratchpad belongs to the user.
@@ -322,7 +329,7 @@ export function codexStopRecoveryWarning(hookResult) {
  * @property {string} stdout - bounded captured output; empty means feedback relay or no child output
  * @property {string} stderr - bounded captured diagnostic; empty means the child reported no error text
  * @property {boolean} hasExceededOutputLimit - true when feedback was stopped before it could flood the coding agent
- * @property {object | undefined} output - raw-byte measurements; absent means no captured child stream arrived
+ * @property {object | undefined} output - raw-byte measurements; absent for uncaptured legacy streams, while managed empty output has zero counts
  * @property {boolean} hasInvalidUtf8Output - true when damaged child text cannot prove a completed scan
  */
 
@@ -453,7 +460,7 @@ function findingSummaryFailureReason(hookResult) {
 /** Shorten one finding detail at a UTF-8 boundary without cutting serialized JSON.
  *
  * @param {string} userDetail - Human detail; empty text remains empty.
- * @param {number} maximumBytes - Retained prefix budget; zero retains no detail.
+ * @param {number} maximumBytes - Prefix budget including the ellipsis; zero leaves only an ellipsis for nonempty detail.
  * @returns {string} Original detail or a readable shortened prefix with an ellipsis.
  */
 export function shortenHookDetail(userDetail, maximumBytes) {
@@ -498,7 +505,7 @@ export function compactHookResultEnvelope(hookResult) {
  *
  * @param {object} capturedHookOutput - retained streams; managed=true selects separate budgets, while an absent flag retains legacy capture
  * @param {"stdout" | "stderr"} outputStreamName - channel receiving the next chunk
- * @param {Buffer | string} outputChunk - next child bytes
+ * @param {Buffer | string} outputChunk - next child bytes; empty content leaves byte counts and retained text unchanged
  * @returns {boolean} false when the next chunk would exceed the limit; the caller stops the hook.
  */
 export function appendBoundedHookOutput(
@@ -548,6 +555,7 @@ const MANAGED_HOOK_IDENTIFIERS_BY_RESPONSE_KIND = new Map([
 
 /**
  * Select a safe user wait below the registered host deadline.
+ *
  * Use before launch so invalid overrides cannot leave the coding agent waiting indefinitely.
  * Reject only unusable waits; an empty override uses the ceiling and a larger override is clamped to keep policy available.
  *
@@ -625,6 +633,7 @@ export function captureHookProcessUntilDeadline(
   appendCapturedHookOutput,
   stopHookProcessTree,
 ) {
+  // Resolve one terminal event for the agent, even when child exit, timeout, and stream shutdown arrive together.
   return new Promise((resolveHookResult) => {
     // A null writer keeps feedback output attached directly to the host.
     const shouldCaptureResult = appendCapturedHookOutput !== null;
@@ -655,6 +664,7 @@ export function captureHookProcessUntilDeadline(
       }
     }
 
+    // Stop the owned process tree at the deadline so a stalled check cannot hold the user's turn open.
     const launchDeadlineTimer = setTimeout(() => {
       hasHookReachedDeadline = true;
       stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment);
@@ -669,7 +679,7 @@ export function captureHookProcessUntilDeadline(
      * Use when Bash exits or fails so the coding agent receives one response.
      *
      * @param {number | null} hookStatus - hook exit code; null means no user-visible status arrived
-     * @param {Error | null} launchError - startup error; null means Bash started successfully
+     * @param {Error | null} launchError - startup error; null means no startup error was reported, including deadline and output-limit endings
      * @returns {void} no value; resolving the promise resumes the user's agent
      */
     function deliverHookResult(hookStatus, launchError) {
@@ -736,17 +746,21 @@ export function captureHookProcessUntilDeadline(
 
     // Captured modes retain both child streams; feedback relay listeners are attached by the launcher.
     if (shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
+      // Scanner stdout is the result envelope that determines whether the agent may continue.
       hookProcess.stdout.on("data", (outputChunk) => {
         captureHookOutputChunk("stdout", outputChunk);
       });
+      // Diagnostics use their own retention budget so ordinary log excess cannot erase the user's scan result.
       hookProcess.stderr.on("data", (outputChunk) => {
         captureHookOutputChunk("stderr", outputChunk);
       });
     }
+    // A missing Bash executable can emit an error before any scanner runs; preserve it as unavailable work.
     hookProcess.once("error", (launchError) => {
       // A launch failure has no hook exit status for the user.
       deliverHookResult(null, launchError);
     });
+    // Normal process closure completes the response, unless a deadline or earlier error already supplied it.
     hookProcess.once("close", (hookStatus) => {
       // A normal close has no launch error to show the user.
       deliverHookResult(hookStatus, null);

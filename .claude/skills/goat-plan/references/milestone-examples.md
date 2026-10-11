@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.17.0"
+goat-flow-reference-version: "1.18.0"
 ---
 # Milestone Formats
 
@@ -306,7 +306,7 @@ User message: `.goat-flow/plans/oauth-refresh/`
 Evidence read: `.active` points elsewhere; a strict check passes at default cap one; metadata shows M01 complete and M02 as the sole in-progress milestone depending on M01, so M02 is the unique final join; the bounded follow-up read returns only its first unchecked task line.
 
 ```markdown
-Mode: Path-Only Intake. `oauth-refresh` has M01 complete and M02 in-progress. I did not switch `.active`. Current task: `[CORE] Implement refresh callback`. Next action needed: summary, status check, plan update, or start this milestone?
+Mode: Path-Only Intake. Plan pointer: `.active` points elsewhere; unchanged. Active set: M02 in-progress; M01 dependency complete. Cap provenance: default one; no configured cap or session override. Session milestone: M02. Next item: `[CORE] Implement refresh callback`. Next action needed: summary, status check, plan update, or start this milestone?
 ```
 
 Expected outcome: no writes to `.active`, milestone status, checkboxes, or code.

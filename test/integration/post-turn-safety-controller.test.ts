@@ -6,8 +6,9 @@
  */
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
-import { mkdirSync, symlinkSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import {
@@ -44,6 +45,74 @@ function assertManagedEnvelope(result: ReturnType<typeof runHook>) {
 }
 
 describe("post-turn-safety hook: explicit non-Git controller roots", () => {
+  it("identifies a started controller child result overflow without claiming startup failure", () => {
+    withTempController(["child"], (controllerRoot, childRoots) => {
+      writeFile(
+        childRoots.child,
+        "changed.php",
+        "<<<<<<< HEAD\nfirst\n=======\nsecond\n>>>>>>> branch\n",
+      );
+      const scanner = readFileSync(
+        resolve("workflow/hooks/post-turn-safety.sh"),
+        "utf8",
+      ).replace(
+        "SECONDS=0\n",
+        'SECONDS=0\nif [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then\nnode -e \'process.stdout.write("x".repeat(70000))\'\nfi\n',
+      );
+      for (const dependency of [
+        "run-with-bash.mjs",
+        "hook-launch-runtime.mjs",
+        "hook-provider-adapters.mjs",
+        "vendor/js-yaml.cjs",
+      ]) {
+        writeFile(
+          controllerRoot,
+          `.goat-flow/hooks/${dependency}`,
+          readFileSync(resolve("workflow/hooks", dependency)),
+        );
+      }
+      writeFile(
+        controllerRoot,
+        ".goat-flow/hooks/post-turn-safety.sh",
+        scanner,
+      );
+      // Launch only this disposable controller; its children and retry state remain inside the fixture tree.
+      const launchController = (turnId: string) =>
+        spawnSync(
+          process.execPath,
+          [
+            join(controllerRoot, ".goat-flow/hooks/run-with-bash.mjs"),
+            ".goat-flow/hooks/post-turn-safety.sh",
+            "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000",
+          ],
+          {
+            cwd: controllerRoot,
+            encoding: "utf8",
+            timeout: 5000,
+            input: JSON.stringify({
+              hook_event_name: "Stop",
+              session_id: "controller-output",
+              turn_id: turnId,
+              stop_hook_active: false,
+            }),
+          },
+        );
+      const overflowReply = launchController("result-overflow");
+      assert.equal(overflowReply.error, undefined);
+      assert.equal(overflowReply.status, 0, overflowReply.stderr);
+      const overflow = JSON.parse(overflowReply.stdout);
+      assert.equal(overflow.decision, "block");
+      assert.match(
+        overflow.reason,
+        /Child safety scan exceeded its output limit/u,
+      );
+      assert.doesNotMatch(
+        overflow.reason,
+        /Child safety scan could not start/u,
+      );
+    });
+  });
+
   for (const scannerVariant of POST_TURN_SCANNER_VARIANTS) {
     it(`aggregates clean configured repositories with the ${scannerVariant.displayName}`, () => {
       withTempController(["gruff-go", "gruff-php"], (controllerRoot) => {

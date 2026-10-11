@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-11
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -100,8 +100,11 @@ For read-only reconciliation, run Git and checksum commands directly and compare
 
 **Created:** 2026-04-24
 **Severity:** INTEGRATION
+**Incident count:** 5
+**Latest occurrence:** 2026-10-11
 
-**Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
+**Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are prohibited in evidence. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
+Before rewriting a source comment, search its distinctive text in learning-loop entries and tests; preserve cited phrases or deliberately update their consumers.
 
 **What happened:** Three independent Gemini quality reports in one session flagged stale `file:line` references across footgun entries. `hooks.md` cited old guardrail lines for the read-only whitelist that had moved; `skills.md` cited `skill-preamble.md` lines for the Step 0 budget that had also moved. Nine active line references across 3 footgun files had drifted. README and CLAUDE.md said "line numbers are advisory" but evaluation templates said "RECOMMENDED", so agents kept using them.
 
@@ -112,6 +115,13 @@ For read-only reconciliation, run Git and checksum commands directly and compare
 **Recurrence 2026-08-04:** A timing-receipt footgun cited the rendered title of a parameterized test. The title existed in test output but not as literal source, so `stats --check` rejected it. Dynamic fixture values and generated test names are not durable semantic anchors; cite a literal fixture constant, helper, or assertion instead.
 
 **Recurrence 2026-09-01:** A same-agent quality assessment found the active `dashboard-terminal.md` footgun (search: `Workspace terminal waiting state has multiple derived surfaces`) telling agents to instrument "the else branch at line 1916" - a branch the Round-6 redesign had removed - and to add cases to a monolithic test file that had been split months earlier. Both survived `stats --check` because a prose line number ("around line 1916") is not a `file:line` ref, and in a footgun a bare backtick path is existence-checked only on an `Evidence anchors:` line (`src/cli/facts/shared/learning-loop-common.ts`, search: `scanBareEvidenceAnchors`); lessons do check bare paths, but their prefix grammar omits `test/` (search: `const pathPattern`), so a dead `test/` path passes there too. Prevention rules are forward-looking instructions, so the scanner's blind spot matters most there: write every path in a Prevention item as `file (search: "needle")` so it is validated, and describe a mechanism by its function, never by its line.
+
+**Recurrence 2026-10-11:** A comment cleanup passed 262 focused tests but removed phrases used as learning-loop search anchors. Full preflight caught five stale references and one recall-test failure. Restoring the phrases in concise, accurate comments made `stats --check` and all 15 recall tests pass. Comment-only edits still need citation and recall checks: `src/cli/facts/shared/learning-loop-common.ts` (search: "confirm the literal string still appears"), `workflow/hooks/post-turn-safety.sh` (search: "scan_untracked_changes"), and `test/unit/learning-loop-recall.test.ts` (search: "marks moved needles beside valid citations and warns before guidance").
+
+Final diff review also caught six `byte-count` labels changed by a local-variable replacement; the strings were restored before delivery.
+The source comparison had repeated the same broad replacement, so it missed the error despite a passing full gate.
+Inspect literals independently when checking renames, as described in
+`.goat-flow/learning-loop/lessons/naming.md` (search: "## Lesson: One-letter rename sweeps can corrupt regex flags").
 
 ---
 

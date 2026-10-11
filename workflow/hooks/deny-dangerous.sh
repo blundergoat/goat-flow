@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034,SC2317,SC2319
-# goat-flow-hook-version: 1.17.0
+# goat-flow-hook-version: 1.18.0
 # deny-dangerous.sh: destructive shell and secret-path policy.
 #
 # The entrypoint fixes policy ownership; the target project supplies the shared parser.

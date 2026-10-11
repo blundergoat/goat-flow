@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
 # post-turn-safety.sh
-# goat-flow-hook-version: 1.17.0
+# goat-flow-hook-version: 1.18.0
 #
 # Scan changed user text for built-in safety hazards at the end of an agent turn.
 #
 # Use this content check alongside project tests, builds and linters; it never claims those checks passed.
+#
 # Direct runs exit 0 when clean, 2 for findings or incomplete work, and 1 for host unavailability.
 # Managed runs return a structured outcome for the provider adapter, including blocks and incomplete coverage.
 #
@@ -18,9 +19,7 @@ shopt -s extglob
 # Bash imports SECONDS from the parent environment, so start hook budgets and result timing at this process boundary.
 SECONDS=0
 
-# Bash 3.2 ships with supported macOS versions. Keep this compatibility path
-# free of associative arrays, mapfile, and Bash-4 parameter expansions. The
-# force flag executes this exact path under newer Bash during integration tests.
+# Stock macOS Bash needs this path without associative arrays, mapfile, or Bash-4 expansions; tests can select it explicitly on newer Bash.
 fallback_findings=0
 fallback_reported="
 "
@@ -37,7 +36,7 @@ fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
 post_turn_native_workspace=""
 post_turn_action="scan"
-post_turn_hook_version="1.17.0"
+post_turn_hook_version="1.18.0"
 post_turn_result_schema="goat-flow.hook-result.v1"
 post_turn_migrated_result_mode=0
 post_turn_result_records_path=""
@@ -344,9 +343,8 @@ try {
   return 0
 }
 
-# Resolve the verified managed installation root when Git cannot provide a scan root.
-# The launcher starts Bash from this directory, and the installed hook shape prevents a
-# direct invocation in an arbitrary non-Git directory from creating continuation state.
+# Resolve the managed launch root when Git cannot identify the project; arbitrary non-Git folders cannot own continuation state.
+# The launcher starts Bash here, and installed hook checks establish the recovery boundary.
 resolve_stop_reentry_root_without_git() {
   local managed_root=""
 
@@ -440,8 +438,7 @@ write_stop_reentry_state() {
   if [ -L "$repository_root/.goat-flow" ] || [ -L "$stop_state_directory" ]; then
     return 1
   fi
-  # Create the private state directory only inside the verified project root. The path stays relative to that root because
-  # Git Bash refuses `mkdir -p` on an absolute //wsl.localhost path even when the directory already exists.
+  # Create state relative to the verified root because Git Bash rejects absolute //wsl.localhost mkdir paths, even for existing directories.
   if ! (cd "$repository_root" 2>/dev/null && umask 077 && mkdir -p "$stop_state_relative_directory"); then
     return 1
   fi
@@ -684,7 +681,7 @@ function configuredScanRoots() {
       roots.every((root) => typeof root === "string" && root.trim().length > 0)
       ? roots : null;
   } catch {
-    // Invalid or unreadable configuration cannot establish scan coverage.
+    // Invalid YAML after a user edits config cannot establish scan roots; leave controller coverage unavailable.
     return null;
   }
 }
@@ -780,8 +777,8 @@ for (const scanUnit of scanUnits) {
       cwd: scanUnit.root, env: childEnvironment, detached: process.platform !== "win32",
       stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
     });
+    // A scanner may close stdin before reading the event; its completed status and result still decide the outcome.
     child.stdin.on("error", () => {
-      // A child may finish before reading its Stop context; its status and envelope still decide the user result.
     });
     child.stdin.end(childPayload);
     childExecution = await managedRuntime.captureHookProcessUntilDeadline(child,
@@ -798,10 +795,13 @@ for (const scanUnit of scanUnits) {
   // An unfinished, flooded or unstarted child has no complete result to aggregate, even if JSON appeared first.
   if (childExecution.error || childExecution.launchError || childExecution.timedOut || childExecution.hasExceededOutputLimit) {
     const reasonCode = childExecution.timedOut || childExecution.error?.code === "ETIMEDOUT" ? "execution-timeout" : "hook-unavailable";
-    const message = reasonCode === "execution-timeout"
+    const hasOutputOverflow = childExecution.hasExceededOutputLimit || childExecution.error?.code === "ENOBUFS";
+    const childFailureMessage = reasonCode === "execution-timeout"
       ? "Child safety scan exceeded the controller deadline"
-      : "Child safety scan could not start";
-    const failure = syntheticResult(reasonCode, message);
+      : hasOutputOverflow
+        ? "Child safety scan exceeded its output limit"
+        : "Child safety scan could not start";
+    const failure = syntheticResult(reasonCode, childFailureMessage);
     // Aborted child counts are lower bounds; they explain the lost coverage without copying arbitrary output into findings.
     if (childExecution.output) failure.execution.output = childExecution.output;
     childResults.push({ name: scanUnit.name, result: failure });
@@ -857,16 +857,17 @@ if (childResults.some((child) => child.result.outcome === "block")) {
   outcome = "block";
   reasonCode = "policy-blocked";
 } else if (childResults.some((child) => child.result.outcome === "unavailable")) {
+  // An unavailable child prevents a clean aggregate even when the other declared repositories passed.
   outcome = "unavailable";
   reasonCode = "hook-unavailable";
 } else if (nonPassResults.length > 0) {
+  // Remaining incomplete or advisory children retain their visible non-clean outcome and any bounded-recovery reason.
   outcome = nonPassResults.some((child) => child.result.outcome === "incomplete")
     ? "incomplete"
     : "advisory";
   reasonCode = everyNonPassBounded ? "bounded-reentry-ended" : outcome === "advisory" ? "findings-reported" : "coverage-incomplete";
 }
-// The retained window must include what decided the aggregate outcome, so findings from
-// outcome-deciding children fill the cap first and the rest keep their deterministic order.
+// Keep outcome-deciding findings first so the user sees why the aggregate blocks; preserve declared order for all remaining details.
 const findingChildren = outcome === "block" ? childResults.filter((child) => child.result.outcome === "block") : childResults;
 const collectedFindings = findingChildren.flatMap((child) => child.result.findings.map((finding) => ({
   isDecisive: child.result.outcome === outcome,
@@ -978,9 +979,7 @@ run_controller_child_scans() {
   return "$controller_status"
 }
 
-# Detector shapes are shared by the Bash 3 compatibility and optimized paths.
-# Keep thresholds and placeholder decisions in this Bash-3-safe block
-# so either execution path cannot silently define a different security policy.
+# Both scanner paths share these Bash-3-safe patterns so macOS and newer Bash users receive the same safety decisions.
 AWS_TOKEN_RE='(AKIA|ASIA)[A-Z0-9]{16}'
 GITHUB_LEGACY_TOKEN_RE='gh[pousr]_[A-Za-z0-9_]{30,}'
 GITHUB_FINE_GRAINED_TOKEN_RE='github_pat_[A-Za-z0-9_]{20,}'
@@ -1089,40 +1088,40 @@ fallback_trim() {
 
 # Normalize a credential label so equivalent UI/config naming styles get one decision.
 fallback_normalize_key() {
-  local raw="$1"
-  local first=""
-  local second=""
-  local c
-  local i
-  local n
+  local credential_label="$1"
+  local camel_case_label=""
+  local word_separated_label=""
+  local label_character
+  local character_index
+  local label_length
 
-  n=${#raw}
-  i=0
+  label_length=${#credential_label}
+  character_index=0
   # Walk the original label so camelCase boundaries become visible to the user-facing classifier.
-  while [ "$i" -lt "$n" ]; do
-    c="${raw:$i:1}"
+  while [ "$character_index" -lt "$label_length" ]; do
+    label_character="${credential_label:$character_index:1}"
     # A lowercase-to-uppercase boundary starts a new credential-label word.
-    if [ "$i" -gt 0 ] && [[ "${raw:$((i - 1)):1}" == [[:lower:][:digit:]] && "$c" == [[:upper:]] ]]; then
-      first="${first}_"
+    if [ "$character_index" -gt 0 ] && [[ "${credential_label:$((character_index - 1)):1}" == [[:lower:][:digit:]] && "$label_character" == [[:upper:]] ]]; then
+      camel_case_label="${camel_case_label}_"
     fi
-    first="${first}${c}"
-    i=$((i + 1))
+    camel_case_label="${camel_case_label}${label_character}"
+    character_index=$((character_index + 1))
   done
 
-  n=${#first}
-  i=0
+  label_length=${#camel_case_label}
+  character_index=0
   # Walk the intermediate label so acronym endings also become separate words.
-  while [ "$i" -lt "$n" ]; do
-    c="${first:$i:1}"
+  while [ "$character_index" -lt "$label_length" ]; do
+    label_character="${camel_case_label:$character_index:1}"
     # The last capital before lowercase text starts the next readable word.
-    if [ "$i" -gt 0 ] && [ "$((i + 1))" -lt "$n" ] && [[ "${first:$((i - 1)):1}" == [[:upper:]] && "$c" == [[:upper:]] && "${first:$((i + 1)):1}" == [[:lower:]] ]]; then
-      second="${second}_"
+    if [ "$character_index" -gt 0 ] && [ "$((character_index + 1))" -lt "$label_length" ] && [[ "${camel_case_label:$((character_index - 1)):1}" == [[:upper:]] && "$label_character" == [[:upper:]] && "${camel_case_label:$((character_index + 1)):1}" == [[:lower:]] ]]; then
+      word_separated_label="${word_separated_label}_"
     fi
-    second="${second}${c}"
-    i=$((i + 1))
+    word_separated_label="${word_separated_label}${label_character}"
+    character_index=$((character_index + 1))
   done
 
-  fallback_lower "$second" || return 1
+  fallback_lower "$word_separated_label" || return 1
   FALLBACK_NORMALIZED_KEY="${FALLBACK_LOWER//-/_}"
 }
 
@@ -1164,6 +1163,7 @@ fallback_is_placeholder() {
 }
 
 # Decide whether a quoted value remains one literal credential the user can rotate.
+#
 # Expression suffixes stay out of warnings so ordinary code does not look like a leak.
 # $1 is post-quote text; empty means ended. Returns 0 for a literal, 1 for an expression.
 suffix_ends_assignment() {
@@ -1522,6 +1522,7 @@ fallback_scan_line() {
 }
 
 # Decode a Git diff destination so compatibility scanning names the user's real file.
+#
 # $1 is decorated header text; sets FALLBACK_DIFF_PATH, empty when unusable.
 # Returns 0 when decoded, or 1 so incomplete coverage can block the turn.
 fallback_decode_diff_path() {
@@ -1968,6 +1969,8 @@ if ! read_stop_context; then
   exit 2
 fi
 
+# Check whether the selected directory is a whole Git repository before choosing single-project or configured controller scanning.
+# An unavailable or different root leaves the explicit controller-root path responsible for establishing scope.
 current_directory_is_git_top_level() {
   local selected_root=""
   local discovered_root=""
@@ -2004,16 +2007,13 @@ MAX_FINDINGS="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
 case "$MAX_FILE_BYTES" in
   '' | *[!0-9]* | 0[0-9]*) MAX_FILE_BYTES=1048576 ;;
 esac
-# Wall-clock budget for the whole scan. The registered agent-side hook timeout
-# must stay above this so the incomplete-scan diagnostic below prints before
-# the runner kills the process (same layering as gruff-code-quality.sh).
+# Keep the scan budget below the registered host timeout so users receive the incomplete-coverage explanation before the host kills the hook.
 MAX_SECONDS="${GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS:-60}"
 case "$MAX_SECONDS" in
   '' | *[!0-9]*) MAX_SECONDS=60 ;;
 esac
 
-# External commands receive at most this many path arguments per invocation so
-# batched calls stay far below the ~32k character Windows command-line limit.
+# Bound path batches below the Windows command-line limit so large change sets do not prevent scan tools from starting.
 CHUNK_SIZE=64
 
 findings=0
@@ -2022,9 +2022,7 @@ reported_findings="
 merge_conflict_scan_path=""
 merge_conflict_scan_state=0
 
-# Budget bookkeeping: BAIL flips once SECONDS crosses MAX_SECONDS; every scan
-# loop checks it and unwinds. PENDING_FILES over-counts remaining candidate
-# files (never under-counts) so the incomplete-scan message stays honest.
+# Stop scan work after a time limit or command failure; conservative remaining-file counts keep coverage from being overstated.
 BAIL=0
 PENDING_FILES=0
 INCOMPLETE_REASON=""
@@ -2073,8 +2071,7 @@ next_temp_path() {
   TEMP_PATH="$WORKDIR/$1-$TEMP_FILE_SEQUENCE"
 }
 
-# Grep exit 1 is its documented no-match result. Any other non-zero status
-# means candidate selection or content gating did not complete.
+# Treat grep exit 1 as no matches; other nonzero exits leave candidate selection incomplete and keep the user's turn blocked.
 capture_grep_output() {
   local output="$1"
   local failure_reason="$2"
@@ -2102,9 +2099,7 @@ has_head() {
   git rev-parse --verify HEAD >/dev/null 2>&1
 }
 
-# Sets STRIPPED to $1 without leading/trailing [[:space:]]. A function output
-# via global instead of stdout: $(...) forks a subshell, and this runs on the
-# per-line hot path.
+# Trim assignment text into STRIPPED; a shared result avoids a subshell for every user-authored line scanned.
 strip_space() {
   STRIPPED="${1##+([[:space:]])}"
   STRIPPED="${STRIPPED%%+([[:space:]])}"
@@ -2138,32 +2133,33 @@ is_excluded_credential_key() {
 }
 
 # Normalize credential labels so camelCase and kebab-case receive the same verdict.
+#
 # This keeps user feedback consistent across common config styles.
 # $1 is the label; sets NORMALIZED_KEY, which is empty only when the input is empty.
 normalize_credential_key() {
-  local raw="$1" first="" second="" c i n
-  n=${#raw}
+  local credential_label="$1" camel_case_label="" word_separated_label="" label_character character_index label_length
+  label_length=${#credential_label}
   # Walk the original label so camelCase boundaries become visible to the classifier.
-  for ((i = 0; i < n; i++)); do
-    c=${raw:i:1}
+  for ((character_index = 0; character_index < label_length; character_index++)); do
+    label_character=${credential_label:character_index:1}
     # A lowercase-to-uppercase boundary starts a new credential-label word.
-    if ((i > 0)) && [[ ${raw:i-1:1} == [[:lower:][:digit:]] && $c == [[:upper:]] ]]; then
-      first+="_"
+    if ((character_index > 0)) && [[ ${credential_label:character_index-1:1} == [[:lower:][:digit:]] && $label_character == [[:upper:]] ]]; then
+      camel_case_label+="_"
     fi
-    first+="$c"
+    camel_case_label+="$label_character"
   done
-  n=${#first}
+  label_length=${#camel_case_label}
   # Walk the intermediate label so acronym endings also become separate words.
-  for ((i = 0; i < n; i++)); do
-    c=${first:i:1}
+  for ((character_index = 0; character_index < label_length; character_index++)); do
+    label_character=${camel_case_label:character_index:1}
     # The last capital before lowercase text starts the next readable word.
-    if ((i > 0 && i + 1 < n)) && [[ ${first:i-1:1} == [[:upper:]] && $c == [[:upper:]] && ${first:i+1:1} == [[:lower:]] ]]; then
-      second+="_"
+    if ((character_index > 0 && character_index + 1 < label_length)) && [[ ${camel_case_label:character_index-1:1} == [[:upper:]] && $label_character == [[:upper:]] && ${camel_case_label:character_index+1:1} == [[:lower:]] ]]; then
+      word_separated_label+="_"
     fi
-    second+="$c"
+    word_separated_label+="$label_character"
   done
-  second="${second,,}"
-  NORMALIZED_KEY="${second//-/_}"
+  word_separated_label="${word_separated_label,,}"
+  NORMALIZED_KEY="${word_separated_label//-/_}"
 }
 
 # Recognize credential labels across common config naming styles.
@@ -2199,10 +2195,9 @@ scan_literal_credential_assignment() {
     return 0
   fi
   value="$LITERAL_VALUE"
+  # Short literals do not meet the high-confidence credential threshold used to interrupt the user's turn.
   [ "${#value}" -ge 12 ] || return 0
-  # Assignment values use delimiter-aware placeholder matching so ordinary
-  # substrings such as "test" inside a generated password do not suppress a
-  # credential finding. Known documented token placeholders are handled there.
+  # Delimiter-aware placeholder matching keeps a generated credential containing an ordinary word from escaping the user's warning.
   if is_placeholder_token "$value"; then
     return 0
   fi
@@ -2270,104 +2265,103 @@ scan_dockerfile_assignment() {
   scan_literal_credential_assignment "$path" "$key" "$raw_value"
 }
 
-# Extracts a literal secret-looking value from an assignment right-hand side.
-# On success sets LITERAL_VALUE and returns 0; returns 1 when the value is a
-# reference, expression, identifier, or otherwise not a literal credential.
+# Extract one credential-shaped assignment value into LITERAL_VALUE for the warning shown to the user.
+# Return 0 for a literal; return 1 for references, expressions, or other values that cannot justify a credential finding.
 literal_assignment_value() {
-  local after
-  local bare
+  local text_after_closing_quote
+  local unquoted_assignment_value
   local dotted_identifier_re
-  local first_segment
-  local first_segment_lower
+  local value_first_segment
+  local value_first_segment_lower
   local operator_expression_re
-  local raw
-  local rest
-  local value
+  local raw_assignment_value
+  local text_after_opening_quote
+  local literal_value
 
   LITERAL_VALUE=""
   strip_space "$1"
-  raw="$STRIPPED"
-  case "$raw" in
+  raw_assignment_value="$STRIPPED"
+  case "$raw_assignment_value" in
     [fF]\"* | [fF]\'* | [fF][rR]\"* | [fF][rR]\'* | [rR][fF]\"* | [rR][fF]\'*)
       return 1
       ;;
   esac
 
-  case "${raw:0:1}" in
+  case "${raw_assignment_value:0:1}" in
     '"')
-      rest="${raw:1}"
-      [[ "$rest" == *\"* ]] || return 1
-      value="${rest%%\"*}"
-      case "$value" in
+      text_after_opening_quote="${raw_assignment_value:1}"
+      [[ "$text_after_opening_quote" == *\"* ]] || return 1
+      literal_value="${text_after_opening_quote%%\"*}"
+      case "$literal_value" in
         *[[:space:]]* | *'$'*) return 1 ;;
       esac
-      is_reference_or_interpolation "$value" && return 1
-      after="${rest#*\"}"
-      strip_space "$after"
-      after="$STRIPPED"
+      is_reference_or_interpolation "$literal_value" && return 1
+      text_after_closing_quote="${text_after_opening_quote#*\"}"
+      strip_space "$text_after_closing_quote"
+      text_after_closing_quote="$STRIPPED"
       # Only an assignment-ending suffix may follow the closing quote.
-      suffix_ends_assignment "$after" || return 1
-      LITERAL_VALUE="$value"
+      suffix_ends_assignment "$text_after_closing_quote" || return 1
+      LITERAL_VALUE="$literal_value"
       return 0
       ;;
     "'")
-      rest="${raw:1}"
-      [[ "$rest" == *"'"* ]] || return 1
-      value="${rest%%\'*}"
-      case "$value" in
+      text_after_opening_quote="${raw_assignment_value:1}"
+      [[ "$text_after_opening_quote" == *"'"* ]] || return 1
+      literal_value="${text_after_opening_quote%%\'*}"
+      case "$literal_value" in
         *[[:space:]]*) return 1 ;;
       esac
-      is_reference_or_interpolation "$value" && return 1
-      after="${rest#*\'}"
-      strip_space "$after"
-      after="$STRIPPED"
+      is_reference_or_interpolation "$literal_value" && return 1
+      text_after_closing_quote="${text_after_opening_quote#*\'}"
+      strip_space "$text_after_closing_quote"
+      text_after_closing_quote="$STRIPPED"
       # Only an assignment-ending suffix may follow the closing quote.
-      suffix_ends_assignment "$after" || return 1
-      LITERAL_VALUE="$value"
+      suffix_ends_assignment "$text_after_closing_quote" || return 1
+      LITERAL_VALUE="$literal_value"
       return 0
       ;;
   esac
 
-  bare="${raw%%#*}"
-  strip_space "$bare"
-  bare="$STRIPPED"
+  unquoted_assignment_value="${raw_assignment_value%%#*}"
+  strip_space "$unquoted_assignment_value"
+  unquoted_assignment_value="$STRIPPED"
   # An empty assignment gives the user no credential to rotate.
-  [ -n "$bare" ] || return 1
-  case "$bare" in
+  [ -n "$unquoted_assignment_value" ] || return 1
+  case "$unquoted_assignment_value" in
     *[[:space:]]* | *"("* | *")"* | *"["* | *"]"* | *"{"* | *"}"* | *","* | *";"* | *"<"* | *">"* | *"|"* | *"&"* | *'`'* | *'$'*)
       return 1
       ;;
   esac
   # A simple lowercase identifier is a runtime reference, not an embedded user secret.
-  if [[ "$bare" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+  if [[ "$unquoted_assignment_value" =~ ^[a-z_][a-z0-9_]*$ ]]; then
     return 1
   fi
   dotted_identifier_re='^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$'
   # Common dotted config references stay allowed unless their first segment is token-like.
-  if [[ "$bare" =~ $dotted_identifier_re ]]; then
-    first_segment="${bare%%.*}"
-    first_segment_lower="${first_segment,,}"
-    case "$first_segment_lower" in
+  if [[ "$unquoted_assignment_value" =~ $dotted_identifier_re ]]; then
+    value_first_segment="${unquoted_assignment_value%%.*}"
+    value_first_segment_lower="${value_first_segment,,}"
+    case "$value_first_segment_lower" in
       app | application | cfg | conf | config | configs | configuration | constant | constants | context | credentials | credential | creds | ctx | default | defaults | env | environ | environment | os | process | self | setting | settings | this)
         return 1
         ;;
     esac
     # Low-entropy dotted prefixes behave like ordinary application references.
-    if ! has_credential_entropy "$first_segment"; then
+    if ! has_credential_entropy "$value_first_segment"; then
       return 1
     fi
   fi
   operator_expression_re='^([A-Za-z_][A-Za-z0-9_]*)([+*/%=]|==|!=)([A-Za-z_][A-Za-z0-9_]*)$'
   # Identifier-led expressions stay allowed unless the left side itself is token-shaped.
-  if [[ "$bare" =~ $operator_expression_re ]]; then
+  if [[ "$unquoted_assignment_value" =~ $operator_expression_re ]]; then
     has_credential_entropy "${BASH_REMATCH[1]}" || return 1
   fi
   # Short or punctuated expressions are not high-confidence rotatable credentials.
-  if [[ ! "$bare" =~ ^[A-Za-z0-9._+/=~-]{12,}$ ]]; then
+  if [[ ! "$unquoted_assignment_value" =~ ^[A-Za-z0-9._+/=~-]{12,}$ ]]; then
     return 1
   fi
-  has_credential_entropy "$bare" || return 1
-  LITERAL_VALUE="$bare"
+  has_credential_entropy "$unquoted_assignment_value" || return 1
+  LITERAL_VALUE="$unquoted_assignment_value"
   return 0
 }
 
@@ -2442,6 +2436,7 @@ scan_env_assignment() {
 }
 
 # Report a raw token unless the matched value is an obvious placeholder.
+#
 # $1 is the user file, $2 the token family, and $3 the match; empty cannot be a finding.
 # Returns clean for a placeholder, otherwise the user-facing finding status.
 report_token_if_real() {
@@ -2555,14 +2550,15 @@ CONTENT_STEM_RE="${STEM_BODY_RE}"
 
 # --- batched file gates -------------------------------------------------------
 
-# Classifies full-content paths without loading them: 1=scannable, 2=oversized
-# text, 3=binary, 4=unavailable, and 5=excluded symlink. Tracked/staged diffs do
-# not use this cap because Git streams only added hunks for the user.
+# Whole-file admission preserves why a path cannot be scanned; tracked and staged diffs stream added hunks without this cap.
+#
+# - Final states: 1=scannable, 2=oversized text, 3=binary, 4=unavailable, 5=excluded symlink.
+# - Pending states: 6=within-cap nonempty content, 7=oversized nonempty content; the binary gate resolves both.
 declare -A SCANNABLE=()
 # Classify full-content paths before the scanner reads user-authored lines.
 gate_scannable_files() {
   local -a batch=() chunk=() sizes=()
-  local path size file_bytes i count total_lines sizes_output grep_output
+  local path size file_bytes path_index path_count total_lines sizes_output grep_output
 
   # Every full-content path gets an explicit admission or exclusion result.
   for path in "$@"; do
@@ -2631,32 +2627,30 @@ gate_scannable_files() {
     fi
     sizes=()
     mapfile -t sizes <"$sizes_output"
-    count=${#chunk[@]}
+    path_count=${#chunk[@]}
     total_lines=${#sizes[@]}
     # Expected output has one line per file plus one total only for multi-file batches.
-    if { ((count == 1)) && ((total_lines == 1)); } || { ((count > 1)) && ((total_lines == count + 1)); }; then
+    if { ((path_count == 1)) && ((total_lines == 1)); } || { ((path_count > 1)) && ((total_lines == path_count + 1)); }; then
       # Match each byte count back to the same user-visible path in the chunk.
-      for ((i = 0; i < count; i++)); do
+      for ((path_index = 0; path_index < path_count; path_index++)); do
         # Invalid byte text cannot safely classify this path or its neighbors.
-        if [[ ! "${sizes[i]}" =~ ^[[:space:]]*([0-9]+) ]]; then
+        if [[ ! "${sizes[path_index]}" =~ ^[[:space:]]*([0-9]+) ]]; then
           mark_scan_incomplete "command" "byte-count command returned invalid output"
           return 1
         fi
         file_bytes="${BASH_REMATCH[1]}"
         # Empty files are fully inspected without a content grep.
         if ((file_bytes == 0)); then
-          SCANNABLE["${chunk[i]}"]=1
+          SCANNABLE["${chunk[path_index]}"]=1
         # Non-empty files retain whether their whole content fits the user cap.
         elif ((file_bytes <= MAX_FILE_BYTES)); then
-          SCANNABLE["${chunk[i]}"]=6
+          SCANNABLE["${chunk[path_index]}"]=6
         else
-          SCANNABLE["${chunk[i]}"]=7
+          SCANNABLE["${chunk[path_index]}"]=7
         fi
       done
     else
-      # Unexpected wc output shape (e.g. a file vanished mid-run): probe the
-      # chunk per file only after marking the scan incomplete; shifted output
-      # cannot safely prove that any neighboring path stayed within the cap.
+      # A missing byte-count row, such as when a file disappears mid-scan, makes the whole batch incomplete; do not guess neighboring file sizes.
       mark_scan_incomplete "command" "byte-count command returned invalid output"
       return 1
     fi
@@ -2690,55 +2684,54 @@ gate_scannable_files() {
 
 # --- diff-stream scanning -----------------------------------------------------
 
-# Unquotes a C-style quoted git path ("caf\303\251.env" style) into UNQUOTED.
+# Decode Git-quoted paths into UNQUOTED so findings show actual filenames, including non-ASCII names and escaped characters.
 c_unquote_path() {
-  local quoted="$1" out="" c oct
-  quoted="${quoted#\"}"
-  quoted="${quoted%\"}"
+  local encoded_path="$1" decoded_path="" path_character octal_bytes
+  encoded_path="${encoded_path#\"}"
+  encoded_path="${encoded_path%\"}"
   # Decode every Git-escaped path byte so findings name the file the user recognizes.
-  while [ -n "$quoted" ]; do
-    c="${quoted:0:1}"
+  while [ -n "$encoded_path" ]; do
+    path_character="${encoded_path:0:1}"
     # Ordinary path characters can be copied without escape decoding.
-    if [ "$c" != "\\" ]; then
-      out+="$c"
-      quoted="${quoted:1}"
+    if [ "$path_character" != "\\" ]; then
+      decoded_path+="$path_character"
+      encoded_path="${encoded_path:1}"
       continue
     fi
-    c="${quoted:1:1}"
-    case "$c" in
+    path_character="${encoded_path:1:1}"
+    case "$path_character" in
       [0-7])
-        oct="${quoted:1:3}"
-        oct="${oct%%[!0-7]*}"
-        printf -v c '%b' "\\0$oct"
-        out+="$c"
-        quoted="${quoted:$((1 + ${#oct}))}"
+        octal_bytes="${encoded_path:1:3}"
+        octal_bytes="${octal_bytes%%[!0-7]*}"
+        printf -v path_character '%b' "\\0$octal_bytes"
+        decoded_path+="$path_character"
+        encoded_path="${encoded_path:$((1 + ${#octal_bytes}))}"
         ;;
-      a) out+=$'\a'; quoted="${quoted:2}" ;;
-      b) out+=$'\b'; quoted="${quoted:2}" ;;
-      f) out+=$'\f'; quoted="${quoted:2}" ;;
-      n) out+=$'\n'; quoted="${quoted:2}" ;;
-      r) out+=$'\r'; quoted="${quoted:2}" ;;
-      t) out+=$'\t'; quoted="${quoted:2}" ;;
-      v) out+=$'\v'; quoted="${quoted:2}" ;;
-      *) out+="$c"; quoted="${quoted:2}" ;;
+      a) decoded_path+=$'\a'; encoded_path="${encoded_path:2}" ;;
+      b) decoded_path+=$'\b'; encoded_path="${encoded_path:2}" ;;
+      f) decoded_path+=$'\f'; encoded_path="${encoded_path:2}" ;;
+      n) decoded_path+=$'\n'; encoded_path="${encoded_path:2}" ;;
+      r) decoded_path+=$'\r'; encoded_path="${encoded_path:2}" ;;
+      t) decoded_path+=$'\t'; encoded_path="${encoded_path:2}" ;;
+      v) decoded_path+=$'\v'; encoded_path="${encoded_path:2}" ;;
+      *) decoded_path+="$path_character"; encoded_path="${encoded_path:2}" ;;
     esac
   done
-  UNQUOTED="$out"
+  UNQUOTED="$decoded_path"
 }
 
 # Scan one bounded Git diff stream while preserving the user's file and line order.
+#
 # $1 is the stream file; empty added content produces no finding.
 # Returns nonzero only when scanning cannot complete; findings feed the final verdict.
 scan_diff_stream() {
   local stream="$1"
   local -a global_hits=() stem_hits=()
-  local ai=0 bi=0 an bn hit line from_global
-  local cur_path="" cur_active=0 cur_env=0 expect_header=0 rest
+  local global_hit_index=0 stem_hit_index=0 global_line_number stem_line_number candidate_line_record line is_global_candidate
+  local changed_file_path="" scan_changed_file=0 is_config_assignment_file=0 expect_file_header=0 diff_destination
   local global_output stem_output
 
-  # -a forces text handling of odd bytes; -U keeps CR bytes at end of line
-  # (Windows grep builds strip them in text mode, which would alter the line
-  # content scan_line sees compared to the original `read -r` loop).
+  # Force text handling and preserve CR bytes so Windows grep cannot alter changed lines before safety detectors inspect them.
   next_temp_path "diff-global-hits"
   global_output="$TEMP_PATH"
   # Global candidates preserve path headers and every high-confidence detector family.
@@ -2755,78 +2748,78 @@ scan_diff_stream() {
   mapfile -t stem_hits <"$stem_output"
 
   # Merge both ordered candidate streams so conflict state follows the user's line order.
-  while ((ai < ${#global_hits[@]} || bi < ${#stem_hits[@]})); do
+  while ((global_hit_index < ${#global_hits[@]} || stem_hit_index < ${#stem_hits[@]})); do
     budget_check || return 0
     # A remaining global candidate exposes its original diff line number.
-    if ((ai < ${#global_hits[@]})); then an="${global_hits[ai]%%:*}"; else an=""; fi
+    if ((global_hit_index < ${#global_hits[@]})); then global_line_number="${global_hits[global_hit_index]%%:*}"; else global_line_number=""; fi
     # A remaining config-stem candidate exposes its original diff line number.
-    if ((bi < ${#stem_hits[@]})); then bn="${stem_hits[bi]%%:*}"; else bn=""; fi
+    if ((stem_hit_index < ${#stem_hits[@]})); then stem_line_number="${stem_hits[stem_hit_index]%%:*}"; else stem_line_number=""; fi
 
-    from_global=1
+    is_global_candidate=1
     # Select the earlier candidate and consume duplicates once from both streams.
-    if [ -z "$an" ]; then
-      from_global=0
-      hit="${stem_hits[bi]}"
-      bi=$((bi + 1))
+    if [ -z "$global_line_number" ]; then
+      is_global_candidate=0
+      candidate_line_record="${stem_hits[stem_hit_index]}"
+      stem_hit_index=$((stem_hit_index + 1))
     # The earlier global detector candidate keeps its original user line order.
-    elif [ -z "$bn" ] || ((an < bn)); then
-      hit="${global_hits[ai]}"
-      ai=$((ai + 1))
+    elif [ -z "$stem_line_number" ] || ((global_line_number < stem_line_number)); then
+      candidate_line_record="${global_hits[global_hit_index]}"
+      global_hit_index=$((global_hit_index + 1))
     # One line matched both candidate sets, so scan it only once.
-    elif ((an == bn)); then
-      hit="${global_hits[ai]}"
-      ai=$((ai + 1))
-      bi=$((bi + 1))
+    elif ((global_line_number == stem_line_number)); then
+      candidate_line_record="${global_hits[global_hit_index]}"
+      global_hit_index=$((global_hit_index + 1))
+      stem_hit_index=$((stem_hit_index + 1))
     else
-      from_global=0
-      hit="${stem_hits[bi]}"
-      bi=$((bi + 1))
+      is_global_candidate=0
+      candidate_line_record="${stem_hits[stem_hit_index]}"
+      stem_hit_index=$((stem_hit_index + 1))
     fi
-    line="${hit#*:}"
+    line="${candidate_line_record#*:}"
 
     # A real Git section header resets path attribution before added user text.
-    if ((from_global)) && [[ "$line" == "diff --git "* ]]; then
-      expect_header=1
-      cur_active=0
+    if ((is_global_candidate)) && [[ "$line" == "diff --git "* ]]; then
+      expect_file_header=1
+      scan_changed_file=0
       continue
     fi
     # Only the destination header immediately after a section selects a user path.
-    if ((from_global && expect_header)) && [[ "$line" == "+++ "* ]]; then
-      expect_header=0
-      rest="${line#+++ }"
+    if ((is_global_candidate && expect_file_header)) && [[ "$line" == "+++ "* ]]; then
+      expect_file_header=0
+      diff_destination="${line#+++ }"
       # A deleted file has no added content for the safety scanner to inspect.
-      if [ "$rest" = "/dev/null" ]; then
-        cur_active=0
+      if [ "$diff_destination" = "/dev/null" ]; then
+        scan_changed_file=0
         continue
       fi
       # Quoted Git paths must be decoded before the user sees a finding.
-      if [[ "$rest" == \"* ]]; then
-        c_unquote_path "$rest"
-        rest="$UNQUOTED"
+      if [[ "$diff_destination" == \"* ]]; then
+        c_unquote_path "$diff_destination"
+        diff_destination="$UNQUOTED"
       else
-        rest="${rest%$'\t'}"
+        diff_destination="${diff_destination%$'\t'}"
       fi
-      rest="${rest#b/}"
-      cur_path="$rest"
-      cur_active=1
-      cur_env=0
+      diff_destination="${diff_destination#b/}"
+      changed_file_path="$diff_destination"
+      scan_changed_file=1
+      is_config_assignment_file=0
       # Config-shaped files admit the additional credential-key candidate stream.
-      if is_env_assignment_file "$cur_path"; then cur_env=1; fi
-      reset_merge_conflict_scan "$cur_path"
+      if is_env_assignment_file "$changed_file_path"; then is_config_assignment_file=1; fi
+      reset_merge_conflict_scan "$changed_file_path"
       # Completion accounting advances once each selected user file begins scanning.
       if ((DIFF_FILES_DONE >= 0)); then DIFF_FILES_DONE=$((DIFF_FILES_DONE + 1)); fi
       continue
     fi
 
-    ((cur_active)) || continue
+    ((scan_changed_file)) || continue
     case "$line" in
       "+++"* | "---"* | "@@"*) continue ;;
       +*) ;;
       *) continue ;;
     esac
     # Global detector hits and admitted config stems both reach the full line scanner.
-    if ((from_global)) || ((cur_env)); then
-      scan_line "$cur_path" "${line#+}"
+    if ((is_global_candidate)) || ((is_config_assignment_file)); then
+      scan_line "$changed_file_path" "${line#+}"
     fi
   done
 }
@@ -2910,21 +2903,22 @@ run_diff_batch() {
 # --- full-content scanning (untracked and unborn-HEAD files) -------------------
 
 # Scan gated whole files so new user content receives the same ordered detectors.
+#
 # Arguments are paths; an empty list is clean because there is no declared content.
 # Returns nonzero only when scanning cannot complete; findings feed the final verdict.
 scan_content_files() {
-  local -a files=("$@") env_files=() g_path=() g_ln=() g_line=() s_path=() s_ln=() s_line=()
+  local -a files=("$@") env_files=() global_candidate_paths=() global_candidate_line_numbers=() global_candidate_lines=() stem_candidate_paths=() stem_candidate_line_numbers=() stem_candidate_lines=()
   local -A file_order=()
   local -a chunk=()
-  local path rest i gi si cur="" grep_output
+  local path candidate_line_record file_index global_hit_index stem_hit_index current_file_path="" grep_output
 
   ((${#files[@]} > 0)) || return 0
   # Record stable file order and the subset that admits config assignment checks.
-  for ((i = 0; i < ${#files[@]}; i++)); do
-    file_order["${files[i]}"]=$i
+  for ((file_index = 0; file_index < ${#files[@]}; file_index++)); do
+    file_order["${files[file_index]}"]=$file_index
     # Only config-shaped user files need the credential-stem candidate stream.
-    if is_env_assignment_file "${files[i]}"; then
-      env_files+=("${files[i]}")
+    if is_env_assignment_file "${files[file_index]}"; then
+      env_files+=("${files[file_index]}")
     fi
   done
 
@@ -2942,10 +2936,10 @@ scan_content_files() {
       return 1
     fi
     # Preserve each path, line number, and line body for ordered user-facing scanning.
-    while IFS= read -r -d '' path && IFS= read -r rest; do
-      g_path+=("$path")
-      g_ln+=("${rest%%:*}")
-      g_line+=("${rest#*:}")
+    while IFS= read -r -d '' path && IFS= read -r candidate_line_record; do
+      global_candidate_paths+=("$path")
+      global_candidate_line_numbers+=("${candidate_line_record%%:*}")
+      global_candidate_lines+=("${candidate_line_record#*:}")
     done <"$grep_output"
   done
 
@@ -2963,51 +2957,51 @@ scan_content_files() {
       return 1
     fi
     # Preserve each config path, line number, and line body for ordered scanning.
-    while IFS= read -r -d '' path && IFS= read -r rest; do
-      s_path+=("$path")
-      s_ln+=("${rest%%:*}")
-      s_line+=("${rest#*:}")
+    while IFS= read -r -d '' path && IFS= read -r candidate_line_record; do
+      stem_candidate_paths+=("$path")
+      stem_candidate_line_numbers+=("${candidate_line_record%%:*}")
+      stem_candidate_lines+=("${candidate_line_record#*:}")
     done <"$grep_output"
   done
 
-  gi=0
-  si=0
+  global_hit_index=0
+  stem_hit_index=0
   # Merge global and config candidates in the order the user wrote them.
-  while ((gi < ${#g_path[@]} || si < ${#s_path[@]})); do
+  while ((global_hit_index < ${#global_candidate_paths[@]} || stem_hit_index < ${#stem_candidate_paths[@]})); do
     budget_check || return 0
-    local g_ok=0 s_ok=0 g_key=0 s_key=0 pick_path pick_line
+    local has_global_candidate=0 has_stem_candidate=0 global_candidate_order=0 stem_candidate_order=0 candidate_path candidate_line
     # A remaining global candidate gets a sortable file-and-line key.
-    if ((gi < ${#g_path[@]})); then
-      g_ok=1
-      g_key=$((${file_order[${g_path[gi]}]:-0} * 10000000 + g_ln[gi]))
+    if ((global_hit_index < ${#global_candidate_paths[@]})); then
+      has_global_candidate=1
+      global_candidate_order=$((${file_order[${global_candidate_paths[global_hit_index]}]:-0} * 10000000 + global_candidate_line_numbers[global_hit_index]))
     fi
     # A remaining config candidate gets the same sortable file-and-line key.
-    if ((si < ${#s_path[@]})); then
-      s_ok=1
-      s_key=$((${file_order[${s_path[si]}]:-0} * 10000000 + s_ln[si]))
+    if ((stem_hit_index < ${#stem_candidate_paths[@]})); then
+      has_stem_candidate=1
+      stem_candidate_order=$((${file_order[${stem_candidate_paths[stem_hit_index]}]:-0} * 10000000 + stem_candidate_line_numbers[stem_hit_index]))
     fi
     # Select the earlier candidate and consume duplicate matches once.
-    if ((g_ok && s_ok && g_key == s_key)); then
-      pick_path="${g_path[gi]}"
-      pick_line="${g_line[gi]}"
-      gi=$((gi + 1))
-      si=$((si + 1))
+    if ((has_global_candidate && has_stem_candidate && global_candidate_order == stem_candidate_order)); then
+      candidate_path="${global_candidate_paths[global_hit_index]}"
+      candidate_line="${global_candidate_lines[global_hit_index]}"
+      global_hit_index=$((global_hit_index + 1))
+      stem_hit_index=$((stem_hit_index + 1))
     # A remaining or earlier global candidate is the next user line to scan.
-    elif ((g_ok)) && { ((!s_ok)) || ((g_key < s_key)); }; then
-      pick_path="${g_path[gi]}"
-      pick_line="${g_line[gi]}"
-      gi=$((gi + 1))
+    elif ((has_global_candidate)) && { ((!has_stem_candidate)) || ((global_candidate_order < stem_candidate_order)); }; then
+      candidate_path="${global_candidate_paths[global_hit_index]}"
+      candidate_line="${global_candidate_lines[global_hit_index]}"
+      global_hit_index=$((global_hit_index + 1))
     else
-      pick_path="${s_path[si]}"
-      pick_line="${s_line[si]}"
-      si=$((si + 1))
+      candidate_path="${stem_candidate_paths[stem_hit_index]}"
+      candidate_line="${stem_candidate_lines[stem_hit_index]}"
+      stem_hit_index=$((stem_hit_index + 1))
     fi
     # A new user file resets conflict-marker state before its first candidate line.
-    if [ "$pick_path" != "$cur" ]; then
-      cur="$pick_path"
-      reset_merge_conflict_scan "$cur"
+    if [ "$candidate_path" != "$current_file_path" ]; then
+      current_file_path="$candidate_path"
+      reset_merge_conflict_scan "$current_file_path"
     fi
-    scan_line "$pick_path" "$pick_line"
+    scan_line "$candidate_path" "$candidate_line"
   done
 }
 
@@ -3031,12 +3025,14 @@ collect_z() {
   done <"$output"
 }
 
-# Run the optimized scan and return the coding agent's final Stop decision.
+# Remove only the temporary native scan workspace at exit; an empty path means setup created nothing to clean up.
 cleanup_post_turn_native_workspace() {
+  # A startup failure before workspace creation must never turn cleanup into a removal of an unspecified path.
   [ -n "${post_turn_native_workspace:-}" ] || return 0
   rm -rf -- "$post_turn_native_workspace"
 }
 
+# Run the optimized scan over tracked, staged, and non-ignored untracked changes to determine the coding agent's final Stop decision.
 main() {
   local root
   local WORKDIR
@@ -3101,8 +3097,7 @@ main() {
     untracked_paths=(${COLLECTED[@]+"${COLLECTED[@]}"})
   fi
 
-  # Fast exit: nothing changed, staged, or untracked, so there is nothing to
-  # scan and no batch work to set up.
+  # With no tracked, staged, or untracked changes, clear old recovery state and let the user finish without scan batches.
   if ((BAIL == 0 && ${#worktree_paths[@]} == 0 && ${#cached_paths[@]} == 0 && ${#untracked_paths[@]} == 0)); then
     clear_stop_reentry_state "$root" >/dev/null 2>&1
     return 0
@@ -3110,8 +3105,7 @@ main() {
 
   PENDING_FILES=$((${#worktree_paths[@]} + ${#cached_paths[@]} + ${#untracked_paths[@]}))
 
-  # Full-content gates apply to untracked files and unborn-HEAD worktree files;
-  # ordinary tracked changes stream from Git diffs without a whole-file cap.
+  # New files and repositories without a first commit need full-content admission; ordinary tracked edits stream only added hunks.
   if ((BAIL == 0)); then
     # A committed baseline limits full-content gates to untracked paths.
     if ((head_present)); then
@@ -3121,8 +3115,7 @@ main() {
     fi
   fi
 
-  # Pass 1: tracked changes (worktree vs HEAD), or full index contents when
-  # HEAD is unborn. Mirrors scan_tracked_changes/scan_worktree_diff_file.
+  # scan_tracked_changes: check tracked worktree edits first; before the first commit, inspect admitted whole files instead of changed hunks.
   local -a pass1=()
   local -A pass1_scanned=()
   local path
@@ -3195,8 +3188,7 @@ main() {
     fi
   fi
 
-  # Untracked pass: full-content scan of non-ignored untracked files, mirroring
-  # scan_untracked_changes/scan_untracked_file.
+  # scan_untracked_changes: check non-ignored new files last so added content is covered and ignored local state cannot block the user's turn.
   if ((BAIL == 0)); then
     local -a untracked_scan=()
     # Each non-ignored untracked path must scan in full or name its coverage gap.

@@ -1,14 +1,8 @@
 /**
- * Shared parsing and reference-validation primitives for the learning-loop fact extractors (footguns, lessons, patterns, decisions).
- * Owns the markdown reading, frontmatter parsing, freshness computation, and the evidence-reference checks that flag stale paths, out-of-bounds line
- * numbers, and broken `(search: ...)` anchors.
+ * Read learning-loop files and check their evidence for audit, stats, and dashboard users.
  *
- * Reference validation is intentionally conservative: ambiguous shorthand (bare source filenames, gitignored task paths, URLs/hostnames) is skipped
- * rather than reported, because a false "stale" finding on a clean checkout erodes trust in the whole audit.
- *
- * The regexes here are the canonical evidence grammar - footgun and lesson extractors must reuse them so the same string is judged identically
- * everywhere.
- * ADR-024 governs the line-number-versus-semantic-anchor policy these checks enforce.
+ * All extractors share this grammar so the same citation gets the same result; ADR-024 requires semantic anchors instead of line numbers.
+ * Skip ambiguous references rather than show users a stale-evidence warning that cannot be justified.
  */
 import type { BucketFreshness, ReadonlyFS } from "../../types.js";
 import {
@@ -27,7 +21,7 @@ export const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * Locate the visible active/resolved boundary while ignoring prose, examples, and longer headings.
  *
- * @param content - complete bucket Markdown whose character offsets must remain stable
+ * @param content - original bucket Markdown whose offsets stay stable; empty content has no resolved-entry boundary
  * @returns zero-based heading offset, or -1 when the bucket has no rendered boundary
  */
 export function findResolvedEntriesHeadingIndex(content: string): number {
@@ -37,13 +31,11 @@ export function findResolvedEntriesHeadingIndex(content: string): number {
 }
 
 /**
- * Matches file path evidence in multiple formats:
- * - `src/auth.ts` (backtick-wrapped file path)
- * - `src/auth.ts:42` (backtick-wrapped with line number)
- * - `src/auth.ts:42-50` (backtick-wrapped with line range)
- * - (lines 866-880) or (line 52) (prose-style)
- * Line numbers are discouraged per ADR-024; flagged for cleanup when found alongside a semantic anchor.
- * File paths alone remain valid evidence.
+ * Recognize file evidence, including legacy line references that validation must still diagnose.
+ *
+ * ADR-024 prohibits line numbers in evidence; recognizing old syntax does not authorize it.
+ * - Backtick-wrapped paths may carry a legacy line number or range.
+ * - Prose-style line references are recognized separately; plain file paths remain valid evidence.
  */
 export const EVIDENCE_PATTERN =
   /`[^`]+\.[a-zA-Z]{1,10}(?::[0-9]+(?:[-,][0-9]+)*)?`|\(lines?\s+[0-9]+/;
@@ -83,13 +75,11 @@ function normalizeSurfacePath(path: string): string {
 }
 
 /**
- * Find learning-loop artifact surfaces that exist on disk but sit outside the configured canonical location, which
- * is the signal that a project is splitting one concern across two directories.
+ * Find competing learning-loop locations so audit users can consolidate one concern into its configured home.
  *
  * @param fs - read-only filesystem adapter for the target project
- * @param canonicalPaths - configured locations, compared with trailing slashes normalized; at least one must exist
- *   or the result is empty, so a project that has not adopted the surface yet is never flagged
- * @param knownPaths - candidate surfaces to test against the canonical set
+ * @param canonicalPaths - configured locations; empty or wholly absent locations suppress duplicate-surface warnings
+ * @param knownPaths - candidate locations; empty means there are no competing surfaces to check
  * @returns existing non-canonical paths, sorted lexicographically for deterministic output; empty when none compete
  */
 export function findCompetingArtifactSurfaces(
@@ -97,6 +87,7 @@ export function findCompetingArtifactSurfaces(
   canonicalPaths: string[],
   knownPaths: string[],
 ): string[] {
+  // A project that has not adopted this surface cannot have a competing configured location.
   if (!canonicalPaths.some((path) => fs.exists(path))) return [];
 
   const canonicalSet = new Set(canonicalPaths.map(normalizeSurfacePath));
@@ -107,19 +98,14 @@ export function findCompetingArtifactSurfaces(
 }
 
 /**
- * Read a learning-loop location into a stable, sorted set of markdown entries.
- *
- * Handles both config shapes: a directory of `.md` entries, or a single flat `.md` file that counts as one entry.
+ * Load the user's configured learning-loop directory or flat Markdown file for deterministic reports.
  *
  * @param fs - read-only filesystem adapter for the target project
  * @param dir - directory path, or a single `.md` file path for flat-file config mode
- * @returns the location with its existence flag and entries, sorted lexicographically because downstream ordering
- *   and report output must be deterministic across machines, so directory listing order is never trusted. `README.md`
- *   and the generated `INDEX.md` are excluded, since counting generated metadata would invent phantom entries and
- *   force entry frontmatter onto a generated file. Files is empty when the location is absent or unreadable.
+ * @returns existence and sorted entries, excluding README/INDEX metadata; files is empty when absent or no eligible file is readable
  */
 export function listMarkdownEntries(fs: ReadonlyFS, dir: string): EntryDir {
-  // Flat-file mode: config points at a single .md file instead of a directory
+  // A user can configure one Markdown file instead of adopting category buckets.
   if (dir.endsWith(".md")) {
     const exists = fs.exists(dir);
     const content = exists ? fs.readFile(dir) : null;
@@ -136,9 +122,11 @@ export function listMarkdownEntries(fs: ReadonlyFS, dir: string): EntryDir {
             file.endsWith(".md") && file !== "README.md" && file !== "INDEX.md",
         )
         .sort((a, b) => a.localeCompare(b))
+        // Read each eligible entry once; a file lost during the listing cannot contribute invented content.
         .flatMap((file) => {
           const path = dir.endsWith("/") ? `${dir}${file}` : `${dir}/${file}`;
           const content = fs.readFile(path);
+          // A listed file may become unreadable; omit it rather than invent an empty learning entry.
           if (content === null) return [];
           return [{ path, content }];
         })
@@ -150,32 +138,33 @@ export function listMarkdownEntries(fs: ReadonlyFS, dir: string): EntryDir {
  * Separate a leading `---`-delimited YAML frontmatter block from the markdown body.
  * Recognizes frontmatter only at the very start of the content; a `---` later in the document is left in the body untouched.
  *
- * @param content - raw markdown file content
- * @returns the frontmatter text without its `---` fences (null when there is none) and the remaining body
+ * @param content - raw Markdown; empty content has no frontmatter and remains an empty body
+ * @returns unfenced frontmatter, or null when absent, plus the remaining body; empty fields retain their actual empty text
  */
 export function parseMarkdownFrontmatter(content: string): {
   frontmatter: string | null;
   body: string;
 } {
   const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  // Without an opening frontmatter block, the user's whole document stays available as entry text.
   if (!match) return { frontmatter: null, body: content };
   return { frontmatter: match[1] ?? "", body: match[2] ?? "" };
 }
 
 /**
- * Parse simple `key: value` pairs from a YAML frontmatter block.
- * Only handles flat scalar fields (sufficient for goat-flow's single-level frontmatter); nested structures, arrays, and multi-line scalars are
- * intentionally unsupported.
+ * Read flat `key: value` metadata for learning-loop reports; nested YAML and multiline values are unsupported.
  *
- * @param frontmatter - YAML frontmatter body without the surrounding `---` markers
- * @returns flat key/value fields parsed from the frontmatter block
+ * @param frontmatter - unfenced metadata text; empty means no fields were supplied
+ * @returns recognized scalar fields; an empty object supplies no metadata, while an empty value preserves a blank field
  */
 export function parseFrontmatterFields(
   frontmatter: string,
 ): Record<string, string> {
   const fields: Record<string, string> = {};
+  // Each recognized metadata line contributes one field to the user's entry report.
   for (const line of frontmatter.split("\n")) {
     const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*?)\s*$/);
+    // Prose and unsupported YAML lines cannot supply a reliable metadata field.
     if (!match || match[1] === undefined) continue;
     fields[match[1]] = match[2] ?? "";
   }
@@ -199,6 +188,7 @@ export function computeFreshness(
     return { days: null, band: "unknown" };
   }
   const reviewedMs = Date.parse(`${lastReviewed}T00:00:00Z`);
+  // An unparseable review date stays unknown rather than displaying a misleading freshness colour.
   if (Number.isNaN(reviewedMs)) return { days: null, band: "unknown" };
 
   const todayMs = Date.UTC(
@@ -209,6 +199,7 @@ export function computeFreshness(
   const days = Math.max(0, Math.floor((todayMs - reviewedMs) / 86400000));
   // Bands the dashboard colours: a month is fresh, a quarter is aging, anything older reads as stale.
   if (days <= 30) return { days, band: "fresh" };
+  // A review older than a month but within the quarter gets the dashboard's aging band.
   if (days <= 90) return { days, band: "aging" };
   return { days, band: "stale" };
 }
@@ -217,7 +208,7 @@ export function computeFreshness(
  * Count how many times a pattern matches across a string.
  * Pass a global (`/g`) regex - `matchAll` requires it, and without the flag the match count is not what a caller expects.
  *
- * @param content - text to scan
+ * @param content - text to scan; empty text contributes zero matches
  * @param pattern - global regular expression; non-global patterns will throw under matchAll
  * @returns the total number of non-overlapping matches; 0 when none match
  */
@@ -226,18 +217,17 @@ export function countMatches(content: string, pattern: RegExp): number {
 }
 
 /**
- * Remove `~~...~~` strikethrough spans before evidence is scanned, so a reference an author has struck through (marked as historical) is not counted
- * as live evidence.
+ * Remove struck-through evidence so an author's retired citation cannot trigger a current-reference warning.
  * Run this first in every reference check; otherwise retired anchors resurface as findings.
  *
- * @param content - markdown that may contain strikethrough spans, including multi-line ones
- * @returns the content with all strikethrough spans removed
+ * @param content - Markdown with optional multiline strikethrough; empty input stays empty
+ * @returns content without retired spans; empty means no live text remains to check
  */
 export function stripStrikethrough(content: string): string {
   return content.replace(/~~[\s\S]*?~~/g, "");
 }
 
-/** Check a concrete file:line reference for out-of-bounds lines or missing anchors. */
+/** Diagnose legacy file:line evidence for the report; null means no numeric reference was found to flag. */
 function getLineRefDiagnostic(
   fs: ReadonlyFS,
   filePath: string,
@@ -246,17 +236,20 @@ function getLineRefDiagnostic(
 ): string | null {
   const lineCount = fs.lineCount(filePath);
   const lineNumbers = Array.from(rawLines.matchAll(/[0-9]+/g)).flatMap(
+    // Keep concrete numeric references for ADR-024 diagnostics rather than guessing at unparseable tokens.
     (lineMatch) => {
       const lineNumber = Number.parseInt(lineMatch[0], 10);
       return Number.isNaN(lineNumber) ? [] : [lineNumber];
     },
   );
   const ref = `${filePath}:${rawLines}`;
+  // A citation outside the current file cannot guide the user to the claimed evidence.
   if (
     lineNumbers.some((lineNumber) => lineNumber < 1 || lineNumber > lineCount)
   ) {
     return ref;
   }
+  // A bare line number leaves the user without the stable citation required by ADR-024.
   if (!hasSemanticAnchor) return `${ref} (missing semantic anchor)`;
   return lineNumbers.length > 0
     ? `${ref} (line ref redundant, semantic anchor exists)`
@@ -266,12 +259,11 @@ function getLineRefDiagnostic(
 /**
  * Validate every file reference in one footgun section and tally the result.
  *
- * Reports a path as stale when the file no longer exists, and flags a `file:line` reference when the line is out of
- * bounds, lacks a semantic anchor, or carries a line number made redundant by an anchor (the ADR-024 contract).
+ * Missing files and prohibited line references become actionable diagnostics under ADR-024.
  *
  * @param fs - read-only filesystem adapter used to resolve and line-count referenced files
  * @param content - the footgun section's markdown; strikethrough is stripped first, so struck evidence is ignored
- * @returns counts plus the stale-path and invalid-line-reference lists; all empty when every reference is valid
+ * @returns reference counts and diagnostic lists; empty lists mean no stale or invalid citations, while counts may still be nonzero
  */
 export function summarizeFootgunRefs(
   fs: ReadonlyFS,
@@ -285,12 +277,15 @@ export function summarizeFootgunRefs(
     validSearchAnchors: 0,
   };
   const cleanedContent = stripStrikethrough(content);
+  // Anchors apply to their own citation line, so one valid anchor cannot excuse unrelated line references.
   for (const line of cleanedContent.split("\n")) {
     const hasSemanticAnchor = new RegExp(SEARCH_ANCHOR_REGEX.source).test(line);
     const fileRefs = line.matchAll(/`([^`]+):([0-9]+(?:[-,][0-9]+)*)`/g);
+    // Inspect every legacy numeric citation so the report identifies all references the author must repair.
     for (const match of fileRefs) {
       const filePath = match[1];
       const rawLines = match[2];
+      // Unsupported or exempt path syntax cannot support a concrete stale-reference warning.
       if (
         filePath === undefined ||
         rawLines === undefined ||
@@ -299,6 +294,7 @@ export function summarizeFootgunRefs(
       )
         continue;
       summary.totalRefs++;
+      // A deleted or moved evidence file needs a replacement citation before this entry can be trusted.
       if (!fs.exists(filePath)) {
         summary.staleRefs.push(`${filePath}:${rawLines}`);
         continue;
@@ -309,6 +305,7 @@ export function summarizeFootgunRefs(
         rawLines,
         hasSemanticAnchor,
       );
+      // Retain the precise line-reference problem so the user knows how to repair this citation.
       if (diagnostic !== null) {
         summary.invalidLineRefs.push(diagnostic);
         continue;
@@ -329,16 +326,23 @@ function scanBareEvidenceAnchors(
   cleanedContent: string,
   summary: FootgunRefSummary,
 ): void {
+  // Only explicitly labelled evidence lines use this bare-path citation grammar.
   for (const line of cleanedContent.split("\n")) {
+    // Ordinary prose references are handled by their own scanners and must not be counted twice.
     if (!BARE_EVIDENCE_ANCHOR_LINE_REGEX.test(line)) continue;
 
+    // Every bare path on the evidence line must remain usable from a clean checkout.
     for (const match of line.matchAll(new RegExp(FILE_REF_REGEX.source, "g"))) {
       const filePath = bareEvidenceAnchorPath(line, match);
+      // A token owned by another citation grammar is checked there instead.
       if (filePath === null) continue;
+      // Local workspace evidence cannot be recovered by another contributor from version control.
       if (flagGitignoredEvidenceAnchor(filePath, summary)) continue;
+      // Exempt paths must not generate unsupported stale-reference warnings.
       if (!isCheckableForStaleness(filePath, fs)) continue;
 
       summary.totalRefs++;
+      // An existing file remains usable evidence; a missing one is shown to the author as stale.
       if (fs.exists(filePath)) {
         summary.validRefs++;
       } else {
@@ -353,18 +357,22 @@ function scanBareEvidenceAnchors(
  *
  * @param line - the evidence-anchors line being scanned
  * @param match - the token match under test
- * @returns the file path, or null when the token is a glob, a `file:line` ref, a path already followed by a
- *   `(search: ...)` anchor, or not a file reference at all; each of those has its own scan
+ * @returns plain path, or null for ambiguous tokens and references handled by numeric or search-anchor scanners
  */
 function bareEvidenceAnchorPath(
   line: string,
   match: RegExpMatchArray,
 ): string | null {
   const filePath = match[1];
+  // An unmatched token supplies no path the report can validate.
   if (filePath === undefined) return null;
+  // A glob or elided path cannot identify one concrete evidence file for the reader.
   if (/[*?{}<>]|\.\.\./.test(filePath)) return null;
+  // Numeric citations need the dedicated ADR-024 diagnostic instead of a second bare-path count.
   if (/:[0-9]+/.test(match[0])) return null;
+  // Search-anchored citations are validated together with their literal search text.
   if (isFollowedBySearchAnchor(line, match)) return null;
+  // Non-file tokens cannot be verified as repository evidence.
   if (!isFileRef(filePath)) return null;
   return filePath;
 }
@@ -372,8 +380,7 @@ function bareEvidenceAnchorPath(
 /**
  * Flag a gitignored path used in a durable-evidence grammar as a policy violation.
  *
- * Local-state paths (plans/scratchpad/logs) vanish on a clean checkout, so they can never be durable anchors, and
- * the violation fires whether or not the file exists right now.
+ * Local-state paths (plans/scratchpad/logs) vanish on a clean checkout; flag them even when they exist in this workspace.
  *
  * @param filePath - the cited path
  * @param summary - reference summary the violation is recorded in
@@ -383,6 +390,7 @@ function flagGitignoredEvidenceAnchor(
   filePath: string,
   summary: FootgunRefSummary,
 ): boolean {
+  // A committed path is eligible for normal validation rather than this local-state warning.
   if (!isIntentionallyGitignored(filePath)) return false;
   summary.totalRefs++;
   summary.staleRefs.push(
@@ -411,18 +419,19 @@ function isFollowedBySearchAnchor(
     .startsWith("(search:");
 }
 
-/** `(search: "<needle>")` anchors: confirm the literal string still appears in
- *  the referenced file. A stale anchor is the mechanism that lets retired-code
- *  footguns pass validation while pointing at code that no longer exists. */
+/** For search anchors, confirm the literal string still appears so users are not directed to removed code. */
 function scanSearchAnchors(
   fs: ReadonlyFS,
   cleanedContent: string,
   summary: FootgunRefSummary,
   options: ReferenceValidationOptions = {},
 ): void {
+  // Each evaluated anchor contributes one citation to the user's reference summary.
   for (const anchor of evaluateSearchAnchors(fs, cleanedContent, options)) {
     summary.totalRefs++;
+    // A stale anchor identifies evidence the author must refresh instead of receiving a valid-reference count.
     if (anchor.status === "stale") {
+      // Some stale states have no displayable detail; retain only diagnostics the evaluator actually supplied.
       if (anchor.diagnostic !== null) summary.staleRefs.push(anchor.diagnostic);
       continue;
     }
@@ -433,15 +442,12 @@ function scanSearchAnchors(
 
 /**
  * Validate the file references in one lesson or pattern section, sharing the same staleness and ADR-024 line-reference rules as footguns.
- * Lessons cite full project-rooted paths (src/, lib/, docs/, .goat-flow/, ...), so this matches that prefix grammar and skips glob-like or
- * `...`-elided tokens that cannot be resolved to a single file.
+ * Check project-rooted paths; globs and elided tokens cannot identify one evidence file.
  *
  * @param fs - read-only filesystem adapter used to resolve and line-count referenced files
- * @param content - the lesson or pattern section's markdown; a section with no references
- *   is normal and simply produces zero counts
- * @param options - policy for evidence that may live in another repo; omitted means every
- *   referenced file must exist locally or it is reported as stale
- * @returns counts plus the stale-path and invalid-line-reference lists; all empty when every reference is valid
+ * @param content - lesson or pattern Markdown; empty text or no references yields zero counts
+ * @param options - external-evidence policy; omitted means missing local files are reported as stale
+ * @returns counts and diagnostic lists; empty lists mean no stale or invalid citations, while valid counts may be nonzero
  */
 export function summarizeLessonRefs(
   fs: ReadonlyFS,
@@ -458,15 +464,20 @@ export function summarizeLessonRefs(
   const pathPattern =
     /`((?:src|config|app|apps|lib|docs|scripts|setup|workflow|agents|\.goat-flow)\/[^`]+)`/g;
   const cleanedContent = stripStrikethrough(content);
+  // Check every concrete project-rooted citation that an author has kept as live evidence.
   for (const match of cleanedContent.matchAll(pathPattern)) {
     const ref = match[1];
+    // Missing captures, globs, and elided tokens cannot identify a file another contributor can open.
     if (ref === undefined || /[*?{}<>]|\.\.\./.test(ref)) continue;
     const filePath = ref.replace(/:[0-9]+(?:[-,][0-9]+)*$/, "");
+    // Local-state references are outside this general path scan and cannot increase its valid count.
     if (isIntentionallyGitignored(filePath)) continue;
     summary.totalRefs++;
+    // Existing evidence contributes to coverage; missing files are warnings unless the caller allows external evidence.
     if (fs.exists(filePath)) {
       summary.validRefs++;
     } else if (options.allowMissingFiles !== true) {
+      // External-evidence mode may excuse a missing local file; ordinary project evidence must resolve here.
       summary.staleRefs.push(filePath);
     }
   }
@@ -483,11 +494,14 @@ function collectInvalidLessonLineRefs(
   cleanedContent: string,
 ): string[] {
   const invalid: string[] = [];
+  // Compare each legacy numeric citation with anchors on the same line of the author's entry.
   for (const line of cleanedContent.split("\n")) {
     const hasSemanticAnchor = new RegExp(SEARCH_ANCHOR_REGEX.source).test(line);
+    // Retain a separate diagnostic for every prohibited numeric citation the author needs to replace.
     for (const match of line.matchAll(/`([^`]+):([0-9]+(?:[-,][0-9]+)*)`/g)) {
       const filePath = match[1];
       const rawLines = match[2];
+      // Missing or exempt evidence files are not suitable for an additional numeric-reference diagnosis.
       if (
         filePath === undefined ||
         rawLines === undefined ||
@@ -502,6 +516,7 @@ function collectInvalidLessonLineRefs(
         rawLines,
         hasSemanticAnchor,
       );
+      // Null means this scanner found no numeric problem to add to the user's report.
       if (diagnostic !== null) invalid.push(diagnostic);
     }
   }

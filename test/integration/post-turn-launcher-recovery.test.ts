@@ -24,6 +24,10 @@ import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
+import { PROFILES } from "../../src/cli/detect/agents.js";
+import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
+import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
   appendBoundedHookOutput,
   captureHookProcessUntilDeadline,
@@ -37,6 +41,12 @@ import {
 const launcherPath = resolve("workflow/hooks/run-with-bash.mjs");
 const stopMode = "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
 const scriptArgument = ".goat-flow/hooks/post-turn-safety.sh";
+const invalidClaudeStopInputs = [
+  '{"hook_event_name":"Stop","stop_hook_active":true}',
+  '{"hook_event_name":"PostToolUse","session_id":"claude-session","stop_hook_active":true}',
+  '{"hook_event_name":"Stop","session_id":"claude-session","stop_hook_active":"true"}',
+  "not JSON",
+];
 
 /** Run one user's Stop event through the canonical launcher; empty input deliberately exercises invalid context.
  *
@@ -56,23 +66,28 @@ function launchStop(
     sessionId?: string;
     input?: string;
     environment?: NodeJS.ProcessEnv;
+    responseMode?: string;
   } = {},
 ) {
-  return spawnSync(process.execPath, [launcherPath, scriptArgument, stopMode], {
-    cwd: projectRoot,
-    encoding: "utf8",
-    timeout: 5000,
-    input:
-      overrides.input ??
-      JSON.stringify({
-        hook_event_name: "Stop",
-        session_id: overrides.sessionId ?? "fixture-session",
-        turn_id: turnId,
-        stop_hook_active: isContinuation,
-        last_assistant_message: "unchanged content",
-      }),
-    env: { ...process.env, ...overrides.environment },
-  });
+  return spawnSync(
+    process.execPath,
+    [launcherPath, scriptArgument, overrides.responseMode ?? stopMode],
+    {
+      cwd: projectRoot,
+      encoding: "utf8",
+      timeout: 5000,
+      input:
+        overrides.input ??
+        JSON.stringify({
+          hook_event_name: "Stop",
+          session_id: overrides.sessionId ?? "fixture-session",
+          turn_id: turnId,
+          stop_hook_active: isContinuation,
+          last_assistant_message: "unchanged content",
+        }),
+      env: { ...process.env, ...overrides.environment },
+    },
+  );
 }
 
 /** Supply the minimum scanner result so assertions isolate the response a user sees.
@@ -208,6 +223,104 @@ function recoveryPaths(projectRoot: string) {
 }
 
 describe("continuation recovery", () => {
+  for (const missingDependency of [
+    "post-turn-safety.sh",
+    "hook-launch-runtime.mjs",
+    "run-with-bash.mjs",
+  ]) {
+    it(`bounds the registered Claude Stop when ${missingDependency} is missing`, () =>
+      withProject((projectRoot) => {
+        writeScanner(
+          projectRoot,
+          "printf 'unexpected scanner launch\\n' >&2\nexit 2",
+        );
+        for (const name of ["run-with-bash.mjs", "hook-launch-runtime.mjs"]) {
+          writeFileSync(
+            join(projectRoot, ".goat-flow/hooks", name),
+            readFileSync(resolve("workflow/hooks", name)),
+          );
+        }
+        const spec = getHookSpec("post-turn-safety")!;
+        writeAgentHookState(projectRoot, PROFILES.claude, spec, true);
+        const settings = JSON.parse(
+          readFileSync(join(projectRoot, ".claude/settings.json"), "utf8"),
+        );
+        const handler = settings.hooks.Stop[0].hooks[0];
+        const command = agentHookSpawnDescriptor({ form: "argv", ...handler });
+        rmSync(join(projectRoot, ".goat-flow/hooks", missingDependency));
+        // Spawns the exact saved argv inside this disposable project; native Claude identity needs no borrowed Codex turn_id.
+        const replay = (isStopHookActive: boolean, input?: string) =>
+          spawnSync(command.command, command.args, {
+            cwd: projectRoot,
+            encoding: "utf8",
+            timeout: 5000,
+            env: { ...process.env, CLAUDE_PROJECT_DIR: projectRoot },
+            input:
+              input ??
+              JSON.stringify({
+                session_id: "claude-bootstrap-session",
+                hook_event_name: "Stop",
+                stop_hook_active: isStopHookActive,
+              }),
+          });
+        assert.equal(replay(false).status, 2);
+        for (let continuation = 0; continuation < 3; continuation += 1) {
+          const repeated = replay(true);
+          assert.equal(repeated.status, 0, repeated.stderr);
+          assert.match(repeated.stderr, /ending repeated Stop.*no clean scan/u);
+          assert.doesNotMatch(repeated.stderr, /unexpected scanner launch/u);
+        }
+        for (const invalidInput of invalidClaudeStopInputs) {
+          assert.equal(replay(true, invalidInput).status, 2, invalidInput);
+        }
+        assert.equal(replay(false).status, 2);
+      }));
+  }
+  for (const startupFailure of ["missing script", "invalid timeout"] as const) {
+    it(`bounds Claude launcher ${startupFailure} without releasing repaired safety findings`, () =>
+      withProject((projectRoot) => {
+        const environment: NodeJS.ProcessEnv = {};
+        if (startupFailure !== "missing script")
+          writeScanner(projectRoot, "exit 0");
+        if (startupFailure === "invalid timeout")
+          environment.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS = "invalid";
+        // Replay native Claude identity without borrowing Codex's turn_id field.
+        const replay = (isStopHookActive: boolean, input?: string) =>
+          launchStop(projectRoot, "claude-turn", isStopHookActive, {
+            responseMode: "post-turn",
+            environment,
+            input:
+              input ??
+              JSON.stringify({
+                hook_event_name: "Stop",
+                session_id: "claude-session",
+                stop_hook_active: isStopHookActive,
+              }),
+          });
+        const initial = replay(false);
+        assert.equal(initial.status, 2, initial.stderr);
+        assert.match(initial.stderr, /hook unavailable/u);
+        for (let continuation = 0; continuation < 3; continuation += 1) {
+          const repeated = replay(true);
+          assert.equal(repeated.status, 0, repeated.stderr);
+          assert.match(repeated.stderr, /ending repeated Stop.*no clean scan/u);
+        }
+        for (const invalidInput of invalidClaudeStopInputs) {
+          assert.equal(replay(true, invalidInput).status, 2, invalidInput);
+        }
+        assert.equal(replay(false).status, 2);
+        // A repaired scanner's real block stays authoritative even on an active continuation.
+        writeScanner(
+          projectRoot,
+          "printf 'confirmed safety finding\\n' >&2\nexit 2",
+        );
+        const repaired = launchStop(projectRoot, "claude-turn", true, {
+          responseMode: "post-turn",
+        });
+        assert.equal(repaired.status, 2, repaired.stderr);
+        assert.match(repaired.stderr, /confirmed safety finding/u);
+      }));
+  }
   // Both scanner modes must end broken-check retries and still block the user's next real finding.
   for (const scannerMode of ["native", "compatibility"]) {
     it(

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.18.0 - 2026-10-11
+
 ### Added
 
 - **Content-audit coverage** - Text, Markdown and JSON name the three scanners and explain that a pass does not verify project facts.

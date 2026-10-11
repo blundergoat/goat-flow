@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-11
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, Stop recovery, and policy-module correctness. Execution cost and performance live in [hook-performance.md](hook-performance.md); scanner blind spots in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -45,9 +45,9 @@ last_reviewed: 2026-10-03
 **Severity:** INTEGRATION
 **Decision changed:** Exercise launcher-owned timeout and invalid-output branches through source and packed consumers before registering model-visible feedback.
 **Trigger phase:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-10-03
+**Incident count:** 4 | **Latest occurrence:** 2026-10-11
 
-**Prevention:** Route every launcher-owned failure through the neutral unavailable envelope and provider adapter, and keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
+**Prevention:** Route managed launcher failures through the neutral unavailable envelope and provider adapter. Test each provider's startup recovery through its saved registration, including missing runtime and launcher files, and keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
 
 **Symptoms:** A migrated child result used the provider adapter, but the timeout and adapter-failure branches returned through the legacy unavailable reporter, so the terminal showed human stderr while Codex received empty stdout and a stopped analyzer looked silent to the model.
 **Recurrence 2026-09-25:** The disabled-policy shortcut exited before the provider adapter and returned empty stdout to Antigravity, which requires an explicit allow object. `workflow/hooks/run-with-bash.mjs` (search: `policyChoiceBeforeBash`) now emits that object without launching Bash; `test/unit/hook-launcher.test.ts` (search: `returns the provider allow response`) checks both policies and the Codex/Claude empty-success controls.
@@ -55,6 +55,8 @@ last_reviewed: 2026-10-03
 **Recurrence 2026-10-03:** Launcher failures bypassed scanner-owned retry state and repeatedly blocked active Stop deliveries.
 Keep one launcher allowance per verified user turn across changing faults; findings still block.
 Evidence: `workflow/hooks/hook-launch-runtime.mjs` (search: `applyManagedStopRecovery`).
+
+**Recurrence 2026-10-11:** Claude startup failures still exited 2 for an initial Stop and three active continuations after Codex recovery was added. The bootstrap can fail before the launcher reads stdin. Valid Claude active Stop input now ends only that startup failure with an unavailable warning; initial, malformed and genuine-finding responses still block. Evidence: `src/cli/server/agent-hook-command.ts` (search: `Claude's bootstrap must handle broken dependencies`), `workflow/hooks/run-with-bash.mjs` (search: `ending repeated Stop after launcher infrastructure failure`), `test/integration/post-turn-launcher-recovery.test.ts` (search: `bounds the registered Claude Stop`). These are registered-handler replays, not live provider-delivery proof.
 
 ## Footgun: One shared hook-output limit can erase a completed safety result
 

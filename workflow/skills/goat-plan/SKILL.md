@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "Use when creating, updating, reconciling, or resuming milestone plans."
-goat-flow-skill-version: "1.17.0"
+goat-flow-skill-version: "1.18.0"
 ---
 # /goat-plan
 
@@ -37,7 +37,7 @@ Use for milestones, replans, rescope, or plan resume in `.goat-flow/plans/<activ
 3. **Inspect existing plan state only after retrieval.**
 - Explicit plan paths select that directory; milestone paths select their parent. Otherwise scan the valid advisory `.active` subdir.
 - If missing/invalid, list non-archive dirs and recent `M*.md`, ask which is current, and offer to update `.active`; this is not setup failure.
-- For stale plans, compare code and modification dates; plans are gitignored.
+- For stale plans, compare code and modification dates.
 
 ### Reconcile Existing Plan State
 
@@ -65,7 +65,7 @@ Plans are local workflow state, not a setup invariant. Mode R is read-only: repo
 
 **4: File-Write (Standard+)** - explicit planning artifacts for Standard / System / Infrastructure; resolve missing destination/scope before writing.
 
-**CHECKPOINT (Path-Only Intake):** "Mode: Path-Only Intake. [path]: [status]. Plan pointer: [state]. Next action needed."
+**CHECKPOINT (Path-Only Intake):** "Mode: Path-Only Intake. Plan pointer: [state]. Active set: [IDs/statuses]. Cap provenance: [value; config/default/session override]. Session milestone: [ID/unselected]. Next item: [item]. Action needed."
 
 **CHECKPOINT (Reconcile):** "Mode R. State: [status]. Corrections: [changes]. No writes."
 
@@ -228,4 +228,4 @@ Verify every implementation task and, when `ISSUE.md` exists, every ISSUE Tasks 
 
 Emit the selected mode's result: resume checkpoint then authorized ACT; 0 orientation; R reconciliation; 1 delta; 2 inline milestones; 3/4 paths, milestone names/objectives, task/exit/test counts, risks, and stop condition.
 
-**Terse-first:** Lead directly; one sentence per bullet; strip qualifiers and closing offers. Gates retain required prompts and evidence.
+**Terse-first:** One sentence per bullet; preserve gate prompts and evidence.
