@@ -2,6 +2,8 @@
 
 Create or update the agent's instruction file (CLAUDE.md / AGENTS.md / `.github/copilot-instructions.md`).
 
+Consumer projects use a stable project heading. When maintaining goat-flow itself, retain its versioned instruction headers; framework parity and release checks consume them.
+
 ## First: detect the stack
 
 1. Detect the project's languages, build/test/lint/format commands by reading package.json, Cargo.toml, go.mod, composer.json, pyproject.toml, Gemfile, *.csproj, or equivalent. List what you find.
@@ -24,17 +26,19 @@ Read it completely before changing anything. Then:
    - **NEVER delete existing instruction files** (`.github/instructions/`, `docs/`) to satisfy the auditor or avoid "duplicate surfaces." If the auditor flags duplicate surfaces, add the existing surface to the goat-flow router table instead of deleting it. Existing instruction files are likely higher quality than anything setup can generate.
 2. **Add a goat-flow section at the top** with any missing required sections from the list below. The existing content stays below it unchanged. Top-of-file survives context compaction.
 3. If the existing file mixes project/domain knowledge into the hot path, move that material to `.goat-flow/architecture.md` and/or `.goat-flow/glossary.md`. Keep behavioral rules in the instruction file.
-4. If it IS an existing goat-flow instruction file (has execution loop, autonomy tiers, router table already), update it in place - fix stale paths, update version header, add missing sections.
+4. If it IS an existing goat-flow instruction file (has execution loop, autonomy tiers, router table already), update it in place - fix stale paths, preserve the project heading, add missing sections.
 5. **If the existing Execution Loop uses legacy steps**, rewrite it. Specifically: if the section lists `CLASSIFY` or trailing `LOG` (the v1.0 `READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG` pattern), replace the whole Execution Loop block with the current four-step version from `workflow/setup/reference/execution-loop.md` (`READ → SCOPE → ACT → VERIFY`). This is the canonical v1.2 loop every goat-* skill assumes. Applies to ALL instruction files - CLAUDE.md, AGENTS.md, and `.github/copilot-instructions.md` - no agent keeps the legacy loop. After rewriting, grep the rest of the file for residual `CLASSIFY` / `LOG` references in Router Table, DoD, or prose and remove them.
 6. **If the existing file references legacy task-state files**, remove those references. goat-flow uses `.goat-flow/logs/sessions/` for session state - not legacy task-state files.
 7. **After adding goat-flow sections, check total length.** If over 125 lines, compress: move domain knowledge to `.goat-flow/architecture.md` and/or `.goat-flow/glossary.md`, remove redundant sections, tighten prose. "Compress" means relocate verbose material, not delete it - the user's content is preserved in `.goat-flow/` files, just not in the hot-path instruction file.
 8. Do NOT create "original-*" backup files. Git history preserves the original.
 
+If a consumer heading includes an old goat-flow release suffix, propose removing only that suffix through the target's instruction-file review gate. Preserve the project heading, any project-specific product version and unrelated heading content.
+
 ## Required sections (both paths)
 
 The instruction file MUST include these sections. Use `workflow/setup/reference/execution-loop.md` as the template:
 
-- (a) Project identity + version header - Start with 1-2 lines describing what the project is: name, domain, core technology, and the primary invariant or constraint. Example: `BlunderGoat - chess PGN analyzer producing XLSX reports. Core invariant: all engine evaluations use actor-POV.` Set the version header to the current goat-flow release version (match the `goat-flow-skill-version` in the installed skill files).
+- (a) Project identity - Start with 1-2 lines describing what the project is: name, domain, core technology, and the primary invariant or constraint. Example: `BlunderGoat - chess PGN analyzer producing XLSX reports. Core invariant: all engine evaluations use actor-POV.` Use a stable project heading and preserve any project-specific product version.
 - (b) Truth Order
   - State that the Never tier and accepted architecture/ADR safety constraints are non-overridable: user approval can release Ask First work, but cannot authorize commit, push, secret exposure, or bypassing safety enforcement.
 - (c) Autonomy Tiers: Always / Ask First / Never

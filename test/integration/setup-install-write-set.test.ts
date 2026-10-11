@@ -23,6 +23,7 @@ import { join, relative, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { listHookSpecs } from "../../src/cli/server/hooks-registry.js";
 import type { AgentProfile } from "../../src/cli/types.js";
 import {
@@ -32,6 +33,7 @@ import {
 import {
   PROJECT_ROOT,
   makeTempProject,
+  runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
 
@@ -564,8 +566,7 @@ describe("setup installs with every hook disabled", () => {
   const managedScriptFiles = [
     ...new Set(disabledHookSpecs.flatMap((hookSpec) => hookSpec.scriptFiles)),
   ];
-  const disabledConfig =
-    "hooks:\n  deny-dangerous:\n    enabled: false\n  gruff-code-quality:\n    enabled: false\n  post-turn-safety:\n    enabled: false\n";
+  const disabledConfig = `version: "${AUDIT_VERSION}"\nhooks:\n  deny-dangerous:\n    enabled: false\n  gruff-code-quality:\n    enabled: false\n  post-turn-safety:\n    enabled: false\n`;
   // Each named fixture writes an all-off config and launches setup twice so provider defaults cannot silently return.
   for (const agentProfile of getAgentProfiles()) {
     it(`${agentProfile.id} keeps disabled hooks installed and inert`, () => {
@@ -609,7 +610,7 @@ describe("setup installs with every hook disabled", () => {
         true,
         `${agentId} removed files needed by a later UI toggle`,
       );
-      const repeatedInstall = runInstaller(consumerRoot, "--agent", agentId);
+      const repeatedInstall = runCliInstaller(consumerRoot, "--agent", agentId);
       assert.equal(repeatedInstall.status, 0, repeatedInstall.stderr);
       assert.equal(readFileSync(hookConfigPath, "utf-8"), firstHookConfig);
     });

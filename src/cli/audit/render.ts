@@ -258,6 +258,14 @@ function renderTextContentFindings(
   content: ContentReport,
   lines: string[],
 ): void {
+  if (content.coverage) {
+    lines.push(`  ${DIM}Coverage:${RESET}`);
+    for (const scanner of content.coverage.scanners) {
+      lines.push(`  ${DIM}- ${scanner}${RESET}`);
+    }
+    lines.push(`  ${DIM}Limit: ${content.coverage.limitation}${RESET}`);
+    lines.push("");
+  }
   if (content.findings.length === 0) {
     lines.push(`  ${DIM}No content issues detected.${RESET}`);
     return;
@@ -465,6 +473,13 @@ function renderMdContent(content: ContentReport, lines: string[]): void {
   lines.push(
     `## Cold-Path Content Lint: ${mdScopeStatus(content.status)} (${content.warnings} warning(s), ${content.infos} info, ${content.filesScanned} file(s) scanned)`,
   );
+  if (content.coverage) {
+    lines.push("", "**Coverage:**");
+    for (const scanner of content.coverage.scanners) {
+      lines.push(`- ${scanner}`);
+    }
+    lines.push("", `**Limit:** ${content.coverage.limitation}`);
+  }
   if (content.findings.length === 0) {
     lines.push("");
     lines.push("No content issues detected.");

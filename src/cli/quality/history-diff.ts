@@ -20,6 +20,11 @@ import {
   type QualityHistoryEntry,
 } from "./history.js";
 import { isRealCalendarDate } from "./schema-parser.js";
+import {
+  isLegacyQualityRubric,
+  isSameQualityAssessmentTarget,
+} from "./rubric.js";
+import { buildQualityRepeatSpreads } from "./repeat-spread.js";
 
 /**
  * Rank a finding severity for user-facing sort order.
@@ -214,12 +219,15 @@ function assessmentComparisonWarnings(
   newerReport: SavedQualityReport,
 ): string[] {
   const warnings: string[] = [];
-  // A new rubric or project scope changes what a score means, even when both runs used the same agent.
-  const targetFields = ["rubric_version", "scope", "project_path"] as const;
-  // A changed rubric or project scope prevents the score delta from measuring the same target.
-  if (targetFields.some((field) => olderReport[field] !== newerReport[field])) {
+  // A changed rubric or scope prevents the score delta from measuring the same target, even for the same agent.
+  if (!isSameQualityAssessmentTarget(olderReport, newerReport)) {
     warnings.push(
-      "Assessment rubric, scope, or project differs; score deltas do not measure the same assessment target.",
+      "Assessment rubric or scope differs; score deltas do not measure the same assessment target.",
+    );
+  }
+  if ([olderReport, newerReport].some(isLegacyQualityRubric)) {
+    warnings.push(
+      "Legacy rubric identity is unavailable; historical package versions share one segment but do not establish unchanged scoring rules.",
     );
   }
   const olderContext = olderReport.assessment_context;
@@ -504,9 +512,14 @@ export function buildQualityDiff(
           })
           .sort(diffRowSort);
 
+  const spreads = buildQualityRepeatSpreads(entries);
   return {
     ok: true,
     diff: {
+      repeatSpread: {
+        from: spreads.get(sourceEntry.id) ?? null,
+        to: spreads.get(targetEntry.id) ?? null,
+      },
       from: sourceEntry,
       to: targetEntry,
       comparisonWarnings: assessmentComparisonWarnings(

@@ -33,7 +33,7 @@ function isPolicyHook(hookId: string): boolean {
 /**
  * Bind offline policy proof to this installation's complete runtime revision.
  * Bytes and filesystem revisions both participate so repairing old bytes cannot revive earlier proof.
- * Reads trusted local files only. Error behavior: returns null for missing, redirected or unreadable dependencies.
+ * Reads trusted local files only. Error behavior: missing or redirected files return null, and the catch swallows later read failures as null.
  *
  * @param projectPath - selected checkout whose installed files supply the proof identity
  * @param agentId - provider whose managed hook directory is inspected
@@ -169,7 +169,7 @@ function hasCurrentHookRuntimeProof(
   );
 }
 
-/** Read only hook proof events. Error behavior: unreadable logs return no events and require fresh verification. */
+/** Read only hook proof events. Error behavior: it swallows an unreadable log as no events, so fresh verification is required. */
 function readHookEvidenceEvents(projectPath: string): EvidenceEnvelope[] {
   try {
     // Filtering before the limit prevents unrelated activity from evicting hook proof.

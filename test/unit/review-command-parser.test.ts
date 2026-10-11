@@ -38,7 +38,7 @@ import {
   reviewReportTemplate,
 } from "./review-validate.helpers.js";
 
-/** Run the controlling source CLI from another directory; empty input deliberately provides no report evidence. */
+/** Spawns the controlling source CLI from another directory; empty input deliberately provides no report evidence. */
 function reviewCli(cwd: string, args: string[], input = "") {
   return spawnSync(
     process.execPath,
@@ -422,6 +422,7 @@ describe("review validate CLI", () => {
 });
 
 describe("saved review project selection", () => {
+  // Writes two reviewed projects keeping the caller's directory apart from the reviewed one, so a report path is never taken as the project.
   it("validates saved reports and drafts from another cwd without moving the input operand", (test) => {
     const root = createReviewedProject(test);
     const caller = createReviewedProject(test);
@@ -473,7 +474,7 @@ describe("saved review project selection", () => {
 });
 
 describe("review CLI metadata boundaries", () => {
-  // Real PR objects prove that finding labels, provenance totals, and CLI exit status stay tied to the same report.
+  // Real PR objects prove finding labels, provenance totals, and CLI exit status must stay tied to the same report.
   it("counts one provenance class per finding and ignores labels mentioned in PR prose", (test) => {
     const { projectRoot, base, head } = createVersionedReviewedProject(test);
     const control = withIntegrityFields(

@@ -1,9 +1,8 @@
 /**
- * Replays configured Gruff and post-turn commands with fixed offline payloads.
+ * Replays configured Gruff and post-turn commands with fixed offline payloads for `goat-flow hooks verify`.
  *
- * Use when a user verifies whether the exact command in agent config returns a recognized result without launching a provider model or retaining hook
- * output.
- * Shared report contracts remain in the deny-runtime evidence module.
+ * Use when a user checks that the exact command in agent config returns a recognized result, without launching a provider model.
+ * Shared report contracts remain in the deny-runtime evidence module, and hook output is never kept.
  */
 import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
@@ -359,8 +358,10 @@ const POST_TURN_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
     id: HOOK_VERIFICATION_CONTRACTS["post-turn-hook"].requiredScenarioIds[0],
     label: "Valid Stop input returns one recognized safety result",
     expected: "typed-result",
+    // Codex's managed launcher rejects a Stop without a turn identity before scanning, so the valid probe needs one to reach the user's scanner.
     payload: JSON.stringify({
       session_id: "goat-flow-configured-hook-verification",
+      turn_id: "goat-flow-configured-hook-verification",
       stop_hook_active: false,
       hook_event_name: "Stop",
     }),
@@ -370,8 +371,10 @@ const POST_TURN_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
     id: HOOK_VERIFICATION_CONTRACTS["post-turn-hook"].requiredScenarioIds[1],
     label: "Wrong-event input remains an incomplete Stop result",
     expected: "incomplete",
+    // A complete identity isolates the wrong event as the only invalid field.
     payload: JSON.stringify({
       session_id: "goat-flow-configured-hook-verification",
+      turn_id: "goat-flow-configured-hook-verification",
       stop_hook_active: false,
       hook_event_name: "PostToolUse",
     }),
@@ -530,21 +533,38 @@ function classifyPostTurnProbe(
     return "error";
   }
   const capturedProcessText = `${execution.stdout}\n${execution.stderr}`;
-  // Launcher startup failures are unavailable rather than valid safety-scan outcomes.
-  if (/hook unavailable|managed root unavailable/iu.test(capturedProcessText)) {
+  // Rejected Stop input is an incomplete result; it is checked first because the managed launcher reports it under an UNAVAILABLE label.
+  if (/invalid Stop payload|\[input-invalid\]/iu.test(capturedProcessText)) {
+    return "incomplete";
+  }
+  // Managed replies lead with an outcome label, and the detail after it quotes scanner text and byte counts such as "at least 70000 stdout".
+  //
+  // - Launcher failures and ended recoveries exit zero too, so their wording is checked before any scanner wording.
+  // - Match whole labels and phrases only; a loose word such as "at" also appears in those byte counts.
+  if (
+    /hook unavailable|managed root unavailable|no clean scan was recorded|post-turn-safety: UNAVAILABLE\b/iu.test(
+      capturedProcessText,
+    )
+  ) {
     return "unavailable";
   }
-  // Invalid input or incomplete coverage must stay distinct from a clean Stop result.
-  if (/scan incomplete|invalid Stop payload/iu.test(capturedProcessText)) {
+  // Incomplete coverage must stay distinct from a clean Stop result.
+  if (
+    /scan incomplete|post-turn-safety: INCOMPLETE\b/iu.test(capturedProcessText)
+  ) {
     return "incomplete";
   }
   // A concrete content finding asks the coding agent to continue fixing the user's change.
   if (
-    /fix or remove the flagged changed content|post-turn-safety: .* at /iu.test(
+    /fix or remove the flagged changed content|post-turn-safety: BLOCK\b/iu.test(
       capturedProcessText,
     )
   ) {
     return "finding";
+  }
+  // Any other continuation request, such as the launcher's reply when its adapter is missing, never records a clean scan.
+  if (/"decision":"(?:block|continue)"/u.test(capturedProcessText)) {
+    return "unavailable";
   }
   // A quiet zero exit is the hook's complete clean result for the selected checkout.
   if (execution.exitCode === 0) return "clean";

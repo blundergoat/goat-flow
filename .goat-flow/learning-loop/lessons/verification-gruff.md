@@ -1,18 +1,19 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-09-19
+last_reviewed: 2026-10-11
 ---
 
-**Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-testing.md](verification-testing.md).
+**Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-size-gates.md](verification-size-gates.md).
 
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
 **Status:** active | **Created:** 2026-05-25
+**Severity:** INTEGRATION
 **Decision changed:** Treat a human-readable comment, boolean name, or compact test as unfinished until the targeted analyzer accepts the exact source shape; read the installed rule before a second rewrite.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 7 | **Latest occurrence:** 2026-08-18
-**Merged:** 2026-09-05 - one static-gate recurrence (2026-08-09) moved to `.goat-flow/learning-loop/lessons/verification-formatting.md`, three size-gate recurrences (2026-08-09 x2, 2026-08-28) moved to `.goat-flow/learning-loop/lessons/verification-testing.md`, and two ratchet recurrences (2026-08-16, 2026-08-18) moved to the hidden-complexity lesson below; this entry keeps the analyzer-vocabulary incidents.
+**Incident count:** 8 | **Latest occurrence:** 2026-10-11
+**Merged:** 2026-09-05 - one static-gate recurrence (2026-08-09) moved to `.goat-flow/learning-loop/lessons/verification-formatting.md`, three size-gate recurrences (2026-08-09 x2, 2026-08-28) moved to `.goat-flow/learning-loop/lessons/verification-size-gates.md`, and two ratchet recurrences (2026-08-16, 2026-08-18) moved to the hidden-complexity lesson below; this entry keeps the analyzer-vocabulary incidents.
 
 **Prevention:** For Gruff-driven comment work, read `.goat-flow/skill-docs/playbooks/code-comments.md`, patch one file or cohesive cluster, then rerun `npx gruff-ts analyse <path>`. If a clear comment stays flagged, open the installed rule in `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` before changing wording or placement again; the rules match whole-word markers and same-line forms, not meaning. Keep internal boolean state in `is...`/`has...` grammar, give each small outcome set direct assertions instead of a test-level loop, and let one concise fixture comment carry purpose and side effect together when the rule reads only the nearest source shape. If a rename replaces a comment, grep the old identifier. Evidence anchors: `src/cli/server/decoders.ts` (search: `Swallows parse errors into the shared decoder failure shape`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/learning-loop/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
 
@@ -20,12 +21,15 @@ last_reviewed: 2026-09-19
 
 **Root cause:** Human-readable comments, compact boolean names, and a local rename were treated as complete before checking analyzer vocabulary, test structure, and parallel type surfaces.
 
-**Recurrence 2026-08-09:** A hook-result cap had a plain-English rationale directly above it, but gruff-ts 0.4.0 still reported `docs.magic-threshold-without-rationale`; the same scan found eight boolean fields without intent prefixes and one assertion loop. The rule's same-line `Cap:` form, `is...`/`has...` names, and explicit outcome assertions took the targeted result from 10 advisories to zero. `src/cli/hook-contracts.ts` (search: `Cap: matches both shipped hook limits`), `test/unit/hook-result-contract.test.ts` (search: `assertHookOutcomeRemainsValid`).
-**Recurrence 2026-08-09 (runtime adapter):** Eight documentation-shape advisories survived 16 passing contract tests: two threshold comments outside the recognized same-line form, two functions without explicit error or invariant wording, and three provider fixture clusters without nearby purpose comments. `workflow/hooks/hook-provider-adapters.mjs` (search: `Error behavior: returns one bounded invalid reason`), `test/unit/hook-provider-adapters.test.ts` (search: `Fixture covers feedback-bearing host shapes`).
-**Recurrence 2026-08-09 (launcher and registry):** Fourteen issues after focused behaviour passed: two files over the length threshold, public contracts without invariant wording, and fixture comments that could not express purpose and side effect as separate adjacent comments. Moving launch decoding into the provider adapter kept the runtime files below 750 lines, and one concise fixture comment now carries both meanings; the three remaining process-execution findings matched the Gruff 0.4 warning baseline that Gruff 0.5 later reclassified as advisory. `workflow/hooks/hook-provider-adapters.mjs` (search: `prepareProviderHookResultDelivery`), `workflow/hooks/run-with-bash.mjs` (search: `function runHookProcessUntilDeadline`), `test/unit/hook-launcher.test.ts` (search: `Fixture purpose: prove direct output parity`), `.gruff-ts.yaml` (search: `security.process-exec:`).
-**Recurrence 2026-08-10:** Formatting a Gruff contract test exposed five fixture-purpose and test-loop advisories; named cases cleared the loops, but separate adjacent purpose and side-effect comments produced six follow-up advisories until one concise comment carried both. `test/integration/hook-provider-contracts.test.ts` (search: `Fixture purpose: creates an edit and runs Gruff`), `test/integration/gruff-code-quality-contract.test.ts` (search: `Fixture purpose: proves helper bypass`).
-**Recurrence 2026-08-17:** A `renderPriorReportContext` docblock described the stable behaviour twice, but `docs.missing-invariant-doc` stayed until the wording used the marker `contract`. `src/cli/prompt/compose-quality-common.ts` (search: `continuity contract`), `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasInvariantMarker`).
-**Recurrence 2026-08-18:** A ratchet comment explained a numeric policy as a "floor", but `docs.magic-threshold-without-rationale` stayed because that synonym is outside the marker vocabulary; "threshold" cleared it. `scripts/gruff-warning-ratchet-checks.mjs` (search: `Coverage threshold retained`), `package.json` (search: `@blundergoat/gruff-ts`).
+**Incident ledger:**
+
+- **Recurrence 2026-08-09:** A hook-result cap had a plain-English rationale directly above it, but gruff-ts 0.4.0 still reported `docs.magic-threshold-without-rationale`; the same scan found eight boolean fields without intent prefixes and one assertion loop. The rule's same-line `Cap:` form, `is...`/`has...` names, and explicit outcome assertions took the targeted result from 10 advisories to zero. `src/cli/hook-contracts.ts` (search: `Cap: matches both shipped hook limits`), `test/unit/hook-result-contract.test.ts` (search: `assertHookOutcomeRemainsValid`).
+- **Recurrence 2026-08-09 (runtime adapter):** Eight documentation-shape advisories survived 16 passing contract tests: two threshold comments outside the recognized same-line form, two functions without explicit error or invariant wording, and three provider fixture clusters without nearby purpose comments. `workflow/hooks/hook-provider-adapters.mjs` (search: `Error behavior: returns one bounded invalid reason`), `test/unit/hook-provider-adapters.test.ts` (search: `Fixture covers feedback-bearing host shapes`).
+- **Recurrence 2026-08-09 (launcher and registry):** Fourteen issues after focused behaviour passed: two files over the length threshold, public contracts without invariant wording, and fixture comments that could not express purpose and side effect as separate adjacent comments. Moving launch decoding into the provider adapter kept the runtime files below 750 lines, and one concise fixture comment now carries both meanings; the three remaining process-execution findings matched the Gruff 0.4 warning baseline that Gruff 0.5 later reclassified as advisory. `workflow/hooks/hook-provider-adapters.mjs` (search: `prepareProviderHookResultDelivery`), `workflow/hooks/run-with-bash.mjs` (search: `function runHookProcessUntilDeadline`), `test/unit/hook-launcher.test.ts` (search: `Fixture purpose: prove direct output parity`), `.gruff-ts.yaml` (search: `security.process-exec:`).
+- **Recurrence 2026-08-10:** Formatting a Gruff contract test exposed five fixture-purpose and test-loop advisories; named cases cleared the loops, but separate adjacent purpose and side-effect comments produced six follow-up advisories until one concise comment carried both. `test/integration/hook-provider-contracts.test.ts` (search: `Fixture purpose: creates an edit and runs Gruff`), `test/integration/gruff-code-quality-contract.test.ts` (search: `Fixture purpose: proves helper bypass`).
+- **Recurrence 2026-08-17:** A `renderPriorReportContext` docblock described the stable behaviour twice, but `docs.missing-invariant-doc` stayed until the wording used the marker `contract`. `src/cli/prompt/compose-quality-common.ts` (search: `continuity contract`), `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasInvariantMarker`).
+- **Recurrence 2026-08-18:** A ratchet comment explained a numeric policy as a "floor", but `docs.magic-threshold-without-rationale` stayed because that synonym is outside the marker vocabulary; "threshold" cleared it. `scripts/gruff-warning-ratchet-checks.mjs` (search: `Coverage threshold retained`), `package.json` (search: `@blundergoat/gruff-ts`).
+- **Recurrence 2026-10-11 (delegated comment pass):** Sub-agents rewrote comments in four `plans check` files for plain language and dropped markers the incumbents carried: four docs lost `must` and five test comments lost `writes`. The PostToolUse hook flagged one sorting helper and the stable-identity comparison found eight more introduced `docs.missing-*` findings; restoring truthful `must` and `Writes` wording returned the comparison to zero. Give delegated comment passes the marker vocabulary and compare identities before accepting their edits. `src/cli/plans-check-summary.ts` (search: `in a stable oldest-first order`).
 
 ## Lesson: Gruff hook compatibility probes need real configs and wrapper PATH
 
@@ -40,6 +44,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff doc comments can expose hidden complexity warnings
 
 **Status:** active | **Created:** 2026-05-30
+**Severity:** INTEGRATION
 **Decision changed:** After any docs batch, analyzer upgrade, or conflict resolution, run the full-scan warning count and the ratchet before the lint gate, even while build and typecheck are green.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -53,9 +58,9 @@ last_reviewed: 2026-09-19
 **Root cause:** Only the targeted docs rule was checked, on the assumption that a comment-only patch could not change broader warning or lint counts.
 
 **Recurrence 2026-08-16:** Upgrading Gruff from 0.4.0 to 0.5.0 changed the warning rule set while one error-severity file-length finding stopped the ratchet before it compared warning debt. Removing that error exposed 120 unmatched warnings and 27 stale accepted identities; the first approved 117-entry manifest was pretty-printed past the 1,000-line error threshold and blocked itself until each reviewed entry sat on one JSON line. That manifest was later removed in favour of clearing the warnings, so accepted debt now lives only in code. `package.json` (search: `@blundergoat/gruff-ts`), `scripts/check-gruff-warning-ratchet.mjs` (search: `splitFindingsBySeverity`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `collectAcceptedEntriesByIdentity`).
-**Recurrence 2026-08-17:** M47's truthful exported-function documentation made Gruff stop reporting an accepted warning while the reviewed manifest still claimed it, and the same preflight found an 11-branch audit helper; removing the stale row and moving agent-ID validation into the baseline helper cleared both. `scripts/gruff-warning-ratchet-checks.mjs` (search: `stale accepted debt`), `src/cli/server/hook-registrar.ts` (search: `applyHookState`), `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineRows`).
+**Recurrence 2026-08-17:** The truthful exported-function documentation made Gruff stop reporting an accepted warning while the reviewed manifest still claimed it, and the same preflight found an 11-branch audit helper; removing the stale row and moving agent-ID validation into the baseline helper cleared both. `scripts/gruff-warning-ratchet-checks.mjs` (search: `stale accepted debt`), `src/cli/server/hook-registrar.ts` (search: `applyHookState`), `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineRows`).
 **Recurrence 2026-08-18:** Resolving a committed `git stash pop` conflict left build and typecheck green while the ratchet failed: the merged `dashboardLoadSavedDashboardState` scored cyclomatic 21 and cognitive 23 against the configured 15, and with no accepted-debt manifest any warning is a regression. Extracting the server read and row assembly returned the scan to zero warnings. `src/dashboard/dashboard-projects.ts` (search: `dashboardReadSavedServerState`), `src/dashboard/dashboard-projects.ts` (search: `dashboardBuildProjectRows`), `.gruff-ts.yaml` (search: `complexity.cognitive:`).
-**Recurrence 2026-08-28:** M41 Task 7 retired that baseline helper after migrating the primary hook loop, but the optional registry comparison still called it; the first focused run threw `ReferenceError: managedBaselineHashes is not defined`, and `stats --check` found this lesson's anchor still naming the removed helper. Search a helper's exact symbol across the whole edited file and durable evidence before deleting it. `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineRows`), `src/cli/audit/check-drift-hooks.ts` (search: `function compareRegistryHookScripts`).
+**Recurrence 2026-08-28:** The optional-guard migration retired that baseline helper after migrating the primary hook loop, but the optional registry comparison still called it; the first focused run threw `ReferenceError: managedBaselineHashes is not defined`, and `stats --check` found this lesson's anchor still naming the removed helper. Search a helper's exact symbol across the whole edited file and durable evidence before deleting it. `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineRows`), `src/cli/audit/check-drift-hooks.ts` (search: `function compareRegistryHookScripts`).
 
 ## Lesson: docs.missing-internal-function-doc must not be silenced; baseline the residue
 
@@ -70,6 +75,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Keep the binary path returned by the gruff availability check
 
 **Status:** active | **Created:** 2026-08-03
+**Severity:** INTEGRATION
 **Decision changed:** Run later Gruff commands through the exact `$found` path instead of guessing a global install location.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -86,6 +92,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff-driven direct imports must preserve facade proof
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-05-31
 
 **Prevention:** When direct imports are needed to prove a nearby implementation module, keep the stable facade exports exercised with explicit alignment assertions in existing nearby tests. For endpoint arrays without a sort contract, select records by semantic identifier before asserting fields. Evidence anchors: `src/cli/audit/audit.ts` (search: `createAuditFactsView`), `src/cli/quality/skill-quality.ts` (search: `scoreAllArtifacts`), `test/integration/dashboard-tasks-api.test.ts` (search: `milestoneByFilename`).
@@ -101,6 +108,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Gruff side-effect comments must name the side effect
 
 **Status:** active | **Created:** 2026-05-30 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-09-12
 
 **Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, name the side effect in plain maintainer language (`Writes`, `Spawns`, `filesystem`) instead of a generic purpose sentence, and do not swap that verb for a synonym later. If the finding remains, read the installed rule before another rewrite. After a large docs batch, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
@@ -112,29 +120,32 @@ last_reviewed: 2026-09-19
 **Recurrence 2026-08-06:** The Windows discovery comment described its purpose and fallback but not the `where.exe` process side effect; naming that action cleared three findings.
 **Recurrence 2026-08-27:** A new audit helper said it "launches one bounded child process", but Gruff still reported `docs.missing-side-effect-doc` until the contract read `Side effect: spawns one bounded child process`. `src/cli/audit/check-agent-deny-runtime.ts` (search: `function spawnConfiguredHookProbe`).
 **Recurrence 2026-08-29:** Changing a fixture helper's sentence from `writes` to `creates` introduced `docs.missing-side-effect-doc` although the sentence still described the file operation; restoring the filesystem verb returned the five-path identity comparison to zero introduced findings. `test/integration/setup-install.test.ts` (search: `Side effect: writes and marks one analyzer fixture executable`).
-**Recurrence 2026-09-12:** M69's publisher fixture comment said "Replay" without naming its file writes or subprocesses. The installed `hasSideEffectMarker` rule confirmed the missing vocabulary; a sentence naming both effects removed that introduced documentation finding, and the same 27 focused cases still passed. `test/integration/preflight-progress.test.ts` (search: `runs each published syntax command against a valid control and a later malformed file`), `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasSideEffectMarker`).
+**Recurrence 2026-09-12:** The publisher fixture comment said "Replay" without naming its file writes or subprocesses. The installed `hasSideEffectMarker` rule confirmed the missing vocabulary; a sentence naming both effects removed that introduced documentation finding, and the same 27 focused cases still passed. `test/integration/preflight-progress.test.ts` (search: `runs each published syntax command against a valid control and a later malformed file`), `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasSideEffectMarker`).
 
 ---
 
 ## Lesson: A source comment can be a cited learning-loop anchor, so rewording it breaks the audit
 
 **Status:** active | **Created:** 2026-08-18
-**Decision changed:** Before rewording an existing comment during a docs pass, grep the learning loop for that exact string; a cited comment is a durable artifact, not free text.
+**Severity:** INTEGRATION
+**Decision changed:** Before rewording a comment, or moving, renaming or deleting a symbol, grep the learning loop for that exact string or name; a cited comment or symbol is a durable artifact, not free text.
 **Trigger phase:** READ
 **Caught at:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-09-19
+**Incident count:** 6 | **Latest occurrence:** 2026-10-11
 
-**Prevention:** When a docs pass rewords an existing comment, keep the cited substring intact and add the analyzer vocabulary in a second sentence. Run `stats --check` or the harness audit after any batch that rewrites existing comments, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).
+**Prevention:** Before rewording a comment or moving, renaming or deleting a symbol, search the learning loop for the file's path to list every anchor it cites; matching is case-sensitive. Keep a cited substring intact and add analyzer vocabulary in a second sentence, or repoint the citing entry in the same change. Run `stats --check` or the harness audit after any batch that rewrites comments or moves code, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).
 
 **What happened:** Rewriting "Write canonical skill stubs" to "Writes canonical skill stubs" in `test/integration/audit-drift.helpers.ts` cleared `docs.missing-side-effect-doc`, passed typecheck, and then failed `test/unit/support-bundle.test.ts` ("emits clean JSON through the CLI", expected exit 0, got 1): the diagnostics bundle embeds the harness audit, whose `feedback-loop-active` check runs `stats --check`, which found this bucket citing the old wording as a search anchor. One letter in a test-helper comment failed a CLI contract three layers away.
 
-**Root cause:** Comment prose was treated as local text; the learning loop cites source comments as evidence anchors, so a cited comment is a cross-file contract the audit enforces.
+**Root cause:** Comment prose and symbol locations were treated as local; the learning loop cites both as evidence anchors, so each is a cross-file contract the audit enforces.
 
-**Recurrence 2026-09-06:** The official-hook sync implementation retired two helper anchors and replaced three cited comments. The focused tests, typecheck and Gruff warning gate passed, but `stats --check` found five stale references. The replacement citations name current owners and distinguish retired mechanisms from their present replacements. Search both symbol names and exact cited prose before a refactor, then check references before the final release gate. Current owners: `src/dashboard/dashboard-app-hook-setup-fragments.ts` (search: `dashboardRunHookAction`), `src/cli/server/hook-managed-installation.ts` (search: `removeLegacyAgentHookScripts`), and `src/cli/server/hook-registrar.ts` (search: `reconcileHook`).
+**Incident ledger:**
 
-**Recurrence 2026-09-19:** To keep the migrations test file under Gruff's 1000-line error, a milestone moved its disabled-hook cases into `test/integration/setup-install-write-set.test.ts` (search: `keeps disabled hooks installed and inert`). A pattern entry cited the old file with that case title, so `stats --check` reported a stale reference after the five changed test files had passed. The repaired anchor keeps the old path and cites that file's own suite title: `test/integration/setup-install-migrations.test.ts` (search: `setup --apply installer upgrade migrations`). Moving code, not only rewording it, needs the same search of cited text first.
-
-**Recurrence 2026-09-19 (renamed function):** A milestone renamed the hook function that projects analyzer results, because it now reads two contract versions. The focused tests, shellcheck and `npm test` passed, then preflight failed two rows on one cause: `stats --check` reported `stale-ref` and the content audit reported `stale-semantic-anchor`, both for a footgun that searched for the old name. The anchor now names the current function: `workflow/hooks/gruff-code-quality.sh` (search: `hook_contract_report`). The M19 recurrence above already said to search cited text before moving code; a rename needs the same search.
+- **Recurrence 2026-09-06:** The official-hook sync retired two helper anchors and replaced three cited comments; focused tests, typecheck and the Gruff gate passed, but `stats --check` found five stale references. Search symbol names and exact cited prose before a refactor. Current owners: `src/dashboard/dashboard-app-hook-setup-fragments.ts` (search: `dashboardRunHookAction`), `src/cli/server/hook-managed-installation.ts` (search: `removeLegacyAgentHookScripts`), and `src/cli/server/hook-registrar.ts` (search: `reconcileHook`).
+- **Recurrence 2026-09-19:** Moving disabled-hook cases into `test/integration/setup-install-write-set.test.ts` (search: `keeps disabled hooks installed and inert`) to stay under Gruff's 1000-line error left a pattern entry citing the old file and case title. The repaired anchor cites the old file's own suite title: `test/integration/setup-install-migrations.test.ts` (search: `setup --apply installer upgrade migrations`). Moving code needs the same search as rewording it.
+- **Recurrence 2026-09-19 (renamed function):** Renaming the hook function that projects analyzer results passed focused tests, shellcheck and `npm test`, then failed two preflight rows on one cause: `stale-ref` from `stats --check` and `stale-semantic-anchor` from the content audit. The anchor now names `workflow/hooks/gruff-code-quality.sh` (search: `hook_contract_report`). A rename needs the same search.
+- **Recurrence 2026-10-03:** A comment pass lowercased "Shared report contracts", which `lessons/naming.md` cites. Step 0 had retrieved this lesson, but the phrase searches covered other headers, not this one. Evidence anchor: `src/cli/hooks-configured-runtime-evidence.ts` (search: `Shared report contracts`).
+- **Recurrence 2026-10-11 (moved constant):** Moving `VALID_STATUSES` out of `src/cli/plans-check.ts` left a `lessons/milestone-timing.md` anchor on the old file. Focused tests, `npm test` and the touched-file checks passed, then preflight failed the same two rows. The anchor now cites `src/cli/plans-check-structure.ts` (search: `export const VALID_STATUSES`). Search for a constant's name before moving it, not only before deleting or renaming it.
 
 ---
 
@@ -150,3 +161,18 @@ last_reviewed: 2026-09-19
 **What happened:** Eighteen `test-quality.loop-in-test` findings were classified by hand from the rule description ("loops whose assertions do not identify the failing item"): 13 with interpolated loop variables were called false positives and 5 with missing messages were edited across `test/contract/test-selection-playbook-doctrine.test.ts`, `test/unit/dashboard-hooks-view.test.ts`, `test/unit/manifest.test.ts`, `test/unit/playbook-contract.test.ts`, and `test/integration/setup-install-agent-matrix.test.ts`. The rerun still reported 18. An isolated probe showed the real trigger: the rule reads the message only when the assertion call sits on one line, so every Prettier-wrapped assertion looks message-less, and a message built from a loop-derived local is not credited either.
 
 **Root cause:** The mechanism was inferred from the finding's prose and a model of what the rule ought to check; the implementation keyed on line shape, and five edits were spent on that model before a two-probe measurement contradicted it.
+
+---
+
+## Lesson: A Gruff identity diff that extracts zero rows proves nothing
+
+**Status:** active | **Created:** 2026-10-11
+**Decision changed:** Before trusting a before/after Gruff identity comparison, reconcile the extracted row count with the same run's `summary.total`; a zero-row extraction on a run that reports findings is a broken filter, not a clean file.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** When comparing `gruff-ts analyse --format json` runs by `stableIdentity`, read `summary.total` from each JSON first and require the extracted identity count to equal it before computing introduced or removed sets. The JSON is pretty-printed, so the key is `"stableIdentity": "` with a space; a pattern without the space matches nothing. Treat `before=0 after=0` as unproven until both counts reconcile. The comparison method itself is in `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Comment and Documentation Passes`).
+
+**What happened:** A comment pass on `src/cli/plans-check-structure.ts` (search: `collectPlanStructureAdvisories`) dropped two `Invariant:` lines and the word "must" from three doc comments. The identity grep used `"stableIdentity":"` without the space, reported `before=0 after=0 introduced=0`, and the pass was called clean. The goat-clarity baseline run on the same paths then showed three `docs.missing-invariant-doc` advisories on those functions, and the earlier JSON's `summary` had reported `advisory: 3` all along.
+
+**Root cause:** The filter was never checked against the run's own total, so an empty extraction was read as an empty finding set even though the same file carried the count that would have exposed the mismatch.

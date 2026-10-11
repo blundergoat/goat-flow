@@ -777,10 +777,10 @@ function configuredHookProbeFailureFromResult(
 }
 
 /**
- * Spawn one bounded policy replay using the trusted target's exact configured invocation.
+ * Spawns one bounded policy replay using the trusted target's exact configured invocation.
  *
  * The caller must authorize target execution before entering this runtime path.
- * Preserve shell and exec argument shapes because a rewritten launcher could hide the user's configuration error.
+ * Preserves shell and exec argument shapes because a rewritten launcher could hide the user's configuration error.
  *
  * @param configured - installed handler; null args selects a platform shell command
  * @param runtimeProbe - safe or blocked request and its expected response
@@ -877,7 +877,7 @@ function verifyConfiguredHookRuntime(
 }
 
 /**
- * Spawn a replay of one blocked request through the installed script when no launcher was discovered.
+ * Spawns a replay of one blocked request through the installed script when no launcher was discovered.
  * This fallback checks the script's response without verifying configured launcher syntax or external agent delivery.
  */
 function verifyDirectHookRuntime(

@@ -8,6 +8,7 @@ last_reviewed: 2026-09-12
 ## Lesson: Browser terminal fixes need live runner proof, not just timer-unit proof
 
 **Status:** active | **Created:** 2026-05-12
+**Severity:** INTEGRATION
 
 **Prevention:** For terminal automation, unit tests must cover lost/late paste state, but the Definition of Done still requires live browser evidence against the runner that originally failed. Do not close on fake timers alone when xterm, WebSocket, or agent composer behavior is involved.
 
@@ -42,6 +43,7 @@ last_reviewed: 2026-09-12
 ## Lesson: Browser-use installer smoke must exercise the wrapper path
 
 **Status:** active | **Created:** 2026-05-12
+**Severity:** INTEGRATION
 
 **Decision changed:** Treat every browser-use dependency upgrade as an interface migration: resolve the published console entry point, bind the compatible release line, and smoke the generated wrapper through that interface before updating instructions.
 **Trigger phase:** READ | **Caught at:** READ | **Incident count:** 3 | **Latest occurrence:** 2026-09-12

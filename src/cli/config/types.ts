@@ -47,7 +47,7 @@ interface GoatFlowHookConfig {
   /** Explicit project-relative Git roots scanned by the post-turn safety hook. */
   scanRoots?: string[];
   /**
-   * Repo-relative analyzer binary overrides keyed by language suffix (e.g. `py: strands_agents/.venv/bin/gruff-py`). Consumed at runtime by the hook
+   * Repo-relative analyzer binary overrides keyed by language suffix (e.g. `py: tools/gruff-py`). Consumed at runtime by the hook
    * script itself; carried here so config round-trips preserve the block.
    */
   binaries?: Record<string, string>;

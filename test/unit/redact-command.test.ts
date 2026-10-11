@@ -10,9 +10,11 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   statSync,
@@ -99,30 +101,50 @@ function injectRejectedAllocationCleanupFault(
 /**
  * Run the public redactor against one temporary project and destination.
  *
- * Side effects: spawns the CLI, which may create the requested fixture output.
+ * Side effects: spawns the CLI, which may create the requested fixture output;
+ * private input/output files are removed after reading the child's diagnostics.
  */
 function runRedact(
   projectPath: string,
   outputPath: string,
   input = TEST_BEARER_INPUT,
 ) {
-  return spawnSync(
-    process.execPath,
-    [
-      "--import",
-      "tsx",
-      CLI_PATH,
-      "redact",
-      projectPath,
-      "--output",
-      outputPath,
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: "utf-8",
-      input,
-    },
-  );
+  const directory = mkdtempSync(join(tmpdir(), "goat-redact-input-"));
+  const descriptors: number[] = [];
+  try {
+    const inputPath = join(directory, "stdin");
+    const stdoutPath = join(directory, "stdout");
+    const stderrPath = join(directory, "stderr");
+    writeFileSync(inputPath, input, { flag: "wx", mode: 0o600 });
+    for (const [path, flags] of [
+      [inputPath, "r"],
+      [stdoutPath, "wx"],
+      [stderrPath, "wx"],
+    ]) {
+      descriptors.push(openSync(path, flags, 0o600));
+    }
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        CLI_PATH,
+        "redact",
+        projectPath,
+        "--output",
+        outputPath,
+      ],
+      { cwd: PROJECT_ROOT, encoding: "utf-8", stdio: descriptors },
+    );
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -304,22 +326,10 @@ describe("durable artifact redaction", () => {
 
     try {
       // This mirrors a user piping a handoff draft into an explicit gitignored output path.
-      const result = spawnSync(
-        process.execPath,
-        [
-          "--import",
-          "tsx",
-          CLI_PATH,
-          "redact",
-          temporaryProject,
-          "--output",
-          outputPath,
-        ],
-        {
-          cwd: PROJECT_ROOT,
-          encoding: "utf-8",
-          input: `Authorization: Bearer ${fakeSecrets.openAi}\n`,
-        },
+      const result = runRedact(
+        temporaryProject,
+        outputPath,
+        `Authorization: Bearer ${fakeSecrets.openAi}\n`,
       );
 
       assert.equal(result.status, 0, result.stderr);

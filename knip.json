@@ -18,6 +18,7 @@
     "src/dashboard/dashboard-projects.ts",
     "src/dashboard/dashboard-prompts.ts",
     "src/dashboard/dashboard-readers.ts",
+    "src/dashboard/dashboard-setup-quality.ts",
     "src/dashboard/dashboard-terminal-connect.ts",
     "src/dashboard/dashboard-terminal-paste.ts",
     "src/dashboard/dashboard-terminal-runtime.ts",

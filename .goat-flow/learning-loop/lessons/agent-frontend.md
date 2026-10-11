@@ -22,6 +22,7 @@ last_reviewed: 2026-09-05
 ## Lesson: A mockup is the spec, and parity is a layer-by-layer diff
 
 **Status:** active | **Created:** 2026-04-05
+**Severity:** CORRECTNESS
 **Decision changed:** Treat a supplied mockup as a binding spec and diff it across all four layers before calling UI work done, rather than reproducing its general look.
 **Incident count:** 3 | **Latest occurrence:** 2026-04-26
 
@@ -32,7 +33,7 @@ last_reviewed: 2026-09-05
 - **Bindings:** every Alpine helper used in markup is local to `x-data` or exists on `app()`. Grep the helper names, then smoke the rendered view after rebuilding `dist/dashboard`; a missing helper fails silently and reads as a missing section.
 - **Spacing and type:** every margin, padding, font family, and font size in the mockup CSS is a hard spec.
 
-**What happened:** Three rounds shared one root cause. In the 2026-04-05 setup view, a mockup specified a `.left` div holding title, agent strip, and detected config beside a `.right` div holding the prompt card; the implementation put the title above both columns, made the strip full-width, and left the column as plain text with no card background, costing six correction rounds that were all visible in the mockup from the start. On 2026-04-26 the M05b Home work dropped the top rollup identity row and called a non-existent helper `agentLabel(...)` where the dashboard exposes `agentName(...)`, so the title expression failed silently and the section looked missing in screenshots. The same day, invented subtitle paragraphs appeared under headings the mockup lacks, section margins and padding differed from the spec, titles used mono where the mockup used sans-serif, and the ring rendered 128px against 92px; the first fix round corrected fonts and sizes but missed both the invented elements and the spacing model.
+**What happened:** Three rounds shared one root cause. In the 2026-04-05 setup view, a mockup specified a `.left` div holding title, agent strip, and detected config beside a `.right` div holding the prompt card; the implementation put the title above both columns, made the strip full-width, and left the column as plain text with no card background, costing six correction rounds that were all visible in the mockup from the start. On 2026-04-26 the Home work dropped the top rollup identity row and called a non-existent helper `agentLabel(...)` where the dashboard exposes `agentName(...)`, so the title expression failed silently and the section looked missing in screenshots. The same day, invented subtitle paragraphs appeared under headings the mockup lacks, section margins and padding differed from the spec, titles used mono where the mockup used sans-serif, and the ring rendered 128px against 92px; the first fix round corrected fonts and sizes but missed both the invented elements and the spacing model.
 
 **Root cause:** The mockup was read as layout inspiration rather than a spec. Verification confirmed the page had one root and the API returned data, and compared CSS properties in isolation, instead of diffing the live DOM against the mockup, so added elements were never flagged.
 
@@ -46,7 +47,7 @@ last_reviewed: 2026-09-05
 
 **Prevention:** For dashboard status UIs, enumerate each meaningful state before testing the rendered screen: missing, partial, complete, stale, and unavailable. Verify that visible labels, project identity, card data source, and CTAs use the same state model; a broad failure helper is acceptable only for actions that truly apply to every failure mode. Evidence anchors: `src/dashboard/views/home.html` (search: `setupPartial()`), `src/dashboard/views/home.html` (search: `showPreviewAgents()`).
 
-**What happened:** The M05b Home view treated every non-passing setup audit as the same "not installed" state, so a project with `1 of 13` setup components present rendered the fresh-install top section, disabled preview cards, and the "Not installed" label although the audit response carried partial setup evidence and agent scores.
+**What happened:** The Home view treated every non-passing setup audit as the same "not installed" state, so a project with `1 of 13` setup components present rendered the fresh-install top section, disabled preview cards, and the "Not installed" label although the audit response carried partial setup evidence and agent scores.
 
 **Root cause:** Verification covered the fully installed and fresh-install branches but not the intermediate state, and the view used one broad `setupFailed()` predicate for identity, preview copy, and learning-loop visibility instead of explicit missing, partial, and complete branches.
 
@@ -55,6 +56,7 @@ last_reviewed: 2026-09-05
 ## Lesson: Check browser tooling before blaming source when rendered CSS disagrees
 
 **Status:** active | **Created:** 2026-04-26
+**Severity:** CORRECTNESS
 **Decision changed:** When a visual bug survives a source-level fix that should have worked, capture the rendered computed styles before editing again; ask a person only when no browser tool is available.
 **Trigger phase:** READ
 **Incident count:** 2 | **Latest occurrence:** 2026-04-27

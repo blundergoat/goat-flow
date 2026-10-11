@@ -1,13 +1,14 @@
 /**
  * Locks the bounded provider-neutral result passed from hooks to host adapters.
- * Use these checks when a hook adds outcomes or coverage detail, so users cannot
- * receive a clean badge for skipped work or an unreadable wall of findings.
+ *
+ * Use these checks when a hook adds outcomes or coverage detail.
+ * Skipped work cannot receive a clean badge, and displayed findings must remain readable.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   HOOK_RESULT_FINDING_LIMIT,
-  HOOK_RESULT_OUTPUT_LIMIT_BYTES,
+  HOOK_RESULT_ENVELOPE_LIMIT_BYTES,
   HOOK_RESULT_SCHEMA,
   validateHookResultEnvelope,
   type HookResultCoverage,
@@ -135,7 +136,7 @@ describe("hook result contract", () => {
         findings: [
           {
             code: "oversized-result",
-            message: "x".repeat(HOOK_RESULT_OUTPUT_LIMIT_BYTES),
+            message: "x".repeat(HOOK_RESULT_ENVELOPE_LIMIT_BYTES),
           },
         ],
       }),
@@ -143,7 +144,7 @@ describe("hook result contract", () => {
 
     assert.ok(
       validationMessages.includes(
-        `result exceeds the ${HOOK_RESULT_OUTPUT_LIMIT_BYTES}-byte limit`,
+        `result exceeds the ${HOOK_RESULT_ENVELOPE_LIMIT_BYTES}-byte limit`,
       ),
     );
   });

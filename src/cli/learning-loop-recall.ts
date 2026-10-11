@@ -9,7 +9,10 @@ import { CLIError } from "./cli-error.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { loadConfig } from "./config/reader.js";
 import { createFS } from "./facts/fs.js";
-import { evaluateSearchAnchors } from "./facts/shared/search-anchors.js";
+import {
+  evaluateSearchAnchors,
+  type SearchAnchorEvaluation,
+} from "./facts/shared/search-anchors.js";
 import {
   INDEX_BUCKETS,
   parseActiveBucketSections,
@@ -30,6 +33,12 @@ interface LearningLoopRecallMatch {
   status: string;
   decisionChanged: string | null;
   matchedPaths: string[];
+  /** Matched needles retain separate verdicts even when they cite the same path. */
+  matchedCitations: Pick<
+    SearchAnchorEvaluation,
+    "filePath" | "needle" | "status" | "reason"
+  >[];
+  hasStaleCitations: boolean;
 }
 
 /** Stable, timestamp-free recall result used by both text and JSON renderers. */
@@ -185,16 +194,22 @@ export function collectLearningLoopRecall(
     parseActiveBucketSections(fs, bucketPaths[bucket], bucket),
   )
     .flatMap((section): LearningLoopRecallMatch[] => {
+      const matchedCitations = evaluateSearchAnchors(fs, section.content, {
+        sourcePath: section.sourcePath,
+      })
+        .filter((anchor) =>
+          operands.some((operand) =>
+            matchesOperand(fs, anchor.filePath, operand),
+          ),
+        )
+        .map(({ filePath, needle, status, reason }) => ({
+          filePath,
+          needle,
+          status,
+          reason,
+        }));
       const matchedPaths = [
-        ...new Set(
-          evaluateSearchAnchors(fs, section.content, {
-            sourcePath: section.sourcePath,
-          })
-            .map((anchor) => anchor.filePath)
-            .filter((path) =>
-              operands.some((operand) => matchesOperand(fs, path, operand)),
-            ),
-        ),
+        ...new Set(matchedCitations.map((anchor) => anchor.filePath)),
       ].sort(compareStable);
       if (matchedPaths.length === 0) return [];
       return [
@@ -205,6 +220,10 @@ export function collectLearningLoopRecall(
           status: section.status,
           decisionChanged: section.decisionChanged,
           matchedPaths,
+          matchedCitations,
+          hasStaleCitations: matchedCitations.some(
+            (citation) => citation.status === "stale",
+          ),
         },
       ];
     })
@@ -234,6 +253,17 @@ function formatTextMatch(match: LearningLoopRecallMatch): string[] {
   const status = escapeTerminalControlCharacters(match.status);
   return [
     `- ${sourcePath} (search: ${heading}) [${bucket}; ${status}]`,
+    ...(match.hasStaleCitations
+      ? [
+          "  Warning: stale citation evidence; reread the source before relying on Decision changed.",
+          ...match.matchedCitations
+            .filter((citation) => citation.status === "stale")
+            .map(
+              (citation) =>
+                `  Citation: ${escapeTerminalControlCharacters(citation.filePath)} (search: ${escapeTerminalControlCharacters(JSON.stringify(citation.needle))}) [stale: ${citation.reason}]`,
+            ),
+        ]
+      : []),
     ...(match.decisionChanged === null
       ? []
       : [

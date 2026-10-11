@@ -322,6 +322,7 @@ function handleQualityRequest(
     ctx.jsonResponse(res, 200, {
       ...result,
       launchPrompt: launchResult.prompt,
+      launchPromptSha256: launchResult.promptSha256,
       auditCacheStatus: audit.cacheStatus,
     });
   } catch (err) {
@@ -359,13 +360,10 @@ async function handleQualityHistoryRequest(
       url.searchParams.get("path"),
       "project-read",
     );
-    const { buildQualityHistoryRows, loadQualityHistoryWindow } =
+    const { buildQualityHistoryRows, loadQualityHistory } =
       await import("../quality/history.js");
-    const history = loadQualityHistoryWindow(projectPath, {
-      agent: filters.agent,
-      limit: filters.limit,
-      qualityMode: filters.qualityMode,
-    });
+    // Rerun groups need older matching reports beyond the displayed page.
+    const history = loadQualityHistory(projectPath);
     const rows = buildQualityHistoryRows(history.entries, {
       agent: filters.agent,
       limit: filters.limit,

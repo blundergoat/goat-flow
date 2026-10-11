@@ -218,10 +218,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       expectedStatus: "invalid",
     },
   ] as const) {
-    it(`keeps ${rootCase.name} non-Git root state wholly unregistered`, (testContext) => {
-      // Keep provider proof fresh so this case isolates invalid local roots.
-      const now = new Date("2026-09-18T00:00:00Z");
-      testContext.mock.timers.enable({ apis: ["Date"], now });
+    it(`keeps ${rootCase.name} non-Git root state wholly unregistered`, () => {
       withTempProject((root) => {
         mkdirSync(join(root, ".codex"), { recursive: true });
         mkdirSync(join(root, ".goat-flow"), { recursive: true });
@@ -294,10 +291,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       scanRootLines: ["    scan-roots: &roots", "      - services/api"],
     },
   ]) {
-    it(`refuses post-turn scan roots written as ${aliasCase.name}`, (testContext) => {
-      // Keep provider proof fresh so this case isolates invalid local roots.
-      const now = new Date("2026-09-18T00:00:00Z");
-      testContext.mock.timers.enable({ apis: ["Date"], now });
+    it(`refuses post-turn scan roots written as ${aliasCase.name}`, () => {
       withTempProject((root) => {
         const childRoot = join(root, "services", "api");
         mkdirSync(childRoot, { recursive: true });
@@ -620,7 +614,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   });
 
-  // A consumer already on the shipped template must not gain any line from a hook toggle, or the audit's order check fails.
+  // Writes a consumer already on the shipped template; a hook toggle must not add any line, or the audit's order check fails.
   it("leaves a template-spelled goat-flow gitignore byte-identical when enabling deny-dangerous", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".codex"), { recursive: true });

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-18
-**Updated:** 2026-09-05 - condensed. Earlier amendments absorbed now-removed ADR-030 (Antigravity replaces Gemini) and ADR-022 (canonical identity) on 2026-08-15, and added the machine-checked shared-section contract for Copilot on 2026-08-30.
+**Updated:** 2026-09-05 - condensed; the machine-checked shared-section contract for Copilot was added on 2026-08-30. Absorbed (removed): ADR-030-replace-gemini-with-antigravity, ADR-022-agent-authority-canonical-source.
 
 ## Context
 

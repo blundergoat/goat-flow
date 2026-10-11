@@ -52,7 +52,7 @@ describe("review live file capture", () => {
    * Fixture purpose: reproduce the review-bot race deterministically by swapping `dir/` for a symlink to an outside
    * folder only while the selected file is opened, then restoring it before the post-read containment walk.
    * Filesystem side effects: renames, symlinks, and restores `dir/` inside disposable temp roots that the test removes.
-   * Invariant: both snapshot capture and anchor reads throw instead of returning the outside file's bytes or hash.
+   * Invariant: each snapshot capture or anchor read throws instead of returning the outside file's bytes or hash.
    */
   it("refuses bytes read through a parent swapped for a symlink around the open", (test) => {
     const root = makeProject("in-project bytes\n");

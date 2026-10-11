@@ -7,9 +7,11 @@
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  closeSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -143,23 +145,40 @@ function runDeadlineCanary(
   disposableConsumerPath: string,
   installedLauncherPath: string,
 ) {
-  return spawnSync(
-    process.execPath,
-    [
-      installedLauncherPath,
-      ".goat-flow/hooks/canary-stall.sh",
-      CODEX_GRUFF_LAUNCH_CONTRACT,
-    ],
-    {
-      cwd: disposableConsumerPath,
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "25",
+  const directory = mkdtempSync(join(tmpdir(), "goat-consumer-canary-output-"));
+  const stdoutPath = join(directory, "stdout");
+  const stderrPath = join(directory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    for (const path of [stdoutPath, stderrPath])
+      descriptors.push(openSync(path, "wx", 0o600));
+    const result = spawnSync(
+      process.execPath,
+      [
+        installedLauncherPath,
+        ".goat-flow/hooks/canary-stall.sh",
+        CODEX_GRUFF_LAUNCH_CONTRACT,
+      ],
+      {
+        cwd: disposableConsumerPath,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "25",
+        },
+        timeout: 2_000,
+        stdio: ["ignore", ...descriptors],
       },
-      timeout: 2_000,
-    },
-  );
+    );
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 describe("source hook consumer canary", () => {

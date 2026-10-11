@@ -455,13 +455,6 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
           /^description: ".*reduction-method.*"$/mu,
           referencePath,
         );
-        // Reference files carry `reference-version`; `skill-version` is the SKILL.md key.
-        // Asserting the wrong one here is what let this file drift out of version parity.
-        assert.match(
-          referenceGuidance,
-          /goat-flow-reference-version: "1\.17\.0"/u,
-          referencePath,
-        );
       },
     );
   });

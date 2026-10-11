@@ -1,7 +1,7 @@
 ---
 name: goat-debug-diagnostic-techniques
 description: "Progressive ranking, causal, reduction-method, mutation-safety, and report guidance for goat-debug diagnosis and existing-fix verification."
-goat-flow-reference-version: "1.17.0"
+goat-flow-reference-version: "1.18.0"
 ---
 # Diagnostic Techniques
 

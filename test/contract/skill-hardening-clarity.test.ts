@@ -185,6 +185,26 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("loads the prose owner for selected documentation whether read-only or writable", () => {
+    // Owner loading decides what the agent reads; write authority is resolved earlier and must not gate the diagnosis.
+    assertForEachTarget(
+      [SKILL_PATH, ...installedSkillPaths("goat-clarity")],
+      (skillPath) => {
+        const guidance = readProjectFile(skillPath);
+        assert.match(
+          guidance,
+          /An eligible selected human-documentation unit needs prose diagnosis, whether read-only or writable/u,
+          skillPath,
+        );
+        assert.doesNotMatch(
+          guidance,
+          /Documentation write authority selects writable human prose/u,
+          `${skillPath}: owner loading must not depend on write authority`,
+        );
+      },
+    );
+  });
+
   it("protects test meaning while allowing bounded clarity edits", () => {
     assertIncludesAll([
       "test-source comments and private names",

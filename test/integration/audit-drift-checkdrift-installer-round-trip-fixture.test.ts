@@ -226,8 +226,16 @@ describe("checkDrift: installer round-trip fixture", () => {
       for (const agentId of agentIds) {
         const install = runCommand(
           root,
-          "bash",
-          ["workflow/install-goat-flow.sh", root, "--agent", agentId],
+          "node",
+          [
+            "--import",
+            "tsx",
+            "src/cli/cli.ts",
+            "install",
+            root,
+            "--agent",
+            agentId,
+          ],
           60000,
         );
         assert.equal(

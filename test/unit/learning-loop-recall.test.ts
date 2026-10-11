@@ -7,7 +7,13 @@
  */
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFS } from "../../src/cli/facts/fs.js";
@@ -26,6 +32,54 @@ const BUCKET_PATHS: Record<IndexBucket, string> = {
   decisions: ".goat-flow/learning-loop/decisions/",
 };
 const ACTIVE_FIXTURE_MATCH_COUNT = 4;
+
+const CITATION_PATH = "src/cli/facts/shared/reference-paths.ts";
+const SECOND_CITATION_PATH = "src/cli/facts/shared/learning-loop-common.ts";
+const CITATION_NEEDLE = "shorthand for a deeply nested file";
+const SECOND_CITATION_NEEDLE = "confirm the literal string still appears";
+const CITATION_SOURCE = ".goat-flow/learning-loop/footguns/citations.md";
+const REAL_CITATION_HEADING =
+  "## Footgun: Regex-shaped search needles pass only while their file path is unresolvable";
+// Copy observed evidence, then perturb only its disposable targets or citation paths.
+const realFootgunBucket = readFileSync(
+  new URL(
+    "../../.goat-flow/learning-loop/footguns/learning-loop-extraction.md",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const realCitationEntry = realFootgunBucket
+  .slice(realFootgunBucket.indexOf(REAL_CITATION_HEADING))
+  .split("\n---\n")[0];
+const realCitationTarget = readFileSync(
+  new URL(`../../${CITATION_PATH}`, import.meta.url),
+  "utf8",
+);
+const realSecondCitationTarget = readFileSync(
+  new URL(`../../${SECOND_CITATION_PATH}`, import.meta.url),
+  "utf8",
+);
+
+/**
+ * Copy a real two-citation entry and its targets into a disposable project.
+ * Side effect: writes a temporary fixture tree; the caller removes it in finally.
+ */
+function makeCitationFixture(
+  targetContent: string | null = realCitationTarget,
+  entryContent = realCitationEntry,
+): string {
+  const root = makeFixtureRepo();
+  mkdirSync(join(root, "src/cli/facts/shared"), { recursive: true });
+  writeFileSync(
+    join(root, CITATION_SOURCE),
+    `---\ncategory: recall\nlast_reviewed: 2026-10-02\n---\n\n${entryContent}`,
+  );
+  if (targetContent !== null) {
+    writeFileSync(join(root, CITATION_PATH), targetContent);
+  }
+  writeFileSync(join(root, SECOND_CITATION_PATH), realSecondCitationTarget);
+  return root;
+}
 
 const LESSONS = `---
 category: recall
@@ -64,6 +118,10 @@ last_reviewed: 2026-08-24
 **What happened:** No evidence anchor appears here.
 
 ## Resolved Entries
+
+> Historical record. These lessons are no longer active.
+
+- **Prose-style resolved lesson** (resolved 2026-08-25) - \`src/core/file.ts\` (search: \`export const coreMarker\`) was cited by history that must not attach to the entry above.
 
 ## Lesson: Resolved position is excluded
 
@@ -364,6 +422,187 @@ last_reviewed: 2026-08-30
       );
     } finally {
       rmSync(controlRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("recall citation freshness", () => {
+  it("adds valid citation metadata without changing existing fields or text", () => {
+    const root = makeCitationFixture();
+    try {
+      const result = collectLearningLoopRecall(createFS(root), BUCKET_PATHS, [
+        CITATION_PATH,
+      ]);
+      const parsed = JSON.parse(formatLearningLoopRecall(result, "json"));
+      const match = parsed.matches[0];
+      assert.equal(result.totalMatches, 1);
+      assert.deepEqual(match.matchedPaths, [CITATION_PATH]);
+      assert.equal(match.sourcePath, CITATION_SOURCE);
+      assert.equal(match.heading, REAL_CITATION_HEADING);
+      assert.equal(match.status, "active");
+      assert.equal(
+        match.decisionChanged,
+        "Write `(search: ...)` needles as literal substrings copied from the target file; when completing a citation's path, treat its needle as unvalidated and re-run `stats --check` in the same change.",
+      );
+      assert.equal(match.hasStaleCitations, false);
+      assert.deepEqual(match.matchedCitations, [
+        {
+          filePath: CITATION_PATH,
+          needle: CITATION_NEEDLE,
+          status: "valid",
+          reason: null,
+        },
+      ]);
+      assert.equal(
+        formatLearningLoopRecall(result, "text"),
+        [
+          `Learning-loop recall: 1 active entry cites ${CITATION_PATH}`,
+          `- ${CITATION_SOURCE} (search: ${JSON.stringify(REAL_CITATION_HEADING)}) [footguns; active]`,
+          `  Decision changed: ${match.decisionChanged}`,
+          `  Cites: ${CITATION_PATH}`,
+        ].join("\n"),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("marks moved needles beside valid citations and warns before guidance", () => {
+    const root = makeCitationFixture(
+      realCitationTarget.replace(CITATION_NEEDLE, ""),
+    );
+    try {
+      const fs = createFS(root);
+      const result = collectLearningLoopRecall(fs, BUCKET_PATHS, [
+        "src/cli/facts/shared",
+      ]);
+      const match = JSON.parse(formatLearningLoopRecall(result, "json"))
+        .matches[0];
+      assert.equal(result.totalMatches, 1);
+      assert.equal(match.hasStaleCitations, true);
+      assert.deepEqual(match.matchedPaths, [
+        SECOND_CITATION_PATH,
+        CITATION_PATH,
+      ]);
+      assert.deepEqual(
+        match.matchedCitations.map(
+          (citation: { status: string; reason: string | null }) => [
+            citation.status,
+            citation.reason,
+          ],
+        ),
+        [
+          ["stale", "missing-needle"],
+          ["valid", null],
+        ],
+      );
+      const text = formatLearningLoopRecall(result, "text");
+      assert.match(text, /stale: missing-needle/u);
+      assert.match(
+        text,
+        /reread the source before relying on Decision changed/u,
+      );
+      assert.ok(text.indexOf("reread") < text.indexOf("  Decision changed:"));
+
+      const validOnly = collectLearningLoopRecall(fs, BUCKET_PATHS, [
+        SECOND_CITATION_PATH,
+      ]);
+      assert.equal(
+        JSON.parse(formatLearningLoopRecall(validOnly, "json")).matches[0]
+          .hasStaleCitations,
+        false,
+        "unmatched stale evidence does not mark a valid matched citation",
+      );
+      const capped = collectLearningLoopRecall(fs, BUCKET_PATHS, ["."], 2);
+      assert.equal(capped.totalMatches, ACTIVE_FIXTURE_MATCH_COUNT + 1);
+      assert.equal(capped.overflowCount, ACTIVE_FIXTURE_MATCH_COUNT - 1);
+      assert.equal(capped.matches[1]?.sourcePath, CITATION_SOURCE);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a missing file discoverable through exact and directory operands", () => {
+    const root = makeCitationFixture(null);
+    try {
+      for (const operand of [CITATION_PATH, "src/cli/facts/shared/"]) {
+        const result = collectLearningLoopRecall(createFS(root), BUCKET_PATHS, [
+          operand,
+        ]);
+        const match = JSON.parse(formatLearningLoopRecall(result, "json"))
+          .matches[0];
+        assert.equal(result.totalMatches, 1, `operand ${operand}`);
+        assert.equal(match.hasStaleCitations, true, `operand ${operand}`);
+        assert.equal(
+          match.matchedCitations[0].reason,
+          "missing-file",
+          `operand ${operand}`,
+        );
+        assert.match(
+          formatLearningLoopRecall(result, "text"),
+          /stale: missing-file/u,
+          `operand ${operand}`,
+        );
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves distinct citation verdicts when needles share one matched path", () => {
+    const root = makeCitationFixture(
+      realCitationTarget,
+      realCitationEntry.replace(SECOND_CITATION_PATH, CITATION_PATH),
+    );
+    try {
+      const result = collectLearningLoopRecall(createFS(root), BUCKET_PATHS, [
+        CITATION_PATH,
+      ]);
+      const match = JSON.parse(formatLearningLoopRecall(result, "json"))
+        .matches[0];
+      assert.deepEqual(match.matchedPaths, [CITATION_PATH]);
+      assert.equal(match.hasStaleCitations, true);
+      assert.deepEqual(
+        match.matchedCitations.map(
+          (citation: { needle: string; status: string }) => [
+            citation.needle,
+            citation.status,
+          ],
+        ),
+        [
+          [CITATION_NEEDLE, "valid"],
+          [SECOND_CITATION_NEEDLE, "stale"],
+        ],
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // Fixture purpose: perturb a real citation to a local plan path so presence cannot imply durable evidence.
+  // Side effects: writes a disposable plan target and removes the fixture project in finally.
+  it("marks ignored evidence as stale even when its literal text exists", () => {
+    const ignoredPath = ".goat-flow/plans/recall-evidence.md";
+    const root = makeCitationFixture(
+      realCitationTarget,
+      realCitationEntry.replace(CITATION_PATH, ignoredPath),
+    );
+    mkdirSync(join(root, ".goat-flow/plans"), { recursive: true });
+    writeFileSync(join(root, ignoredPath), realCitationTarget);
+    try {
+      const result = collectLearningLoopRecall(createFS(root), BUCKET_PATHS, [
+        ignoredPath,
+      ]);
+      const match = JSON.parse(formatLearningLoopRecall(result, "json"))
+        .matches[0];
+      assert.equal(match.hasStaleCitations, true);
+      assert.equal(match.matchedCitations[0].reason, "gitignored-path");
+      assert.match(
+        formatLearningLoopRecall(result, "text"),
+        /stale: gitignored-path/u,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

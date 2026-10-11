@@ -67,6 +67,10 @@ No symptoms label here, so the hook falls back to this paragraph.
 
 ## Resolved Entries
 
+> Historical record. These entries are no longer active traps.
+
+- **Prose-style resolved trap** (resolved 2026-05-06) - a bullet summary of a duplicated command guard; this history must not count toward the reading cost of the active entry above it.
+
 ## Footgun: Resolved-by-position trap
 
 **Status:** active | **Created:** 2026-05-05 | **Evidence:** ACTUAL_MEASURED
@@ -401,6 +405,28 @@ This unlabelled prose must keep the paragraph visible.
     );
   });
 
+  it("keeps prevention first when repeat entries carry severity and enforcement metadata", () => {
+    for (const [bucket, heading] of [
+      ["footguns", "## Footgun: Guarded repeat"],
+      ["lessons", "## Lesson: Guarded repeat"],
+    ] as const) {
+      const firstBody = firstLearningEntryBodyParagraph({
+        bucket,
+        content: `${heading}
+
+**Status:** active | **Created:** 2026-09-29
+**Severity:** SECURITY
+**Enforced-by:** \`test/integration/deny-git-graphql.test.ts\` (search: \`GraphQL read-only policy\`)
+
+**Prevention:** Keep the verified guard in place.`,
+      });
+      assert.equal(
+        firstBody,
+        "**Prevention:** Keep the verified guard in place.",
+      );
+    }
+  });
+
   it("keeps extracted facts identical when Prevention moves before the incident narrative", () => {
     const ruleFirstFacts = extractOrderedLessonFacts(true);
     const narrativeFirstFacts = extractOrderedLessonFacts(false);
@@ -549,7 +575,11 @@ Choose the visible path. Later prose stays out of the hook.
   });
 
   it("extracts declared dates and byte-derived reading costs", () => {
-    const [footgun] = parseBucket(fs, FOOTGUNS_DIR, "footguns");
+    const [footgun, lastActiveFootgun] = parseBucket(
+      fs,
+      FOOTGUNS_DIR,
+      "footguns",
+    );
     const lessons = parseBucket(fs, LESSONS_DIR, "lessons");
     const datedLesson = lessons.find(
       (entry) => entry.title === "Agents must read before writing",
@@ -562,6 +592,11 @@ Choose the visible path. Later prose stays out of the hook.
     assert.deepEqual(
       [footgun?.declaredDate, footgun?.approxTokenEstimate],
       ["2026-05-01", 80],
+    );
+    // The entry's own 192 bytes; the prose under Resolved Entries would raise it if history leaked into the last active entry.
+    assert.deepEqual(
+      [lastActiveFootgun?.declaredDate, lastActiveFootgun?.approxTokenEstimate],
+      ["2026-05-04", 50],
     );
     assert.deepEqual(
       [datedLesson?.declaredDate, datedLesson?.approxTokenEstimate],

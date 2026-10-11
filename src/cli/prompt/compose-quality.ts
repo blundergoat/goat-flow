@@ -5,6 +5,7 @@
  *
  * A user gets here from the dashboard Quality tab or `goat-flow quality prompt`, after choosing what they want assessed.
  */
+import { createHash } from "node:crypto";
 import {
   type QualityInput,
   type QualityPayload,
@@ -22,8 +23,14 @@ export { composeArtifactQualityPrompt } from "./compose-quality-artifact.js";
  */
 export function composeQuality(input: QualityInput): QualityPayload {
   const qualityMode = input.qualityMode ?? "agent-setup";
-  if (qualityMode !== "agent-setup") {
-    return composeFocusedQuality(input, qualityMode);
-  }
-  return composeAgentSetupQuality(input, qualityMode);
+  const payload =
+    qualityMode !== "agent-setup"
+      ? composeFocusedQuality(input, qualityMode)
+      : composeAgentSetupQuality(input, qualityMode);
+  return {
+    ...payload,
+    promptSha256: createHash("sha256")
+      .update(payload.prompt, "utf8")
+      .digest("hex"),
+  };
 }

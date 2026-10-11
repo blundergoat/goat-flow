@@ -332,12 +332,10 @@ function managedHookFileContracts(
   hookSpec: HookSpec,
 ): ManagedHookFileContract[] {
   // Every registry script must match the bundled bytes before the UI reports current.
-  const managedHookFiles = hookSpec.scriptFiles.map((hookScriptName) => ({
+  return hookSpec.scriptFiles.map((hookScriptName) => ({
     installedPath: installedHookTarget(projectPath, agent, hookScriptName),
     templatePath: getTemplatePath(`workflow/hooks/${hookScriptName}`),
   }));
-
-  return managedHookFiles;
 }
 
 /**

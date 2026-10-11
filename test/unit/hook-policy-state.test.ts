@@ -74,10 +74,12 @@ test("requires review for either mixed choice pair only when installed ownership
           needsReview && originalIdentity !== "current"
             ? { original, requested, paths: [files[0].path] }
             : null,
+          `${JSON.stringify(original)} -> ${JSON.stringify(requested)}, identity ${originalIdentity}`,
         );
         assert.equal(
           policyUpgradeReview(original, requested, false, files),
           null,
+          `${JSON.stringify(original)} -> ${JSON.stringify(requested)}, identity ${originalIdentity}`,
         );
       }
     }
@@ -209,6 +211,7 @@ test("rejects unreadable config instead of defaulting it on or off", (t) => {
   assert.throws(() => readPolicyChoices(root), /EACCES/);
 });
 
+// Writes a config, then replaces it after its validated descriptor was read; the replacement must be rejected, not loaded as policy.
 test("rejects replacement after the validated descriptor was read", (t) => {
   const root = fs.mkdtempSync(join(tmpdir(), "goat-policy-replace-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

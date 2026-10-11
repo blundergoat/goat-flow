@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.17.0"
+goat-flow-reference-version: "1.18.0"
 ---
 # Test Selection
 
@@ -206,4 +206,4 @@ Before handing off a selection:
 
 - `.goat-flow/skill-docs/skill-quality-testing/README.md` and `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` - capability-aware fixtures and application-not-citation scoring when testing a skill.
 - `.goat-flow/skill-docs/skill-preamble.md` - shared proof classes, evidence discipline, and actor boundaries.
-- `.agents/skills/goat-qa/SKILL.md` - report-only coverage analysis that applies this playbook before emitting recommendations.
+- `goat-qa` in the active agent's installed skills directory - report-only coverage analysis that applies this playbook before emitting recommendations; resolve its directory through the instruction file's router.

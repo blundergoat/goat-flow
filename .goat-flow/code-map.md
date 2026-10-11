@@ -238,7 +238,7 @@ workflow/                        = packaged template source copied into target p
 │   ├── agent-config/            = claude, codex, antigravity, copilot hook config templates
 │   └── vendor/                  = locked js-yaml and graphql parsers bundled for dependency-free installed hooks
 │
-└── evaluation/                  = quality-assessment prompt templates
+└── evaluation/                  = footgun, lesson, and pattern capture templates
 ```
 
 ## scripts/ -- Shell scripts
@@ -250,10 +250,12 @@ scripts/                         = development, release, test, and maintenance s
 ├── run-tests.mjs                = Node test runner used by npm test scripts
 ├── build-dashboard-assets.mjs   = copies dashboard assets/views/vendor files into dist
 ├── bump-version.sh              = version sync across package/config/skills/docs
+├── capture-command.mjs         = bounded asynchronous tool output with live byte limits and a deadline
 ├── check-gruff-warning-ratchet.mjs = reviewed Gruff warning-debt ratchet: launches the analyzer, prints the verdict
 ├── gruff-warning-ratchet-checks.mjs = ratchet comparison rules: manifest load/validate, scan shape, debt diff
 ├── ratchet-failure-report.mjs   = bounded per-category failure collector shared by the ratchet modules
 ├── check-instruction-parity.mjs = instruction-file section/order parity
+├── check-touched.mjs            = read-only checks selected from working-tree changes, including deletion and rename triggers
 ├── check-markdown-links.sh      = markdown link resolver
 ├── check-package-readme-links.mjs = npm-pack README link check
 ├── check-path-integrity.sh      = docs/code path-reference integrity checks

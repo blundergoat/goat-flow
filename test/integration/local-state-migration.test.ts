@@ -24,7 +24,7 @@ import {
   symlinkDirectoryOrSkip,
 } from "./setup-install.helpers.js";
 
-/** Create disposable legacy directories and write opaque records to exercise byte-preserving relocation. */
+/** Writes disposable legacy directories and opaque records to exercise byte-preserving relocation. */
 function legacyProject(): string {
   const root = makeTempProject();
   mkdirSync(join(root, ".goat-flow/install-state"), { recursive: true });

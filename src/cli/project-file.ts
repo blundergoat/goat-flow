@@ -108,6 +108,22 @@ export function readProjectTextFile(
   path: string,
   maxBytes = MAX_EVIDENCE_FILE_BYTES,
 ): string {
+  return readProjectFileBytes(projectRoot, path, maxBytes).toString("utf8");
+}
+
+/**
+ * Read bounded, unchanged project bytes before hashing or decoding evidence.
+ * Reuses the text reader's containment and descriptor checks; throws on unsafe or changing files.
+ * @param projectRoot - selected project; a resolved directory alias is allowed
+ * @param path - absolute or project-relative file inside the selected project
+ * @param maxBytes - largest accepted file; defaults to the evidence ceiling
+ * @returns original bytes after the pathname and descriptor still identify the inspected file
+ */
+export function readProjectFileBytes(
+  projectRoot: string,
+  path: string,
+  maxBytes = MAX_EVIDENCE_FILE_BYTES,
+): Buffer {
   const lexicalRoot = resolve(projectRoot);
   const root = realpathSync(lexicalRoot);
   const target = resolve(
@@ -138,7 +154,7 @@ export function readProjectTextFile(
     ) {
       throw new Error("Evidence file changed while reading.");
     }
-    return buffer.toString("utf8");
+    return buffer;
   } finally {
     closeSync(descriptor);
   }

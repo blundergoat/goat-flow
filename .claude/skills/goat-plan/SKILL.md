@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "Use when creating, updating, reconciling, or resuming milestone plans."
-goat-flow-skill-version: "1.17.0"
+goat-flow-skill-version: "1.18.0"
 ---
 # /goat-plan
 
@@ -34,14 +34,14 @@ Use for milestones, replans, rescope, or plan resume in `.goat-flow/plans/<activ
 
 2. **Run learning-loop retrieval before mode-specific reads.** Follow the preamble's INDEX-first retrieval and emit `Relevant prior learnings:`. Use brief/plan terms; add decisions for architecture, policy, or setup. For path-only intake, search only for plan-orientation and task-state failure classes. Do not retrieve implementation-domain learnings from the task path; open entries only when a hit affects safe orientation.
 
-3. **Inspect existing plan state only after retrieval.** Check for existing milestones:
+3. **Inspect existing plan state only after retrieval.**
 - Explicit plan paths select that directory; milestone paths select their parent. Otherwise scan the valid advisory `.active` subdir.
 - If missing/invalid, list non-archive dirs and recent `M*.md`, ask which is current, and offer to update `.active`; this is not setup failure.
-- For stale plans, compare code and modification dates; plans are gitignored.
+- For stale plans, compare code and modification dates.
 
 ### Reconcile Existing Plan State
 
-Plans are local workflow state, not a setup invariant. Mode R is read-only: report each canonical Status token with a plain-language explanation, propose exact corrections, and stop.
+Plans are local workflow state, not a setup invariant. Mode R is read-only: report each canonical Status token with a plain-language explanation.
 
 **Starting fresh:** name the build, main risk, and kill criteria.
 
@@ -59,13 +59,13 @@ Plans are local workflow state, not a setup invariant. Mode R is read-only: repo
 
 **R: Reconcile Existing Plan State** - reconcile/audit without requested edits: compare evidence, propose corrections, stop without writes.
 
-**2: Read-Only Analysis** - inline planning without artifact authority; skip Phase 3. File mode requires authorization.
+**2: Read-Only Analysis** - inline planning without artifact authority. File mode requires authorization.
 
 **3: Small File-Write** - explicit planning artifacts for Hotfix / Small Feature (1-2 milestones); use Mode 4's write path with compact ceremony.
 
 **4: File-Write (Standard+)** - explicit planning artifacts for Standard / System / Infrastructure; resolve missing destination/scope before writing.
 
-**CHECKPOINT (Path-Only Intake):** "Mode: Path-Only Intake. [path]: [status]. Plan pointer: [state]. Next action needed."
+**CHECKPOINT (Path-Only Intake):** "Mode: Path-Only Intake. Plan pointer: [state]. Active set: [IDs/statuses]. Cap provenance: [value; config/default/session override]. Session milestone: [ID/unselected]. Next item: [item]. Action needed."
 
 **CHECKPOINT (Reconcile):** "Mode R. State: [status]. Corrections: [changes]. No writes."
 
@@ -81,9 +81,9 @@ Budget determines must-deliver scope, ranked stretch work, and cut order. Risk s
 
 ### Milestone Archetypes
 
-Archetypes are optional lenses: **Prove It Works**, **Make It Real**, **Make It Solid**, **Make It Shine**. Merge shared outcomes/proof; omit lenses without risk reduction or value.
+Archetypes are optional lenses: **Prove It Works**, **Make It Real**, **Make It Solid**, **Make It Shine**. Merge shared outcomes/proof; omit valueless lenses.
 
-**Spike-first rule:** If uncertain about a library, API, performance characteristic, or integration point - that uncertainty goes in Milestone 1 as a spike, not Milestone 3 as a risk.
+**Spike-first rule:** Library/API, performance or integration uncertainty belongs in Milestone 1 as a spike, not Milestone 3 as a risk.
 
 Never drop a spike, intake, or kill criteria for milestone count, deadline, or reduced ceremony.
 
@@ -97,15 +97,15 @@ Order **[RISKY]** unknowns/integrations/spikes, **[CORE]** logic, then **[SAFE]*
 
 ### Proof format
 
-Each item states the claim and evidence with a proof-class tag. Omit inapplicable classes; manual proof is conditional, static analysis is not behavioural proof, and high-risk work keeps distinct compatibility, rollback, and security evidence. Put each literal command in one command source.
+State claim, evidence and proof-class tag. Omit inapplicable classes; manual proof is conditional. Static analysis is not behavioural proof. High-risk work keeps distinct compatibility, rollback and security evidence. Store literal commands once.
 
 ### Quality rules
 
-**Tasks:** Use one action, target, and done condition. Put rationale, paths, and proof beneath the task only when needed. Pin paths when downstream work depends on them.
+**Tasks:** One action, target and done condition; supporting rationale/paths/proof only when needed. Pin paths for downstream dependencies.
 
-Start task text with the operation; prefer about 25 words excluding tags and estimates and put supporting detail beneath it. Validation, saving and history loading are separate observable changes: give each its own counted task. Separate test authoring from test execution. Read `references/milestone-examples.md` → Short task example before rendering checkboxes.
+Start task text with the operation; prefer about 25 words excluding tags and estimates. Validation, saving and history loading are separate observable changes: give each its own counted task. Separate test authoring from test execution. Read `references/milestone-examples.md` → Short task example before rendering checkboxes.
 
-Verify existing paths, symbols and behavior against the target revision before naming them. Label proposed paths as new and unresolved anchors `(confirm: what)`; schedule the investigation before dependent implementation.
+Verify paths/symbols/behavior against the target revision. Label proposed paths new and unresolved anchors `(confirm: what)`; investigate before dependent implementation.
 
 For every ISSUE draft, PR, or handoff export, read `references/issue-format.md` → Human-facing exports before drafting and delivery; it owns audience checks and saved-draft proof.
 
@@ -113,7 +113,7 @@ For every ISSUE draft, PR, or handoff export, read `references/issue-format.md` 
 
 Before authoring or revising forecasts, read `references/milestone-examples.md` → Effort Estimates for work counting, history selection, fast-case evidence and immutable revisions. Read `references/issue-format.md` → Forecast presentation when summarizing delivery.
 
-**Readable narrative, specific tasks:** Apply the preamble's human-prose route and exemptions; `references/issue-format.md` owns audience-specific task guidance.
+**Readable narrative, specific tasks:** Preamble prose routing applies; `references/issue-format.md` owns audience-specific task guidance.
 
 **Cold-start bar:** Identify files, conventions, scope, commands, and recovery.
 
@@ -129,12 +129,12 @@ For Standard+, answer "If this plan fails, the most likely cause is ..." in an e
 
 ## Phase 2 - Deliver Milestones
 
-Use only the Step 0 mode's delivery block; never cross modes mid-flow.
+Use only the Step 0 mode's delivery block.
 
 ### Mode 0: Path-Only Intake / Read-Only Orientation
 
 - Read filenames plus Status, Lane, and Depends on; run the source-compatible `plans check <plan-path> --strict`. Checker errors stop body reads.
-- Report cap provenance. Use `--max-active` only when the operator supplied it for this session; otherwise omit it for canonical config or default one. Never infer a cap from the active count or borrow an earlier override; if an absent override is needed, stop and ask.
+- Use `--max-active` only when the operator supplied it for this session; otherwise omit it for canonical config or default one. Never infer a cap from the active count or borrow an earlier override; if an absent override is needed, stop and ask.
 - Active means `in-progress`, `testing-gate`, or `human-verification-pending`. An absent or empty Lane means `default`. Check the final join below before source work or timing.
 - One session owns one milestone. An explicit path or user instruction selects it; select the sole active milestone automatically. With several active milestones and no selection, report each bounded next item, then ask which milestone this session owns.
 - Read only the bounded next item: implementation task, executor proof, or human item according to status. Report other lanes as state, never implementation authority. With no active work, report eligible choices.
@@ -147,7 +147,7 @@ Compare HEAD and uncommitted state with status, tasks, assumptions, and evidence
 
 ### Mode 1: Named-File Update (edit in place)
 
-Edit the named file in place; a path alone does not qualify. Preserve unaffected title/status. Present the delta; stop on scope spill.
+Edit the named file in place; a path alone does not qualify. Preserve unaffected title/status. Present the delta and apply the progress rule for adopted plans; stop on scope spill.
 
 ### Mode 2: Read-Only Analysis (no files)
 
@@ -165,9 +165,9 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 ### File Artifact Rules (Modes 3 and 4)
 
-Fresh plan: create a slugged directory and write one zero-padded `M*.md` per milestone. Only explicit active-plan selection updates `.active`; a creation destination or unrelated existing-plan edit leaves a valid marker unchanged. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` bands and totals.
+Fresh plan: honour supplied destinations; otherwise create a slugged directory. Write zero-padded `M*.md`, `investigation-notes` (empty allowed; no filler), and `_PROGRESS.md` containing only `# Plan and implementation progress`; follow the plans README. Existing plans adopt notes/progress only explicitly. Only explicit active-plan selection updates `.active`. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` bands and totals.
 
-**Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty sections; retain Phase 1 core, claim-based Proof, and one command source.
+**Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty sections; retain Phase 1 core and claim-based Proof.
 
 **ISSUE.md:** Standard+ writes `ISSUE.md` using `references/issue-format.md` as read-only guidance; Small only for a requested GitHub brief, multiple milestones, or shared requirements/budget.
 
@@ -177,13 +177,15 @@ Fresh plan: create a slugged directory and write one zero-padded `M*.md` per mil
 
 **Validate:** Resolve inline references, then run `goat-flow plans check .goat-flow/plans/<active> --strict`; fix errors before the checkpoint.
 
-**Post-plan return:** After Phase 2 finishes, `return-to-implement` hands ordinary ACT the existing build authorization; new Ask First boundaries still gate. Plan-only stops; Phase 3 gates milestones.
+**Post-plan return:** After Phase 2 finishes, Modes 3/4 apply the progress rule. `return-to-implement` hands ordinary ACT the existing build authorization; new Ask First boundaries still gate. Plan-only stops; Phase 3 gates milestones.
 
 ## Phase 3 - Between Milestones
 
+**Progress:** For adopted plans, apply `references/issue-format.md` → Plan progress updates after meaningful planning or implementation batches, at handoff, and for material approval/check/rework changes. Skip unchanged resumes. Carry this rule into execution handoffs; always run scoped `goat-clarity` before delivering new or revised entries.
+
 **Lane eligibility:** Activate not-started work only when every dependency is complete, its lane is free, and the active count is below the cap. For lane or capacity contention, show eligible IDs, lanes, and dependencies; ask, never select by number. Lanes grant no writer ownership; use disjoint scopes, applicable write claims, and an agreed merge boundary. Read `references/milestone-examples.md` → Lane lifecycle for downgrade recovery.
 
-**Final join:** Exclude `abandoned`, `superseded`, and `deferred`; `blocked` still participates. Require one participating dependency sink whose transitive dependency closure covers every other participating milestone. Authors join every participating lane tip. A clean checker result cannot prove this join. Multiple sinks or uncovered work requires a plan amendment before source work or timing; never guess.
+**Final join:** Exclude `abandoned`, `superseded`, and `deferred`; `blocked` still participates. Require one participating dependency sink whose transitive dependency closure covers every other participating milestone. Authors join every participating lane tip. `plans check --strict` fails a plan with open work that breaks this join; a fully complete plan gets an advisory instead. Multiple sinks or uncovered work requires a plan amendment before source work or timing; never guess.
 
 Completed implementation enters `testing-gate`. If the milestone changed source, run `goat-clarity` on the paths it wrote before proof, so remediation renames cannot stale it. Apply the preamble's Proof Gate; audit tasks and exit, rerun only stale/failed checks or when risk requires it.
 
@@ -224,6 +226,6 @@ Verify every implementation task and, when `ISSUE.md` exists, every ISSUE Tasks 
 
 ## Output Format
 
-Emit the selected mode's result: resume checkpoint then authorized ACT; 0 orientation; R reconciliation; 1 delta; 2 inline milestones; 3/4 paths, milestone names/objectives, task/exit/test counts, risks, and stop condition. Modes 0/R/2 never write.
+Emit the selected mode's result: resume checkpoint then authorized ACT; 0 orientation; R reconciliation; 1 delta; 2 inline milestones; 3/4 paths, milestone names/objectives, task/exit/test counts, risks, and stop condition.
 
-**Terse-first:** Lead directly; one sentence per bullet; strip qualifiers and closing offers. Gates retain required prompts and evidence.
+**Terse-first:** One sentence per bullet; preserve gate prompts and evidence.

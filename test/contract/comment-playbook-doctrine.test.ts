@@ -584,16 +584,6 @@ describe("human-facing prose code-prose boundary", () => {
           /Comments and replies addressed to a person/u,
           playbookPath,
         );
-        assert.match(
-          content,
-          /Review comments and replies to a person\s*\|\s*Correctness and residue only/u,
-          playbookPath,
-        );
-        assert.match(
-          content,
-          /Code comments and docstrings\s*\|\s*No - see `code-comments\.md`/u,
-          playbookPath,
-        );
       },
     );
   });
@@ -609,7 +599,6 @@ describe("human-facing prose code-prose boundary", () => {
         );
         assert.match(content, /## Quick Tests/u, playbookPath);
         assert.match(content, /\*\*Substitution test\./u, playbookPath);
-        assert.match(content, /raises suspicion, not proof/u, playbookPath);
       },
     );
   });

@@ -3,8 +3,6 @@
  *
  * Inventory and artifact requests use the selected runner's skill tree; evaluation accepts single documents or uploaded bundles.
  * Validation and scoring failures become JSON errors, and oversized request bodies receive a 413 response.
- *
- * The deprecated /api/quality/analyse route shares evaluation behavior and marks responses with deprecation headers.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
@@ -177,30 +175,20 @@ function handleSkillQualityRequest(
   return true;
 }
 
-// Writes deprecation headers on every response served via the `/analyse` alias.
-function markEvaluateAliasDeprecation(res: ServerResponse): void {
-  res.setHeader("Deprecation", "true");
-  res.setHeader("Link", '</api/quality/evaluate>; rel="successor-version"');
-}
-
 /**
- * Answer a failed evaluate request, keeping the deprecation header on the old alias so callers still see they should move off it.
+ * Answer a failed evaluate request with a JSON status body.
  *
  * @param ctx - dashboard route context supplying the response helper
  * @param res - JSON response target
- * @param isAlias - true when the request came in on the deprecated alias path
  * @param status - HTTP status to send
  * @param payload - error body shown to the user
  */
 function sendEvaluateError(
   ctx: DashboardRouteContext,
   res: ServerResponse,
-  isAlias: boolean,
   status: number,
   payload: Record<string, unknown>,
 ): void {
-  // Older callers must receive the migration hint even when their evaluation request fails.
-  if (isAlias) markEvaluateAliasDeprecation(res);
   ctx.jsonResponse(res, status, payload);
 }
 
@@ -211,14 +199,12 @@ function sendEvaluateError(
  * @param ctx - dashboard route context supplying the body reader
  * @param req - incoming POST request carrying the content
  * @param res - response already answered when the body is refused
- * @param isAlias - true when the request came in on the deprecated alias path
  * @returns the body text, or null once an error response has been sent and the caller should stop
  */
 async function readEvaluateRequestBody(
   ctx: DashboardRouteContext,
   req: IncomingMessage,
   res: ServerResponse,
-  isAlias: boolean,
 ): Promise<string | null> {
   try {
     return await ctx.readBody(req, {
@@ -227,7 +213,7 @@ async function readEvaluateRequestBody(
     });
   } catch (err) {
     // An upload exceeding the body limit is rejected before scoring; the Evaluate modal receives the size error.
-    sendEvaluateError(ctx, res, isAlias, 413, {
+    sendEvaluateError(ctx, res, 413, {
       error: err instanceof Error ? err.message : String(err),
     });
     return null;
@@ -261,7 +247,7 @@ function evaluateRequestBody(projectPath: string, body: EvaluateBody) {
  *
  * @param ctx - dashboard route context supplying path validation and response helpers
  * @param req - incoming POST request carrying the content
- * @param url - request URL, which also selects the deprecated alias behaviour
+ * @param url - request URL carrying the optional project path
  * @param res - JSON response target
  * @returns true once this route has answered; false means the URL belongs to another handler
  */
@@ -271,21 +257,20 @@ async function handleQualityEvaluateRequest(
   url: URL,
   res: ServerResponse,
 ): Promise<boolean> {
-  const isAlias = url.pathname === "/api/quality/analyse";
-  // Current and legacy evaluation URLs share scoring; other Quality requests belong to separate handlers.
-  if (url.pathname !== "/api/quality/evaluate" && !isAlias) return false;
+  // Other Quality requests belong to separate handlers.
+  if (url.pathname !== "/api/quality/evaluate") return false;
   // Evaluation requires submitted Markdown; simply opening the endpoint does not request a score.
   if (req.method !== "POST") {
-    sendEvaluateError(ctx, res, isAlias, 405, { error: "Method not allowed" });
+    sendEvaluateError(ctx, res, 405, { error: "Method not allowed" });
     return true;
   }
-  const body = await readEvaluateRequestBody(ctx, req, res, isAlias);
+  const body = await readEvaluateRequestBody(ctx, req, res);
   // The body reader already returned the upload failure, so scoring must not start.
   if (body === null) return true;
   const decoded = decodeEvaluateBody(body);
   // Invalid content or file fields must be corrected before the user's Markdown reaches the scorer.
   if (!decoded.ok) {
-    sendEvaluateError(ctx, res, isAlias, 400, {
+    sendEvaluateError(ctx, res, 400, {
       error: decoded.error,
       path: decoded.path,
     });
@@ -297,12 +282,10 @@ async function handleQualityEvaluateRequest(
       "project-read",
     );
     const result = evaluateRequestBody(projectPath, decoded.value);
-    // Successful evaluations also tell legacy callers which endpoint replaces this alias.
-    if (isAlias) markEvaluateAliasDeprecation(res);
     ctx.jsonResponse(res, 200, result);
   } catch (err) {
-    // A project removed while the modal was open cannot provide scoring settings; return the error while preserving legacy-route headers.
-    sendEvaluateError(ctx, res, isAlias, ctx.responseStatusForError(err, 500), {
+    // A project removed while the modal was open cannot provide scoring settings; return the error to the modal.
+    sendEvaluateError(ctx, res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
   }

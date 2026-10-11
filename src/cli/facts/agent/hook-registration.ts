@@ -306,6 +306,7 @@ export function buildHookRegistration(
  *
  * @param agent - agent profile naming its pre-tool hook event and identifying Antigravity
  * @param hookConfigParsed - parsed hook config from readHookConfig, or null/invalid content
+ * @param hookId - policy guard to look up; omitted means the dangerous-command guard
  * @returns deny registration flag and resolved script path; path is null when not registered or disabled
  */
 export function buildDenyRegistration(

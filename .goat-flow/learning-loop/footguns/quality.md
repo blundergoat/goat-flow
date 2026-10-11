@@ -54,6 +54,7 @@ last_reviewed: 2026-09-05
 ## Footgun: Advisory warnings without enforcement train users to ignore output
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Optional missing metadata remains visible in structured facts; warnings are reserved for malformed supplied values.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY

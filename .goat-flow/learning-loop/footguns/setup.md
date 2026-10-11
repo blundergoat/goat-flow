@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-09-08
+last_reviewed: 2026-10-11
 ---
 
 ## Footgun: A preview-layer classification change is inert until apply consumes the decision
@@ -13,7 +13,9 @@ last_reviewed: 2026-09-08
 
 **Why it happens:** Preview classification, admission, and authority live in TypeScript; the writes live in the installer script. Nothing in the type system, the linter, or a classifier unit test crosses that boundary.
 
-**Evidence:** While implementing 1.16.0 M02's `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` changed and `install` exited 0, but `workflow/install-goat-flow.sh` (search: `copy_file()`) still replaced every system-owned destination. The fix was a decision channel: `src/cli/install-command.ts` (search: `Each row's own decision travels to Bash`) turns preview rows into `--preserve-path` and `--replace-user-path` flags, and `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) consults them inside `copy_file`.
+**Evidence:** While implementing the 1.16.0 `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` changed and `install` exited 0, but `workflow/install-goat-flow.sh` (search: `copy_file()`) still replaced every system-owned destination. The fix was a decision channel: `src/cli/install-command.ts` (search: `Each row's own decision travels to Bash`) turns preview rows into `--preserve-path` and `--replace-user-path` flags, and `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) consults them inside `copy_file`.
+
+**Reporting recurrence 2026-10-09 (ACTUAL_MEASURED):** Closing output must distinguish requested state from completed writes across the same boundary. The summary fixture initially inferred registration removal from a disabled deny choice, but the installer retained its neutral registration. `workflow/install-goat-flow.sh` (search: `shouldRegisterManagedHook`) uses the generated `retainRegistrationWhenDisabled` contract; Stop registration does not have that retention. A non-Git fixture also lacked a Stop registration before apply, so absence afterward could not prove removal. `test/integration/setup-install-upgrade-summary.test.ts` (search: `names replaced local content and disabled registration removals after verification`) now establishes the initial registration in a Git fixture, verifies actual Stop removal and deny retention, and couples the closing output to target bytes. `src/cli/install-summary.ts` (search: `completedHookChanges`) compares registry readings before and after apply rather than treating preview edit phrases or flags as results. For failure injection, ensure a changed baseline or missing selected receipt reaches the required write: preservable local edits and identical state bytes legitimately skip those failure boundaries.
 
 ## Footgun: Optional-hook agent profiles break when installer treats hooks as universal
 
@@ -54,15 +56,35 @@ last_reviewed: 2026-09-08
 **Trigger phase:** VERIFY
 
 **Prevention:**
-1. When `setup-install-*` cases fail with `null !== 0`, read `status`, not the message. `spawnSync` returns `status: null` when its `timeout` kills the child, and the helpers pass a fixed 30-second budget: `test/integration/setup-install.helpers.ts` (search: `runInstallerWithEnvironment`), (search: `runCliInstaller`).
+1. When `setup-install-*` cases fail with `null !== 0`, inspect `status` and `error` before diagnosing content. A timeout gives `status: null`. The current helpers allow 120 seconds on Windows and 30 elsewhere: `test/integration/setup-install.helpers.ts` (search: `runInstallerWithEnvironment`), (search: `runCliInstaller`). Copied-package fixtures must retain that platform budget.
 2. Time one install directly before blaming a diff: `bash workflow/install-goat-flow.sh <temp-dir> --agent claude`. A run near or above 30 seconds explains every failing case at once.
 3. Do not treat these suites as a gate for a guidance-text change on a slow host. They belong to the `slow` group, which `npm run test:slow` runs single-concurrency after a build; the `fast` group is the default `npm test`.
 
 **Symptoms:** Twenty-five of twenty-six `cross-agent install smoke matrix` cases fail with a bare `null !== 0` under an install log that shows every step succeeding, each case taking almost exactly 30 seconds. The message reads like an exit-code assertion about installed content, so the natural next move is to hunt the diff.
 
-**Why it happens:** The helpers spawn the installer with `timeout: 30000`. `spawnSync` reports a killed child as `status: null`, and the assertion compares that to `0`, so a wall-clock problem is presented in the vocabulary of a content problem. The installer copies several hundred small files, which is exactly the workload Windows Git Bash is slowest at - the same process and filesystem cost recorded in `.goat-flow/learning-loop/footguns/hooks.md` (search: `Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash`).
+**Why it happens:** The incident used a fixed `timeout: 30000`; current helpers give Windows a larger budget. `spawnSync` reports a killed child as `status: null`, and the assertion compares that to `0`, so a wall-clock problem reads as a content failure. Copying hundreds of small files is slow on Windows Git Bash, as recorded in `.goat-flow/learning-loop/footguns/hook-performance.md` (search: `Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash`).
 
-**Evidence:** Measured 2026-09-08 on Windows 11 Pro 10.0.26200 during M47, whose change was Markdown, one JSON string and two test files. Run serially with `--test-concurrency=1` and nothing else touching the tree, the two suites returned `# tests 51`, `# pass 2`, `# fail 49` - 25 of 26 cases in `setup-install-agent-matrix.test.ts` and 24 of 25 in `setup-install-migrations.test.ts` - each failure around `duration_ms: 30016` with error `null !== 0`. A default-concurrency run returned the same totals, so concurrency is not the cause. A single `bash workflow/install-goat-flow.sh <temp-dir> --agent claude` on the same tree exited 0 in 46 seconds, above the helpers' 30-second budget.
+**Evidence:** Measured 2026-09-08 on Windows 11 Pro 10.0.26200 while changing Markdown, one JSON string and two test files. Run serially with `--test-concurrency=1` and nothing else touching the tree, the two suites returned `# tests 51`, `# pass 2`, `# fail 49` - 25 of 26 cases in `setup-install-agent-matrix.test.ts` and 24 of 25 in `setup-install-migrations.test.ts` - each failure around `duration_ms: 30016` with error `null !== 0`. A default-concurrency run returned the same totals, so concurrency is not the cause. A single `bash workflow/install-goat-flow.sh <temp-dir> --agent claude` on the same tree exited 0 in 46 seconds, above the helpers' 30-second budget.
+
+---
+
+## Footgun: An ownership flip to system-owned blocks upgrades from install state that never recorded the path
+
+**Status:** active | **Created:** 2026-10-11 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 2 | **Latest occurrence:** 2026-10-11
+**Decision changed:** Before changing a manifest path from `user-owned` to `system-owned`, add a transfer rule and an upgrade test that starts from the previous release's install state; a fresh-install test cannot catch the block.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Treat an ownership flip as an upgrade migration, not a manifest edit. Install state records rows only for system-owned files, so after the flip the path has no baseline row in any install written by the previous release. Test the flip from that release's install state with both a pristine and a customised copy, and decide how each is classified before shipping.
+
+**Symptoms:** A change made `.goat-flow/learning-loop/decisions/README.md` system-owned and copied it with `copy_file`. Its new install test, which started from a project with no install state, passed. A review then showed from the classifier code that every CLI-managed 1.17.0 project would be blocked on upgrade, even with an unedited README, because the template had changed since 1.17.0.
+
+**Why it happens:** With a loaded baseline, no row for the path, and current bytes that differ from the new template, the managed preview classifies the file `unmanaged`, which protects it and blocks the install. Without any install state, the classifier returns `adopted`, which replaces a customised copy with only a warning. Neither path knows the file used to belong to the user.
+
+**Evidence:** `src/cli/managed-setup-state.ts` (search: `if (file.ownership !== "system-owned") continue;`), `src/cli/managed-setup-authority.ts` (search: `function loadedBaselineProtectsExistingDifferentTarget`) and `src/cli/managed-setup-preview.ts` (search: `export function classifyManagedSetupFile`) own the ordinary rules. The decisions guide now has a narrow transfer exception in `src/cli/decisions-readme-transfer.ts` (search: `readDecisionsReadmeTransfer`); other ownership flips still need their own migration decision and evidence.
+
+**Recurrence 2026-10-11:** The old `.goat-flow/decisions/README.md` appeared absent at its new destination during preview. Bash then moved and overwrote it, exited 0 and recorded a full receipt. Inspect migration sources before classification. `src/cli/decisions-readme-transfer.ts` (search: `readInheritedGuide`) now does so; `test/integration/setup-install-decisions-readme.test.ts` (search: `preserves a legacy-folder custom guide`) reproduces the loss and verifies preservation.
 
 ## Resolved Entries
 
@@ -78,7 +100,7 @@ last_reviewed: 2026-09-08
 
 **Resolution:** Managed preview, install state, and installer admission inspect each existing path component before scaffolding or writing, and `--force` cannot bypass a symlinked or non-regular component.
 
-**Original symptoms:** M26 placed `.goat-flow/logs/quality` as a symlink to a directory outside the project with an outside `README.md` matching the template, and a final-path check accepted it. M28 then showed that validating staged files was still too late: a symlinked `.goat-flow` root received 19 setup directories before the first file check blocked.
+**Original symptoms:** A fixture placed `.goat-flow/logs/quality` as a symlink to a directory outside the project with an outside `README.md` matching the template, and a final-path check accepted it. A later fixture then showed that validating staged files was still too late: a symlinked `.goat-flow` root received 19 setup directories before the first file check blocked.
 
 **Why it happened:** `lstat` does not follow the final symlink, but it resolves symlinked parents on the way to a child, so a final-file check proved only that the last component was regular.
 

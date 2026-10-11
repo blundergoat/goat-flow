@@ -8,6 +8,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Rename sweeps into test/ skip typecheck entirely
 
 **Status:** active | **Created:** 2026-08-19
+**Severity:** CORRECTNESS
 **Incident count:** 3 | **Latest occurrence:** 2026-09-19
 
 **Prevention:** After a rename sweep that touches `test/`, run the suites owning the renamed files before trusting typecheck; for the slow suite that is `npm run test:slow:ci -- --shard=<i>/5` on the shard holding those files. When a declaration or call site is renamed, check that the declared return type and every reader moved with it. Evidence anchors: `tsconfig.json` (search: `"exclude"`), `test/integration/dashboard-server.helpers.ts` (search: `export function assertAuditScope`), `test/integration/dashboard-audit-api.test.ts` (search: `ms: elapsedMs`), `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `only treats image file drag items`).
@@ -33,6 +34,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Size refactors must preserve browser script load graphs in tests
 
 **Status:** active | **Created:** 2026-05-31
+**Severity:** INTEGRATION
 **Decision changed:** After splitting or extracting from a dashboard classic script, update the HTML load order, every VM helper source list, and every source-shape assertion in the same patch, then run the focused VM suites before expanding the refactor.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -51,6 +53,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Split tests must import their former shared scope explicitly
 
 **Status:** active | **Created:** 2026-05-31 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-12
 
 **Prevention:** After splitting any test file, run the whole new file glob rather than one renamed slice, and add explicit imports before trusting the split even when the old parent imported the same helpers. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `export {`), `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `COPILOT_GRUFF_HOOK_ENTRY`).
@@ -66,6 +69,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Parameterized matrix tests need named cases with direct assertions
 
 **Status:** active | **Created:** 2026-07-13
+**Severity:** INTEGRATION
 **Decision changed:** Generate one named test per matrix value and keep the assertion in that test callback; shared helpers return evidence instead of hiding assertions.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -73,12 +77,12 @@ last_reviewed: 2026-09-21
 
 **Prevention:** Register one named case per matrix value, return a concrete result from the shared scenario helper, and assert that result inside the test callback. Document temporary filesystem and subprocess side effects on helpers that perform installer flows. Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `Separate names make the failing agent visible`).
 
-**What happened:** The first M03 cross-agent install matrix wrapped assertions for all four agents inside two test-level loops. Gruff reported `test-quality.loop-in-test`; moving the work into named per-agent helpers then exposed `test-quality.no-assertions` because the visible callbacks only called those helpers. The behaviour suite passed both shapes, but its TAP output and analyzer evidence could not prove each named case owned an assertion.
+**What happened:** The first cross-agent install matrix wrapped assertions for all four agents inside two test-level loops. Gruff reported `test-quality.loop-in-test`; moving the work into named per-agent helpers then exposed `test-quality.no-assertions` because the visible callbacks only called those helpers. The behaviour suite passed both shapes, but its TAP output and analyzer evidence could not prove each named case owned an assertion.
 
 **Root cause:** The matrix was optimized for short source instead of failure localization. A helper can centralize fixture work, but each user-visible case still needs its own direct assertion so CI and static analysis can connect the case name to evidence.
 
-**Recurrence 2026-07-13:** M14's evidence-envelope and local-data contract tests asserted matrix values inside test-level loops; named cases restored failure localization and produced `A`, composite `100`, with 0 findings. `test/unit/evidence-envelope.test.ts` (search: `FORBIDDEN_RAW_PAYLOAD_KEYS`), `test/contract/local-data-contract.test.ts` (search: `LOCAL_STATE_README_ENTRIES`).
-**Recurrence 2026-08-07:** M04 checked nine staged-only prompt phrases inside one bounded-saver test loop; one named test per phrase kept a direct assertion, the focused suite passed 45 tests, and the rerun removed the finding. `test/unit/quality-report-contract.test.ts` (search: `keeps bounded-saver prompts free of staged-only guidance`).
+**Recurrence 2026-07-13:** The evidence-envelope and local-data contract tests asserted matrix values inside test-level loops; named cases restored failure localization and produced `A`, composite `100`, with 0 findings. `test/unit/evidence-envelope.test.ts` (search: `FORBIDDEN_RAW_PAYLOAD_KEYS`), `test/contract/local-data-contract.test.ts` (search: `LOCAL_STATE_README_ENTRIES`).
+**Recurrence 2026-08-07:** The change checked nine staged-only prompt phrases inside one bounded-saver test loop; one named test per phrase kept a direct assertion, the focused suite passed 45 tests, and the rerun removed the finding. `test/unit/quality-report-contract.test.ts` (search: `keeps bounded-saver prompts free of staged-only guidance`).
 **Recurrence 2026-08-09 (playbook mirrors):** Three hook-registration tests each looped over the two shipped playbook copies; one named mirror runner moved iteration out of the tests while assertion callbacks kept path-labelled failures. `test/unit/playbook-contract.test.ts` (search: `assertRegistrationCommandForEachPlaybook`).
 **Recurrence 2026-08-09 (launcher settings):** The hook launcher suite checked six invalid settings and two feedback ceilings inside one loop; named cases gave every value a direct assertion and a distinct TAP result. `test/unit/hook-launcher.test.ts` (search: `Separate names show exactly which mistyped user setting`).
 **Recurrence 2026-08-17:** A Gruff discovery contract checked twelve ordered candidates inside one loop; explicit relationship assertions kept the compact case while identifying the exact missing or misordered candidate. `test/contract/comment-playbook-doctrine.test.ts` (search: `discovers declared, wrapped, checkout, and installed tools in order`).

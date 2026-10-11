@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.17.0"
+goat-flow-reference-version: "1.18.0"
 ---
 # Skill Preamble
 
@@ -18,6 +18,8 @@ Goat-* Step 0 replaces READ and selects depth. SCOPE gates writes by mode or app
 ## Durable Local Text Redaction
 
 Narrative records: session, handoff, critique, review, quality, security, or export text. Require `goat-flow --version` matching `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Source CLI requires matching package/entry/version. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or source equivalent, using a fresh `.goat-flow/logs/` path. Redact before disk, not after: only redacted output reaches disk, never stage raw text; existing destinations are refused. Otherwise write nothing and report `persist-skipped: redactor-unavailable`.
+
+**Plan-summary exception:** Only the selected plan's `_PROGRESS.md` may be updated in place. Read history (or confirm absence), draft in memory, then use the version-matched `goat-flow redact` stdin/stdout mode; source equivalent: `node --import tsx src/cli/cli.ts redact`. Require exit zero before trusting stdout. Compare the destination with the history read, then save only scrubbed text that preserves earlier entries verbatim. Stop on unexpected destination changes. Apply the same pre-write procedure to every clarity edit. Failed/unavailable redaction leaves the file untouched; disclose the gap. Other narrative records retain the fresh-log, create-only rule above.
 
 The hash-only `redactEvidenceText` API is not a readable scrubber. Redaction reduces leakage; it is neither DLP nor secret review.
 
@@ -38,7 +40,7 @@ Order by severity, not discovery order.
 
 ## Evidence Standard
 
-- Live findings and durable learning artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function, or unique string); line numbers only navigate.
+- Live findings and durable learning artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function, or unique string); never line numbers.
 - For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible work, read `.goat-flow/skill-docs/playbooks/browser-use.md` and run `command -v browser-use || command -v browser-use-python` before declaring automation unavailable.
 - Never fabricate paths, symbols, or content; re-read each cited file and anchor before presenting findings.
 - Tag evidence quality: **OBSERVED** (verified) | **INFERRED** (name missing proof) | **UNVERIFIED** (cannot re-read) | **HUMAN-PENDING: \<what needs checking\>**.

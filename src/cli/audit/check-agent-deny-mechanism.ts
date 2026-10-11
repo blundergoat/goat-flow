@@ -417,7 +417,9 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
 
 /**
  * Spawns the installed deny self-test only after the caller requested full target-hook evidence.
- * Deduplicating shared dispatchers keeps audit bounded; it reports policy or launch failures without claiming provider delivery.
+ *
+ * Shared dispatchers run once because repeating the same self-test adds time without new evidence.
+ * It reports policy or launch failures without claiming provider delivery.
  *
  * @param ctx - target project and included agents whose installed dispatcher can be supplied to the self-test
  * @returns - self-test or environment failure, or null when runnable tests pass or no self-test file was readable

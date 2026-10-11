@@ -111,11 +111,11 @@ function dashboardSetupInstructionSurfaces(
 }
 
 /**
- * Finds one configured quality preset so a Quality card can show the prompt the user set up.
+ * Find a configured quality preset so the launch button can use its name.
  *
  * @param ctx - dashboard state holding presets fetched when the dashboard started
  * @param presetId - preset to find; an unknown id is a normal miss while presets are still loading
- * @returns the matching preset; null leaves its card without preset text when the requested preset is missing
+ * @returns the matching preset; null makes the launch label use the mode name
  */
 function dashboardQualityModePreset(
   ctx: DashboardSetupQualityContext,
@@ -138,45 +138,16 @@ function dashboardClearQualityHistory(ctx: DashboardSetupQualityContext): void {
 }
 
 /**
- * Build the harness assessment guidance shown when the user chooses the Harness Quality card.
- * Use in the browser fallback; the separate report-contract block supplies its save instructions.
- *
- * @returns non-empty assessment instructions; these do not launch a runner or save a report
- */
-function dashboardHarnessQualityPrompt(): string {
-  return [
-    "AI Harness Engineering Quality Assessment",
-    "",
-    "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write normal gitignored reporting/local-state artifacts if the runner requires them. In this contract, gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes; do not report them as read-only violations.",
-    "",
-    "Assess whether the selected target project's agent harness is actually usable, not only structurally present. Focus on context loading, constraint safety, verification evidence, recovery paths, feedback-loop durability, and whether instructions distinguish the controlling goat-flow workspace from the selected target.",
-    "",
-    "Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts audit . --harness --format json from the controlling workspace when applicable; node --import tsx src/cli/cli.ts stats . --check when the selected target is a goat-flow installation. Command output wins over prose.",
-    "",
-    "Read next: target instruction files, local agent settings/hooks, .goat-flow/config.yaml when present, .goat-flow/skill-docs/ and .goat-flow/skill-docs/playbooks/ when present, controlling-workspace harness code under src/cli/audit/harness/, and any dashboard terminal/runner context text that affects selected-target execution.",
-    "",
-    "Output sections: Harness Scorecard; Findings ordered by severity; Concern-by-concern analysis; False positive and false negative risks; Top 5 improvements; What was not verified. For each deterministic harness concern (Context, Constraints, Verification, Recovery, Feedback Loop), state what works, what fails or is weak, exact file or semantic-anchor evidence, and a verification command that would prove the fix.",
-    "",
-    "Do not treat a structural PASS as quality PASS. If a score or check claims completeness, verify what behavior it actually proves.",
-  ].join("\n");
-}
-
-/**
  * Builds the cards the user picks from on the Quality tab, in the order they appear on screen.
  *
- * Cards render before their presets arrive, so a card can exist with no prompt yet; treat a missing prompt as "not ready", not "empty".
+ * Prompt text comes from the shared CLI composer through the quality API; presets supply launch labels only.
  *
- * @param ctx - dashboard state supplying loaded presets and the selected project
- * @returns the cards in display order; `prompt` is undefined on a preset-backed card whose preset has not loaded yet
+ * @param _ctx - existing dashboard call context; card metadata is independent of loaded presets
+ * @returns cards in display order; every mode uses the quality API
  */
 function dashboardQualityModes(
-  ctx: DashboardSetupQualityContext,
+  _ctx: DashboardSetupQualityContext,
 ): QualityModeOption[] {
-  const qualityCheck = dashboardQualityModePreset(
-    ctx,
-    "quality-check-goatflow",
-  );
-  const skillQuality = dashboardQualityModePreset(ctx, "skill-quality-test");
   return [
     {
       id: "agent-setup",
@@ -193,7 +164,6 @@ function dashboardQualityModes(
       presetId: "quality-check-goatflow",
       targetScope:
         "controlling goat-flow workspace, plus selected target only when it is a goat-flow installation",
-      prompt: qualityCheck?.prompt,
     },
     {
       id: "harness",
@@ -202,7 +172,6 @@ function dashboardQualityModes(
       source: "api",
       targetScope:
         "selected target project harness, interpreted from the controlling workspace",
-      prompt: dashboardHarnessQualityPrompt(),
     },
     {
       id: "skills",
@@ -212,7 +181,6 @@ function dashboardQualityModes(
       presetId: "skill-quality-test",
       targetScope:
         "controlling goat-flow workspace skills and shared references",
-      prompt: skillQuality?.prompt,
     },
   ];
 }
@@ -241,16 +209,6 @@ function dashboardSelectedQualityModeMeta(
  */
 function dashboardQualityControllingWorkspace(): string {
   return window.__GOAT_FLOW_DEFAULT_PATH__ ?? ".";
-}
-
-/**
- * Quotes text for the shell commands embedded in a generated quality prompt, so a project path with spaces still pastes and runs.
- *
- * @param unquotedText - raw text, usually a project path the user picked; embedded quotes are escaped so it stays one shell word
- * @returns the quoted text including its surrounding quotes; never empty, so the command never loses an argument
- */
-function dashboardQualityShellQuote(unquotedText: string): string {
-  return `'${unquotedText.replace(/'/g, "'\\''")}'`;
 }
 
 /**
@@ -291,159 +249,6 @@ function dashboardQualityLaunchLabel(
       : mode.label
     : ctx.qualityAgent;
   return `Quality ${modeLabel} for ${dashboardAgentDisplayName(ctx, ctx.qualityAgent)} via ${dashboardAgentDisplayName(ctx, ctx.activeRunner)}`;
-}
-
-/**
- * Builds the "where to save the report" half of a quality prompt, so the run a user launches lands in their history rather than a transcript.
- *
- * It tells the agent the owning project, the exact filename rules, and the schema the report must satisfy to stay loadable by `quality history`.
- *
- * @param ctx - dashboard state supplying the target agent and selected project
- * @param mode - the Quality card the user picked; decides which project owns the saved report
- * @returns the contract block as newline-joined Markdown; never empty, since a prompt without it produces a report nobody can find again
- */
-function dashboardQualityReportLogPrompt(
-  ctx: DashboardSetupQualityContext,
-  mode: QualityModeOption,
-): string {
-  const agent = ctx.qualityAgent;
-  const projectPath = dashboardQualityReportProjectPath(ctx, mode);
-  const agentJson = JSON.stringify(agent);
-  const projectPathJson = JSON.stringify(projectPath);
-  const modeJson = JSON.stringify(mode.id);
-  // A dashboard without version metadata cannot claim a compatible CLI for the user's assessment.
-  const reportVersion = window.__GOAT_FLOW_VERSION__ ?? "unknown";
-  const versionJson = JSON.stringify(reportVersion);
-  const scopeJson = JSON.stringify(
-    mode.id === "process" || mode.id === "skills"
-      ? "framework-self"
-      : "consumer",
-  );
-  const reportRootShell = dashboardQualityShellQuote(projectPath);
-  return [
-    "### Refuted Candidates",
-    "List every candidate finding you tested and excluded, why it was excluded, and the source anchor or command result that disproved it. Write `None` when no candidate was ruled out.",
-    "Keep these candidates out of Findings and Top 5 Improvements; the ledger exists so the user and later reviewers do not repeat disproved work.",
-    "",
-    "Quality report log:",
-    `- Report owner project_path for this mode: ${projectPath}`,
-    "- Persist the final report through the bounded saver. It redacts and validates stdin in memory, then chooses a filename under the owner project's gitignored `.goat-flow/logs/quality/`.",
-    "- Filename format: `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`; the saver derives every filename component.",
-    "- JSON body shape:",
-    "```json",
-    "{",
-    '  "report_kind": "goat-flow-quality-report",',
-    `  "goat_flow_version": ${versionJson},`,
-    `  "agent": ${agentJson},`,
-    `  "project_path": ${projectPathJson},`,
-    '  "run_date": "YYYY-MM-DD",',
-    '  "audit_status": "pass | fail | unavailable",',
-    `  "scope": ${scopeJson},`,
-    `  "rubric_version": ${versionJson},`,
-    `  "quality_mode": ${modeJson},`,
-    '  "prior_report_id": null,',
-    '  "assessment_context": {',
-    '    "project_revision": null,',
-    '    "working_tree_state": "unavailable",',
-    '    "grounding_status": "blocked",',
-    '    "unverified_probes": ["runtime grounding not yet recorded"],',
-    '    "score_confidence": "low",',
-    '    "workspace_snapshot": { "start": null, "end": null }',
-    "  },",
-    '  "scores": {',
-    '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
-    '    "system": { "total": 0, "usefulness": 0, "signal_to_noise": 0, "adaptability": 0, "learnability": 0 }',
-    "  },",
-    '  "score_rationale": {',
-    '    "setup": {',
-    '      "accuracy": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
-    '      "relevance": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
-    '      "completeness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
-    '      "friction": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
-    "    },",
-    '    "system": {',
-    '      "usefulness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
-    '      "signal_to_noise": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
-    '      "adaptability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
-    '      "learnability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
-    "    }",
-    "  },",
-    '  "findings": [',
-    '    { "type": "setup_quality", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": "new" }',
-    "  ],",
-    '  "refuted_candidates": [],',
-    '  "improvements": []',
-    "}",
-    "```",
-    "- Use exact score axis values `0 | 5 | 10 | 15 | 20 | 25`; each total must equal its axis sum.",
-    "- Every score axis requires `evidence` and `deduction` as non-empty single-line strings of 240 characters or fewer.",
-    "- Allowed finding types: `setup_quality`, `skill_flaw`, `contradiction`, `false_path`, `content_quality`, `framework_flaw`.",
-    "- Allowed severities: `BLOCKER`, `MAJOR`, `MINOR`. Allowed evidence methods: `runtime-probe`, `static-analysis`, `mixed`.",
-    "- A `runtime-probe` or `mixed` finding requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` from the same completed tool call. Optional `evidence_warning_count` and `evidence_excerpt` must match that output.",
-    "- Capture command output and its real exit code together. A grep with no matches can exit 1; a failed analyzer startup is not a clean run. Truncated output, a signal, or an unavailable exit code cannot support a precise count or a fabricated exit 0; name the missing evidence in `unverified_probes`.",
-    "- Recheck each candidate against current source, accepted decisions, and a negative control before scoring it. Report findings only for concrete current defects. Keep qualification gaps, maintenance work, and design opportunities distinct; a local classifier test does not prove live provider delivery. State whether a skill was inspected or invoked; static inspection is valid evidence for static claims.",
-    "- Record up to 5 actionable recommendations in `improvements`, or `[]` when none remain. Each row has `category` (`defect`, `qualification-gap`, `maintenance`, `design-opportunity`), `summary` (up to 240 characters), `action` and `evidence` (up to 1000 each), and `file` (path or null for project-wide work). Text must be non-empty and single-line. Preserve the same recommendations in prose; do not repeat refuted candidates or change rubric scores merely because an opportunity exists.",
-    "- `refuted_candidates` is REQUIRED and may be `[]`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; excluded candidates do not belong in `findings`.",
-    "- A `runtime-probe` or `mixed` refuted candidate requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` so the disproval is reproducible.",
-    '- A refuted candidate must use `evidence_quality: "OBSERVED"`; an `INFERRED` candidate remains unresolved and must not enter the refutation ledger.',
-    '- A `static-analysis` or `mixed` refuted candidate requires a non-null `file` and a grep-friendly semantic anchor such as `(search: "pattern")` in `evidence_summary`.',
-    '- `prior_report_id`: keep `null` unless you can cite a specific prior report id (from `goat-flow quality history`) for this same agent/mode. When it is set, `delta_tag` is REQUIRED on every finding (`"new"` unless the finding materially matches that prior report; then `"persisted"`); when it is `null`, leave `delta_tag` as `null` or omit it.',
-    "- `assessment_context`: record `project_revision`, `working_tree_state` (`clean`, `dirty`, `not-git`, or `unavailable`), `grounding_status` (`complete`, `partial`, or `blocked`), every skipped, denied, or unavailable command or skill probe in `unverified_probes`, and `score_confidence` (`high`, `medium`, or `low`). Use an empty probe array only for complete grounding. This metadata does not change or cap the rubric scores.",
-    "- Record `workspace_snapshot.start` before assessment and `.end` afterwards using the same raw-file snapshot request below; copy each returned `authority.fingerprint`. This covers the selected project's non-ignored regular files, not ignored plans/logs, symlinks, or nested repositories. Re-read any ignored evidence separately. These are reviewer-recorded fingerprints, not launcher attestation.",
-    `- With a version-matched CLI, send {"schema":"goat-review-request/v1","source":{"kind":"area","roots":["."],"sample":null}} on stdin to \`goat-flow review snapshot --project ${reportRootShell} --expected-version ${reportVersion}\`. In the controlling framework checkout, the matching \`node --import tsx src/cli/cli.ts\` prefix is also valid.`,
-    "- If snapshot capture is unavailable, use null for that endpoint and name the limitation in `unverified_probes`. If endpoints differ, recheck affected findings and use partial grounding while the drift remains unresolved. A shared HEAD or a dirty/clean label alone does not establish identical assessed content. Compare score changes only with matching rubric, scope, and adequately grounded evidence.",
-    "- Live review findings should cite `file` + semantic anchor after re-reading the cited file and anchor. Durable footguns, lessons, patterns, and decisions must use file paths plus semantic anchors rather than line numbers.",
-    "- **Version-skew calibration:** Executable version checks select a compatible report saver; they are not findings or score inputs. Before publication, the framework checkout may be newer than the bare `goat-flow` on `PATH`; use the matching source CLI and do not report or score that PATH-only skew. Raise version findings only when repository-owned declarations or managed target artifacts disagree.",
-    "- In the controlling goat-flow checkout, confirm `node --import tsx src/cli/cli.ts --version` matches the report version, then run:",
-    "```bash",
-    `node --import tsx src/cli/cli.ts quality save ${reportRootShell} <<'JSON'`,
-    "<insert the complete report object as one JSON line here>",
-    "JSON",
-    "```",
-    "- Outside the framework checkout, use the matching installed CLI:",
-    "```bash",
-    `goat-flow quality save ${reportRootShell} <<'JSON'`,
-    "<insert the complete report object as one JSON line here>",
-    "JSON",
-    "```",
-    "- Minify the completed object to one JSON line; multi-line heredoc bodies can be mistaken for chained commands by safety hooks.",
-    "- Never stage the raw JSON or pass `--output`. If neither saver is compatible, report `persist-skipped: redactor-unavailable`.",
-    "- Success prints `OK <absolute-report-path>` only after the report exists and validates.",
-    "- End your response with: `Wrote quality report to <absolute-report-path>` using the exact `OK` path.",
-    `- This log requirement applies to the ${mode.label} mode; do not skip it even when the prose assessment is complete.`,
-  ].join("\n");
-}
-
-/**
- * Assembles the full prompt the user copies or launches: the preset text, the scope block, then the report-log contract.
- *
- * @param ctx - dashboard state supplying the controlling workspace and the project the user selected
- * @param mode - the Quality card the user picked; one whose preset has not loaded yet carries no prompt text
- * @returns the complete prompt, or an empty string when there is nothing to build on, which the Quality tab shows as a card that cannot launch yet
- */
-function dashboardBuildQualityModePrompt(
-  ctx: DashboardSetupQualityContext,
-  mode: QualityModeOption,
-): string {
-  const prompt = mode.prompt?.trim();
-  // A mode without meaningful preset text cannot provide a usable prompt to copy or launch.
-  if (!prompt) {
-    return "";
-  }
-  return [
-    prompt,
-    "",
-    "Quality mode scope:",
-    `- Mode: ${mode.label}`,
-    `- Controlling goat-flow workspace: ${window.__GOAT_FLOW_DEFAULT_PATH__ ?? "."}`,
-    `- Selected target project: ${ctx.projectPath}`,
-    `- Scope rule: ${mode.targetScope}`,
-    "- Treat missing target .goat-flow files as normal unless this mode explicitly audits a goat-flow installation.",
-    "- Keep this assessment read-only unless the user explicitly asks for edits.",
-    `- Selected quality target agent: ${ctx.qualityAgent}`,
-    "",
-    dashboardQualityReportLogPrompt(ctx, mode),
-  ].join("\n");
 }
 
 /**

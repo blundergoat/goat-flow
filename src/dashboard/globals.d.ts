@@ -102,14 +102,24 @@ interface QualityResult {
   launchPrompt: string;
 }
 
+/** Descriptive statistics supplied by saved history, with legacy evidence labelled. */
+interface QualityRepeatSpread {
+  kind: "controlled" | "observational";
+  sampleSize: number;
+  setup: { median: number; min: number; max: number; range: number };
+  system: { median: number; min: number; max: number; range: number };
+}
+
 /** One row in the quality-history trend table from `/api/quality/history`. */
 interface QualityHistoryRow {
+  repeatSpread?: QualityRepeatSpread | null;
   id: string;
   date: string;
   agent: RunnerId;
   setupTotal: number;
   systemTotal: number;
   setupDelta: number | null;
+  systemDelta: number | null;
   blockerCount: number;
   majorCount: number;
   minorCount: number;
@@ -429,7 +439,6 @@ interface QualityModeOption {
   source: "api" | "preset" | "registry";
   presetId?: string | undefined;
   targetScope: string;
-  prompt?: string | undefined;
 }
 
 // ---------------------------------------------------------------------------

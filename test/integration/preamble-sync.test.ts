@@ -1,7 +1,9 @@
 /**
- * Regression test for the preflight preamble/conventions sync check.
- * Verifies the diff-based check correctly detects when template and installed
- * copies of skill-preamble.md or skill-conventions.md diverge.
+ * Parity contract for the shared references and playbooks goat-flow installs into `.goat-flow/skill-docs/`.
+ *
+ * Every pair in the audit's `SHARED_ARTIFACT_MIRRORS` registry must match byte for byte, so a new playbook is
+ * covered the moment it is registered instead of needing a hand-written case here. The remaining cases check
+ * the discovery row and preamble sections agents rely on, and prove the diff-based detection still fires.
  *
  * Regression detection runs in a tmpdir - never mutates tracked repo files.
  */
@@ -16,8 +18,9 @@ import {
   mkdtempSync,
   rmSync,
 } from "node:fs";
-import { resolve, join } from "node:path";
+import { basename, dirname, resolve, join } from "node:path";
 import { tmpdir } from "node:os";
+import { SHARED_ARTIFACT_MIRRORS } from "../../src/cli/audit/artifact-templates.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const TEMPLATE_REFERENCE_README = resolve(
@@ -36,146 +39,6 @@ const INSTALLED_PREAMBLE = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/skill-preamble.md",
 );
-const TEMPLATE_CONVENTIONS = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/reference/skill-conventions.md",
-);
-const INSTALLED_CONVENTIONS = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/skill-conventions.md",
-);
-const TEMPLATE_BROWSER_USE = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/browser-use.md",
-);
-const INSTALLED_BROWSER_USE = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/browser-use.md",
-);
-const TEMPLATE_CODE_COMMENTS = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/code-comments.md",
-);
-const INSTALLED_CODE_COMMENTS = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/code-comments.md",
-);
-const TEMPLATE_NAMING_AND_PLACEMENT = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/naming-and-placement.md",
-);
-const INSTALLED_NAMING_AND_PLACEMENT = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
-);
-const TEMPLATE_GRUFF_CODE_QUALITY = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/gruff-code-quality.md",
-);
-const INSTALLED_GRUFF_CODE_QUALITY = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-);
-const TEMPLATE_HOOK_POLICY_TESTING = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/hook-policy-testing.md",
-);
-const INSTALLED_HOOK_POLICY_TESTING = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
-);
-const TEMPLATE_OBSERVABILITY = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/observability.md",
-);
-const INSTALLED_OBSERVABILITY = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/observability.md",
-);
-const TEMPLATE_PAGE_CAPTURE = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/page-capture.md",
-);
-const INSTALLED_PAGE_CAPTURE = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/page-capture.md",
-);
-const TEMPLATE_RELEASE_NOTES = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/release-notes.md",
-);
-const INSTALLED_RELEASE_NOTES = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/release-notes.md",
-);
-const TEMPLATE_PLAYBOOK_AUTHORING_SYNC = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/skill-playbook-authoring-sync.md",
-);
-const INSTALLED_PLAYBOOK_AUTHORING_SYNC = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
-);
-const TEMPLATE_TEST_SELECTION = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/test-selection.md",
-);
-const INSTALLED_TEST_SELECTION = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/test-selection.md",
-);
-const TEMPLATE_AGENT_FACING_INSTRUCTIONS = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/writing-agent-facing-instructions.md",
-);
-const INSTALLED_AGENT_FACING_INSTRUCTIONS = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
-);
-const TEMPLATE_HUMAN_FACING_PROSE = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/writing-human-facing-prose.md",
-);
-const INSTALLED_HUMAN_FACING_PROSE = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
-);
-const ROUTED_WRITING_DIAGNOSTIC_PAIRS = [
-  "writing-sentence-diagnostics.md",
-  "writing-structure-diagnostics.md",
-].map((filename) => ({
-  filename,
-  template: resolve(PROJECT_ROOT, "workflow/skills/playbooks", filename),
-  installed: resolve(PROJECT_ROOT, ".goat-flow/skill-docs/playbooks", filename),
-}));
-const TEMPLATE_CHANGELOG = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/changelog.md",
-);
-const INSTALLED_CHANGELOG = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/changelog.md",
-);
-const TEMPLATE_QUALITY_TESTING = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/playbooks/skill-quality-testing.md",
-);
-const INSTALLED_QUALITY_TESTING = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/skill-quality-testing/README.md",
-);
-const TOPICAL_FILES = ["tdd-iteration", "adversarial-framing", "deployment"];
-const TOPICAL_PAIRS = TOPICAL_FILES.map((name) => ({
-  name,
-  template: resolve(
-    PROJECT_ROOT,
-    `workflow/skills/playbooks/skill-quality-testing/${name}.md`,
-  ),
-  installed: resolve(
-    PROJECT_ROOT,
-    `.goat-flow/skill-docs/skill-quality-testing/${name}.md`,
-  ),
-}));
 
 /** Spawns quiet diff so sync contracts can assert parity without printing bodies. */
 function diffQuiet(expectedPath: string, actualPath: string): number {
@@ -200,35 +63,54 @@ function assertMirrorExists(
   );
 }
 
+/**
+ * Name one registry pair the way maintainers know the file.
+ * README mirrors keep their parent directory so the reference and playbook READMEs stay distinct cases.
+ *
+ * @param templatePath - repository-relative canonical source path from the registry
+ * @returns the file name, or `<parent>/README.md` for a README mirror
+ */
+function mirrorLabel(templatePath: string): string {
+  const name = basename(templatePath);
+  return name === "README.md"
+    ? `${basename(dirname(templatePath))}/README.md`
+    : name;
+}
+
 // ---------------------------------------------------------------------------
 // Template and installed copies currently match (sanity check)
 // ---------------------------------------------------------------------------
 describe("preamble/conventions sync: current state", () => {
-  it("template and installed skill-docs README.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_REFERENCE_README,
-      INSTALLED_REFERENCE_README,
-      "skill-docs README.md",
+  it("the mirror registry still enrolls the shared reference files", () => {
+    // Registry-driven parity cannot notice a core entry disappearing from the registry itself.
+    const installed = new Set(
+      SHARED_ARTIFACT_MIRRORS.map((spec) => spec.installed),
     );
-    assert.equal(
-      diffQuiet(TEMPLATE_REFERENCE_README, INSTALLED_REFERENCE_README),
-      0,
-      "skill-docs README.md: template and installed should match",
-    );
+    for (const required of [
+      ".goat-flow/skill-docs/README.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ]) {
+      assert.ok(
+        installed.has(required),
+        `${required} is no longer registered in SHARED_ARTIFACT_MIRRORS`,
+      );
+    }
   });
 
-  it("template and installed skill-preamble.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_PREAMBLE,
-      INSTALLED_PREAMBLE,
-      "skill-preamble.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_PREAMBLE, INSTALLED_PREAMBLE),
-      0,
-      "skill-preamble.md: template and installed should match",
-    );
-  });
+  for (const spec of SHARED_ARTIFACT_MIRRORS) {
+    const label = mirrorLabel(spec.template);
+    it(`template and installed ${label} match`, () => {
+      const templatePath = resolve(PROJECT_ROOT, spec.template);
+      const installedPath = resolve(PROJECT_ROOT, spec.installed);
+      assertMirrorExists(templatePath, installedPath, label);
+      assert.equal(
+        diffQuiet(templatePath, installedPath),
+        0,
+        `${label}: template and installed should match`,
+      );
+    });
+  }
 
   it("the skill-conventions discovery row names every load-bearing role it governs", () => {
     // Byte parity alone lets two identical rows be identically wrong. Before 2026-08-29 both READMEs described this
@@ -260,232 +142,6 @@ describe("preamble/conventions sync: current state", () => {
       }
     }
   });
-
-  it("template and installed skill-conventions.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_CONVENTIONS,
-      INSTALLED_CONVENTIONS,
-      "skill-conventions.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_CONVENTIONS, INSTALLED_CONVENTIONS),
-      0,
-      "skill-conventions.md: template and installed should match",
-    );
-  });
-
-  it("template and installed browser-use.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_BROWSER_USE,
-      INSTALLED_BROWSER_USE,
-      "browser-use.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_BROWSER_USE, INSTALLED_BROWSER_USE),
-      0,
-      "browser-use.md: template and installed should match",
-    );
-  });
-
-  it("template and installed code-comments.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_CODE_COMMENTS,
-      INSTALLED_CODE_COMMENTS,
-      "code-comments.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_CODE_COMMENTS, INSTALLED_CODE_COMMENTS),
-      0,
-      "code-comments.md: template and installed should match",
-    );
-  });
-
-  it("template and installed naming-and-placement.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_NAMING_AND_PLACEMENT,
-      INSTALLED_NAMING_AND_PLACEMENT,
-      "naming-and-placement.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_NAMING_AND_PLACEMENT, INSTALLED_NAMING_AND_PLACEMENT),
-      0,
-      "naming-and-placement.md: template and installed should match",
-    );
-  });
-
-  it("template and installed gruff-code-quality.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_GRUFF_CODE_QUALITY,
-      INSTALLED_GRUFF_CODE_QUALITY,
-      "gruff-code-quality.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_GRUFF_CODE_QUALITY, INSTALLED_GRUFF_CODE_QUALITY),
-      0,
-      "gruff-code-quality.md: template and installed should match",
-    );
-  });
-
-  it("template and installed hook-policy-testing.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_HOOK_POLICY_TESTING,
-      INSTALLED_HOOK_POLICY_TESTING,
-      "hook-policy-testing.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_HOOK_POLICY_TESTING, INSTALLED_HOOK_POLICY_TESTING),
-      0,
-      "hook-policy-testing.md: template and installed should match",
-    );
-  });
-
-  it("template and installed observability.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_OBSERVABILITY,
-      INSTALLED_OBSERVABILITY,
-      "observability.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_OBSERVABILITY, INSTALLED_OBSERVABILITY),
-      0,
-      "observability.md: template and installed should match",
-    );
-  });
-
-  it("template and installed page-capture.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_PAGE_CAPTURE,
-      INSTALLED_PAGE_CAPTURE,
-      "page-capture.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_PAGE_CAPTURE, INSTALLED_PAGE_CAPTURE),
-      0,
-      "page-capture.md: template and installed should match",
-    );
-  });
-
-  it("template and installed release-notes.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_RELEASE_NOTES,
-      INSTALLED_RELEASE_NOTES,
-      "release-notes.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_RELEASE_NOTES, INSTALLED_RELEASE_NOTES),
-      0,
-      "release-notes.md: template and installed should match",
-    );
-  });
-
-  // A fresh install must expose the same playbook contract maintainers edit in workflow source.
-  it("template and installed skill-playbook-authoring-sync.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_PLAYBOOK_AUTHORING_SYNC,
-      INSTALLED_PLAYBOOK_AUTHORING_SYNC,
-      "skill-playbook-authoring-sync.md",
-    );
-    assert.equal(
-      diffQuiet(
-        TEMPLATE_PLAYBOOK_AUTHORING_SYNC,
-        INSTALLED_PLAYBOOK_AUTHORING_SYNC,
-      ),
-      0,
-      "skill-playbook-authoring-sync.md: template and installed should match",
-    );
-  });
-
-  it("template and installed test-selection.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_TEST_SELECTION,
-      INSTALLED_TEST_SELECTION,
-      "test-selection.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_TEST_SELECTION, INSTALLED_TEST_SELECTION),
-      0,
-      "test-selection.md: template and installed should match",
-    );
-  });
-
-  // Agent-document authoring guidance ships to consumers, so the installed copy must not drift.
-  it("template and installed writing-agent-facing-instructions.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_AGENT_FACING_INSTRUCTIONS,
-      INSTALLED_AGENT_FACING_INSTRUCTIONS,
-      "writing-agent-facing-instructions.md",
-    );
-    assert.equal(
-      diffQuiet(
-        TEMPLATE_AGENT_FACING_INSTRUCTIONS,
-        INSTALLED_AGENT_FACING_INSTRUCTIONS,
-      ),
-      0,
-      "writing-agent-facing-instructions.md: template and installed should match",
-    );
-  });
-
-  // Prose-style guidance ships to consumers, so the installed copy must not drift.
-  it("template and installed writing-human-facing-prose.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_HUMAN_FACING_PROSE,
-      INSTALLED_HUMAN_FACING_PROSE,
-      "writing-human-facing-prose.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_HUMAN_FACING_PROSE, INSTALLED_HUMAN_FACING_PROSE),
-      0,
-      "writing-human-facing-prose.md: template and installed should match",
-    );
-  });
-
-  for (const pair of ROUTED_WRITING_DIAGNOSTIC_PAIRS) {
-    it(`template and installed ${pair.filename} match`, () => {
-      assertMirrorExists(pair.template, pair.installed, pair.filename);
-      assert.equal(
-        diffQuiet(pair.template, pair.installed),
-        0,
-        `${pair.filename}: template and installed should match`,
-      );
-    });
-  }
-
-  it("template and installed changelog.md match", () => {
-    assertMirrorExists(TEMPLATE_CHANGELOG, INSTALLED_CHANGELOG, "changelog.md");
-    assert.equal(
-      diffQuiet(TEMPLATE_CHANGELOG, INSTALLED_CHANGELOG),
-      0,
-      "changelog.md: template and installed should match",
-    );
-  });
-
-  it("template and installed skill-quality-testing.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_QUALITY_TESTING,
-      INSTALLED_QUALITY_TESTING,
-      "skill-quality-testing.md",
-    );
-    assert.equal(
-      diffQuiet(TEMPLATE_QUALITY_TESTING, INSTALLED_QUALITY_TESTING),
-      0,
-      "skill-quality-testing.md: template and installed should match",
-    );
-  });
-
-  for (const pair of TOPICAL_PAIRS) {
-    it(`template and installed skill-quality-testing/${pair.name}.md match`, () => {
-      assertMirrorExists(
-        pair.template,
-        pair.installed,
-        `skill-quality-testing/${pair.name}.md`,
-      );
-      assert.equal(
-        diffQuiet(pair.template, pair.installed),
-        0,
-        `skill-quality-testing/${pair.name}.md: template and installed should match`,
-      );
-    });
-  }
 });
 
 // ---------------------------------------------------------------------------

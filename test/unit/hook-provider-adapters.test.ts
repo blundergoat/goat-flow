@@ -1,8 +1,8 @@
 /**
  * Locks the runtime boundary that turns one neutral hook result into host output.
- * Use these fixtures before migrating a detector, so malformed or incomplete
- * child output cannot become a clean badge and provider-specific feedback stays
- * bounded, model-visible where supported, and blocking where required.
+ *
+ * Use these fixtures before migrating a detector so malformed or incomplete output cannot become a clean badge.
+ * Keep provider feedback bounded, visible where supported and blocking where required.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -10,6 +10,7 @@ import {
   HOOK_RESULT_ADAPTER_VERSION,
   HOOK_RESULT_FINDING_LIMIT as RUNTIME_FINDING_LIMIT,
   HOOK_RESULT_OUTPUT_LIMIT_BYTES as RUNTIME_OUTPUT_LIMIT_BYTES,
+  HOOK_RESULT_ENVELOPE_LIMIT_BYTES,
   HOOK_RESULT_SCHEMA as RUNTIME_RESULT_SCHEMA,
   adaptHookResultForProvider,
   decodeHookResultOutput,
@@ -18,6 +19,7 @@ import {
   HOOK_RESULT_FINDING_LIMIT,
   HOOK_RESULT_OUTPUT_LIMIT_BYTES,
   HOOK_RESULT_SCHEMA,
+  validateHookResultEnvelope,
   type HookLifecycleEvent,
   type HookResultEnvelope,
   type HookResultOutcome,
@@ -137,6 +139,7 @@ function providerFeedbackText(
   providerOutput: ReturnType<typeof adaptHookResultForProvider>,
 ): string {
   assert.equal(providerOutput.state, "adapted");
+  // Failed adaptation cannot supply the user feedback this fixture is checking.
   if (providerOutput.state !== "adapted") {
     throw new Error(providerOutput.reason);
   }
@@ -159,6 +162,7 @@ function providerFeedbackText(
 function assertForEachDetailedCase(
   detailedCases: ReadonlyArray<[string, HookResultEnvelope]>,
 ): void {
+  // Every nearby envelope variation must retain detailed coverage rather than hiding it in a compact advisory.
   for (const [caseLabel, hookResult] of detailedCases) {
     const rendered = providerFeedbackText(
       adaptHookResultForProvider(
@@ -226,12 +230,14 @@ describe("hook provider adapters", () => {
   });
 
   // Oversized child output is rejected before JSON parsing can consume the host channel.
-  it("rejects child output beyond the shared byte limit", () => {
-    const oversizedChildOutput = "x".repeat(HOOK_RESULT_OUTPUT_LIMIT_BYTES + 1);
+  it("rejects child output beyond the envelope byte limit", () => {
+    const oversizedChildOutput = "x".repeat(
+      HOOK_RESULT_ENVELOPE_LIMIT_BYTES + 1,
+    );
 
     assert.deepEqual(decodeHookResultOutput(oversizedChildOutput), {
       state: "invalid",
-      reason: `result output exceeds the ${HOOK_RESULT_OUTPUT_LIMIT_BYTES}-byte limit`,
+      reason: `result output exceeds the ${HOOK_RESULT_ENVELOPE_LIMIT_BYTES}-byte limit`,
     });
   });
 
@@ -538,5 +544,97 @@ describe("hook provider adapters", () => {
     );
 
     assert.match(multiline, /Coverage:/u);
+  });
+});
+
+describe("output budgets", () => {
+  // A forged recovery label must not create a warning too large for the user's provider to receive.
+  it("rejects oversized recovery labels in typed and runtime validation", () => {
+    const result = providerHookResult("codex", "turn-stop", "incomplete");
+    result.reasonCode = "bounded-reentry-ended";
+    result.execution.failureClass = "infrastructure";
+    result.execution.recovery = {
+      state: "exhausted",
+      failureCode: "a".repeat(11_000),
+    };
+    assert.deepEqual(validateHookResultEnvelope(result), [
+      "execution recovery metadata is invalid",
+    ]);
+    assert.deepEqual(decodeHookResultOutput(JSON.stringify(result)), {
+      state: "invalid",
+      reason: "execution recovery metadata is invalid",
+    });
+  });
+
+  it("keeps child-byte validation consistent in typed screens and runtime delivery", () => {
+    const result = providerHookResult("codex", "turn-stop", "block");
+    result.execution.childOutput = {
+      envelopeLimitBytes: 65536,
+      stderrRetentionLimitBytes: 4096,
+      stderrFloodLimitBytes: 1048576,
+      providerLimitBytes: 10000,
+      stdoutBytes: 500,
+      stderrBytes: 70000,
+      areByteCountsExact: true,
+      isStderrTruncated: true,
+    };
+    assert.deepEqual(validateHookResultEnvelope(result), []);
+    assert.equal(decodeHookResultOutput(JSON.stringify(result)).state, "valid");
+    result.execution.childOutput.stderrBytes = -1;
+    assert.deepEqual(validateHookResultEnvelope(result), [
+      "execution output metadata is invalid",
+    ]);
+    assert.deepEqual(decodeHookResultOutput(JSON.stringify(result)), {
+      state: "invalid",
+      reason: "execution output metadata is invalid",
+    });
+  });
+  it("keeps typed and runtime envelope ceilings aligned with the larger capture stage", () => {
+    assert.equal(HOOK_RESULT_ENVELOPE_LIMIT_BYTES, 65_536);
+    const result = providerHookResult("codex", "turn-stop", "block");
+    result.findings = [
+      { code: "safety-hazard", message: 'Quoted "text" 漢字 '.repeat(1800) },
+    ];
+    const decoded = decodeHookResultOutput(JSON.stringify(result));
+    assert.equal(decoded.state, "valid");
+    const delivery = adaptHookResultForProvider(result, "codex", "turn-stop");
+    assert.equal(delivery.state, "adapted");
+    assert.equal(JSON.parse(delivery.stdout).decision, "block");
+    assert.match(JSON.parse(delivery.stdout).reason, /safety-hazard/);
+    assert.ok(
+      Buffer.byteLength(delivery.stdout) <= HOOK_RESULT_OUTPUT_LIMIT_BYTES,
+    );
+  });
+
+  it("rejects contradictory omissions instead of counting skipped scope as hidden findings", () => {
+    const result = providerHookResult("codex", "turn-stop", "block");
+    result.findings = [
+      {
+        code: "safety-hazard",
+        message: "A changed file has a confirmed hazard",
+      },
+    ];
+    result.summary = {
+      detectedFindings: 2,
+      envelopeOmittedFindings: 1,
+      presentationOmittedFindings: 1,
+    };
+    assert.deepEqual(decodeHookResultOutput(JSON.stringify(result)), {
+      state: "invalid",
+      reason: "result summary metadata is invalid",
+    });
+  });
+
+  it("rejects recovery metadata on a genuine finding so a forged terminal label cannot release it", () => {
+    const result = providerHookResult("codex", "turn-stop", "block");
+    result.execution.failureClass = "infrastructure";
+    result.execution.recovery = {
+      state: "exhausted",
+      failureCode: "hook-unavailable",
+    };
+    assert.deepEqual(decodeHookResultOutput(JSON.stringify(result)), {
+      state: "invalid",
+      reason: "execution recovery metadata is invalid",
+    });
   });
 });

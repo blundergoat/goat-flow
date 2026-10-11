@@ -7,7 +7,10 @@
  * Use this suite when changing command grammar or policy boundaries.
  */
 import assert from "node:assert/strict";
-import { checkInstalledPolicy } from "../helpers/check-installed-policy.js";
+import {
+  checkInstalledPolicy,
+  runHookWithPayload,
+} from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -211,11 +214,11 @@ describe("split policy partial installation", () => {
               "decision",
             ],
           ] as const) {
-            const result = spawnSync("bash", [resolve(hooks, `${hook}.sh`)], {
-              cwd: root,
-              input: JSON.stringify(payload),
-              encoding: "utf8",
-            });
+            const result = runHookWithPayload(
+              resolve(hooks, `${hook}.sh`),
+              root,
+              JSON.stringify(payload),
+            );
             assert.equal(
               result.status,
               decision === null ? 2 : 0,
@@ -295,18 +298,18 @@ function runStdinPolicyCheck(
   positionalCommand?: string,
   hook: PolicyHook = "deny-dangerous",
 ): ReturnType<typeof spawnSync> {
-  const args = [resolve(fixtureHooks, `${hook}.sh`)];
+  const args: string[] = [];
   // A positional command exercises the dispatcher's alternate CLI input form without changing the fixture text.
   if (positionalCommand !== undefined) args.push(positionalCommand);
-  return spawnSync("bash", args, {
-    cwd: policyFixture,
-    encoding: "utf8",
-    input: JSON.stringify({
+  return runHookWithPayload(
+    resolve(fixtureHooks, `${hook}.sh`),
+    policyFixture,
+    JSON.stringify({
       tool_name: "Bash",
       tool_input: { command: stdinCommand },
     }),
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+    args,
+  );
 }
 
 const policyBlockCases: PolicyBlockCase[] = [

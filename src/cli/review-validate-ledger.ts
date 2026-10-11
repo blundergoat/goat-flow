@@ -109,7 +109,7 @@ export function readReviewReceipt(
   return readUnchangedReceipt(candidate, observed);
 }
 
-/** Inspect the named receipt and its parents; null leaves draft persistence explicitly unverified. */
+/** Inspect the named receipt and its parents; throws on an unsafe or missing final receipt, while null leaves draft persistence unverified. */
 function inspectReceiptPath(
   root: string,
   candidate: string,
@@ -146,7 +146,7 @@ function inspectReceiptPath(
   return observed;
 }
 
-/** Read the inspected file once and reject observed substitution before crediting its retained evidence. */
+/** Read the inspected file once and reject observed substitution before crediting its retained evidence; throws when the file changed. */
 function readUnchangedReceipt(
   candidate: string,
   observed: Array<{ path: string; details: Stats }>,
@@ -353,7 +353,7 @@ export function validateRefutationLedgerText(
 }
 
 /**
- * Check the bundle's final file or fresh draft destination without granting it raw-source authority.
+ * Check the bundle's final file or fresh draft destination without granting it raw-source authority; an unsafe receipt reports a violation.
  *
  * @param projectRoot - selected project whose review directory contains the receipt
  *

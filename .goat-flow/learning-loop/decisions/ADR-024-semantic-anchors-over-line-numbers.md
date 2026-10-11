@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-24
+**Updated:** 2026-10-11 - the "approximate convenience" allowance is removed; the ban is unconditional.
 
 ## Context
 
@@ -11,12 +12,12 @@ The maintenance cost was real: 9 active line-number references across 3 footgun 
 
 ## Decision
 
-Ban line numbers from footgun and lesson evidence. Use grep-friendly semantic anchors instead: function names, unique strings, section headings, or `(search: "pattern")` markers. Line numbers may appear as approximate convenience but are not considered evidence and are not validated by `stats --check`.
+Footgun and lesson evidence cites grep-friendly semantic anchors only: function names, unique strings, section headings, or `(search: "pattern")` markers. Line numbers are banned from evidence; `stats --check` validates `(search: ...)` anchors and never line numbers.
 
 ## Consequences
 
 - Footgun/lesson evidence survives refactors without maintenance
 - `stats --check` `(search: ...)` anchor validation catches stale evidence that line-number validation could not
-- Evaluation templates updated: line numbers changed from RECOMMENDED to DISCOURAGED
+- Evaluation templates, the shared preamble, and the footguns README require a semantic anchor; none recommends line numbers
 - Instruction files updated: footgun evidence guidance says "semantic anchors" not "file:line"
 - Existing entries stripped of line numbers and given semantic anchors where needed

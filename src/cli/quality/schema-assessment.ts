@@ -11,6 +11,7 @@ import {
   QUALITY_IMPROVEMENT_CATEGORIES,
   QUALITY_MAX_IMPROVEMENTS,
   type QualityAssessmentContext,
+  type QualityAssessmentIdentity,
   type QualityImprovement,
 } from "./schema-types.js";
 import {
@@ -23,6 +24,21 @@ import {
 } from "./schema-expectations.js";
 
 type FieldResult<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/** Keep compact identity text inspectable and fingerprints bound to exact recorded bytes. */
+function parseIdentityField(
+  raw: unknown,
+  path: string,
+  isFingerprint: boolean,
+): FieldResult<string | null> {
+  const field = expectNullableSingleLineString(raw, path);
+  if (!field.ok || field.value === null) return field;
+  if (isFingerprint && !/^[a-f0-9]{64}$/u.test(field.value))
+    return { ok: false, error: `${path} must be a lowercase SHA-256 or null` };
+  if (field.value.length > 200)
+    return { ok: false, error: `${path} must be at most 200 characters` };
+  return field;
+}
 
 /**
  * Read the before/after snapshot identifiers retained with an assessment.
@@ -354,6 +370,7 @@ export function parseAssessmentContext(
       "unverified_probes",
       "score_confidence",
       "workspace_snapshot",
+      "assessment_identity",
     ],
     path,
   );
@@ -402,8 +419,8 @@ export function parseAssessmentContext(
   // The confidence label must use a value that history readers can interpret consistently.
   if (!scoreConfidence.ok) return scoreConfidence;
 
-  const workspace = parseAssessmentWorkspace(
-    raw.workspace_snapshot,
+  const workspace = parseAssessmentProvenance(
+    raw,
     groundingStatus.value,
     path,
     requireCurrentFields,
@@ -420,6 +437,101 @@ export function parseAssessmentContext(
       grounding_status: groundingStatus.value,
       unverified_probes: unverifiedProbes.value,
       score_confidence: scoreConfidence.value,
+    },
+  };
+}
+
+/** Validate the independent workspace and assessor provenance before joining the coverage fields. */
+function parseAssessmentProvenance(
+  raw: Record<string, unknown>,
+  grounding: QualityAssessmentContext["grounding_status"],
+  path: string,
+  requireCurrentFields?: boolean,
+): FieldResult<
+  Pick<QualityAssessmentContext, "workspace_snapshot" | "assessment_identity">
+> {
+  const workspace = parseAssessmentWorkspace(
+    raw.workspace_snapshot,
+    grounding,
+    path,
+    requireCurrentFields,
+  );
+  if (!workspace.ok) return workspace;
+  const identity = parseAssessmentIdentity(
+    raw.assessment_identity,
+    `${path}.assessment_identity`,
+    requireCurrentFields,
+  );
+  if (!identity.ok) return identity;
+  return {
+    ok: true,
+    value: {
+      ...workspace.value,
+      ...(identity.value === undefined
+        ? {}
+        : { assessment_identity: identity.value }),
+    },
+  };
+}
+
+/** Preserve historical absence; new admission makes unavailable identity explicit. */
+function parseAssessmentIdentity(
+  raw: unknown,
+  path: string,
+  requireCurrentFields?: boolean,
+): FieldResult<QualityAssessmentIdentity | undefined> {
+  if (raw === undefined) {
+    return {
+      ok: true,
+      value: requireCurrentFields
+        ? {
+            model: null,
+            tool_version: null,
+            prompt_sha256: null,
+            settings_sha256: null,
+            capture: "unknown",
+            fixed_input_protocol: null,
+          }
+        : undefined,
+    };
+  }
+  if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
+  const keys = [
+    "model",
+    "tool_version",
+    "prompt_sha256",
+    "settings_sha256",
+    "fixed_input_protocol",
+  ] as const;
+  const unknown = rejectUnknownKeys(raw, [...keys, "capture"], path);
+  if (unknown) return { ok: false, error: unknown };
+  const fields: Omit<QualityAssessmentIdentity, "capture"> = {
+    model: null,
+    tool_version: null,
+    prompt_sha256: null,
+    settings_sha256: null,
+    fixed_input_protocol: null,
+  };
+  for (const key of keys) {
+    const field = parseIdentityField(
+      raw[key],
+      `${path}.${key}`,
+      key !== "model" && key !== "tool_version",
+    );
+    if (!field.ok) return field;
+    fields[key] = field.value;
+  }
+  const capture = expectEnumValue(raw.capture, `${path}.capture`, [
+    "launch-observed",
+    "assessor-reported",
+    "unknown",
+  ] as const);
+  if (!capture.ok) return capture;
+  return {
+    ok: true,
+    value: {
+      ...fields,
+      capture: capture.value,
     },
   };
 }

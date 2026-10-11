@@ -78,7 +78,7 @@ function isContained(root: string, path: string): boolean {
   return local !== ".." && !local.startsWith(`..${sep}`) && !isAbsolute(local);
 }
 
-/** Return a real contained path of the required kind; symlinks and unreadable paths are never evidence. */
+/** Tell whether a path is a real contained entry of the required kind; symlinks are never evidence, and it swallows filesystem errors as false. */
 function isHistoryPath(
   root: string,
   path: string,
@@ -104,7 +104,7 @@ function historyId(root: string, path: string): string {
   );
 }
 
-/** Canonical compact JSON sorts object keys recursively and preserves array order. Input comes only from JSON or parsed records. */
+/** Deterministic compact JSON: sorts object keys recursively and preserves array order. Input comes only from JSON or parsed records. */
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value !== null && typeof value === "object") {
@@ -579,6 +579,7 @@ function wholeScopeExclusion(
       text: "Plan/admin overhead",
       isChecked: false,
     });
+  // Compare task wording with its `(est: ...)` tag removed and whitespace collapsed, so a re-estimated task still matches its issued snapshot.
   const normalize = (text: string): string =>
     text
       .replace(

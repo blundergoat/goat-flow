@@ -2,6 +2,7 @@
  * Defines the score-provenance contract shared by current report parsing and every quality prompt.
  * Legacy reports stay readable, while new reports must explain each numeric axis in bounded text.
  */
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -11,6 +12,8 @@ import { composeQuality } from "../../src/cli/prompt/compose-quality.js";
 import type { QualityInput } from "../../src/cli/prompt/compose-quality-common.js";
 import { parseQualityReport } from "../../src/cli/quality/schema.js";
 import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
+import { createHash } from "node:crypto";
+import { qualityScoringText } from "../../src/cli/prompt/compose-quality-static-sections.js";
 
 const QUALITY_MODES = ["agent-setup", "process", "harness", "skills"] as const;
 const RATIONALE_GUIDANCE =
@@ -27,7 +30,7 @@ function currentReport(scoreRationale: unknown = makeQualityScoreRationale()) {
     run_date: "2026-08-29",
     audit_status: "pass",
     scope: "consumer",
-    rubric_version: version,
+    rubric_version: getQualityRubricId("agent-setup"),
     quality_mode: "agent-setup",
     prior_report_id: null,
     assessment_context: {
@@ -36,6 +39,14 @@ function currentReport(scoreRationale: unknown = makeQualityScoreRationale()) {
       grounding_status: "complete",
       unverified_probes: [],
       score_confidence: "high",
+      assessment_identity: {
+        model: null,
+        tool_version: null,
+        prompt_sha256: null,
+        settings_sha256: null,
+        capture: "unknown",
+        fixed_input_protocol: null,
+      },
       workspace_snapshot: {
         start: `review-v1:sha256:${"a".repeat(64)}`,
         end: `review-v1:sha256:${"a".repeat(64)}`,
@@ -201,19 +212,6 @@ describe("quality score rationale prompt contract", () => {
     });
   }
 
-  it("keeps the browser-side dashboard mirror on the same contract", () => {
-    const source = readFileSync(
-      resolve(
-        import.meta.dirname,
-        "../../src/dashboard/dashboard-setup-quality.ts",
-      ),
-      "utf8",
-    );
-
-    assert.ok(source.includes('"score_rationale"'));
-    assert.ok(source.includes(RATIONALE_GUIDANCE));
-  });
-
   it("keeps the documented quality-save example on the strict current schema", () => {
     const docs = readFileSync(
       resolve(import.meta.dirname, "../../docs/cli.md"),
@@ -231,6 +229,7 @@ describe("quality score rationale prompt contract", () => {
 
     const materializedExampleJson = exampleJson
       .replaceAll("<current-version>", getPackageVersion())
+      .replaceAll("<current-rubric-id>", getQualityRubricId("skills"))
       .replace("<absolute-project-path>", "/tmp/example-project")
       .replace("YYYY-MM-DD", "2026-08-29")
       .replace("<git-head>", "a".repeat(40));
@@ -244,6 +243,88 @@ describe("quality score rationale prompt contract", () => {
       parsedReport.ok
         ? undefined
         : `documented quality report is invalid: ${parsedReport.error}`,
+    );
+  });
+});
+
+describe("quality rubric identity and integer scores", () => {
+  it("uses distinct per-mode scoring hashes independently of run and persistence inputs", () => {
+    const ids = new Set<string>();
+    for (const qualityMode of QUALITY_MODES) {
+      const id = getQualityRubricId(qualityMode);
+      const text = qualityScoringText(qualityMode);
+      assert.match(
+        id,
+        new RegExp(`^quality-${qualityMode}-r3-[a-f0-9]{64}$`, "u"),
+      );
+      assert.ok(
+        id.endsWith(createHash("sha256").update(text).digest("hex")),
+        `mode ${qualityMode}`,
+      );
+      assert.doesNotMatch(
+        text,
+        /Persist through|goat_flow_version|project_path|Prior report context|Prioritized Improvements/u,
+        `mode ${qualityMode}`,
+      );
+      ids.add(id);
+      for (const persistence of ["bounded-saver", "staged-draft"] as const) {
+        const prompt = composeQuality({
+          ...promptInput(qualityMode),
+          agent: "claude",
+          projectPath: "/tmp/other-project",
+          runDate: "2026-09-30",
+          persistence,
+        }).prompt;
+        assert.ok(
+          prompt.includes(`"rubric_version": "${id}"`),
+          `mode ${qualityMode} ${persistence}`,
+        );
+      }
+      const report = {
+        ...currentReport(),
+        quality_mode: qualityMode,
+        rubric_version: id,
+      };
+      assert.equal(parseQualityReport(report).ok, true, `mode ${qualityMode}`);
+      assert.equal(
+        parseQualityReport({
+          ...report,
+          rubric_version: getQualityRubricId(
+            qualityMode === "skills" ? "harness" : "skills",
+          ),
+        }).ok,
+        false,
+        `mode ${qualityMode}`,
+      );
+    }
+    assert.equal(ids.size, 4);
+  });
+
+  it("accepts every integer axis value and rejects fractions, bounds and incorrect totals", () => {
+    for (let value = 0; value <= 25; value++) {
+      const report = currentReport();
+      report.scores.setup.accuracy = value;
+      report.scores.setup.total = 60 + value;
+      assert.equal(parseQualityReport(report).ok, true, `integer ${value}`);
+    }
+    for (const value of [-1, 25.5, 26]) {
+      const report = currentReport();
+      report.scores.setup.accuracy = value;
+      report.scores.setup.total = 60 + value;
+      assert.equal(
+        parseQualityReport(report).ok,
+        false,
+        `invalid axis ${value}`,
+      );
+    }
+    const wrongSum = currentReport();
+    wrongSum.scores.system.total = 81;
+    assert.equal(parseQualityReport(wrongSum).ok, false);
+    const legacy = { ...currentReport(), rubric_version: "1.15.0" };
+    assert.equal(parseQualityReport(legacy).ok, false);
+    assert.equal(
+      parseQualityReport(legacy, { requireCurrentFields: false }).ok,
+      true,
     );
   });
 });

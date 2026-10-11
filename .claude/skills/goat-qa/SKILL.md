@@ -1,7 +1,7 @@
 ---
 name: goat-qa
 description: "Use when evaluating test coverage gaps, planning test strategy, or assessing testing risk for code changes."
-goat-flow-skill-version: "1.17.0"
+goat-flow-skill-version: "1.18.0"
 ---
 # /goat-qa
 
@@ -51,7 +51,7 @@ Standard maps Blocking to Must test, High-value to Should test, and Defer to Saf
 
 Before assessing a proposed or existing test, read `.goat-flow/skill-docs/playbooks/test-selection.md`. Apply its four-part value gate: plausible regression, user or business impact, current overlap and why other coverage is insufficient, and a stable observable contract. Priority and disposition are separate: the matrix says when evidence matters; the playbook says what to do with a candidate.
 
-Creation dispositions are `ADD UNIT`, `ADD INTEGRATION`, `ADD END-TO-END/MANUAL`, `SKIP`, or `UNRESOLVED`. Existing-test dispositions are `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`. Failing the creation gate never authorizes deletion. Unresolved evidence keeps an existing test in place and names the next check. `CONSOLIDATE` and `MOVE LEVEL` retain the original until trustworthy replacement coverage passes; `PRUNE CANDIDATE` explains why no replacement is required.
+The playbook owns creation, existing-test, added-test, removed-test, and relocated-test dispositions. Select its matching vocabulary by selector and change state, including added, removed, materially changed, and proven relocated cases in PR or uncommitted work. Failing the creation gate never authorizes deletion. Unresolved evidence keeps an existing test in place and names the next check. `CONSOLIDATE` and `MOVE LEVEL` retain the original until trustworthy replacement coverage passes; `PRUNE CANDIDATE` explains why no replacement is required.
 
 Mock collaborator call counts, call order, non-calls, and simulated cooperation remain `STRUCTURAL` unless the interaction is a named public protocol; they earn no integration confidence. Prefer consolidation when nearby cases lack distinct regression stories. Every recommendation carries the playbook's compact record. goat-qa stays report-only: ordinary ACT must re-read current code and coverage before any separately approved add, move, consolidation, or prune action.
 
@@ -121,7 +121,7 @@ Compare risk and coverage bidirectionally:
 - Without one, map every changed behaviour to automated tests and flag gaps.
 - Read each matched test file and classify coverage depth; record unavailable tests in Verification Integrity.
 - Apply the exhaustive priority matrix to every changed behaviour. Blocking/High-value gaps are **Undertested risk**; evidence-backed test-to-risk mismatches are **Misaligned effort**.
-- Apply the test-selection value gate and record one creation or existing-test disposition for every recommendation; incomplete evidence is `UNRESOLVED`, not omission.
+- Apply the test-selection value gate and record one applicable playbook disposition for every assessed or proposed test; incomplete evidence is `UNRESOLVED`, not omission; use the matching change-state qualifier.
 
 For CRITICAL items with no coverage, annotate why: new path / missed coverage on existing path / hard-to-test.
 

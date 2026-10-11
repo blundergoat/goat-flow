@@ -137,7 +137,7 @@ function appendIntroAndContext(
   lines.push(`# GOAT Flow Quality Assessment - ${promptContext.agentLabel}`);
   lines.push("");
   lines.push(
-    `Assess the quality of the goat-flow v${getPackageVersion()} setup on this project. Be thorough, honest, and specific. Do NOT be polite or generous - I want real problems identified with evidence.`,
+    `Assess the quality of the goat-flow v${getPackageVersion()} setup on this project. Be accurate, specific, and proportionate. Report supported problems and useful strengths; zero findings is a valid result.`,
   );
   lines.push("");
   lines.push(
@@ -355,7 +355,9 @@ function appendReadNext(
   lines.push("");
   lines.push("## Read next");
   lines.push("");
-  lines.push("After Step 0, read ALL of these before writing any findings:");
+  lines.push(
+    "After Step 0, read the core contract below. Follow references and shared implementations for the behaviors you assess; disclose anything you did not inspect:",
+  );
   lines.push("");
   lines.push(`- Your instruction file: \`${promptContext.instructionFile}\``);
   lines.push("- `.goat-flow/config.yaml`");
@@ -366,7 +368,7 @@ function appendReadNext(
     "- `.goat-flow/code-map.md`, `.goat-flow/glossary.md`, `.goat-flow/learning-loop/patterns/` (if they exist)",
   );
   lines.push(
-    `- All installed skill files in \`${promptContext.skillsDir}\` - each \`SKILL.md\` plus any nested \`references/*.md\` packs`,
+    `- All installed skill files in \`${promptContext.skillsDir}\` - each \`SKILL.md\`, then the nested references needed to verify its assessed behaviors`,
   );
   lines.push(`- Agent settings: \`${promptContext.settingsFile}\``);
   // Reading list mirrors the Context section: the registration file is only listed when it is not the settings file itself.
@@ -375,7 +377,9 @@ function appendReadNext(
   }
   // Only agents that support hooks are asked to read them.
   if (promptContext.hooksDir)
-    lines.push("- All hook scripts in your agent's hooks directory");
+    lines.push(
+      "- Registered hook entrypoints and the shared implementations needed to trace their policy and result paths",
+    );
   lines.push("");
   lines.push(
     "For the learning loop - `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md` - DO NOT broad-load buckets. Use INDEX-first retrieval per `skill-preamble.md` Learning-Loop Retrieval: derive 2-4 search terms from the target area and expected failure class, read matching INDEX rows first, open source entries only on candidate hits, grep individual buckets only after the INDEX pass or on a known retrieval miss, reword once on zero hits, then record the miss. Broad-loading recreates the context-bloat failure this protocol exists to prevent.",
@@ -463,7 +467,7 @@ function appendSetupQuality(
   lines.push("");
   lines.push("**Evidence quality - spot-check 3-5 entries:**");
   lines.push(
-    '- Pick 3-5 footgun entries from `.goat-flow/learning-loop/footguns/`. For each: (a) grep for the cited semantic anchor (function name, unique string, or `(search: "pattern")`) - does the code still exhibit the described behavior? (b) Is the `Status` field (active/resolved) accurate? An entry marked `active` that describes fixed behavior is a stale entry - report it. (c) Do the semantic anchors resolve to the described code?',
+    '- Pick 3-5 footgun entries from `.goat-flow/learning-loop/footguns/`. For each: (a) grep for the cited semantic anchor (function name, unique string, or `(search: "pattern")`) - does the code still exhibit the described behavior? (b) Is the `Status` field (active/resolved) accurate? Use the bucket README status definitions: a repaired incident can still document an active structural trap. Report stale status only when the underlying trap no longer applies. (c) Do the semantic anchors resolve to the described code?',
   );
   lines.push(
     "- Pick 2-3 lesson entries from `.goat-flow/learning-loop/lessons/`. Are they from real incidents or synthetic?",
@@ -471,7 +475,7 @@ function appendSetupQuality(
   lines.push("");
   lines.push("**Setup hygiene:**");
   lines.push(
-    "- Were existing project files (`.github/instructions/`, `docs/`, etc.) respected or overwritten?",
+    "- Does history or retained setup evidence show whether existing project files were respected or overwritten? If unavailable, state unknown; current files alone cannot establish past overwrites.",
   );
   lines.push(
     "- Did setup create duplicate surfaces (e.g., both `docs/footguns.md` and `.goat-flow/learning-loop/footguns/`)?",
@@ -523,7 +527,9 @@ function appendSystemAssessment(
   lines.push("");
   lines.push("## Part 4: System assessment - is goat-flow itself good?");
   lines.push("");
-  lines.push("Answer with evidence from your testing in Part 3:");
+  lines.push(
+    "Answer with evidence from Part 3. File analysis establishes documented behavior, not live enforcement or measured productivity. Label runtime and usability conclusions as unverified or inferred when you have not exercised them; explain that limit in the affected score rationale.",
+  );
   lines.push("");
   lines.push(
     "- Is the execution loop (READ -> SCOPE -> ACT -> VERIFY) useful or ceremonial overhead? Did you actually follow it during skill testing?",
@@ -629,7 +635,7 @@ function appendOutputFormat(
   lines.push("");
   lines.push("### Skill Testing Results");
   lines.push(
-    `For each of the ${promptContext.skillFacts.total} skills (or subset tested): what worked, what failed, what was ceremony.`,
+    `For each of the ${promptContext.skillFacts.total} skills (or subset tested): method used, evidence limits, what worked, and any supported failure or avoidable cost. Use None where appropriate.`,
   );
   lines.push("");
   lines.push("### Findings");

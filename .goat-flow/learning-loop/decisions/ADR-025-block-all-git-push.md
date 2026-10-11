@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-26
-**Updated:** 2026-09-25 - corrected GitHub CLI write-policy ownership. The 2026-09-05 condensation replaced the "contract tests should fail" consequence with current enforcement, and the 2026-08-15 amendment absorbed now-removed ADR-040 (agents never commit).
+**Updated:** 2026-09-25 - corrected GitHub CLI write-policy ownership. Absorbed (removed): ADR-040-agents-never-commit.
 
 ## Context
 

@@ -29,8 +29,11 @@ describe("plaintext credential-store coverage", () => {
         "utf8",
       ),
     ) as { permissions: { deny: string[] } };
+    // Exclude the audit's other key/credential alternatives to isolate Git credentials.
     template.permissions.deny = template.permissions.deny.filter(
-      (rule) => !/\*\.(pem|key|pfx)/u.test(rule),
+      (rule) =>
+        !/\*\.(pem|key|pfx)/u.test(rule) &&
+        !rule.endsWith("(**/credentials.json)"),
     );
     const facts = extractSettingsFacts(
       stubFS({

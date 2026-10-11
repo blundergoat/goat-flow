@@ -307,6 +307,154 @@ it("forwards the selected quality report owner to Claude and Codex", () => {
   );
 });
 
+it("renders supplied system deltas and hides missing comparisons without adjacent-row arithmetic", () => {
+  const view = readFileSync(QUALITY_VIEW_PATH, "utf8");
+  const card = view.slice(
+    view.indexOf("System score"),
+    view.indexOf("System score") + 1100,
+  );
+  const show = card.match(/x-show="([^"]+)"/u)?.[1];
+  const text = card.match(/x-text="([^"]*systemDelta[^"]*)"/u)?.[1];
+  assert.ok(show && text);
+  for (const [delta, expected] of [
+    [7, " (+7)"],
+    [0, " (0)"],
+    [-3, " (-3)"],
+  ] as const) {
+    const context = createContext({
+      qualityHistoryRows: [
+        { systemTotal: 85, systemDelta: delta },
+        { systemTotal: 10, systemDelta: null },
+      ],
+    });
+    assert.equal(Boolean(runInContext(show, context)), true, `delta ${delta}`);
+    assert.equal(runInContext(text, context), expected);
+  }
+  for (const rows of [[], [{ systemTotal: 85, systemDelta: null }]]) {
+    assert.equal(
+      Boolean(runInContext(show, createContext({ qualityHistoryRows: rows }))),
+      false,
+      `rows ${JSON.stringify(rows)}`,
+    );
+  }
+});
+
+it("decodes system comparisons and preserves older-server rows with null deltas", () => {
+  const source = readFileSync(
+    resolve(PROJECT_ROOT, "src/dashboard/dashboard-model-readers.ts"),
+    "utf8",
+  );
+  const context = createContext({
+    isRecord: (raw: unknown) =>
+      typeof raw === "object" && raw !== null && !Array.isArray(raw),
+    readString: (raw: unknown) => (typeof raw === "string" ? raw : ""),
+    readRunnerId: (raw: unknown) => (raw === "claude" ? raw : null),
+  });
+  runInContext(
+    transpileModule(source, {
+      compilerOptions: { target: ScriptTarget.ES2022 },
+    }).outputText,
+    context,
+  );
+  const row = {
+    id: "saved-run",
+    date: "2026-09-30",
+    agent: "claude",
+    setupTotal: 80,
+    systemTotal: 85,
+    setupDelta: null,
+    blockerCount: 0,
+    majorCount: 0,
+    minorCount: 0,
+  };
+  context.row = row;
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).systemDelta", context),
+    null,
+  );
+  context.row = { ...row, systemDelta: 7 };
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).systemDelta", context),
+    7,
+  );
+  context.row = { ...row, systemDelta: null };
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).systemDelta", context),
+    null,
+  );
+  context.row = { ...row, systemDelta: "7" };
+  assert.equal(runInContext("readQualityHistoryRow(row)", context), null);
+  const repeatSpread = {
+    kind: "observational",
+    sampleSize: 3,
+    setup: { median: 80, min: 75, max: 90, range: 15 },
+    system: { median: 20, min: 10, max: 25, range: 15 },
+  };
+  context.row = { ...row, repeatSpread };
+  assert.equal(
+    runInContext(
+      "JSON.stringify(readQualityHistoryRow(row).repeatSpread)",
+      context,
+    ),
+    JSON.stringify(repeatSpread),
+  );
+  context.row = { ...row, repeatSpread: { ...repeatSpread, sampleSize: 1 } };
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).repeatSpread", context),
+    null,
+  );
+  context.row = { ...row };
+  assert.equal(
+    runInContext("readQualityHistoryRow(row).repeatSpread", context),
+    null,
+  );
+});
+
+it("renders rerun statistics and unavailable spread beside unchanged percentage totals", () => {
+  const view = readFileSync(QUALITY_VIEW_PATH, "utf8");
+  for (const binding of [
+    "qualityHistoryLatest.setupTotal + '%'",
+    "qualityHistoryLatest.systemTotal + '%'",
+    "row.setupTotal + '%'",
+    "row.systemTotal + '%'",
+  ])
+    assert.ok(view.includes(binding), binding);
+  const expressions = [
+    ...view.matchAll(/x-text="([^"]*repeatSpread[^"]*)"/gu),
+  ].map((match) => match[1] ?? "");
+  assert.equal(expressions.length, 4);
+  const row = {
+    repeatSpread: {
+      kind: "observational",
+      sampleSize: 3,
+      setup: { median: 80, min: 75, max: 90, range: 15 },
+      system: { median: 20, min: 10, max: 25, range: 15 },
+    },
+  };
+  for (const expression of expressions) {
+    const rendered = runInContext(
+      expression,
+      createContext({ row, qualityHistoryRows: [row] }),
+    );
+    assert.match(
+      String(rendered),
+      /observational reruns n=3; median (80|20)\/100; range (75-90|10-25)\/100/,
+      `expression ${expression}`,
+    );
+    assert.equal(
+      runInContext(
+        expression,
+        createContext({
+          row: { repeatSpread: null },
+          qualityHistoryRows: [{ repeatSpread: null }],
+        }),
+      ),
+      "no comparable reruns",
+      `expression ${expression}`,
+    );
+  }
+});
+
 /** Build one concern score fixture with the Home summary fields populated. */
 function concern(
   status: "pass" | "fail",

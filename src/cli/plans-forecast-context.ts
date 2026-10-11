@@ -472,7 +472,7 @@ function readForecastDocument(section: string): PlanForecastDocument {
 }
 
 /**
- * Read optional forecast metadata for CLI previews and checks; catches parsing errors, adds warnings and disables invalid methods.
+ * Read optional forecast metadata for CLI previews and checks; a parsing error reports a warning and disables the invalid method instead of throwing.
  *
  * @param content - source Markdown; absent declarations preserve the legacy export shape
  * @param recordSections - visible Forecast records bodies; empty means no record section was supplied

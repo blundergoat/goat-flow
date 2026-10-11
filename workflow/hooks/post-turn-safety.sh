@@ -1,36 +1,17 @@
 #!/usr/bin/env bash
 
 # post-turn-safety.sh
-# goat-flow-hook-version: 1.17.0
+# goat-flow-hook-version: 1.18.0
 #
-# Purpose:
-#   Universal Stop-event safety guard for supported agents. This hook checks
-#   changed text content for built-in safety hazards that goat-flow can evaluate
-#   without knowing the target project's language stack or validation commands.
+# Scan changed user text for built-in safety hazards at the end of an agent turn.
 #
-# Runtime contract:
-#   This is not project validation. It does not run tests, builds, linters, or
-#   formatters, and it must not claim that the project passed validation. It
-#   blocks only high-confidence safety hazards in changed content.
+# Use this content check alongside project tests, builds and linters; it never claims those checks passed.
 #
-# Exit codes:
-#   0  clean scan, no findings
-#   1  reserved for host-level hook unavailability
-#   2  findings blocked, or the scan could not complete
+# Direct runs exit 0 when clean, 2 for findings or incomplete work, and 1 for host unavailability.
+# Managed runs return a structured outcome for the provider adapter, including blocks and incomplete coverage.
 #
-# Bash 4+ performance architecture (Windows Git Bash ships fork costs 10-40x
-# Linux, so its optimized scan must not spawn per line or per file):
-#   1. Path sets come from the same `git diff --name-only -z` / `git ls-files -z`
-#      plumbing as before, but content is read through one batched
-#      `git diff --unified=0` per pass instead of one diff process per path.
-#   2. A grep pre-filter (a provable superset of every scan_line trigger, see
-#      the *_RE definitions) selects candidate lines; only matched lines reach
-#      the per-line bash analysis.
-#   3. Its string helpers are pure bash (no sed/tr/subshell forks).
-#   4. External commands are chunked to stay inside Windows' command-line
-#      length limit; total process count is O(passes), not O(files or lines).
-# The Bash 3 compatibility path favors coverage on stock macOS and remains
-# bounded by the same wall-clock, file-size, and output limits.
+# Bash 4+ batches diffs and candidate lines to avoid slow per-file or per-line process creation in Git Bash.
+# Bash 3 compatibility preserves the same coverage and wall-clock, file-size and output limits on stock macOS.
 
 set -uo pipefail
 shopt -s extglob
@@ -38,9 +19,7 @@ shopt -s extglob
 # Bash imports SECONDS from the parent environment, so start hook budgets and result timing at this process boundary.
 SECONDS=0
 
-# Bash 3.2 ships with supported macOS versions. Keep this compatibility path
-# free of associative arrays, mapfile, and Bash-4 parameter expansions. The
-# force flag executes this exact path under newer Bash during integration tests.
+# Stock macOS Bash needs this path without associative arrays, mapfile, or Bash-4 expansions; tests can select it explicitly on newer Bash.
 fallback_findings=0
 fallback_reported="
 "
@@ -57,7 +36,7 @@ fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
 post_turn_native_workspace=""
 post_turn_action="scan"
-post_turn_hook_version="1.17.0"
+post_turn_hook_version="1.18.0"
 post_turn_result_schema="goat-flow.hook-result.v1"
 post_turn_migrated_result_mode=0
 post_turn_result_records_path=""
@@ -65,6 +44,7 @@ post_turn_result_record_error=0
 post_turn_result_detail=""
 post_turn_result_reason_override=""
 bounded_reentry_ended=0
+post_turn_infrastructure_failure=0
 stop_payload_present=0
 stop_session_fingerprint=""
 stop_hook_active=0
@@ -137,8 +117,14 @@ emit_post_turn_hook_result() {
 
   # A record-write failure makes detailed provider feedback unavailable even if scanning continued.
   if [ "$post_turn_result_record_error" -ne 0 ]; then
-    result_outcome="unavailable"
-    result_reason_code="hook-unavailable"
+    # A known hazard stays blocking even when its detailed record could not be retained.
+    if [ "$observed_finding_count" -gt 0 ]; then
+      result_outcome="block"
+      result_reason_code="policy-blocked"
+    else
+      result_outcome="unavailable"
+      result_reason_code="hook-unavailable"
+    fi
     result_detail="Hook result details could not be retained for provider delivery"
   # One verified repeat ends the provider cycle but remains explicitly incomplete for the user.
   elif [ "$bounded_reentry_ended" -ne 0 ]; then
@@ -185,8 +171,15 @@ emit_post_turn_hook_result() {
     POST_TURN_RESULT_SKIPPED_UNITS="$skipped_scan_units" \
     POST_TURN_RESULT_DETAIL="$result_detail" \
     POST_TURN_RESULT_DURATION_MS="$result_duration_ms" \
-    node -e '
-const { existsSync, readFileSync } = require("node:fs");
+    POST_TURN_RESULT_INFRASTRUCTURE_FAILURE="$post_turn_infrastructure_failure" \
+    POST_TURN_RESULT_DETECTED_FINDINGS="$observed_finding_count" \
+    POST_TURN_SCANNER_PATH="${BASH_SOURCE[0]}" \
+    node --input-type=module -e '
+const { existsSync, readFileSync } = await import("node:fs");
+const { dirname, join, resolve } = await import("node:path");
+const { pathToFileURL } = await import("node:url");
+// Windows Node resolves either separator, so a controller child launched with a backslash path still finds its sibling runtime.
+const { compactHookResultEnvelope } = await import(pathToFileURL(join(dirname(resolve(process.env.POST_TURN_SCANNER_PATH)), "hook-launch-runtime.mjs")).href);
 const recordsPath = process.env.POST_TURN_RESULT_RECORDS_PATH ?? "";
 let resultOutcome = process.env.POST_TURN_RESULT_OUTCOME;
 let resultReasonCode = process.env.POST_TURN_RESULT_REASON_CODE;
@@ -207,8 +200,11 @@ try {
   }
 } catch {
   // For example, cleanup software may remove the temporary records file before Stop finishes.
-  resultOutcome = "unavailable";
-  resultReasonCode = "hook-unavailable";
+  // Lost detail cannot downgrade a hazard the scanner already confirmed.
+  if (resultOutcome !== "block") {
+    resultOutcome = "unavailable";
+    resultReasonCode = "hook-unavailable";
+  }
   resultDetail = "Hook result details could not be read for provider delivery";
   userVisibleFindings = [];
 }
@@ -235,6 +231,11 @@ const resultEnvelope = {
   },
   reasonCode: resultReasonCode,
   findings: userVisibleFindings,
+  ...(Number(process.env.POST_TURN_RESULT_DETECTED_FINDINGS) > 0 ? { summary: {
+    detectedFindings: Math.max(Number(process.env.POST_TURN_RESULT_DETECTED_FINDINGS), userVisibleFindings.length),
+    envelopeOmittedFindings: Math.max(0, Number(process.env.POST_TURN_RESULT_DETECTED_FINDINGS) - userVisibleFindings.length),
+    presentationOmittedFindings: 0,
+  } } : {}),
   execution: {
     hookVersion: process.env.POST_TURN_HOOK_VERSION,
     provider: providerIdentifier,
@@ -242,9 +243,10 @@ const resultEnvelope = {
     adapterName: `${providerIdentifier}-${hookEvent}`,
     adapterVersion: process.env.GOAT_FLOW_HOOK_ADAPTER_VERSION ?? "1",
     durationMs: Number(process.env.POST_TURN_RESULT_DURATION_MS),
+    ...(process.env.POST_TURN_RESULT_INFRASTRUCTURE_FAILURE === "1" ? { failureClass: "infrastructure" } : {}),
   },
 };
-process.stdout.write(`${JSON.stringify(resultEnvelope)}\n`);
+process.stdout.write(`${JSON.stringify(compactHookResultEnvelope(resultEnvelope))}\n`);
 '
 }
 
@@ -291,8 +293,8 @@ read_stop_context() {
   while IFS= read -r stop_payload_line || [ -n "$stop_payload_line" ]; do
     stop_payload_json="${stop_payload_json}${stop_payload_json:+$'\n'}${stop_payload_line}"
     # Oversized provider input cannot be trusted as the user's Stop event.
-    if [ "${#stop_payload_json}" -gt 65536 ]; then
-      stop_payload_error="payload exceeds 65536 bytes"
+    if [ "${#stop_payload_json}" -gt 1048576 ]; then
+      stop_payload_error="payload exceeds 1048576 bytes"
       return 1
     fi
   done
@@ -341,9 +343,8 @@ try {
   return 0
 }
 
-# Resolve the verified managed installation root when Git cannot provide a scan root.
-# The launcher starts Bash from this directory, and the installed hook shape prevents a
-# direct invocation in an arbitrary non-Git directory from creating continuation state.
+# Resolve the managed launch root when Git cannot identify the project; arbitrary non-Git folders cannot own continuation state.
+# The launcher starts Bash here, and installed hook checks establish the recovery boundary.
 resolve_stop_reentry_root_without_git() {
   local managed_root=""
 
@@ -351,6 +352,7 @@ resolve_stop_reentry_root_without_git() {
   if [ "$stop_payload_present" -eq 0 ] || [ -z "$stop_session_fingerprint" ]; then
     return 1
   fi
+  # A vanished working directory cannot own recovery state for this session.
   if ! managed_root="$(pwd -P 2>/dev/null)" || [ -z "$managed_root" ]; then
     return 1
   fi
@@ -364,13 +366,12 @@ resolve_stop_reentry_root_without_git() {
   printf '%s\n' "$managed_root"
 }
 
-# Resolve the ignored owner-local state file used to bound a repeated Stop failure.
-# The path contains hashes only, so it never stores the user's session ID or changed content.
-# The record is session-specific, so the filename must be too: two sessions working in one
-# project would otherwise overwrite each other's record, and a clean result in either would
-# delete the sibling's, leaving both to keep blocking instead of reaching the second-Stop exit.
+# Resolve the ignored state path for scanner-owned legacy Stop recovery.
+#
+# Store hashes rather than session IDs or user content; session-specific names keep one session from replacing another recovery record.
 set_stop_state_paths() {
-  stop_state_directory="$1/.goat-flow/scratchpad"
+  stop_state_relative_directory=".goat-flow/scratchpad"
+  stop_state_directory="$1/$stop_state_relative_directory"
   # The fingerprint is validated hex, so a bounded slice is always a safe filename component.
   local session_key="${stop_session_fingerprint:0:32}"
   # A direct user run parses no session and still needs one stable owner-local path.
@@ -437,8 +438,8 @@ write_stop_reentry_state() {
   if [ -L "$repository_root/.goat-flow" ] || [ -L "$stop_state_directory" ]; then
     return 1
   fi
-  # Create the private state directory only inside the verified project root.
-  if ! (umask 077 && mkdir -p "$stop_state_directory"); then
+  # Create state relative to the verified root because Git Bash rejects absolute //wsl.localhost mkdir paths, even for existing directories.
+  if ! (cd "$repository_root" 2>/dev/null && umask 077 && mkdir -p "$stop_state_relative_directory"); then
     return 1
   fi
   # Existing state may be replaced only when it is a regular file owned by this user.
@@ -504,6 +505,12 @@ stop_reentry_state_matches() {
 finish_infrastructure_failure() {
   local repository_root="$1"
   local failure_identity="$2"
+  post_turn_infrastructure_failure=1
+
+  # The verified launcher owns this turn allowance; the scanner reports its fresh infrastructure outcome without resetting state.
+  if [ "${GOAT_FLOW_STOP_RECOVERY_OWNER:-}" = "launcher" ]; then
+    return 2
+  fi
 
   # Direct runs and invalid provider context have no safe identity for re-entry handling.
   if [ "$stop_payload_present" -eq 0 ] || [ -z "$stop_session_fingerprint" ]; then
@@ -534,50 +541,65 @@ finish_repository_root_failure() {
   local failure_identity="$1"
   local managed_root=""
 
+  # An unverified launch root cannot authorize legacy recovery for the user.
   if ! managed_root="$(resolve_stop_reentry_root_without_git)"; then
     return 2
   fi
   finish_infrastructure_failure "$managed_root" "$failure_identity"
 }
 
-# Scan only the explicit Git roots configured for a managed non-Git controller.
-# Each child emits the existing provider-neutral envelope, so aggregation never parses human stderr
-# or reimplements detector decisions. Exit 3 means the complete configured root contract could not
-# be established and preserves the bounded single-project root failure below.
-run_controller_child_scans() {
-  local controller_root=""
-  local controller_result=""
-  local controller_status=0
-  local hook_script="${BASH_SOURCE[0]}"
+# Tell the user why Git withheld the repository root, naming the one cause only they can clear.
+# Git refuses a checkout it treats as owned by another account, such as a \\wsl.localhost path opened from Windows.
+report_repository_root_failure() {
+  local root_lookup_error=""
 
-  # A child whose Git commands fail must report that failure instead of recursively widening scope.
-  if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then
-    return 3
-  fi
-  if ! command -v node >/dev/null 2>&1 || \
-    ! controller_root="$(pwd -P 2>/dev/null)" || [ -z "$controller_root" ]; then
-    return 3
-  fi
+  post_turn_result_detail="The selected Git repository root could not be opened"
+  printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+  root_lookup_error="$(LC_ALL=C git rev-parse --show-toplevel 2>&1 >/dev/null)"
+  # Trusting a refused checkout is the user's decision, so the result names that step instead of a generic failure.
+  case "$root_lookup_error" in
+    *"dubious ownership"*)
+      post_turn_result_detail="Git refused this repository for dubious ownership; the user must add it to Git safe.directory before the scan can run"
+      printf 'post-turn-safety: %s.\n' "$post_turn_result_detail" >&2
+      ;;
+  esac
+}
 
-  # shellcheck disable=SC2016 # Literal JavaScript must not expand shell or provider text.
-  controller_result="$(
-    GOAT_FLOW_CONTROLLER_PARENT_MIGRATED="$post_turn_migrated_result_mode" \
-      GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT="$stop_session_fingerprint" \
-      GOAT_FLOW_CONTROLLER_STOP_ACTIVE="$stop_hook_active" \
-      POST_TURN_HOOK_VERSION="$post_turn_hook_version" \
-      node -e '
-const { readFileSync, realpathSync, statSync } = require("node:fs");
-const { spawnSync } = require("node:child_process");
-const path = require("node:path");
+# Run the controller program for the given root and scanner path, printing its result envelope; exit 3 means no valid root list exists.
+#
+# The program reaches Node on stdin through a quoted heredoc, so provider text never expands in it and Windows' command-line limit never applies.
+# A function body keeps that heredoc out of `$(...)`, whose parsing differs across the Bash versions this scanner supports.
+run_controller_program() {
+  GOAT_FLOW_CONTROLLER_PARENT_MIGRATED="$post_turn_migrated_result_mode" \
+    GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT="$stop_session_fingerprint" \
+    GOAT_FLOW_CONTROLLER_STOP_ACTIVE="$stop_hook_active" \
+    POST_TURN_HOOK_VERSION="$post_turn_hook_version" \
+    node --input-type=module - "$1" "$2" <<'GOAT_FLOW_CONTROLLER_PROGRAM'
+const { readFileSync, realpathSync, statSync } = await import("node:fs");
+const { spawn, spawnSync } = await import("node:child_process");
+const path = await import("node:path");
+const { pathToFileURL } = await import("node:url");
+const { createRequire } = await import("node:module");
 
-const hookScript = path.resolve(process.argv[1], process.argv[2]);
-const controllerRoot = realpathSync(process.argv[1]);
+// Node reads this program from stdin, so its two arguments follow the "-" script marker in process.argv.
+const [controllerRootArgument, hookScriptArgument] = process.argv.slice(2);
+const hookScript = path.resolve(controllerRootArgument, hookScriptArgument);
+const yaml = createRequire(pathToFileURL(hookScript))("./vendor/js-yaml.cjs");
+// Bash accepts forward slashes on every host, and each child derives its sibling runtime path from this argument.
+const bashScriptArgument = hookScript.replace(/\\/gu, "/");
+const controllerRoot = realpathSync(controllerRootArgument);
 const startedAt = Date.now();
 const resultSchema = "goat-flow.hook-result.v1";
 const provider = process.env.GOAT_FLOW_HOOK_PROVIDER || "claude";
 const hookVersion = process.env.POST_TURN_HOOK_VERSION || "unknown";
 const adapterVersion = process.env.GOAT_FLOW_HOOK_ADAPTER_VERSION || "1";
 const parentMigrated = process.env.GOAT_FLOW_CONTROLLER_PARENT_MIGRATED === "1";
+const managedRuntime = parentMigrated
+  ? await import(pathToFileURL(path.join(path.dirname(hookScript), "hook-launch-runtime.mjs")).href)
+  : null;
+const managedLauncher = parentMigrated
+  ? await import(pathToFileURL(path.join(path.dirname(hookScript), "run-with-bash.mjs")).href)
+  : null;
 const sessionFingerprint = process.env.GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT || "";
 const stopHookActive = process.env.GOAT_FLOW_CONTROLLER_STOP_ACTIVE === "1";
 const configuredSeconds = Number(process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS || "60");
@@ -587,6 +609,7 @@ const maximumMilliseconds = Number.isInteger(configuredSeconds) && configuredSec
 const allowedOutcomes = new Set(["pass", "block", "advisory", "incomplete", "unavailable"]);
 const allowedCoverage = new Set(["complete", "partial", "none"]);
 
+// Represent a declared repository that could not be scanned, preserving unavailable coverage for the user.
 function syntheticResult(reasonCode, message) {
   return {
     schema: resultSchema,
@@ -606,21 +629,33 @@ function syntheticResult(reasonCode, message) {
       adapterName: `${provider}-turn-stop`,
       adapterVersion,
       durationMs: 0,
+      ...(["hook-unavailable", "execution-timeout"].includes(reasonCode) ? { failureClass: "infrastructure" } : {}),
     },
   };
 }
 
+// Accept only the expected scanner contract before a child can contribute coverage or findings.
 function validChildResult(value) {
+  // Empty or non-object output cannot describe a completed repository scan.
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  // A response from another hook or event cannot establish this repository coverage.
   if (value.schema !== resultSchema || value.hookId !== "post-turn-safety" || value.event !== "turn-stop") return false;
+  // Unknown decisions or missing reasons cannot explain the result to the user.
   if (!allowedOutcomes.has(value.outcome) || typeof value.reasonCode !== "string") return false;
   const coverage = value.coverage;
+  // Missing coverage facts cannot turn an unscanned repository into completed work.
   if (coverage === null || typeof coverage !== "object" || Array.isArray(coverage)) return false;
+  // Coverage must use the same complete, partial or unavailable states shown to the user.
   if (!allowedCoverage.has(coverage.status)) return false;
+  // Repository counts must describe whole scan units, not fractional or missing work.
   if (![coverage.attemptedUnits, coverage.completedUnits, coverage.skippedUnits].every(Number.isInteger)) return false;
+  // This child owns one declared repository and cannot claim negative completed or skipped work.
   if (coverage.attemptedUnits !== 1 || coverage.completedUnits < 0 || coverage.skippedUnits < 0) return false;
+  // Completed and skipped coverage cannot exceed the single repository assigned to this child.
   if (coverage.completedUnits + coverage.skippedUnits > coverage.attemptedUnits) return false;
+  // The child must supply a bounded finding list before its details reach provider feedback.
   if (!Array.isArray(value.findings) || value.findings.length > 20) return false;
+  // Each retained finding needs a readable code, message and any supplied target.
   if (!value.findings.every((finding) => finding !== null && typeof finding === "object" && !Array.isArray(finding) &&
     typeof finding.code === "string" && finding.code.trim().length > 0 &&
     typeof finding.message === "string" && finding.message.trim().length > 0 &&
@@ -630,330 +665,56 @@ function validChildResult(value) {
     execution.provider === provider && execution.hookVersion === hookVersion;
 }
 
+// Name the declared repository beside each finding so the user knows which project needs repair.
 function prefixTarget(childName, target) {
+  // A project-level finding needs only its declared repository name.
   if (typeof target !== "string" || target === "project") return childName;
   return `${childName}/${target}`;
 }
 
-const singleQuote = String.fromCharCode(39);
-
-function stripYamlComment(text) {
-  let inSingle = false;
-  let inDouble = false;
-  let escaped = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (inDouble && character === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (!inDouble && character === singleQuote) {
-      if (inSingle && text[index + 1] === singleQuote) {
-        index += 1;
-        continue;
-      }
-      inSingle = !inSingle;
-      continue;
-    }
-    if (!inSingle && character === "\"") {
-      inDouble = !inDouble;
-      continue;
-    }
-    if (!inSingle && !inDouble && character === "#" &&
-      (index === 0 || /\s/u.test(text[index - 1]))) {
-      return text.slice(0, index).trimEnd();
-    }
-  }
-  return text.trimEnd();
-}
-
-function yamlStringScalar(rawValue) {
-  const value = stripYamlComment(rawValue).trim();
-  if (value.length === 0) return null;
-  if (value.startsWith(singleQuote) && value.endsWith(singleQuote)) {
-    return value.slice(1, -1).split(singleQuote + singleQuote).join(singleQuote);
-  }
-  if (value.startsWith("\"") && value.endsWith("\"")) {
-    try {
-      const decoded = JSON.parse(value);
-      return typeof decoded === "string" ? decoded : null;
-    } catch {
-      return null;
-    }
-  }
-  if (/^(?:null|~|true|false)$/iu.test(value) || /^[-+]?\d+(?:\.\d+)?$/u.test(value)) {
-    return null;
-  }
-  return value;
-}
-
-function yamlMappingValue(line, expectedKey) {
-  const separatorIndex = line.indexOf(":");
-  if (separatorIndex < 0) return null;
-  const parsedKey = yamlStringScalar(line.slice(0, separatorIndex));
-  return parsedKey === expectedKey
-    ? line.slice(separatorIndex + 1).trim()
-    : null;
-}
-
-function yamlFlowStringList(rawValue) {
-  const value = stripYamlComment(rawValue).trim();
-  if (!value.startsWith("[") || !value.endsWith("]")) return null;
-  const body = value.slice(1, -1);
-  if (body.trim().length === 0) return [];
-  const rawItems = [];
-  let item = "";
-  let inSingle = false;
-  let inDouble = false;
-  let escaped = false;
-  for (let index = 0; index < body.length; index += 1) {
-    const character = body[index];
-    if (escaped) {
-      item += character;
-      escaped = false;
-      continue;
-    }
-    if (inDouble && character === "\\") {
-      item += character;
-      escaped = true;
-      continue;
-    }
-    if (!inDouble && character === singleQuote) {
-      item += character;
-      if (inSingle && body[index + 1] === singleQuote) {
-        item += body[index + 1];
-        index += 1;
-        continue;
-      }
-      inSingle = !inSingle;
-      continue;
-    }
-    if (!inSingle && character === "\"") {
-      item += character;
-      inDouble = !inDouble;
-      continue;
-    }
-    if (!inSingle && !inDouble && character === ",") {
-      rawItems.push(item);
-      item = "";
-      continue;
-    }
-    item += character;
-  }
-  if (inSingle || inDouble || escaped) return null;
-  rawItems.push(item);
-  const parsedItems = rawItems.map(yamlStringScalar);
-  return parsedItems.every((candidate) => typeof candidate === "string")
-    ? parsedItems
-    : null;
-}
-
-// Return the raw value text for one key of a single-line flow mapping, or null when the
-// text is not a balanced flow mapping. Registration accepts these shapes, so the runtime
-// parser must read them too instead of silently dropping configured child scans.
-function yamlFlowMappingValue(rawValue, expectedKey) {
-  const value = stripYamlComment(rawValue).trim();
-  if (!value.startsWith("{") || !value.endsWith("}")) return null;
-  const body = value.slice(1, -1);
-  const rawEntries = [];
-  let entry = "";
-  let depth = 0;
-  let inSingle = false;
-  let inDouble = false;
-  let escaped = false;
-  for (let index = 0; index < body.length; index += 1) {
-    const character = body[index];
-    if (escaped) {
-      entry += character;
-      escaped = false;
-      continue;
-    }
-    if (inDouble && character === "\\") {
-      entry += character;
-      escaped = true;
-      continue;
-    }
-    if (!inDouble && character === singleQuote) {
-      entry += character;
-      if (inSingle && body[index + 1] === singleQuote) {
-        entry += body[index + 1];
-        index += 1;
-        continue;
-      }
-      inSingle = !inSingle;
-      continue;
-    }
-    if (!inSingle && character === "\"") {
-      entry += character;
-      inDouble = !inDouble;
-      continue;
-    }
-    if (!inSingle && !inDouble) {
-      if (character === "{" || character === "[") depth += 1;
-      if (character === "}" || character === "]") depth -= 1;
-      if (depth < 0) return null;
-      if (character === "," && depth === 0) {
-        rawEntries.push(entry);
-        entry = "";
-        continue;
-      }
-    }
-    entry += character;
-  }
-  if (inSingle || inDouble || escaped || depth !== 0) return null;
-  rawEntries.push(entry);
-  for (const rawEntry of rawEntries) {
-    let separatorIndex = -1;
-    let keySingle = false;
-    let keyDouble = false;
-    let keyEscaped = false;
-    for (let index = 0; index < rawEntry.length; index += 1) {
-      const character = rawEntry[index];
-      if (keyEscaped) {
-        keyEscaped = false;
-        continue;
-      }
-      if (keyDouble && character === "\\") {
-        keyEscaped = true;
-        continue;
-      }
-      if (!keyDouble && character === singleQuote) {
-        keySingle = !keySingle;
-        continue;
-      }
-      if (!keySingle && character === "\"") {
-        keyDouble = !keyDouble;
-        continue;
-      }
-      if (keySingle || keyDouble) continue;
-      if (character === "{" || character === "[") break;
-      if (character === ":") {
-        separatorIndex = index;
-        break;
-      }
-    }
-    if (separatorIndex < 0) continue;
-    const parsedKey = yamlStringScalar(rawEntry.slice(0, separatorIndex));
-    if (parsedKey === expectedKey) return rawEntry.slice(separatorIndex + 1).trim();
-  }
-  return null;
-}
-
-function lineIndent(line) {
-  if (line.includes("\t")) return -1;
-  return line.length - line.trimStart().length;
-}
-
+// Read the saved root list with the same YAML semantics as the CLI config reader.
 function configuredScanRoots() {
-  let configText;
   try {
-    configText = readFileSync(path.join(controllerRoot, ".goat-flow", "config.yaml"), "utf8");
+    const config = yaml.load(readFileSync(path.join(controllerRoot, ".goat-flow", "config.yaml"), "utf8"));
+    const roots = config?.hooks?.["post-turn-safety"]?.["scan-roots"];
+    return Array.isArray(roots) && roots.length > 0 &&
+      roots.every((root) => typeof root === "string" && root.trim().length > 0)
+      ? roots : null;
   } catch {
+    // Invalid YAML after a user edits config cannot establish scan roots; leave controller coverage unavailable.
     return null;
   }
-  const lines = configText.replace(/\r\n?/gu, "\n").split("\n");
-  let hooksInlineValue = null;
-  const hooksIndex = lines.findIndex((line) => {
-    if (lineIndent(line) !== 0) return false;
-    const value = yamlMappingValue(stripYamlComment(line).trim(), "hooks");
-    if (value === null) return false;
-    hooksInlineValue = value;
-    return true;
-  });
-  if (hooksIndex < 0) return null;
-  // A flow-style hooks mapping carries the whole hook table on one line.
-  if (hooksInlineValue !== "") {
-    const hookValue = yamlFlowMappingValue(hooksInlineValue, "post-turn-safety");
-    if (hookValue === null) return null;
-    const rootsValue = yamlFlowMappingValue(hookValue, "scan-roots");
-    if (rootsValue === null) return null;
-    return yamlFlowStringList(rootsValue);
-  }
-  let hooksEnd = lines.length;
-  for (let index = hooksIndex + 1; index < lines.length; index += 1) {
-    const cleanLine = stripYamlComment(lines[index]);
-    if (cleanLine.trim().length > 0 && lineIndent(lines[index]) <= 0) {
-      hooksEnd = index;
-      break;
-    }
-  }
-  let hookIndex = -1;
-  let hookIndent = -1;
-  let hookInlineValue = null;
-  for (let index = hooksIndex + 1; index < hooksEnd; index += 1) {
-    const indent = lineIndent(lines[index]);
-    if (indent <= 0) continue;
-    const value = yamlMappingValue(
-      stripYamlComment(lines[index]).trim(),
-      "post-turn-safety",
-    );
-    if (value === null) continue;
-    if (value === "") {
-      hookIndex = index;
-      hookIndent = indent;
-    } else {
-      hookInlineValue = value;
-    }
-    break;
-  }
-  // A flow-style hook entry keeps its scan roots inline beneath a block hooks mapping.
-  if (hookIndex < 0 && hookInlineValue !== null) {
-    const rootsValue = yamlFlowMappingValue(hookInlineValue, "scan-roots");
-    if (rootsValue === null) return null;
-    return yamlFlowStringList(rootsValue);
-  }
-  if (hookIndex < 0) return null;
-  for (let index = hookIndex + 1; index < hooksEnd; index += 1) {
-    const cleanLine = stripYamlComment(lines[index]);
-    const trimmedLine = cleanLine.trim();
-    if (trimmedLine.length === 0) continue;
-    const indent = lineIndent(lines[index]);
-    if (indent <= hookIndent) break;
-    const inlineValue = yamlMappingValue(trimmedLine, "scan-roots");
-    if (inlineValue === null) continue;
-    if (inlineValue.length > 0) return yamlFlowStringList(inlineValue);
-    const roots = [];
-    for (let rootIndex = index + 1; rootIndex < hooksEnd; rootIndex += 1) {
-      const rootLine = stripYamlComment(lines[rootIndex]);
-      if (rootLine.trim().length === 0) continue;
-      if (lineIndent(lines[rootIndex]) <= indent) break;
-      const itemMatch = /^-\s+(.+)$/u.exec(rootLine.trim());
-      if (!itemMatch) return null;
-      const root = yamlStringScalar(itemMatch[1]);
-      if (root === null) return null;
-      roots.push(root);
-    }
-    return roots;
-  }
-  return null;
 }
 
 const configuredRoots = configuredScanRoots();
+// Missing or empty roots leave controller coverage unavailable; the caller handles root recovery.
 if (!Array.isArray(configuredRoots) || configuredRoots.length === 0) process.exit(3);
 
 const scanUnits = [];
+// Verify each declared repository stays inside the selected controller workspace.
 for (const configuredRoot of configuredRoots) {
+  // Empty or absolute paths cannot redirect this controller scan outside its selected workspace.
   if (configuredRoot.length === 0 || path.isAbsolute(configuredRoot) ||
     /^[A-Za-z]:[\\/]/u.test(configuredRoot) || /^\\\\/u.test(configuredRoot)) {
     process.exit(3);
   }
   const childPath = path.resolve(controllerRoot, configuredRoot);
   const lexicalRelative = path.relative(controllerRoot, childPath);
+  // Parent traversal cannot widen the user-approved repository set.
   if (lexicalRelative === ".." || lexicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(lexicalRelative)) {
     process.exit(3);
   }
   let childRealPath;
   try {
     childRealPath = realpathSync(childPath);
+    // A listed file cannot stand in for a repository directory.
     if (!statSync(childRealPath).isDirectory()) process.exit(3);
   } catch {
+    // A configured repository may have been removed or become unreadable before this Stop scan.
     process.exit(3);
   }
   const physicalRelative = path.relative(controllerRoot, childRealPath);
+  // Linked paths must also remain physically inside the selected workspace.
   if (physicalRelative === ".." || physicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(physicalRelative)) {
     process.exit(3);
   }
@@ -962,6 +723,7 @@ for (const configuredRoot of configuredRoots) {
     timeout: Math.min(maximumMilliseconds, 5000),
     windowsHide: true,
   });
+  // Failed Git lookup cannot establish scanned coverage for this configured root.
   if (rootLookup.error || rootLookup.status !== 0 || typeof rootLookup.stdout !== "string" || rootLookup.stdout.trim().length === 0) {
     process.exit(3);
   }
@@ -969,8 +731,10 @@ for (const configuredRoot of configuredRoots) {
   try {
     gitRoot = realpathSync(rootLookup.stdout.trim());
   } catch {
+    // A repository moved after Git lookup cannot establish a verified root for this scan.
     process.exit(3);
   }
+  // Each root must name a whole Git repository rather than part of a different checkout.
   if (gitRoot !== childRealPath) process.exit(3);
   scanUnits.push({
     name: physicalRelative.split(path.sep).join("/"),
@@ -982,13 +746,16 @@ const childPayload = sessionFingerprint.length > 0
   ? JSON.stringify({ session_id: sessionFingerprint, hook_event_name: "Stop", stop_hook_active: stopHookActive })
   : "";
 const childResults = [];
+// Preserve declared repository order while giving every root a result or coverage failure.
 for (const scanUnit of scanUnits) {
+  // A root already refused during setup retains its unavailable result without starting a scanner.
   if (scanUnit.failure) {
     childResults.push({ name: scanUnit.name, result: scanUnit.failure });
     continue;
   }
   const elapsedMilliseconds = Date.now() - startedAt;
   const remainingMilliseconds = maximumMilliseconds - elapsedMilliseconds;
+  // The shared deadline leaves this repository unscanned and must remain visible as incomplete work.
   if (remainingMilliseconds <= 0) {
     childResults.push({ name: scanUnit.name, result: syntheticResult("execution-timeout", "Controller safety-scan budget expired before this child ran") });
     continue;
@@ -1003,33 +770,60 @@ for (const scanUnit of scanUnits) {
     GOAT_FLOW_POST_TURN_CONTROLLER_CHILD: "1",
     GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: String(Math.max(1, Math.ceil(remainingMilliseconds / 1000))),
   };
-  const childExecution = spawnSync("bash", [hookScript], {
-    cwd: scanUnit.root,
-    encoding: "utf8",
-    input: childPayload,
-    env: childEnvironment,
-    timeout: remainingMilliseconds,
-    windowsHide: true,
-    maxBuffer: 20_000,
-  });
-  if (childExecution.error) {
-    const reasonCode = childExecution.error.code === "ETIMEDOUT" ? "execution-timeout" : "hook-unavailable";
-    const message = reasonCode === "execution-timeout"
+  let childExecution;
+  // Managed controller children use the same independent byte and tree-cleanup contracts as the outer launcher.
+  if (managedRuntime !== null) {
+    const child = spawn("bash", [bashScriptArgument], {
+      cwd: scanUnit.root, env: childEnvironment, detached: process.platform !== "win32",
+      stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
+    });
+    // A scanner may close stdin before reading the event; its completed status and result still decide the outcome.
+    child.stdin.on("error", () => {
+    });
+    child.stdin.end(childPayload);
+    childExecution = await managedRuntime.captureHookProcessUntilDeadline(child,
+      { ...childEnvironment, GOAT_FLOW_HOOK_PROVIDER_MODE: "managed" }, remainingMilliseconds, process.platform,
+      managedRuntime.appendBoundedHookOutput, managedLauncher.stopHookProcessTree);
+    // Retained child diagnostics stay visible without allowing their excess to discard a completed finding.
+    if (childExecution.stderr.length > 0) process.stderr.write(childExecution.stderr);
+  } else {
+    childExecution = spawnSync("bash", [bashScriptArgument], {
+      cwd: scanUnit.root, encoding: "utf8", input: childPayload, env: childEnvironment,
+      timeout: remainingMilliseconds, windowsHide: true, maxBuffer: 65_536,
+    });
+  }
+  // An unfinished, flooded or unstarted child has no complete result to aggregate, even if JSON appeared first.
+  if (childExecution.error || childExecution.launchError || childExecution.timedOut || childExecution.hasExceededOutputLimit) {
+    const reasonCode = childExecution.timedOut || childExecution.error?.code === "ETIMEDOUT" ? "execution-timeout" : "hook-unavailable";
+    const hasOutputOverflow = childExecution.hasExceededOutputLimit || childExecution.error?.code === "ENOBUFS";
+    const childFailureMessage = reasonCode === "execution-timeout"
       ? "Child safety scan exceeded the controller deadline"
-      : "Child safety scan could not start";
-    childResults.push({ name: scanUnit.name, result: syntheticResult(reasonCode, message) });
+      : hasOutputOverflow
+        ? "Child safety scan exceeded its output limit"
+        : "Child safety scan could not start";
+    const failure = syntheticResult(reasonCode, childFailureMessage);
+    // Aborted child counts are lower bounds; they explain the lost coverage without copying arbitrary output into findings.
+    if (childExecution.output) failure.execution.output = childExecution.output;
+    childResults.push({ name: scanUnit.name, result: failure });
     continue;
   }
   let childResult;
   try {
     childResult = JSON.parse((childExecution.stdout || "").trim());
   } catch {
+    // A child that emits empty or partial JSON cannot report a completed repository scan.
     childResult = null;
   }
-  if (childExecution.status !== 0 || !validChildResult(childResult)) {
-    childResults.push({ name: scanUnit.name, result: syntheticResult("hook-unavailable", "Child safety scan did not return a valid result") });
+  // A failed or malformed child cannot contribute a clean repository result.
+  if (childExecution.status !== 0 || childExecution.hasInvalidUtf8Output || !validChildResult(childResult)) {
+    const failure = syntheticResult("hook-unavailable", "Child safety scan did not return a valid result");
+    // A completed but invalid envelope still has measurable stream totals, while coverage remains unavailable.
+    if (childExecution.output) failure.execution.output = childExecution.output;
+    childResults.push({ name: scanUnit.name, result: failure });
     continue;
   }
+  // Valid child findings retain their raw-byte measurements so the aggregate can disclose diagnostic truncation.
+  if (childExecution.output) childResult.execution.output = childExecution.output;
   childResults.push({ name: scanUnit.name, result: childResult });
 }
 
@@ -1038,29 +832,44 @@ const coverage = childResults.reduce((total, child) => ({
   completedUnits: total.completedUnits + child.result.coverage.completedUnits,
   skippedUnits: total.skippedUnits + child.result.coverage.skippedUnits,
 }), { attemptedUnits: 0, completedUnits: 0, skippedUnits: 0 });
+const childOutputMeasurements = childResults.map((child) => child.result.execution.output).filter(Boolean);
+// Shared runtime limits keep a future budget change from invalidating every controller aggregate.
+const childOutput = managedRuntime !== null && childOutputMeasurements.length > 0 ? {
+  envelopeLimitBytes: managedRuntime.HOOK_RESULT_ENVELOPE_LIMIT_BYTES, stderrRetentionLimitBytes: managedRuntime.HOOK_STDERR_RETENTION_LIMIT_BYTES,
+  stderrFloodLimitBytes: managedRuntime.HOOK_STDERR_FLOOD_LIMIT_BYTES, providerLimitBytes: managedRuntime.HOOK_RESULT_OUTPUT_LIMIT_BYTES,
+  stdoutBytes: childOutputMeasurements.reduce((total, output) => total + output.stdoutBytes, 0),
+  stderrBytes: childOutputMeasurements.reduce((total, output) => total + output.stderrBytes, 0),
+  areByteCountsExact: childOutputMeasurements.length === scanUnits.length && childOutputMeasurements.every((output) => output.areByteCountsExact),
+  isStderrTruncated: childOutputMeasurements.some((output) => output.isStderrTruncated),
+} : null;
 const coverageStatus = coverage.completedUnits === coverage.attemptedUnits && coverage.skippedUnits === 0
   ? "complete"
   : coverage.completedUnits === 0 ? "none" : "partial";
 const nonPassResults = childResults.filter((child) => child.result.outcome !== "pass");
 const everyNonPassBounded = nonPassResults.length > 0 && nonPassResults.every((child) =>
   child.result.outcome === "incomplete" && child.result.reasonCode === "bounded-reentry-ended");
+const everyNonPassInfrastructure = nonPassResults.length > 0 && nonPassResults.every((child) =>
+  ["incomplete", "unavailable"].includes(child.result.outcome) && child.result.execution.failureClass === "infrastructure");
 let outcome = "pass";
 let reasonCode = "completed-clean";
+// A genuine child finding determines the controller block even when another root was unavailable.
 if (childResults.some((child) => child.result.outcome === "block")) {
   outcome = "block";
   reasonCode = "policy-blocked";
 } else if (childResults.some((child) => child.result.outcome === "unavailable")) {
+  // An unavailable child prevents a clean aggregate even when the other declared repositories passed.
   outcome = "unavailable";
   reasonCode = "hook-unavailable";
 } else if (nonPassResults.length > 0) {
+  // Remaining incomplete or advisory children retain their visible non-clean outcome and any bounded-recovery reason.
   outcome = nonPassResults.some((child) => child.result.outcome === "incomplete")
     ? "incomplete"
     : "advisory";
   reasonCode = everyNonPassBounded ? "bounded-reentry-ended" : outcome === "advisory" ? "findings-reported" : "coverage-incomplete";
 }
-// The retained window must include what decided the aggregate outcome, so findings from
-// outcome-deciding children fill the cap first and the rest keep their deterministic order.
-const collectedFindings = childResults.flatMap((child) => child.result.findings.map((finding) => ({
+// Keep outcome-deciding findings first so the user sees why the aggregate blocks; preserve declared order for all remaining details.
+const findingChildren = outcome === "block" ? childResults.filter((child) => child.result.outcome === "block") : childResults;
+const collectedFindings = findingChildren.flatMap((child) => child.result.findings.map((finding) => ({
   isDecisive: child.result.outcome === outcome,
   finding: {
     code: finding.code,
@@ -1080,6 +889,11 @@ const aggregateResult = {
   coverage: { status: coverageStatus, ...coverage },
   reasonCode,
   findings,
+  ...(outcome === "block" ? { summary: {
+    detectedFindings: findingChildren.reduce((total, child) => total + (child.result.summary?.detectedFindings ?? child.result.findings.length), 0),
+    envelopeOmittedFindings: findingChildren.reduce((total, child) => total + (child.result.summary?.envelopeOmittedFindings ?? 0), 0) + collectedFindings.length - findings.length,
+    presentationOmittedFindings: 0,
+  } } : {}),
   execution: {
     hookVersion,
     provider,
@@ -1087,32 +901,60 @@ const aggregateResult = {
     adapterName: `${provider}-turn-stop`,
     adapterVersion,
     durationMs: Date.now() - startedAt,
+    ...(everyNonPassInfrastructure ? { failureClass: "infrastructure" } : {}),
+    ...(childOutput === null ? {} : { childOutput }),
   },
 };
 
+// Managed callers receive one structured aggregate for the provider adapter.
 if (parentMigrated) {
-  process.stdout.write(`${JSON.stringify(aggregateResult)}\n`);
+  const { compactHookResultEnvelope } = await import(pathToFileURL(path.join(path.dirname(hookScript), "hook-launch-runtime.mjs")).href);
+  process.stdout.write(`${JSON.stringify(compactHookResultEnvelope(aggregateResult))}\n`);
   process.exit(0);
 }
+// Complete clean legacy coverage ends without a terminal warning.
 if (outcome === "pass") process.exit(0);
+// Direct terminal users receive each retained finding with its declared repository target.
 for (const finding of findings) {
   process.stderr.write(`post-turn-safety: ${finding.target}: ${finding.message}\n`);
 }
-// A legacy host has no adapter to read `bounded-reentry-ended`, so the controller must end the
-// exhausted cycle itself. Without this the turn can never stop: every later Stop repeats the same
-// unchanged child failure, while the single-project path ends that cycle after one replay.
+// End an exhausted legacy cycle here because this host has no structured-result adapter.
+// The unchanged child failure remains incomplete; later Stop callbacks must not renew its retry.
 if (reasonCode === "bounded-reentry-ended") {
   process.stderr.write("post-turn-safety: ending repeated Stop after unchanged infrastructure failure; no clean scan was recorded.\n");
   process.exit(0);
 }
+// A known hazard needs content repair; other non-clean outcomes keep their incomplete-scan explanation.
 if (outcome === "block") {
   process.stderr.write("post-turn-safety: fix or remove the flagged changed content before stopping.\n");
 } else {
   process.stderr.write("post-turn-safety: controller scan incomplete.\n");
 }
 process.exit(2);
-' "$controller_root" "$hook_script"
-  )"
+GOAT_FLOW_CONTROLLER_PROGRAM
+}
+
+# Scan only the explicit Git roots configured for a managed non-Git controller.
+#
+# Children return structured results so aggregation preserves detector decisions without parsing terminal text.
+# Exit 3 means root configuration could not be established; the caller then applies its infrastructure recovery contract.
+run_controller_child_scans() {
+  local controller_root=""
+  local controller_result=""
+  local controller_status=0
+  local hook_script="${BASH_SOURCE[0]}"
+
+  # A child whose Git commands fail must report that failure instead of recursively widening scope.
+  if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then
+    return 3
+  fi
+  # Missing Node or an inaccessible controller directory leaves its child scope unresolved.
+  if ! command -v node >/dev/null 2>&1 || \
+    ! controller_root="$(pwd -P 2>/dev/null)" || [ -z "$controller_root" ]; then
+    return 3
+  fi
+
+  controller_result="$(run_controller_program "$controller_root" "$hook_script")"
   controller_status=$?
 
   # An absent or invalid explicit list leaves the bounded fail-closed Git-root path authoritative.
@@ -1121,6 +963,7 @@ process.exit(2);
   fi
   # Once child scope is established, stale single-root failure state cannot affect this topology.
   clear_stop_reentry_state "$controller_root" >/dev/null 2>&1
+  # A nonempty controller envelope carries the declared child outcomes to the launcher.
   if [ -n "$controller_result" ]; then
     printf '%s\n' "$controller_result"
   fi
@@ -1136,9 +979,7 @@ process.exit(2);
   return "$controller_status"
 }
 
-# Detector shapes are shared by the Bash 3 compatibility and optimized paths.
-# Keep thresholds and placeholder decisions in this Bash-3-safe block
-# so either execution path cannot silently define a different security policy.
+# Both scanner paths share these Bash-3-safe patterns so macOS and newer Bash users receive the same safety decisions.
 AWS_TOKEN_RE='(AKIA|ASIA)[A-Z0-9]{16}'
 GITHUB_LEGACY_TOKEN_RE='gh[pousr]_[A-Za-z0-9_]{30,}'
 GITHUB_FINE_GRAINED_TOKEN_RE='github_pat_[A-Za-z0-9_]{20,}'
@@ -1247,40 +1088,40 @@ fallback_trim() {
 
 # Normalize a credential label so equivalent UI/config naming styles get one decision.
 fallback_normalize_key() {
-  local raw="$1"
-  local first=""
-  local second=""
-  local c
-  local i
-  local n
+  local credential_label="$1"
+  local camel_case_label=""
+  local word_separated_label=""
+  local label_character
+  local character_index
+  local label_length
 
-  n=${#raw}
-  i=0
+  label_length=${#credential_label}
+  character_index=0
   # Walk the original label so camelCase boundaries become visible to the user-facing classifier.
-  while [ "$i" -lt "$n" ]; do
-    c="${raw:$i:1}"
+  while [ "$character_index" -lt "$label_length" ]; do
+    label_character="${credential_label:$character_index:1}"
     # A lowercase-to-uppercase boundary starts a new credential-label word.
-    if [ "$i" -gt 0 ] && [[ "${raw:$((i - 1)):1}" == [[:lower:][:digit:]] && "$c" == [[:upper:]] ]]; then
-      first="${first}_"
+    if [ "$character_index" -gt 0 ] && [[ "${credential_label:$((character_index - 1)):1}" == [[:lower:][:digit:]] && "$label_character" == [[:upper:]] ]]; then
+      camel_case_label="${camel_case_label}_"
     fi
-    first="${first}${c}"
-    i=$((i + 1))
+    camel_case_label="${camel_case_label}${label_character}"
+    character_index=$((character_index + 1))
   done
 
-  n=${#first}
-  i=0
+  label_length=${#camel_case_label}
+  character_index=0
   # Walk the intermediate label so acronym endings also become separate words.
-  while [ "$i" -lt "$n" ]; do
-    c="${first:$i:1}"
+  while [ "$character_index" -lt "$label_length" ]; do
+    label_character="${camel_case_label:$character_index:1}"
     # The last capital before lowercase text starts the next readable word.
-    if [ "$i" -gt 0 ] && [ "$((i + 1))" -lt "$n" ] && [[ "${first:$((i - 1)):1}" == [[:upper:]] && "$c" == [[:upper:]] && "${first:$((i + 1)):1}" == [[:lower:]] ]]; then
-      second="${second}_"
+    if [ "$character_index" -gt 0 ] && [ "$((character_index + 1))" -lt "$label_length" ] && [[ "${camel_case_label:$((character_index - 1)):1}" == [[:upper:]] && "$label_character" == [[:upper:]] && "${camel_case_label:$((character_index + 1)):1}" == [[:lower:]] ]]; then
+      word_separated_label="${word_separated_label}_"
     fi
-    second="${second}${c}"
-    i=$((i + 1))
+    word_separated_label="${word_separated_label}${label_character}"
+    character_index=$((character_index + 1))
   done
 
-  fallback_lower "$second" || return 1
+  fallback_lower "$word_separated_label" || return 1
   FALLBACK_NORMALIZED_KEY="${FALLBACK_LOWER//-/_}"
 }
 
@@ -1298,8 +1139,8 @@ $path|$family
 "
   fallback_findings=$((fallback_findings + 1))
   record_post_turn_result_finding "safety-hazard" "Blocked $family in changed content" "$path"
-  # The output cap keeps a large edit readable while the final count stays honest.
-  if [ "$fallback_findings" -le "$fallback_max_findings" ]; then
+  # Direct terminal use shows capped findings; managed mode keeps them in JSON without duplicate diagnostics.
+  if [ "$post_turn_migrated_result_mode" -eq 0 ] && [ "$fallback_findings" -le "$fallback_max_findings" ]; then
     printf 'post-turn-safety: %s in %s (Bash 3 compatibility scan).\n' "$family" "$path" >&2
   fi
 }
@@ -1322,6 +1163,7 @@ fallback_is_placeholder() {
 }
 
 # Decide whether a quoted value remains one literal credential the user can rotate.
+#
 # Expression suffixes stay out of warnings so ordinary code does not look like a leak.
 # $1 is post-quote text; empty means ended. Returns 0 for a literal, 1 for an expression.
 suffix_ends_assignment() {
@@ -1680,6 +1522,7 @@ fallback_scan_line() {
 }
 
 # Decode a Git diff destination so compatibility scanning names the user's real file.
+#
 # $1 is decorated header text; sets FALLBACK_DIFF_PATH, empty when unusable.
 # Returns 0 when decoded, or 1 so incomplete coverage can block the turn.
 fallback_decode_diff_path() {
@@ -2001,8 +1844,7 @@ fallback_main() {
 
   # Without a Git root, the hook cannot identify the project changes for this turn.
   if ! root=$(git rev-parse --show-toplevel 2>/dev/null) || [ -z "$root" ]; then
-    post_turn_result_detail="The selected Git repository root could not be opened"
-    printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+    report_repository_root_failure
     finish_repository_root_failure "fallback:git repository root unavailable"
     return $?
   fi
@@ -2127,6 +1969,8 @@ if ! read_stop_context; then
   exit 2
 fi
 
+# Check whether the selected directory is a whole Git repository before choosing single-project or configured controller scanning.
+# An unavailable or different root leaves the explicit controller-root path responsible for establishing scope.
 current_directory_is_git_top_level() {
   local selected_root=""
   local discovered_root=""
@@ -2142,6 +1986,7 @@ if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" != 1 ] && \
   ! current_directory_is_git_top_level; then
   run_controller_child_scans
   controller_scan_status=$?
+  # Established child scope owns this result and must not fall back to scanning another project.
   if [ "$controller_scan_status" -ne 3 ]; then
     exit "$controller_scan_status"
   fi
@@ -2162,16 +2007,13 @@ MAX_FINDINGS="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
 case "$MAX_FILE_BYTES" in
   '' | *[!0-9]* | 0[0-9]*) MAX_FILE_BYTES=1048576 ;;
 esac
-# Wall-clock budget for the whole scan. The registered agent-side hook timeout
-# must stay above this so the incomplete-scan diagnostic below prints before
-# the runner kills the process (same layering as gruff-code-quality.sh).
+# Keep the scan budget below the registered host timeout so users receive the incomplete-coverage explanation before the host kills the hook.
 MAX_SECONDS="${GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS:-60}"
 case "$MAX_SECONDS" in
   '' | *[!0-9]*) MAX_SECONDS=60 ;;
 esac
 
-# External commands receive at most this many path arguments per invocation so
-# batched calls stay far below the ~32k character Windows command-line limit.
+# Bound path batches below the Windows command-line limit so large change sets do not prevent scan tools from starting.
 CHUNK_SIZE=64
 
 findings=0
@@ -2180,9 +2022,7 @@ reported_findings="
 merge_conflict_scan_path=""
 merge_conflict_scan_state=0
 
-# Budget bookkeeping: BAIL flips once SECONDS crosses MAX_SECONDS; every scan
-# loop checks it and unwinds. PENDING_FILES over-counts remaining candidate
-# files (never under-counts) so the incomplete-scan message stays honest.
+# Stop scan work after a time limit or command failure; conservative remaining-file counts keep coverage from being overstated.
 BAIL=0
 PENDING_FILES=0
 INCOMPLETE_REASON=""
@@ -2231,8 +2071,7 @@ next_temp_path() {
   TEMP_PATH="$WORKDIR/$1-$TEMP_FILE_SEQUENCE"
 }
 
-# Grep exit 1 is its documented no-match result. Any other non-zero status
-# means candidate selection or content gating did not complete.
+# Treat grep exit 1 as no matches; other nonzero exits leave candidate selection incomplete and keep the user's turn blocked.
 capture_grep_output() {
   local output="$1"
   local failure_reason="$2"
@@ -2260,9 +2099,7 @@ has_head() {
   git rev-parse --verify HEAD >/dev/null 2>&1
 }
 
-# Sets STRIPPED to $1 without leading/trailing [[:space:]]. A function output
-# via global instead of stdout: $(...) forks a subshell, and this runs on the
-# per-line hot path.
+# Trim assignment text into STRIPPED; a shared result avoids a subshell for every user-authored line scanned.
 strip_space() {
   STRIPPED="${1##+([[:space:]])}"
   STRIPPED="${STRIPPED%%+([[:space:]])}"
@@ -2296,32 +2133,33 @@ is_excluded_credential_key() {
 }
 
 # Normalize credential labels so camelCase and kebab-case receive the same verdict.
+#
 # This keeps user feedback consistent across common config styles.
 # $1 is the label; sets NORMALIZED_KEY, which is empty only when the input is empty.
 normalize_credential_key() {
-  local raw="$1" first="" second="" c i n
-  n=${#raw}
+  local credential_label="$1" camel_case_label="" word_separated_label="" label_character character_index label_length
+  label_length=${#credential_label}
   # Walk the original label so camelCase boundaries become visible to the classifier.
-  for ((i = 0; i < n; i++)); do
-    c=${raw:i:1}
+  for ((character_index = 0; character_index < label_length; character_index++)); do
+    label_character=${credential_label:character_index:1}
     # A lowercase-to-uppercase boundary starts a new credential-label word.
-    if ((i > 0)) && [[ ${raw:i-1:1} == [[:lower:][:digit:]] && $c == [[:upper:]] ]]; then
-      first+="_"
+    if ((character_index > 0)) && [[ ${credential_label:character_index-1:1} == [[:lower:][:digit:]] && $label_character == [[:upper:]] ]]; then
+      camel_case_label+="_"
     fi
-    first+="$c"
+    camel_case_label+="$label_character"
   done
-  n=${#first}
+  label_length=${#camel_case_label}
   # Walk the intermediate label so acronym endings also become separate words.
-  for ((i = 0; i < n; i++)); do
-    c=${first:i:1}
+  for ((character_index = 0; character_index < label_length; character_index++)); do
+    label_character=${camel_case_label:character_index:1}
     # The last capital before lowercase text starts the next readable word.
-    if ((i > 0 && i + 1 < n)) && [[ ${first:i-1:1} == [[:upper:]] && $c == [[:upper:]] && ${first:i+1:1} == [[:lower:]] ]]; then
-      second+="_"
+    if ((character_index > 0 && character_index + 1 < label_length)) && [[ ${camel_case_label:character_index-1:1} == [[:upper:]] && $label_character == [[:upper:]] && ${camel_case_label:character_index+1:1} == [[:lower:]] ]]; then
+      word_separated_label+="_"
     fi
-    second+="$c"
+    word_separated_label+="$label_character"
   done
-  second="${second,,}"
-  NORMALIZED_KEY="${second//-/_}"
+  word_separated_label="${word_separated_label,,}"
+  NORMALIZED_KEY="${word_separated_label//-/_}"
 }
 
 # Recognize credential labels across common config naming styles.
@@ -2357,10 +2195,9 @@ scan_literal_credential_assignment() {
     return 0
   fi
   value="$LITERAL_VALUE"
+  # Short literals do not meet the high-confidence credential threshold used to interrupt the user's turn.
   [ "${#value}" -ge 12 ] || return 0
-  # Assignment values use delimiter-aware placeholder matching so ordinary
-  # substrings such as "test" inside a generated password do not suppress a
-  # credential finding. Known documented token placeholders are handled there.
+  # Delimiter-aware placeholder matching keeps a generated credential containing an ordinary word from escaping the user's warning.
   if is_placeholder_token "$value"; then
     return 0
   fi
@@ -2428,104 +2265,103 @@ scan_dockerfile_assignment() {
   scan_literal_credential_assignment "$path" "$key" "$raw_value"
 }
 
-# Extracts a literal secret-looking value from an assignment right-hand side.
-# On success sets LITERAL_VALUE and returns 0; returns 1 when the value is a
-# reference, expression, identifier, or otherwise not a literal credential.
+# Extract one credential-shaped assignment value into LITERAL_VALUE for the warning shown to the user.
+# Return 0 for a literal; return 1 for references, expressions, or other values that cannot justify a credential finding.
 literal_assignment_value() {
-  local after
-  local bare
+  local text_after_closing_quote
+  local unquoted_assignment_value
   local dotted_identifier_re
-  local first_segment
-  local first_segment_lower
+  local value_first_segment
+  local value_first_segment_lower
   local operator_expression_re
-  local raw
-  local rest
-  local value
+  local raw_assignment_value
+  local text_after_opening_quote
+  local literal_value
 
   LITERAL_VALUE=""
   strip_space "$1"
-  raw="$STRIPPED"
-  case "$raw" in
+  raw_assignment_value="$STRIPPED"
+  case "$raw_assignment_value" in
     [fF]\"* | [fF]\'* | [fF][rR]\"* | [fF][rR]\'* | [rR][fF]\"* | [rR][fF]\'*)
       return 1
       ;;
   esac
 
-  case "${raw:0:1}" in
+  case "${raw_assignment_value:0:1}" in
     '"')
-      rest="${raw:1}"
-      [[ "$rest" == *\"* ]] || return 1
-      value="${rest%%\"*}"
-      case "$value" in
+      text_after_opening_quote="${raw_assignment_value:1}"
+      [[ "$text_after_opening_quote" == *\"* ]] || return 1
+      literal_value="${text_after_opening_quote%%\"*}"
+      case "$literal_value" in
         *[[:space:]]* | *'$'*) return 1 ;;
       esac
-      is_reference_or_interpolation "$value" && return 1
-      after="${rest#*\"}"
-      strip_space "$after"
-      after="$STRIPPED"
+      is_reference_or_interpolation "$literal_value" && return 1
+      text_after_closing_quote="${text_after_opening_quote#*\"}"
+      strip_space "$text_after_closing_quote"
+      text_after_closing_quote="$STRIPPED"
       # Only an assignment-ending suffix may follow the closing quote.
-      suffix_ends_assignment "$after" || return 1
-      LITERAL_VALUE="$value"
+      suffix_ends_assignment "$text_after_closing_quote" || return 1
+      LITERAL_VALUE="$literal_value"
       return 0
       ;;
     "'")
-      rest="${raw:1}"
-      [[ "$rest" == *"'"* ]] || return 1
-      value="${rest%%\'*}"
-      case "$value" in
+      text_after_opening_quote="${raw_assignment_value:1}"
+      [[ "$text_after_opening_quote" == *"'"* ]] || return 1
+      literal_value="${text_after_opening_quote%%\'*}"
+      case "$literal_value" in
         *[[:space:]]*) return 1 ;;
       esac
-      is_reference_or_interpolation "$value" && return 1
-      after="${rest#*\'}"
-      strip_space "$after"
-      after="$STRIPPED"
+      is_reference_or_interpolation "$literal_value" && return 1
+      text_after_closing_quote="${text_after_opening_quote#*\'}"
+      strip_space "$text_after_closing_quote"
+      text_after_closing_quote="$STRIPPED"
       # Only an assignment-ending suffix may follow the closing quote.
-      suffix_ends_assignment "$after" || return 1
-      LITERAL_VALUE="$value"
+      suffix_ends_assignment "$text_after_closing_quote" || return 1
+      LITERAL_VALUE="$literal_value"
       return 0
       ;;
   esac
 
-  bare="${raw%%#*}"
-  strip_space "$bare"
-  bare="$STRIPPED"
+  unquoted_assignment_value="${raw_assignment_value%%#*}"
+  strip_space "$unquoted_assignment_value"
+  unquoted_assignment_value="$STRIPPED"
   # An empty assignment gives the user no credential to rotate.
-  [ -n "$bare" ] || return 1
-  case "$bare" in
+  [ -n "$unquoted_assignment_value" ] || return 1
+  case "$unquoted_assignment_value" in
     *[[:space:]]* | *"("* | *")"* | *"["* | *"]"* | *"{"* | *"}"* | *","* | *";"* | *"<"* | *">"* | *"|"* | *"&"* | *'`'* | *'$'*)
       return 1
       ;;
   esac
   # A simple lowercase identifier is a runtime reference, not an embedded user secret.
-  if [[ "$bare" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+  if [[ "$unquoted_assignment_value" =~ ^[a-z_][a-z0-9_]*$ ]]; then
     return 1
   fi
   dotted_identifier_re='^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$'
   # Common dotted config references stay allowed unless their first segment is token-like.
-  if [[ "$bare" =~ $dotted_identifier_re ]]; then
-    first_segment="${bare%%.*}"
-    first_segment_lower="${first_segment,,}"
-    case "$first_segment_lower" in
+  if [[ "$unquoted_assignment_value" =~ $dotted_identifier_re ]]; then
+    value_first_segment="${unquoted_assignment_value%%.*}"
+    value_first_segment_lower="${value_first_segment,,}"
+    case "$value_first_segment_lower" in
       app | application | cfg | conf | config | configs | configuration | constant | constants | context | credentials | credential | creds | ctx | default | defaults | env | environ | environment | os | process | self | setting | settings | this)
         return 1
         ;;
     esac
     # Low-entropy dotted prefixes behave like ordinary application references.
-    if ! has_credential_entropy "$first_segment"; then
+    if ! has_credential_entropy "$value_first_segment"; then
       return 1
     fi
   fi
   operator_expression_re='^([A-Za-z_][A-Za-z0-9_]*)([+*/%=]|==|!=)([A-Za-z_][A-Za-z0-9_]*)$'
   # Identifier-led expressions stay allowed unless the left side itself is token-shaped.
-  if [[ "$bare" =~ $operator_expression_re ]]; then
+  if [[ "$unquoted_assignment_value" =~ $operator_expression_re ]]; then
     has_credential_entropy "${BASH_REMATCH[1]}" || return 1
   fi
   # Short or punctuated expressions are not high-confidence rotatable credentials.
-  if [[ ! "$bare" =~ ^[A-Za-z0-9._+/=~-]{12,}$ ]]; then
+  if [[ ! "$unquoted_assignment_value" =~ ^[A-Za-z0-9._+/=~-]{12,}$ ]]; then
     return 1
   fi
-  has_credential_entropy "$bare" || return 1
-  LITERAL_VALUE="$bare"
+  has_credential_entropy "$unquoted_assignment_value" || return 1
+  LITERAL_VALUE="$unquoted_assignment_value"
   return 0
 }
 
@@ -2573,8 +2409,8 @@ $fingerprint
 "
   findings=$((findings + 1))
   record_post_turn_result_finding "safety-hazard" "Blocked $family in changed content" "$path"
-  # The output cap keeps a large edit readable while the final count stays honest.
-  if [ "$findings" -le "$MAX_FINDINGS" ]; then
+  # Direct terminal use shows capped findings; managed mode keeps them in JSON without duplicate diagnostics.
+  if [ "$post_turn_migrated_result_mode" -eq 0 ] && [ "$findings" -le "$MAX_FINDINGS" ]; then
     printf 'post-turn-safety: blocked %s in %s\n' "$family" "$path" >&2
   fi
 }
@@ -2600,6 +2436,7 @@ scan_env_assignment() {
 }
 
 # Report a raw token unless the matched value is an obvious placeholder.
+#
 # $1 is the user file, $2 the token family, and $3 the match; empty cannot be a finding.
 # Returns clean for a placeholder, otherwise the user-facing finding status.
 report_token_if_real() {
@@ -2697,41 +2534,13 @@ scan_line() {
 
 # --- grep pre-filter patterns -------------------------------------------------
 #
-# Only lines matching one of these patterns reach scan_line. Each pattern is a
-# strict superset of the corresponding scan_line trigger, so pre-filtering can
-# never drop a line the full analysis would have flagged:
+# Keep every detector candidate while filtering ordinary user text before scan_line.
 #
-#   ^diff --git , ^+++    In the diff stream: file-section starts and +++ path
-#                         headers, needed for path attribution. In a --unified=0
-#                         stream a line starting "diff --git " can only be a
-#                         real section start (added lines render as "+diff...",
-#                         removed as "--diff...", and no context lines exist),
-#                         so a "+++ b/..." header is accepted only directly
-#                         after one; content that merely looks like a header
-#                         (e.g. an added line "++ b/x") is skipped exactly like
-#                         the original per-line reader skipped "+++"* lines.
-#   <<<<<<< , =======, >>>>>>>   The only three line shapes that can advance,
-#                         complete, or reset the merge-conflict state machine
-#                         (case arms "<<<<<<< "*, exact "=======", ">>>>>>> "*).
-#                         Lines matching none of them leave the state untouched,
-#                         so skipping them cannot change conflict detection.
-#   -----BEGIN            Required literal substring of the private-key regex.
-#   (AKIA|ASIA)[A-Z0-9]{16} and the gh/github_pat/npm/xox token patterns are
-#                         the detector regexes themselves (trivially supersets).
-#   sk-[A-Za-z0-9][A-Za-z0-9_-]{31,}   Required by both API-token branches.
-#   token|secret|password|api[-_]?key|private[-_]?key  (case-insensitive, env
-#                         files only): every accepting arm of is_credential_key
-#                         contains one of the stems token/secret/password/
-#                         api_key/apikey/private_key/secret_key in the
-#                         normalized key. Normalization only lowercases, maps
-#                         "-" to "_", and inserts underscores; it never removes
-#                         or reorders characters, so the raw line must contain
-#                         the stem letters contiguously (any case) with at most
-#                         one "-"/"_" inside the api/private+key stems. The
-#                         same holds for Dockerfile ARG/ENV findings, which
-#                         also require an is_credential_key key on the line.
-#                         Placeholder values only suppress findings, so they
-#                         need no pre-filter clause.
+# - Diff section and path headers retain file attribution; zero-context added text cannot masquerade as a section header.
+# - All three merge-conflict marker shapes remain visible; other lines cannot change conflict detection state.
+# - Token patterns match the detectors; private keys also retain their required -----BEGIN header.
+# - Config stems retain every is_credential_key candidate: normalization changes case or separators without removing stem letters.
+# - Dockerfile assignments use the same credential labels; placeholder values suppress findings and need no extra candidate pattern.
 TOKEN_BODY_RE="-----BEGIN|${AWS_TOKEN_RE}|${GITHUB_LEGACY_TOKEN_RE}|${GITHUB_FINE_GRAINED_TOKEN_RE}|${NPM_TOKEN_RE}|${SLACK_TOKEN_RE}|${API_TOKEN_RE}"
 STEM_BODY_RE='token|secret|password|api[-_]?key|private[-_]?key'
 DIFF_GLOBAL_RE="^diff --git |^\\+\\+\\+ |^\\+<<<<<<< |^\\+={7}[[:cntrl:]]?\$|^\\+>>>>>>> |^\\+.*(${TOKEN_BODY_RE})"
@@ -2741,14 +2550,15 @@ CONTENT_STEM_RE="${STEM_BODY_RE}"
 
 # --- batched file gates -------------------------------------------------------
 
-# Classifies full-content paths without loading them: 1=scannable, 2=oversized
-# text, 3=binary, 4=unavailable, and 5=excluded symlink. Tracked/staged diffs do
-# not use this cap because Git streams only added hunks for the user.
+# Whole-file admission preserves why a path cannot be scanned; tracked and staged diffs stream added hunks without this cap.
+#
+# - Final states: 1=scannable, 2=oversized text, 3=binary, 4=unavailable, 5=excluded symlink.
+# - Pending states: 6=within-cap nonempty content, 7=oversized nonempty content; the binary gate resolves both.
 declare -A SCANNABLE=()
 # Classify full-content paths before the scanner reads user-authored lines.
 gate_scannable_files() {
   local -a batch=() chunk=() sizes=()
-  local path size file_bytes i count total_lines sizes_output grep_output
+  local path size file_bytes path_index path_count total_lines sizes_output grep_output
 
   # Every full-content path gets an explicit admission or exclusion result.
   for path in "$@"; do
@@ -2817,32 +2627,30 @@ gate_scannable_files() {
     fi
     sizes=()
     mapfile -t sizes <"$sizes_output"
-    count=${#chunk[@]}
+    path_count=${#chunk[@]}
     total_lines=${#sizes[@]}
     # Expected output has one line per file plus one total only for multi-file batches.
-    if { ((count == 1)) && ((total_lines == 1)); } || { ((count > 1)) && ((total_lines == count + 1)); }; then
+    if { ((path_count == 1)) && ((total_lines == 1)); } || { ((path_count > 1)) && ((total_lines == path_count + 1)); }; then
       # Match each byte count back to the same user-visible path in the chunk.
-      for ((i = 0; i < count; i++)); do
+      for ((path_index = 0; path_index < path_count; path_index++)); do
         # Invalid byte text cannot safely classify this path or its neighbors.
-        if [[ ! "${sizes[i]}" =~ ^[[:space:]]*([0-9]+) ]]; then
+        if [[ ! "${sizes[path_index]}" =~ ^[[:space:]]*([0-9]+) ]]; then
           mark_scan_incomplete "command" "byte-count command returned invalid output"
           return 1
         fi
         file_bytes="${BASH_REMATCH[1]}"
         # Empty files are fully inspected without a content grep.
         if ((file_bytes == 0)); then
-          SCANNABLE["${chunk[i]}"]=1
+          SCANNABLE["${chunk[path_index]}"]=1
         # Non-empty files retain whether their whole content fits the user cap.
         elif ((file_bytes <= MAX_FILE_BYTES)); then
-          SCANNABLE["${chunk[i]}"]=6
+          SCANNABLE["${chunk[path_index]}"]=6
         else
-          SCANNABLE["${chunk[i]}"]=7
+          SCANNABLE["${chunk[path_index]}"]=7
         fi
       done
     else
-      # Unexpected wc output shape (e.g. a file vanished mid-run): probe the
-      # chunk per file only after marking the scan incomplete; shifted output
-      # cannot safely prove that any neighboring path stayed within the cap.
+      # A missing byte-count row, such as when a file disappears mid-scan, makes the whole batch incomplete; do not guess neighboring file sizes.
       mark_scan_incomplete "command" "byte-count command returned invalid output"
       return 1
     fi
@@ -2876,55 +2684,54 @@ gate_scannable_files() {
 
 # --- diff-stream scanning -----------------------------------------------------
 
-# Unquotes a C-style quoted git path ("caf\303\251.env" style) into UNQUOTED.
+# Decode Git-quoted paths into UNQUOTED so findings show actual filenames, including non-ASCII names and escaped characters.
 c_unquote_path() {
-  local quoted="$1" out="" c oct
-  quoted="${quoted#\"}"
-  quoted="${quoted%\"}"
+  local encoded_path="$1" decoded_path="" path_character octal_bytes
+  encoded_path="${encoded_path#\"}"
+  encoded_path="${encoded_path%\"}"
   # Decode every Git-escaped path byte so findings name the file the user recognizes.
-  while [ -n "$quoted" ]; do
-    c="${quoted:0:1}"
+  while [ -n "$encoded_path" ]; do
+    path_character="${encoded_path:0:1}"
     # Ordinary path characters can be copied without escape decoding.
-    if [ "$c" != "\\" ]; then
-      out+="$c"
-      quoted="${quoted:1}"
+    if [ "$path_character" != "\\" ]; then
+      decoded_path+="$path_character"
+      encoded_path="${encoded_path:1}"
       continue
     fi
-    c="${quoted:1:1}"
-    case "$c" in
+    path_character="${encoded_path:1:1}"
+    case "$path_character" in
       [0-7])
-        oct="${quoted:1:3}"
-        oct="${oct%%[!0-7]*}"
-        printf -v c '%b' "\\0$oct"
-        out+="$c"
-        quoted="${quoted:$((1 + ${#oct}))}"
+        octal_bytes="${encoded_path:1:3}"
+        octal_bytes="${octal_bytes%%[!0-7]*}"
+        printf -v path_character '%b' "\\0$octal_bytes"
+        decoded_path+="$path_character"
+        encoded_path="${encoded_path:$((1 + ${#octal_bytes}))}"
         ;;
-      a) out+=$'\a'; quoted="${quoted:2}" ;;
-      b) out+=$'\b'; quoted="${quoted:2}" ;;
-      f) out+=$'\f'; quoted="${quoted:2}" ;;
-      n) out+=$'\n'; quoted="${quoted:2}" ;;
-      r) out+=$'\r'; quoted="${quoted:2}" ;;
-      t) out+=$'\t'; quoted="${quoted:2}" ;;
-      v) out+=$'\v'; quoted="${quoted:2}" ;;
-      *) out+="$c"; quoted="${quoted:2}" ;;
+      a) decoded_path+=$'\a'; encoded_path="${encoded_path:2}" ;;
+      b) decoded_path+=$'\b'; encoded_path="${encoded_path:2}" ;;
+      f) decoded_path+=$'\f'; encoded_path="${encoded_path:2}" ;;
+      n) decoded_path+=$'\n'; encoded_path="${encoded_path:2}" ;;
+      r) decoded_path+=$'\r'; encoded_path="${encoded_path:2}" ;;
+      t) decoded_path+=$'\t'; encoded_path="${encoded_path:2}" ;;
+      v) decoded_path+=$'\v'; encoded_path="${encoded_path:2}" ;;
+      *) decoded_path+="$path_character"; encoded_path="${encoded_path:2}" ;;
     esac
   done
-  UNQUOTED="$out"
+  UNQUOTED="$decoded_path"
 }
 
 # Scan one bounded Git diff stream while preserving the user's file and line order.
+#
 # $1 is the stream file; empty added content produces no finding.
 # Returns nonzero only when scanning cannot complete; findings feed the final verdict.
 scan_diff_stream() {
   local stream="$1"
   local -a global_hits=() stem_hits=()
-  local ai=0 bi=0 an bn hit line from_global
-  local cur_path="" cur_active=0 cur_env=0 expect_header=0 rest
+  local global_hit_index=0 stem_hit_index=0 global_line_number stem_line_number candidate_line_record line is_global_candidate
+  local changed_file_path="" scan_changed_file=0 is_config_assignment_file=0 expect_file_header=0 diff_destination
   local global_output stem_output
 
-  # -a forces text handling of odd bytes; -U keeps CR bytes at end of line
-  # (Windows grep builds strip them in text mode, which would alter the line
-  # content scan_line sees compared to the original `read -r` loop).
+  # Force text handling and preserve CR bytes so Windows grep cannot alter changed lines before safety detectors inspect them.
   next_temp_path "diff-global-hits"
   global_output="$TEMP_PATH"
   # Global candidates preserve path headers and every high-confidence detector family.
@@ -2941,88 +2748,86 @@ scan_diff_stream() {
   mapfile -t stem_hits <"$stem_output"
 
   # Merge both ordered candidate streams so conflict state follows the user's line order.
-  while ((ai < ${#global_hits[@]} || bi < ${#stem_hits[@]})); do
+  while ((global_hit_index < ${#global_hits[@]} || stem_hit_index < ${#stem_hits[@]})); do
     budget_check || return 0
     # A remaining global candidate exposes its original diff line number.
-    if ((ai < ${#global_hits[@]})); then an="${global_hits[ai]%%:*}"; else an=""; fi
+    if ((global_hit_index < ${#global_hits[@]})); then global_line_number="${global_hits[global_hit_index]%%:*}"; else global_line_number=""; fi
     # A remaining config-stem candidate exposes its original diff line number.
-    if ((bi < ${#stem_hits[@]})); then bn="${stem_hits[bi]%%:*}"; else bn=""; fi
+    if ((stem_hit_index < ${#stem_hits[@]})); then stem_line_number="${stem_hits[stem_hit_index]%%:*}"; else stem_line_number=""; fi
 
-    from_global=1
+    is_global_candidate=1
     # Select the earlier candidate and consume duplicates once from both streams.
-    if [ -z "$an" ]; then
-      from_global=0
-      hit="${stem_hits[bi]}"
-      bi=$((bi + 1))
+    if [ -z "$global_line_number" ]; then
+      is_global_candidate=0
+      candidate_line_record="${stem_hits[stem_hit_index]}"
+      stem_hit_index=$((stem_hit_index + 1))
     # The earlier global detector candidate keeps its original user line order.
-    elif [ -z "$bn" ] || ((an < bn)); then
-      hit="${global_hits[ai]}"
-      ai=$((ai + 1))
+    elif [ -z "$stem_line_number" ] || ((global_line_number < stem_line_number)); then
+      candidate_line_record="${global_hits[global_hit_index]}"
+      global_hit_index=$((global_hit_index + 1))
     # One line matched both candidate sets, so scan it only once.
-    elif ((an == bn)); then
-      hit="${global_hits[ai]}"
-      ai=$((ai + 1))
-      bi=$((bi + 1))
+    elif ((global_line_number == stem_line_number)); then
+      candidate_line_record="${global_hits[global_hit_index]}"
+      global_hit_index=$((global_hit_index + 1))
+      stem_hit_index=$((stem_hit_index + 1))
     else
-      from_global=0
-      hit="${stem_hits[bi]}"
-      bi=$((bi + 1))
+      is_global_candidate=0
+      candidate_line_record="${stem_hits[stem_hit_index]}"
+      stem_hit_index=$((stem_hit_index + 1))
     fi
-    line="${hit#*:}"
+    line="${candidate_line_record#*:}"
 
     # A real Git section header resets path attribution before added user text.
-    if ((from_global)) && [[ "$line" == "diff --git "* ]]; then
-      expect_header=1
-      cur_active=0
+    if ((is_global_candidate)) && [[ "$line" == "diff --git "* ]]; then
+      expect_file_header=1
+      scan_changed_file=0
       continue
     fi
     # Only the destination header immediately after a section selects a user path.
-    if ((from_global && expect_header)) && [[ "$line" == "+++ "* ]]; then
-      expect_header=0
-      rest="${line#+++ }"
+    if ((is_global_candidate && expect_file_header)) && [[ "$line" == "+++ "* ]]; then
+      expect_file_header=0
+      diff_destination="${line#+++ }"
       # A deleted file has no added content for the safety scanner to inspect.
-      if [ "$rest" = "/dev/null" ]; then
-        cur_active=0
+      if [ "$diff_destination" = "/dev/null" ]; then
+        scan_changed_file=0
         continue
       fi
       # Quoted Git paths must be decoded before the user sees a finding.
-      if [[ "$rest" == \"* ]]; then
-        c_unquote_path "$rest"
-        rest="$UNQUOTED"
+      if [[ "$diff_destination" == \"* ]]; then
+        c_unquote_path "$diff_destination"
+        diff_destination="$UNQUOTED"
       else
-        rest="${rest%$'\t'}"
+        diff_destination="${diff_destination%$'\t'}"
       fi
-      rest="${rest#b/}"
-      cur_path="$rest"
-      cur_active=1
-      cur_env=0
+      diff_destination="${diff_destination#b/}"
+      changed_file_path="$diff_destination"
+      scan_changed_file=1
+      is_config_assignment_file=0
       # Config-shaped files admit the additional credential-key candidate stream.
-      if is_env_assignment_file "$cur_path"; then cur_env=1; fi
-      reset_merge_conflict_scan "$cur_path"
+      if is_env_assignment_file "$changed_file_path"; then is_config_assignment_file=1; fi
+      reset_merge_conflict_scan "$changed_file_path"
       # Completion accounting advances once each selected user file begins scanning.
       if ((DIFF_FILES_DONE >= 0)); then DIFF_FILES_DONE=$((DIFF_FILES_DONE + 1)); fi
       continue
     fi
 
-    ((cur_active)) || continue
+    ((scan_changed_file)) || continue
     case "$line" in
       "+++"* | "---"* | "@@"*) continue ;;
       +*) ;;
       *) continue ;;
     esac
     # Global detector hits and admitted config stems both reach the full line scanner.
-    if ((from_global)) || ((cur_env)); then
-      scan_line "$cur_path" "${line#+}"
+    if ((is_global_candidate)) || ((is_config_assignment_file)); then
+      scan_line "$changed_file_path" "${line#+}"
     fi
   done
 }
 
-# Runs one batched --unified=0 diff over a chunked path list and scans the
-# stream. Prefix/quotepath settings are pinned so header parsing stays stable
-# under any user diff config; content and path selection semantics match the
-# original per-path `git diff` calls (same pathspec set, same flags).
+# Count paths completed by the current batch for truthful scan coverage.
 DIFF_FILES_DONE=0
 # Stream one worktree or staged path batch and preserve per-path user coverage.
+# Pin diff prefixes and quoting so personal Git settings cannot change finding attribution.
 run_diff_batch() {
   local mode="$1"
   shift
@@ -3098,21 +2903,22 @@ run_diff_batch() {
 # --- full-content scanning (untracked and unborn-HEAD files) -------------------
 
 # Scan gated whole files so new user content receives the same ordered detectors.
+#
 # Arguments are paths; an empty list is clean because there is no declared content.
 # Returns nonzero only when scanning cannot complete; findings feed the final verdict.
 scan_content_files() {
-  local -a files=("$@") env_files=() g_path=() g_ln=() g_line=() s_path=() s_ln=() s_line=()
+  local -a files=("$@") env_files=() global_candidate_paths=() global_candidate_line_numbers=() global_candidate_lines=() stem_candidate_paths=() stem_candidate_line_numbers=() stem_candidate_lines=()
   local -A file_order=()
   local -a chunk=()
-  local path rest i gi si cur="" grep_output
+  local path candidate_line_record file_index global_hit_index stem_hit_index current_file_path="" grep_output
 
   ((${#files[@]} > 0)) || return 0
   # Record stable file order and the subset that admits config assignment checks.
-  for ((i = 0; i < ${#files[@]}; i++)); do
-    file_order["${files[i]}"]=$i
+  for ((file_index = 0; file_index < ${#files[@]}; file_index++)); do
+    file_order["${files[file_index]}"]=$file_index
     # Only config-shaped user files need the credential-stem candidate stream.
-    if is_env_assignment_file "${files[i]}"; then
-      env_files+=("${files[i]}")
+    if is_env_assignment_file "${files[file_index]}"; then
+      env_files+=("${files[file_index]}")
     fi
   done
 
@@ -3130,10 +2936,10 @@ scan_content_files() {
       return 1
     fi
     # Preserve each path, line number, and line body for ordered user-facing scanning.
-    while IFS= read -r -d '' path && IFS= read -r rest; do
-      g_path+=("$path")
-      g_ln+=("${rest%%:*}")
-      g_line+=("${rest#*:}")
+    while IFS= read -r -d '' path && IFS= read -r candidate_line_record; do
+      global_candidate_paths+=("$path")
+      global_candidate_line_numbers+=("${candidate_line_record%%:*}")
+      global_candidate_lines+=("${candidate_line_record#*:}")
     done <"$grep_output"
   done
 
@@ -3151,51 +2957,51 @@ scan_content_files() {
       return 1
     fi
     # Preserve each config path, line number, and line body for ordered scanning.
-    while IFS= read -r -d '' path && IFS= read -r rest; do
-      s_path+=("$path")
-      s_ln+=("${rest%%:*}")
-      s_line+=("${rest#*:}")
+    while IFS= read -r -d '' path && IFS= read -r candidate_line_record; do
+      stem_candidate_paths+=("$path")
+      stem_candidate_line_numbers+=("${candidate_line_record%%:*}")
+      stem_candidate_lines+=("${candidate_line_record#*:}")
     done <"$grep_output"
   done
 
-  gi=0
-  si=0
+  global_hit_index=0
+  stem_hit_index=0
   # Merge global and config candidates in the order the user wrote them.
-  while ((gi < ${#g_path[@]} || si < ${#s_path[@]})); do
+  while ((global_hit_index < ${#global_candidate_paths[@]} || stem_hit_index < ${#stem_candidate_paths[@]})); do
     budget_check || return 0
-    local g_ok=0 s_ok=0 g_key=0 s_key=0 pick_path pick_line
+    local has_global_candidate=0 has_stem_candidate=0 global_candidate_order=0 stem_candidate_order=0 candidate_path candidate_line
     # A remaining global candidate gets a sortable file-and-line key.
-    if ((gi < ${#g_path[@]})); then
-      g_ok=1
-      g_key=$((${file_order[${g_path[gi]}]:-0} * 10000000 + g_ln[gi]))
+    if ((global_hit_index < ${#global_candidate_paths[@]})); then
+      has_global_candidate=1
+      global_candidate_order=$((${file_order[${global_candidate_paths[global_hit_index]}]:-0} * 10000000 + global_candidate_line_numbers[global_hit_index]))
     fi
     # A remaining config candidate gets the same sortable file-and-line key.
-    if ((si < ${#s_path[@]})); then
-      s_ok=1
-      s_key=$((${file_order[${s_path[si]}]:-0} * 10000000 + s_ln[si]))
+    if ((stem_hit_index < ${#stem_candidate_paths[@]})); then
+      has_stem_candidate=1
+      stem_candidate_order=$((${file_order[${stem_candidate_paths[stem_hit_index]}]:-0} * 10000000 + stem_candidate_line_numbers[stem_hit_index]))
     fi
     # Select the earlier candidate and consume duplicate matches once.
-    if ((g_ok && s_ok && g_key == s_key)); then
-      pick_path="${g_path[gi]}"
-      pick_line="${g_line[gi]}"
-      gi=$((gi + 1))
-      si=$((si + 1))
+    if ((has_global_candidate && has_stem_candidate && global_candidate_order == stem_candidate_order)); then
+      candidate_path="${global_candidate_paths[global_hit_index]}"
+      candidate_line="${global_candidate_lines[global_hit_index]}"
+      global_hit_index=$((global_hit_index + 1))
+      stem_hit_index=$((stem_hit_index + 1))
     # A remaining or earlier global candidate is the next user line to scan.
-    elif ((g_ok)) && { ((!s_ok)) || ((g_key < s_key)); }; then
-      pick_path="${g_path[gi]}"
-      pick_line="${g_line[gi]}"
-      gi=$((gi + 1))
+    elif ((has_global_candidate)) && { ((!has_stem_candidate)) || ((global_candidate_order < stem_candidate_order)); }; then
+      candidate_path="${global_candidate_paths[global_hit_index]}"
+      candidate_line="${global_candidate_lines[global_hit_index]}"
+      global_hit_index=$((global_hit_index + 1))
     else
-      pick_path="${s_path[si]}"
-      pick_line="${s_line[si]}"
-      si=$((si + 1))
+      candidate_path="${stem_candidate_paths[stem_hit_index]}"
+      candidate_line="${stem_candidate_lines[stem_hit_index]}"
+      stem_hit_index=$((stem_hit_index + 1))
     fi
     # A new user file resets conflict-marker state before its first candidate line.
-    if [ "$pick_path" != "$cur" ]; then
-      cur="$pick_path"
-      reset_merge_conflict_scan "$cur"
+    if [ "$candidate_path" != "$current_file_path" ]; then
+      current_file_path="$candidate_path"
+      reset_merge_conflict_scan "$current_file_path"
     fi
-    scan_line "$pick_path" "$pick_line"
+    scan_line "$candidate_path" "$candidate_line"
   done
 }
 
@@ -3219,24 +3025,26 @@ collect_z() {
   done <"$output"
 }
 
-# Run the optimized scan and return the coding agent's final Stop decision.
+# Remove only the temporary native scan workspace at exit; an empty path means setup created nothing to clean up.
 cleanup_post_turn_native_workspace() {
+  # A startup failure before workspace creation must never turn cleanup into a removal of an unspecified path.
   [ -n "${post_turn_native_workspace:-}" ] || return 0
   rm -rf -- "$post_turn_native_workspace"
 }
 
+# Run the optimized scan over tracked, staged, and non-ignored untracked changes to determine the coding agent's final Stop decision.
 main() {
   local root
   local WORKDIR
   local head_status
   # Without a Git root, the hook cannot identify the project changes for this turn.
   if ! root="$(repo_root)" || [ -z "$root" ]; then
-    post_turn_result_detail="The selected Git repository root could not be opened"
-    printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+    report_repository_root_failure
     finish_repository_root_failure "native:git repository root unavailable"
     return $?
   fi
 
+  # A removed or inaccessible repository cannot be scanned or presented as completed coverage.
   if ! cd "$root" 2>/dev/null; then
     post_turn_result_detail="The selected Git repository root could not be entered"
     printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
@@ -3289,8 +3097,7 @@ main() {
     untracked_paths=(${COLLECTED[@]+"${COLLECTED[@]}"})
   fi
 
-  # Fast exit: nothing changed, staged, or untracked, so there is nothing to
-  # scan and no batch work to set up.
+  # With no tracked, staged, or untracked changes, clear old recovery state and let the user finish without scan batches.
   if ((BAIL == 0 && ${#worktree_paths[@]} == 0 && ${#cached_paths[@]} == 0 && ${#untracked_paths[@]} == 0)); then
     clear_stop_reentry_state "$root" >/dev/null 2>&1
     return 0
@@ -3298,8 +3105,7 @@ main() {
 
   PENDING_FILES=$((${#worktree_paths[@]} + ${#cached_paths[@]} + ${#untracked_paths[@]}))
 
-  # Full-content gates apply to untracked files and unborn-HEAD worktree files;
-  # ordinary tracked changes stream from Git diffs without a whole-file cap.
+  # New files and repositories without a first commit need full-content admission; ordinary tracked edits stream only added hunks.
   if ((BAIL == 0)); then
     # A committed baseline limits full-content gates to untracked paths.
     if ((head_present)); then
@@ -3309,8 +3115,7 @@ main() {
     fi
   fi
 
-  # Pass 1: tracked changes (worktree vs HEAD), or full index contents when
-  # HEAD is unborn. Mirrors scan_tracked_changes/scan_worktree_diff_file.
+  # scan_tracked_changes: check tracked worktree edits first; before the first commit, inspect admitted whole files instead of changed hunks.
   local -a pass1=()
   local -A pass1_scanned=()
   local path
@@ -3345,13 +3150,9 @@ main() {
     fi
   fi
 
-  # Pass 2: staged changes. When the index entry equals the worktree file
-  # (path absent from `git diff --name-only`) and pass 1 scanned that path,
-  # the --cached diff is byte-identical to the pass-1 diff, so every finding it
-  # could produce was already reported (report_finding dedupes on path+family);
-  # such paths are safely skipped. Paths whose index differs from the worktree
-  # (including staged-then-reverted and staged-then-edited states) are always
-  # scanned, as is everything when HEAD is unborn.
+  # Skip staged content only when it matches worktree content already scanned in pass one, so no finding is lost.
+  #
+  # Always scan staged files that differ from the worktree, including reverted edits, and all staged paths before the first commit.
   if ((BAIL == 0)) && ((${#cached_paths[@]} > 0)); then
     local -A dirty_vs_index=()
     # A committed baseline can skip staged content already identical to pass one.
@@ -3387,8 +3188,7 @@ main() {
     fi
   fi
 
-  # Untracked pass: full-content scan of non-ignored untracked files, mirroring
-  # scan_untracked_changes/scan_untracked_file.
+  # scan_untracked_changes: check non-ignored new files last so added content is covered and ignored local state cannot block the user's turn.
   if ((BAIL == 0)); then
     local -a untracked_scan=()
     # Each non-ignored untracked path must scan in full or name its coverage gap.

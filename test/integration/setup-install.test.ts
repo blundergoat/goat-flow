@@ -17,7 +17,6 @@ import {
   openSync,
   readFileSync,
   statSync,
-  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -102,21 +101,38 @@ function stalePermissionRules(groups: ClaudePermissionGroups): string[] {
 }
 
 /**
- * Create the executable nested analyzer convention inside a disposable project.
+ * Create an executable project-local analyzer inside a disposable project.
  *
- * Use before setup so tests can verify the analyzer path a user receives in generated config.
+ * Use before setup so tests can prove install writes no analyzer path into the generated config on its own.
  * Side effect: writes and marks one analyzer fixture executable inside `projectRoot`; fixture calls supply a disposable project.
  *
  * @param projectRoot - non-empty disposable project that owns the generated analyzer fixture
  * @returns executable analyzer path; never empty after fixture creation succeeds
  */
-function writeConventionalGruffPy(projectRoot: string): string {
-  const binaryDirectory = join(projectRoot, "strands_agents", ".venv", "bin");
+function writeProjectGruffPy(projectRoot: string): string {
+  const binaryDirectory = join(projectRoot, "tools", ".venv", "bin");
   const binaryPath = join(binaryDirectory, "gruff-py");
   mkdirSync(binaryDirectory, { recursive: true });
   writeFileSync(binaryPath, "#!/usr/bin/env python3\n");
   chmodSync(binaryPath, 0o755);
   return binaryPath;
+}
+
+/**
+ * Add the analyzer override a user would type under the Gruff hook of a scaffolded config.
+ *
+ * @param config - scaffolded config text whose `gruff-code-quality` block uses two-space indents and has no `binaries` yet
+ * @param binaryPath - project-relative analyzer path to save
+ * @returns the config with `binaries:` and the path inserted after the hook's `enabled` line
+ */
+function withGruffBinaryOverride(config: string, binaryPath: string): string {
+  const next = config.replace(
+    /(\n {2}gruff-code-quality:\n {4}enabled: (?:true|false))\n/u,
+    `$1\n    binaries:\n      py: ${binaryPath}\n`,
+  );
+  // A config in an unexpected shape would silently test nothing, so the fixture refuses it.
+  assert.notEqual(next, config, "scaffolded Gruff hook block not found");
+  return next;
 }
 
 describe("setup --apply installer", () => {
@@ -202,29 +218,23 @@ describe("setup --apply installer", () => {
     );
   });
 
-  // Fixture purpose: installs with the nested analyzer and proves an explicit path wins; writes stay in the disposable project.
-  it("pins a conventional strands_agents gruff-py during install", () => {
+  // Fixture purpose: installs beside a project analyzer and proves only an explicit path reaches the config; writes stay in the disposable project.
+  it("writes no binaries entry during install and keeps an explicit one", () => {
     const root = makeTempProject();
-    writeConventionalGruffPy(root);
+    writeProjectGruffPy(root);
 
     const result = runInstaller(root, "--agent", "codex");
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    const config = readFileSync(
-      join(root, ".goat-flow", "config.yaml"),
-      "utf-8",
-    );
-    assert.match(
-      config,
-      /binaries:\n {6}py: strands_agents\/\.venv\/bin\/gruff-py/u,
-    );
-
     const configPath = join(root, ".goat-flow", "config.yaml");
+    const config = readFileSync(configPath, "utf-8");
+    assert.doesNotMatch(config, /binaries:/u);
+
     writeFileSync(
       configPath,
-      config.replace("strands_agents/.venv/bin/gruff-py", "tools/gruff-py"),
+      withGruffBinaryOverride(config, "tools/gruff-py"),
     );
-    const secondResult = runInstaller(root, "--agent", "codex");
+    const secondResult = runCliInstaller(root, "--agent", "codex");
     assert.equal(
       secondResult.status,
       0,
@@ -232,21 +242,17 @@ describe("setup --apply installer", () => {
     );
     const preservedConfig = readFileSync(configPath, "utf-8");
     assert.match(preservedConfig, /binaries:\n {6}py: tools\/gruff-py/u);
-    assert.doesNotMatch(
-      preservedConfig,
-      /strands_agents\/\.venv\/bin\/gruff-py/u,
-    );
   });
 
-  // Fixture purpose: runs the installed hook with Gruff saved off, then on, via the persisted analyzer override; writes stay in the fixture.
+  // Fixture purpose: runs the installed hook with Gruff saved off, then on through a saved analyzer override; writes stay in the fixture.
   it(
-    "runs the installed Gruff hook through the detected strands_agents binary",
+    "runs the installed Gruff hook through a configured binaries override",
     { skip: process.platform === "win32" },
     () => {
       const root = makeTempProject();
       writeMockGruffBinary(
         root,
-        "strands_agents/.venv/bin",
+        "tools/.venv/bin",
         "gruff-py",
         "installed-config.rule",
       );
@@ -313,7 +319,15 @@ describe("setup --apply installer", () => {
       assert.equal(disabledResult.stdout, "");
       assert.deepEqual(readInvocations(root), []);
 
-      // Enabling Gruff keeps the pinned analyzer, so the installed hook now runs through it.
+      // The user saves the override by hand, then enabling Gruff keeps it, so the installed hook runs through it.
+      const configPath = join(root, ".goat-flow", "config.yaml");
+      writeFileSync(
+        configPath,
+        withGruffBinaryOverride(
+          readFileSync(configPath, "utf-8"),
+          "tools/.venv/bin/gruff-py",
+        ),
+      );
       setHookEnabled(root, "gruff-code-quality", true);
       const hookResult = runInstalledHook();
       assert.equal(
@@ -326,10 +340,10 @@ describe("setup --apply installer", () => {
     },
   );
 
-  // Fixture purpose: reproduces an enabled hook without its nested analyzer override; writes stay in the disposable project.
-  it("repairs a missing gruff-py override for an enabled existing hook", () => {
+  // Fixture purpose: an enabled hook without an override, beside a project analyzer, must stay override-free; writes stay in the disposable project.
+  it("leaves an enabled existing hook without a binaries override", () => {
     const root = makeTempProject();
-    writeConventionalGruffPy(root);
+    writeProjectGruffPy(root);
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
     writeFileSync(
       join(root, ".goat-flow", "config.yaml"),
@@ -355,67 +369,17 @@ describe("setup --apply installer", () => {
       "utf-8",
     );
     assert.match(config, /gruff-code-quality:\n {8}enabled: true/u);
-    assert.match(
-      config,
-      / {8}binaries:\n {12}py: strands_agents\/\.venv\/bin\/gruff-py/u,
-    );
+    assert.doesNotMatch(config, /binaries/u);
     const parsedConfig = load(config) as {
       hooks: Record<string, { binaries?: Record<string, string> }>;
     };
-    assert.equal(
-      parsedConfig.hooks["gruff-code-quality"].binaries?.py,
-      "strands_agents/.venv/bin/gruff-py",
-    );
+    assert.equal(parsedConfig.hooks["gruff-code-quality"].binaries, undefined);
   });
 
-  // Fixture purpose: redirects the conventional analyzer outside the selected target; side effects: writes only inside cleaned temp projects.
-  it(
-    "does not pin a conventional gruff-py symlink that escapes the project",
-    { skip: process.platform === "win32" },
-    () => {
-      const outsideRoot = makeTempProject();
-      const outsideBinary = join(outsideRoot, "gruff-py");
-      writeFileSync(outsideBinary, "#!/usr/bin/env python3\n");
-      chmodSync(outsideBinary, 0o755);
-      const root = makeTempProject();
-      const binaryDirectory = join(root, "strands_agents", ".venv", "bin");
-      mkdirSync(binaryDirectory, { recursive: true });
-      symlinkSync(outsideBinary, join(binaryDirectory, "gruff-py"));
-
-      const result = runInstaller(root, "--agent", "codex");
-
-      assert.equal(result.status, 0, result.stderr || result.stdout);
-      const config = readFileSync(
-        join(root, ".goat-flow", "config.yaml"),
-        "utf-8",
-      );
-      assert.doesNotMatch(config, /binaries:/u);
-    },
-  );
-
-  // Fixture purpose: removes execute permission from the nested analyzer; writes stay in the disposable project.
-  it(
-    "does not pin a non-executable conventional gruff-py during install",
-    { skip: process.platform === "win32" },
-    () => {
-      const root = makeTempProject();
-      chmodSync(writeConventionalGruffPy(root), 0o644);
-
-      const result = runInstaller(root, "--agent", "codex");
-
-      assert.equal(result.status, 0, result.stderr || result.stdout);
-      const config = readFileSync(
-        join(root, ".goat-flow", "config.yaml"),
-        "utf-8",
-      );
-      assert.doesNotMatch(config, /binaries:/u);
-    },
-  );
-
-  // Fixture purpose: keeps compact hook YAML while detecting the nested analyzer; writes stay in the disposable project.
-  it("pins gruff-py without expanding a flow-style hooks mapping", () => {
+  // Fixture purpose: install appends missing hook toggles inside a compact flow-style mapping and adds no binaries entry; writes stay in the fixture.
+  it("keeps a compact flow-style hooks mapping without adding binaries during install", () => {
     const root = makeTempProject();
-    writeConventionalGruffPy(root);
+    writeProjectGruffPy(root);
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
     const configPath = join(root, ".goat-flow", "config.yaml");
     writeFileSync(
@@ -429,74 +393,9 @@ describe("setup --apply installer", () => {
     const config = readFileSync(configPath, "utf-8");
     assert.match(
       config,
-      /^hooks: \{.*"gruff-code-quality": \{ enabled: true, binaries: \{ py: strands_agents\/\.venv\/bin\/gruff-py \} \}.*\}$/mu,
+      /^hooks: \{ "gruff-code-quality": \{ enabled: true \}, deny-dangerous: \{ enabled: true \}, deny-git-mutations: \{ enabled: true \}, post-turn-safety: \{ enabled: true \} \}$/mu,
     );
-    const parsedConfig = load(config) as {
-      hooks: Record<string, { binaries?: Record<string, string> }>;
-    };
-    assert.equal(
-      parsedConfig.hooks["gruff-code-quality"].binaries?.py,
-      "strands_agents/.venv/bin/gruff-py",
-    );
-  });
-
-  // Fixture purpose: puts multiline colliding and direct flow keys before Gruff; writes stay in the disposable project.
-  it("pins gruff-py to the exact multiline flow-style hook key", () => {
-    const root = makeTempProject();
-    writeConventionalGruffPy(root);
-    mkdirSync(join(root, ".goat-flow"), { recursive: true });
-    const configPath = join(root, ".goat-flow", "config.yaml");
-    writeFileSync(
-      configPath,
-      [
-        'version: "1.16.0"',
-        'hooks: { other-hook: { note: "#, gruff-code-quality: { enabled: true }" },',
-        "  other-flow-hook: {}, #, gruff-code-quality: { enabled: true }",
-        "  not-gruff-code-quality: {",
-        "    enabled: true,",
-        "    gruff-code-quality: {",
-        "      enabled: true",
-        "    }",
-        "  },",
-        '  "deny-dangerous": { enabled: true },',
-        '  "post-turn-safety": { enabled: true },',
-        '  "gruff-code-quality": {',
-        "    enabled: true,",
-        "  }",
-        "}",
-        "",
-      ].join("\n"),
-    );
-
-    const result = runInstaller(root, "--agent", "codex");
-
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-    const parsedConfig = load(readFileSync(configPath, "utf-8")) as {
-      hooks: Record<
-        string,
-        {
-          binaries?: Record<string, string>;
-          "gruff-code-quality"?: { binaries?: Record<string, string> };
-        }
-      >;
-    };
-    assert.equal(
-      parsedConfig.hooks["not-gruff-code-quality"].binaries,
-      undefined,
-    );
-    assert.equal(
-      parsedConfig.hooks["not-gruff-code-quality"]["gruff-code-quality"]
-        ?.binaries,
-      undefined,
-    );
-    assert.equal(
-      parsedConfig.hooks["gruff-code-quality"].binaries?.py,
-      "strands_agents/.venv/bin/gruff-py",
-    );
-    assert.match(
-      readFileSync(configPath, "utf-8"),
-      /#, gruff-code-quality: \{ enabled: true \}\n/u,
-    );
+    assert.doesNotMatch(config, /binaries/u);
   });
 
   it("does not register unverified Antigravity Stop hooks during install", () => {
@@ -624,7 +523,7 @@ describe("setup --apply installer", () => {
       "user edited the patterns guide\n",
     );
 
-    const reinstall = runInstaller(projectRoot, "--agent", "codex");
+    const reinstall = runCliInstaller(projectRoot, "--agent", "codex");
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
     assert.equal(
       readFileSync(installedReadmePath, "utf-8"),
@@ -678,7 +577,7 @@ describe("setup --apply installer", () => {
       "# Team security policy\n\nKeep this local rule.\n";
     writeFileSync(securityPolicyPath, customizedPolicy);
 
-    const reinstall = runInstaller(projectRoot, "--agent", "codex");
+    const reinstall = runCliInstaller(projectRoot, "--agent", "codex");
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
     assert.equal(readFileSync(securityPolicyPath, "utf-8"), customizedPolicy);
   });
@@ -701,7 +600,7 @@ describe("setup --apply installer", () => {
     );
     unlinkSync(sessionAnchorPath);
 
-    const reinstall = runInstaller(projectRoot, "--agent", "codex");
+    const reinstall = runCliInstaller(projectRoot, "--agent", "codex");
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
     assert.equal(existsSync(sessionAnchorPath), true);
     assert.equal(readFileSync(sessionAnchorPath, "utf-8"), "");
@@ -985,7 +884,7 @@ describe("setup --apply permission upgrade migrations", () => {
     assert.match(result.stdout, /stale or superseded permission rules/);
     assert.match(
       result.stderr,
-      /retired Claude deny rule removed: Read\(\*\*\/secrets\/\*\*\)/,
+      /retired Claude deny rule removed: "Read\(\*\*\/secrets\/\*\*\)"/,
     );
 
     const { deny, allow } = readClaudePermissionGroups(root);
@@ -1033,6 +932,11 @@ describe("setup --apply permission upgrade migrations", () => {
     );
     // Retirement never reaches the allow list: an allow with the same text is the user's own decision.
     assert.ok(allow.includes("Bash(*sudo *)"), "allow list left alone");
+    assert.ok(
+      !deny.includes("Read(**/credentials.json)") &&
+        !deny.includes("Edit(**/credentials.json)"),
+      "new exact credential rules require reviewed reconciliation, even after retiring credentials*",
+    );
   });
 
   // Covers removed-tool, unmatched-rule, and broad env-deny migrations together.
@@ -1074,7 +978,7 @@ describe("setup --apply permission upgrade migrations", () => {
 
     const { deny, allow, ask } = readClaudePermissionGroups(root);
     assert.deepEqual(
-      stalePermissionRules({ deny, allow, ask }),
+      stalePermissionRules({ deny, allow: [], ask: [] }),
       [],
       "retired and unmatched permission forms should be gone",
     );
@@ -1102,13 +1006,9 @@ describe("setup --apply permission upgrade migrations", () => {
       deny.includes("Edit(**/.env.*.local)"),
       "local-variant edit deny added",
     );
-    // Allow/ask arrays repaired without env expansion.
-    assert.ok(allow.includes("Edit(docs/**)"), "allow Write rewritten to Edit");
-    assert.ok(
-      allow.includes("Read(**/.env.example)"),
-      "sample env allow preserved",
-    );
-    assert.ok(ask.includes("Read(**/dist/**)"), "ask Glob rewritten to Read");
+    // Saved allow/ask spellings remain inert until the project owner deliberately changes them.
+    assert.deepEqual(allow, ["Read(**/.env.example)", "Write(docs/**)"]);
+    assert.deepEqual(ask, ["Glob(**/dist/**)"]);
     // No collateral damage to valid user-added unmanaged tool denies.
     assert.ok(
       deny.includes("WebFetch(**/internal/**)"),
@@ -1116,7 +1016,7 @@ describe("setup --apply permission upgrade migrations", () => {
     );
 
     // Idempotent: a second upgrade reports no further permission migration.
-    const second = runInstaller(root, "--agent", "claude");
+    const second = runCliInstaller(root, "--agent", "claude");
     assert.equal(second.status, 0, second.stderr || second.stdout);
     assert.doesNotMatch(second.stdout, /stale or superseded permission rules/);
   });

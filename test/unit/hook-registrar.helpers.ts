@@ -967,22 +967,6 @@ export function readClaudeGruffCommands(settingsJson: string): string[] {
   return generatedHookCommands(config.hooks?.PostToolUse);
 }
 
-/** Read the generated Antigravity gruff hook command because hooks are grouped by hook id.
- *
- * @param hooksJson - raw hooks.json text as the registrar wrote it
- * @returns the single Antigravity gruff command; missing entries fail loudly
- */
-export function readAntigravityGruffCommand(hooksJson: string): string {
-  const config = JSON.parse(hooksJson) as {
-    "gruff-code-quality"?: {
-      PostToolUse?: GeneratedHookEntry[];
-    };
-  };
-  return (
-    generatedHookCommands(config["gruff-code-quality"]?.PostToolUse)[0] ?? ""
-  );
-}
-
 /** Read matcherless Stop hook commands from Claude/Codex-style hook config.
  *
  * @param settingsJson - raw .claude/settings.json text as the registrar wrote it
@@ -1039,36 +1023,42 @@ export function writePostTurnCapableSurfaces(root: string): void {
   writeFileSync(join(root, ".github", "hooks", "hooks.json"), "{}\n");
 }
 
-/** Execute a generated shell launcher with a runtime-shaped payload.
- *
- * @param command - generated shell command line to execute
- * @param cwd - working directory the process runs in
- * @param payload - hook JSON delivered on stdin, as an agent host would send it
- * @param env - extra environment merged onto the process env; absent means the plain env
- * @returns the finished launcher process with captured streams
+/** Spawns the requested launcher with finite stdin and private output files.
+ * Removes the capture directory after reading diagnostics and keeps status and error metadata unchanged.
  */
-export function runLauncherWithPayload(
+function runPayloadProcess(
   command: string,
+  args: string[],
   cwd: string,
   payload: string,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv,
 ): ReturnType<typeof spawnSync> {
-  const payloadPath = join(
-    tmpdir(),
-    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
-  );
-  writeFileSync(payloadPath, payload);
-  const fileDescriptor = openSync(payloadPath, "r");
+  const directory = mkdtempSync(join(tmpdir(), "goat-flow-hook-payload-"));
+  const descriptors: number[] = [];
   try {
-    return spawnSync("bash", ["-c", command], {
+    const inputPath = join(directory, "stdin");
+    const stdoutPath = join(directory, "stdout");
+    const stderrPath = join(directory, "stderr");
+    writeFileSync(inputPath, payload, { flag: "wx", mode: 0o600 });
+    for (const [path, flags] of [
+      [inputPath, "r"],
+      [stdoutPath, "wx"],
+      [stderrPath, "wx"],
+    ]) {
+      descriptors.push(openSync(path, flags, 0o600));
+    }
+    const result = spawnSync(command, args, {
       cwd,
       encoding: "utf8",
       env,
-      stdio: [fileDescriptor, "pipe", "pipe"],
+      stdio: descriptors,
     });
+    const stdout = readFileSync(stdoutPath, "utf8");
+    const stderr = readFileSync(stderrPath, "utf8");
+    return { ...result, stdout, stderr, output: [null, stdout, stderr] };
   } finally {
-    closeSync(fileDescriptor);
-    rmSync(payloadPath, { force: true });
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(directory, { recursive: true, force: true });
   }
 }
 
@@ -1087,23 +1077,7 @@ export function runClaudeLauncher(
   payload = CLAUDE_SAFE_PAYLOAD,
   env: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof spawnSync> {
-  const payloadPath = join(
-    tmpdir(),
-    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
-  );
-  writeFileSync(payloadPath, payload);
-  const fileDescriptor = openSync(payloadPath, "r");
-  try {
-    return spawnSync(handler.command, handler.args, {
-      cwd,
-      encoding: "utf8",
-      env,
-      stdio: [fileDescriptor, "pipe", "pipe"],
-    });
-  } finally {
-    closeSync(fileDescriptor);
-    rmSync(payloadPath, { force: true });
-  }
+  return runPayloadProcess(handler.command, handler.args, cwd, payload, env);
 }
 
 /** Assert the registered handler allows a benign payload from this cwd.
@@ -1144,23 +1118,13 @@ export function runCodexLauncher(
     command: handler.command,
     commandWindows: handler.commandWindows,
   });
-  const payloadPath = join(
-    tmpdir(),
-    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
+  return runPayloadProcess(
+    spawnDescriptor.command,
+    spawnDescriptor.args,
+    cwd,
+    payload,
+    { ...env, ...spawnDescriptor.env },
   );
-  writeFileSync(payloadPath, payload);
-  const fileDescriptor = openSync(payloadPath, "r");
-  try {
-    return spawnSync(spawnDescriptor.command, spawnDescriptor.args, {
-      cwd,
-      encoding: "utf8",
-      env: { ...env, ...spawnDescriptor.env },
-      stdio: [fileDescriptor, "pipe", "pipe"],
-    });
-  } finally {
-    closeSync(fileDescriptor);
-    rmSync(payloadPath, { force: true });
-  }
 }
 
 /**

@@ -270,6 +270,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
     );
   });
 
+  // Writes a history ledger whose refuter ID must survive a move, while a secondary reference to an undefined ID is rejected.
   it("preserves moved refuter IDs while rejecting undefined secondary references", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const ledgerPath =
@@ -774,6 +775,7 @@ describe("exclusive final review dispositions", () => {
     );
   });
 
+  // Writes an identity-ledger record that must match its refuted ID exactly; duplicates are rejected and history is never active evidence.
   it("matches exact refuted IDs, rejects duplicate records, and keeps history out of active evidence", (test) => {
     const root = createReviewedProject(test);
     const ledger =
@@ -895,7 +897,11 @@ describe("exclusive final review dispositions", () => {
         "Refuter pass": `${state}; confirmed=0, refuted=0, unresolved=0, leads-verified=0, model=n/a`,
         "Refuter outcomes": "{}",
       }).replace(" [CONFIRMED-CROSS-MODEL]", "");
-      assert.deepEqual(validateReviewReport(skipped, root).violations, []);
+      assert.deepEqual(
+        validateReviewReport(skipped, root).violations,
+        [],
+        `refuters ${state}`,
+      );
       assertDispositionFailure(
         skipped.replace("confirmed=0", "confirmed=1"),
         root,

@@ -232,20 +232,22 @@ function setLegacyVersion(
 }
 
 /**
- * Install two agents through the predecessor producer and persist its real v1 state shape.
- * Filesystem side effects: direct-installs and writes two v1 baselines only inside one disposable target.
+ * Install two agents through the CLI, then reconstruct legacy history with the retained v1 writer.
+ * The disposable fixture keeps installed files but removes v2 history so tests exercise actual cutover.
  */
 function installedLegacyPair(): string {
   const projectPath = makeTempProject();
-  // Create the two predecessor installations whose shared file history must migrate consistently.
-  for (const agent of ["codex", "antigravity"] as const) {
-    const result = runInstaller(projectPath, "--agent", agent);
+  const agents = ["codex", "antigravity"] as const;
+  for (const agent of agents) {
+    const result = runCliInstaller(projectPath, "--agent", agent);
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    writeManagedInstallState(
-      projectPath,
-      buildManagedSetupPreview(projectPath, agent),
-    );
   }
+  const previews = agents.map((agent) =>
+    buildManagedSetupPreview(projectPath, agent),
+  );
+  rmSync(join(projectPath, ".goat-flow/state/install"), { recursive: true });
+  for (const preview of previews)
+    writeManagedInstallState(projectPath, preview);
   return projectPath;
 }
 
@@ -928,7 +930,7 @@ describe("hook-only shared history upgrades", () => {
       assert.notEqual(
         priorReference.generation,
         hookRow.generation,
-        "hook sync leaves the old full-install receipt stale",
+        `${version}: hook sync leaves the old full-install receipt stale`,
       );
       previousGeneration = hookRow.generation;
     }

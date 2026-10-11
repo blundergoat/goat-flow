@@ -107,7 +107,7 @@ function createClaudeProject(): string {
 }
 
 /**
- * Create the smallest Codex project whose generated handlers can be replayed on Windows.
+ * Create the smallest Codex project whose generated handlers the local host can replay.
  * Side effects: creates and writes one disposable project removed by suite cleanup.
  */
 function createCodexProject(): string {
@@ -314,8 +314,7 @@ describe("effective hook state", () => {
     );
   });
 
-  /** Each published Codex capture stays current through its deadline and expires immediately afterward. */
-  it("expires exact Codex deny, Gruff and Stop proof", () => {
+  it("keeps Codex deny, Gruff and Stop proof valid as time advances", (testContext) => {
     const denySpec = getHookSpec("deny-dangerous");
     const gruffSpec = getHookSpec("gruff-code-quality");
     const postTurnSpec = getHookSpec("post-turn-safety");
@@ -329,51 +328,26 @@ describe("effective hook state", () => {
     assert.ok(gruffCodexEvidence);
     assert.ok(postTurnCodexEvidence);
 
-    assert.equal(
-      currentHookProviderSupportGate(
+    testContext.mock.timers.enable({
+      apis: ["Date"],
+      now: new Date("2026-09-22T00:00:00Z"),
+    });
+    for (const now of ["2026-09-22T00:00:00Z", "2036-09-22T00:00:00Z"]) {
+      testContext.mock.timers.setTime(new Date(now).getTime());
+      for (const evidence of [
         denyCodexEvidence,
-        new Date("2026-10-21T00:00:00.000Z"),
-      ),
-      "scenario-unverified",
-    );
-    assert.equal(
-      currentHookProviderSupportGate(
-        denyCodexEvidence,
-        new Date("2026-10-21T00:00:00.001Z"),
-      ),
-      "provider-capture-stale",
-    );
-
-    assert.equal(
-      currentHookProviderSupportGate(
+        getHookSpec("deny-git-mutations")?.providerEvidence?.codex,
         gruffCodexEvidence,
-        new Date("2026-09-25T20:17:22.830Z"),
-      ),
-      "scenario-unverified",
-    );
-    assert.equal(
-      currentHookProviderSupportGate(
-        gruffCodexEvidence,
-        new Date("2026-09-25T20:17:22.831Z"),
-      ),
-      "provider-capture-stale",
-    );
-
-    assert.equal(postTurnCodexEvidence.expiresAt, "2026-10-17T00:00:00Z");
-    assert.equal(
-      currentHookProviderSupportGate(
         postTurnCodexEvidence,
-        new Date("2026-10-17T00:00:00.000Z"),
-      ),
-      "scenario-unverified",
-    );
-    assert.equal(
-      currentHookProviderSupportGate(
-        postTurnCodexEvidence,
-        new Date("2026-10-17T00:00:00.001Z"),
-      ),
-      "provider-capture-stale",
-    );
+      ]) {
+        assert.ok(evidence);
+        assert.equal(
+          currentHookProviderSupportGate(evidence),
+          "scenario-unverified",
+          `${evidence.identity} at ${now}`,
+        );
+      }
+    }
   });
 
   // A desired hook with no exact registration is not protected merely because the registry lists it.
@@ -937,6 +911,7 @@ describe("effective hook state", () => {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "effective",
+        `policy ${hookId}`,
       );
     }
     const sharedPath = join(
@@ -952,6 +927,7 @@ describe("effective hook state", () => {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "installation-stale",
+        `policy ${hookId}`,
       );
     }
     let confirmationIdentity: string | undefined;
@@ -975,6 +951,7 @@ describe("effective hook state", () => {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "scenario-unverified",
+        `policy ${hookId}`,
       );
     }
     assert.equal(verify("git-mutations-hook").status, "pass");
@@ -989,10 +966,10 @@ describe("effective hook state", () => {
     "replays Codex deny scenarios through the Windows override",
     { skip: process.platform !== "win32" },
     (testContext) => {
-      // Keep replay proof independent of today's date, then cross the provider's expiry.
+      // Exercise the Windows command after the historical capture date, then advance the clock.
       testContext.mock.timers.enable({
         apis: ["Date"],
-        now: new Date("2026-10-21T00:00:00.000Z"),
+        now: new Date("2036-10-21T00:00:00.000Z"),
       });
       const projectPath = createCodexProject();
       syncHookStates(projectPath);
@@ -1014,10 +991,10 @@ describe("effective hook state", () => {
         codexHookState(projectPath, "deny-dangerous").effectiveState,
         { status: "effective", severity: "success" },
       );
-      testContext.mock.timers.tick(1);
+      testContext.mock.timers.tick(365 * 24 * 60 * 60 * 1000);
       assert.deepEqual(
         codexHookState(projectPath, "deny-dangerous").effectiveState,
-        { status: "provider-capture-stale", severity: "warning" },
+        { status: "effective", severity: "success" },
       );
     },
   );
@@ -1062,44 +1039,44 @@ describe("effective hook state", () => {
     );
   });
 
-  it(
-    "replays Codex Stop results without upgrading stale provider proof",
-    { skip: process.platform !== "win32" },
-    (testContext) => {
-      // Local replay cannot renew a capture after its published deadline.
-      testContext.mock.timers.enable({
-        apis: ["Date"],
-        now: new Date("2026-10-17T00:00:00.001Z"),
-      });
-      const projectPath = createCodexProject();
-      initializeDisposableGitProject(projectPath);
-      mkdirSync(join(projectPath, "src"), { recursive: true });
-      writeFileSync(
-        join(projectPath, "src", "example.txt"),
-        ["<<<<<<< HEAD", "left", "=======", "right", ">>>>>>> branch", ""].join(
-          "\n",
-        ),
-      );
-      syncHookStates(projectPath);
+  // Writes a merge-conflict file in a disposable Git project to verify Stop; elapsed time must not invalidate the separate provider capture.
+  it("replays Codex Stop results without expiring provider proof", (testContext) => {
+    testContext.mock.timers.enable({
+      apis: ["Date"],
+      now: new Date("2036-10-17T00:00:00.001Z"),
+    });
+    const projectPath = createCodexProject();
+    initializeDisposableGitProject(projectPath);
+    mkdirSync(join(projectPath, "src"), { recursive: true });
+    writeFileSync(
+      join(projectPath, "src", "example.txt"),
+      ["<<<<<<< HEAD", "left", "=======", "right", ">>>>>>> branch", ""].join(
+        "\n",
+      ),
+    );
+    syncHookStates(projectPath);
 
-      const report = verifyManagedConfiguredHook({
-        projectPath,
-        agent: "codex",
-        scenarioGroup: "post-turn-hook",
-        isTargetUntrusted: false,
-      });
+    assert.equal(
+      codexHookState(projectPath, "post-turn-safety").effectiveState.status,
+      "scenario-unverified",
+    );
+    const report = verifyManagedConfiguredHook({
+      projectPath,
+      agent: "codex",
+      scenarioGroup: "post-turn-hook",
+      isTargetUntrusted: false,
+    });
 
-      assert.equal(report.status, "pass", JSON.stringify(report, null, 2));
-      assert.deepEqual(
-        report.scenarios.map((scenario) => scenario.observed),
-        ["finding", "incomplete"],
-      );
-      assert.deepEqual(
-        codexHookState(projectPath, "post-turn-safety").effectiveState,
-        { status: "provider-capture-stale", severity: "warning" },
-      );
-    },
-  );
+    assert.equal(report.status, "pass", JSON.stringify(report, null, 2));
+    assert.deepEqual(
+      report.scenarios.map((scenario) => scenario.observed),
+      ["finding", "incomplete"],
+    );
+    assert.deepEqual(
+      codexHookState(projectPath, "post-turn-safety").effectiveState,
+      { status: "effective", severity: "success" },
+    );
+  });
 
   // An edited source without a Gruff config is unavailable and malformed input is incomplete, while a non-source edit stays quiet.
   it("replays incomplete, quiet, and unavailable Gruff results through its configured command", () => {
@@ -1131,7 +1108,7 @@ describe("effective hook state", () => {
   });
 });
 
-// Write an incompatible launcher in a disposable project; an off request must preserve both saved config and launcher bytes.
+// Writes an incompatible launcher in a disposable project; an off request must preserve both saved config and launcher bytes.
 it("refuses off before changing an incompatible launcher and preserves all config bytes", () => {
   const root = createClaudeProject();
   syncHookStates(root);

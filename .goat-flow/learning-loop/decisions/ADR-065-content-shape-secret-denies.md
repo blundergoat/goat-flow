@@ -2,8 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-02
-**Ticket/Context:** `.goat-flow/plans/permissions-rebalance/M01-rebalance-secret-denies.md` (local working state, not committed evidence)
-**Updated:** 2026-09-25 - retain Claude credential-store protection at home and inside the project after the owner approved both locations.
+**Updated:** 2026-10-08 - add the exact `credentials.json` exception for Claude file tools; retain paired home/project stores and reviewed reconciliation for absent rules.
 
 ## Context
 
@@ -15,16 +14,18 @@ Two more defects surfaced against the Claude Code permissions documentation. Bar
 
 ## Decision
 
-Shipped deny rules match secret content shapes and credential stores, never plain folder or file names.
+Shipped deny rules match secret content shapes and credential stores, with an explicit exception for the exact `credentials.json` filename. Broad application folder and filename heuristics remain retired.
 
 - Keep the ADR-025 `Bash(*git commit*)` and `Bash(*git push*)` rules, the eight enumerated `.env` variants for Read and Edit, and the `pem`, `key`, and `pfx` extensions for Read and Edit. The settings layer keeps only those two Bash rules, whose bluntness ADR-025 accepts deliberately; fail-closed enforcement belongs in the hook, whose parser can tell a command from a quotation.
 - Protect each credential store at home and inside the project on Claude: `.ssh/**`, `.aws/**`, `.gnupg/**`, `.config/gcloud/**`, `.docker/**`, `.kube/**`, `.npmrc`, `.pypirc`, `.netrc`, `.git-credentials`, `.config/gh/hosts.yml`, `.pgpass`, each with both `~/` and `**/` anchors for Read and Edit. These tools bypass the Bash hook. Home anchors protect the developer's stores; project patterns protect copied stores and local registry tokens. Codex workspace-root grammar keeps its workspace-relative forms, and the Bash hook covers shell access to home stores for every agent. Exact plaintext filenames must not deny their `.example` documentation controls.
-- Retire `**/secrets/**` and `**/credentials*` from both templates, the dashboard reporting profile, and the hook's path regexes. The hook keeps the exact `credentials.json` download and the registry auth files. A folder or file name is not evidence of secret content; an extension such as `.pem` or a dotfile store such as `.aws` is, and content-shape rules have no known collision with application code.
+- Retire `**/secrets/**` and `**/credentials*` from both templates, the dashboard reporting profile, and the hook's path regexes. Broad names collide with application code; the exact `credentials.json` download remains protected by the hook and, through `Read(**/credentials.json)` and `Edit(**/credentials.json)`, the Claude template. These relative file-tool rules cover the working directory and its descendants. They leave `credentials.ts`, ordinary `credentials/` folders and `credentials.json.example` outside the filename deny; they do not add a home-wide name heuristic.
 - Retire `Bash(*sudo *)`, `Bash(*mkfs*)`, `Bash(*dd if=*)`, and `Bash(*git reset --hard*)` from the settings layer; the hook owns them.
 
 Upgrades carry the change through narrow, printed migrations, never wholesale replacement. Claude install removes the eight retired deny rules and pairs an existing credential-store deny with its missing home or project partner. Legacy Docker and Kubernetes file rules expand to the matching store pair. Allow and ask rules remain the user's choice, and a store with neither deny remains absent. Every addition and removal is printed. Already complete credential pairs keep their saved order so repeat installation remains byte-stable. Codex preserves project additions while refreshing retired or incomplete profiles. Other missing template rules still require the reviewed setup reconcile step; install does not restore the entire deny list.
 
 The earlier home-only migration removed project coverage. The September 25 review reproduced that loss through the installer; `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`) now checks both locations. The owner chose paired protection because home-only and project-only rules each leave a credential copy reachable through Read or Edit.
+
+Existing Claude settings that lack the exact `credentials.json` pair keep it absent during normal installation. The reviewed setup reconcile step may add it while preserving user allow/ask choices and unrelated rules. Retirement advice for `credentials*` must name the exact pair as a reviewed replacement, never add it automatically. The preservation assertion is in `test/integration/setup-install.test.ts` (search: `new exact credential rules require reviewed reconciliation`).
 
 ## Failure Mode Comparison
 
@@ -39,7 +40,7 @@ The earlier home-only migration removed project coverage. The September 25 revie
 
 ## Consequences
 
-- `test/unit/agent-config-template-parity.test.ts` forbids folder-name heuristics, requires both Claude credential-store locations, and limits settings-layer Bash denies to the ADR-025 pair.
+- `test/unit/agent-config-template-parity.test.ts` forbids broad folder-name heuristics, requires the exact `credentials.json` pair in the template and workspace settings, requires both Claude credential-store locations, and limits settings-layer Bash denies to the ADR-025 pair.
 - The hook self-test and `test/integration/deny-dangerous-policy.test.ts` assert that a nested secrets route and a `credentials.ts` provider stay readable while `.env`, key files, `credentials.json`, and home stores stay blocked.
 - `deny-covers-secrets` no longer requires a secrets-directory family in the hook or a `secrets/**` or `credentials*` pattern in a Codex profile; env, key-store, registry, plaintext credential-store and key-extension families remain required. Existing Claude settings missing the new stores need the reviewed setup reconcile step; a normal install does not silently add those denies.
 - A project whose secret material lives in an extensionless file under a folder named `secrets/` loses the folder-level deny. The Stop-time safety scan and the env and key-extension rules remain; teams that want the folder rule add it as a project-owned deny, which upgrades preserve.

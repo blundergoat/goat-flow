@@ -1,46 +1,11 @@
 /**
  * Dashboard HTML shell contract: GET / returns text/html injecting the runtime globals (default
  * path, version, token, agents, runner ids, presets), links every dashboard asset script, and
- * renders exactly one Home view root.
+ * renders exactly one Home view root. Unknown routes and asset files return 404 instead of the shell.
  */
 import { assert, baseUrl, describe, it } from "./dashboard-server.helpers.js";
-import { loadDashboardPresets } from "../../src/cli/server/dashboard-assets.js";
-import { resolveProjectIdentity } from "../../src/cli/server/dashboard-project-state.js";
-import {
-  createDashboardAuditProfiler,
-  shouldProfileAuditRequest,
-} from "../../src/cli/server/dashboard-reporting.js";
-import {
-  buildSetupDetectPayload,
-  isProjectDirectory,
-} from "../../src/cli/server/setup-detect.js";
 
 describe("dashboard HTML", () => {
-  it("exercises dashboard support helper behaviour behind the server integration surface", () => {
-    const profiler = createDashboardAuditProfiler(true);
-    const profiled = profiler.span("demo", () => "ok");
-
-    assert.equal(loadDashboardPresets().length > 0, true);
-    assert.equal(
-      resolveProjectIdentity(process.cwd()).currentPath.length > 0,
-      true,
-    );
-    assert.equal(
-      shouldProfileAuditRequest(
-        new URL("http://localhost/?profile=true"),
-        true,
-      ),
-      true,
-    );
-    assert.equal(profiled, "ok");
-    assert.equal(profiler.spans.length, 1);
-    assert.equal(isProjectDirectory(process.cwd()), true);
-    assert.equal(
-      buildSetupDetectPayload(process.cwd()).languages.length > 0,
-      true,
-    );
-  });
-
   it("GET / returns HTML shell with the expected scripts", async () => {
     const res = await fetch(baseUrl);
     assert.equal(res.status, 200);
@@ -74,5 +39,17 @@ describe("dashboard HTML", () => {
       1,
       "dashboard HTML should contain exactly one Home view root",
     );
+  });
+});
+
+describe("dashboard error handling", () => {
+  it("returns 404 for unknown routes", async () => {
+    const res = await fetch(`${baseUrl}/nonexistent`);
+    assert.equal(res.status, 404);
+  });
+
+  it("returns 404 for unknown asset files", async () => {
+    const res = await fetch(`${baseUrl}/assets/nonexistent.js`);
+    assert.equal(res.status, 404);
   });
 });

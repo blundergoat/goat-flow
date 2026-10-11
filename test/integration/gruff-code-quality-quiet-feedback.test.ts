@@ -7,13 +7,18 @@ import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  closeSync,
   cpSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  openSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
@@ -103,7 +108,7 @@ function registerClaudeGruffHandler(projectRoot: string): string[] {
 
 /**
  * Replays one edit through Claude's registered Gruff handler, launcher and adapter included.
- * It starts the handler as a child process and changes no file.
+ * It starts the handler and removes its private input/output captures after replay.
  *
  * @param projectRoot - project holding the registered install; also the working directory
  * @param providerDirectory - directory Claude exports as CLAUDE_PROJECT_DIR
@@ -115,23 +120,43 @@ function deliveredContext(
   providerDirectory: string,
   editPayload: unknown,
 ): string {
-  const replay = spawnSync(
-    process.execPath,
-    registerClaudeGruffHandler(projectRoot),
-    {
-      cwd: projectRoot,
-      encoding: "utf8",
-      env: { ...process.env, CLAUDE_PROJECT_DIR: providerDirectory },
-      input: JSON.stringify(editPayload),
-      timeout: 60_000,
-    },
-  );
-  assert.equal(replay.status, 0, replay.stderr);
-  assert.notEqual(replay.stdout, "", "a quiet handler proves no analysis");
-  const response = JSON.parse(replay.stdout) as {
-    hookSpecificOutput: { additionalContext: string };
-  };
-  return response.hookSpecificOutput.additionalContext;
+  const captureDirectory = mkdtempSync(join(tmpdir(), "goat-gruff-feedback-"));
+  const payloadPath = join(captureDirectory, "stdin");
+  const stdoutPath = join(captureDirectory, "stdout");
+  const stderrPath = join(captureDirectory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    writeFileSync(payloadPath, JSON.stringify(editPayload), {
+      flag: "wx",
+      mode: 0o600,
+    });
+    descriptors.push(openSync(payloadPath, "r"));
+    for (const path of [stdoutPath, stderrPath]) {
+      descriptors.push(openSync(path, "wx", 0o600));
+    }
+    const replay = spawnSync(
+      process.execPath,
+      registerClaudeGruffHandler(projectRoot),
+      {
+        cwd: projectRoot,
+        encoding: "utf8",
+        env: { ...process.env, CLAUDE_PROJECT_DIR: providerDirectory },
+        stdio: descriptors,
+        timeout: 60_000,
+      },
+    );
+    const stdout = readFileSync(stdoutPath, "utf8");
+    const stderr = readFileSync(stderrPath, "utf8");
+    assert.equal(replay.status, 0, stderr);
+    assert.notEqual(stdout, "", "a quiet handler proves no analysis");
+    const response = JSON.parse(stdout) as {
+      hookSpecificOutput: { additionalContext: string };
+    };
+    return response.hookSpecificOutput.additionalContext;
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(captureDirectory, { recursive: true, force: true });
+  }
 }
 
 describe("gruff-code-quality hook quiets edits outside the analysed scope", () => {

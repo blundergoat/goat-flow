@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
 import { makeTempProject, runInstaller } from "./setup-install.helpers.js";
 
@@ -16,7 +17,7 @@ describe("non-Git install hook reporting", () => {
     mkdirSync(join(projectRoot, ".goat-flow"), { recursive: true });
     writeFileSync(
       join(projectRoot, ".goat-flow", "config.yaml"),
-      "hooks:\n  post-turn-safety: true\n",
+      `version: "${AUDIT_VERSION}"\nhooks:\n  post-turn-safety: true\n`,
     );
 
     const installed = runInstaller(projectRoot, "--agent", "claude");

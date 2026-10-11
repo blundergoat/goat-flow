@@ -16,16 +16,8 @@ import {
   originalExecFileSync,
   syncBuiltinESMExports,
 } from "./dashboard-server.helpers.js";
-import { normalizeAgentVersionOutput as normalizeAgentVersionOutputFromRoutes } from "../../src/cli/server/dashboard-routes.js";
 
 describe("dashboard /api/agents/installed", () => {
-  it("keeps the dashboard routes version-normalizer export aligned with the implementation", () => {
-    assert.equal(
-      normalizeAgentVersionOutputFromRoutes,
-      normalizeAgentVersionOutput,
-    );
-  });
-
   it("normalizes trailing punctuation from one-line version output", () => {
     assert.equal(
       normalizeAgentVersionOutput("GitHub Copilot CLI 1.0.34.\n"),

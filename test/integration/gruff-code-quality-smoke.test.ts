@@ -448,15 +448,15 @@ describe("gruff-code-quality hook", () => {
     writeFileSync(join(root, ".gruff-py.yaml"), "rules: {}\n");
     mkdirSync(join(root, "src"), { recursive: true });
     mkdirSync(join(root, "assets"), { recursive: true });
-    mkdirSync(join(root, "strands_agents"), { recursive: true });
+    mkdirSync(join(root, "services"), { recursive: true });
     writeFileSync(join(root, "src", "example.php"), "<?php\n");
     writeFileSync(join(root, "assets", "example.ts"), "const value = 1;\n");
-    writeFileSync(join(root, "strands_agents", "example.py"), "value = 1\n");
+    writeFileSync(join(root, "services", "example.py"), "value = 1\n");
 
     assertExtensionRoutesToExpectedGruff(root, [
       { file: "src/example.php", expectedRule: "php.rule" },
       { file: "assets/example.ts", expectedRule: "ts.rule" },
-      { file: "strands_agents/example.py", expectedRule: "py.rule" },
+      { file: "services/example.py", expectedRule: "py.rule" },
     ]);
   });
 
@@ -563,7 +563,7 @@ describe("gruff-code-quality hook", () => {
     const root = makeRoot();
     const overrideBinDir = writeMockGruffBinary(
       root,
-      "strands_agents/.venv/bin",
+      "tools/.venv/bin",
       "gruff-py",
       "override.rule",
     );
@@ -595,12 +595,7 @@ describe("gruff-code-quality hook", () => {
   // Fixture purpose: writes a nested-venv analyzer path into .goat-flow/config.yaml to cover repo overrides.
   it("uses a repo-owned config binaries override for a non-standard monorepo gruff binary", () => {
     const root = makeRoot();
-    writeMockGruffBinary(
-      root,
-      "strands_agents/.venv/bin",
-      "gruff-py",
-      "config.rule",
-    );
+    writeMockGruffBinary(root, "tools/.venv/bin", "gruff-py", "config.rule");
     writeFileSync(join(root, ".gruff-py.yaml"), "rules: {}\n");
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
     writeFileSync(
@@ -610,7 +605,7 @@ describe("gruff-code-quality hook", () => {
         "  gruff-code-quality:",
         "    enabled: true",
         "    binaries:",
-        "      py: strands_agents/.venv/bin/gruff-py",
+        "      py: tools/.venv/bin/gruff-py",
         "",
       ].join("\n"),
     );
@@ -728,7 +723,7 @@ describe("gruff-code-quality hook", () => {
           "hooks:",
           "  gruff-code-quality:",
           "    enabled: true",
-          "    binaries: { py: strands_agents/.venv/bin/gruff-py }",
+          "    binaries: { py: tools/.venv/bin/gruff-py }",
           "",
         ],
       },
@@ -740,7 +735,7 @@ describe("gruff-code-quality hook", () => {
           "  gruff-code-quality:",
           "    enabled: true",
           "    binaries:",
-          '      py: "strands_agents/.venv/bin/gruff-py" # analyzer',
+          '      py: "tools/.venv/bin/gruff-py" # analyzer',
           "",
         ],
       },
@@ -749,12 +744,7 @@ describe("gruff-code-quality hook", () => {
     // Each config shape is what users may paste into the dashboard-managed file.
     for (const fixture of fixtures) {
       const root = makeRoot();
-      writeMockGruffBinary(
-        root,
-        "strands_agents/.venv/bin",
-        "gruff-py",
-        "config.rule",
-      );
+      writeMockGruffBinary(root, "tools/.venv/bin", "gruff-py", "config.rule");
       writeFileSync(join(root, ".gruff-py.yaml"), "rules: {}\n");
       mkdirSync(join(root, ".goat-flow"), { recursive: true });
       writeFileSync(

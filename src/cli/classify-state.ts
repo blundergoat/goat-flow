@@ -13,6 +13,8 @@ import {
 } from "./constants.js";
 import { getAgentProfiles } from "./agents/registry.js";
 import type { AgentProfile } from "./types.js";
+import { load } from "js-yaml";
+import { compareVersions, isReleaseVersion } from "./version-compare.js";
 
 /** Minimal filesystem interface needed for project state detection. */
 interface StateFS {
@@ -37,8 +39,6 @@ interface ProjectState {
   details: string;
   version?: string;
 }
-
-const CURRENT_VERSION_FAMILY = AUDIT_VERSION.split(".").slice(0, 2).join(".");
 
 /** Cache for {@link agentProfiles} - manifest-backed and static per process. */
 let cachedAgentProfiles: AgentProfile[] | undefined;
@@ -90,6 +90,7 @@ function buildIncompleteDetails(
   hasInstructionFile: boolean,
   hasPreamble: boolean,
   hasConventions: boolean,
+  version: string,
 ): string {
   const missing: string[] = [];
   const missingSkills = canonicalSkills.filter(
@@ -116,7 +117,7 @@ function buildIncompleteDetails(
     missing.push("missing .goat-flow/skill-docs/skill-conventions.md");
   }
 
-  return `Config says current goat-flow ${CURRENT_VERSION_FAMILY}.x but install is incomplete: ${missing.join("; ")}`;
+  return `Config says current goat-flow ${version} but install is incomplete: ${missing.join("; ")}`;
 }
 
 /** Map from agentId to that agent's instruction file (lazy - see {@link agentProfiles}). */
@@ -148,6 +149,47 @@ interface InstalledProjectProbe {
 }
 
 /**
+ * Read the complete saved YAML scalar; absent/non-string values have no comparable version.
+ * Swallows read/parse failures into undefined so status and installation request owner review.
+ */
+function installedConfigVersion(fs: StateFS): string | undefined {
+  try {
+    const version = (
+      load(fs.readFile(".goat-flow/config.yaml") ?? "") as {
+        version?: unknown;
+      } | null
+    )?.version;
+    return typeof version === "string" ? version : undefined;
+  } catch {
+    // Invalid YAML needs the owner's review; defaults would hide the missing version.
+    return undefined;
+  }
+}
+
+/** Reject prereleases and numbers that would lose precision in the shared release comparison. */
+function isComparableRelease(version: string): boolean {
+  return (
+    isReleaseVersion(version) &&
+    version.split(".").every((part) => Number.isSafeInteger(Number(part)))
+  );
+}
+
+/** Refuse newer releases or version entries the line-based installer cannot safely refresh. */
+function installedReleaseBlocker(fs: StateFS, version: string): string | null {
+  // The CLI is the stale side; stop rather than replace the newer project's files.
+  if (compareVersions(version, AUDIT_VERSION) > 0) {
+    return `Project version ${version} is newer than this CLI ${AUDIT_VERSION}. Upgrade the CLI before installing; the project's files must remain unchanged.`;
+  }
+  // The line-based installer cannot preserve block, flow or aliased version entries.
+  const writableVersion =
+    /^(?:version|"version"|'version')[ \t]*:[ \t]*(?:&[^\s#]+[ \t]+)?(["']?)\d+\.\d+\.\d+\1[ \t]*(?:#[^\r\n]*)?\r?$/mu;
+  if (!writableVersion.test(fs.readFile(".goat-flow/config.yaml") ?? "")) {
+    return `Config version ${version} cannot be safely refreshed. Review .goat-flow/config.yaml and put the version on a single top-level line, such as version: "${version}", before installing.`;
+  }
+  return null;
+}
+
+/**
  * Classify a project that already has a `.goat-flow/config.yaml`, so the only questions left are version and completeness.
  *
  * This is what decides the badge a user sees beside an already-installed project: current, incomplete, outdated,
@@ -163,21 +205,30 @@ function classifyInstalledProject(
   fs: StateFS,
   probe: InstalledProjectProbe,
 ): ProjectState {
-  const configContent = fs.readFile(".goat-flow/config.yaml");
-  const version = configContent?.match(/version:\s*["']?(\d+\.\d+\.\d+)/)?.[1];
+  const version = installedConfigVersion(fs);
 
-  // Config present but the version is unreadable, so setup is offered to regenerate a clean one.
-  if (!version) {
+  // An existing config without a rankable release needs review before any installation changes.
+  if (version === undefined || !isComparableRelease(version)) {
     return {
       state: "error",
-      action: "setup",
-      details:
-        "Config exists but version could not be parsed from .goat-flow/config.yaml. Run setup to regenerate.",
+      action: "none",
+      details: `Config version cannot be safely compared with CLI ${AUDIT_VERSION}. Review the saved version in .goat-flow/config.yaml; use a numeric X.Y.Z release before installing.`,
+      ...(version === undefined ? {} : { version }),
     };
   }
 
-  // An older family means the user has an upgrade available rather than anything broken.
-  if (!version.startsWith(`${CURRENT_VERSION_FAMILY}.`)) {
+  const admissionBlocker = installedReleaseBlocker(fs, version);
+  if (admissionBlocker !== null) {
+    return {
+      state: "error",
+      action: "none",
+      details: admissionBlocker,
+      version,
+    };
+  }
+  const direction = compareVersions(version, AUDIT_VERSION);
+  // Any older release, including an older patch, offers an upgrade before completeness checks.
+  if (direction < 0) {
     return {
       state: "outdated",
       action: "upgrade",
@@ -210,6 +261,7 @@ function classifyInstalledProject(
       probe.hasInstructionFile,
       probe.hasPreamble,
       probe.hasConventions,
+      version,
     ),
     version,
   };

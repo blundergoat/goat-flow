@@ -99,10 +99,6 @@ export interface QualityConfig {
   toolKeywordsRegex: string;
   /** Subtype profiles indexed by subtype name. Order in this object is detection priority. */
   subtypes: Record<ArtifactSubtype, SubtypeProfile>;
-  /** Path to the in-tree expected-scores fixture. */
-  fixturePath: string;
-  /** Additional fixtures consumer projects may declare. */
-  additionalFixtures: string[];
 }
 
 const DEFAULT_PROFILES: Record<ArtifactSubtype, Record<MetricName, number>> = {
@@ -302,8 +298,6 @@ export const DEFAULT_QUALITY_CONFIG: QualityConfig = {
       notes: "Workflow skill with Step 0 / phases / gates / mode system.",
     },
   },
-  fixturePath: "test/fixtures/skill-quality/expected-scores.json",
-  additionalFixtures: [],
 };
 
 /** Narrow unknown values to plain object records. */
@@ -559,12 +553,6 @@ export function mergeQualityConfig(raw: unknown): QualityConfig {
         ? raw["tool-keywords-regex"]
         : defaults.toolKeywordsRegex,
     subtypes: mergeSubtypes(raw.subtypes, defaults.subtypes),
-    fixturePath:
-      typeof raw["fixture-path"] === "string"
-        ? raw["fixture-path"]
-        : defaults.fixturePath,
-    additionalFixtures:
-      stringArray(raw["additional-fixtures"]) ?? defaults.additionalFixtures,
   };
 }
 
@@ -603,8 +591,6 @@ export function cloneQualityConfig(config: QualityConfig): QualityConfig {
         },
       ]),
     ) as Record<ArtifactSubtype, SubtypeProfile>,
-    fixturePath: config.fixturePath,
-    additionalFixtures: [...config.additionalFixtures],
   };
 }
 

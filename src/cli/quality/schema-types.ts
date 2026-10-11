@@ -9,6 +9,63 @@ import type { AgentId } from "../types.js";
 
 export const QUALITY_REPORT_KIND = "goat-flow-quality-report";
 
+export const QUALITY_CONCERNS = [
+  "context",
+  "constraints",
+  "verification",
+  "recovery",
+  "feedback-loop",
+] as const;
+/** One primary harness concern; legacy findings may omit it. */
+type QualityConcern = (typeof QUALITY_CONCERNS)[number];
+/** Counts describe one report's findings, never an inventory of all open defects. */
+export type QualityConcernCounts = Record<
+  QualityConcern | "unclassified",
+  number
+>;
+
+/** A retained file's exact bytes, read only within the selected project. */
+export interface QualityEvidenceReference {
+  file: string;
+  sha256: string;
+}
+
+/** A committed revision or a retained review capture identifies the verified source. */
+export type QualityFixTarget =
+  | { kind: "commit"; revision: string }
+  | {
+      kind: "workspace-snapshot";
+      fingerprint: string;
+      capture: QualityEvidenceReference;
+    };
+
+/** The assessor supplies the proof; the CLI checks its references without executing commands. */
+export interface QualityFixEvidence extends QualityEvidenceReference {
+  method: QualityEvidenceMethod;
+  summary: string;
+  anchor?: string;
+  command?: string;
+  exit_code?: number;
+}
+
+/** Persisted admission result, separate from later reference availability. */
+export interface QualityFixReferenceCheck {
+  status: "confirmed" | "unconfirmed";
+  reason: string;
+}
+
+/** Persisted fix-claim schema: attribution is the containing report's agent and saved report ID, and missing proof stays unconfirmed. */
+export interface QualityFix {
+  prior_report_id: string | null;
+  finding_id: string | null;
+  conclusion: "assessor-verified";
+  explanation: string | null;
+  target: QualityFixTarget | null;
+  evidence: QualityFixEvidence | null;
+  /** Written by save, never accepted as proof from an incoming report. */
+  reference_check?: QualityFixReferenceCheck;
+}
+
 export const QUALITY_FINDING_TYPES = [
   "setup_quality",
   "skill_flaw",
@@ -58,7 +115,10 @@ export const QUALITY_IMPROVEMENT_CATEGORIES = [
 ] as const;
 /** The five-item limit bounds the work a history reader scans and matches the prompt's Top 5 Improvements. */
 export const QUALITY_MAX_IMPROVEMENTS = 5;
-export const QUALITY_SCORE_VALUES = [0, 5, 10, 15, 20, 25] as const;
+export const QUALITY_SCORE_VALUES = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+  22, 23, 24, 25,
+] as const;
 export const QUALITY_SETUP_SCORE_AXES = [
   "accuracy",
   "relevance",
@@ -92,8 +152,8 @@ export type QualityScope = (typeof QUALITY_SCOPES)[number];
 /** Quality workflow mode used to keep history and diffs within comparable report families. */
 export type QualityMode = (typeof QUALITY_MODES)[number];
 /**
- * Whether a finding first appeared in this report (`new`) or carried over from the prior same-agent report (`persisted`).
- * Computed during history comparison; null on findings with no prior context.
+ * The assessor's claim that a finding is new or persists from prior same-agent context.
+ * History compares these claims with exact-ID matches; null means no claim was recorded.
  */
 export type QualityDeltaTag = (typeof QUALITY_DELTA_TAGS)[number];
 type QualityAuditStatus = (typeof QUALITY_AUDIT_STATUSES)[number];
@@ -101,7 +161,7 @@ type QualityWorktreeState = (typeof QUALITY_WORKTREE_STATES)[number];
 type QualityGroundingStatus = (typeof QUALITY_GROUNDING_STATUSES)[number];
 type QualityScoreConfidence = (typeof QUALITY_SCORE_CONFIDENCES)[number];
 /**
- * A single rubric axis score, constrained to the fixed 0-25 five-point band so totals stay comparable across reports.
+ * A single rubric axis score, constrained to integers from 0 through 25.
  * Values outside this set are rejected by the schema parser.
  */
 export type QualityAxisScore = (typeof QUALITY_SCORE_VALUES)[number];
@@ -148,6 +208,17 @@ export interface QualityScoreRationale {
   >;
 }
 
+/** Compact assessment-time identity schema; nulls name unavailable evidence, never defaults. */
+export interface QualityAssessmentIdentity {
+  model: string | null;
+  tool_version: string | null;
+  prompt_sha256: string | null;
+  settings_sha256: string | null;
+  capture: "launch-observed" | "assessor-reported" | "unknown";
+  /** Fingerprint of the recorded fixed-input protocol; identity alone does not establish control. */
+  fixed_input_protocol: string | null;
+}
+
 /** Evidence coverage and workspace provenance needed to compare independently produced reports. */
 export interface QualityAssessmentContext {
   /** Git revision assessed, or null when the target is not Git-backed or the revision was unavailable. */
@@ -162,6 +233,7 @@ export interface QualityAssessmentContext {
   score_confidence: QualityScoreConfidence;
   /** Assessor-copied review snapshot fingerprints; null means capture was unavailable, not unchanged. */
   workspace_snapshot?: { start: string | null; end: string | null };
+  assessment_identity?: QualityAssessmentIdentity;
 }
 
 /** A bounded proposed action, kept separate from the report's current defect list. */
@@ -175,6 +247,7 @@ export interface QualityImprovement {
 
 /** One current agent-emitted quality finding before deterministic IDs are attached. */
 export interface QualityFinding {
+  concern?: QualityConcern;
   type: QualityFindingType;
   severity: QualityFindingSeverity;
   file: string | null;
@@ -262,6 +335,8 @@ export interface QualityReport {
   score_rationale?: QualityScoreRationale;
   /** Ordered recommendations; omission means the older report did not preserve this section. */
   improvements?: QualityImprovement[];
+  /** Optional attributed corrections; omission means the report did not record them. */
+  fixes?: QualityFix[];
   findings: QualityFinding[];
   refuted_candidates: QualityRefutedCandidate[];
 }

@@ -520,6 +520,7 @@ What I Didn't Examine: none.
     });
   }
 
+  // Each row writes a real selection by file count and changed lines, at and past each limit, because only an overrun must require chunking.
   it("requires accepted chunking when completed scope size exceeds either limit", (testContext) => {
     // Real selected files keep chunk-limit failures separate from inventory-count contradictions.
     for (const [fileCount, changedLines, needsChunks] of [
@@ -553,8 +554,14 @@ What I Didn't Examine: none.
               projectRoot,
             ).violations,
             [],
+            `${fileCount} files, ${changedLines} lines, ${report === compact ? "compact" : "full"} report`,
           );
-        } else assert.deepEqual(result.violations, []);
+        } else
+          assert.deepEqual(
+            result.violations,
+            [],
+            `${fileCount} files, ${changedLines} lines, ${report === compact ? "compact" : "full"} report`,
+          );
       }
     }
   });
@@ -856,6 +863,7 @@ function assertIntegrityFailure(
 }
 
 describe("selected review integrity relationships", () => {
+  // Writes four more selected files, one with an escaped-anchor name; all five must stay in the report when opened or source coverage is partial.
   it("retains all five selected files when opened or source coverage is partial", (test) => {
     const root = createReviewedProject(test);
     const paths = [
@@ -930,7 +938,11 @@ describe("selected review integrity relationships", () => {
     const compact = cleanReview(root);
     // Duplicate paths and extra Size clauses must fail equally in compact and full reports.
     for (const report of [compact, fullCleanReview(compact)]) {
-      assert.deepEqual(validateReviewReport(report, root).violations, []);
+      assert.deepEqual(
+        validateReviewReport(report, root).violations,
+        [],
+        `${report === compact ? "compact" : "full"} report`,
+      );
       // Each malformed manifest isolates duplicate, absent, or empty path membership.
       for (const manifest of [
         '["src/example.ts","src/example.ts"]',
@@ -1053,12 +1065,12 @@ describe("selected review integrity relationships", () => {
       const short = withIntegrityFields(compact, {
         "Degradation evidence": evidence,
       }).replace("no degradation flags", `flags=${flag}`);
-      assert.deepEqual(validateReviewReport(short, root).violations, []);
+      assert.deepEqual(validateReviewReport(short, root).violations, [], flag);
       const full = withIntegrityFields(fullCleanReview(compact), {
         "Degradation flags": flag,
         "Degradation evidence": evidence,
       });
-      assert.deepEqual(validateReviewReport(full, root).violations, []);
+      assert.deepEqual(validateReviewReport(full, root).violations, [], flag);
       assertIntegrityFailure(
         withIntegrityFields(full, { "Degradation evidence": "{}" }),
         root,

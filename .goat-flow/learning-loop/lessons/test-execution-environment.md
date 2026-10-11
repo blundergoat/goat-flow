@@ -1,6 +1,6 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-08-21
+last_reviewed: 2026-09-28
 ---
 
 **Scope:** Choosing and invoking the right runner - which binary and loader actually execute, why a file argument may not narrow the suite, and when proof needs the published invocation path rather than source mode. Shell and process behaviour is [test-shell-environment.md](test-shell-environment.md).
@@ -20,13 +20,14 @@ last_reviewed: 2026-08-21
 ## Lesson: Directory targets can break Node's test runner
 
 **Status:** active | **Created:** 2026-06-11
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-08-29
 
 **Prevention:** For suite-wide verification, use `node scripts/run-tests.mjs fast` or the matching npm script from `package.json`. Use `node --import tsx --test <specific-file.test.ts>` only for focused files. Treat `ERR_MODULE_NOT_FOUND` on a test directory or `index.json` as an invocation-shape failure before diagnosing product code. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`).
 
-**What happened:** While executing `.goat-flow/plans/1.12.0/M01-verification-score-spike-and-decision.md`, the milestone's baseline command `node --import tsx --test test/unit/` failed before running tests: Node treated the directory argument as a module target and tried to import `test/unit/index.json`, producing `ERR_MODULE_NOT_FOUND`. The canonical repo runner `node scripts/run-tests.mjs fast` immediately passed with `# pass 661`, `# fail 0`.
+**What happened:** During verification-score investigation, the baseline command `node --import tsx --test test/unit/` failed before running tests: Node treated the directory argument as a module target and tried to import `test/unit/index.json`, producing `ERR_MODULE_NOT_FOUND`. The canonical repo runner `node scripts/run-tests.mjs fast` immediately passed with `# pass 661`, `# fail 0`.
 
-**Recurrence (2026-08-29):** M70 named `test/unit` and `test/contract` directly in a focused `node --test` command. Node treated both directories as test modules and returned `tests 2`, `pass 0`, `fail 2` before executing any owning case. Replacing the directory arguments with the four explicit M70 `*.test.ts` paths restored the intended 166-case proof. Evidence anchors: `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`) and `test/contract/command-phrases.test.ts` (search: `instruction-files must remain a bounded manifest mode`).
+**Recurrence (2026-08-29):** The change named `test/unit` and `test/contract` directly in a focused `node --test` command. Node treated both directories as test modules and returned `tests 2`, `pass 0`, `fail 2` before executing any owning case. Replacing the directory arguments with the four explicit `*.test.ts` paths restored the intended 166-case proof. Evidence anchors: `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`) and `test/contract/command-phrases.test.ts` (search: `instruction-files must remain a bounded manifest mode`).
 
 **Root cause:** I trusted a milestone's directory-shaped test command instead of checking `package.json` and `scripts/run-tests.mjs`. In this repo, test file discovery and slow/fast partitioning live in `scripts/run-tests.mjs`; direct Node `--test` invocations should name specific `*.test.ts` files, not a directory.
 
@@ -47,6 +48,7 @@ last_reviewed: 2026-08-21
 ## Lesson: Test suite must exercise the published invocation path
 
 **Status:** active | **Created:** 2026-04-24
+**Severity:** INTEGRATION
 **Trigger phase:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Run the packed public command and capture its complete output instead of inferring entry-point behavior or presentation from source and package metadata.
@@ -81,6 +83,7 @@ last_reviewed: 2026-08-21
 ## Lesson: Focused TypeScript tests need verified paths and the `tsx` loader
 
 **Status:** active | **Created:** 2026-04-29 | **Incident count:** 5 | **Latest occurrence:** 2026-08-21
+**Severity:** INTEGRATION
 
 **Prevention:** Resolve focused paths with `find test -type f -name '<pattern>'` rather than a shell glob or ripgrep, then use `node --import tsx --test <specific-file.test.ts>` as declared by `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`). When a spawned Node process names `tsx` as a package import, keep its cwd inside the dependency tree or pass a resolved loader location; a source entry point at an absolute path does not relocate package resolution. Before using the runner across Windows and WSL, verify that the runtime platform matches both the installed native dependencies and any subprocess paths in the suite. For WSL tests that require POSIX shell paths, keep the Linux runtime and use `ESBUILD_BINARY_PATH` only with a platform-correct binary from a same-version, same-lockfile dependency tree. Before treating a source/dist parity failure as a code regression, run the repository gate that rebuilds ignored `dist/` output (`scripts/preflight-checks.sh`, search: `Typecheck + build (dist/ produced)`) and rerun the test. A missing target, source-resolution error, native-package mismatch, stale ignored build artifact, or cross-platform subprocess failure is an invocation failure until the resolved command also fails.
 
@@ -101,10 +104,11 @@ last_reviewed: 2026-08-21
 ## Lesson: `git archive` is not a clean-clone proof when tests require `.git`
 
 **Status:** active | **Created:** 2026-06-01
+**Severity:** INTEGRATION
 
 **Prevention:** For "clean checkout" proofs, use a real clone when the test suite includes hooks, audit checks, or git-root discovery. Use `git archive` only for tests that are explicitly gitless. If an archive run fails with `deny-dangerous-self-test.sh --self-test=smoke failed`, rerun in a real clone before changing hook logic. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `git rev-parse --show-toplevel`), `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_allow shell "echo safe"`), `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `passes when the installed deny hook matches the canonical template`), `package.json` (search: `"test:fast"`).
 
-**What happened:** During M09 clean-checkout verification, `git archive HEAD | tar -x` produced a no-`dist/` tree, but `npm test` failed five deny-hook audit tests. The failure was not the test partition fix: the archived tree had no `.git`, so `workflow/hooks/deny-dangerous.sh` could not resolve `git rev-parse --git-common-dir` and failed closed. The equivalent local `git clone --no-hardlinks --branch fix/audit-drift-fast-slow-partition --single-branch ...` had `.git`, no `dist/`, and passed `npm test` with `# pass 557`, `# fail 0`, `CLONE_NPM_TEST_EXIT_0`.
+**What happened:** During clean-checkout verification, `git archive HEAD | tar -x` produced a no-`dist/` tree, but `npm test` failed five deny-hook audit tests. The failure was not the test partition fix: the archived tree had no `.git`, so `workflow/hooks/deny-dangerous.sh` could not resolve `git rev-parse --git-common-dir` and failed closed. The equivalent local `git clone --no-hardlinks --branch fix/audit-drift-fast-slow-partition --single-branch ...` had `.git`, no `dist/`, and passed `npm test` with `# pass 557`, `# fail 0`, `CLONE_NPM_TEST_EXIT_0`.
 
 **Root cause:** I treated an archive extraction as equivalent to a fresh clone. In this repo, deny-hook and audit tests intentionally rely on git-root discovery, so an archive is a different execution environment.
 
@@ -115,6 +119,7 @@ last_reviewed: 2026-08-21
 ## Lesson: `npx vitest` is not this repo's runner and trips on `_temp/stryker-tmp` sandboxes
 
 **Status:** active | **Created:** 2026-06-14
+**Severity:** INTEGRATION
 
 **Prevention:** Use `node scripts/run-tests.mjs fast` (or `npm test`) for suite runs and `node --import tsx --test <specific-file.test.ts>` for focused files. Do not use `npx vitest` here. Read `No test suite found` originating from a `_temp/stryker-tmp/sandbox-*` path as a wrong-runner signal, not a product failure. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), and `.gitignore` (search: `_temp`).
 
@@ -142,6 +147,8 @@ last_reviewed: 2026-08-21
 ## Lesson: Node test filters must precede explicit test paths
 
 **Status:** active | **Created:** 2026-08-01
+**Severity:** INTEGRATION
+**Incident count:** 3 | **Latest occurrence:** 2026-10-04
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/test-snapshots.md`; argument order for the runner belongs with the other invocation-shape entries.
 
 **Decision changed:** Put Node test-runner filters before explicit test paths and verify the reported test count proves isolation.
@@ -150,6 +157,10 @@ last_reviewed: 2026-08-21
 
 **Prevention:** Use `node --import tsx --test --test-name-pattern="<pattern>" <test-path>` and require both the named subtest and expected `# tests` count before treating the run as focused proof.
 
-**What happened:** The M03 anchor command placed `--test-name-pattern` after the TypeScript test path. The Node/tsx runner executed all 110 contracts instead of the one anchor contract, so expected interim mirror failures obscured the intended proof. Moving the filter before the path produced exactly one passing test and the zero-miss diagnostic.
+**What happened:** The anchor command placed `--test-name-pattern` after the TypeScript test path. The Node/tsx runner executed all 110 contracts instead of the one anchor contract, so expected interim mirror failures obscured the intended proof. Moving the filter before the path produced exactly one passing test and the zero-miss diagnostic.
 
 **Evidence:** `test/contract/skill-hardening-review-2.test.ts` (search: `goat-review internal anchors resolve to named current targets`) - this is the intended isolated contract; its diagnostic reports checked, exempted, and missed anchors.
+
+**Recurrence 2026-09-28:** Hook-input diagnostics used name filters that selected zero tests. Their successful exit was discarded as evidence; the unfiltered owning suites supplied the proof. Check both the selected test names and nonzero executed count before accepting a focused run. Evidence: `test/integration/deny-dangerous-operands.test.ts` (search: `classify`) and `test/helpers/check-installed-policy.ts` (search: `runHookWithPayload`).
+
+**Recurrence 2026-10-04:** A filter built from an assertion message matched no test, yet the run printed `# tests 1` and `# pass 1` for the file itself and was first counted as a pass. A nonzero count is not proof: require the named subtest line. The rerun under the real test title passed. Evidence: `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`).

@@ -7,6 +7,7 @@
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -17,7 +18,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { BATCH_HOOK_SCENARIOS } from "../../src/cli/cli-types.js";
@@ -29,7 +30,10 @@ import {
 } from "../../src/cli/hooks-configured-runtime-evidence.js";
 import type { CreateEvidenceEnvelopeInput } from "../../src/cli/evidence/envelope.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
-import { applyHookState } from "../../src/cli/server/hook-registrar.js";
+import {
+  applyHookState,
+  syncHookStates,
+} from "../../src/cli/server/hook-registrar.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
   executeManagedHookProbe,
@@ -659,6 +663,72 @@ describe("hooks runtime evidence", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  // Fixture side effects: writes a disposable Codex project and a Bash wrapper folder, prefixes PATH while replaying, then removes both.
+  // The real launcher reports the overflow with inexact "at least" byte counts, which must never read as a safety finding.
+  it(
+    "fails a Codex Stop hook that never delivers a scan, before and after its one retry",
+    // The wrapper is a POSIX shell script; hook-effective-state.test.ts replays Codex Stop through the Windows override.
+    { skip: process.platform === "win32" },
+    () => {
+      const projectRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-codex-stop-proof-"),
+      );
+      const wrapperDirectory = mkdtempSync(
+        join(tmpdir(), "goat-flow-overflow-bash-"),
+      );
+      const suitePath = process.env.PATH;
+      try {
+        mkdirSync(join(projectRoot, ".goat-flow"), { recursive: true });
+        mkdirSync(join(projectRoot, ".codex"), { recursive: true });
+        writeFileSync(
+          join(projectRoot, ".goat-flow", "config.yaml"),
+          'version: "1.15.0"\n',
+        );
+        writeFileSync(join(projectRoot, ".codex", "config.toml"), "\n");
+        const gitInit = spawnSync("git", ["init", "--quiet"], {
+          cwd: projectRoot,
+          encoding: "utf-8",
+        });
+        assert.equal(gitInit.status, 0, gitInit.stderr);
+        syncHookStates(projectRoot);
+        const realBash = spawnSync("bash", ["-c", "command -v bash"], {
+          encoding: "utf-8",
+        }).stdout.trim();
+        // The probe's own `bash -c` passes through, while the launcher's scanner run overflows the 65,536-byte result envelope instead of scanning.
+        writeFileSync(
+          join(wrapperDirectory, "bash"),
+          `#!/bin/sh\nif [ "$1" = "-c" ]; then exec '${realBash}' "$@"; fi\nprintf '%070000d' 0\n`,
+          { mode: 0o755 },
+        );
+        process.env.PATH = [wrapperDirectory, suitePath].join(delimiter);
+        // Both runs share the probe's fixed turn, so the second ends the launcher's one retry with a recovery warning instead of a block.
+        for (const verificationRun of ["first failure", "ended retry"]) {
+          const report = verifyManagedConfiguredHook({
+            projectPath: projectRoot,
+            agent: "codex",
+            scenarioGroup: "post-turn-hook",
+            isTargetUntrusted: false,
+          });
+          assert.equal(report.status, "fail", verificationRun);
+          assert.deepEqual(
+            report.scenarios.map((scenario) => scenario.observed),
+            ["unavailable", "incomplete"],
+            verificationRun,
+          );
+        }
+      } finally {
+        // A suite without PATH returns to that state instead of a PATH holding the text "undefined".
+        if (suitePath === undefined) {
+          delete process.env.PATH;
+        } else {
+          process.env.PATH = suitePath;
+        }
+        rmSync(projectRoot, { recursive: true, force: true });
+        rmSync(wrapperDirectory, { recursive: true, force: true });
+      }
+    },
+  );
 
   // Missing policy dependencies return exit 2 too, so the unavailable marker must outrank BLOCKED.
   it("classifies an unavailable hook as error instead of a blocked pass", () => {

@@ -54,7 +54,7 @@ function parseWith(section: Record<string, unknown>) {
 }
 
 /**
- * Replace one field of the fixture's only finding, leaving every other field valid so the parser fails on that field alone.
+ * Replace one field of the fixture's only finding, leaving every other field valid so the parser must fail on that field alone.
  *
  * @param field - finding field to replace
  * @param replacementText - text under test for that field

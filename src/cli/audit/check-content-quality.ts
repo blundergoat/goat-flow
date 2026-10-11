@@ -382,7 +382,7 @@ function scanUnresolvedReadiness(path: string, text: string): ContentFinding[] {
 }
 
 /**
- * Append a readiness warning for the author when this line contains a recognized unfinished answer.
+ * Reports a readiness warning for the author when this line contains a recognized unfinished answer.
  * Mutates the caller's findings; a line without a marker adds nothing.
  *
  * @param line - source line; empty prose alone produces no marker
@@ -417,7 +417,7 @@ function isTableSeparatorLine(line: string): boolean {
 }
 
 /**
- * Read each configured pattern and append its matching explanation for the document's author.
+ * Reports the explanation of each configured pattern that matches this line, for the document's author.
  * Mutates the caller's findings; nonmatching rules add nothing.
  *
  * @param rules - rules in display order; an empty list adds no findings
@@ -450,7 +450,7 @@ function applyPatternRules(
 }
 
 /**
- * Read a full-mode source line for configured vague words and append advice that asks the author for a measurable standard.
+ * Reports configured vague words in a full-mode source line, with advice that asks the author for a measurable standard.
  * Mutates the caller's findings once for each configured term present on the line.
  *
  * @param line - source line; empty text matches no configured vague word
@@ -514,7 +514,7 @@ function scanLine(
 }
 
 /**
- * Scan one document's prose and readiness answers, preserving source locations for the author's repairs.
+ * Scans one document's prose and readiness answers and reports each finding at its source location for the author's repair.
  * Prose rules skip fenced blocks and table header labels; restricted mode omits vague-word warnings.
  *
  * @param path - source path used in findings and surface-specific rules
@@ -691,7 +691,7 @@ function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
 }
 
 /**
- * Read the configured documentation targets and report prose, readiness, and evidence findings for the author.
+ * Reads the configured documentation targets and reports prose, readiness, and evidence findings for the author.
  * Missing or unreadable files are skipped, leaving available guidance covered without treating a skipped file as a pass.
  *
  * @param ctx - selected project's read-only filesystem and audit context

@@ -27,8 +27,9 @@ paths:
     - "**/*.css"
     - ".goat-flow/logs/**"
     - ".goat-flow/hooks/**"
-    # Reproducible third-party bundle; the handwritten classifier remains analysed.
+    # Reproducible third-party bundles; the handwritten classifier and policy reader remain analysed.
     - "workflow/hooks/vendor/graphql.cjs"
+    - "workflow/hooks/vendor/js-yaml.cjs"
 
 allowlists:
   # Abbreviations listed here are accepted in identifiers without a naming finding.

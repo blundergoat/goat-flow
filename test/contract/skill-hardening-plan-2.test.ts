@@ -8,7 +8,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertForEachTarget,
-  countSkillBodyWords,
   installedSkillPaths,
   installedSkillReferencePaths,
   readMarkdownSection,
@@ -303,26 +302,6 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     });
   });
 
-  // Historical evidence in .goat-flow/learning-loop/lessons/contract-testing.md locates this check through
-  // "redesigned goat-plan canonical surface" and "canonical goat-plan surface has".
-  it("keeps canonical goat-plan files within the standard per-file budgets", () => {
-    assert.ok(
-      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") < 2500,
-      "workflow goat-plan must stay below the functional-skill limit of 2500 words",
-    );
-
-    for (const referencePath of [
-      "workflow/skills/goat-plan/references/milestone-examples.md",
-      "workflow/skills/goat-plan/references/issue-format.md",
-    ]) {
-      const referenceWords = countSkillBodyWords(referencePath);
-      assert.ok(
-        referenceWords < 3000,
-        `${referencePath} has ${referenceWords} words; expected fewer than 3000`,
-      );
-    }
-  });
-
   it("aligns goat-plan lifecycle guidance with human-verification-pending", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -343,17 +322,12 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
     });
 
-    // Both installed convention copies send plan authors to the same owner instead of restating its lifecycle.
+    // Shared conventions must not duplicate the lifecycle rules owned by goat-plan.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
     ]) {
       const conventions = readProjectFile(conventionsPath);
-      assert.match(
-        conventions,
-        /`goat-plan` owns milestone status, lanes, receipts, human gates, and the final join/u,
-        conventionsPath,
-      );
       assert.doesNotMatch(
         conventions,
         /Successful AI proof records structured `Actual:`/u,

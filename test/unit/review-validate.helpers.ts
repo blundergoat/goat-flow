@@ -61,7 +61,7 @@ export function createReviewedProject(testContext: TestContext): string {
 }
 
 /**
- * Create immutable source commits and a different live file for source-substitution tests.
+ * Writes immutable source commits and a different live file for source-substitution tests.
  * Use before binding a PR or branch control whose evidence must come from its selected commit.
  *
  * @param testContext - running test that owns cleanup of the disposable project
@@ -213,7 +213,7 @@ export function validReview(
 }
 
 /**
- * Bind a fixture report to a source during arrangement, before the test introduces drift or a substitution.
+ * Bind a fixture report to a source captured through the review request schema, before the test introduces drift or a substitution.
  *
  * @param report - report template whose readable and canonical authority fields are replaced together
  * @param projectRoot - fixture root where the source request resolves
@@ -265,7 +265,8 @@ export function withReviewSource(
 }
 
 /**
- * Build compact review metadata with real selected files and a completed matching gate.
+ * Writes a Git fixture if absent and spawns one matching gate, then builds compact review metadata from the real selected files.
+ * The gate is bound to the capture's authority fingerprint and workspace state.
  *
  * @param projectRoot - fixture root whose default live source is captured
  * @returns canonical source, coverage, and gate records; the disposable command supplies one passing gate
@@ -759,7 +760,7 @@ export function fixtureGate(
 }
 
 /**
- * Bind a full-report control to the actual selected source before introducing a report defect.
+ * Bind a full-report control to the actual selected source and its authority fingerprint before introducing a report defect.
  *
  * @param snapshot - captured inventory and identity; its selected paths remain the coverage denominator
  * @param search - literal source anchor; omitted uses the fixture's loadConfig marker

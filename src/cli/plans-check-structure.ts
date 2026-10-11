@@ -1,11 +1,14 @@
 /**
- * Checks that a plan stays readable and its milestones fit together as a set.
+ * Runs the plan-wide checks behind `plans check`, so a plan author sees every readability and ordering problem in one run.
  *
- * Reader-facing problem and benefit sections receive actionable length and internal-identifier findings before a plan reaches review.
- * Plan-level checks then catch missing dependencies, cycles, duplicate IDs, competing active milestones, and superseded milestones that name no
- * resolvable successor.
+ * Findings print as `error:` or `warning:` lines naming the milestone file to fix, or `plan:` for problems across milestones. They catch:
+ * - problem and benefit summaries with the wrong length or shape, or with internal IDs an outside reader cannot decode;
+ * - milestone IDs that are duplicated or disagree between filename and title;
+ * - dependencies that are missing, unresolved, circular, or still open under active or finished work;
+ * - more active milestones than the cap allows, and superseded milestones that name no successor;
+ * - open work that ends in more than one milestone, so no single milestone confirms the combined result.
  *
- * Each finding names the milestone file so an author can go directly to the sentence or relationship that needs correction.
+ * It also exports the ID, dependency, Status and lane readers that the `active:`, `ready:` and `waiting:` lines use.
  */
 import { scrubDurableText } from "./evidence/redaction.js";
 import type { PlanExportRecord } from "./plans-export.js";
@@ -13,11 +16,31 @@ import type { PlanExportRecord } from "./plans-export.js";
 /** Hidden parsed sections used by `plans check`; symbol keys never enter a user's JSON or Markdown export. */
 export const PLAN_STRUCTURE_SECTIONS = Symbol("planStructureSections");
 
-/** States that represent one currently active execution or review boundary. */
+/** Status values a milestone may use; any other value fails `--strict` and makes the readiness lines treat the Status as unreadable. */
+export const VALID_STATUSES = new Set([
+  "not-started",
+  "in-progress",
+  "testing-gate",
+  "human-verification-pending",
+  "blocked",
+  "abandoned",
+  "superseded",
+  "deferred",
+  "complete",
+]);
+
+/** Statuses that hold an active slot: work under way, in testing, or waiting for human sign-off. */
 const ACTIVE_STATUSES = new Set([
   "in-progress",
   "testing-gate",
   "human-verification-pending",
+]);
+
+/** Statuses whose work has left the plan, so the final milestone need not depend on them; `blocked` work is still owed and must be joined. */
+const FINAL_JOIN_EXCLUDED_STATUSES = new Set([
+  "abandoned",
+  "superseded",
+  "deferred",
 ]);
 
 const MINIMUM_PLAIN_LANGUAGE_CHARACTERS = 70;
@@ -33,7 +56,7 @@ interface PlainLanguageSectionContract {
   legacyHeading: string;
 }
 
-/** One actionable prose result plus whether current strict authoring must reject it. */
+/** One summary problem to show the author, and whether `--strict` prints it as an error instead of a warning. */
 interface PlainLanguageFinding {
   message: string;
   isStrictBlocking: boolean;
@@ -45,6 +68,7 @@ interface InternalIdentifierPattern {
   tokenCaptureIndex: number;
 }
 
+/** The problem and benefit headings every milestone needs; a milestone written only with legacy headings gets warnings, never strict errors. */
 const PLAIN_LANGUAGE_SECTION_CONTRACTS: readonly PlainLanguageSectionContract[] =
   [
     {
@@ -59,6 +83,7 @@ const PLAIN_LANGUAGE_SECTION_CONTRACTS: readonly PlainLanguageSectionContract[] 
     },
   ];
 
+/** Tokens an outside reader cannot decode, tried in order: milestone IDs, decision numbers, versions, flags, then file paths. */
 const INTERNAL_IDENTIFIER_PATTERNS: readonly InternalIdentifierPattern[] = [
   { pattern: /\bM\d+\b/iu, tokenCaptureIndex: 0 },
   { pattern: /\bADR-\d+\b/iu, tokenCaptureIndex: 0 },
@@ -97,13 +122,15 @@ function findInternalIdentifier(sectionBody: string): string | null {
     if (matchedToken === undefined || matchedToken.length === 0) continue;
     return scrubDurableText(matchedToken);
   }
-  // Null means the sentence is self-contained for every deterministic identifier class this gate owns.
+  // Null means the summary names no milestone ID, decision number, version, flag, or file path, so the author has nothing to replace.
   return null;
 }
 
 /**
- * Convert the splitter's normalized heading back to the title text users see.
- * Use only for fixed plain-language headings; empty input stays empty for an honest diagnostic.
+ * Capitalize a lowercased heading so a finding quotes it the way the author wrote it in the milestone template.
+ *
+ * @param normalizedHeading - heading the Markdown splitter lowercased; empty stays empty so the finding shows exactly what was parsed
+ * @returns the heading with its first letter capitalized
  */
 function displaySectionHeading(normalizedHeading: string): string {
   // An empty parser value gives the user no first character to capitalize.
@@ -112,9 +139,10 @@ function displaySectionHeading(normalizedHeading: string): string {
 }
 
 /**
- * Validate one present problem or benefit section against the rules an author can fix mechanically.
- * Use after the shared Markdown splitter identifies whether the heading is current or legacy.
- * Invalid input becomes findings rather than throwing, so one check can report every correction.
+ * Check one problem or benefit summary against the rules an author can fix by rewriting that sentence.
+ *
+ * Use after the Markdown splitter has tagged the heading as current or legacy.
+ * Each broken rule becomes its own finding instead of throwing, so one run lists every correction.
  *
  * @param heading - normalized level-two heading; empty text is reported literally
  * @param sectionBody - unchanged rendered body; empty text produces a zero-character finding
@@ -132,7 +160,7 @@ function collectPlainLanguageSectionFindings(
   const displayedHeading = displaySectionHeading(heading);
   const characterCount = Array.from(sectionBody).length;
 
-  // A sentence outside the published band makes review either cryptic or needlessly dense.
+  // A summary that is too short says nothing a reviewer can use, and one that is too long is hard to scan.
   if (
     characterCount < MINIMUM_PLAIN_LANGUAGE_CHARACTERS ||
     characterCount > MAXIMUM_PLAIN_LANGUAGE_CHARACTERS
@@ -164,7 +192,7 @@ function collectPlainLanguageSectionFindings(
   const hasEarlierSentenceBoundary = /[.!?][\t ]+\S/u.test(
     sentenceText.slice(0, -1),
   );
-  // Standard+ summaries are deliberately one plain line and one sentence so exports have one unambiguous reader-facing value.
+  // Each summary must be one line holding one sentence, so exports and issue text show a single clear statement.
   if (
     nonEmptyLines.length !== 1 ||
     !hasTerminalPunctuation ||
@@ -181,12 +209,12 @@ function collectPlainLanguageSectionFindings(
 }
 
 /**
- * Return strict cardinality and heading-style findings for one reader-facing role.
+ * Check that a milestone has exactly one problem (or benefit) heading and does not mix current and legacy heading styles.
  *
- * @param sectionContract - current and legacy names for the problem or benefit role
- * @param currentSectionCount - visible sections using the current heading
- * @param legacySectionCount - visible sections using the compatibility heading
- * @param doesMilestoneUseCurrentHeadings - whether either role selected the current pair
+ * @param sectionContract - current and legacy headings for the problem or benefit role
+ * @param currentSectionCount - sections using the current heading; zero in a current-template milestone means the summary is missing
+ * @param legacySectionCount - sections using the older heading
+ * @param doesMilestoneUseCurrentHeadings - true when either role uses a current heading, which commits the milestone to the current template
  * @returns deterministic findings; empty means this role has no cardinality or style conflict
  * @throws Never; invalid cardinality is represented as findings
  */
@@ -197,7 +225,7 @@ function collectPlainLanguageCardinalityFindings(
   doesMilestoneUseCurrentHeadings: boolean,
 ): PlainLanguageFinding[] {
   const findings: PlainLanguageFinding[] = [];
-  // A current pair has exactly one section for each role and cannot fall back to a legacy half.
+  // Once either summary uses a current heading, this one needs its current heading too; a legacy heading cannot stand in for it.
   if (doesMilestoneUseCurrentHeadings && currentSectionCount === 0) {
     findings.push({
       isStrictBlocking: true,
@@ -206,6 +234,7 @@ function collectPlainLanguageCardinalityFindings(
         `expected "## ${displaySectionHeading(sectionContract.currentHeading)}"; received "legacy heading only"`,
     });
   }
+  // Two current headings for one role leave reviewers with competing summaries and no way to tell which one counts.
   if (currentSectionCount > 1) {
     findings.push({
       isStrictBlocking: true,
@@ -214,6 +243,7 @@ function collectPlainLanguageCardinalityFindings(
         `expected "exactly one ## ${displaySectionHeading(sectionContract.currentHeading)}"; received "${currentSectionCount} matching sections"`,
     });
   }
+  // A legacy heading beside a current one means the milestone was only half moved to the current template.
   if (doesMilestoneUseCurrentHeadings && legacySectionCount > 0) {
     findings.push({
       isStrictBlocking: true,
@@ -226,12 +256,12 @@ function collectPlainLanguageCardinalityFindings(
 }
 
 /**
- * Evaluate both reader-facing section roles from one parsed milestone.
+ * Check both the problem and benefit summaries of one milestone.
  *
- * Default and strict checks share the same findings; complete milestones keep prose corrections advisory so archived plans remain readable.
- * Structural errors still block, and malformed prose returns findings rather than interrupting the remaining checks.
+ * Default and strict checks must share these findings; a complete milestone keeps sentence fixes as warnings so finished plans stay valid.
+ * Heading-count problems still block, and broken prose becomes findings instead of stopping the remaining checks.
  *
- * @param record - parsed milestone; an absent hidden section list means an older caller supplied no prose evidence
+ * @param record - parsed milestone; without its hidden section list, both summaries are reported missing as warnings
  * @returns all present, missing, current, and legacy findings; empty means the pair is complete and compliant
  * @throws Never; missing or malformed sections are returned as findings
  */
@@ -265,9 +295,9 @@ function collectMilestonePlainLanguageFindings(
       ),
     );
 
-    // No matching heading is strict only when its sibling proves this milestone chose the current pair.
+    // This summary has no heading at all; it only blocks when the other summary already uses a current heading.
     if (currentSections.length === 0 && legacySections.length === 0) {
-      // Current milestones already received the stricter missing-counterpart finding above.
+      // That case already got the blocking missing-section finding above, so a warning here would only repeat it.
       if (milestoneUsesCurrentHeadings) continue;
       findings.push({
         isStrictBlocking: false,
@@ -278,7 +308,7 @@ function collectMilestonePlainLanguageFindings(
       continue;
     }
 
-    // Every duplicate current section receives its own deterministic correction rather than being silently selected.
+    // Every current section is checked, so a repeated heading shows each copy's problems instead of quietly picking one.
     for (const currentSection of currentSections) {
       findings.push(
         ...collectPlainLanguageSectionFindings(
@@ -287,14 +317,14 @@ function collectMilestonePlainLanguageFindings(
           true,
         ).map((finding) => ({
           ...finding,
-          // Finished records remain navigable without rewriting historical prose; structural and lifecycle gates still apply.
+          // A complete milestone's summary problems stay warnings, so finished work need not be rewritten; heading-count errors still block.
           isStrictBlocking:
             finding.isStrictBlocking &&
             record.status.trim().toLowerCase() !== "complete",
         })),
       );
     }
-    // Historical aliases remain visible but advisory even when the user explicitly chooses strict mode.
+    // A legacy heading's wording problems only ever warn, even under `--strict`, so older plans keep passing.
     for (const legacySection of legacySections) {
       findings.push(
         ...collectPlainLanguageSectionFindings(
@@ -309,48 +339,57 @@ function collectMilestonePlainLanguageFindings(
 }
 
 /**
- * Return plain-language guidance that stays non-blocking in the selected checker mode.
- * Use in CLI output so default mode explains every issue while strict mode avoids duplicating current errors as warnings.
- * Invariant: a current strict finding appears only in the error lane, never in both lanes.
+ * List the `warning:` lines `plans check` prints; none of them change the exit code.
  *
- * @param records - selected milestones; an empty list produces no advisory output
- * @param isStrict - true hides current findings because the strict error lane owns them
- * @returns source-labelled advisory lines; empty means no non-blocking prose issue remains
+ * Default mode warns about every summary problem; `--strict` prints the blocking ones as errors instead, because a problem must never print twice.
+ * Strict mode also warns when a finished plan has more than one ending, because only new work needs a final milestone.
+ *
+ * @param records - milestones in the selected plan; an empty list yields no warnings
+ * @param isStrict - true when the author ran `--strict`, which hides warnings the error list owns and adds the finished-plan ending note
+ * @returns `<file>: <message>` or `plan: <message>` lines; empty means nothing needs the author's attention
  */
 export function collectPlanStructureAdvisories(
   records: PlanExportRecord[],
   isStrict: boolean,
 ): string[] {
   const advisories: string[] = [];
-  // Each milestone remains independently actionable in the terminal report.
+  // Each warning keeps its milestone filename, so the author knows which file to open.
   for (const record of records) {
     const milestoneFindings = collectMilestonePlainLanguageFindings(record);
-    // Current findings move from warning to error only when the user chooses strict mode.
+    // A milestone can break several summary rules at once, and each one gets its own line.
     for (const finding of milestoneFindings) {
-      // Strict errors are omitted here so the same issue never appears twice to the user.
+      // Under `--strict` this issue already prints as an error, so a matching warning would only repeat it.
       if (isStrict && finding.isStrictBlocking) continue;
       advisories.push(`${record.sourceFile}: ${finding.message}`);
+    }
+  }
+  // Plan shape belongs to the strict gate, so a default check stays quiet about a finished plan's endings.
+  if (isStrict) {
+    const graph = readDependencyGraph(records, []);
+    // Invalid links, an unreadable Status, a shared ID or a loop make the apparent endings unreliable until the author repairs them.
+    if (canNameEndings(graph) && !findDependencyCycle(graph.byId)) {
+      advisories.push(...collectFinalJoinFindings(graph.byId).advisories);
     }
   }
   return advisories;
 }
 
 /**
- * Collect source-labelled current-heading findings for the strict plan gate.
+ * List the blocking problem and benefit summary findings as `--strict` errors, labelled with their file; each must print here, never as a warning.
  *
- * Use when a user requests blocking validation; legacy and compatibility findings stay advisory.
- * Invariant: a current strict finding enters this error lane exactly once.
+ * @param records - milestones in the selected plan; an empty list yields no errors
+ * @returns `<file>: <message>` lines; empty means no summary problem blocks `--strict`
  */
 function collectStrictPlainLanguageErrors(
   records: PlanExportRecord[],
 ): string[] {
   const errors: string[] = [];
-  // Strict mode evaluates each milestone separately so every error retains its file label.
+  // Each error keeps its milestone filename, so the author knows which file to open.
   for (const record of records) {
     const milestoneFindings = collectMilestonePlainLanguageFindings(record);
-    // Legacy findings stay advisory and therefore never enter this error lane.
+    // A milestone can break several summary rules at once, and each one gets its own line.
     for (const finding of milestoneFindings) {
-      // A non-blocking finding preserves historical plans even under an explicit strict check.
+      // Legacy headings and finished milestones stay warnings, so older plans still pass a strict check.
       if (!finding.isStrictBlocking) continue;
       errors.push(`${record.sourceFile}: ${finding.message}`);
     }
@@ -358,17 +397,23 @@ function collectStrictPlainLanguageErrors(
   return errors;
 }
 
-/** Parsed filename identity used for local dependency validation. */
-interface MilestoneIdentity {
+/** One milestone file as the dependency checks see it: its ID, the file it came from, and what it depends on. */
+export interface MilestoneIdentity {
   id: string;
+  /** Milestone number without leading zeros, so `M03` and `M3` are caught as the same milestone. */
   numericId: string;
   record: PlanExportRecord;
+  /** IDs from the `Depends on` field; empty until the field is parsed, and empty for `none`. */
   dependencies: string[];
+  /** A missing or unreadable field must not be mistaken for an explicit `none`. */
+  dependencyIssue: "missing" | "invalid" | null;
 }
 
 /**
- * Extract the local milestone ID and its zero-insensitive duplicate key.
- * Use before showing dependency findings so every message points to the ID users see.
+ * Read a milestone's ID from its filename, such as `M18` from `M18-go-precision.md`, so every finding uses the ID the author sees.
+ *
+ * @param record - parsed milestone file; its filename supplies the ID, matched without regard to case
+ * @returns the identity with no dependencies parsed yet, or null when the filename has no `M<digits>` prefix and so skips dependency checks
  */
 function readMilestoneIdentity(
   record: PlanExportRecord,
@@ -382,33 +427,47 @@ function readMilestoneIdentity(
     numericId: milestoneFilenameMatch[1].replace(/^0+(?=\d)/u, ""),
     record,
     dependencies: [],
+    dependencyIssue: null,
   };
 }
 
 /**
- * Parse strict dependency metadata while keeping narrative sequencing out of the graph.
- * Use when building the start order a plan author can follow.
+ * Read one milestone's `Depends on` field into milestone IDs, so the checks can work out a start order the author can follow.
+ *
+ * @param identity - milestone whose field is read; its `dependencyIssue` is set when the field is repeated, unreadable, or blank where required
+ * @param requiresField - true in a plan with several milestones, where a blank field leaves no start order and is an error
+ * @param errors - receives one line for a blank or unreadable field
+ * @returns dependency IDs; empty for `none`, for a blank or repeated field, or for a field written as prose instead of IDs
  */
 function readDependencies(
   identity: MilestoneIdentity,
   requiresField: boolean,
   errors: string[],
 ): string[] {
+  // A second `Depends on` line may name prerequisites the first omits; strict mode already reports the repeat, so no error is added here.
+  if (
+    identity.record.warnings.includes("multiple Depends on values supplied")
+  ) {
+    identity.dependencyIssue = "invalid";
+    return [];
+  }
   const rawDependencies = identity.record.dependencies.trim();
-  // An empty field leaves users without an executable order in a multi-milestone plan.
+  // A blank field gives the author no start order once the plan has more than one milestone.
   if (rawDependencies.length === 0) {
-    // Single-milestone plans need no explicit graph edge, while larger plans do.
+    // A one-milestone plan has nothing to order, so only larger plans report the gap.
     if (requiresField) {
+      identity.dependencyIssue = "missing";
       errors.push(
         `${identity.record.sourceFile}: missing dependencies for a multi-milestone plan`,
       );
     }
     return [];
   }
-  // `none` explicitly tells the user this milestone can start without another local milestone.
+  // `none` says the milestone can start without waiting for any other milestone in the plan.
   if (rawDependencies === "none") return [];
-  // Narrative qualifiers cannot become reliable graph edges, so the author receives the accepted shape.
+  // Prose such as `M01 (soft)` cannot become a reliable dependency, so the author is shown the accepted shape.
   if (!/^M\d+(?:\s*,\s*M\d+)*$/u.test(rawDependencies)) {
+    identity.dependencyIssue = "invalid";
     errors.push(
       `${identity.record.sourceFile}: dependencies must be \`none\` or comma-separated local milestone IDs`,
     );
@@ -418,96 +477,105 @@ function readDependencies(
 }
 
 /**
- * Find one cycle in a fully local dependency graph.
- * Use to show the first prerequisite loop that prevents a user from starting work.
+ * Find the first dependency loop, such as M01 waiting on M02 while M02 waits on M01, which leaves the author no milestone to start.
+ *
+ * @param identitiesById - milestones by ID; a dependency on an ID outside the plan is skipped because it has its own error
+ * @returns the loop as IDs that end where they began, or null when the plan has a valid start order
  */
 function findDependencyCycle(
   identitiesById: ReadonlyMap<string, MilestoneIdentity>,
 ): string[] | null {
-  const visited = new Set<string>();
-  const visiting = new Set<string>();
+  const loopFreeIds = new Set<string>();
+  const idsOnCurrentPath = new Set<string>();
   const path: string[] = [];
 
   /**
-   * Walk one dependency chain and return its first reachable cycle.
-   * Use internally to preserve the milestone order shown in the user's plan.
+   * Follow one milestone's dependencies and report the first loop they lead back into.
+   *
+   * @param id - milestone to walk from
+   * @returns the loop from its first repeated milestone, or null when no path from here leads back to a milestone already on it
    */
-  function visit(id: string): string[] | null {
-    // Re-entering the active path closes a cycle that would prevent a user from finding a valid start order.
-    if (visiting.has(id)) {
+  function findCycleFrom(id: string): string[] | null {
+    // Reaching a milestone already on the current path means the author wrote a loop with no starting point.
+    if (idsOnCurrentPath.has(id)) {
       const cycleStart = path.indexOf(id);
       return [...path.slice(cycleStart), id];
     }
-    // A completed branch was already proven cycle-free during this traversal.
-    if (visited.has(id)) return null;
-    visiting.add(id);
+    // A milestone already walked from was proven loop-free, so it is not walked again.
+    if (loopFreeIds.has(id)) return null;
+    idsOnCurrentPath.add(id);
     path.push(id);
     const identity = identitiesById.get(id);
-    // Follow only declared local prerequisites because narrative sequencing is not executable plan state.
+    // Only the `Depends on` field orders work; prose elsewhere in the milestone never adds a dependency.
     for (const dependency of identity?.dependencies ?? []) {
-      // An unresolved dependency already has its own actionable error and cannot extend this local cycle.
+      // An ID outside the plan already has its own error and cannot be part of a loop here.
       if (!identitiesById.has(dependency)) continue;
-      const cycle = visit(dependency);
-      // The first cycle is enough to show the author the exact loop they must break.
+      const cycle = findCycleFrom(dependency);
+      // One loop is enough to show the author the exact dependency they must break.
       if (cycle) return cycle;
     }
     path.pop();
-    visiting.delete(id);
-    visited.add(id);
+    idsOnCurrentPath.delete(id);
+    loopFreeIds.add(id);
     return null;
   }
 
-  // Start from every milestone because a disconnected component can contain its own cycle.
+  // Every milestone is a starting point, because a group of milestones unconnected to the rest can hold its own loop.
   for (const id of identitiesById.keys()) {
-    const cycle = visit(id);
-    // Return the first deterministic cycle so the CLI avoids repetitive paths through the same loop.
+    const cycle = findCycleFrom(id);
+    // Stopping at the first loop keeps the report to one line instead of every route around the same loop.
     if (cycle) return cycle;
   }
   return null;
 }
 
-/** Canonical lookup tables used to reconcile milestone IDs and numeric aliases. */
+/** Lookups by full ID and by number, so `M03` and `M3` can be reported as the same milestone. */
 interface MilestoneIndexes {
   byId: Map<string, MilestoneIdentity>;
   byNumber: Map<string, MilestoneIdentity>;
 }
 
 /**
- * Read either supported title prefix into the canonical local ID shape.
- * Use when checking that the heading and filename send users to the same milestone.
+ * Read the milestone ID from a title written as `M18: ...` or `Milestone 18 ...`, so it can be compared with the filename.
+ *
+ * @param title - milestone heading text
+ * @returns the ID in `M<digits>` form, or undefined when the title carries no milestone number
  */
 function readTitleMilestoneId(title: string): string | undefined {
   const compactTitleNumber = title.match(/^M(\d+)\b/iu)?.[1];
-  // The compact title is the current form authors see in generated milestone examples.
+  // `M18: ...` is the form the current milestone template produces.
   if (compactTitleNumber !== undefined) return `M${compactTitleNumber}`;
   const longTitleNumber = title.match(/^Milestone\s+(\d+)\b/iu)?.[1];
-  // Undefined means neither supported title form gives the user a milestone identity.
+  // Neither title form matched, so the title gives the author no milestone number to compare.
   return longTitleNumber === undefined ? undefined : `M${longTitleNumber}`;
 }
 
 /**
- * Report filename and title drift for one local milestone identity.
- * Use before dependency checks so later messages cannot point users to a conflicting ID.
+ * Report a milestone whose filename or title would point the author at a different ID than the one the checks use.
+ *
+ * @param identity - milestone read from its filename
+ * @param requiresTitleId - true in a plan with several milestones, where a title without its ID makes dependencies hard to follow
+ * @param errors - receives one line per filename or title problem
  */
 function collectMilestoneIdentityErrors(
   identity: MilestoneIdentity,
   requiresTitleId: boolean,
   errors: string[],
 ): void {
-  // Lowercase or ID-less filenames make CLI findings harder for users to map back to milestone labels.
+  // A filename like `m03-x.md` still parses, but every finding then prints `M03`, which no longer matches the file the author searches for.
   if (!/^M\d.*\.md$/u.test(identity.record.sourceFile)) {
     errors.push(
       `${identity.record.sourceFile}: milestone filename must begin with an uppercase M and digits`,
     );
   }
   const titleId = readTitleMilestoneId(identity.record.title);
-  // Multi-milestone titles need their ID so readers can reconcile dependencies without opening filenames separately.
+  // With several milestones, a title without its ID forces readers to open filenames to follow `Depends on` lines.
   if (!titleId && requiresTitleId) {
     errors.push(
       `${identity.record.sourceFile}: multi-milestone title must begin with its milestone ID`,
     );
   }
-  // A conflicting title sends a user to the wrong milestone even when the filename itself is valid.
+  // A title that names a different ID sends the reader to the wrong milestone even when the filename is valid.
   if (titleId && titleId !== identity.id) {
     errors.push(
       `${identity.record.sourceFile}: title ID ${titleId} does not match filename ID ${identity.id}`,
@@ -516,8 +584,11 @@ function collectMilestoneIdentityErrors(
 }
 
 /**
- * Insert one numeric identity while reporting zero-padding aliases.
- * Use to prevent two filenames from presenting the same milestone number to users.
+ * Record one milestone's number, reporting a second file that claims it, such as `M3-...` beside `M03-...`.
+ *
+ * @param identity - milestone to record
+ * @param identitiesByNumber - numbers recorded so far; the first file to claim a number keeps it
+ * @param errors - receives one line when this file's number is already taken
  */
 function indexMilestoneNumber(
   identity: MilestoneIdentity,
@@ -525,7 +596,7 @@ function indexMilestoneNumber(
   errors: string[],
 ): void {
   const duplicate = identitiesByNumber.get(identity.numericId);
-  // Zero-padding variants still represent one user-facing milestone number and must not coexist.
+  // Two files with the same number leave `Depends on` lines pointing at an ambiguous milestone.
   if (duplicate) {
     errors.push(
       `${identity.record.sourceFile}: duplicate milestone ID ${identity.id} conflicts with ${duplicate.id}`,
@@ -536,8 +607,12 @@ function indexMilestoneNumber(
 }
 
 /**
- * Index local IDs while reporting duplicate numeric identities and title drift.
- * Use once per plan to prepare the lookups behind dependency guidance.
+ * Build the ID and number lookups the dependency checks use, reporting duplicate numbers and title mismatches along the way.
+ *
+ * @param identities - milestones read from their filenames, in file order
+ * @param requiresTitleId - true in a plan with several milestones, where each title must start with its ID
+ * @param errors - receives one line per identity problem
+ * @returns lookups by full ID and by number; the number lookup keeps the first file per number, the ID lookup the last file per exact ID
  */
 function indexMilestones(
   identities: MilestoneIdentity[],
@@ -547,7 +622,7 @@ function indexMilestones(
   const identitiesById = new Map<string, MilestoneIdentity>();
   const identitiesByNumber = new Map<string, MilestoneIdentity>();
 
-  // Every parsed milestone contributes its title checks and one numeric lookup entry.
+  // Each milestone gets its filename and title checked before its ID is used in any dependency finding.
   for (const identity of identities) {
     collectMilestoneIdentityErrors(identity, requiresTitleId, errors);
     indexMilestoneNumber(identity, identitiesByNumber, errors);
@@ -557,8 +632,12 @@ function indexMilestones(
 }
 
 /**
- * Parse dependency fields and report unresolved or self-referential edges.
- * Use to turn each visible prerequisite into a milestone the author can actually complete.
+ * Fill in each milestone's dependencies and report any that name itself or an ID missing from the plan.
+ *
+ * @param identities - milestones whose `dependencies` lists this fills in; later checks read those lists
+ * @param identitiesById - every milestone in the plan by ID
+ * @param requiresDependencies - true in a plan with several milestones, where a blank `Depends on` field is an error
+ * @param errors - receives one line per unreadable field or unusable dependency
  */
 function collectDependencyReferenceErrors(
   identities: MilestoneIdentity[],
@@ -566,21 +645,21 @@ function collectDependencyReferenceErrors(
   requiresDependencies: boolean,
   errors: string[],
 ): void {
-  // Parse each field before checking its edges so later state checks share one graph.
+  // Every field is parsed here once, so the loop, state, and final-milestone checks all read the same dependencies.
   for (const identity of identities) {
     identity.dependencies = readDependencies(
       identity,
       requiresDependencies,
       errors,
     );
-    // Each dependency either resolves locally, points to itself, or tells the author what ID is missing.
+    // Each dependency must name another milestone in this plan that the author can finish first.
     for (const dependency of identity.dependencies) {
-      // Self-dependency leaves this milestone permanently unable to start.
+      // A milestone that waits on itself can never start.
       if (dependency === identity.id) {
         errors.push(
           `${identity.record.sourceFile}: milestone cannot depend on itself`,
         );
-        // A missing local ID gives the user no milestone they can complete to unblock this work.
+        // An ID with no file in this plan gives the author nothing to finish first.
       } else if (!identitiesById.has(dependency)) {
         errors.push(
           `${identity.record.sourceFile}: dependency ${dependency} does not resolve in this plan`,
@@ -591,23 +670,27 @@ function collectDependencyReferenceErrors(
 }
 
 /**
- * Report active or complete milestones whose declared prerequisites remain open.
- * Use to stop users claiming progress before the plan's visible start conditions are satisfied.
+ * Report a milestone marked active or complete while something it depends on is still unfinished.
+ * Example: the author set M02 to `in-progress` while M01, named in its `Depends on` field, is still `testing-gate`.
+ *
+ * @param identities - milestones with their dependencies already filled in
+ * @param identitiesById - every milestone in the plan by ID
+ * @returns one error per unfinished dependency; empty means no milestone started or finished ahead of its prerequisites
  */
 function collectDependencyStateErrors(
   identities: MilestoneIdentity[],
   identitiesById: ReadonlyMap<string, MilestoneIdentity>,
 ): string[] {
   const errors: string[] = [];
-  // Only work that is active or claimed complete can contradict an unfinished prerequisite.
+  // Only a milestone already started or finished can claim progress its prerequisites do not support.
   for (const identity of identities) {
     const status = identity.record.status.trim().toLowerCase();
-    // Future or abandoned milestones make no claim that their dependency gate has passed.
+    // Not-started, blocked, and dropped milestones claim no progress, so their prerequisites may still be open.
     if (!ACTIVE_STATUSES.has(status) && status !== "complete") continue;
-    // Check every declared prerequisite so the user sees each blocker in the selected milestone.
+    // Every prerequisite is checked, so the author sees each unfinished one in a single run.
     for (const dependency of identity.dependencies) {
       const dependencyRecord = identitiesById.get(dependency)?.record;
-      // A resolved dependency still blocks when its own visible status is not complete.
+      // Starting work early is reported here; a dependency missing from the plan already has its own error.
       if (
         dependencyRecord &&
         dependencyRecord.status.trim().toLowerCase() !== "complete"
@@ -622,11 +705,10 @@ function collectDependencyStateErrors(
 }
 
 /**
- * Require every superseded milestone to name the successor that carries its remainder.
- * Use so a reader can follow a spent milestone to the live work without searching the plan.
+ * Require every superseded milestone to name, in its Status reason, the milestone that now carries its remaining work.
  *
- * @param identities - parsed milestone identities with their statuses and reasons
- * @param identitiesByNumber - zero-insensitive lookup of every local milestone
+ * @param identities - milestones with their statuses and reasons
+ * @param identitiesByNumber - every milestone by number, so `M3` and `M03` both resolve
  * @returns one error per missing, self-referential, or unresolved successor; empty means every superseded milestone points at real work
  */
 function collectSupersededSuccessorErrors(
@@ -634,7 +716,7 @@ function collectSupersededSuccessorErrors(
   identitiesByNumber: ReadonlyMap<string, MilestoneIdentity>,
 ): string[] {
   const errors: string[] = [];
-  // Only a superseded milestone promises a successor; the other terminal states owe no pointer.
+  // Only a superseded milestone promises a successor; abandoned and deferred work owe no pointer.
   for (const identity of identities) {
     if (identity.record.status.trim().toLowerCase() !== "superseded") continue;
     const successorIds = Array.from(
@@ -651,6 +733,7 @@ function collectSupersededSuccessorErrors(
     // Each named successor must be a real milestone in this plan other than the superseded one itself.
     for (const successorDigits of successorIds) {
       const successorNumber = successorDigits.replace(/^0+(?=\d)/u, "");
+      // Naming itself sends the reader in a circle; naming a missing ID sends them nowhere.
       if (successorNumber === identity.numericId) {
         errors.push(
           `${identity.record.sourceFile}: superseded milestone cannot name itself as its successor`,
@@ -665,69 +748,143 @@ function collectSupersededSuccessorErrors(
   return errors;
 }
 
-/** Active scheduling state shared by strict enforcement and opt-in reporting. */
-interface ActiveMilestone {
+/** One milestone holding an active slot, as shown in the `active:` lines and counted against the cap. */
+export interface ActiveMilestone {
   id: string;
   status: string;
-  /** Null marks an invalid or ambiguous declaration; absent and empty declarations use default. */
+  /** Null marks an invalid or repeated Lane value; a missing or empty Lane means `default`. */
   lane: string | null;
 }
 
 /**
- * Derive active state without changing exported Lane metadata.
- * @param records - parsed milestones in file order; inactive statuses consume no slot
- * @returns active rows in that same order; invalid lanes still consume a global slot
+ * Read the lane a milestone declared, as the `active:` rows and readiness lines show it.
+ *
+ * @param record - parsed milestone; a missing or empty Lane field means the shared `default` lane
+ * @returns the lane name, or null when the Lane field is repeated or holds a value like `Bad!` that cannot name a lane
+ */
+export function readDeclaredLane(record: PlanExportRecord): string | null {
+  const declaredLane = record.lane ?? "";
+  // A repeated Lane line or a value like `Bad!` cannot name a lane, so callers print `<invalid>` instead of leaking the text.
+  const isLaneInvalid =
+    record.warnings.includes("multiple Lane values supplied") ||
+    (declaredLane !== "" && !/^[a-z0-9][a-z0-9-]{0,39}$/u.test(declaredLane));
+  return isLaneInvalid ? null : declaredLane || "default";
+}
+
+/** Why readiness cannot trust a milestone's Status: nothing was written, or the value is unsupported or repeated. */
+export type StatusIssue = "missing" | "invalid";
+
+/**
+ * Decide whether a milestone's Status can drive readiness, so a typo or a second Status line never passes for a real state.
+ *
+ * @param record - parsed milestone; the export warns `missing status` for an absent or blank field and stores it as `unknown`
+ * @returns `missing` or `invalid` when readiness must assume the worst, or null when the Status is one valid value
+ */
+export function readStatusIssue(record: PlanExportRecord): StatusIssue | null {
+  // A blank or absent Status is stored as `unknown`, so only the parser warning tells it apart from an author who typed `unknown`.
+  if (record.warnings.includes("missing status")) return "missing";
+  const isStatusInvalid =
+    record.warnings.includes("multiple Status values supplied") ||
+    !VALID_STATUSES.has(record.status.trim().toLowerCase());
+  return isStatusInvalid ? "invalid" : null;
+}
+
+/**
+ * List the milestones holding an active slot, with their lanes, for the `active:` report lines and the cap check.
+ *
+ * @param records - parsed milestones in file order; not-started, blocked, finished, and dropped milestones hold no slot
+ * @returns active milestones in that same order; one with an invalid lane still holds a slot under the overall cap
  */
 export function readActiveMilestones(
   records: PlanExportRecord[],
 ): ActiveMilestone[] {
   const active: ActiveMilestone[] = [];
+  // Each active milestone keeps its file order, so the report lists them as the author sees them in the folder.
   for (const record of records) {
     const status = record.status.trim().toLowerCase();
+    // Only work under way, in testing, or awaiting sign-off holds a slot.
     if (!ACTIVE_STATUSES.has(status)) continue;
     const identity = readMilestoneIdentity(record);
+    // A file without an `M<digits>` name has no ID to show in the `active:` line.
     if (identity === null) continue;
-    const declaredLane = record.lane ?? "";
-    const isLaneInvalid =
-      record.warnings.includes("multiple Lane values supplied") ||
-      (declaredLane !== "" && !/^[a-z0-9][a-z0-9-]{0,39}$/u.test(declaredLane));
-    active.push({
-      id: identity.id,
-      status,
-      lane: isLaneInvalid ? null : declaredLane || "default",
-    });
+    // An invalid lane still counts toward the overall cap.
+    active.push({ id: identity.id, status, lane: readDeclaredLane(record) });
   }
   return active;
 }
 
-/** Enforce the legacy single-active rule or the opted-in per-lane and global limits. */
+/** A milestone that holds an active slot, or may hold one because its Status cannot be read. */
+export interface SlotHolder extends ActiveMilestone {
+  sourceFile: string;
+  /** Null when the Status names an active state; otherwise the reason the milestone only may be active. */
+  statusIssue: StatusIssue | null;
+}
+
+/**
+ * List the milestones that hold an active slot or may hold one, so readiness never mistakes an unreadable Status for idle work.
+ *
+ * @param identities - plan milestones in file order; each file counts separately even when two share an ID
+ * @returns active milestones plus every milestone whose Status is missing, unsupported, or repeated
+ */
+export function readSlotHolders(identities: MilestoneIdentity[]): SlotHolder[] {
+  const holders: SlotHolder[] = [];
+  // Each file is judged on its own Status, so two files that share an ID can each appear as a slot holder.
+  for (const { id, record } of identities) {
+    const status = record.status.trim().toLowerCase();
+    const statusIssue = readStatusIssue(record);
+    // A readable idle or finished Status holds nothing; an unreadable one might be hiding work under way.
+    if (statusIssue === null && !ACTIVE_STATUSES.has(status)) continue;
+    holders.push({
+      id,
+      status,
+      lane: readDeclaredLane(record),
+      sourceFile: record.sourceFile,
+      statusIssue,
+    });
+  }
+  return holders;
+}
+
+/**
+ * Report too many active milestones: one at a time under the default cap, or one per lane plus an overall cap when the author raised it.
+ * Example: with the cap at 1, M02 and M03 both `in-progress` print `error: plan: multiple active milestones: M02, M03` under `--strict`.
+ *
+ * @param active - milestones holding an active slot, in file order
+ * @param maxActive - cap from `--max-active` or the project config; 1 keeps the single-active rule and ignores lanes
+ * @returns `plan:` error lines; empty means the active work fits its lanes and the cap
+ */
 function collectActiveStateErrors(
   active: ActiveMilestone[],
   maxActive: number,
 ): string[] {
   const activeIds = active.map((milestone) => milestone.id).join(", ");
-  // Cap one keeps exactly the historical error, even when authors have declared lanes.
+  // With a cap of one, lanes do not matter, so a second active milestone is an error whatever lane it declares.
   if (maxActive === 1) {
     return active.length > 1
       ? [`plan: multiple active milestones: ${activeIds}`]
       : [];
   }
   const lanes = new Map<string, string[]>();
+  // Active milestones are grouped by lane, so two in one lane can be reported together.
   for (const milestone of active) {
-    // The source-labelled metadata error owns invalid declarations; they never fabricate a lane collision.
+    // An invalid lane already has its own error on that file, so it never creates a fake collision here.
     if (milestone.lane === null) continue;
     const ids = lanes.get(milestone.lane) ?? [];
     ids.push(milestone.id);
     lanes.set(milestone.lane, ids);
   }
   const errors: string[] = [];
+  // Each lane allows one active milestone, so the author can run independent work side by side without overlap.
   for (const [lane, ids] of lanes) {
+    // A lane holding one active milestone is within its limit, so it prints no error.
     if (ids.length < 2) continue;
+    // The shared `default` lane goes unnamed, so its error reads like the single-active error; other lanes are named.
     const laneLabel = lane === "default" ? "" : ` in lane ${lane}`;
     errors.push(
       `plan: multiple active milestones${laneLabel}: ${ids.join(", ")}`,
     );
   }
+  // The overall cap still applies across lanes, so the author cannot open more work than the plan allows at once.
   if (active.length > maxActive) {
     errors.push(
       `plan: active milestone cap ${maxActive} exceeded: ${activeIds}`,
@@ -736,41 +893,210 @@ function collectActiveStateErrors(
   return errors;
 }
 
+/** A plan's milestones with their dependencies filled in, plus lookups by ID and by number. */
+export interface DependencyGraph extends MilestoneIndexes {
+  identities: MilestoneIdentity[];
+  /** True when any `Depends on` field is missing, repeated or unreadable, names its own milestone, or names an ID outside the plan. */
+  hasInvalidDependencies: boolean;
+  /** Numbers without leading zeros that two or more files claim; a `Depends on` entry for one cannot say which file it means. */
+  duplicatedNumbers: ReadonlySet<string>;
+}
+
 /**
- * Check that a plan's milestones form a workable set, not just valid files.
- * Use in strict mode after each milestone passes on its own, so the author learns about duplicate ids, missing or circular dependencies, and two
- * competing active milestones under the resolved scheduling cap.
+ * Report whether a milestone ID could mean more than one file, such as `M02` beside both `M02-a.md` and `M2-b.md`.
  *
- * @param records - every milestone parsed from the plan directory; an empty list means there
- *   is no plan to cross-check and nothing is reported
- * @param maxActive - resolved positive safe integer cap; one preserves legacy enforcement
- * @returns one error line per structural problem, each naming its milestone file; empty means
- *   the milestones fit together and the author has a workable order
+ * @param graph - plan graph whose duplicate numbers were found while indexing
+ * @param id - `M<digits>` ID from a filename or a `Depends on` entry
+ * @returns true when another file claims the same number, so neither file's Status can stand for the ID
+ */
+export function isMilestoneIdShared(
+  graph: DependencyGraph,
+  id: string,
+): boolean {
+  return graph.duplicatedNumbers.has(id.slice(1).replace(/^0+(?=\d)/u, ""));
+}
+
+/**
+ * Decide whether the plan is readable enough to name its endings; a cycle is checked separately because it has its own error.
+ * Statuses count because they decide which milestones are dropped from the join and whether the plan is finished.
+ *
+ * @param graph - plan graph after identity and dependency checks
+ * @returns false while a dependency field or Status is unusable or two files share a number, since any of them can hide or invent an ending
+ */
+function canNameEndings(graph: DependencyGraph): boolean {
+  return (
+    !graph.hasInvalidDependencies &&
+    graph.duplicatedNumbers.size === 0 &&
+    graph.identities.every(
+      (identity) => readStatusIssue(identity.record) === null,
+    )
+  );
+}
+
+/**
+ * Read every milestone's ID and dependencies once, so all plan-wide checks and the readiness lines agree on what depends on what.
+ *
+ * @param records - every milestone parsed from the plan directory
+ * @param errors - receives identity and dependency errors; pass a throwaway list when the caller only needs the graph
+ * @returns milestones in file order plus ID and number lookups; files without an `M<digits>` name are left out
+ */
+export function readDependencyGraph(
+  records: PlanExportRecord[],
+  errors: string[],
+): DependencyGraph {
+  // A file without an `M<digits>` name has no ID other milestones could depend on, so it stays out of the graph.
+  const identities = records
+    .map(readMilestoneIdentity)
+    .filter((identity): identity is MilestoneIdentity => identity !== null);
+  const indexes = indexMilestones(identities, records.length > 1, errors);
+  const dependencyErrors: string[] = [];
+  collectDependencyReferenceErrors(
+    identities,
+    indexes.byId,
+    records.length > 1,
+    dependencyErrors,
+  );
+  errors.push(...dependencyErrors);
+  // The number lookup keeps the first file per number, so any other file with that number marks it as shared.
+  const duplicatedNumbers = new Set(
+    identities
+      .filter(
+        (identity) => indexes.byNumber.get(identity.numericId) !== identity,
+      )
+      .map((identity) => identity.numericId),
+  );
+  return {
+    identities,
+    ...indexes,
+    // A repeated field sets an issue without an error line of its own, so both sources count.
+    hasInvalidDependencies:
+      dependencyErrors.length > 0 ||
+      identities.some((identity) => identity.dependencyIssue !== null),
+    duplicatedNumbers,
+  };
+}
+
+/**
+ * Collect every milestone one milestone builds on, directly or through other milestones, including dropped ones in between.
+ *
+ * @param identity - starting milestone; it appears in its own result only if it depends on itself
+ * @param identitiesById - every milestone in the plan by ID; an ID missing from the plan is skipped because it has its own error
+ * @returns IDs of every prerequisite; empty when the milestone depends on nothing in the plan
+ */
+function collectAllPrerequisiteIds(
+  identity: MilestoneIdentity,
+  identitiesById: ReadonlyMap<string, MilestoneIdentity>,
+): Set<string> {
+  const reached = new Set<string>();
+  const pending = [...identity.dependencies];
+  // Each prerequisite found adds its own prerequisites, until no new milestone turns up.
+  while (pending.length > 0) {
+    const dependency = pending.pop();
+    // A milestone already counted adds nothing new, and an ID missing from the plan has no prerequisites to follow.
+    if (
+      dependency === undefined ||
+      reached.has(dependency) ||
+      !identitiesById.has(dependency)
+    ) {
+      continue;
+    }
+    reached.add(dependency);
+    pending.push(...(identitiesById.get(dependency)?.dependencies ?? []));
+  }
+  return reached;
+}
+
+/** Final-milestone findings: errors fail `plans check --strict`, advisories print as warnings only. */
+interface FinalJoinFindings {
+  errors: string[];
+  advisories: string[];
+}
+
+/**
+ * Check that a plan with open work ends in one final milestone, so a single sign-off covers every lane.
+ *
+ * An ending is a milestone that no other participating milestone depends on, even indirectly.
+ * Every participating milestone sits under some ending, so the listed endings are exactly what a new final milestone must depend on.
+ *
+ * @param identitiesById - loop-free milestones by ID; abandoned, superseded, and deferred ones keep their links but never count as endings
+ * @returns one error per ending while work remains, or one advisory when every participant is complete; empty means zero or one ending
+ */
+function collectFinalJoinFindings(
+  identitiesById: ReadonlyMap<string, MilestoneIdentity>,
+): FinalJoinFindings {
+  const participants = [...identitiesById.values()].filter(
+    (identity) =>
+      !FINAL_JOIN_EXCLUDED_STATUSES.has(
+        identity.record.status.trim().toLowerCase(),
+      ),
+  );
+  const prerequisitesOfOthers = new Set<string>();
+  // A milestone that some other participant builds on is already covered by that later work, so it is not an ending.
+  for (const participant of participants) {
+    // Every prerequisite counts, even one reached only through an abandoned or deferred milestone in between.
+    for (const id of collectAllPrerequisiteIds(participant, identitiesById)) {
+      // A milestone that depends on itself has its own error and does not cover itself.
+      if (id !== participant.id) prerequisitesOfOthers.add(id);
+    }
+  }
+  const endings = participants.filter(
+    (participant) => !prerequisitesOfOthers.has(participant.id),
+  );
+  // No participants means there is nothing to join, and a single ending is already the plan's final milestone.
+  if (endings.length < 2) return { errors: [], advisories: [] };
+  const endingIds = endings.map((ending) => ending.id).join(", ");
+  const endingsPhrase = endings.length === 2 ? "both" : `all ${endings.length}`;
+  // A finished plan keeps its historical shape and only gets a warning, so archived plans do not start failing.
+  if (
+    participants.every(
+      (participant) =>
+        participant.record.status.trim().toLowerCase() === "complete",
+    )
+  ) {
+    return {
+      errors: [],
+      advisories: [
+        `plan: finished plan has ${endings.length} endings (${endingIds}); any new milestone must depend on ${endingsPhrase}`,
+      ],
+    };
+  }
+  // For example, a Go lane and a PHP lane both build on a shared baseline, but no milestone merges them before release.
+  return {
+    errors: endings.map(
+      (ending) =>
+        `${ending.record.sourceFile}: plan has ${endings.length} endings (${endingIds}); add a final milestone that depends on ${endingsPhrase}`,
+    ),
+    advisories: [],
+  };
+}
+
+/**
+ * List the strict-mode errors about how a plan's milestones fit together, each naming the file to fix.
+ *
+ * Runs only under `plans check --strict`, after each milestone file has been checked on its own.
+ * Covers milestone IDs, dependencies and loops, active-slot limits, superseded successors, and a plan with more than one ending.
+ *
+ * @param records - every milestone parsed from the plan directory; an empty list has nothing to cross-check and yields no errors
+ * @param maxActive - cap from `--max-active` or the project config; 1 keeps the single-active rule
+ * @returns one error line per problem; empty means the milestones fit together and the author has a workable order
  */
 export function collectPlanStructureErrors(
   records: PlanExportRecord[],
   maxActive = 1,
 ): string[] {
   const errors = collectStrictPlainLanguageErrors(records);
-  // Files without a milestone ID cannot participate in local graph relationships.
-  const identities = records
-    .map(readMilestoneIdentity)
-    .filter((identity): identity is MilestoneIdentity => identity !== null);
-  const indexes = indexMilestones(identities, records.length > 1, errors);
-  collectDependencyReferenceErrors(
-    identities,
-    indexes.byId,
-    records.length > 1,
-    errors,
-  );
-  const cycle = findDependencyCycle(indexes.byId);
-  // A discovered loop names the exact dependency route the author must break.
+  const graph = readDependencyGraph(records, errors);
+  const cycle = findDependencyCycle(graph.byId);
+  // A dependency loop is reported as the exact route the author must break.
   if (cycle) {
     errors.push(`plan: dependency cycle detected: ${cycle.join(" -> ")}`);
+  } else if (canNameEndings(graph)) {
+    // Endings only make sense once every dependency and Status can be read and every ID names one file.
+    errors.push(...collectFinalJoinFindings(graph.byId).errors);
   }
-  errors.push(...collectDependencyStateErrors(identities, indexes.byId));
+  errors.push(...collectDependencyStateErrors(graph.identities, graph.byId));
   errors.push(
-    ...collectSupersededSuccessorErrors(identities, indexes.byNumber),
+    ...collectSupersededSuccessorErrors(graph.identities, graph.byNumber),
   );
   errors.push(
     ...collectActiveStateErrors(readActiveMilestones(records), maxActive),

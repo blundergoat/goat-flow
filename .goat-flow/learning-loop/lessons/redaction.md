@@ -17,6 +17,7 @@ last_reviewed: 2026-09-16
 ## Lesson: Pre-write examples must not start from an unredacted disk file
 
 **Status:** active | **Created:** 2026-07-13
+**Severity:** SECURITY
 **Decision changed:** Version-check the redactor before writing any durable plan, decision, learning, or session text, and let its output create the destination.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -25,7 +26,7 @@ last_reviewed: 2026-09-16
 
 **Prevention:** A pre-write redaction example must accept interactive stdin or another non-persistent source, and must never be demonstrated by redirecting from a raw draft file. A durable destination may receive only version-matched redactor output: if a draft reaches that path first, stop before indexing, redact to a temporary file, compare bytes, and replace the destination only from the redacted result.
 
-**What happened:** M08 correctly scrubbed stdin before its output write, but the first docs demonstrated `< draft.md`, implying the raw candidate already existed on disk.
+**What happened:** The change correctly scrubbed stdin before its output write, but the first docs demonstrated `< draft.md`, implying the raw candidate already existed on disk.
 
 **Evidence:** `.goat-flow/logs/sessions/README.md` (search: `Run the scrubber first`) - the corrected flow starts the command, accepts pasted stdin, and writes only the scrubbed result; `src/cli/redact-command.ts` (search: `readFileSync(0`) confirms stdin is read before the shared output sink.
 
@@ -35,11 +36,12 @@ last_reviewed: 2026-09-16
 
 **Recurrence (2026-08-24):** During the standalone local-hook-policy re-home, 17 plan and decision files reached their durable paths before the goat-plan redaction gate. The correction ran each file through goat-flow v1.16.0 to a temporary destination and byte-compared it with the written file; every comparison matched.
 
-**Recurrence 2026-09-12:** M58 evidence capture was blocked by an oversized inline command, an interpreter wrapper and a pipe. Direct foreground redactor stdin succeeded without a raw disk draft or policy change. Before capture, prefer the supported sole-process stdin route; suppress temporary server-auth startup output before recording validation. Validation also rejected the checkout-local plan as a durable citation. Evidence: `src/cli/redact-command.ts` (search: `handleRedactCommand`) reads stdin before emitting scrubbed output; `.goat-flow/logs/sessions/README.md` (search: `Run the scrubber first`) documents the supported interactive flow.
+**Recurrence 2026-09-12:** Evidence capture was blocked by an oversized inline command, an interpreter wrapper and a pipe. Direct foreground redactor stdin succeeded without a raw disk draft or policy change. Before capture, prefer the supported sole-process stdin route; suppress temporary server-auth startup output before recording validation. Validation also rejected the checkout-local plan as a durable citation. Evidence: `src/cli/redact-command.ts` (search: `handleRedactCommand`) reads stdin before emitting scrubbed output; `.goat-flow/logs/sessions/README.md` (search: `Run the scrubber first`) documents the supported interactive flow.
 
 ## Lesson: Durable exports must redact metadata as well as body fields
 
 **Status:** active | **Created:** 2026-07-13 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
 **Incident count:** 4 | **Latest occurrence:** 2026-09-18
 
 **Prevention:** Inventory every serialized field, including filenames, identifiers, labels, and warning text. Add a secret-shaped value outside the main body to every durable-export redaction test.
@@ -50,9 +52,9 @@ last_reviewed: 2026-09-16
 
 **Recurrence 2026-09-16:** Text redaction of a serialized forecast case containing historical Markdown produced invalid JSON. Whole-history registration also recursively embedded the study and exceeded the serializer limit. Freeze only the registration fields consumed by the replay, exclude the target from its inputs, and validate sanitized JSON plus frozen hashes before publishing. Preserve failed output as diagnostics; never publish it as a valid registration. Evidence: src/cli/evidence/redaction.ts (search: DURABLE_TEXT_REDACTION_RULES) performs ordered text replacement, while src/cli/plans-forecast-history.ts (search: registrationEntries) reads schemaVersion and forecasts. Sanitize readable fields before serialization where the contract permits; do not silently change frozen source bytes to force a match.
 
-**Recurrence 2026-09-16 (M12):** I redacted and published a whole forecast registry before parsing the result, corrupting quoted text in three previously frozen Markdown sources.
+**Recurrence 2026-09-16:** I redacted and published a whole forecast registry before parsing the result, corrupting quoted text in three previously frozen Markdown sources.
 The original files still matched their saved hashes, allowing exact restoration without changing issued forecasts.
 Validate sanitized additions before merging them; preserve already frozen records byte-for-byte and replay the final candidate before publication.
 The existing evidence owners above apply: the text redactor does not preserve JSON string escaping, while forecast history depends on exact saved records.
 
-**Recurrence 2026-09-18:** M04 reused a whole-document redaction helper despite the M12 warning above. The resulting registry failed JSON parsing and altered the same three frozen input bodies. Their original files still matched every saved hash; exact restoration recovered all 3,764 origin/input checks and the pilot replay. Read this entry before registration work, sanitize new narrative fields before serialization, and validate the assembled JSON and frozen hashes before replacing the registry. The code owners above still apply; no forecast value, timestamp or protocol field changed.
+**Recurrence 2026-09-18:** The change reused a whole-document redaction helper despite the earlier warning above. The resulting registry failed JSON parsing and altered the same three frozen input bodies. Their original files still matched every saved hash; exact restoration recovered all 3,764 origin/input checks and the pilot replay. Read this entry before registration work, sanitize new narrative fields before serialization, and validate the assembled JSON and frozen hashes before replacing the registry. The code owners above still apply; no forecast value, timestamp or protocol field changed.

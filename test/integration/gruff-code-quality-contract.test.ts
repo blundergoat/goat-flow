@@ -10,14 +10,18 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CLEAN_GRUFF_CONTRACT_ENVELOPE,
@@ -32,6 +36,7 @@ import {
   sampleGruffEditPayload,
   writeContractGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
+import { withCommandShim } from "./post-turn-safety-hook.helpers.js";
 
 const PROJECT_ROOT = join(import.meta.dirname, "..", "..");
 const HOOK_RUNNER = join(
@@ -42,6 +47,47 @@ const HOOK_RUNNER = join(
 );
 
 after(cleanupHookTestDirs);
+
+/**
+ * Spawns the real provider launcher with finite input and private output captures.
+ * Writes and removes temporary files around the Node and Bash child processes.
+ *
+ * @param payload - exact provider JSON, including intentionally malformed fixture shapes
+ * @param responseMode - provider adaptation contract passed to the launcher
+ * @returns unchanged process metadata plus captured provider feedback
+ */
+function runProviderLauncher(payload: string, responseMode: string) {
+  const captureDirectory = mkdtempSync(join(tmpdir(), "goat-gruff-launcher-"));
+  const payloadPath = join(captureDirectory, "stdin");
+  const stdoutPath = join(captureDirectory, "stdout");
+  const stderrPath = join(captureDirectory, "stderr");
+  const descriptors: number[] = [];
+  try {
+    writeFileSync(payloadPath, payload, { flag: "wx", mode: 0o600 });
+    // Nested Bash readers need EOF; Node-owned input pipes can leave them waiting.
+    descriptors.push(openSync(payloadPath, "r"));
+    for (const path of [stdoutPath, stderrPath]) {
+      descriptors.push(openSync(path, "wx", 0o600));
+    }
+    const result = spawnSync(
+      process.execPath,
+      [HOOK_RUNNER, "workflow/hooks/gruff-code-quality.sh", responseMode],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+        stdio: descriptors,
+      },
+    );
+    return {
+      ...result,
+      stdout: readFileSync(stdoutPath, "utf8"),
+      stderr: readFileSync(stderrPath, "utf8"),
+    };
+  } finally {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    rmSync(captureDirectory, { recursive: true, force: true });
+  }
+}
 
 describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   it("routes naming guidance to the naming and placement owner", () => {
@@ -384,14 +430,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     // Side effects: starts Node and Bash child processes without editing project files.
     it(`silently ignores a valid non-edit ${benignPostToolEvent.displayName}`, () => {
       const responseMode = `${benignPostToolEvent.provider}:gruff:goat-flow.hook-result.v1:post-tool:1:75000`;
-      const result = spawnSync(
-        process.execPath,
-        [HOOK_RUNNER, "workflow/hooks/gruff-code-quality.sh", responseMode],
-        {
-          cwd: PROJECT_ROOT,
-          input: JSON.stringify(benignPostToolEvent.payload),
-          encoding: "utf8",
-        },
+      const result = runProviderLauncher(
+        JSON.stringify(benignPostToolEvent.payload),
+        responseMode,
       );
 
       assert.equal(result.status, 0, result.stderr);
@@ -403,18 +444,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   // Fixture purpose: keeps missing tool identity visible while valid named non-edits no-op.
   // Side effects: starts Node and Bash child processes without editing project files.
   it("reports a malformed migrated payload as incomplete", () => {
-    const result = spawnSync(
-      process.execPath,
-      [
-        HOOK_RUNNER,
-        "workflow/hooks/gruff-code-quality.sh",
-        "claude:gruff:goat-flow.hook-result.v1:post-tool:1:75000",
-      ],
-      {
-        cwd: PROJECT_ROOT,
-        input: '{"tool_input":{"command":"pwd"}}',
-        encoding: "utf8",
-      },
+    const result = runProviderLauncher(
+      '{"tool_input":{"command":"pwd"}}',
+      "claude:gruff:goat-flow.hook-result.v1:post-tool:1:75000",
     );
 
     assert.equal(result.status, 0, result.stderr);
@@ -701,7 +733,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   });
 
   // Writes session health markers so repeated user edits receive one useful process notice.
-  it("deduplicates verified health while re-announcing malformed and reused session state", () => {
+  it("deduplicates verified health while tolerating malformed, unwritable and reused session state", () => {
     const failedProjectRoot = makeEditedGruffContractProject("", {
       exitStatus: 7,
       standardError: "dependency crashed",
@@ -721,12 +753,15 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     const projectRoot = makeEditedGruffContractProject(
       CLEAN_GRUFF_CONTRACT_ENVELOPE,
     );
-    const firstResult = runMigratedHook(
-      projectRoot,
-      sampleGruffEditPayload("same-session"),
-      "/usr/bin:/bin",
-      { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-09" },
-    );
+    // Hold provider identity fixed while varying marker state and day.
+    const runHealthCheck = (day = "2026-08-09") =>
+      runMigratedHook(
+        projectRoot,
+        sampleGruffEditPayload("same-session"),
+        "/usr/bin:/bin",
+        { GRUFF_CODE_QUALITY_HEALTH_DAY: day },
+      );
+    const firstResult = runHealthCheck();
     readMigratedGruffResult(firstResult);
     assert.match(firstResult.stderr, /verified analyzer exchange/u);
     const markerDirectoryPath = join(
@@ -740,12 +775,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     );
     assert.equal(firstMarkerNames.length, 1);
 
-    const repeatedResult = runMigratedHook(
-      projectRoot,
-      sampleGruffEditPayload("same-session"),
-      "/usr/bin:/bin",
-      { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-09" },
-    );
+    const repeatedResult = runHealthCheck();
     readMigratedGruffResult(repeatedResult);
     assert.doesNotMatch(repeatedResult.stderr, /verified analyzer exchange/u);
 
@@ -753,23 +783,68 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       join(markerDirectoryPath, firstMarkerNames[0]),
       "malformed\n",
     );
-    const malformedResult = runMigratedHook(
-      projectRoot,
-      sampleGruffEditPayload("same-session"),
-      "/usr/bin:/bin",
-      { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-09" },
-    );
+    const malformedResult = runHealthCheck();
     readMigratedGruffResult(malformedResult);
     assert.match(malformedResult.stderr, /verified analyzer exchange/u);
 
-    const reusedSessionResult = runMigratedHook(
-      projectRoot,
-      sampleGruffEditPayload("same-session"),
-      "/usr/bin:/bin",
-      { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-10" },
+    const markerPath = join(markerDirectoryPath, firstMarkerNames[0]);
+    // Unreadable state cannot discard analysis; privileged hosts may still read it.
+    chmodSync(markerPath, 0o200);
+    assert.equal(readMigratedGruffResult(runHealthCheck()).outcome, "pass");
+    chmodSync(markerPath, 0o600);
+
+    // An obstructed marker cannot discard the completed analyzer result.
+    rmSync(markerPath);
+    mkdirSync(markerPath);
+    const unwritableResult = runHealthCheck();
+    assert.equal(readMigratedGruffResult(unwritableResult).outcome, "pass");
+    assert.match(unwritableResult.stderr, /health marker could not be stored/u);
+    assert.doesNotMatch(
+      unwritableResult.stderr,
+      /health is current for this session/u,
     );
+
+    const reusedSessionResult = runHealthCheck("2026-08-10");
     readMigratedGruffResult(reusedSessionResult);
     assert.match(reusedSessionResult.stderr, /verified analyzer exchange/u);
+  });
+
+  // Reproduce Git Bash's rejection of absolute mkdir paths while relative creation works.
+  it("deduplicates verified health when mkdir refuses absolute paths", () => {
+    const projectRoot = makeEditedGruffContractProject(
+      CLEAN_GRUFF_CONTRACT_ENVELOPE,
+    );
+    withCommandShim(
+      "mkdir",
+      [
+        'for argument in "$@"; do',
+        '  case "$argument" in /*) exit 1 ;; esac',
+        "done",
+      ].join("\n"),
+      (environment) => {
+        // Repeat the same provider session to exercise marker persistence and reuse.
+        const runHealthCheck = () =>
+          runMigratedHook(
+            projectRoot,
+            sampleGruffEditPayload("relative-health-session"),
+            environment.PATH,
+            { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-10-01" },
+          );
+        const first = runHealthCheck();
+        assert.equal(readMigratedGruffResult(first).outcome, "pass");
+        assert.match(first.stderr, /health is current for this session/u);
+        assert.doesNotMatch(first.stderr, /health marker could not be stored/u);
+        const repeated = runHealthCheck();
+        assert.equal(readMigratedGruffResult(repeated).outcome, "pass");
+        assert.doesNotMatch(repeated.stderr, /verified analyzer exchange/u);
+        assert.equal(
+          readdirSync(join(projectRoot, ".goat-flow", "logs", "events")).filter(
+            (name) => name.startsWith(".gruff-hook-health."),
+          ).length,
+          1,
+        );
+      },
+    );
   });
 
   // Fixture purpose: writes two analyzer fixtures and runs TypeScript, Python, then TypeScript
@@ -869,6 +944,7 @@ function writeOwnerGruffConfig(
 }
 
 describe("gruff-code-quality hook resolves ownership from the edited file", () => {
+  // Writes a nested install that enables Gruff without an analyzer config; it must report the config missing, not borrow the parent's.
   it("does not borrow a parent analyzer config across a nested installation boundary", () => {
     const root = makeRoot();
     writeAnalysablePackage(root);

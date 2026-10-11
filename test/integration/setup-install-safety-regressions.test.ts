@@ -6,7 +6,6 @@
  */
 import assert from "node:assert/strict";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -22,16 +21,6 @@ import {
   runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
-
-/** Writes an executable analyzer fixture so setup exercises YAML path detection without running or installing Gruff. */
-function writeConventionalGruffPy(projectRoot: string): string {
-  const binaryDirectory = join(projectRoot, "strands_agents", ".venv", "bin");
-  const binaryPath = join(binaryDirectory, "gruff-py");
-  mkdirSync(binaryDirectory, { recursive: true });
-  writeFileSync(binaryPath, "#!/usr/bin/env python3\n");
-  chmodSync(binaryPath, 0o755);
-  return binaryPath;
-}
 
 describe("setup safety regressions", () => {
   // Local overrides isolate permission previews from the selected provider's separate hook-registration changes.
@@ -108,6 +97,7 @@ describe("setup safety regressions", () => {
     });
   }
 
+  // Writes a provider enrolled through a legacy deny guard; it must get Git protection previewed before its Git companion exists.
   it("previews Git protection for an already enrolled sibling provider", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".claude"), { recursive: true });
@@ -163,14 +153,13 @@ describe("setup safety regressions", () => {
     assert.equal(existsSync(join(root, ".codex/hooks.json")), false);
   });
 
-  // These valid multiline forms broke after the installer inserted a detected binary path beside the user's existing choice.
+  // Install edits the hooks block around these valid multiline Gruff entries and must leave them loadable with the user's saved choice.
   for (const gruffConfig of [
     "  gruff-code-quality:\n    {enabled: true}\n",
     "  gruff-code-quality:\n    enabled:\n      true\n",
   ]) {
     it(`preserves valid Gruff YAML when a value starts on the next line (${gruffConfig.includes("{") ? "flow" : "scalar"})`, () => {
       const root = makeTempProject();
-      writeConventionalGruffPy(root);
       mkdirSync(join(root, ".goat-flow"), { recursive: true });
       const configPath = join(root, ".goat-flow/config.yaml");
       writeFileSync(configPath, 'version: "1.17.0"\nhooks:\n' + gruffConfig);
@@ -183,7 +172,8 @@ describe("setup safety regressions", () => {
     });
   }
 
-  // The outside sentinel proves setup neither imports unrelated documentation nor removes the developer's link to it.
+  // Writes an outside sentinel proving setup neither imports unrelated documentation nor removes the developer's link to it.
+  // A Windows host that refuses symlinks skips; any other symlink error throws.
   it("does not migrate a legacy commit guide through a symlink", (testContext) => {
     const root = makeTempProject();
     const outside = makeTempProject();

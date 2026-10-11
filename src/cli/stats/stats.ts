@@ -8,6 +8,7 @@ import { DECISION_META_FILES } from "../facts/shared/decision-files.js";
 import type {
   SharedFacts,
   BucketFreshness,
+  GraduationCandidate,
   LearningLoopEntryFact,
   ReadonlyFS,
 } from "../types.js";
@@ -24,8 +25,7 @@ export interface BucketSection {
   totalEntries: number;
   totalStaleRefs: number;
   totalInvalidLineRefs: number;
-  /** Active entries with `**Recurrence update` markers across all buckets.
-   *  Feedback-loop graduation candidates: report-only, never a `--check` failure. */
+  /** Active repeat candidates across all buckets; report-only, never a `--check` failure. */
   totalGraduationCandidates: number;
   bands: { fresh: number; aging: number; stale: number; unknown: number };
   buckets: BucketFreshness[];
@@ -152,9 +152,68 @@ function buildSection(
       0,
     ),
     bands: freshnessBandCounts,
-    buckets: memoryDirectoryFacts.buckets,
+    buckets: memoryDirectoryFacts.buckets.map((bucket) => ({
+      ...bucket,
+      graduationCandidates: bucket.graduationCandidates.map((candidate) => ({
+        ...candidate,
+      })),
+    })),
     formatDiagnostic: memoryDirectoryFacts.formatDiagnostic,
   };
+}
+
+const GRADUATION_SEVERITY_ORDER = [
+  "SECURITY",
+  "CORRECTNESS",
+  "INTEGRATION",
+  "PERFORMANCE",
+  "STYLE",
+] as const;
+
+/**
+ * Invariant: every candidate gets a report-wide rank before human output hides guarded rows.
+ * Severity precedes effective incident count; path and title break ties, with unknown severity last.
+ * Mutate only report-owned copies so other shared-fact consumers keep source order.
+ */
+function rankGraduationCandidates(
+  footguns: BucketSection,
+  lessons: BucketSection,
+): void {
+  const ranked = [footguns, lessons]
+    .flatMap((section) =>
+      section.buckets.flatMap((bucket) =>
+        bucket.graduationCandidates.map((candidate) => ({
+          candidate,
+          bucketPath: bucket.path,
+        })),
+      ),
+    )
+    .sort((left, right) => {
+      const severityDifference =
+        (left.candidate.severity === null
+          ? GRADUATION_SEVERITY_ORDER.length
+          : GRADUATION_SEVERITY_ORDER.indexOf(left.candidate.severity)) -
+        (right.candidate.severity === null
+          ? GRADUATION_SEVERITY_ORDER.length
+          : GRADUATION_SEVERITY_ORDER.indexOf(right.candidate.severity));
+      return (
+        severityDifference ||
+        right.candidate.incidentCount - left.candidate.incidentCount ||
+        left.bucketPath.localeCompare(right.bucketPath) ||
+        left.candidate.title.localeCompare(right.candidate.title)
+      );
+    });
+  ranked.forEach(({ candidate }, index) => {
+    candidate.rank = index + 1;
+  });
+  for (const section of [footguns, lessons]) {
+    for (const bucket of section.buckets) {
+      bucket.graduationCandidates.sort(
+        (left: GraduationCandidate, right: GraduationCandidate) =>
+          (left.rank ?? 0) - (right.rank ?? 0),
+      );
+    }
+  }
 }
 
 /**
@@ -170,15 +229,18 @@ export function buildStatsReport(shared: {
   decisions?: DecisionsSection;
   indexes?: IndexFreshness[];
 }): StatsReport {
+  const footguns = buildSection(
+    shared.footguns,
+    shared.footguns.invalidLineRefs.length,
+  );
+  const lessons = buildSection(
+    shared.lessons,
+    shared.lessons.invalidLineRefs.length,
+  );
+  rankGraduationCandidates(footguns, lessons);
   return {
-    footguns: buildSection(
-      shared.footguns,
-      shared.footguns.invalidLineRefs.length,
-    ),
-    lessons: buildSection(
-      shared.lessons,
-      shared.lessons.invalidLineRefs.length,
-    ),
+    footguns,
+    lessons,
     // Older internal callers may omit entry facts; users then receive a stable empty collection.
     learningLoopEntries: shared.learningLoopEntries ?? [],
     // Missing decision facts keep the decision section out of views that did not request it.

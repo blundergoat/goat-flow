@@ -66,7 +66,7 @@ export type FinalDisposition =
 /**
  * Read canonical metadata before validating the report's manifests and per-ID maps.
  *
- * Invalid JSON adds a violation; an absent optional field returns null without inventing a value.
+ * Invalid JSON reports a violation; an absent optional field returns null without inventing a value.
  *
  * @param fields - visible integrity rows; an absent optional row returns null
  * @param label - metadata field the reviewer can repair

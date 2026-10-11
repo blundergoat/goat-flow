@@ -1,8 +1,8 @@
 /**
- * Unit tests for terminal spawn specs and terminal input chunking.
+ * Unit tests for terminal spawn specs, terminal input chunking and the runner version probe.
  *
- * Use these cases when changing how the dashboard opens a terminal or sends a user's command.
- * Platform-specific specifications preserve selected paths and avoid executing the generated commands during these checks.
+ * Use these cases when changing how the dashboard opens a terminal, sends a user's command or records the runner's version.
+ * Spawn specifications are checked without running them; only the Windows version-probe case starts a real runner shim.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -16,11 +16,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 import {
   buildTerminalSpawnSpec,
   chunkTerminalInput,
 } from "../../src/cli/server/terminal.js";
+import { observeTerminalToolVersion } from "../../src/cli/server/terminal-spawn.js";
 
 const QUOTED_MULTILINE_PROMPT = [
   "# GOAT Flow Setup - Codex",
@@ -31,6 +33,40 @@ const QUOTED_MULTILINE_PROMPT = [
 ].join("\n");
 
 describe("buildTerminalSpawnSpec", () => {
+  it("carries exact prompt identity beside the bytes without inherited identity or guessed settings", () => {
+    for (const platform of ["linux", "win32"] as const) {
+      const spec = buildTerminalSpawnSpec(
+        "claude",
+        "/usr/local/bin/claude",
+        QUOTED_MULTILINE_PROMPT,
+        { GOAT_QUALITY_ASSESSMENT_IDENTITY: "stale-metadata" },
+        platform,
+        {
+          accessMode: "reporting",
+          toolVersion: "cli-version-fixture",
+          projectPath: process.cwd(),
+        },
+      );
+      const identity = JSON.parse(
+        spec.env.GOAT_QUALITY_ASSESSMENT_IDENTITY ?? "",
+      );
+      assert.equal(
+        identity.prompt_sha256,
+        createHash("sha256").update(QUOTED_MULTILINE_PROMPT).digest("hex"),
+      );
+      assert.equal(identity.tool_version, "cli-version-fixture");
+      assert.equal(identity.model, null);
+      assert.equal(identity.settings_sha256, null);
+      assert.equal(identity.fixed_input_protocol, null);
+      assert.equal(identity.capture, "launch-observed");
+      assert.equal(
+        spec.initialInput,
+        `\x1b[200~${QUOTED_MULTILINE_PROMPT}\x1b[201~\r`,
+      );
+      assert.match(spec.args.join("\n"), /--append-system-prompt/);
+      assert.match(spec.args.join("\n"), /GOAT_QUALITY_ASSESSMENT_IDENTITY/);
+    }
+  });
   it("keeps multiline prompts out of Windows PowerShell argv and env", () => {
     const spec = buildTerminalSpawnSpec(
       "claude",
@@ -438,8 +474,12 @@ describe("buildTerminalSpawnSpec", () => {
         "# Plans\n",
       );
       writeFileSync(join(tempRoot, ".gitignore"), "dist/\n");
-      execFileSync("git", ["-C", tempRoot, "init", "--quiet"]);
-      execFileSync("git", ["-C", tempRoot, "add", ".gitignore"]);
+      execFileSync("git", ["-C", tempRoot, "init", "--quiet"], {
+        stdio: "ignore",
+      });
+      execFileSync("git", ["-C", tempRoot, "add", ".gitignore"], {
+        stdio: "ignore",
+      });
 
       const spec = buildTerminalSpawnSpec(
         "codex",
@@ -476,19 +516,22 @@ describe("buildTerminalSpawnSpec", () => {
         mkdirSync(join(rootPath, "dist"), { recursive: true });
         writeFileSync(join(rootPath, ".gitignore"), "dist/\n");
         writeFileSync(join(rootPath, "dist/local.txt"), "ignored\n");
-        execFileSync("git", ["-C", rootPath, "init", "--quiet"]);
-        execFileSync("git", ["-C", rootPath, "add", ".gitignore"]);
+        execFileSync("git", ["-C", rootPath, "init", "--quiet"], {
+          stdio: "ignore",
+        });
+        execFileSync("git", ["-C", rootPath, "add", ".gitignore"], {
+          stdio: "ignore",
+        });
       }
       writeFileSync(
         join(controllerPath, ".goat-flow/logs/quality/custom.md"),
         "tracked\n",
       );
-      execFileSync("git", [
-        "-C",
-        controllerPath,
-        "add",
-        ".goat-flow/logs/quality/custom.md",
-      ]);
+      execFileSync(
+        "git",
+        ["-C", controllerPath, "add", ".goat-flow/logs/quality/custom.md"],
+        { stdio: "ignore" },
+      );
 
       const ownerByQualityMode = [
         ["process", controllerPath],
@@ -611,4 +654,41 @@ describe("buildTerminalSpawnSpec", () => {
     assert.match(spec.args.join("\n"), /--sandbox danger-full-access/);
     assert.equal(spec.env.GOAT_CODEX_REPORTING_PROFILE, undefined);
   });
+});
+
+describe("observeTerminalToolVersion", () => {
+  // Fixture side effects: writes one npm-style `.cmd` runner in a temporary folder whose name has a space, then removes the folder.
+  it(
+    "reads a Windows npm shim version through PowerShell despite stderr noise",
+    {
+      skip:
+        process.platform === "win32"
+          ? false
+          : "Windows npm shims need PowerShell",
+    },
+    async () => {
+      const fixtureRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow version probe "),
+      );
+      try {
+        const runnerPath = join(fixtureRoot, "codex.cmd");
+        // An update notice on stderr larger than the probe's 4 KB stdout cap must not cost the version printed on stdout.
+        writeFileSync(
+          runnerPath,
+          [
+            "@echo off",
+            `"${process.execPath}" -e "process.stderr.write('x'.repeat(5000))"`,
+            "echo fixture-cli 9.8.7",
+            "",
+          ].join("\r\n"),
+        );
+        assert.equal(
+          await observeTerminalToolVersion(runnerPath, "win32"),
+          "fixture-cli 9.8.7",
+        );
+      } finally {
+        rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    },
+  );
 });

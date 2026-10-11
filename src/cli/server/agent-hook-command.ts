@@ -2,8 +2,7 @@
  * Builds and recognizes exact commands registered in coding-agent hook config.
  *
  * Use when setup installs, syncs, or checks the command a user's provider runs.
- * It owns response modes, portable root discovery, matchers, and host timeouts, while the writer keeps responsibility for reading and changing config
- * files.
+ * It owns launch commands, root discovery, matchers, and timeouts; config writers own reading and changing the user's files.
  */
 import { PROFILES } from "../detect/agents.js";
 import type { AgentId, AgentProfile } from "../types.js";
@@ -91,6 +90,21 @@ function unavailableHookResponseProgram(hookResponseMode: string): string {
   }
   // Post-turn safety cannot claim a completed scan when its launcher never started.
   if (responseKind === "post-turn") {
+    // Claude's bootstrap must handle broken dependencies before the shared launcher can read Stop input.
+    if (hookResponseMode === "post-turn") {
+      return [
+        "const reportUnavailable=(reason)=>{",
+        "let finished=false;let timer;const chunks=[];let bytes=0;",
+        "const finish=(canEnd)=>{if(finished)return;finished=true;clearTimeout(timer);process.stderr.write('post-turn-safety: hook unavailable: '+reason+'.'+lineBreak);if(canEnd)process.stderr.write('post-turn-safety: ending repeated Stop after launcher infrastructure failure; no clean scan was recorded.'+lineBreak);process.exit(canEnd?0:2);};",
+        // A broken bootstrap spends at most one second and one MiB reading re-entry context; normal launches keep stdin untouched.
+        "timer=setTimeout(()=>finish(false),1000);",
+        "if(process.stdin.readableEnded||process.stdin.destroyed)return finish(false);",
+        "process.stdin.on('data',(chunk)=>{const buffer=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);bytes+=buffer.length;if(bytes>1048576)return finish(false);chunks.push(buffer);});",
+        "process.stdin.once('error',()=>finish(false));",
+        "process.stdin.once('end',()=>{try{const payload=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));finish(payload!==null&&payload.hook_event_name==='Stop'&&typeof payload.session_id==='string'&&payload.session_id.trim().length>0&&Buffer.byteLength(payload.session_id)<=512&&payload.stop_hook_active===true);}catch{finish(false);}});",
+        "};",
+      ].join("");
+    }
     return "const reportUnavailable=(reason)=>{process.stderr.write('post-turn-safety: hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
   }
   // Antigravity expects a deny decision on stdout and treats the host response as handled.
@@ -133,25 +147,22 @@ function bootstrapPreludeFragments(
   ];
 }
 
-// ADR-052 freezes deferred provider registrations, so this recognizer must keep
-// emitting exactly the bytes those providers registered before ADR-053.
+// ADR-053 freezes deferred provider registrations until exact delivery is captured.
+// Keep this recognizer byte-identical to the legacy registration contract.
 const LEGACY_REGISTRATION_RECOGNITION_FRAGMENT =
   "const registrationNamesOperands=(value)=>{if(Array.isArray(value))return value.some(registrationNamesOperands);if(!isPlainObject(value))return false;for(const [key,nested] of Object.entries(value)){if((key==='command'||key==='bash'||key==='powershell')&&typeof nested==='string'&&commandNamesOperands(nested))return true;if((Array.isArray(nested)||isPlainObject(nested))&&registrationNamesOperands(nested))return true;}return false;};";
 
-// Structured registrations name their operands as argv elements, so root
-// recognition must also accept an args tuple beside legacy command strings.
+// Recognize argv operands as well as shell commands so setup can find projects with structured hook registrations.
 const STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS = [
   "const argsNameOperands=(argumentValues)=>{const normalized=argumentValues.filter((argumentValue)=>typeof argumentValue==='string').map(normalizeOperand);return normalized.includes(normalizeOperand(hookScriptPath))&&normalized.includes(normalizeOperand(bashLauncherRelativePath));};",
   "const registrationNamesOperands=(value)=>{if(Array.isArray(value))return value.some(registrationNamesOperands);if(!isPlainObject(value))return false;for(const [key,nested] of Object.entries(value)){if((key==='command'||key==='bash'||key==='powershell')&&typeof nested==='string'&&commandNamesOperands(nested))return true;if(key==='args'&&Array.isArray(nested)&&argsNameOperands(nested))return true;if((Array.isArray(nested)||isPlainObject(nested))&&registrationNamesOperands(nested))return true;}return false;};",
 ];
 
 /**
- * Shared root-selection source: Git root first, then real cwd ancestors, then the approved environment fallback, classifying absent, corrupt, and
- * complete managed roots.
- * Use after a registration recognizer is defined; both bootstraps must select identical roots.
+ * Build project discovery after defining the registration recognizer; both bootstraps must choose the same managed root.
  *
- * ADR-066 exception: Claude's Gruff handler passes `provider-project-first`, so the provider project directory is inspected before the shell cwd
- * and a folder holding only a script copy (a child that disabled Gruff) is passed over. Every other handler keeps the ADR-053 order byte for byte.
+ * ADR-053 searches Git root, real cwd ancestors, then the approved environment fallback; corrupt managed roots stop the launch.
+ * ADR-066 makes Claude Gruff prefer the provider project and skip unregistered script copies, preserving feedback after an agent changes directory.
  *
  * @param rootRule - `shared` for the ADR-053 contract; `provider-project-first` for Claude's Gruff handler
  * @returns ordered source fragments ending with the validated launcher path; never empty
@@ -163,6 +174,7 @@ function rootDiscoveryFragments(
     "if(selected.state!=='complete'&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){const inspected=inspectOnce(process.env[rootEnvironmentName]);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}";
   // Gruff's entry must not follow `cd`: a registration decides relevance, and the provider project is tried before the cwd's Git root.
   if (rootRule === "provider-project-first") {
+    // Reorder root-selection fragments so Claude Gruff stays attached to its provider project after an agent changes directory.
     return rootDiscoveryFragments()
       .map((fragment) =>
         fragment.replace(
@@ -171,11 +183,15 @@ function rootDiscoveryFragments(
         ),
       )
       .flatMap((fragment) => {
+        // Defer Git discovery until the provider project has had the first chance to establish scope.
         if (fragment.startsWith("const gitRootLookup=")) return [];
+        // Remove the environment fallback from its old position before inserting it ahead of Git lookup.
         if (fragment === providerRootStep) return [];
+        // Begin with provider project discovery immediately after creating the selection state.
         if (fragment === "let selected={state:'none',root:''};") {
           return [fragment, providerRootStep];
         }
+        // Git remains a fallback only when the provider project supplied no complete managed install.
         if (fragment.startsWith("if(gitRootLookup.status===0")) {
           return [
             "if(selected.state!=='complete'){const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){const inspected=inspectOnce(gitRootLookup.stdout.trim());if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}}",
@@ -246,8 +262,7 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
 
 /**
  * Build the structured `-e` source registered as one exec-form argv element.
- * Use for providers whose live capture approves argv handlers; it keeps the legacy root contract while importing the shipped launcher instead of
- * spawning Node again.
+ * Use for approved argv handlers to preserve root selection while loading the shipped launcher in-process.
  *
  * @param hookResponseMode - host response selected for this hook; empty uses fail-closed policy behavior
  * @returns structured bootstrap source; never empty because it becomes args[1] of the handler
@@ -263,12 +278,29 @@ function structuredHookLaunchBootstrap(hookResponseMode: string): string {
       : hookResponseMode;
   const rootRule =
     responseKind === "gruff" ? "provider-project-first" : "shared";
-  return [
+  const fragments = [
     ...bootstrapPreludeFragments(unavailableResponseProgram),
     ...STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS,
     ...rootDiscoveryFragments(rootRule),
     ...STRUCTURED_IMPORT_TAIL_FRAGMENTS,
-  ].join("");
+  ];
+  // A Claude startup refusal waits for bounded Stop input; return from the bootstrap instead of continuing root discovery.
+  if (hookResponseMode === "post-turn") {
+    const program = fragments
+      .map((fragment) =>
+        fragment.replaceAll(
+          ")reportUnavailable(",
+          ")return reportUnavailable(",
+        ),
+      )
+      .join("");
+    return (
+      "(async()=>{" +
+      program +
+      "})().catch(()=>{process.stderr.write('post-turn-safety: hook unavailable: bootstrap failed.'+String.fromCharCode(10));process.exit(2);});"
+    );
+  }
+  return fragments.join("");
 }
 
 /**
@@ -356,9 +388,8 @@ export function agentRegistersHostTimeout(
 /**
  * Complete handler shape one provider registers for a managed hook.
  *
- * Shell descriptors carry one host-parsed command string and may add the provider's Windows-only override. Claude argv descriptors carry an
- * exec-form executable plus ordered arguments and inert shell routes for hosts that also load Claude config. Readers compare the complete
- * selected descriptor, never a reconstructed string.
+ * Shell handlers carry a command and optional Windows override; Claude argv handlers carry an executable, ordered arguments, and inert shell routes.
+ * Compare the complete descriptor when reporting installation drift; reconstructing a command string loses provider-specific identity.
  */
 export type AgentHookHandlerDescriptor =
   | { form: "shell"; command: string; commandWindows?: string }
@@ -407,6 +438,7 @@ function codexWindowsHookCommand(
     ...operands.map(quoteWindowsPowerShellArgument),
   ].join(" ");
   // Literal location restoration preserves hostile-named roots that PowerShell's provider startup rejects as patterns.
+  //
   // The null guard makes a missing Node executable fail instead of reusing PowerShell's empty native status as success.
   // Explicit exit propagation prevents Windows PowerShell from collapsing every non-zero native status to exit 1.
   return `Set-Location -LiteralPath ([Environment]::CurrentDirectory); $global:LASTEXITCODE = $null; & ${nodeCommand}; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE`;
@@ -516,6 +548,7 @@ export function buildAgentHookDescriptor(
       JSON.stringify(bashLauncherPath),
     ].join(" "),
   };
+  // Codex users on Windows need literal PowerShell transport for the same registered bootstrap and operands.
   if (agentId === "codex") {
     shellDescriptor.commandWindows = codexWindowsHookCommand(bootstrapSource, [
       hookScriptPath,
@@ -591,14 +624,13 @@ export function managedAgentHookCommand(
 
 /**
  * Identify an exact managed script token without claiming similar user hook names.
+ *
  * Use before setup adds, replaces, or removes a registration.
  * For example, `custom-post-turn-safety.sh` remains user-owned.
  *
- * @param commands - runnable text from one config entry, joined by newlines; empty means the entry
- *   runs nothing and can never be a managed registration
+ * @param commands - runnable fields joined by newlines; empty means this entry runs nothing and cannot be managed
  * @param script - managed script filename to look for, such as `post-turn-safety.sh`
- * @returns true when this entry launches the managed script, so setup owns it; false leaves the
- *   entry untouched as the user's own hook
+ * @returns true for a managed script launch; false preserves the entry as the user's own hook
  */
 function commandsReferenceScriptToken(
   commands: string,
@@ -709,6 +741,7 @@ export function entryCarriesHandlerDescriptor(
   }
   // Argv handlers must match the executable, every ordered argument, and both inert shell routes exactly.
   if (descriptor.form === "argv") {
+    // Missing argv cannot reproduce the structured handler the user enabled.
     if (!Array.isArray(entry.args)) return false;
     const registeredIdentityFields = [
       entry.command,
@@ -720,6 +753,7 @@ export function entryCarriesHandlerDescriptor(
       descriptor.bash,
       descriptor.powershell,
     ];
+    // A changed executable or shell route is registration drift even when the argument list still matches.
     if (
       !registeredIdentityFields.every(
         (fieldValue, fieldIndex) =>
@@ -737,6 +771,7 @@ export function entryCarriesHandlerDescriptor(
       )
     );
   }
+  // Shell handlers must retain the exact managed command before their optional Windows override is compared.
   if (entry.command !== descriptor.command) return false;
   return (
     descriptor.commandWindows === undefined ||
@@ -861,6 +896,7 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
       "multi_replace_file_content",
     ].join("|");
   }
+  // Git mutation protection follows Antigravity's shell tool, where the user's Git command is executed.
   if (spec.id === "deny-git-mutations") return "run_command";
   // Antigravity policy coverage includes both shell and direct file actions users can request.
   if (spec.id === "deny-dangerous") {

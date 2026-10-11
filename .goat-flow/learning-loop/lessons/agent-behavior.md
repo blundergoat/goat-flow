@@ -1,9 +1,24 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-09-27
+last_reviewed: 2026-10-10
 ---
 
-**Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, naming the real failure class in retrieval terms, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
+**Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, naming the real failure class in retrieval terms, sizing a proposal to the reproduced defect, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
+
+## Lesson: A plan proposed a module and suite per milestone for a one-function checker fix
+
+**Status:** active | **Created:** 2026-10-10 | **Evidence:** OBSERVED
+**Decision changed:** Size a plan to the reproduced defect before adding modules, commands, suites or design references.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Before writing a milestone that adds a new source module, CLI command or test suite, name the reproduced failure it fixes and the smallest existing owner that can hold the change. Count new modules, commands and suites across the plan; when that count approaches the milestone count, cut to the reproduced defects and leave the rest out. External architecture references do not justify scope that no local incident needs.
+
+**What happened:** On 2026-10-10 the local graph investigation planned six milestones for the Markdown plan checker: six new modules under `src/cli/`, a `plans ready` command with JSON reason codes, three new integration suites, a dashboard SVG view, verification receipts and transition guards, with Bazel Skyframe, W3C PROV-O and LangGraph cited as design references. The only reproduced defect was that `plans check --strict` passes a plan with two final milestones. The user deleted four of the six and asked for the remaining two to be cut to a reachability check inside the existing structure checker and readiness lines in the existing `plans check` output.
+
+**Root cause:** The plan grew from the design space the investigation explored, not from the defects it reproduced. Each explored idea received its own milestone, module and suite, and no step compared the proposal's size with the reproduced defect or asked whether an existing owner already held the data. Owner of the reproduced defect: `src/cli/plans-check-structure.ts` (search: `collectPlanStructureErrors`).
+
+---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
 
@@ -78,11 +93,12 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 ## Lesson: Retrieval terms must name the concrete failure class
 
 **Created:** 2026-04-18
+**Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-09-25
 
 **Prevention:** Build the first retrieval query from target area + symptom + named file/tool, not from milestone names or architecture abstractions. If the first pass is abstract, reword toward the concrete failure class before concluding a miss.
 
-**What happened:** During the M10 retrieval proof, the plan-oriented query `support matrix|agent matrix|registry canonicality` returned zero learning-loop hits for M12 work even though the relevant trap already existed in `.goat-flow/learning-loop/footguns/hooks.md`. Rewording to the concrete platform limitation - `Codex has no compaction notification hook` - found the entry immediately.
+**What happened:** During the retrieval proof, the plan-oriented query `support matrix|agent matrix|registry canonicality` returned zero learning-loop hits for the support-metadata change even though the relevant trap already existed in `.goat-flow/learning-loop/footguns/hooks.md`. Rewording to the concrete platform limitation - `Codex has no compaction notification hook` - found the entry immediately.
 
 **Root cause:** The first query mirrored the milestone title instead of the language used by the stored incident. Learning-loop buckets are written around concrete symptoms, platform limits, and file/tool names; abstract planning vocabulary is too detached.
 
@@ -117,6 +133,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 ## Lesson: Quality assessors can reopen ADR-settled skill modes
 
 **Status:** active | **Created:** 2026-05-27 | **Incident count:** 2 | **Latest occurrence:** 2026-08-29
+**Severity:** INTEGRATION
 **Decision changed:** Treat any ADR-settled constraint - skill mode, tool-call ceiling, or sub-agent budget - as decided until the decisions INDEX says otherwise, and search that index by the disputed mechanism before filing the finding.
 **Trigger phase:** READ
 **Caught at:** VERIFY
@@ -133,23 +150,25 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 ## Lesson: End-of-task rules must be treated as deliverables
 
-**Status:** active | **Created:** 2026-04-08 | **Merged during:** M11 learning-loop consolidation
+**Status:** active | **Created:** 2026-04-08 | **Merged during:** learning-loop consolidation
+**Severity:** INTEGRATION
 
 **Prevention:** Make closing gates part of the deliverable, not an optional afterword. Separate executor and human proof into distinct rows: close automated evidence before promotion and mark each remaining human-owned row with leading `[human]`. After completing milestone tasks, run the named testing gate and strict plan validation before lifecycle promotion. Report what was done and stop; do not make commits, pushes, PRs, staging commands, or follow-on Git write workflows the default next action. Coding agents never run `git commit` or `git push`, even when asked; hand those operations back to the user. If asked "what's next" after verified work, default to non-mutating options: review the diff, inspect a file, or wait for the requested handoff. Providing a suggested commit message is allowed only when asked for one.
 
-**What happened:** Multiple incidents shared the same shape: the agent skipped an AI testing gate after completing milestone tasks, treated an AI gate's "14/14 checks passed" as proof real-world setup worked, skipped session/learning-loop closure steps, or offered to commit after completing work. On 2026-08-01, M03 was promoted before strict validation caught a human proof row with no estimate, then an estimate outside the declared split.
+**What happened:** Multiple incidents shared the same shape: the agent skipped an AI testing gate after completing milestone tasks, treated an AI gate's "14/14 checks passed" as proof real-world setup worked, skipped session/learning-loop closure steps, or offered to commit after completing work. On 2026-08-01, the change was promoted before strict validation caught a human proof row with no estimate, then an estimate outside the declared split.
 
 **Root cause:** Closing rules fire after the primary work feels done, so attention shifts to reporting instead of executing the gate.
 
 **Recurrence update 2026-05-30:** After completing the deny-dangerous hook consolidation, the user asked "whats next". The agent responded with `git add` / `git commit` sequences and a PR follow-up path, even though the user had not asked to commit, stage, push, or open a PR. No commit was executed, but the answer still steered the user into a write workflow as the default next action. The current rule is stronger and unambiguous: `AGENTS.md` (search: `Coding agents never run`) reserves commits and pushes for the user.
 
-**Recurrence update 2026-08-09:** M00 automated proof passed, but its final compatibility row combined `[automated, HUMAN-PENDING: ...]` metadata and remained unchecked. Strict plan validation correctly rejected the row as executor-owned because human ownership requires a leading `[human]` marker. The correction closed the automated row and added a separate open `[human]` native-runtime row before presenting the gate.
+**Recurrence update 2026-08-09:** Automated proof passed, but its final compatibility row combined `[automated, HUMAN-PENDING: ...]` metadata and remained unchecked. Strict plan validation correctly rejected the row as executor-owned because human ownership requires a leading `[human]` marker. The correction closed the automated row and added a separate open `[human]` native-runtime row before presenting the gate.
 
 ---
 
 ## Lesson: Fresh-eyes critique reruns need section-only evidence after a leak-scan discard
 
-**Status:** active | **Created:** 2026-04-24 | **Merged during:** M11 learning-loop consolidation
+**Status:** active | **Created:** 2026-04-24 | **Merged during:** learning-loop consolidation
+**Severity:** INTEGRATION
 
 **Prevention:** When rerunning a fresh-eyes critique after leak-scan discard, instruct the sub-agent to cite section titles or neutral labels only. Do not include repository-local paths in the output unless the phase permits them.
 
@@ -157,7 +176,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Root cause:** The isolation rule is enforced over output text, not just what the sub-agent read. A clean analysis can still fail if its citation format contains repository-local paths.
 
-**Recurrence update (2026-07-12):** M33's first structural leak matcher treated the generic noun `tests` as repository navigation and nearly discarded a clean Fresh Eyes result. The orchestrator reran a path/config/anchor-only scan and kept the agent output. Leak scans must match traceable navigation tokens, not ordinary review vocabulary.
+**Recurrence update (2026-07-12):** The first structural leak matcher treated the generic noun `tests` as repository navigation and nearly discarded a clean Fresh Eyes result. The orchestrator reran a path/config/anchor-only scan and kept the agent output. Leak scans must match traceable navigation tokens, not ordinary review vocabulary.
 
 ---
 
@@ -171,7 +190,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Prevention:** Before the first write after any scope expansion, inventory each newly admitted surface and rerun its READ route. For `ISSUE.md`, milestone narrative, documentation, or learning-loop prose, read `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` (search: `## Scope Gate`) before drafting. Keep exempt control rows and commands out of style-only rewrites.
 
-**What happened:** While re-homing the native Windows hook milestone, the agent correctly expanded scope to update live dependency and roadmap references, but edited `.goat-flow/plans/1.17.0/ISSUE.md` before reading the `writing-human-facing-prose.md` playbook required for `ISSUE.md` prose. The miss was caught before final verification, and the edited wording was then checked against the playbook's minimum pass.
+**What happened:** While re-homing the native Windows hook milestone, the agent correctly expanded scope to update live dependency and roadmap references, but edited the plan’s `ISSUE.md` before reading the `writing-human-facing-prose.md` playbook required for `ISSUE.md` prose. The miss was caught before final verification, and the edited wording was then checked against the playbook's minimum pass.
 
 **Root cause:** The first READ pass classified the request as a file move. When cross-reference evidence expanded the work into companion prose edits, the agent updated the file list but did not rerun surface routing before the combined patch.
 
@@ -182,6 +201,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 ## Lesson: A written repair list is a diagnosis, not a proof; check its stated contradiction against the bytes
 
 **Status:** active | **Created:** 2026-09-08
+**Severity:** CORRECTNESS
 **Decision changed:** Before deleting a value, clause or field that a handoff, review or issue says is contradictory, quote both sides of the alleged contradiction from the current bytes and check they sit on the same axis. Two rules on independent axes cannot contradict, and the "contradictory" item is often the only thing enforcing a third rule.
 **Trigger phase:** READ
 **Caught at:** VERIFY

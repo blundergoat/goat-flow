@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-09-25
+last_reviewed: 2026-10-08
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -8,6 +8,7 @@ last_reviewed: 2026-09-25
 ## Lesson: Permission wildcards must stay separate from escaped literal paths
 
 **Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
+**Severity:** CORRECTNESS
 **Decision changed:** Build permission patterns by escaping the literal directory first, then append deliberate wildcard grammar and assert the serialized rule. | **Trigger phase:** ACT
 
 **Prevention:** Pass only literal filesystem components through path escaping. Append reviewed permission wildcards afterward, then assert every server-owned filename family in the serialized deny rules. Evidence anchors: `src/cli/server/terminal-reporting-profile.ts` (search: `stagingServerFileDenies`), `test/unit/terminal-spawn.test.ts` (search: `launches Claude reporting sessions with a restrictive settings overlay`).
@@ -23,6 +24,7 @@ last_reviewed: 2026-09-25
 ## Lesson: Input/output alias guards must compare resolved filesystem paths
 
 **Status:** active | **Created:** 2026-08-05 | **Incident count:** 3 | **Latest occurrence:** 2026-09-25
+**Severity:** CORRECTNESS
 **Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** ACT
 **Caught at:** VERIFY
 
@@ -41,6 +43,7 @@ last_reviewed: 2026-09-25
 ## Lesson: RegExp constructor assertions need a real escape helper
 
 **Status:** active | **Created:** 2026-05-28
+**Severity:** CORRECTNESS
 
 **Incident count:** 2 | **Latest occurrence:** 2026-08-01
 
@@ -50,11 +53,12 @@ last_reviewed: 2026-09-25
 
 **Root cause:** I treated slash escaping for regex literals and `RegExp` constructor strings as the same problem. In constructor strings, `/` is not a delimiter and does not need escaping; only regex metacharacters do.
 
-**Recurrence (2026-08-01):** An M04 contract built a dynamic `RegExp` with a template literal that also contained escaped Markdown backticks. The TypeScript transform failed before any behavioural test ran. String concatenation produced the intended pattern and exposed the genuine three-failure RED.
+**Recurrence (2026-08-01):** A contract built a dynamic `RegExp` with a template literal that also contained escaped Markdown backticks. The TypeScript transform failed before any behavioural test ran. String concatenation produced the intended pattern and exposed the genuine three-failure RED.
 
 ## Lesson: Harness fixture counts must match the reported unit
 
 **Status:** active | **Created:** 2026-05-25
+**Severity:** CORRECTNESS
 **Incident count:** 3 | **Latest occurrence:** 2026-08-26
 
 **Prevention:** Name and assert the reported unit explicitly: profiles, unique files, unique identifiers, representations, findings, or checks. Normalize before counting identities, and assert representation cardinality separately when case or separator variants are part of the fixture. When multiple agents share one instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
@@ -65,7 +69,7 @@ last_reviewed: 2026-09-25
 
 **Recurrence (2026-08-10):** A migrated Gruff result fixture asserted only the first finding code. Replacing that partial check with the complete user-visible code list failed because the analyzer envelope also carries `naming.short`. The expected result now enumerates both findings, so a missing or extra detail row is visible. Evidence anchors: `test/integration/hook-provider-contracts.test.ts` (search: `expectedFindingCodes`) and `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `FINDING_GRUFF_CONTRACT_ENVELOPE`).
 
-**Recurrence 2026-08-26:** M55's privacy proof described two case and separator path spellings as two restricted names. Its first derived guard normalized both spellings to one project identifier, then failed because the assertion required two unique identifiers. Separating identity from representation produced the truthful contract: one identifier, two path spellings, and zero case-insensitive tracked hits. Evidence anchor: `test/unit/hook-registrar-surfaces.test.ts` (search: `treats Windows case and separator variants as the same physical root`) preserves the two-representation invariant without retaining the historical identifier.
+**Recurrence 2026-08-26:** The privacy proof described two case and separator path spellings as two restricted names. Its first derived guard normalized both spellings to one project identifier, then failed because the assertion required two unique identifiers. Separating identity from representation produced the truthful contract: one identifier, two path spellings, and zero case-insensitive tracked hits. Evidence anchor: `test/unit/hook-registrar-surfaces.test.ts` (search: `treats Windows case and separator variants as the same physical root`) preserves the two-representation invariant without retaining the historical identifier.
 
 ## Lesson: Validators can require explicit inventories and phrases despite README pointers
 
@@ -82,6 +86,7 @@ last_reviewed: 2026-09-25
 ## Lesson: Behavior-scope changes need assertion updates before the first focused run
 
 **Status:** active | **Created:** 2026-05-04
+**Severity:** INTEGRATION
 **Incident count:** 8 | **Latest occurrence:** 2026-09-07
 
 **Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; include install/round-trip suites when generated config shape changes. For every replaced sentence, grep its opening fragment as well as its changed terms, because an assertion may parse a sentence by its opener without naming the words being changed. Update those assertions with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
@@ -94,9 +99,9 @@ last_reviewed: 2026-09-25
 
 **Latest recurrence (2026-07-29):** A newly authored contract regex pinned capitalized `Honor \`Depends on\`` from memory after an edit earlier in the same session had folded it to lowercase `honor`; the first full run failed the new test. Grep current file text before encoding an assertion, even for text written earlier the same session.
 
-**Latest recurrence (2026-08-01):** M03's first RED used heading helpers at the wrong Markdown levels, and a later GREEN assertion treated `same-file` capitalization as semantic. Re-reading the helper contract produced the genuine four-failure RED; matching prose case-insensitively removed the false GREEN failure. Validate assertion machinery before accepting RED, and copy exact source text unless case is intentionally irrelevant.
+**Latest recurrence (2026-08-01):** the first RED used heading helpers at the wrong Markdown levels, and a later GREEN assertion treated `same-file` capitalization as semantic. Re-reading the helper contract produced the genuine four-failure RED; matching prose case-insensitively removed the false GREEN failure. Validate assertion machinery before accepting RED, and copy exact source text unless case is intentionally irrelevant.
 
-**Latest recurrence (2026-08-03):** The active Timing Receipt regression correctly failed strict validation, but its new assertion guessed `duplicate segment id M01-S01` instead of copying the parser's emitted `timing receipt segment ids must be unique`. The focused run stopped at 62/63 despite correct product behaviour. Run the reproduction once or inspect the parser warning before pinning diagnostic text; do not invent a more specific contract than the implementation emits.
+**Latest recurrence (2026-08-03):** The active Timing Receipt regression correctly failed strict validation, but its new assertion guessed `duplicate segment id` instead of copying the parser's emitted `timing receipt segment ids must be unique`. The focused run stopped at 62/63 despite correct product behaviour. Run the reproduction once or inspect the parser warning before pinning diagnostic text; do not invent a more specific contract than the implementation emits.
 
 **Latest recurrence (2026-08-06):** Replacing Copilot's `Get-Command bash` fallback with the shared Node launcher cleared the focused registrar and drift suites, but the full installer matrix still required the retired PowerShell marker in two cases. The corrected assertion now requires `run-with-bash.mjs` and rejects `Get-Command bash`. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `must use the managed Bash resolver`) and `src/cli/server/agent-hook-writer.ts` (search: `powershell: crossPlatformCommand`).
 
@@ -104,22 +109,23 @@ last_reviewed: 2026-09-25
 
 A relocation also destroys its own evidence: once the inline list was deleted, the reader and its tests both resolved to the manifest, so a phrase dropped in transit would have vanished from the rule and the assertion in the same commit, and the tests would still have gone green. Green tests cannot show that a move preserved membership; only the pre-move copy can. Diff it structurally - parse the old literal out of `git show HEAD:<file>` and compare label, section, and phrase content rather than eyeballing labels, because a label survives a shortened phrase list. Verified for this move on 2026-08-17: 8 rules before and after, zero content differences.
 
-**Recurrence 2026-09-07:** M44 rewrote the security root's inventory sentence and grepped both security contract suites for the changed nouns (`attackers`, `completeness proof`, `descriptor-anchored`). That found every affected assertion except one: `test/contract/skill-hardening-security-2.test.ts` (search: `current exhaustive baseline must retain 12 inventory kinds`) parsed the kind list from the sentence opener `Every authoritative assessment-driving inventory—` and failed the first GREEN run at 16 of 17 while the four intentionally revised cases passed. The assertion now parses the reconciled list and the declared pair separately, so the same 12-kind baseline holds.
+**Recurrence 2026-09-07:** The change rewrote the security root's inventory sentence and grepped both security contract suites for the changed nouns (`attackers`, `completeness proof`, `descriptor-anchored`). That found every affected assertion except one: `test/contract/skill-hardening-security-2.test.ts` (search: `current exhaustive baseline must retain 12 inventory kinds`) parsed the kind list from the sentence opener `Every authoritative assessment-driving inventory—` and failed the first GREEN run at 16 of 17 while the four intentionally revised cases passed. The assertion now parses the reconciled list and the declared pair separately, so the same 12-kind baseline holds.
 
 ---
 
 ## Lesson: New validators must run against the live repo before closeout
 
 **Status:** active | **Created:** 2026-04-29
+**Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-08-05
 
 **Prevention:** After adding any validator that scans a project-wide artifact directory, run it against the live repository before the milestone gate and budget time for the live cleanup it exposes.
 
-**What happened:** M06 added decision-file validation and the fixture tests passed, but the first live `node --import tsx src/cli/cli.ts stats . --check` run failed against existing ADR files and one stale lesson reference.
+**What happened:** The change added decision-file validation and the fixture tests passed, but the first live `node --import tsx src/cli/cli.ts stats . --check` run failed against existing ADR files and one stale lesson reference.
 
 **Root cause:** Treated fixture coverage as enough proof for a repository-wide validator. The new rule was correct, but the live repo contained older records that predated the stricter contract.
 
-**Recurrence (2026-07-13):** M07 ownership fixtures passed focused manifest tests, but full preflight found three packaged-mode `ManifestJson` fixtures that omitted the new required `file_ownership` contract. It also caught ESLint complexity and Knip exports outside the focused commands. After a manifest schema change, grep every `ManifestJson` fixture and run the full static/test gate, not only the new validator suite. Evidence anchors: `test/unit/packaged-install.test.ts` (search: `file_ownership`), `src/cli/manifest/manifest-json.ts` (search: `OWNERSHIP_EVIDENCE_FINDERS`).
+**Recurrence (2026-07-13):** Ownership fixtures passed focused manifest tests, but full preflight found three packaged-mode `ManifestJson` fixtures that omitted the new required `file_ownership` contract. It also caught ESLint complexity and Knip exports outside the focused commands. After a manifest schema change, grep every `ManifestJson` fixture and run the full static/test gate, not only the new validator suite. Evidence anchors: `test/unit/packaged-install.test.ts` (search: `file_ownership`), `src/cli/manifest/manifest-json.ts` (search: `OWNERSHIP_EVIDENCE_FINDERS`).
 
 **Recurrence (2026-08-03):** Compact-review, config, and version regressions reported 75 passing focused tests, but repository preflight still failed because `validateIntegrity` exceeded the ESLint complexity limit and three touched TypeScript files were not Prettier-clean. The compact branch moved to `validateCompactIntegrity`, and only the three reported files were formatted before rerunning the focused and full gates. Evidence anchors: `src/cli/review-validate-integrity.ts` (search: `function validateCompactIntegrity`) and `scripts/preflight-checks.sh` (search: `TypeScript`).
 
@@ -132,6 +138,7 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 ## Lesson: Heading regexes can silently truncate router-table checks
 
 **Status:** active | **Created:** 2026-04-03 | **Last recurrence:** 2026-07-18
+**Severity:** CORRECTNESS
 
 **Prevention:** For markdown section extraction, prefer a line-based parser that tracks fenced-code state over multiline heading regexes with `$`. When the invariant is file-wide, assert against the full document instead of a section helper. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
 
@@ -144,6 +151,7 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 ## Lesson: Path normalization can invalidate later path-shape heuristics
 
 **Status:** active | **Created:** 2026-04-03 | **Incident count:** 2 | **Latest occurrence:** 2026-09-04
+**Severity:** CORRECTNESS
 **Decision changed:** Exact path checks use token or segment boundaries plus a longer-lookalike negative control, never raw substring containment. | **Trigger phase:** ACT | **Caught at:** VERIFY
 
 **Prevention:** When a parser normalizes or extracts paths, downstream checks must use shape tests that still hold afterward, such as segment-boundary regexes (`/\/skills(?:\/|$)/`). When a validator claims exact identity, add a longer-lookalike negative control and reject raw substring containment. Evidence anchors: `src/cli/audit/skill-docs-contract.ts` (search: `textReferencesProjectPath`), `test/unit/audit-command/main.test.ts` (search: `Retired policy copy`).
@@ -174,11 +182,12 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 ## Lesson: Aggregate metadata counts can mask invalid individual entries
 
 **Status:** active | **Created:** 2026-07-17
+**Severity:** CORRECTNESS
 **Decision changed:** Schema-health and evidence gates validate every parsed value and required relation independently before aggregating counts or declaring presence.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-07-17
+**Incident count:** 4
+**Latest occurrence:** 2026-09-30
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/test-snapshots.md`; this is a counting contract between a check and what it reports, which this bucket owns.
 
 **Prevention:** Split structured Markdown into entries first, classify only frontmatter, Status-line, typed, or label-shaped standalone declarations, validate each value against its documented vocabulary, validate ordering and ownership relations explicitly, reduce each entry to at most one valid schema result, then aggregate. Pair empty-input fixtures with semantic near-misses: duplicate or unknown values, negated pressure and failure claims, explicit absence presented as evidence, placeholders presented as evidence, fields in the wrong section, labels on the wrong side of a boundary, and non-file paths. Keep the existing negative fixtures for duplicate-masks-missing, multiple labels in one value, legacy labels, wrong casing, a canonical label followed by narrative `**Evidence:**` content, and the blocking `stats --check` result. Diagnostic text must not contain the aggregator's `; ` delimiter. Evidence anchors: `src/cli/facts/shared/learning-loop.ts` (search: `getEvidenceLabelDiagnostic`) separates taxonomy metadata from prose and emits the bucket error; `src/cli/stats/stats.ts` (search: `evidence-label`) maps it to a stable rule; `test/integration/stats-command.test.ts` (search: `exactly one canonical evidence label`) locks parsing and enforcement.
@@ -191,15 +200,39 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 
 **Recurrence 2026-07-17 (quality recheck):** A follow-up RED-log probe used every canonical token only inside explicit negations: `no time pressure`, `failed? no`, and `none observed because it complied`. The gate still accepted the receipt and wrote a discoverable skill because each field validator recognized tokens without validating the field's asserted meaning. The first literal fix blocked that receipt, but an immediate boundary probe reproduced the same bypass with label-prefixed absence claims: `time: no pressure`, `failed: false`, and `No rationalisation occurred`. The pressure validator now rejects a directly negated detail after a canonical label, the outcome validator rejects directly negated failure classifications, and the rationalisation validator rejects prose that explicitly reports absence. Evidence anchors: `src/cli/skill-author.ts` (search: `startsWithNegatedAssertion` and `isAbsentRationalisation`), `test/integration/skill-author.test.ts` (search: `rejects negated RED evidence that includes canonical tokens` and `rejects alternate absence claims after canonical RED labels`), and the paired acceptance control (search: `accepts positive pressure details and a substantive no-prefixed rationalisation`).
 
+**Recurrence 2026-09-30:** The change read optional `Enforced-by` from the whole rendered entry. A temporary-project probe with the label only in incident prose returned a non-null enforcement link, removing an unguarded repeat from the text action list. A second probe found that a body label adjacent to the metadata block still let a later `Enforced-by` line through. `src/cli/facts/shared/learning-loop.ts` (search: `firstEntryMetadataBlock`) now stops at the first prose field, including an adjacent `Prevention` label; `test/integration/stats-command-graduation.test.ts` (search: `keeps metadata-shaped incident prose out of severity and enforcement`) covers both visible results.
+
 ## Lesson: Permission migrations must recognize already complete pairs
 
 **Status:** active | **Created:** 2026-09-25
 **Decision changed:** Test fresh installation, an incomplete permission upgrade, and repeat installation before accepting a permission expansion.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-08
 
 **Prevention:** Return no replacement for an already complete permission pair so its saved order stays byte-stable. A semantic-equivalence assertion does not replace the installer's existing repeated-install byte check.
+
+**Recurrence 2026-10-08:** Historical `v1.13.1` settings needed two installs to settle because tool normalization ran after deny classification. The first install recreated broad environment denies; the second removed them. The earlier fixture also accepted automatic allow/ask rewrites, contrary to the saved user-choice contract. Normalize only denies before classifying them, compare the first installed bytes with subsequent installs, and check preview against the same preservation controls. `test/integration/setup-install-permission-convergence.test.ts` (search: `converges historical permissions once`) retains the release fixture and labels added test inputs; `workflow/install-goat-flow.sh` (search: `const normalizeRule`) owns the ordering.
+
+The amended regression also passed only `deny` to the three-array `stalePermissionRules` helper and failed before checking the result. Supply empty allow/ask arrays when testing only denies; narrowing the assertion does not change the helper's input contract. The exact-output check in `test/integration/setup-install-codex-config-migration.test.ts` (search: `migrates invalid filesystem permission globs in place`) also caught an omitted removal: the rebuilt profile drops an explicit write grant, so the printed delta must name that grant as well as changed denies.
+
+The follow-up review reproduced false removal messages for permission-shaped TOML comments because I scanned raw lines as active rules. Ignore comments outside quoted values before classifying deltas, and preserve quoted hash characters in path patterns. The same Codex regression covers both controls. The historical Claude permissions are now pinned in `test/integration/setup-install-permission-convergence.test.ts` (search: `const historicalPermissions`) so missing release tags cannot silently skip the convergence proof.
 
 **What happened:** The paired home/project credential migration inserted each project rule beside its home rule even when both were already present. The full release gate caught a second Claude install changing the template's rule order. `workflow/install-goat-flow.sh` (search: `credentialPair.every`) now preserves complete pairs; `test/integration/setup-install-write-set.test.ts` (search: `keeps disabled hooks installed and inert`) reproduces the required byte stability, and `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`) retains the incomplete-upgrade control.
 
 **Root cause:** I checked the new deny coverage but missed the already-complete input branch. Existing regression coverage exposed the omission, so the repair changes the migration rather than weakening its assertion. The preview still classified the former home-only migration, hiding an incomplete pair and announcing a rewrite for a complete pair. `src/cli/install-command.ts` (search: `CLAUDE_PAIRED_CREDENTIAL_STORES`) and `test/integration/setup-install-safety-regressions.test.ts` (search: `previews credential-pair migration`) now compare home-only, project-only, complete and absent pairs against the same policy.
+
+## Lesson: A table-escaped pipe turns a ripgrep absence check into a literal-pipe search
+
+**Status:** active | **Created:** 2026-10-08
+**Severity:** CORRECTNESS
+**Decision changed:** Write regex alternation in plan proof commands as one `-e` per pattern, or keep the command in a fenced block that the row references; run every absence check once where hits must exist before trusting a zero.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-10-08
+
+**Prevention:** Milestone Commands rows sit in a Markdown table, `workflow/skills/goat-plan/references/milestone-examples.md` (search: `| Purpose | Command | Expected result |`), so authors escape `|` as `\|`. GNU `grep` reads `\|` as alternation in a basic regex; ripgrep reads it as a literal pipe. Use `rg -e A -e B` or move the command out of the table. Give each absence sweep a positive control: before the change it must report hits. The session `grep` wrapper causes the same false zero for a different reason: `.goat-flow/learning-loop/lessons/test-shell-environment.md` (search: `known-positive`).
+
+**What happened:** A release plan's retired-consumer proof ran `rg --hidden -n 'deny-dangerous\.sh\|deny-git-mutations\.sh\|...'` across the hook consumers. Run verbatim with ripgrep 14.1.0, it printed nothing and exited 1 while every named file still existed; the same pattern with `|` matched 1,208 lines outside local worktrees. The plan's earlier audit had recorded its command references as validated without running them.
+
+**Root cause:** I treated a referenced command as a checked command and a zero-hit search as proof of absence. Ripgrep's Rust regex syntax differs from GNU basic regex exactly at the escaped pipe, and nothing executed the row before it became a proof gate.

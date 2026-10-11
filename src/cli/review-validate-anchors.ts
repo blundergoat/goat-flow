@@ -84,7 +84,7 @@ export function isWithinProject(
 }
 
 /**
- * Resolve a finding's literal evidence from its frozen source before the report can credit it.
+ * Resolve a finding's literal evidence from its frozen source before the report can credit it; an unresolved anchor reports a violation.
  *
  * @param projectRoot - reviewed root used to reject paths outside the selected project
  *
@@ -298,7 +298,10 @@ export function validateEscapedReviewAnchors(
   }
 }
 
-/** Parse one escaped literal without letting quotes, pipes, tabs, or newlines change the selected file. */
+/**
+ * Parse one escaped literal without letting quotes, pipes, tabs, or newlines change the selected file.
+ * Its keys must be exactly path, search and side; a malformed anchor reports a violation instead of throwing.
+ */
 function validateEscapedAnchor(
   json: string,
   projectRoot: string,
@@ -949,7 +952,7 @@ export function treeFiles(
  *
  * @param context - selected repository; a previously read index is reused only within this capture
  *
- * @returns sorted staged entries; an empty index is a valid empty selection
+ * @returns staged entries in a stable path order for the fingerprint; an empty index is a valid empty selection
  * @throws ReviewAuthorityError when the index is unmerged, sparse, intent-to-add, malformed, or contains unsupported file kinds
  */
 export function indexEntries(context: GitContext): IndexEntry[] {

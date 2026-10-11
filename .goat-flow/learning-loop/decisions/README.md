@@ -49,6 +49,8 @@ Allowed non-ADR files: `README.md` and `INDEX.md`.
 
 Everything else in this directory is a stats failure. If a note cannot earn an ADR filename, route it using the table above.
 
+Numbers are never reused. A removed or absorbed record keeps its number retired, and a reference to a removed record cites its full filename slug (`ADR-NNN-kebab-case-title`), because a bare number can point at the wrong record once directories move.
+
 ## Required Structure
 
 Every ADR carries `**Status:**`, `**Date:**`, `## Context`, `## Decision`, and at least one trade-off section: `## Consequences`, `## Failure Mode Comparison`, or `## Reversibility`. The template below is the recommended full shape, not the minimum:
@@ -98,7 +100,6 @@ Recommended metadata:
 
 - `Proposed` - under discussion, not yet binding
 - `Accepted` - decision made, implementation may still be underway
-- `Implemented` - decision is reflected in the codebase
 - `Superseded by ADR-NNN` - replaced by a later decision
 
 ## Anti-Patterns
@@ -110,6 +111,7 @@ Do not create ADRs for:
 - workaround notes for a missing implementation;
 - scoping notes that belong in a milestone file;
 - benchmark traces without a durable decision;
+- specifications the code owns, such as schemas, byte layouts, argument lists, or step-by-step procedures; cite the owning code with a semantic anchor instead;
 - files missing the `ADR-NNN-...` filename, `**Status:**`, `**Date:**`, `## Context`, `## Decision`, or a trade-off section.
 
 ## Before Writing

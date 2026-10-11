@@ -4,6 +4,7 @@
  * audits unless fresh=true, and emits a redacted evidence envelope for the generated prompts.
  */
 import { existsSync } from "node:fs";
+import { makeCurrentQualityReport } from "../fixtures/quality-report.js";
 import {
   assert,
   assertValidEmittedEnvelope,
@@ -21,6 +22,57 @@ import {
   writeProjectFile,
 } from "./dashboard-server.helpers.js";
 describe("dashboard /api/quality", () => {
+  it("computes rerun spread beyond the requested history window and keeps filters", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-quality-spread-"));
+    try {
+      for (const [index, suffix] of ["aaaaa", "bbbbb", "ccccc"].entries()) {
+        const report = makeCurrentQualityReport(root, "History window fixture");
+        Object.assign(report.assessment_context, {
+          assessment_identity: {
+            model: "model-fixture",
+            tool_version: "version-fixture",
+            prompt_sha256: "a".repeat(64),
+            settings_sha256: "b".repeat(64),
+            fixed_input_protocol: "c".repeat(64),
+            capture: "launch-observed",
+          },
+        });
+        Object.assign(report.scores.setup, {
+          total: index * 5,
+          accuracy: index * 5,
+        });
+        await writeProjectFile(
+          root,
+          `.goat-flow/logs/quality/2026-07-31-120${index}-claude-${suffix}.json`,
+          JSON.stringify(report),
+        );
+      }
+      const { res, body } = await fetchJson(
+        `/api/quality/history?path=${encodeURIComponent(root)}&agent=claude&mode=skills&limit=1`,
+      );
+      assert.equal(res.status, 200);
+      const payload = expectRecord(body, "Quality history response");
+      assert.ok(Array.isArray(payload.rows));
+      assert.equal(payload.rows.length, 1);
+      const row = expectRecord(payload.rows[0], "Quality history row");
+      assert.deepEqual(row.repeatSpread, {
+        kind: "controlled",
+        sampleSize: 3,
+        setup: { median: 5, min: 0, max: 10, range: 10 },
+        system: { median: 0, min: 0, max: 0, range: 0 },
+      });
+      assert.equal(row.setupDelta, 5);
+      const filtered = await fetchJson(
+        `/api/quality/history?path=${encodeURIComponent(root)}&agent=codex&limit=1`,
+      );
+      assert.deepEqual(
+        expectRecord(filtered.body, "Other agent history").rows,
+        [],
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it("returns 400 without agent", async () => {
     const { res } = await fetchJson(
       `/api/quality?path=${encodeURIComponent(PROJECT_PATH)}`,

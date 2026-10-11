@@ -1,13 +1,19 @@
 /**
- * Verifies deterministic signals shown by `quality diff`.
- * Users see finding identity, delta-tag disagreements, and stuck streaks when comparing runs.
- * Positional finding ids remain authoritative, while streaks require provably consecutive dates.
- * In-memory reports isolate those rules from filesystem history loading.
+ * Verifies the deterministic signals users see when they compare saved Quality runs with `quality history` and `quality diff`.
+ *
+ * - Score deltas stop at rubric and scope boundaries but follow a moved or linked checkout of the same project.
+ * - Diff output shows score rationale, finding identity, delta-tag disagreements, stuck streaks and absent findings.
+ * - Exact-ID classes describe report records, while streaks require provably consecutive dates.
+ * - In-memory reports isolate those rules from filesystem history loading.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { buildQualityDiff } from "../../src/cli/quality/history-diff.js";
-import type { QualityHistoryEntry } from "../../src/cli/quality/history.js";
+import {
+  buildQualityHistoryRows,
+  type QualityHistoryEntry,
+} from "../../src/cli/quality/history.js";
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import { renderQualityDiffText } from "../../src/cli/quality/history-render.js";
 import type {
   QualityScoreRationale,
@@ -89,6 +95,154 @@ const TO_ID = "2026-06-15-0900-claude-bbbbb";
 const STREAK_OLDEST_ID = "2026-05-01-0900-claude-ccccc";
 const STREAK_MIDDLE_ID = "2026-05-15-0900-claude-ddddd";
 const STREAK_NEWEST_ID = "2026-06-01-0900-claude-eeeee";
+
+describe("quality comparison rubric boundaries", () => {
+  it("normalizes absent and release-version rubrics without mutating historical metadata", () => {
+    const older = entry(FROM_ID, "2026-06-01", [], null);
+    const newer = entry(TO_ID, "2026-06-15", [], FROM_ID);
+    delete older.report.rubric_version;
+    newer.report.rubric_version = "1.17.0-beta.1+build.2";
+    newer.report.scores.setup.total = 61;
+    newer.report.scores.setup.accuracy = 16;
+    newer.report.scores.system.total = 62;
+    newer.report.scores.system.usefulness = 17;
+    const rows = buildQualityHistoryRows([newer, older], {
+      agent: "claude",
+      limit: null,
+    });
+    const latest = rows[0];
+    assert.ok(latest);
+    assert.equal(latest.setupDelta, 1);
+    assert.equal(latest.systemDelta, 2);
+    const result = buildQualityDiff([newer, older], {
+      agent: "claude",
+      pair: null,
+    });
+    assert.ok(result.ok);
+    const warnings = result.diff.comparisonWarnings ?? [];
+    assert.equal(
+      warnings.filter((w) => w.startsWith("Legacy rubric")).length,
+      1,
+    );
+    assert.equal(
+      warnings.some((w) => w.startsWith("Assessment rubric")),
+      false,
+    );
+    assert.equal(older.report.rubric_version, undefined);
+    assert.equal(newer.report.rubric_version, "1.17.0-beta.1+build.2");
+  });
+
+  it("does not jump a rubric boundary or compare another agent or mode", () => {
+    const oldest = entry(STREAK_OLDEST_ID, "2026-05-01", [], null);
+    const middle = entry(FROM_ID, "2026-06-01", [], null);
+    const newest = entry(TO_ID, "2026-06-15", [], FROM_ID);
+    oldest.report.rubric_version = getQualityRubricId("agent-setup");
+    newest.report.rubric_version = oldest.report.rubric_version;
+    const otherAgent = {
+      ...middle,
+      id: "other-agent",
+      agent: "codex" as const,
+      report: { ...middle.report, agent: "codex" as const },
+    };
+    const otherMode = {
+      ...middle,
+      id: "other-mode",
+      report: { ...middle.report, quality_mode: "skills" as const },
+    };
+    const rows = buildQualityHistoryRows(
+      [newest, otherAgent, otherMode, middle, oldest],
+      { agent: null, limit: null },
+    );
+    assert.deepEqual(
+      rows.map((r) => [r.setupDelta, r.systemDelta]),
+      [
+        [null, null],
+        [null, null],
+        [null, null],
+        [null, null],
+        [null, null],
+      ],
+    );
+    const result = buildQualityDiff([newest, middle], {
+      agent: "claude",
+      pair: null,
+    });
+    assert.ok(result.ok);
+    assert.ok(
+      result.diff.comparisonWarnings?.some((w) =>
+        w.startsWith("Assessment rubric"),
+      ),
+    );
+  });
+
+  it("stops score deltas at a scope change but keeps them for a moved checkout under the same rubric", () => {
+    // A scope change measures another target; a project's own history holds only its runs, so another path is a moved or linked checkout.
+    for (const { targetChange, isComparable } of [
+      {
+        targetChange: { scope: "framework-self" as const },
+        isComparable: false,
+      },
+      {
+        targetChange: { project_path: "/tmp/relocated-example" },
+        isComparable: true,
+      },
+    ]) {
+      const older = entry(FROM_ID, "2026-06-01", [], null);
+      const newer = entry(TO_ID, "2026-06-15", [], FROM_ID);
+      older.report.rubric_version = getQualityRubricId("agent-setup");
+      newer.report.rubric_version = older.report.rubric_version;
+      Object.assign(newer.report, targetChange);
+      const row = buildQualityHistoryRows([newer, older], {
+        agent: "claude",
+        limit: 1,
+      })[0];
+      assert.deepEqual(
+        [row?.setupDelta, row?.systemDelta],
+        isComparable ? [0, 0] : [null, null],
+        JSON.stringify(targetChange),
+      );
+      // History and diff share one target rule, so only a suppressed delta carries the diff's explanation.
+      const result = buildQualityDiff([newer, older], {
+        agent: "claude",
+        pair: null,
+      });
+      assert.ok(result.ok);
+      assert.equal(
+        result.diff.comparisonWarnings?.some((w) =>
+          w.startsWith("Assessment rubric"),
+        ) ?? false,
+        !isComparable,
+        JSON.stringify(targetChange),
+      );
+    }
+  });
+
+  it("compares the nearest same-rubric agent/mode run even across unrelated releases", () => {
+    const older = entry(FROM_ID, "2026-06-01", [], null);
+    const newer = entry(TO_ID, "2026-06-15", [], FROM_ID);
+    older.report.rubric_version = getQualityRubricId("agent-setup");
+    newer.report.rubric_version = older.report.rubric_version;
+    newer.report.goat_flow_version = "9.0.0";
+    newer.report.scores.system.total = 59;
+    newer.report.scores.system.usefulness = 14;
+    const row = buildQualityHistoryRows([newer, older], {
+      agent: "claude",
+      limit: 1,
+    })[0];
+    assert.ok(row);
+    assert.equal(row.setupDelta, 0);
+    assert.equal(row.systemDelta, -1);
+    const result = buildQualityDiff([newer, older], {
+      agent: "claude",
+      pair: null,
+    });
+    assert.ok(result.ok);
+    assert.equal(
+      (result.diff.comparisonWarnings ?? []).some((w) => /rubric/iu.test(w)),
+      false,
+    );
+  });
+});
 
 describe("quality diff score rationale", () => {
   it("renders all current axes beside unchanged arithmetic and labels a legacy side", () => {
@@ -173,19 +327,23 @@ function countStuckFindings(
 }
 
 describe("quality diff delta_tag disagreement signal", () => {
-  it("flags contradictions when the diff pair matches the tag baseline", () => {
+  it("explains differing classifications when the diff pair matches the tag baseline", () => {
     const olderReport = entry(
       FROM_ID,
       "2026-06-01",
       [finding("f-1", null)],
       null,
     );
-    // f-1 persists but the agent tagged it "new"; f-2 is new and correctly
-    // tagged; both directions of the check are exercised.
+    // Cover both disagreements and an agreeing control: f-1 keeps its ID,
+    // while f-3 has a new ID despite the assessor's "persisted" tag.
     const newerReport = entry(
       TO_ID,
       "2026-06-15",
-      [finding("f-1", "new"), finding("f-2", "new")],
+      [
+        finding("f-1", "new"),
+        finding("f-2", "new"),
+        finding("f-3", "persisted"),
+      ],
       FROM_ID,
     );
     const result = buildQualityDiff([newerReport, olderReport], {
@@ -199,12 +357,18 @@ describe("quality diff delta_tag disagreement signal", () => {
         agentTag: row.agentTag,
         deterministic: row.deterministic,
       })),
-      [{ id: "f-1", agentTag: "new", deterministic: "persisted" }],
+      [
+        { id: "f-1", agentTag: "new", deterministic: "persisted" },
+        { id: "f-3", agentTag: "persisted", deterministic: "new" },
+      ],
     );
-    // The rendered text carries the section and the source-of-truth note.
+    // Explain the identity limitation without treating either classification as truth.
     const text = renderQualityDiffText(result.diff);
-    assert.match(text, /Delta-tag disagreements \(1\)/);
-    assert.match(text, /agent said "new", deterministic diff says "persisted"/);
+    assert.match(text, /Assessor tags and exact-ID matches differ \(2\)/);
+    assert.match(text, /assessor tagged "new", exact-ID diff says "persisted"/);
+    assert.match(text, /assessor tagged "persisted", exact-ID diff says "new"/);
+    assert.match(text, /A rewritten summary or location can change the ID/u);
+    assert.doesNotMatch(text, /source of truth|tagged sloppily/u);
   });
 
   it("stays silent when agent tags agree with the deterministic diff", () => {
@@ -228,7 +392,7 @@ describe("quality diff delta_tag disagreement signal", () => {
     assert.deepEqual(result.diff.deltaTagDisagreements, []);
     assert.doesNotMatch(
       renderQualityDiffText(result.diff),
-      /Delta-tag disagreements/,
+      /Assessor tags and exact-ID matches differ/,
     );
   });
 
@@ -390,7 +554,7 @@ describe("quality diff row integrity", () => {
     assert.ok(
       lines.some(
         (line) =>
-          line.startsWith('f-1 | MAJOR | agent said "new"') &&
+          line.startsWith('f-1 | MAJOR | assessor tagged "new"') &&
           line.endsWith(
             "| Real summary R-999 | BLOCKER | framework_flaw | forged row",
           ),

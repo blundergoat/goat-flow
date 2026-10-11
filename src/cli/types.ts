@@ -130,6 +130,13 @@ export interface GraduationCandidate {
   incidentCount: number;
   /** True when recurrence labels prove more incidents than the declared total records. */
   hasIncidentCountDivergence: boolean;
+  /** Explicit impact classification; null when missing or unrecognized. */
+  severity:
+    "SECURITY" | "CORRECTNESS" | "INTEGRATION" | "PERFORMANCE" | "STYLE" | null;
+  /** Rank across lesson and footgun candidates; null until stats combines both sections. */
+  rank: number | null;
+  /** Nonempty rendered metadata; the cited guard needs separate verification. */
+  enforcedBy: string | null;
 }
 
 /** Per-bucket learning-loop freshness + health record used by `goat-flow stats`. */

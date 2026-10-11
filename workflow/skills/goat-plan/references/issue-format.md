@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.17.0"
+goat-flow-reference-version: "1.18.0"
 ---
 # ISSUE.md Format
 
@@ -82,7 +82,27 @@ Before export, inspect every prose section, table and checklist for unexplained 
 
 Illustrative rewrite, shape only: “Finalize the report metadata contract” becomes “Preserve assessment metadata when saving reports”, followed by the check “Reload the saved report; confirm its assessment metadata is unchanged”. Validation and history loading receive separate change tasks when required; they must not disappear inside the saving task.
 
-The headings below are the default output order. The snippets are illustrative input/output shape only, never repository evidence.
+### Plan progress updates
+
+New plans contain `_PROGRESS.md`, initially only `# Plan and implementation progress`. Existing plans adopt it only on explicit request. This summary reports planning decisions and implementation outcomes for issue readers; milestones retain task state and acceptance.
+
+After meaningful planning or implementation batches and at handoff, compare plan amendments, completed tasks, observed evidence and saved entries. Prepend `## YYYY-MM-DD: <short subject>` below the title, newest first even on the same day. Name the change in the subject. Normally write three to five short outcome bullets, a brief `Checks:` line naming actual verification and gaps, then a final `Next:` line. Use fewer bullets for sparse results; never pad or invent completion. Update during implementation, without waiting for milestone completion.
+
+Aim for 100-150 characters per bullet, excluding the list marker. This is a preference, not a limit: shorter bullets are fine, and useful or important detail may run longer. Never pad a bullet or cut facts to meet the target.
+
+State each outcome's completion level: **planned** means specified future work; **implemented** means changes made; **verified** means named checks support the stated scope; **accepted** means recorded human acceptance of that work. Report only relevant levels. Distinguish plan validation from implementation verification, and plan or scope approval from milestone acceptance. Report planning changes and completed implementation when both occurred.
+
+End every entry with `Next:` naming the next action and its owner. If a human decision is needed, name the work or evidence to review, the decision, and what approval allows. Use existing gates; do not add approval requirements. If nothing remains, say so.
+
+Use hyphens, colons or commas where appropriate; do not use em dashes.
+
+Report each outcome once. An unchanged resume or empty batch writes nothing. Material approval, verification or rework changes may prepend a short dated correction without new completed tasks: say what changed and refer to the affected outcome plainly. Preserve earlier entries verbatim.
+
+Apply Human-facing exports and the human-prose playbook. Preserve facts and public technical names; omit private note links, executor IDs and agent-operation details. Posting remains a human action.
+
+Before saving, follow the shared preamble's Durable Local Text Redaction → Plan-summary exception. Always run `/goat-clarity documentation .goat-flow/plans/<selected-plan>/_PROGRESS.md` on each new or revised entry before delivery for concise, natural wording that preserves facts and completion levels. Limit writes to the new entry; older entries are read-only. Compare earlier bytes before/after and require a repeated pass to preserve already-clear text. Every clarity edit follows the same pre-write redaction rule. Failed saving leaves the existing file untouched; unavailable clarity is disclosed as incomplete, never paste-ready.
+
+The headings below are the default ISSUE output order. The snippets are illustrative input/output shape only, never repository evidence.
 
 ## Outcome
 

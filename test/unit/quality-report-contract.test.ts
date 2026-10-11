@@ -3,11 +3,13 @@
  * Use when prompt composition changes so a report launched from one screen is not weaker than another.
  *
  * It keeps report fields, audit limits, score calibration, and save instructions consistent across every mode.
- * The dashboard mirror stays source-pinned because its classic script cannot import the CLI builder.
+ * Dashboard launch contracts are produced by the same CLI composer through the quality API.
  */
+import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
@@ -17,7 +19,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { CLIError } from "../../src/cli/cli-error.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import { composeQuality } from "../../src/cli/prompt/compose-quality.js";
@@ -55,6 +56,7 @@ const REQUIRED_TOP_LEVEL_FIELDS = [
 
 /** Per-finding fields every contract render must require or demonstrate. */
 const REQUIRED_FINDING_FIELDS = [
+  "concern",
   "evidence_quality",
   "evidence_method",
   "delta_tag",
@@ -96,6 +98,47 @@ const ASSESSMENT_CONTEXT_GUIDANCE = [
 ] as const;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 const QUALITY_MODES = ["agent-setup", "process", "harness", "skills"] as const;
+
+it("fingerprints each final prompt beside its body, including persistence and prior context", () => {
+  for (const qualityMode of QUALITY_MODES) {
+    const input: QualityInput = {
+      agent: "claude",
+      projectPath: REPOSITORY_ROOT,
+      auditReport: null,
+      qualityMode,
+      runDate: "2026-10-02",
+    };
+    const manual = composeQuality(input);
+    const staged = composeQuality({ ...input, persistence: "staged-draft" });
+    for (const payload of [manual, staged]) {
+      assert.equal(
+        payload.promptSha256,
+        createHash("sha256").update(payload.prompt, "utf8").digest("hex"),
+        `${qualityMode} ${payload === manual ? "manual" : "staged"} payload`,
+      );
+      assert.equal(
+        payload.prompt.includes(payload.promptSha256 ?? "missing"),
+        false,
+        `${qualityMode} ${payload === manual ? "manual" : "staged"} payload`,
+      );
+      assert.match(
+        payload.prompt,
+        /"assessment_identity"/,
+        `${qualityMode} ${payload === manual ? "manual" : "staged"} payload`,
+      );
+      assert.match(
+        payload.prompt,
+        /available launch metadata supplied separately/,
+        `${qualityMode} ${payload === manual ? "manual" : "staged"} payload`,
+      );
+    }
+    assert.notEqual(
+      manual.promptSha256,
+      staged.promptSha256,
+      `mode ${qualityMode}`,
+    );
+  }
+});
 const FOCUSED_QUALITY_MODES = ["process", "harness", "skills"] as const;
 const STAGED_DRAFT_MODES = ["skills", "harness", "agent-setup"] as const;
 /** Validity rubric shown only in the full agent-setup assessment. */
@@ -328,6 +371,14 @@ function makeLimitedAuditReport(): NonNullable<QualityInput["auditReport"]> {
  * Use for each launch surface so users cannot receive a weaker schema, evidence vocabulary, or saver contract.
  */
 function assertCarriesContract(surface: string, text: string): void {
+  for (const guidance of [
+    "Recheck the original problem and explain how the evidence proves its correction",
+    "Do not duplicate one defect across concern rows",
+    "does not certify the correction or run saved commands",
+    "evidence unavailable; not reverified",
+  ]) {
+    assert.ok(text.includes(guidance), `${surface}: missing ${guidance}`);
+  }
   // Every top-level field the schema parser requires must appear in the shape.
   for (const field of REQUIRED_TOP_LEVEL_FIELDS) {
     assert.ok(text.includes(field), `${surface}: missing ${field}`);
@@ -679,7 +730,7 @@ describe("quality report contract: CLI surfaces", () => {
       );
       assert.match(
         writeBlock,
-        /<insert the complete report object as one JSON line here>/u,
+        /<insert the complete report object here>/u,
         `${qualityMode}: missing in-memory report placeholder`,
       );
       assert.match(
@@ -707,32 +758,54 @@ describe("quality report contract: CLI surfaces", () => {
   it("sends a thorough report block through the actual deny hook", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
     const writeBlock = extractReportWriteBlock(prompt);
-    const reportObject = JSON.stringify(
-      Object.fromEntries(
-        Array.from({ length: 60 }, (_, index) => [
-          `field_${index}`,
-          `value_${index}_${"x".repeat(400)}`,
-        ]),
-      ),
+    const reportObject = Object.fromEntries(
+      Array.from({ length: 60 }, (_, index) => [
+        `field_${index}`,
+        `value_${index}_${"x".repeat(400)}`,
+      ]),
     );
-    const realisticBlock = writeBlock.replace(
-      "<insert the complete report object as one JSON line here>",
-      reportObject,
-    );
-    assert.ok(
-      realisticBlock.length > 16_384,
-      "fixture must exercise the large-command policy branch",
-    );
-    const hookResult = spawnSync(
-      "bash",
-      [".goat-flow/hooks/deny-dangerous.sh", "--check", realisticBlock],
-      {
-        cwd: REPOSITORY_ROOT,
-        encoding: "utf-8",
-      },
-    );
-
-    assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+    for (const indent of [undefined, 2]) {
+      const realisticBlock = writeBlock.replace(
+        "<insert the complete report object here>",
+        JSON.stringify(reportObject, null, indent),
+      );
+      assert.ok(
+        realisticBlock.length > 16_384,
+        `indent ${indent}: exercise the large-command policy branch`,
+      );
+      for (const hook of ["deny-dangerous", "deny-git-mutations"]) {
+        const hookPath = `.goat-flow/hooks/${hook}.sh`;
+        const blocks = [
+          [realisticBlock, 0],
+          [
+            realisticBlock.replace(
+              "goat-flow quality save",
+              "node --import tsx src/cli/cli.ts quality save",
+            ),
+            0,
+          ],
+          [realisticBlock.replace("<<'JSON'", "<<JSON"), 2],
+          [
+            realisticBlock.replace(
+              /goat-flow quality save [^\n]+/u,
+              "cat <<'JSON'",
+            ),
+            2,
+          ],
+        ] as const;
+        for (const [block, expected] of blocks) {
+          const result = spawnSync("bash", [hookPath, "--check", block], {
+            cwd: REPOSITORY_ROOT,
+            encoding: "utf-8",
+          });
+          assert.equal(
+            result.status,
+            expected,
+            `${hook}, indent=${indent}: ${result.stderr}`,
+          );
+        }
+      }
+    }
   });
 
   it("matches goat-clarity's declared target-selector count", () => {
@@ -785,7 +858,9 @@ describe("quality report contract: CLI surfaces", () => {
       ),
     );
     assert.equal(
-      fresh.includes("materially matches a prior finding by type/file/line"),
+      fresh.includes(
+        "materially matches a prior finding by root cause and affected behavior",
+      ),
       false,
     );
     // Minimal-but-complete history entry: the prior-context section reads
@@ -805,7 +880,7 @@ describe("quality report contract: CLI surfaces", () => {
     assert.ok(withPrior.includes("a prior severity is not evidence"));
     assert.ok(
       withPrior.includes(
-        "materially matches a prior finding by type/file/line",
+        "materially matches a prior finding by root cause and affected behavior",
       ),
     );
     assert.ok(
@@ -872,7 +947,7 @@ describe("quality report contract: cross-variant boundaries", () => {
       );
       assert.ok(
         promptWithPriorReport.includes(
-          "Prior refuted candidates (do not repeat unless evidence or contract changed)",
+          "Prior refuted candidates (4800-character budget; claims to re-check before repeating)",
         ),
         `${qualityMode}: missing prior refutation continuity`,
       );
@@ -885,8 +960,8 @@ describe("quality report contract: cross-variant boundaries", () => {
     });
   }
 
-  // Five rows prove the prompt shows its three-row allowance and reports the two omitted rows.
-  it("bounds prior refutation context to three candidates", () => {
+  // Five short refutations fit the text budget without sending the assessor to scored history.
+  it("retains more than three short prior refutations without a raw-report pointer", () => {
     const priorReport = makePriorQualityReport("skills");
     priorReport.report.refuted_candidates = Array.from(
       { length: 5 },
@@ -907,16 +982,10 @@ describe("quality report contract: cross-variant boundaries", () => {
 
     assert.ok(prompt.includes("Refuted claim 1"));
     assert.ok(prompt.includes("Refuted claim 3"));
-    assert.equal(prompt.includes("Refuted claim 4"), false);
-    assert.ok(
-      prompt.includes(
-        "2 additional prior refuted candidate(s) omitted from this bounded preview.",
-      ),
-    );
-    assert.ok(
-      prompt.includes(JSON.stringify(priorReport.path)),
-      "omitted refutations need an exact safe retrieval path",
-    );
+    assert.ok(prompt.includes("Refuted claim 5"));
+    assert.equal(prompt.includes("omitted from this bounded preview"), false);
+    assert.equal(prompt.includes(priorReport.path), false);
+    assert.equal(prompt.includes("Read the complete refutation ledger"), false);
   });
 });
 
@@ -952,7 +1021,9 @@ describe("quality report contract: rejected persistence", () => {
   // Fixture purpose: writes partial bytes, throws, and proves cleanup removes only that owned filesystem path.
   it("removes an owned allocation when report writing fails", () => {
     const projectRoot = mkdtempSync(resolve(tmpdir(), "quality-rejected-"));
-    execFileSync("git", ["-C", projectRoot, "init", "--quiet"]);
+    execFileSync("git", ["-C", projectRoot, "init", "--quiet"], {
+      stdio: "ignore",
+    });
     writeFileSync(
       resolve(projectRoot, ".gitignore"),
       ".goat-flow/logs/quality/*.json\n",
@@ -966,7 +1037,7 @@ describe("quality report contract: rejected persistence", () => {
       run_date: "2026-08-28",
       audit_status: "pass",
       scope: "framework-self",
-      rubric_version: version,
+      rubric_version: getQualityRubricId("skills"),
       prior_report_id: null,
       assessment_context: {
         project_revision: "a".repeat(40),
@@ -1011,27 +1082,5 @@ describe("quality report contract: rejected persistence", () => {
       // For example, a simulated partial write can throw before cleanup, so the test-owned temporary project must still be removed.
       rmSync(projectRoot, { recursive: true, force: true });
     }
-  });
-});
-
-describe("quality report contract: dashboard mirror", () => {
-  const dashboardSource = readFileSync(
-    fileURLToPath(
-      new URL(
-        "../../src/dashboard/dashboard-setup-quality.ts",
-        import.meta.url,
-      ),
-    ),
-    "utf-8",
-  );
-
-  it("dashboard prompt source mirrors the required fields and enums", () => {
-    assertCarriesContract("dashboard", dashboardSource);
-  });
-
-  it("dashboard prompt source keeps pre-release PATH skew out of findings", () => {
-    assert.ok(dashboardSource.includes(SAVER_VERSION_CLASSIFICATION));
-    assert.ok(dashboardSource.includes(PATH_SKEW_CLASSIFICATION));
-    assert.ok(dashboardSource.includes(VERSION_FINDING_AUTHORITY));
   });
 });

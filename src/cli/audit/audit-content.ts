@@ -41,5 +41,14 @@ export function computeContent(ctx: AuditContext): ContentReport {
       qualityReport.filesScanned +
       factualClaimReport.filesScanned +
       snapshotClaimReport.filesScanned,
+    coverage: {
+      scanners: [
+        "Prose, readiness and semantic anchors in selected Markdown.",
+        "Supported framework claims in current guidance against live goat-flow registries and source.",
+        "Release count claims in CHANGELOG.md and .goat-flow/scratchpad/release.md against available manifest snapshots.",
+      ],
+      limitation:
+        "Does not verify arbitrary project or domain facts. Coverage depends on the documents and snapshots available.",
+    },
   };
 }

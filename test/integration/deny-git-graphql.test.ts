@@ -1,5 +1,6 @@
 /** Replays inert GraphQL requests through candidate hooks, including provider-shaped input. */
 import assert from "node:assert/strict";
+import { runHookWithPayload } from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -88,20 +89,17 @@ describe("GraphQL read-only policy", () => {
     for (const command of commands) {
       for (const isProviderInput of [false, true]) {
         it(`${expectedStatus === 0 ? "allows" : "denies"} ${command} (${isProviderInput ? "provider" : "check"})`, () => {
-          const result = spawnSync(
-            "bash",
-            [
-              resolve(hooks, "deny-git-mutations.sh"),
-              ...(isProviderInput ? [] : ["--check", command]),
-            ],
-            {
-              cwd: fixture,
-              encoding: "utf8",
-              input: isProviderInput
-                ? JSON.stringify({ tool_name: "Bash", tool_input: { command } })
-                : undefined,
-            },
-          );
+          const result = isProviderInput
+            ? runHookWithPayload(
+                resolve(hooks, "deny-git-mutations.sh"),
+                fixture,
+                JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
+              )
+            : spawnSync(
+                "bash",
+                [resolve(hooks, "deny-git-mutations.sh"), "--check", command],
+                { cwd: fixture, encoding: "utf8" },
+              );
           assert.equal(result.status, expectedStatus, result.stderr);
           if (expectedStatus === 2)
             assert.match(result.stderr, /Policy repository/u);

@@ -53,6 +53,7 @@ function growthLines(records: ParsedMilestone[]): string[] {
 }
 
 describe("plans check: work added after forecasts", () => {
+  // A revision whose scope adds a phantom task is semantically invalid, so the real Markdown parser path must exclude it.
   it("excludes semantically invalid revisions through the real Markdown parser", () => {
     const fixture = registeredHistoryFixture(100, 540);
     const revision = {

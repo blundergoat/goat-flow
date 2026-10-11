@@ -6,10 +6,10 @@ These sections go in the project's instruction file. Target: under 125 lines. Ha
 
 ## Required Sections
 
-a) Project identity + version header
+a) Project identity
    - Start with 1-2 lines: project name, domain, core technology, and primary invariant.
    - Include the five-concerns framing when installing goat-flow itself or when the target project needs a concise harness identity: Context, Constraints, Verification, Recovery, Feedback loop.
-   - Set the version header to the current goat-flow release version (match installed skill frontmatter).
+   - Consumer projects use a stable project heading and preserve any project-specific product version. Remove an old goat-flow release suffix only through the target's instruction-file review gate. When maintaining goat-flow itself, retain its versioned instruction headers for framework parity and release checks.
 
 b) Truth Order
    - User's explicit instruction for this session.

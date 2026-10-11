@@ -4,16 +4,8 @@
  * Targeted changes preserve unrelated top-level settings and comments.
  * Guarded Sync prepares config in memory; direct writers persist their own changes atomically.
  */
-import {
-  accessSync,
-  constants,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  statSync,
-} from "node:fs";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { dump, load } from "js-yaml";
 import {
   isPolicyHook,
@@ -38,9 +30,6 @@ const HOOK_IDENTIFIER_ALIASES = new Map([
   ["guard-secret-paths", "deny-dangerous"],
   ["guard-repository-writes", "deny-dangerous"],
 ]);
-const CONVENTIONAL_GRUFF_BINARIES = [
-  ["py", "strands_agents/.venv/bin/gruff-py"],
-] as const;
 const HOOK_BLOCK_COMMENT_LINES = new Set([
   "# Togglable goat-flow hook state. Missing entries use registry defaults.",
   "# Manage with the dashboard Hooks page or `goat-flow hooks <enable|disable|sync>`.",
@@ -80,48 +69,6 @@ function readConfigText(projectPath: string): string {
   return readFileSync(path, "utf-8");
 }
 
-/**
- * Find a supported project-local analyzer when the user enables Gruff without configuring a binary.
- *
- * Only executable files inside the project qualify; missing or inaccessible candidates leave discovery unset as a safe fallback.
- *
- * @param projectPath - selected project whose existing Python environment may supply the analyzer
- * @returns project-relative analyzer paths, or null to leave discovery unset when no usable local analyzer exists
- */
-function conventionalGruffBinaries(
-  projectPath: string,
-): Record<string, string> | null {
-  let projectRealPath: string;
-  try {
-    projectRealPath = realpathSync(projectPath);
-  } catch {
-    // A project moved or became unreadable after selection; leave analyzer discovery unset.
-    return null;
-  }
-
-  const binaries: Record<string, string> = {};
-  // Check only supported project locations when the user enables Gruff without choosing a binary.
-  for (const [language, relativeBinaryPath] of CONVENTIONAL_GRUFF_BINARIES) {
-    try {
-      const candidatePath = join(projectPath, relativeBinaryPath);
-      accessSync(candidatePath, constants.X_OK);
-      const binaryRealPath = realpathSync(candidatePath);
-      const relativeRealPath = relative(projectRealPath, binaryRealPath);
-      const escapesProject =
-        relativeRealPath === ".." ||
-        relativeRealPath.startsWith(`..${sep}`) ||
-        isAbsolute(relativeRealPath);
-      // Do not save a launcher that points outside the selected project or cannot identify an executable file.
-      if (escapesProject || !statSync(binaryRealPath).isFile()) continue;
-      binaries[language] = relativeBinaryPath;
-    } catch {
-      // Ignore missing or unusable local analyzers; for example, the user may not have created this project's Python environment.
-    }
-  }
-  // No usable local analyzer leaves the user's binary choice unset for normal discovery.
-  return Object.keys(binaries).length > 0 ? binaries : null;
-}
-
 /** Map legacy hook ids to canonical ids so old config entries keep their state. */
 function normalizeHookIdentifier(hookIdentifier: string): string {
   // Current IDs and unknown custom IDs keep their spelling; only known legacy IDs are migrated.
@@ -144,7 +91,7 @@ function readHookEntry(
   // Ignore a malformed saved switch so status can use the hook's default; guarded writes validate policy choices separately.
   if (!isRecord(hookEntry) || typeof hookEntry.enabled !== "boolean")
     return null;
-  // An explicit empty binary map preserves the user's choice to use discovery instead of saving a conventional launcher.
+  // An explicit empty binary map is the user's saved choice to rely on discovery, and a rewrite must keep it.
   const configuredBinaries =
     readHookBinaries(hookEntry.binaries) ??
     (isRecord(hookEntry.binaries) ? {} : null);
@@ -605,19 +552,10 @@ export function setHookEnabled(
   // Ordinary writes save the on default; legacy inheritance belongs to explicit migration.
   hooks["deny-git-mutations"] ??= { enabled: true };
   const currentHook = hooks[hookId];
-  // Enabling Gruff may save a supported local analyzer; other toggles and explicit binary choices need no discovery.
-  const detectedBinaries =
-    hookId === "gruff-code-quality" &&
-    isEnabled &&
-    currentHook?.binaries === undefined
-      ? conventionalGruffBinaries(projectPath)
-      : null;
-  // Keep the user's saved binary map, including an empty map; use discovery only when that choice is absent.
-  const binaries = currentHook?.binaries ?? detectedBinaries;
+  // Keep the user's saved binary map, including an empty map; enabling a hook never adds one.
   hooks[hookId] = {
     ...currentHook,
     enabled: isEnabled,
-    ...(binaries ? { binaries } : {}),
   };
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(
@@ -667,23 +605,15 @@ function removeRetiredHookChoices(
   return hasRemovedChoice;
 }
 
-/** Apply the user's explicit choice, discovering a conventional analyzer only when enabling Gruff without a configured binary. */
+/** Apply the user's explicit choice, keeping any binary override they saved; enabling a hook never adds one. */
 function applyPreparedHookChoice(
   choices: HookConfigMap,
   toggle: { hookId: string; enabled: boolean },
-  projectPath: string,
 ): void {
   const current = choices[toggle.hookId];
-  // Preserve an explicit binary choice; enabling Gruff without one can discover a usable project-local analyzer.
-  const binaries =
-    current?.binaries ??
-    (toggle.hookId === "gruff-code-quality" && toggle.enabled
-      ? conventionalGruffBinaries(projectPath)
-      : null);
   choices[toggle.hookId] = {
     ...current,
     enabled: toggle.enabled,
-    ...(binaries ? { binaries } : {}),
   };
 }
 
@@ -692,8 +622,6 @@ function applyPreparedHookChoice(
  * Invalid YAML refuses the operation before it can erase saved choices.
  *
  * @param text - captured config; null creates a first config, while empty text supplies no saved choices
- * @param projectPath - selected project used to discover an existing local analyzer
- *
  * @param toggle - explicit requested choice; omitted for Sync, which preserves enabled choices
  * @param removedHookIds - retired registry IDs to remove; an empty list preserves every current choice
  *
@@ -702,7 +630,6 @@ function applyPreparedHookChoice(
  */
 export function prepareHookConfig(
   text: string | null,
-  projectPath: string,
   toggle?: { hookId: string; enabled: boolean },
   removedHookIds: readonly string[] = [],
 ): string {
@@ -733,7 +660,7 @@ export function prepareHookConfig(
   let hasHookChange = removeRetiredHookChoices(desired, removedHookIds);
   // Sync preserves configured choices; a toggle replaces only its explicitly selected choice.
   if (toggle) {
-    applyPreparedHookChoice(desired, toggle, projectPath);
+    applyPreparedHookChoice(desired, toggle);
     hasHookChange = true;
   }
   // Rewrite the hooks section only when a toggle or retired choice changed it.

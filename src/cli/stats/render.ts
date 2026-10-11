@@ -11,7 +11,11 @@ import type {
   StatsCheckReport,
   StatsReport,
 } from "./stats.js";
-import type { LearningLoopEntryFact, LearningLoopEntryKind } from "../types.js";
+import type {
+  GraduationCandidate,
+  LearningLoopEntryFact,
+  LearningLoopEntryKind,
+} from "../types.js";
 
 const BAND_LABEL: Record<string, string> = {
   fresh: "fresh",
@@ -88,47 +92,74 @@ function renderSectionText(
     const refs = `${bucket.staleRefs.length}s/${bucket.invalidLineRefs.length}i`;
     return `  ${padRight(display, nameWidth)}  last=${last}  age=${padRight(days, 6)}  band=${padRight(band, 7)}  entries=${bucket.entryCount}  refs=${refs}`;
   });
-  return [
-    header,
-    summary,
-    triggerPhases,
-    ...lines,
-    ...renderGraduationText(section),
-    "",
-  ].join("\n");
+  return [header, summary, triggerPhases, ...lines, ""].join("\n");
 }
 
-/** Format one graduation-candidate row shared by the text and Markdown renderers. */
-function graduationRows(section: BucketSection): string[] {
-  return section.buckets
-    .flatMap((bucket) =>
-      bucket.graduationCandidates.map((candidate) => ({
-        bucketPath: bucket.path,
-        candidate,
-      })),
+/** Preserve the report-wide rank order and every candidate before excluding guarded rows from display; equal ranks keep a stable order. */
+function graduationEntries(report: StatsReport): Array<{
+  bucketPath: string;
+  candidate: GraduationCandidate;
+}> {
+  return [report.footguns, report.lessons]
+    .flatMap((section) =>
+      section.buckets.flatMap((bucket) =>
+        bucket.graduationCandidates.map((candidate) => ({
+          bucketPath: bucket.path,
+          candidate,
+        })),
+      ),
     )
     .sort(
-      (left, right) =>
-        right.candidate.incidentCount - left.candidate.incidentCount ||
-        left.bucketPath.localeCompare(right.bucketPath) ||
-        left.candidate.title.localeCompare(right.candidate.title),
-    )
-    .map(({ bucketPath, candidate }) => {
-      const incidentNoun =
-        candidate.incidentCount === 1 ? "incident" : "incidents";
-      const divergenceDetails = candidate.hasIncidentCountDivergence
-        ? `; declared ${candidate.declaredIncidentCount}, ${candidate.recurrenceCount} recurrence labels`
-        : "";
-      return `${basename(bucketPath)} :: ${candidate.title} (${candidate.incidentCount} ${incidentNoun}${divergenceDetails})`;
-    });
+      (left, right) => (left.candidate.rank ?? 0) - (right.candidate.rank ?? 0),
+    );
 }
 
-/** Render graduation candidates only when present, so a clean corpus adds zero noise. */
-function renderGraduationText(section: BucketSection): string[] {
-  if (section.totalGraduationCandidates === 0) return [];
+/** Format one candidate with its impact and effective incident evidence. */
+function graduationRows(
+  entries: ReturnType<typeof graduationEntries>,
+): string[] {
+  return entries.map(({ bucketPath, candidate }) => {
+    const incidentNoun =
+      candidate.incidentCount === 1 ? "incident" : "incidents";
+    const divergenceDetails = candidate.hasIncidentCountDivergence
+      ? `; declared ${candidate.declaredIncidentCount}, ${candidate.recurrenceCount} recurrence labels`
+      : "";
+    return `[${candidate.severity ?? "UNCLASSIFIED"}] ${basename(bucketPath)} :: ${candidate.title} (${candidate.incidentCount} ${incidentNoun}${divergenceDetails})`;
+  });
+}
+
+/** Keep guarded rows out of the action list while accounting for every candidate. */
+function graduationView(report: StatsReport): {
+  rows: string[];
+  guarded: number;
+  remaining: number;
+  unclassified: number;
+} {
+  const entries = graduationEntries(report);
+  const unguarded = entries.filter(
+    ({ candidate }) => candidate.enforcedBy === null,
+  );
+  return {
+    rows: graduationRows(unguarded.slice(0, 10)),
+    guarded: entries.length - unguarded.length,
+    remaining: Math.max(0, unguarded.length - 10),
+    unclassified: entries.filter(({ candidate }) => candidate.severity === null)
+      .length,
+  };
+}
+
+/** Render one report-wide graduation block only when candidates exist. */
+function renderGraduationText(report: StatsReport): string[] {
+  if (
+    report.footguns.totalGraduationCandidates +
+      report.lessons.totalGraduationCandidates ===
+    0
+  )
+    return [];
+  const view = graduationView(report);
   return [
-    `  Graduation candidates (recurred after recording - promote to a structural gate or resolve):`,
-    ...graduationRows(section).map((row) => `    - ${row}`),
+    `Graduation candidates: ${view.rows.length} shown, ${view.remaining} more unguarded, ${view.guarded} guarded, ${view.unclassified} need classification`,
+    ...view.rows.map((row) => `    - ${row}`),
   ];
 }
 
@@ -145,6 +176,7 @@ function basename(path: string): string {
  * @returns Text format optimized for local inspection, not a stable machine contract.
  */
 export function renderStatsText(report: StatsReport): string {
+  const graduation = renderGraduationText(report);
   return (
     renderSectionText(
       "Footguns",
@@ -159,6 +191,7 @@ export function renderStatsText(report: StatsReport): string {
       report.learningLoopEntries,
       "lesson",
     ) +
+    (graduation.length > 0 ? "\n" + graduation.join("\n") + "\n" : "") +
     (report.decisions ? "\n" + renderDecisionsText(report.decisions) : "")
   );
 }
@@ -193,6 +226,11 @@ export function renderStatsMarkdown(report: StatsReport): string {
       report.learningLoopEntries,
       "lesson",
     ),
+    ...(report.footguns.totalGraduationCandidates +
+      report.lessons.totalGraduationCandidates >
+    0
+      ? [markdownGraduation(report)]
+      : []),
     ...(report.decisions ? [markdownDecisions(report.decisions)] : []),
   ];
   return ["# Learning-loop stats", "", ...sections].join("\n");
@@ -275,19 +313,20 @@ function markdownSection(
     `| --- | --- | --- | --- | ---: | ---: | ---: |`,
     ...rows,
     ``,
-    ...markdownGraduation(section),
   ].join("\n");
 }
 
-/** Render the Markdown graduation block only when candidates exist. */
-function markdownGraduation(section: BucketSection): string[] {
-  if (section.totalGraduationCandidates === 0) return [];
+/** Render the same report-wide action list and counts in Markdown. */
+function markdownGraduation(report: StatsReport): string {
+  const view = graduationView(report);
   return [
-    `**Graduation candidates** (recurred after recording - promote to a structural gate or resolve):`,
+    `## Graduation candidates`,
     ``,
-    ...graduationRows(section).map((row) => `- ${row}`),
+    `${view.rows.length} shown, ${view.remaining} more unguarded, ${view.guarded} guarded, ${view.unclassified} need classification.`,
     ``,
-  ];
+    ...view.rows.map((row) => `- ${row}`),
+    ``,
+  ].join("\n");
 }
 
 /**

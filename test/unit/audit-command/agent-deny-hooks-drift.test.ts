@@ -39,7 +39,7 @@ describe("Copilot split-policy registration order", () => {
     ),
   ) as { hooks: { preToolUse: Record<string, unknown>[] } };
 
-  /** Compare native config in memory; complete canonical runtime files isolate registration drift. */
+  /** Compare native config in memory; the stub serves complete canonical runtime files, so findings must come from registration drift alone. */
   function nativeConfigFindings(
     entries: Record<string, unknown>[],
   ): DriftFinding[] {
@@ -87,6 +87,7 @@ describe("Copilot split-policy registration order", () => {
         nativeConfigFindings(entries).some(
           (finding) => finding.kind === "content",
         ),
+        `registrations=${entries.length}`,
       );
     }
   });

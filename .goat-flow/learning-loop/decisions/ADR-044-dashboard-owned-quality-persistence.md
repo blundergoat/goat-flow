@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-31
-**Updated:** 2026-09-05 - condensed; the 2026-08-03 amendment is folded in and a deleted local milestone reference is dropped.
+**Updated:** 2026-10-10 - the analogy to the deleted hook-trust decision is removed; the persistence boundary is described below.
 
 ## Context
 
@@ -17,7 +17,7 @@ The enforced reporting session never persists the report; the dashboard server d
 3. The Claude overlay drops the dead saver and `--version` Bash allow rules, keeps the staging path writable through the logs allow, and denies agent edits to finalized `.goat-flow/logs/quality/*.json`.
 4. Unenforced runs (CLI-generated prompts executed manually) keep the bounded heredoc `quality save` path unchanged.
 
-Accepted residual risk: an unredacted draft exists briefly on gitignored disk before server-side redaction. The staging directory is created `0700`, drafts are processed on appearance, per-draft claims prevent duplicate persistence across server processes, stale owners fail closed, the path is never inside a tracked directory, and final reports keep `0600` exclusive-create semantics. An unclaimed incomplete draft may outlive one server process. Like ADR-052's heredoc boundary, this is a declared boundary, not a silent gap.
+Accepted residual risk: an unredacted draft exists briefly on gitignored disk before server-side redaction. The staging directory is created `0700`, drafts are processed on appearance, per-draft claims prevent duplicate persistence across server processes, stale owners fail closed, the path is never inside a tracked directory, and final reports keep `0600` exclusive-create semantics. An unclaimed incomplete draft may outlive one server process.
 
 ## Failure Mode Comparison
 

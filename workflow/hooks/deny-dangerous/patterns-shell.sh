@@ -837,7 +837,7 @@ check_destructive_segment() {
     fi
     # An unresolved or broad cleanup target cannot safely proceed as an agent command.
     if ! rm_is_safely_scoped "$CMD_NORMALIZED"; then
-      block "rm -r without safe scoping. Specify an explicit target path." || return $?
+      block "rm -r without safe scoping. Only for already-approved deletion: use rm on each reviewed literal file, then rmdir on the empty directory. Confirm targets before deleting 5+ files; secret and human-only restrictions still apply." || return $?
     fi
   fi
 

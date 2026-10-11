@@ -93,7 +93,13 @@ export function expectNonEmptyString(
   return { ok: true, value: parsed.value };
 }
 
-/** Reject terminal and bidirectional controls before persisted text reaches history output. */
+/**
+ * Reject terminal and bidirectional controls before persisted text reaches history output.
+ *
+ * @param candidate - untrusted field value; anything other than a non-empty string fails
+ * @param path - report field path named in the error message
+ * @returns the unchanged text, or an error naming the field when it is not a non-empty single-line string
+ */
 export function expectSingleLineString(
   candidate: unknown,
   path: string,

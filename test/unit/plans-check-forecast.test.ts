@@ -4,7 +4,6 @@
  * against written milestones, so failures match what plan authors see in the
  * terminal before implementation begins.
  */
-import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -18,8 +17,7 @@ import {
 } from "../../src/cli/plans-check-summary.js";
 import { parseMilestoneMarkdown } from "../../src/cli/plans-export.js";
 import {
-  PROJECT_ROOT,
-  CLI_PATH,
+  runPlansCommand,
   runPlansCheck,
   assertSourceLabelledErrors,
   writeCheckFixture,
@@ -145,6 +143,7 @@ describe("plans check: configured forecast bands", () => {
     ];
     const wide = renderCalibrationSummary(records, [10, 90]);
     const narrow = renderCalibrationSummary([...records].reverse(), [20, 80]);
+    // Keep only the per-milestone `rule sample:` lines, so each band compares its samples without the surrounding report.
     const samples = (lines: string[]) =>
       lines.filter((line) => line.startsWith("rule sample:"));
     assert.deepEqual(samples(wide), [
@@ -259,16 +258,19 @@ describe("plans check: calibration eligibility", () => {
         lines.includes(
           `calibration exclusion: M01-sample.md - both pools: ${reason}`,
         ),
+        `exclusion ${reason}`,
       );
       assert.ok(
         lines.includes(
           "calibration: uncalibrated - 0 of 3 eligible measured samples",
         ),
+        `exclusion ${reason}`,
       );
       assert.ok(
         lines.includes(
           "work-unit calibration: uncalibrated - 0 of 3 eligible measured samples with countable bases",
         ),
+        `exclusion ${reason}`,
       );
     }
   });
@@ -281,25 +283,30 @@ describe("plans check: calibration eligibility", () => {
         lines.includes(
           "calibration: uncalibrated - 1 of 3 eligible measured samples",
         ),
+        `${seconds}s receipt`,
       );
       assert.ok(
         lines.includes(
           "work-unit calibration: uncalibrated - 1 of 3 eligible measured samples with countable bases",
         ),
+        `${seconds}s receipt`,
       );
       assert.equal(
         lines.some((line) => line.startsWith("calibration note:")),
         seconds === 20,
+        `${seconds}s receipt`,
       );
       if (seconds === 20)
         assert.ok(
           lines.includes(
             "calibration note: M01-sample.md - 20s raw rounds to 0 min; estimate-ratio eligible; work-unit eligible",
           ),
+          `${seconds}s receipt`,
         );
       assert.doesNotMatch(
         lines.join("\n"),
         /late timer|invalid receipt|fabricated/iu,
+        `${seconds}s receipt`,
       );
     }
   });
@@ -459,6 +466,7 @@ describe("plans check: quantile-based reforecasting", () => {
         ["- [ ] Build the result (est: 3 min product)"],
         {
           title: "M04: Future milestone",
+          dependsOn: "M01, M02, M03",
           forecastBasisLine:
             "Forecast basis: 3 agent work units; 0.5-3-10 min/unit low-likely-high; source: recorded fixture basis",
           forecastRangeLine:
@@ -567,6 +575,7 @@ describe("plans check: quantile-based reforecasting", () => {
           [`- [ ] Build the result (est: ${testCase.product} min product)`],
           {
             title: "M04: Future milestone",
+            dependsOn: "M01, M02, M03",
             forecastBasisLine: `Forecast basis: 3 agent work units; ${testCase.rates} min/unit low-likely-high; source: recorded fixture basis`,
             forecastRangeLine: `Forecast range: ${testCase.low}-${testCase.high} agent-time minutes on one recorded-unpaused milestone timeline; likely ${testCase.likely}; recorded fixture range`,
             planAdminOverhead: "3 min other",
@@ -833,7 +842,11 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
         "Actual: ~15 min agent-time (5 product / 10 proof / 0 other) - rough retrospective guess; timing was not instrumented, so treat this figure as low-confidence",
         "complete",
       ),
-      "M03-empty.md": legacyBody("M03", "Actual: _", "not-started"),
+      // The unfinished milestone joins both finished ones, so the plan has one ending.
+      "M03-empty.md": legacyBody("M03", "Actual: _", "not-started").replace(
+        "Depends on: none",
+        "Depends on: M01, M02",
+      ),
     });
 
     try {
@@ -853,11 +866,12 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-gate-"));
     const planPath = writeCheckPlan(temporaryRoot, {
       "M01-approved.md": eligibleSampleBody(300),
+      // The pending milestone follows the approved one, so the plan has one ending.
       "M02-pending.md": eligibleSampleBody(
         600,
         "M02",
         "human-verification-pending",
-      ),
+      ).replace("Depends on: none", "Depends on: M01"),
     });
 
     try {
@@ -908,6 +922,7 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
       ],
       {
         title: "M04: Future milestone",
+        dependsOn: "M01, M02, M03",
         forecastBasisLine:
           "Forecast basis: 4 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
         forecastRangeLine:
@@ -994,11 +1009,7 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
   });
 
   it("rejects --strict outside plans check", () => {
-    const result = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "plans", "export", ".", "--strict"],
-      { cwd: PROJECT_ROOT, encoding: "utf-8" },
-    );
+    const result = runPlansCommand("export", ".", "--strict");
 
     assert.equal(result.status, 2);
     assert.match(result.stderr, /--strict is only valid for plans check/u);

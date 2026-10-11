@@ -1,7 +1,7 @@
 # .goat-flow/config.yaml - project configuration
 # Docs: https://github.com/blundergoat/goat-flow
 
-version: "1.17.0"
+version: "1.18.0"
 
 # ── Project Setup ───────────────────────────────
 skills:
@@ -34,7 +34,7 @@ toolchain:
     - npm run test:fast
 
 # ── Telemetry ─────────────────────────────────
-# Opt-in: logs skill invocations to .goat-flow/logs/skill-usage.jsonl
+# Reserved compatibility field; skill-invocation logging is not implemented.
 telemetry: false
 
 # ── Learning Loop Auto-Capture ──────────────────

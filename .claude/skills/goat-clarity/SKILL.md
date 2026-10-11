@@ -1,7 +1,7 @@
 ---
 name: goat-clarity
 description: "Use when a developer asks to improve code comments, documentation, naming, or private placement for a GitHub pull request, uncommitted files, or any repository folders and files."
-goat-flow-skill-version: "1.17.0"
+goat-flow-skill-version: "1.18.0"
 ---
 # /goat-clarity
 
@@ -104,7 +104,7 @@ Do not diagnose names or comments while collecting the inventory; accounting com
 | Repository instructions require Gruff for an eligible unit and read-only discovery finds the wrapper | `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (`Comment and Documentation Passes`) |
 | A PR or uncommitted selector changes test cases, or a folder or file selector includes test source | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Decision Route`) |
 | Verification needs a focused test choice | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Revalidate before mutation`) |
-| Documentation write authority selects writable human prose | `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` (`Scope Gate`) and any surface owner it routes |
+| An eligible selected human-documentation unit needs prose diagnosis, whether read-only or writable | `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` (`Scope Gate`) and any surface owner it routes |
 | A candidate depends on project vocabulary or a domain term | `.goat-flow/glossary.md` |
 
 No matrix match means no owner load or broader-discipline claim. Project authority may add an owner

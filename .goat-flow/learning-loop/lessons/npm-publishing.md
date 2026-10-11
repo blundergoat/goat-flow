@@ -1,6 +1,6 @@
 ---
 category: npm-publishing
-last_reviewed: 2026-09-28
+last_reviewed: 2026-10-03
 ---
 
 ## Lesson: A profile query is not a publishing capability check
@@ -19,12 +19,56 @@ last_reviewed: 2026-09-28
 ## Lesson: OTP tests must exercise npm's configuration precedence
 
 **Status:** active | **Created:** 2026-09-28 | **Evidence:** ACTUAL_MEASURED
+**Severity:** CORRECTNESS
 **Decision changed:** Verify credential configuration through npm's real parser instead of having a test shim read one assumed environment variable.
+**Incident count:** 2
+**Latest occurrence:** 2026-09-28
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Set both `NPM_CONFIG_OTP` and `npm_config_otp` when passing a fresh code through the environment. For an empty response, use `--otp=` so npm's own prompt does not inherit a stale code from environment or config files. Exercise these choices with the real `npm config get otp` command in an isolated fixture; keep actual publishing mocked.
+**Prevention:** Clear inherited OTP settings with `--otp=` for both browser login and publishing. A configured OTP can force npm's login into legacy authentication even when `--auth-type=web` is supplied. Exercise these choices with the real `npm config get auth-type otp` parser in an isolated fixture; keep actual login and publishing mocked. Check other behavior-changing settings through that parser too: the confirmed publish must pass `--dry-run=false` to override inherited preview settings.
 
 **What happened:** The agent's publish tests read only `NPM_CONFIG_OTP`, concealing how npm merges configuration. Local probes with npm 10.9.4 showed that reversing the uppercase and lowercase environment assignments changed the selected OTP. Empty environment values were ignored. The script also left inherited OTP settings intact when the user pressed Enter for npm's own prompt.
 
-**Evidence:** `test/integration/npm-publish.test.ts` (search: `overrides stale OTP settings with`) now resolves the effective OTP through real npm configuration in a temporary workspace. The empty-response case failed with the previous script and passed after `scripts/npm-publish.sh` (search: `npm publish --otp=`) cleared it explicitly. The fresh-code case verifies that entered input takes precedence over inherited settings.
+**Evidence:** `test/integration/npm-publish.test.ts` (search: `overrides stale OTP settings with`) resolves the effective OTP through real npm configuration in a temporary workspace. The original empty-response case failed until `scripts/npm-publish.sh` (search: `npm publish --otp=`) cleared it explicitly. When the custom code prompt was removed, the fresh-code and empty-response cases were replaced by a browser-authentication case. It verifies that inherited uppercase, lowercase, and file settings leave login in web mode and publishing without a supplied OTP.
+
+**Recurrence 2026-09-28:** A follow-up review found that the test shim recognized only the explicit `--dry-run` argument, concealing inherited preview settings. `test/integration/npm-publish.test.ts` (search: `performs the confirmed publish despite inherited dry-run settings`) used npm's parser and observed `publish-dry-run:true` on the final command while the script reported success. Passing `--dry-run=false` made that same case resolve false. The package preview remains a dry run; no live publish was performed.
+
+## Lesson: Let npm handle passkey verification in its browser flow
+
+**Status:** active | **Created:** 2026-09-28 | **Evidence:** OBSERVED
+**Decision changed:** Check the provider's current authentication flow before adding credential prompts; use npm's browser login and native publish challenge for passkey users.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+
+**Prevention:** Use `npm login --auth-type=web --otp=` before release checks and keep `npm publish --otp=` attached to the terminal so npm can open its browser challenge. Do not ask passkey users to supply an authenticator or recovery code. Preserve npm's error output and distinguish cancelled browser authentication from an account security hold when explaining retries. Script tests prove the handoff and config precedence, not successful registry authentication.
+
+**What happened:** The agent added a generic 2FA-code prompt to `scripts/npm-publish.sh` (search: `verify_publish_auth`) and offered fresh-code retries after any publish failure. The maintainer reported that npm only offered passkey setup, that they tried a recovery code while following the code prompt, and that publishing returned a temporary account suspension. The exact recovery action and hold start time were not verified. [npm's recovery documentation](https://docs.npmjs.com/recovering-your-2fa-enabled-account/) describes a 72-hour publishing hold after recovery-code login; it does not establish that submitting a code to the script caused this hold.
+
+**Evidence:** `scripts/npm-publish.sh` (search: `npm login --auth-type=web --otp=`) now delegates login to npm and has no custom code collector. `test/integration/npm-publish.test.ts` (search: `continues with interactive 2FA when login succeeds but profile access is unavailable`) completes the mocked flow using only the authentication choice and publish confirmation. The `stops before the expensive gate when browser login is cancelled` case verifies that failed login prevents release checks. No live passkey login or publish was exercised.
+
+## Lesson: Test setup failures at the shell function's call site
+
+**Status:** active | **Created:** 2026-09-28 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Reproduce failed credential setup through its actual caller before relying on `set -e` to stop publishing.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** A shell function invoked as an `if` condition does not stop at intermediate failures under `set -e`. Call credential setup directly when its failures must terminate the script, or handle every failing operation explicitly. Test failed temporary-file creation and ensure no authentication or publish command follows it.
+
+**What happened:** The agent reviewed `scripts/npm-publish.sh` (search: `configure_token_from_env`) without testing filesystem failures. Its caller used `if configure_token_from_env`, so a failed `mktemp` did not stop the function. It continued through failed config writes, reported the token as selected, and reached publishing with a different or missing credential config.
+
+**Evidence:** `test/integration/npm-publish.test.ts` (search: `stops before authentication when temporary token config creation fails`) injected a failing `mktemp`. The original script completed the mocked publish with status 0. Calling setup directly made the same test exit 1 before `npm whoami`, release checks, or publishing. The existing `accepts one bypass token without asking for an OTP` case also verifies npm's selected config path and removal of the temporary config after success.
+
+## Lesson: Mock identifiers must not contain the secrets a leak assertion searches for
+
+**Status:** active | **Created:** 2026-10-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Before adding a mock value to a suite that asserts secrets never reach output, check it against those assertion patterns; prefer letters-only fixture IDs.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Run the existing no-leak assertions against every new string the script prints. A hex commit hash such as `0123456789abcdef...` contains the fixture OTP `123456`, and `9876543210` contains `654321`.
+
+**What happened:** The CI fast path added to `scripts/npm-publish.sh` (search: `ci_verified_head`) prints an abbreviated commit hash. The agent's mock HEAD was `0123456789abcdef0123456789abcdef01234567`, so the new `Running the full gate: CI for 01234567` line matched `/123456|654321/u`. Three tests that check 2FA codes never reach output failed, although no code leaked.
+
+**Evidence:** `test/integration/npm-publish.test.ts` (search: `MOCK_HEAD =`) failed 3 of 14 cases with `The input was expected to not match the regular expression /123456|654321/u`. A letters-only mock hash made all 14 pass without changing the script.

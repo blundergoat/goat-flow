@@ -1,8 +1,8 @@
 # ADR-068: Floor the likely at one minute per unit so fast plans can use their own history
 
-**Status:** Implemented
+**Status:** Accepted
 **Date:** 2026-09-20
-**Ticket/Context:** `.goat-flow/plans/forecast-accuracy/M09-decide-how-fast-plans-get-their-own-range.md` and `M10-give-fast-plans-their-own-range.md` (local working state, not committed evidence)
+**Updated:** 2026-10-11 - the retired Implemented status became Accepted.
 
 ## Context
 

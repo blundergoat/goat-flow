@@ -1,6 +1,6 @@
 ---
 category: integration-verification
-last_reviewed: 2026-09-19
+last_reviewed: 2026-10-03
 ---
 
 **Scope:** Proof that separately-correct components still cooperate - manifest against installer, built against source-run server paths, helper ownership across splits, and API contracts beyond the happy path.
@@ -84,6 +84,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Repeated doc claims need grep verification after the first patch
 
 **Status:** active | **Created:** 2026-04-21
+**Severity:** INTEGRATION
 
 **Prevention:**
 1. For duplicated release-note bullets or summary sections, assume the same claim may appear more than once and verify with `rg`, not by eyeballing one section.
@@ -100,6 +101,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Copilot instruction line caps count trailing newlines
 
 **Status:** active | **Created:** 2026-04-25
+**Severity:** INTEGRATION
 
 **Incident count:** 2 | **Latest occurrence:** 2026-08-14
 
@@ -152,3 +154,18 @@ last_reviewed: 2026-09-19
 **What happened:** A disposable replica of a multi-project workspace left out `logs`, `plans` and `scratchpad` to stay small. Every project's upgrade preview came back `blocked`, and the first summary mixed real local edits with rows the copy had caused. Two rebuilds were needed, first restoring the log READMEs and then the plans and scratchpad anchors, before two clean projects previewed as upgradable and the real conflicts stood alone.
 
 **Root cause:** The exclusion list was chosen by size and by what looked like throwaway state, without reading which paths the installer owns inside those folders.
+
+---
+
+## Lesson: Moving a child process from spawnSync to execFile changes what counts against maxBuffer
+
+**Status:** active | **Created:** 2026-10-03
+**Decision changed:** When replacing `spawnSync` or `spawn` with `execFile`, carry over every ignored stream; `execFile` has no `stdio` option and stops the child when stderr alone passes `maxBuffer`.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Before swapping a child-process API, list the old call's `stdio`, `maxBuffer`, timeout and stdin settings and keep each one. To read only stdout, use `spawn` with stderr ignored and cap stdout in code, then test with more output on the ignored stream than the buffer allows. Evidence anchors: `src/cli/server/terminal-spawn.ts` (search: `function firstVersionLine`) and `test/smoke/dashboard-endpoints.test.ts` (search: `5,000 bytes of them must not cost the probe`).
+
+**What happened:** PR #67 review asked for the dashboard's runner version probe to leave the server's synchronous launch path and to reach Windows `.cmd` shims through PowerShell. The fix replaced `spawnSync(..., { maxBuffer: 4096, stdio: ["ignore", "pipe", "ignore"] })` with `execFile(..., { maxBuffer: 4096 })`. A Windows shim that wrote 5,000 bytes to stderr then recorded `null` instead of its version, and two independent reviews flagged the same cause.
+
+**Root cause:** I checked the new call's arguments and timeout but not the stream handling the old `stdio` option had provided.

@@ -114,12 +114,16 @@ describe("config validates active milestone policy", () => {
   it("defaults omitted policy to one and retains the canonical plans path", () => {
     for (const yaml of [null, "", "plans: {}", "plans:\n  path: elsewhere"]) {
       const result = loadConfig("/tmp", configFS(yaml));
-      assert.equal(result.valid, true);
-      assert.deepEqual(result.config.plans, {
-        path: ".goat-flow/plans/",
-        maxActiveMilestones: 1,
-        forecastBandQuantiles: [10, 90],
-      });
+      assert.equal(result.valid, true, `config ${JSON.stringify(yaml)}`);
+      assert.deepEqual(
+        result.config.plans,
+        {
+          path: ".goat-flow/plans/",
+          maxActiveMilestones: 1,
+          forecastBandQuantiles: [10, 90],
+        },
+        `config ${JSON.stringify(yaml)}`,
+      );
     }
   });
 
@@ -230,13 +234,13 @@ hooks:
   gruff-code-quality:
     enabled: true
     binaries:
-      py: strands_agents/.venv/bin/gruff-py
+      py: tools/.venv/bin/gruff-py
 `;
     const result = loadConfig("/tmp", configFS(yaml));
     assert.equal(result.valid, true);
     assert.deepStrictEqual(result.config.hooks["gruff-code-quality"], {
       enabled: true,
-      binaries: { py: "strands_agents/.venv/bin/gruff-py" },
+      binaries: { py: "tools/.venv/bin/gruff-py" },
     });
   });
 
@@ -394,8 +398,6 @@ quality:
   gate-vocabulary:
     verification-gate: ["runs? tests"]
   tool-keywords-regex: "browser-use"
-  fixture-path: test/fixtures/quality-scores.json
-  additional-fixtures: []
   subtypes:
     workflow:
       notes: tuned for this project
@@ -774,6 +776,7 @@ describe("plans check: active cap input and project authority", () => {
           error instanceof CLIError &&
           error.exitCode === 2 &&
           error.message.includes("--max-active"),
+        `raw ${JSON.stringify(raw)}`,
       );
     }
   });
@@ -799,7 +802,7 @@ describe("plans check: active cap input and project authority", () => {
     assert.match(missing.stderr, /--max-active/u);
   });
 
-  /** Temporary canonical and external plans prove config errors, precedence, and quiet warnings through the CLI. */
+  /** Writes temporary canonical and external plans proving the CLI's config-error, precedence and quiet-warning contract. */
   it("loads only canonical project policy and lets fully explicit policy bypass malformed config", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-policy-"));
     try {
@@ -857,7 +860,7 @@ describe("plans check: active cap input and project authority", () => {
     }
   });
 
-  /** Copies the consumer fixture into a temporary project to prove which positive cap reaches enforcement. */
+  /** Writes a copy of the consumer fixture into a temporary project to prove which positive cap reaches enforcement. */
   it("uses the canonical configured cap unless an explicit flag overrides it", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-cap-precedence-"));
     try {
@@ -866,6 +869,7 @@ describe("plans check: active cap input and project authority", () => {
         "M17-shared-baseline.md",
         "M18-go-precision.md",
         "M19-php-precision.md",
+        "M20-merge-precision.md",
       ]) {
         files[name] = readFileSync(
           join(
@@ -902,7 +906,7 @@ describe("plans check: active cap input and project authority", () => {
     }
   });
 
-  /** Symlinked operands may be readable while lacking authority to use the apparent project's config. */
+  /** Writes symlinked operands readable without authority over the apparent project's config; EPERM skips, and any other error throws. */
   it("requires physical containment of both the plans root and selected directory", (context) => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-policy-links-"));
     try {

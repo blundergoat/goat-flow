@@ -20,6 +20,7 @@ last_reviewed: 2026-09-21
 ## Lesson: Slow verification can expose unrelated dashboard doc drift
 
 **Status:** active | **Created:** 2026-05-09
+**Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-05-18
 
 **Prevention:** When `npm run test:slow` or preflight fails during unrelated verification, separate task-local regressions from repo-wide drift before changing code. For dashboard view drift, compare `workflow/manifest.json` (search: `dashboard_views`) against `.goat-flow/architecture.md` (search: `Page views`), then rerun both `bash scripts/preflight-checks.sh` and `npm run test:slow` after the doc correction.
@@ -37,10 +38,11 @@ last_reviewed: 2026-09-21
 ## Lesson: Classic dashboard script splits need Knip ignore coverage
 
 **Status:** active | **Created:** 2026-04-21
+**Severity:** INTEGRATION
 **Decision changed:** Register a new dashboard classic script in `knip.json` and `src/dashboard/index.html` in the change that creates it, and run the repository Knip command before trusting preflight.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-04-25
+**Incident count:** 3 | **Latest occurrence:** 2026-10-01
 **Merged:** 2026-09-05 - absorbed "Dashboard classic scripts need Knip registration" (2026-04-25); one root cause, HTML-loaded scripts are invisible to the module graph.
 
 **Prevention:** When adding a `src/dashboard/*.ts` classic script, update `src/dashboard/index.html`, add the built asset smoke, and register the source file in `knip.json` in the same change. Run the repository Knip command before relying on preflight; dashboard typecheck and asset tests cannot see reachability. After adding optional decoder branches, run `npx eslint src/cli src/dashboard` rather than treating `npm run typecheck` as enough. Evidence anchors: `knip.json` (search: `dashboard-custom-prompts.ts`), `src/cli/server/decoders.ts` (search: `decodeOptionalStringField`).
@@ -49,13 +51,16 @@ last_reviewed: 2026-09-21
 
 **Root cause:** The dashboard frontend intentionally uses classic scripts (`x-data="app()"`) and shared browser globals, so Knip follows module imports and never sees HTML script-tag reachability; `knip.json` is the only place that records the intent.
 
-**Recurrence 2026-04-25:** M03 added `src/dashboard/dashboard-custom-prompts.ts` and loaded it from the HTML shell; focused tests and typecheck passed, but the installer round-trip preflight reported the file unused, and the same run caught an ESLint complexity error in `src/cli/server/decoders.ts` after the terminal-create payload grew another optional field.
+**Recurrence 2026-04-25:** The change added `src/dashboard/dashboard-custom-prompts.ts` and loaded it from the HTML shell; focused tests and typecheck passed, but the installer round-trip preflight reported the file unused, and the same run caught an ESLint complexity error in `src/cli/server/decoders.ts` after the terminal-create payload grew another optional field.
+
+**Recurrence 2026-10-01:** The change removed tests for an unreachable quality-template copy. That also removed the last statically recognized test reference to `dashboard-setup-quality.ts`; the HTML shell and classic-script callers still load and use the live helper. Full preflight then reported the file unused. Register existing HTML-loaded scripts when pruning their last module-graph reference, not only when creating them. Evidence: `src/dashboard/index.html` (search: `dashboard-setup-quality.js`), `src/dashboard/dashboard-app-prompts-audit-fragments.ts` (search: `dashboardQualityModes`), and `knip.json` (search: `dashboard-setup-quality.ts`).
 
 ---
 
 ## Lesson: Dashboard asset tests can read stale dist copies
 
 **Status:** active | **Created:** 2026-04-25
+**Severity:** INTEGRATION
 **Decision changed:** Keep generated-asset checks in the after-build suite; source contracts must run without `dist`. Clean the build when an asset is renamed or removed.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -64,13 +69,13 @@ last_reviewed: 2026-09-21
 
 **Prevention:** The preset equality check belongs in `test/integration/dashboard-preset-build.test.ts`, which the slow suite runs after building. Keep source-only skill contracts in the fast suite. After changing dashboard static assets copied by `build:dashboard`, run `npm run build:dashboard` before dashboard-server asset smoke tests and before the first expanded suite, not after a favourable focused run. When the change renames or deletes a generated asset, run the full `npm run build` or clean `dist` first, because `build:dashboard` compiles and copies without removing `dist/dashboard`; then grep `dist` for the old filenames. Evidence anchors: `package.json` (search: `rmSync('dist', { recursive: true, force: true })`), `package.json` (search: `tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs`).
 
-**What happened:** M02 added metadata to `src/dashboard/preset-prompts.json` and the JSON and unit checks passed, but the focused `dashboard assets` integration test failed because `/assets/preset-prompts.json` served the existing `dist/dashboard/preset-prompts.json` copy without the new metadata.
+**What happened:** The change added metadata to `src/dashboard/preset-prompts.json` and the JSON and unit checks passed, but the focused `dashboard assets` integration test failed because `/assets/preset-prompts.json` served the existing `dist/dashboard/preset-prompts.json` copy without the new metadata.
 
 **Root cause:** The dashboard server prefers the built copy when it exists, and source edits plus `npm run typecheck` never refresh it, so a local `dist/` makes source-run tests verify stale data.
 
 **Recurrence 2026-05-31:** Renaming dashboard app fragment files, `npm run build:dashboard` compiled the new descriptive `dashboard-app-*.js` files but left the old generated numbered assets in `dist/dashboard`, because only the full build cleans `dist` first.
-**Recurrence 2026-08-14:** M03 changed the four QA-facing records in the preset catalog; focused preset and doctrine tests passed, but a later full-suite run failed the source/dist parity contract because the built copy still held the earlier catalog. `test/integration/dashboard-preset-build.test.ts` (search: `dashboard preset source/dist parity`).
-**Recurrence 2026-08-29:** M68 changed the Coverage Audit preset and its focused unit contract, and the first full `npm test` failed the same parity contract until `npm run build:dashboard` ran before repeating it. `src/dashboard/preset-prompts.json` (search: `blocking-gate contract`).
+**Recurrence 2026-08-14:** The change changed the four QA-facing records in the preset catalog; focused preset and doctrine tests passed, but a later full-suite run failed the source/dist parity contract because the built copy still held the earlier catalog. `test/integration/dashboard-preset-build.test.ts` (search: `dashboard preset source/dist parity`).
+**Recurrence 2026-08-29:** The change changed the Coverage Audit preset and its focused unit contract, and the first full `npm test` failed the same parity contract until `npm run build:dashboard` ran before repeating it. `src/dashboard/preset-prompts.json` (search: `blocking-gate contract`).
 
 **Recurrence 2026-09-08:** Resuming the release plan, the focused skill-contract run passed 111 of 112 tests but failed the dashboard preset parity assertion. The built catalog lacked the source security prompt's execution-withheld wording. Refreshing only the existing JSON copy followed the build script's direct-copy mapping; the source catalog needed no edit. The parity assertion now lives in the after-build integration suite so guidance-only fast tests no longer depend on generated assets. Evidence: `test/integration/dashboard-preset-build.test.ts` (search: `dashboard preset source/dist parity`); `scripts/build-dashboard-assets.mjs` (search: `preset-prompts.json`).
 
