@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-11
 ---
 
 **Scope:** Hook test coverage strategy and provider evidence - what a self-test actually exercises, which support layer a capture proves, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -235,7 +235,7 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is 
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
 
-**Prevention:** Named hook suites, `npm test` and preflight do not run the slow suite, where the installer tests execute the installed hook against fixtures. Run `command grep -rln '<hook file name>' test/` and run every file it lists, or the whole slow suite. When the work sits on a pull request, check its latest CI result (`gh pr checks <number>`) at each handoff: a job that has failed since the change is evidence even when every local gate passed. Evidence anchor: `test/integration/setup-install.test.ts` (search: `runs the installed Gruff hook through the detected strands_agents binary`).
+**Prevention:** Named hook suites, `npm test` and preflight do not run the slow suite, where the installer tests execute the installed hook against fixtures. Run `command grep -rln '<hook file name>' test/` and run every file it lists, or the whole slow suite. When the work sits on a pull request, check its latest CI result (`gh pr checks <number>`) at each handoff: a job that has failed since the change is evidence even when every local gate passed. Evidence anchor: `test/integration/setup-install.test.ts` (search: `runs the installed Gruff hook through a configured binaries override`).
 
 **What happened:** A milestone taught the Gruff hook to respect a project's saved `enabled: false`. An installer test ran the installed hook in a freshly installed project, whose saved choice is off by default, and still expected analysis. That milestone and the next three ran their named Gruff suites, `npm test` and preflight, all green, while CI's `test-slow (5/5)` job failed on every commit of the pull request. The final milestone's release gate hit the same failure, and the user reported the CI job. The test now enables Gruff before running the hook and proves the hook stays quiet while the choice is off.
 

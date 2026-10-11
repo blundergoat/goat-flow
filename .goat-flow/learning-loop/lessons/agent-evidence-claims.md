@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-11
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -58,10 +58,15 @@ Related evidence moved intact to [evidence-attribution.md](evidence-attribution.
 ## Lesson: Single-source-of-truth claims need a cold-path review pass
 
 **Status:** active | **Created:** 2026-04-18
+**Severity:** INTEGRATION
+**Incident count:** 2 | **Latest occurrence:** 2026-10-11
+**Decision changed:** Trace every applicable entry mode to the shared rule before claiming that guidance is consistent.
 
-**Prevention:** When claiming a single writable authority, run a cold-path pass for hardcoded enums, literal allowlists, and docs or templates restating the same contract. The migration is complete only when manifest, installer, config validation, audit failures, and frontend payload readers agree on one authority.
+**Prevention:** When claiming a single writable authority, run a cold-path pass for hardcoded enums, literal allowlists, and docs or templates restating the same contract. The migration is complete only when manifest, installer, config validation, audit failures, and frontend payload readers agree on one authority. For skills, follow each applicable mode to its reference; matching installed copies do not prove that every mode reaches the rule.
 
 **What happened:** The change moved agent support metadata into `workflow/manifest.json`, but a follow-up review still found parallel authority: Codex had a fictional `post_turn: "Stop"` event in the manifest, the dashboard frontend narrowed injected agent ids back to `claude | codex | gemini`, and unknown `.goat-flow/config.yaml` `agents:` ids only warned, so audit status stayed green.
+
+**Recurrence 2026-10-11:** Progress-summary guidance covered planning and implementation in the reference, but the primary skill trigger still named completed batches and Mode 1 had no progress handoff. Follow-up inspection found the mismatch after the planning contract suites passed. The repair aligned `workflow/skills/goat-plan/SKILL.md` (search: `**Progress:**`, `Mode 1: Named-File Update (edit in place)`) with `workflow/skills/goat-plan/references/issue-format.md` (search: `Plan progress updates`). The repair then removed `After Phase 2 finishes`, which `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`) requires. Preflight caught that omission. Preserve shared handoff wording and run shared contracts when changing routing.
 
 ---
 

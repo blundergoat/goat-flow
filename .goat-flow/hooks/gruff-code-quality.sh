@@ -1186,7 +1186,7 @@ self_test() {
   }
 
   tmp="$(mktemp -d)"
-  mkdir -p "$tmp/src" "$tmp/empty-bin" "$tmp/env-bin" "$tmp/strands_agents/.venv/bin" "$tmp/.goat-flow"
+  mkdir -p "$tmp/src" "$tmp/empty-bin" "$tmp/env-bin" "$tmp/tools/.venv/bin" "$tmp/.goat-flow"
   sample_payload='{"tool_name":"Edit","tool_input":{"file_path":"src/sample.py","changed_ranges":[{"startLine":1,"endLine":1}]}}'
   printf 'rules: {}\n' > "$tmp/.gruff-py.yaml"
   printf 'print("x")\n' > "$tmp/src/sample.py"
@@ -1196,8 +1196,8 @@ self_test() {
     printf 'gruff-code-quality self-test: binary-missing diagnostic failed: %s\n' "$output" >&2
     return 1
   }
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/strands_agents/.venv/bin/gruff-py"
-  chmod +x "$tmp/strands_agents/.venv/bin/gruff-py"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/tools/.venv/bin/gruff-py"
+  chmod +x "$tmp/tools/.venv/bin/gruff-py"
   # The nested venv binary now exists but no override names it - discovery must
   # still skip it (ADR-032: no arbitrary-subtree auto-discovery).
   discovered="$(PATH="$tmp/empty-bin" discover_binary "$tmp" gruff-py)"
@@ -1206,8 +1206,8 @@ self_test() {
     printf 'gruff-code-quality self-test: nested venv must not be auto-discovered: %s\n' "$discovered" >&2
     return 1
   }
-  override_path="$(PATH="$tmp/empty-bin" GRUFF_PY_BIN="$tmp/strands_agents/.venv/bin/gruff-py" discover_binary "$tmp" gruff-py)"
-  [[ "$override_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
+  override_path="$(PATH="$tmp/empty-bin" GRUFF_PY_BIN="$tmp/tools/.venv/bin/gruff-py" discover_binary "$tmp" gruff-py)"
+  [[ "$override_path" == "$tmp/tools/.venv/bin/gruff-py" ]] || {
     rm -rf "$tmp"
     printf 'gruff-code-quality self-test: env binary override failed: %s\n' "$override_path" >&2
     return 1
@@ -1223,25 +1223,25 @@ self_test() {
   # These config-driven calls keep the real PATH appended because the parser
   # needs awk; they never reach the PATH binary search - a present config
   # override returns from discovery before the standard-location loop.
-  printf 'hooks:\r\n  gruff-code-quality:\r\n    enabled: true\r\n    binaries:\r\n      py: "strands_agents/.venv/bin/gruff-py"\r\n' > "$tmp/.goat-flow/config.yaml"
+  printf 'hooks:\r\n  gruff-code-quality:\r\n    enabled: true\r\n    binaries:\r\n      py: "tools/.venv/bin/gruff-py"\r\n' > "$tmp/.goat-flow/config.yaml"
   config_path="$(PATH="$tmp/empty-bin:$PATH" discover_binary "$tmp" gruff-py)"
-  [[ "$config_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
+  [[ "$config_path" == "$tmp/tools/.venv/bin/gruff-py" ]] || {
     rm -rf "$tmp"
     printf 'gruff-code-quality self-test: config binary override failed: %s\n' "$config_path" >&2
     return 1
   }
-  printf 'hooks:\n  gruff-code-quality:\n    enabled: true\n    binaries: { py: strands_agents/.venv/bin/gruff-py }\n' > "$tmp/.goat-flow/config.yaml"
+  printf 'hooks:\n  gruff-code-quality:\n    enabled: true\n    binaries: { py: tools/.venv/bin/gruff-py }\n' > "$tmp/.goat-flow/config.yaml"
   inline_config_path="$(PATH="$tmp/empty-bin:$PATH" discover_binary "$tmp" gruff-py)"
   # The compact dashboard-friendly YAML form must run the same analyzer.
-  [[ "$inline_config_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
+  [[ "$inline_config_path" == "$tmp/tools/.venv/bin/gruff-py" ]] || {
     rm -rf "$tmp"
     printf 'gruff-code-quality self-test: inline config binary override failed: %s\n' "$inline_config_path" >&2
     return 1
   }
-  printf 'hooks:\n  gruff-code-quality:\n    enabled: true\n    binaries:\n      py: "strands_agents/.venv/bin/gruff-py" # analyzer\n' > "$tmp/.goat-flow/config.yaml"
+  printf 'hooks:\n  gruff-code-quality:\n    enabled: true\n    binaries:\n      py: "tools/.venv/bin/gruff-py" # analyzer\n' > "$tmp/.goat-flow/config.yaml"
   commented_config_path="$(PATH="$tmp/empty-bin:$PATH" discover_binary "$tmp" gruff-py)"
   # Inline comments should stay readable without becoming part of the path.
-  [[ "$commented_config_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
+  [[ "$commented_config_path" == "$tmp/tools/.venv/bin/gruff-py" ]] || {
     rm -rf "$tmp"
     printf 'gruff-code-quality self-test: commented config binary override failed: %s\n' "$commented_config_path" >&2
     return 1
@@ -1255,16 +1255,16 @@ self_test() {
     return 1
   }
   # Git Bash infers executability from a shebang even after chmod -x; use inert data for this fixture.
-  printf 'non-executable analyzer fixture\n' > "$tmp/strands_agents/.venv/bin/gruff-py"
-  chmod -x "$tmp/strands_agents/.venv/bin/gruff-py"
+  printf 'non-executable analyzer fixture\n' > "$tmp/tools/.venv/bin/gruff-py"
+  chmod -x "$tmp/tools/.venv/bin/gruff-py"
   output="$(PATH="$tmp/empty-bin:$PATH" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"
-  [[ "$output" == *"hooks.gruff-code-quality.binaries.py points at strands_agents/.venv/bin/gruff-py which is not an executable file"* ]] || {
+  [[ "$output" == *"hooks.gruff-code-quality.binaries.py points at tools/.venv/bin/gruff-py which is not an executable file"* ]] || {
     rm -rf "$tmp"
     printf 'gruff-code-quality self-test: non-executable config override diagnostic failed: %s\n' "$output" >&2
     return 1
   }
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/strands_agents/.venv/bin/gruff-py"
-  chmod +x "$tmp/strands_agents/.venv/bin/gruff-py"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/tools/.venv/bin/gruff-py"
+  chmod +x "$tmp/tools/.venv/bin/gruff-py"
   printf 'hooks:\n  gruff-code-quality:\n    binaries:\n      py: missing/gruff-py\n' > "$tmp/.goat-flow/config.yaml"
   output="$(PATH="$tmp/empty-bin:$PATH" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"
   [[ "$output" == *"hooks.gruff-code-quality.binaries.py points at missing/gruff-py which does not exist"* ]] || {

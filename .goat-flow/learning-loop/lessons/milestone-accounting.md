@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-11
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
@@ -144,7 +144,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Decision changed:** Reserve Tasks for estimated implementation checkboxes and keep each `(est: ...)` entry at the end of its item.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 10 | **Latest occurrence:** 2026-09-27
+**Incident count:** 11 | **Latest occurrence:** 2026-10-11
 **Merged:** 2026-09-05 - absorbed three plan-parsing recurrences (2026-07-29, 2026-07-31, 2026-08-21) from `.goat-flow/learning-loop/lessons/audit-contracts.md`, which filed them under artifact scanners.
 
 **Prevention:** Keep `## Tasks` to estimated work items. Put section-wide guidance before the first checkbox or under its own heading, never after the final estimated item; put discoveries in `## Context` and literal gate output in `## Actual evidence`; place a completion note before the terminal estimate. Keep `Plan/admin overhead` as the forecast input, keep measured variance outside the fixed Actual receipt reason, and rerun strict validation after closeout edits. Evidence anchors: `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task checkbox into an estimate-bearing record; `src/cli/plans-effort.ts` (search: `const TASK_ESTIMATE_PATTERN`) requires the estimate at the item's end; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.
@@ -162,6 +162,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-08-23:** A section-wide gate paragraph placed after the final checkbox became part of Task 4, so its `(est: ...)` token was no longer terminal and strict validation reported one missing estimate, 11 product minutes against 14, and 7 work units against 8; moving the paragraph above the first checkbox restored all three counts.
 
 **Recurrence 2026-09-27:** While consolidating the release plans, a section-wide verification note after the final task made strict validation report 34 product minutes against 37, one missing estimate and 34 work units against 35. Moving the note before the first checkbox restored the terminal estimate. Keep shared guidance outside checklist item bodies; `src/cli/plans-export.ts` (search: `function readChecklistItems`) and `src/cli/plans-effort.ts` (search: `const TASK_ESTIMATE_PATTERN`) own this boundary.
+
+**Recurrence 2026-10-11:** An implementation note after the last task hid its three-minute estimate: strict validation counted 26 product minutes against 29 and 19 work units against 20. Moving the unchanged note into Context restored exit 0. The parser still owns text until the next checkbox or heading; `src/cli/plans-export.ts` (search: `function readChecklistItems`) and `src/cli/plans-effort.ts` (search: `export function readTaskEstimate`) explain the failure.
 
 
 ## Lesson: Milestone plans need exporter-contract verification before handoff

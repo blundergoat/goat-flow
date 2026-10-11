@@ -58,7 +58,6 @@ const BOUNDED_SETUP_DIRS = [
   "tests",
   "config",
   "scripts",
-  "strands_agents",
 ];
 
 /** Detect which supported agent surfaces already exist in the project. */
@@ -484,8 +483,7 @@ function collectPythonSetup(
     rootExists(projectPath, "pyproject.toml") ||
     rootExists(projectPath, "setup.py") ||
     rootExists(projectPath, "setup.cfg") ||
-    rootExists(projectPath, "requirements.txt") ||
-    hasBoundedSetupDir(projectPath, "strands_agents")
+    rootExists(projectPath, "requirements.txt")
   ) {
     addLabel(languages, "Python");
     commands.test ||= "pytest";

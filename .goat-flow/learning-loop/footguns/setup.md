@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-10-09
+last_reviewed: 2026-10-11
 ---
 
 ## Footgun: A preview-layer classification change is inert until apply consumes the decision
@@ -65,6 +65,23 @@ last_reviewed: 2026-10-09
 **Why it happens:** The helpers spawn the installer with `timeout: 30000`. `spawnSync` reports a killed child as `status: null`, and the assertion compares that to `0`, so a wall-clock problem is presented in the vocabulary of a content problem. The installer copies several hundred small files, which is exactly the workload Windows Git Bash is slowest at - the same process and filesystem cost recorded in `.goat-flow/learning-loop/footguns/hook-performance.md` (search: `Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash`).
 
 **Evidence:** Measured 2026-09-08 on Windows 11 Pro 10.0.26200 while changing Markdown, one JSON string and two test files. Run serially with `--test-concurrency=1` and nothing else touching the tree, the two suites returned `# tests 51`, `# pass 2`, `# fail 49` - 25 of 26 cases in `setup-install-agent-matrix.test.ts` and 24 of 25 in `setup-install-migrations.test.ts` - each failure around `duration_ms: 30016` with error `null !== 0`. A default-concurrency run returned the same totals, so concurrency is not the cause. A single `bash workflow/install-goat-flow.sh <temp-dir> --agent claude` on the same tree exited 0 in 46 seconds, above the helpers' 30-second budget.
+
+---
+
+## Footgun: An ownership flip to system-owned blocks upgrades from install state that never recorded the path
+
+**Status:** active | **Created:** 2026-10-11 | **Evidence:** OBSERVED
+**Decision changed:** Before changing a manifest path from `user-owned` to `system-owned`, add a transfer rule and an upgrade test that starts from the previous release's install state; a fresh-install test cannot catch the block.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Treat an ownership flip as an upgrade migration, not a manifest edit. Install state records rows only for system-owned files, so after the flip the path has no baseline row in any install written by the previous release. Test the flip from that release's install state with both a pristine and a customised copy, and decide how each is classified before shipping.
+
+**Symptoms:** A change made `.goat-flow/learning-loop/decisions/README.md` system-owned and copied it with `copy_file`. Its new install test, which started from a project with no install state, passed. A review then showed from the classifier code that every CLI-managed 1.17.0 project would be blocked on upgrade, even with an unedited README, because the template had changed since 1.17.0.
+
+**Why it happens:** With a loaded baseline, no row for the path, and current bytes that differ from the new template, the managed preview classifies the file `unmanaged`, which protects it and blocks the install. Without any install state, the classifier returns `adopted`, which replaces a customised copy with only a warning. Neither path knows the file used to belong to the user.
+
+**Evidence:** `src/cli/managed-setup-state.ts` (search: `if (file.ownership !== "system-owned") continue;`), `src/cli/managed-setup-preview.ts` (search: `function loadedBaselineProtectsExistingDifferentTarget`) and (search: `export function classifyManagedSetupFile`); `workflow/manifest.json` (search: `"source": "workflow/setup/reference/decisions-readme.md"`) still declares the README `user-owned` until the transfer rule ships.
 
 ## Resolved Entries
 

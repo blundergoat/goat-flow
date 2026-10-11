@@ -27,6 +27,10 @@
 - **Read-only prose reviews load the prose playbook** - goat-clarity diagnoses selected documentation the same way with or without edit permission.
 - **Three writing rules** - No invented reasons or conditions; prose judges see the source and score fidelity apart; a removed dash never becomes a semicolon.
 
+### Removed
+
+- **`strands_agents` analyzer detection** - Install and `hooks enable` no longer write a `binaries` entry for `strands_agents/.venv/bin/gruff-py`, and setup detection no longer reports Python from a `strands_agents/` folder alone; set `hooks.gruff-code-quality.binaries.<lang>` yourself when a project needs an override.
+
 ### Fixed
 
 - **Patch installs refresh the project version** - Older releases now refresh the config version while preserving comments and choices. Install refuses newer, unrankable or unsafe-to-refresh saved versions before target writes, including with force. Status shows the project and CLI versions separately; JSON retains `version` for the CLI and adds `projectVersion`.

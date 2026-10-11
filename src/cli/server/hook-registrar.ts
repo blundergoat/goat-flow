@@ -1147,7 +1147,6 @@ function prepareHookChange(
   const configPath = ".goat-flow/config.yaml";
   const config = prepareHookConfig(
     change.readText(configPath),
-    change.projectPath,
     intent.kind === "toggle" ? intent : undefined,
     REMOVED_HOOK_TOMBSTONES.map((spec) => spec.id),
   );

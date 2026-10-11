@@ -25,9 +25,11 @@ Existing plans adopt this layout only on explicit request. A missing notes direc
 
 ## Progress summaries
 
-New Small and Standard plans create `_PROGRESS.md` directly inside the selected plan, initially containing only `# Plan progress`. Existing plans adopt it only on explicit request.
+New Small and Standard plans create `_PROGRESS.md` directly inside the selected plan, initially containing only `# Plan and implementation progress`. Existing plans adopt it only on explicit request.
 
-After meaningful completed batches, prepend concise dated outcomes, actual checks, gaps and pending review; skip unchanged resumes and add brief material status corrections. Preserve earlier entries. Follow goat-plan's `references/issue-format.md` → Plan progress updates for the format, safe saving and scoped clarity required before delivery. The human posts the update.
+After meaningful planning or implementation batches and at handoff, prepend a dated entry with a short subject, outcome bullets, actual checks and gaps, and a final `Next:` action. Distinguish planned, implemented, verified and accepted work. Preserve earlier entries; skip unchanged resumes and add brief material status corrections.
+
+Follow goat-plan's `references/issue-format.md` → Plan progress updates for completion meanings, required decisions, preferred bullet length, punctuation and safe saving. Always run scoped `goat-clarity` for concise, natural wording before delivering new or revised entries. The human posts the update.
 
 ## Data Boundary
 

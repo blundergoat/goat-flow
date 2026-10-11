@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-11
 ---
 
 **Scope:** Hook install, launch, registration, and config-drift plumbing. The `deny-dangerous` policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md); runtime delivery and provider adapters live in [hooks.md](hooks.md).
@@ -230,8 +230,8 @@ Evidence: `test/integration/hook-sync-recovery.test.ts` (search: `recovers a ful
 
 **Symptoms:** Inserting a two-space Git entry before four-space hook siblings moved the existing dangerous and Gruff settings beneath the new entry. The installer then missed an enabled Gruff hook and failed to add its conventional binary override.
 
-**Evidence:** `workflow/install-goat-flow.sh` (search: `function insertHookEntry`) and `src/cli/config/writer.ts` (search: `hookChildIndent`) now infer sibling indentation. The original reproduction in `test/integration/setup-install.test.ts` (search: `repairs a missing gruff-py override for an enabled existing hook`) and the independent writer case in `test/unit/config-writer.test.ts` (search: `preserves four-space hook siblings`) each failed before the repair; the combined replay reported `# tests 2`, `# pass 2`, `# fail 0` (exit 0).
+**Evidence:** `workflow/install-goat-flow.sh` (search: `function insertHookEntry`) and `src/cli/config/writer.ts` (search: `hookChildIndent`) now infer sibling indentation. The original reproduction in `test/integration/setup-install.test.ts` (search: `leaves an enabled existing hook without a binaries override`) and the independent writer case in `test/unit/config-writer.test.ts` (search: `preserves four-space hook siblings`) each failed before the repair; the combined replay reported `# tests 2`, `# pass 2`, `# fail 0` (exit 0).
 
 **Recurrence 2026-09-06:** The Git split's standalone migration reported success after inserting block entries beneath an anchored flow mapping or whole-map alias, producing invalid YAML. A trailing comma also became invalid, while a multiline flow map silently missed the new choice. Four real installer regressions failed before the repair. `workflow/install-goat-flow.sh` (search: `hooksNodeValue`, `insertFlowHookEntry`) now preserves those forms and validates an originally parsed mapping before publishing it. `test/integration/setup-install-agent-matrix.test.ts` (search: `hook choices during the Git split and repeated installation`) covers the four failures plus the existing plain-flow case; the replay recorded `# pass 5`, `# fail 0`, and repeated-install byte equality.
 
-**Recurrence 2026-09-25:** Gruff binary-path insertion broke valid multiline flow mappings and scalar values. Reparse the proposed text and compare its complete meaning with the intended single-field change before saving; preserve the original when the text insertion cannot represent it safely. `workflow/install-goat-flow.sh` (search: `expectedConfig`, `isDeepStrictEqual`) and `test/integration/setup-install-safety-regressions.test.ts` (search: `preserves valid Gruff YAML`) cover both reproduced forms.
+**Recurrence 2026-09-25:** Gruff binary-path insertion broke valid multiline flow mappings and scalar values. Reparse the proposed text and compare its complete meaning with the intended single-field change before saving; preserve the original when the text insertion cannot represent it safely. The binary-path insertion and its reparse-and-compare guard were deleted with the analyzer detection in 1.18.0; `test/integration/setup-install-safety-regressions.test.ts` (search: `preserves valid Gruff YAML`) still covers both reproduced forms against the installer's remaining hooks-block edits.
