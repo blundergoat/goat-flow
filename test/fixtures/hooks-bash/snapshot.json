@@ -1,0 +1,369 @@
+{
+  "schemaVersion": 1,
+  "freezeCommit": "5205eefad9e5630f3dbd6b50f88db22fb94ec02f",
+  "files": [
+    {
+      "path": ".goat-flow/hooks/deny-dangerous.sh",
+      "gitMode": "100755",
+      "gitBlob": "9d10658ff573e431ad7ae736e354ea9b81ba41c9",
+      "sha256": "980f7552c62f54b6d8385d481ccdd3b8ce90745d671d0ad3543a29c69fc10bb8",
+      "bytes": 4040
+    },
+    {
+      "path": ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
+      "gitMode": "100755",
+      "gitBlob": "e02a8bce810f7fda7c413557e88b130656661295",
+      "sha256": "6c85270390c824805ce997a2c3afeab0fcd390e71a66e7571ee9f4d0ba3fbb44",
+      "bytes": 210789
+    },
+    {
+      "path": ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+      "gitMode": "100755",
+      "gitBlob": "7582d69acfb069d25cf832f04bae580f2bf751ba",
+      "sha256": "9fa8456357ae4680a2ae87c885087106cb5834ea2f0e984dba54048d05fa76b0",
+      "bytes": 180297
+    },
+    {
+      "path": ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
+      "gitMode": "100755",
+      "gitBlob": "0525f8815cf4a4e875be51676e69d011b857d539",
+      "sha256": "6a3a3356486e33d2b3391c11cd6af35618273aac27623e0c011b1e1aed965b94",
+      "bytes": 32760
+    },
+    {
+      "path": ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+      "gitMode": "100755",
+      "gitBlob": "483140e8981fb37f8adeacfeeb8f25ff15073455",
+      "sha256": "46e65a387c92d70502c2c92540e9230e406c54c56b68d8c485946817f6226701",
+      "bytes": 45607
+    },
+    {
+      "path": ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+      "gitMode": "100755",
+      "gitBlob": "8aeda27d4966aa70a6db38531ee12f4c2abd5170",
+      "sha256": "1edf01b5a246142fa37311ce4a850d6bd561a688e3f8c93c2a52facd7cca24e0",
+      "bytes": 57326
+    },
+    {
+      "path": ".goat-flow/hooks/deny-git-mutations.sh",
+      "gitMode": "100755",
+      "gitBlob": "a216746ab9d174168885c4fba05fddac08e99f6a",
+      "sha256": "0cea39e8f967622babb07a66b5d30d49f9ccac7a2a748caca9e94aca92bb7b7d",
+      "bytes": 4093
+    },
+    {
+      "path": ".goat-flow/hooks/gh-graphql-read.cjs",
+      "gitMode": "100644",
+      "gitBlob": "3074cdc477c7dcfaa0686e78ff08dc14147f57d0",
+      "sha256": "b0d4e01b1b13fba8a66c11fe5f0f13f996fec26deb7404efc7cd75337e5d13e6",
+      "bytes": 12933
+    },
+    {
+      "path": ".goat-flow/hooks/gruff-code-quality.sh",
+      "gitMode": "100755",
+      "gitBlob": "fed5cbcd4d59af80fb5c49d3c418001702aaf4d9",
+      "sha256": "25693c729e5d25a7645f11aaceb52dbfebc8e69163d8c0934a10eb2ac0f0091d",
+      "bytes": 125009
+    },
+    {
+      "path": ".goat-flow/hooks/hook-launch-runtime.mjs",
+      "gitMode": "100644",
+      "gitBlob": "3e80f425ab8aae6d33f88f60cb740e11e7d950db",
+      "sha256": "bb724775193b50667e99b7508a7846c4820a6bcf9e4d3fcdf6b83677ae6287f5",
+      "bytes": 50923
+    },
+    {
+      "path": ".goat-flow/hooks/hook-policy-state.cjs",
+      "gitMode": "100644",
+      "gitBlob": "d42049bf6676948d27705ddd97a3cf882abb7992",
+      "sha256": "9ffc244d4a35c6abf13e79ab6b688431fc2090a95d7a329b75ecfe354c1b5b17",
+      "bytes": 13218
+    },
+    {
+      "path": ".goat-flow/hooks/hook-provider-adapters.mjs",
+      "gitMode": "100644",
+      "gitBlob": "5e934062bc6980fa6c24f1c7afb4c96a2922dfa8",
+      "sha256": "c80409783acf0ebb67f4ea272fe47be783836a1fc95f38307fba4048d212a56a",
+      "bytes": 36679
+    },
+    {
+      "path": ".goat-flow/hooks/post-turn-safety.sh",
+      "gitMode": "100755",
+      "gitBlob": "ad4856030fb7e0887ddb5f4ecb4547a877809323",
+      "sha256": "89e63f9758ccf8c9e9963d49b7e5b242ec606cf3298cfb8fd0c0344938db1be9",
+      "bytes": 144360
+    },
+    {
+      "path": ".goat-flow/hooks/run-with-bash.mjs",
+      "gitMode": "100644",
+      "gitBlob": "403cd910e953c144cd8c75f1c9a42d900bcded1d",
+      "sha256": "1df5cb4cdf02be5bec4ec877bd74a3a7108e335b7a9b7d534a6e148d7e15efee",
+      "bytes": 47919
+    },
+    {
+      "path": ".goat-flow/hooks/vendor/graphql.cjs",
+      "gitMode": "100644",
+      "gitBlob": "71cd8e02d4da1352fd696ba2fa29efeac555097e",
+      "sha256": "86a01e3e0b9c9389fa1c6cb735ec4150bde9d27b3c9367b070eb55a0674a9a20",
+      "bytes": 36613
+    },
+    {
+      "path": ".goat-flow/hooks/vendor/js-yaml.cjs",
+      "gitMode": "100644",
+      "gitBlob": "aabf75958946448be0d367739bedcbaa7ef78bfb",
+      "sha256": "d7fdf1c03e3f58cb290e067efb8ced57a72e3c441af014be9bbf379078a5ef07",
+      "bytes": 44802
+    },
+    {
+      "path": "workflow/hooks/README.md",
+      "gitMode": "100755",
+      "gitBlob": "7de56feebc95901ad38bebb4b5aa40e0c7f25c73",
+      "sha256": "454337bf851c78b651a1ff83deb1843864d3ab172b7b79ca990131ad509480f9",
+      "bytes": 31374
+    },
+    {
+      "path": "workflow/hooks/agent-config/README.md",
+      "gitMode": "100644",
+      "gitBlob": "a8218e6955bce83921dde5473c0e5be95f84b391",
+      "sha256": "d37749279a474745e1a3da28af1e8cc2e674b2098cc531461aa7fcf41ed9b6ec",
+      "bytes": 899
+    },
+    {
+      "path": "workflow/hooks/agent-config/antigravity-hooks.json",
+      "gitMode": "100644",
+      "gitBlob": "2452e3bf95ea7719b4b1957d0c7a996b167ba1fd",
+      "sha256": "163e08a1456a25061518b8f1adac4171e42be1719204adb3174a94378f8c64e5",
+      "bytes": 12155
+    },
+    {
+      "path": "workflow/hooks/agent-config/claude.json",
+      "gitMode": "100755",
+      "gitBlob": "9b4b451fe2c318998adede5e7319dee43830af0f",
+      "sha256": "a7babf173fc01fbdd8ec32cc7fa19546189a1257162a415d572b572641b5ce22",
+      "bytes": 23777
+    },
+    {
+      "path": "workflow/hooks/agent-config/codex-hooks.json",
+      "gitMode": "100644",
+      "gitBlob": "9755fbc4ffbc38238d2a9b50d4c883e0779f5280",
+      "sha256": "b051f498c0a025bc9f8fc9b3905814fbc33de980030e61168869a32a02ff24ff",
+      "bytes": 41209
+    },
+    {
+      "path": "workflow/hooks/agent-config/codex.toml",
+      "gitMode": "100755",
+      "gitBlob": "53504dbb252b5694e6fa0564132545a5dd080afa",
+      "sha256": "096d2ac7236b440ed5f1c129ef5447ebdb94379b1ecf1b570559292c6badf387",
+      "bytes": 1789
+    },
+    {
+      "path": "workflow/hooks/agent-config/copilot-hooks.json",
+      "gitMode": "100644",
+      "gitBlob": "023cd2d82ed65f522e44545169480e79aa9af1f6",
+      "sha256": "6db9842827779dceace5a17ac838cec521d2dfe7b5eb1937b30131e85bee3571",
+      "bytes": 23520
+    },
+    {
+      "path": "workflow/hooks/agent-config/managed-hook-desired-state.json",
+      "gitMode": "100644",
+      "gitBlob": "95d1d90487fca35cebec83724b60c0d7be1a4a4f",
+      "sha256": "f319b1571c5825231c47e57400a0b87181624c2929ba2dfa4135c477be5d4a2f",
+      "bytes": 165762
+    },
+    {
+      "path": "workflow/hooks/deny-dangerous.sh",
+      "gitMode": "100755",
+      "gitBlob": "9d10658ff573e431ad7ae736e354ea9b81ba41c9",
+      "sha256": "980f7552c62f54b6d8385d481ccdd3b8ce90745d671d0ad3543a29c69fc10bb8",
+      "bytes": 4040
+    },
+    {
+      "path": "workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
+      "gitMode": "100755",
+      "gitBlob": "e02a8bce810f7fda7c413557e88b130656661295",
+      "sha256": "6c85270390c824805ce997a2c3afeab0fcd390e71a66e7571ee9f4d0ba3fbb44",
+      "bytes": 210789
+    },
+    {
+      "path": "workflow/hooks/deny-dangerous/guard-runtime.sh",
+      "gitMode": "100755",
+      "gitBlob": "7582d69acfb069d25cf832f04bae580f2bf751ba",
+      "sha256": "9fa8456357ae4680a2ae87c885087106cb5834ea2f0e984dba54048d05fa76b0",
+      "bytes": 180297
+    },
+    {
+      "path": "workflow/hooks/deny-dangerous/patterns-paths.sh",
+      "gitMode": "100755",
+      "gitBlob": "0525f8815cf4a4e875be51676e69d011b857d539",
+      "sha256": "6a3a3356486e33d2b3391c11cd6af35618273aac27623e0c011b1e1aed965b94",
+      "bytes": 32760
+    },
+    {
+      "path": "workflow/hooks/deny-dangerous/patterns-shell.sh",
+      "gitMode": "100755",
+      "gitBlob": "483140e8981fb37f8adeacfeeb8f25ff15073455",
+      "sha256": "46e65a387c92d70502c2c92540e9230e406c54c56b68d8c485946817f6226701",
+      "bytes": 45607
+    },
+    {
+      "path": "workflow/hooks/deny-dangerous/patterns-writes.sh",
+      "gitMode": "100755",
+      "gitBlob": "8aeda27d4966aa70a6db38531ee12f4c2abd5170",
+      "sha256": "1edf01b5a246142fa37311ce4a850d6bd561a688e3f8c93c2a52facd7cca24e0",
+      "bytes": 57326
+    },
+    {
+      "path": "workflow/hooks/deny-git-mutations.sh",
+      "gitMode": "100755",
+      "gitBlob": "a216746ab9d174168885c4fba05fddac08e99f6a",
+      "sha256": "0cea39e8f967622babb07a66b5d30d49f9ccac7a2a748caca9e94aca92bb7b7d",
+      "bytes": 4093
+    },
+    {
+      "path": "workflow/hooks/gh-graphql-read.cjs",
+      "gitMode": "100644",
+      "gitBlob": "3074cdc477c7dcfaa0686e78ff08dc14147f57d0",
+      "sha256": "b0d4e01b1b13fba8a66c11fe5f0f13f996fec26deb7404efc7cd75337e5d13e6",
+      "bytes": 12933
+    },
+    {
+      "path": "workflow/hooks/gruff-code-quality.sh",
+      "gitMode": "100755",
+      "gitBlob": "fed5cbcd4d59af80fb5c49d3c418001702aaf4d9",
+      "sha256": "25693c729e5d25a7645f11aaceb52dbfebc8e69163d8c0934a10eb2ac0f0091d",
+      "bytes": 125009
+    },
+    {
+      "path": "workflow/hooks/hook-launch-runtime.mjs",
+      "gitMode": "100644",
+      "gitBlob": "3e80f425ab8aae6d33f88f60cb740e11e7d950db",
+      "sha256": "bb724775193b50667e99b7508a7846c4820a6bcf9e4d3fcdf6b83677ae6287f5",
+      "bytes": 50923
+    },
+    {
+      "path": "workflow/hooks/hook-policy-state.cjs",
+      "gitMode": "100644",
+      "gitBlob": "d42049bf6676948d27705ddd97a3cf882abb7992",
+      "sha256": "9ffc244d4a35c6abf13e79ab6b688431fc2090a95d7a329b75ecfe354c1b5b17",
+      "bytes": 13218
+    },
+    {
+      "path": "workflow/hooks/hook-policy-state.d.cts",
+      "gitMode": "100644",
+      "gitBlob": "d2bb13ccbea86b3147d19352bb969f57761ba2a2",
+      "sha256": "1404c7ac3a1578f3911fea63dbf5f7a611484fab6a7c158280da22739baaa602",
+      "bytes": 2698
+    },
+    {
+      "path": "workflow/hooks/hook-provider-adapters.mjs",
+      "gitMode": "100644",
+      "gitBlob": "5e934062bc6980fa6c24f1c7afb4c96a2922dfa8",
+      "sha256": "c80409783acf0ebb67f4ea272fe47be783836a1fc95f38307fba4048d212a56a",
+      "bytes": 36679
+    },
+    {
+      "path": "workflow/hooks/post-turn-safety.sh",
+      "gitMode": "100755",
+      "gitBlob": "ad4856030fb7e0887ddb5f4ecb4547a877809323",
+      "sha256": "89e63f9758ccf8c9e9963d49b7e5b242ec606cf3298cfb8fd0c0344938db1be9",
+      "bytes": 144360
+    },
+    {
+      "path": "workflow/hooks/run-with-bash.mjs",
+      "gitMode": "100644",
+      "gitBlob": "403cd910e953c144cd8c75f1c9a42d900bcded1d",
+      "sha256": "1df5cb4cdf02be5bec4ec877bd74a3a7108e335b7a9b7d534a6e148d7e15efee",
+      "bytes": 47919
+    },
+    {
+      "path": "workflow/hooks/vendor/graphql.cjs",
+      "gitMode": "100644",
+      "gitBlob": "71cd8e02d4da1352fd696ba2fa29efeac555097e",
+      "sha256": "86a01e3e0b9c9389fa1c6cb735ec4150bde9d27b3c9367b070eb55a0674a9a20",
+      "bytes": 36613
+    },
+    {
+      "path": "workflow/hooks/vendor/js-yaml.cjs",
+      "gitMode": "100644",
+      "gitBlob": "aabf75958946448be0d367739bedcbaa7ef78bfb",
+      "sha256": "d7fdf1c03e3f58cb290e067efb8ced57a72e3c441af014be9bbf379078a5ef07",
+      "bytes": 44802
+    },
+    {
+      "path": ".goat-flow/config.yaml",
+      "gitMode": "100644",
+      "gitBlob": "cc03e6ec0b35e2cb0cba57729ffda868a660a05e",
+      "sha256": "f5006eaa28708d7640e398e48d47405fb0f4f6fbf4dbb1e882217699c6bcbb57",
+      "bytes": 2497
+    },
+    {
+      "path": "package.json",
+      "gitMode": "100644",
+      "gitBlob": "0f3c6b16b6f6676b11224c9941aa6c186cf1a502",
+      "sha256": "4db3bcf5cb4613dfadc1a89ae254d23419303e3d913c3291fe9bd1eb4707c01c",
+      "bytes": 5437
+    }
+  ],
+  "requiredEnvironment": {
+    "referenceHost": "WSL2",
+    "locales": [
+      "C",
+      "C.UTF-8"
+    ],
+    "jqVersion": "jq-1.6"
+  },
+  "generatedRowCounts": {
+    "C": {
+      "deny-dangerous": {
+        "smoke": {
+          "executed": 49,
+          "skipped": 112,
+          "captured": 49
+        },
+        "full": {
+          "executed": 921,
+          "skipped": 914,
+          "captured": 921
+        }
+      },
+      "deny-git-mutations": {
+        "smoke": {
+          "executed": 121,
+          "skipped": 40,
+          "captured": 121
+        },
+        "full": {
+          "executed": 953,
+          "skipped": 907,
+          "captured": 953
+        }
+      }
+    },
+    "C.UTF-8": {
+      "deny-dangerous": {
+        "smoke": {
+          "executed": 49,
+          "skipped": 112,
+          "captured": 49
+        },
+        "full": {
+          "executed": 921,
+          "skipped": 914,
+          "captured": 921
+        }
+      },
+      "deny-git-mutations": {
+        "smoke": {
+          "executed": 121,
+          "skipped": 40,
+          "captured": 121
+        },
+        "full": {
+          "executed": 953,
+          "skipped": 907,
+          "captured": 953
+        }
+      }
+    }
+  }
+}

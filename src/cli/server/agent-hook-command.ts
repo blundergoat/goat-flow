@@ -518,12 +518,17 @@ export function buildAgentHookDescriptor(
   const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
   // Claude's live capture approves exec form, while cross-loading shell hosts receive inert routes.
   if (agentId === "claude") {
+    // Set the per-file scan limit in Node so literal argv works on POSIX and Windows.
+    const scanBudget =
+      spec.id === "post-turn-safety"
+        ? "process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304';"
+        : "";
     return {
       form: "argv",
       command: "node",
       args: [
         "-e",
-        structuredHookLaunchBootstrap(hookResponseMode),
+        scanBudget + structuredHookLaunchBootstrap(hookResponseMode),
         hookScriptPath,
         hookResponseMode,
         rootEnvironmentName,
@@ -557,6 +562,11 @@ export function buildAgentHookDescriptor(
       registrationPath,
       bashLauncherPath,
     ]);
+    // The shipped policy corpus exceeds Stop's default one-MiB file limit.
+    if (spec.id === "post-turn-safety") {
+      shellDescriptor.command = `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304 ${shellDescriptor.command}`;
+      shellDescriptor.commandWindows = `$env:GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304'; ${shellDescriptor.commandWindows}`;
+    }
   }
   return shellDescriptor;
 }

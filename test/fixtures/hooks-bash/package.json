@@ -1,0 +1,148 @@
+{
+  "name": "@blundergoat/goat-flow",
+  "version": "1.18.0",
+  "description": "AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot - setup audits, guardrails, structured skills, deny hooks, and persistent learning loops.",
+  "author": "Matthew Hansen (https://www.blundergoat.com)",
+  "license": "MIT",
+  "homepage": "https://github.com/blundergoat/goat-flow#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blundergoat/goat-flow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blundergoat/goat-flow/issues"
+  },
+  "type": "module",
+  "bin": {
+    "goat-flow": "dist/cli/cli.js"
+  },
+  "exports": {
+    ".": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "docs/cli.md",
+    "docs/dashboard.md",
+    "docs/guardrails.md",
+    "docs/skills.md",
+    "docs/skill-quality-config.md",
+    "docs/skill-authoring.md",
+    "docs/coding-standards/conventions.md",
+    "docs/audit-and-quality.md",
+    "docs/audit-checks.md",
+    "docs/harness-audit.md",
+    "docs/harness-engineering.md",
+    "docs/harness-quality.md",
+    "docs/assets/dashboard-preview.png",
+    "scripts/profile-dashboard-audit.mjs",
+    "scripts/check-package-readme-links.mjs",
+    "scripts/warn-node-pty.mjs",
+    "workflow"
+  ],
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "node-pty"
+    ]
+  },
+  "scripts": {
+    "build": "npm run check:hook-policy-parser && npm run check:hook-graphql-parser && npm run check:managed-hook-contract && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
+    "build:dashboard": "tsc -p tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs",
+    "test": "npm run test:fast",
+    "test:fast": "node scripts/run-tests.mjs fast",
+    "test:slow": "npm run build && node scripts/run-tests.mjs slow",
+    "test:slow:ci": "node scripts/run-tests.mjs slow",
+    "test:full": "npm run test:fast && npm run test:slow",
+    "test:coverage": "node scripts/run-tests.mjs coverage",
+    "gruff-ts": "gruff-ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.dashboard.json --noEmit",
+    "check:touched": "node scripts/check-touched.mjs",
+    "check:node-pty": "node scripts/warn-node-pty.mjs",
+    "goat-flow:cli": "node dist/cli/cli.js",
+    "audit": "node dist/cli/cli.js audit .",
+    "audit:harness": "node dist/cli/cli.js audit . --harness",
+    "audit:json": "node dist/cli/cli.js audit . --format json",
+    "dev": "tsc && npm run build:dashboard && node dist/cli/cli.js dashboard . --dev",
+    "dashboard": "npm run build && node dist/cli/cli.js dashboard .",
+    "profile:dashboard-audit": "node scripts/profile-dashboard-audit.mjs",
+    "preflight": "bash scripts/preflight-checks.sh",
+    "check-instruction-parity": "node scripts/check-instruction-parity.mjs",
+    "check-versions": "node scripts/check-versions.mjs",
+    "check-package-links": "node scripts/check-package-readme-links.mjs",
+    "generate:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --write",
+    "check:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --check",
+    "check:hook-policy-parser": "node scripts/generate-hook-policy-parser.mjs --check",
+    "check:hook-graphql-parser": "node scripts/generate-hook-graphql-parser.mjs --check",
+    "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
+    "prepublishOnly": "npm run publish:check",
+    "publish:check": "npm run publish:check:quick && npm run test:fast && node scripts/run-tests.mjs slow",
+    "publish:check:quick": "npm run check-versions && npm run check-instruction-parity && npm run build && npm run check-package-links"
+  },
+  "keywords": [
+    "goat-flow",
+    "harness-engineering",
+    "ai-harness",
+    "ai-agent-harness",
+    "ai-agents",
+    "coding-agent",
+    "coding-agents",
+    "ai-coding",
+    "agentic-coding",
+    "ai-workflow",
+    "agent-workflows",
+    "ai-safety",
+    "ai-guardrails",
+    "agent-guardrails",
+    "agent-dashboard",
+    "prompt-engineering",
+    "claude-code",
+    "codex",
+    "openai-codex",
+    "antigravity",
+    "copilot",
+    "github-copilot",
+    "llm",
+    "llm-tools",
+    "developer-tools",
+    "cli",
+    "auditor",
+    "code-quality",
+    "multi-agent"
+  ],
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "ws": "^8.20.1"
+  },
+  "optionalDependencies": {
+    "node-pty": "1.1.0"
+  },
+  "devDependencies": {
+    "@blundergoat/gruff-ts": "^0.5.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@tailwindcss/browser": "^4.3.2",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.6.0",
+    "@types/ws": "^8.18.1",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "alpinejs": "^3.15.12",
+    "esbuild": "0.28.2",
+    "eslint": "^10.1.0",
+    "graphql": "16.14.2",
+    "knip": "^6.0.2",
+    "prettier": "^3.8.1",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.57.1"
+  },
+  "main": "dist/cli/index.js",
+  "overrides": {
+    "typed-rest-client": {
+      "qs": "6.16.0"
+    }
+  }
+}

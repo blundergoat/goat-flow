@@ -1,0 +1,48 @@
+# Codex CLI config template - copy to .codex/config.toml
+#
+# Codex permission profiles control filesystem and network access; Claude Code's settings.json permission syntax does not apply.
+# Hook registrations live in .codex/hooks.json: PreToolUse hooks enforce shell command policy, and Stop hooks run safety checks.
+default_permissions = "goat-flow"
+
+[features]
+hooks = true
+
+[permissions.goat-flow]
+description = "goat-flow workspace editing with secret-path read denies."
+extends = ":workspace"
+
+[permissions.goat-flow.filesystem]
+glob_scan_max_depth = 3
+
+[permissions.goat-flow.filesystem.":workspace_roots"]
+# List environment-file variants explicitly so .env.example stays readable and writable, matching the shell hook's exemption.
+# A broad .env* pattern would also match the sample file.
+#
+# Match paths associated with secrets: environment files, key extensions, and known credential stores.
+# Avoid broad names such as secrets/ or credentials*, which can also belong to application code.
+#
+# The shell hook also blocks paths such as .env.backup, which are not covered here for direct file access.
+# These rules apply within workspace roots; the shell hook separately checks credential paths in the home directory.
+"**/.env" = "deny"
+"**/.env.local" = "deny"
+"**/.env.development" = "deny"
+"**/.env.production" = "deny"
+"**/.env.staging" = "deny"
+"**/.env.test" = "deny"
+"**/.envrc" = "deny"
+"**/.env.*.local" = "deny"
+"**/.ssh/**" = "deny"
+"**/.aws/**" = "deny"
+"**/.gnupg/**" = "deny"
+"**/.config/gcloud/**" = "deny"
+"**/.docker/**" = "deny"
+"**/.kube/**" = "deny"
+"**/.npmrc" = "deny"
+"**/.netrc" = "deny"
+"**/.git-credentials" = "deny"
+"**/.config/gh/hosts.yml" = "deny"
+"**/.pgpass" = "deny"
+"**/.pypirc" = "deny"
+"**/*.pem" = "deny"
+"**/*.key" = "deny"
+"**/*.pfx" = "deny"

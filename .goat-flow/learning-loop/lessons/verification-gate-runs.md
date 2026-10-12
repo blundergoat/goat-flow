@@ -1,6 +1,6 @@
 ---
 category: verification-gate-runs
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-12
 ---
 
 **Scope:** Running gates during a change - stopping each edit batch at its declared proof, checking every target after a failed multi-file patch, invoking tools with the repository's own flags, and telling a transient gate failure from a task regression. Adding or trusting a repo-wide gate is [verification-preflight.md](verification-preflight.md); what a test must establish is [verification-testing.md](verification-testing.md).
@@ -48,18 +48,21 @@ last_reviewed: 2026-10-11
 
 **Status:** active | **Created:** 2026-08-09
 **Severity:** CORRECTNESS
-**Decision changed:** Inspect every target after a failed multi-file patch; never assume the operation was atomic.
+**Decision changed:** Stop dependent tool calls at the first failed admission or patch, then inspect every target; neither a patch nor an orchestrated batch is atomic.
 **Trigger phase:** ACT
-**Incident count:** 2 | **Latest occurrence:** 2026-08-09
+**Incident count:** 3 | **Latest occurrence:** 2026-10-12
 **Merged:** 2026-10-11 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split to recover its headroom.
 
-**Prevention:** Prefer one file, or one independently recoverable hunk group, per patch when source is changing concurrently. After any patch failure, inspect timestamps and exact semantic anchors across every target before retrying, then build the retry from current bytes. The affected artifacts were gitignored milestone files, so they are not cited as durable anchors; the evidence was the failed patch result and the same-session target-by-target read.
+**Prevention:** For dependent tool calls, check each exit status and throw or exit before the next mutation; awaiting a call does not make a nonzero result fatal. Prefer one file, or one independently recoverable hunk group, per patch when source is changing concurrently. After any patch failure, inspect timestamps and exact semantic anchors across every target before retrying, then build the retry from current bytes. The affected artifacts were gitignored milestone files, so they are not cited as durable anchors; the evidence was the failed patch result and the same-session target-by-target read.
 
 **What happened:** During peer-plan synthesis one patch updated the roadmap issue and provider-contract milestone, then failed when a later post-turn hunk used a near-match instead of the file's exact wording. The failure named only the unmatched hunk, so the operation looked rejected as a whole, but the earlier file edits had persisted.
 
 **Root cause:** A multi-file patch was treated as a transaction and reasoned about from the final failing hunk instead of the state of every target, so the retry risked applying landed edits twice or building hunks against stale bytes.
 
 **Recurrence 2026-08-09:** A malformed Markdown-list hunk in a rollback patch failed after earlier file hunks in the same request; this time a target-by-target diff found no retained edits. The patch surface has shown both partial and atomic-looking failures, so inspection stays the recovery contract.
+
+**Recurrence 2026-10-12:** M01 combined config admission, timing, patch application and bookkeeping in one tool batch. Admission rejected an unexpected Stop config hash, but the batch continued: the full config patch refused, the approved source patch landed, and bookkeeping failed on absent approval metadata. Target-by-target hashes showed that the config already contained the approved POSIX prefix, while the runner and test exactly matched the approved patch. Recovery preserved that external prefix and applied only the missing Windows prefix. The evidence was the failed admission, per-call exits and same-session hash comparisons; affected surfaces are `.codex/hooks.json` (search: `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES`) and `scripts/check-hook-parity.mjs` (search: `spawnReferenceCommand`).
+
 
 ## Lesson: Preserve repository-owned verification flags
 
@@ -73,3 +76,20 @@ last_reviewed: 2026-10-11
 **Recurrence 2026-10-01:** Preflight found an unused export after scoped checks passed. Keeping `QualityConcern` private fixed it. Run the preflight-owned Knip gate too; `check:touched` omits it. `src/cli/quality/schema-types.ts` (search: `type QualityConcern =`).
 
 **Recurrence 2026-09-14:** The change tried nonexistent `tsconfig.cli.json`; `package.json` (search: `"typecheck"`) owns the two-project check.
+
+
+## Lesson: Configured hook replay does not prove managed registration consistency
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 2 | **Latest occurrence:** 2026-10-12
+**Decision changed:** Read the canonical descriptor writer and generated contract before changing a managed command, then verify both execution and exact registration identity.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** A local command that runs correctly can still be managed drift. Follow the writer to its provider template and generated installer contract; keep those owners consistent and retain strict descriptor comparisons. Replay the complete registered executable and ordered arguments; a bare executable's zero exit does not establish hook execution. Run configured replay, the generator check, identity tests and repository preflight before calling the registration verified. Record automatic provider delivery separately.
+
+**What happened:** M01 added an approved four-MiB scan limit to both local Codex Stop commands. Configured WSL2 replay finished cleanly, scanner coverage was complete and a native Windows prefix probe received the setting. Full preflight still exited one because config parity and both audit views expected the unchanged canonical descriptor. The approved correction aligned the canonical writer, Codex template and generated installer contract and added a test that rejects either stripped prefix. Fresh full preflight exited zero with 93 checks and the existing learning-bucket warning. Configured replay and canonical consistency are verified separately; automatic host delivery remains unverified.
+
+**Recurrence 2026-10-12:** Claude's local Stop registration and canonical template still used the scanner's one-MiB default after Codex received four MiB. Three untracked JSON artifacts measured 2,885,754 to 2,944,548 bytes each, so every Claude Stop reported incomplete coverage. The first diagnostic ran only `node`, omitting its registered arguments; its zero exit was discarded. Complete argv replay reproduced all three gaps with exit two. Setting the per-file limit inside Claude's Node bootstrap, in both the descriptor writer and template, then regenerating the installer contract changed that same replay to exit zero with no coverage gaps. Four MiB provides bounded headroom over these files and matches Codex; it is not a model context budget or the smallest possible limit. Automatic Claude delivery remains unverified.
+
+**Evidence:** `src/cli/server/agent-hook-command.ts` (search: `buildAgentHookDescriptor`, `entryCarriesHandlerDescriptor`); `scripts/generate-managed-hook-desired-state.mjs` (search: `renderManagedHookContract`); `scripts/preflight-checks.sh` (search: `agent_config_output`); `workflow/hooks/agent-config/codex-hooks.json` and `workflow/hooks/agent-config/claude.json` (search: `Stop`); `.goat-flow/hooks/post-turn-safety.sh` (search: `MAX_FILE_BYTES`, `oversized untracked text not scanned`); `test/unit/agent-hook-command.test.ts` (search: `keeps the per-file scan limit in the managed argv identity`).

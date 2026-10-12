@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-12
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
@@ -172,7 +172,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Severity:** INTEGRATION
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient.
 **Trigger phase:** VERIFY
-**Incident count:** 14 | **Latest occurrence:** 2026-10-10
+**Incident count:** 16 | **Latest occurrence:** 2026-10-12
 
 **Prevention:** After the final write, run `goat-flow plans check <plan-directory> --strict`, require warning-free exporter records, and check cited paths/anchors. Keep one live metadata value; fence history. Current strict plans require a numeric effort split even when runtime is unknown; label the forecast provisional and name the measurement/reforecast checkpoint rather than omitting required fields. Exercise compact/expanded fixtures through `parseMilestoneMarkdown` and plan commands against prepared disposable paths. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Preserve Status, Scope, Tasks, Proof, Exit/Exit criteria and Stop/rescope; compact Stop/rescope belongs inside Exit. Anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`; `readStopMarkdown`), `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
@@ -196,6 +196,10 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-09-30:** An execution note began with `Scope:` beneath a milestone that already had `## Scope`. Strict checking rejected the two representations; changing the note label to `Execution class:` restored exit 0. Keep parser-owned field labels out of narrative notes, even outside the header. Source: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`); rejection coverage: `test/unit/plans-check-structure.test.ts` (search: `strict mode rejects conflicting canonical and legacy aliases`). Evidence: ACTUAL_MEASURED.
 
 **Recurrence 2026-10-10 (ACTUAL_MEASURED):** Six graph milestone drafts put stop conditions in ordinary Exit prose. The strict plan command returned six `missing stop/rescope` errors after a custom topology/arithmetic precheck had succeeded. Use the canonical Stop / rescope section or the explicitly parsed compact Exit stop line, and run the full strict checker before handoff. Sources: `src/cli/plans-export.ts` (search: `readStopMarkdown`; `readObjective`) and `src/cli/plans-check.ts` (search: `missing stop/rescope`). The correction uses supported bold Objective metadata and dedicated stop sections.
+
+**Recurrence 2026-10-11 (ACTUAL_MEASURED):** The first strict check of the 1.19.0 carryover amendment rejected M32's problem summary: `expected "70-120 characters"; received "127 characters"`. Shortening that sentence restored exit 0 without changing its task or proof scope. Run the shipped strict checker after prose reconciliation as well as graph and forecast checks. Source: `src/cli/plans-check-structure.ts` (search: `collectPlainLanguageSectionFindings`).
+
+**Recurrence 2026-10-12 (ACTUAL_MEASURED):** Applying the preceding recurrence exposed a bad citation: `stats --check` rejected its bare local-plan filename as `stale-ref`. Keep local plan mentions as navigation, never durable evidence anchors; retain the committed checker anchor above. Check learning citations before proposing their patch, then run the learning gate after applying it. Source: `src/cli/facts/shared/reference-paths.ts` (search: `gitignored path used as durable evidence anchor`).
 
 ---
 
