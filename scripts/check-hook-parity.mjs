@@ -905,13 +905,22 @@ function compareExtraRows(project, rows, comparison, seen, locale) {
   for (const row of rows.filter(
     (row) => row.origin.kind !== "self-test" && selected.has(row.id),
   )) {
-    const actual = runFrozen(
-      project,
-      row.policy,
-      row.input,
-      locale,
-      row.setup.environment,
-    );
+    const started = Date.now();
+    let actual;
+    try {
+      actual = runFrozen(
+        project,
+        row.policy,
+        row.input,
+        locale,
+        row.setup.environment,
+      );
+    } catch (error) {
+      throw new Error(
+        `Frozen launch failed: case=${row.id}; locale=${locale}; elapsedMs=${Date.now() - started}: ${error.message}`,
+        { cause: error },
+      );
+    }
     if (row.origin.kind === "locale-sentinel")
       assert.equal(
         actual.status,

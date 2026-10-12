@@ -211,3 +211,18 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 
 
 **Verification follow-up 2026-10-12:** Linting the extracted `WSL floor and LTS controls` body without an interpreter produced SC2148 because the inline CI script has no shebang. Its action already declares Bash. Running `shellcheck --shell=bash` on the same extracted bytes exited zero. Reproduce the workflow's interpreter as well as its install/build prerequisites when validating extracted shell blocks; this check-setup failure was not evidence of a workflow defect.
+
+---
+
+## Lesson: Keep frozen reference fixtures outside any parent Git repository
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Separate saved diagnostic logs from temporary reference projects, and verify Git-root isolation before replaying a hook.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Save scripts and logs in the requested plan directory, but create reference projects outside every Git checkout. Before executing a fixture, run `git -C <fixture> rev-parse --show-toplevel`; a returned parent root invalidates isolation. Record the temporary path separately and preserve failed diagnostic evidence.
+
+**What happened:** While investigating M07's hosted C.UTF-8 extraction timeout, I set TMPDIR beneath this workspace's plan logs to keep receipts together. The frozen smoke group reported two failures. Git queried from the generated reference project returned the controlling goat-flow root, so the run could select live policy dependencies. I stopped only the owned replay processes, retained its log and scratch state, then created an isolated reference directory outside Git. The unchanged smoke group then reported 49 captured assertions and zero failures. The full replay was still running at that checkpoint.
+
+**Evidence and limit:** `scripts/check-hook-parity.mjs` (search: `materializeReference`, `tmpdir()`); `test/fixtures/hooks-bash/.goat-flow/hooks/deny-dangerous.sh` (search: `git rev-parse --show-toplevel`, `GOAT_FLOW_ROOT`). This proves a local reproduction setup error. It does not explain the separate hosted Bash timeout, identify its case, or establish complete hosted parity.

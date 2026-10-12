@@ -283,11 +283,68 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Record consumer identity
         run: node -e "console.log(JSON.stringify({node:process.version,platform:process.platform,arch:process.arch,commit:process.env.GITHUB_SHA}))"
+      - name: Prepare macOS process observer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/m07-observe-test-command.mjs" <<'JS'
+          /** Run the original Node command while sampling its POSIX descendant processes.
+           * Diagnostics omit arguments and environment values, and never set a test deadline.
+           * The observer exits with the child result; sample failures remain diagnostic output.
+           */
+          import { spawn, spawnSync } from "node:child_process";
+          import { constants } from "node:os";
+          import { basename } from "node:path";
+
+          const record = (event) => process.stderr.write("m07-process-trace " + JSON.stringify(event) + "\n");
+          const child = spawn(process.execPath, process.argv.slice(2), { stdio: "inherit" });
+          record({ event: "start", pid: child.pid, node: process.version, platform: process.platform });
+
+          function sample() {
+            const result = spawnSync("ps", ["-axo", "pid=,ppid=,stat=,etime=,time=,comm="],
+              { encoding: "utf8", timeout: 2000, maxBuffer: 1024 * 1024 });
+            if (result.error || result.status !== 0) {
+              record({ event: "sample-unavailable", status: result.status, code: result.error?.code });
+              return;
+            }
+            const entries = result.stdout.split("\n").flatMap((line) => {
+              const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$/);
+              return match ? [{ pid: Number(match[1]), ppid: Number(match[2]), state: match[3],
+                elapsed: match[4], cpu: match[5], executable: basename(match[6]) }] : [];
+            });
+            const descendants = new Set([child.pid]);
+            let count;
+            do {
+              count = descendants.size;
+              for (const entry of entries) {
+                if (descendants.has(entry.ppid)) descendants.add(entry.pid);
+              }
+            } while (descendants.size !== count);
+            record({ event: "sample", time: new Date().toISOString(),
+              processes: entries.filter((entry) => descendants.has(entry.pid)) });
+          }
+
+          sample();
+          const interval = setInterval(sample, 15_000);
+          for (const signal of ["SIGINT", "SIGTERM"]) {
+            process.on(signal, () => child.kill(signal));
+          }
+          child.once("error", (error) => {
+            clearInterval(interval);
+            record({ event: "launch-error", code: error.code });
+            process.exitCode = 1;
+          });
+          child.once("close", (code, signal) => {
+            clearInterval(interval);
+            record({ event: "close", code, signal });
+            process.exitCode = code ?? 128 + (constants.signals[signal] ?? 1);
+          });
+          JS
       - name: Restricted process and selector controls
-        run: node --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
       # npm pack invokes the platform npm shim outside the restricted child.
       - name: Corpus and package controls
-        run: node --import tsx --test test/integration/hook-parity.test.ts
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/integration/hook-parity.test.ts
 
   # Bash extraction stays on native Linux with pinned jq and explicit locales.
   # macOS runs the Node controls above, never reference extraction.

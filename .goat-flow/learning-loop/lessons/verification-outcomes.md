@@ -1,6 +1,6 @@
 ---
 category: verification-outcomes
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-12
 ---
 
 **Scope:** Interpreting verification results - command execution, selected mode, and semantic outcome. General verification discipline remains in [verification.md](verification.md).
@@ -11,7 +11,7 @@ last_reviewed: 2026-10-10
 **Severity:** CORRECTNESS
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 20 | **Latest occurrence:** 2026-10-02
+**Incident count:** 22 | **Latest occurrence:** 2026-10-12
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -21,6 +21,8 @@ last_reviewed: 2026-10-10
 3. **Did the assertion test the behaviour?** Pin a negative assertion to the complete unsafe instruction and positively require the safe replacement, because a shared suffix is not an absence proof when another feature can use it legitimately. For static prose, prefer independent literal checks against the exact approved strings and re-read the artifact before encoding expectations in a wrapper. To prove a patch introduced no token, use zero-context diff output, inspect only added rows, exclude the header line, and compare whole-tree counts separately; ordinary diff context is not changed content.
 
 For an agent-driven probe, give the exact source line, commit or index the disposable baseline before launch, and require every mechanical postcondition: a successful tool event, the intended file diff or an independently captured state transition, a hook-start marker, a provider-visible marker, and the expected exit status. When a provider renderer may insert metadata, assert the structured event and the unique semantic marker independently rather than requiring display-label adjacency. Never promote the model's final sentence to proof.
+
+When reading test summaries across Node versions, pin the reporter or parse the observed summary format. Retain the process exit and raw output independently; a mismatched display prefix is a verifier error, not a failing test. For cleanup proof, identify each resource and its owner before asserting an empty temporary directory. Executable fixtures, runtime caches and deliberately retained failure journals have different lifecycles.
 
 Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (search: `offers deliberate review instead of an automatic rewrite`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`), `src/cli/help.ts` (search: `--harness`), `src/cli/audit/audit.ts` (search: `harness: options.harness`), `src/cli/plans-check-structure.ts` (search: `plain-language section`), `.goat-flow/skill-docs/skill-preamble.md` (search: `Proof Gate`).
 
@@ -52,6 +54,10 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 **Recurrence 2026-09-21 (manifest metadata probe):** A one-off check used the guessed key `directory_semantics` and threw before inspecting the approved description. Reading `workflow/manifest.json` (search: `directory_purposes`) supplied the real key; the corrected probe verified the policy owner and required every other parsed manifest value to match HEAD. Read the owning JSON object before writing a field assertion, and distinguish a broken probe from a product failure.
 
 **Recurrence 2026-10-02 (Node diagnostic flag):** During quality-history verification, the agent guessed `--test-isolation=none`; Node exited 9 with `node: bad option: --test-isolation=none` before executing the test. The installed `node --help` exposed `--experimental-test-isolation`, and the corrected diagnostic reported listener `EPERM` with ten cancelled tests. Check installed flag spelling before changing test execution mode; neither a rejected command nor cancelled tests proves the product contract. Evidence: `scripts/run-tests.mjs` (search: `const testRunnerArguments`) and `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `computes rerun spread beyond the requested history window and keeps filters`).
+
+**Recurrence 2026-10-12 (reporter prefix):** The M07 process-observer verifier accepted Node 20.11.0's TAP summary but rejected the unchanged restricted-controls command on Node 24.21.0 because it required `# fail 0`. The retained output instead reports seven passes, `ℹ fail 0`, and the observer's child-close code zero. Reading that receipt corrected the verifier to recognize both observed summaries; no test or observer code changed. Evidence: `test/integration/restricted-env-controls.test.ts` (search: `clean restricted consumer journals allowed Node and Git with zero denials`) and `test/unit/hook-entrypoint.test.ts` (search: `unknown selection refuses`). The plan-local receipts retain both reporters and the corrected verifier result as diagnostic records. The first learning check rejected a gitignored log path used as a durable anchor; the corrected entry cites the maintained test owners instead.
+
+**Recurrence 2026-10-12 (cleanup ownership):** All M07 observer and reference-control commands met their expected results, but my final verifier asserted that the shared temporary directory was empty. It contained tsx and Node compile caches plus a journal from the reference test's intentional failed assertion. The corrected check admits those named owners, verifies the saved child results and requires zero remaining executable reference projects. No maintained test or observer behavior changed. Evidence: `scripts/check-hook-parity.mjs` (search: `if (!failed) rmSync(work`) and `test/integration/hook-parity-reference.test.ts` (search: `divergence captures failed original assertions without allowing acceptance`).
 
 ---
 
