@@ -248,8 +248,112 @@ jobs:
         run: node --import tsx --test test/integration/preflight-progress.test.ts
       - name: Path write claim and state migration contracts
         run: node --import tsx --test test/unit/path-write-claim.test.ts test/integration/local-state-migration.test.ts
+      - name: Prepare Windows process observer
+        shell: pwsh
+        run: |
+          $observer = @'
+          /** Run the original Node test command while observing Windows descendants.
+           * Only process identity and cumulative CPU metadata enter trace records.
+           * A failed two-second sample never changes the test result or its deadlines.
+           */
+          import { spawn, spawnSync } from "node:child_process";
+          import { constants } from "node:os";
+          
+          const record = (event) =>
+            process.stderr.write(
+              "m07-windows-process-trace " + JSON.stringify(event) + "\n",
+            );
+          const child = spawn(process.execPath, process.argv.slice(2), {
+            stdio: "inherit",
+          });
+          record({
+            event: "start",
+            pid: child.pid,
+            node: process.version,
+            platform: process.platform,
+          });
+          
+          function sample() {
+            if (!Number.isInteger(child.pid)) return;
+            const result = spawnSync(
+              "powershell.exe",
+              [
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,KernelModeTime,UserModeTime | ConvertTo-Json -Compress",
+              ],
+              {
+                encoding: "utf8",
+                timeout: 2000,
+                maxBuffer: 1024 * 1024,
+                windowsHide: true,
+              },
+            );
+            if (result.error || result.status !== 0) {
+              record({
+                event: "sample-unavailable",
+                status: result.status,
+                code: result.error?.code,
+              });
+              return;
+            }
+            let entries;
+            try {
+              const parsed = JSON.parse(result.stdout.replace(/^\uFEFF/u, ""));
+              entries = Array.isArray(parsed) ? parsed : [parsed];
+            } catch {
+              record({ event: "sample-unavailable", code: "INVALID_JSON" });
+              return;
+            }
+            const descendants = new Set([child.pid]);
+            let count;
+            do {
+              count = descendants.size;
+              for (const entry of entries) {
+                if (
+                  entry &&
+                  Number.isInteger(entry.ProcessId) &&
+                  descendants.has(entry.ParentProcessId)
+                )
+                  descendants.add(entry.ProcessId);
+              }
+            } while (descendants.size !== count);
+            record({
+              event: "sample",
+              time: new Date().toISOString(),
+              processes: entries
+                .filter((entry) => entry && descendants.has(entry.ProcessId))
+                .map((entry) => ({
+                  pid: entry.ProcessId,
+                  ppid: entry.ParentProcessId,
+                  executable: entry.Name,
+                  kernelTime: entry.KernelModeTime,
+                  userTime: entry.UserModeTime,
+                })),
+            });
+          }
+          
+          const interval = setInterval(sample, 15_000);
+          for (const signal of ["SIGINT", "SIGTERM"]) {
+            process.on(signal, () => child.kill(signal));
+          }
+          child.once("error", (error) => {
+            clearInterval(interval);
+            record({ event: "launch-error", code: error.code });
+            process.exitCode = 1;
+          });
+          child.once("close", (code, signal) => {
+            clearInterval(interval);
+            record({ event: "close", code, signal });
+            process.exitCode = code ?? 128 + (constants.signals[signal] ?? 1);
+          });
+          sample();
+          '@
+          $path = Join-Path $env:RUNNER_TEMP 'm07-observe-windows-contracts.mjs'
+          [System.IO.File]::WriteAllText($path, $observer.Replace("`r`n", "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
       - name: Descriptor spawn matrix and focused hook contracts
-        run: node --import tsx --test test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-effective-state.test.ts
+        run: node "$env:RUNNER_TEMP/m07-observe-windows-contracts.mjs" --import tsx --test test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-effective-state.test.ts
       # Native Windows has no POSIX owner and a 32,767-character command line, so Stop recovery and the multi-repo controller need a real run here.
       - name: Post-turn recovery and controller contracts
         run: node --import tsx --test --test-name-pattern="blocks a missing scanner once|preserves controller child findings" test/integration/post-turn-launcher-recovery.test.ts

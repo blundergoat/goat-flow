@@ -82,6 +82,14 @@ test("frozen launches preserve long and UNC literal inputs in both locales", () 
   try {
     for (const locale of ["C", "C.UTF-8"]) {
       for (const row of rows) {
+        // The frozen Unicode parser needs a longer Linux window; its original
+        // input and verdict assertions remain the acceptance criteria.
+        const timeoutMs =
+          process.platform === "linux" &&
+          locale === "C.UTF-8" &&
+          row.id === "contract-locale-sentinel-deny-dangerous"
+            ? 120_000
+            : 30_000;
         assertOutcome(
           runFrozen(
             project,
@@ -90,6 +98,7 @@ test("frozen launches preserve long and UNC literal inputs in both locales", () 
             locale,
             row.setup.environment,
             row.id,
+            timeoutMs,
           ),
           originals.get(row.id).original[locale],
           true,

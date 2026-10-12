@@ -1,6 +1,6 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-13
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
@@ -202,6 +202,7 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 **Decision changed:** Reproduce the preceding install and build steps before treating a local replay as the hosted job's reproduction.
 **Trigger phase:** READ
 **Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-10-13
 
 **Prevention:** Read the failing job's complete setup, then recreate its dependencies and generated artifacts before running the original command. Preserve an incomplete-setup failure separately; it cannot explain a different hosted assertion.
 
@@ -211,6 +212,9 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 
 
 **Verification follow-up 2026-10-12:** Linting the extracted `WSL floor and LTS controls` body without an interpreter produced SC2148 because the inline CI script has no shebang. Its action already declares Bash. Running `shellcheck --shell=bash` on the same extracted bytes exited zero. Reproduce the workflow's interpreter as well as its install/build prerequisites when validating extracted shell blocks; this check-setup failure was not evidence of a workflow defect.
+
+**Recurrence 2026-10-13 (Windows replay setup):** I attempted the current registered-Windows-override case directly through a WSL UNC source path; native Node reported that the test file was not found. A disposable native copy then failed dependency-junction setup through cmd, and a later module load failed because that partial copy omitted scripts/check-hook-parity.mjs. The original test body never ran. Stop after repeated setup corrections, retain each failure, and inspect the full import/setup boundary before another replay. Evidence anchors: test/integration/hook-command-spawn-matrix.test.ts (search: "delivers allow and exit-2 deny results through Codex's registered Windows override") and test/integration/gruff-code-quality-smoke.helpers.ts (search: "check-hook-parity.mjs"). The native probe used Node 24.9.0; the CI contract uses 20.11.0, so it cannot clear the hosted timeout.
+
 
 ---
 
