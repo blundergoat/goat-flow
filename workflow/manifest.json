@@ -45,6 +45,7 @@
     ".goat-flow/hooks/deny-dangerous.sh",
     ".goat-flow/hooks/deny-git-mutations.sh",
     ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+    ".goat-flow/hooks/deny-dangerous/corpus.json",
     ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/hook-provider-adapters.mjs",
     ".goat-flow/hooks/hook-launch-runtime.mjs",
@@ -232,6 +233,10 @@
     ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-dangerous/guard-runtime.sh"
+    },
+    ".goat-flow/hooks/deny-dangerous/corpus.json": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/corpus.json"
     },
     ".goat-flow/hooks/gruff-code-quality.sh": {
       "ownership": "system-owned",

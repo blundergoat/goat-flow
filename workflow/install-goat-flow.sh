@@ -3684,6 +3684,7 @@ if $HOOKS_ENABLED; then
   do
     copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/$hook_policy_script" ".goat-flow/hooks/deny-dangerous/$hook_policy_script" "system-owned" "755"
   done
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/corpus.json" "$HOOKS_DIR/deny-dangerous/corpus.json" "system-owned" "644"
   ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/"
   # A changed result makes the shipped hook directory visible to version control.
   if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then

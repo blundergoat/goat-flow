@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { hookInvocation, spawnSelectedHook } from "./hook-entrypoint.js";
 
 /**
  * Deliver an inert provider request to an installed hook with a finite stdin stream.
@@ -37,7 +38,7 @@ export function runHookWithPayload(
     writeFileSync(payloadPath, payload, { flag: "wx", mode: 0o600 });
     descriptor = openSync(payloadPath, "r");
     // A regular file supplies EOF even when a managed Node pipe leaves Bash cat waiting.
-    return spawnSync("bash", [hookPath, ...argumentsAfterHook], {
+    return spawnSelectedHook(hookPath, argumentsAfterHook, {
       cwd: projectPath,
       encoding: "utf8",
       stdio: [descriptor, "pipe", "pipe"],
@@ -61,7 +62,17 @@ export function checkInstalledPolicy(
   hookPath: string,
   projectPath: string,
   proposedCommand: string,
+  environment: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof spawnSync> {
+  const invocation = hookInvocation(hookPath, ["--check", proposedCommand]);
+  if (invocation.executable !== "bash") {
+    return spawnSync(invocation.executable, invocation.args, {
+      cwd: projectPath,
+      encoding: "utf8",
+      env: environment,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  }
   return spawnSync(
     "bash",
     [
@@ -75,8 +86,8 @@ export function checkInstalledPolicy(
       encoding: "utf8",
       // Environment transport preserves UNC backslashes that Windows argv conversion would consume.
       env: {
-        ...process.env,
-        GOAT_TEST_HOOK: hookPath,
+        ...environment,
+        GOAT_TEST_HOOK: invocation.entrypoint,
         GOAT_TEST_COMMAND: proposedCommand,
       },
       stdio: ["ignore", "pipe", "pipe"],

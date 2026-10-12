@@ -5,6 +5,8 @@
  * provider adaptation. Legacy rendering remains covered while registration is gated by
  * separate live-provider evidence.
  */
+import { copyHookTree, selectedHookPath } from "../helpers/hook-entrypoint.js";
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -39,13 +41,6 @@ import {
 import { withCommandShim } from "./post-turn-safety-hook.helpers.js";
 
 const PROJECT_ROOT = join(import.meta.dirname, "..", "..");
-const HOOK_RUNNER = join(
-  PROJECT_ROOT,
-  "workflow",
-  "hooks",
-  "run-with-bash.mjs",
-);
-
 after(cleanupHookTestDirs);
 
 /**
@@ -58,6 +53,11 @@ after(cleanupHookTestDirs);
  */
 function runProviderLauncher(payload: string, responseMode: string) {
   const captureDirectory = mkdtempSync(join(tmpdir(), "goat-gruff-launcher-"));
+  copyHookTree(join(captureDirectory, "workflow/hooks"));
+  copyHookTree(join(captureDirectory, ".goat-flow/hooks"), "installed");
+  const selectedRunner = selectedHookPath(
+    join(captureDirectory, "workflow/hooks/run-with-bash.mjs"),
+  );
   const payloadPath = join(captureDirectory, "stdin");
   const stdoutPath = join(captureDirectory, "stdout");
   const stderrPath = join(captureDirectory, "stderr");
@@ -71,9 +71,9 @@ function runProviderLauncher(payload: string, responseMode: string) {
     }
     const result = spawnSync(
       process.execPath,
-      [HOOK_RUNNER, "workflow/hooks/gruff-code-quality.sh", responseMode],
+      [selectedRunner, "workflow/hooks/gruff-code-quality.sh", responseMode],
       {
-        cwd: PROJECT_ROOT,
+        cwd: captureDirectory,
         encoding: "utf8",
         stdio: descriptors,
       },
@@ -815,12 +815,8 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       CLEAN_GRUFF_CONTRACT_ENVELOPE,
     );
     withCommandShim(
-      "mkdir",
-      [
-        'for argument in "$@"; do',
-        '  case "$argument" in /*) exit 1 ;; esac',
-        "done",
-      ].join("\n"),
+      resolveExecutable("mkdir"),
+      { when: { absoluteOperand: true }, status: 1 },
       (environment) => {
         // Repeat the same provider session to exercise marker persistence and reuse.
         const runHealthCheck = () =>

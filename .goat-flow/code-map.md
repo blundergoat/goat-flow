@@ -285,6 +285,28 @@ scripts/                         = development, release, test, and maintenance s
 └── maintenance/                 = cleanup, secret scanning, Zone.Identifier removal
 ```
 
+## test/ -- Hook migration fixtures and controls
+
+```text
+test/
+├── helpers/hook-entrypoint.ts                  = reference/candidate/installed test selection; complete dependency trees, missing-candidate refusal
+├── helpers/restricted-consumer-env.ts          = child-only executable allowlist and preload environment
+├── helpers/spawn-guard.mjs                     = Node child-process instrumentation, propagation and launch journal; not an OS sandbox
+├── helpers/check-installed-policy.ts          = selected policy transport; command inputs remain inert classifier data
+├── integration/restricted-env-controls.test.ts = actual named/namespace/require denials, stripped-child propagation and clean Node/Git/analyzer control
+├── integration/hook-parity.test.ts             = Node corpus, frozen-hash and npm-pack inventory controls
+├── integration/hook-parity-reference.test.ts   = frozen Bash extraction, literal-input and dependency-isolation controls
+├── integration/post-turn-safety-hook.helpers.ts = selected scanner transport and declared absolute command-fault fixtures
+├── integration/gruff-code-quality-smoke.helpers.ts = selected Gruff transport and Node analyzer programs outside analyzed projects
+├── integration/packaged-hook-install.test.ts   = archive consumer installation, including corpus byte identity
+├── unit/hook-entrypoint.test.ts                = selector refusal and frozen dependency-root controls
+└── fixtures/hooks-bash/                        = immutable M01 Bash trees, dependency hashes and per-ID reference outcomes; never packed
+```
+
+`.github/workflows/ci.yml` owns native Linux/macOS/Windows floor/LTS controls, a separately identified WSL2 route, Linux reference tests with jq 1.6 and both locales, and Windows Git Bash/WSL divergence reports. Divergence reports do not accept candidates. The original Bash self-tests stay immutable; each port owns its candidate suite conversion.
+
+The shipped corpus lives at `workflow/hooks/deny-dangerous/corpus.json`, mirrored to `.goat-flow/hooks/deny-dangerous/corpus.json`. `workflow/manifest.json` declares ownership and required delivery; `workflow/install-goat-flow.sh` copies it as data. The test-only reference outcomes stay under `test/fixtures/hooks-bash/`.
+
 ## docs/ -- Documentation
 
 ```text

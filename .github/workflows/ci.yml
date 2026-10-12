@@ -261,6 +261,181 @@ jobs:
       - name: Windows packaged install contract
         run: node --import tsx --test --test-name-pattern="runs fresh install through the archived CLI bin" test/integration/packaged-hook-install.test.ts
 
+  # Build with supported tooling before switching to each consumer runtime. These
+  # controls establish the port harness; owning milestones add candidate hooks.
+  hook-port-controls:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["20.11.0", "24.21.0"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.21.0"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Record consumer identity
+        run: node -e "console.log(JSON.stringify({node:process.version,platform:process.platform,arch:process.arch,commit:process.env.GITHUB_SHA}))"
+      - name: Restricted process and selector controls
+        run: node --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
+      # npm pack invokes the platform npm shim outside the restricted child.
+      - name: Corpus and package controls
+        run: node --import tsx --test test/integration/hook-parity.test.ts
+
+  # Bash extraction stays on native Linux with pinned jq and explicit locales.
+  # macOS runs the Node controls above, never reference extraction.
+  hook-reference-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        locale: [C, C.UTF-8]
+    env:
+      GOAT_FLOW_HOOK_UNDER_TEST: reference
+      LC_ALL: ${{ matrix.locale }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.21.0"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      - name: Provision reference jq 1.6
+        run: |
+          set -euo pipefail
+          jq_dir="$RUNNER_TEMP/reference-bin"
+          mkdir -p "$jq_dir"
+          curl -fsSL -o "$jq_dir/jq" https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64
+          echo "af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44  $jq_dir/jq" | sha256sum --check
+          chmod +x "$jq_dir/jq"
+          echo "$jq_dir" >> "$GITHUB_PATH"
+          echo "GOAT_FLOW_JQ16_BIN=$jq_dir/jq" >> "$GITHUB_ENV"
+      - name: Record reference identity
+        run: node --version && uname -a && git rev-parse HEAD && jq --version && locale
+      - name: Frozen policy invariants
+        run: node --import tsx --test --test-concurrency=1 test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts
+      - name: Frozen scanner and recovery invariants
+        run: node --import tsx --test --test-concurrency=1 test/integration/post-turn-safety-hook*.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
+      - name: Frozen Gruff and provider invariants
+        run: node --import tsx --test --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts test/integration/hook-provider-contracts.test.ts
+      - name: Frozen extraction controls
+        run: node --import tsx --test test/integration/hook-parity-reference.test.ts
+
+  # WSL has its own identity and receipts; a native Windows pass cannot credit it.
+  # Fail closed if the disposable hosted runner cannot provide WSL2.
+  hook-port-controls-wsl:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: Ubuntu/WSL/.github/actions/wsl-install@3b7a6b2a43af18aa541eeee1669ac27656630097
+        with:
+          distro: Ubuntu-22.04
+      - name: Require WSL2
+        shell: pwsh
+        run: |
+          $env:WSL_UTF8 = '1'
+          wsl --set-version Ubuntu-22.04 2
+          if ($LASTEXITCODE -ne 0) { throw 'WSL2 conversion failed' }
+          $listing = (wsl --list --verbose) -replace "`0", ''
+          $listing
+          if ($LASTEXITCODE -ne 0 -or ($listing -join "`n") -notmatch 'Ubuntu-22\.04\s+\S+\s+2\s*') { throw 'WSL2 identity missing' }
+      - name: WSL floor and LTS controls
+        uses: Ubuntu/WSL/.github/actions/wsl-bash@3b7a6b2a43af18aa541eeee1669ac27656630097
+        with:
+          distro: Ubuntu-22.04
+          exec: |
+            set -euo pipefail
+            uname -a
+            grep -i 'microsoft.*WSL2' /proc/sys/kernel/osrelease
+            apt-get update
+            apt-get install -y ca-certificates curl git xz-utils procps
+            source_path=$(wslpath -u '${{ github.workspace }}')
+            work_path=$(mktemp -d /tmp/goat-flow-ci-XXXXXXXX)
+            printf '%s\n' "$work_path" > /tmp/goat-flow-ci-path
+            cp -a "$source_path/." "$work_path/"
+            cd "$work_path"
+            git config --global --add safe.directory "$work_path"
+            git rev-parse HEAD
+            for version in 24.21.0 20.11.0; do
+              archive="node-v$version-linux-x64.tar.xz"
+              curl -fsSLO "https://nodejs.org/dist/v$version/$archive"
+              curl -fsSL "https://nodejs.org/dist/v$version/SHASUMS256.txt" | grep "  $archive$" > "$archive.sha256"
+              sha256sum --check "$archive.sha256"
+              tar -xf "$archive"
+            done
+            export PATH="$work_path/node-v24.21.0-linux-x64/bin:$PATH"
+            npm ci
+            npm run build
+            for version in 20.11.0 24.21.0; do
+              export PATH="$work_path/node-v$version-linux-x64/bin:$PATH"
+              node --version
+              node --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
+              node --import tsx --test test/integration/hook-parity.test.ts
+            done
+      - name: WSL frozen divergence report
+        uses: Ubuntu/WSL/.github/actions/wsl-bash@3b7a6b2a43af18aa541eeee1669ac27656630097
+        with:
+          distro: Ubuntu-22.04
+          exec: |
+            set -euo pipefail
+            work_path=$(cat /tmp/goat-flow-ci-path)
+            cd "$work_path"
+            export PATH="$work_path/node-v24.21.0-linux-x64/bin:$PATH"
+            jq_dir=$(mktemp -d /tmp/goat-flow-jq-XXXXXXXX)
+            curl -fsSL -o "$jq_dir/jq" https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64
+            echo "af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44  $jq_dir/jq" | sha256sum --check
+            chmod +x "$jq_dir/jq"
+            export PATH="$jq_dir:$PATH" GOAT_FLOW_JQ16_BIN="$jq_dir/jq"
+            for locale in C C.UTF-8; do
+              LC_ALL="$locale" node scripts/check-hook-parity.mjs --stage=extraction --list-divergent
+            done
+
+  # Divergence is reported separately from candidate acceptance. Both locales and
+  # the complete frozen corpus are retained, including approved differences.
+  hook-reference-git-bash:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        locale: [C, C.UTF-8]
+    env:
+      LC_ALL: ${{ matrix.locale }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.21.0"
+          cache: "npm"
+      - run: npm ci
+      - name: Provision reference jq 1.6
+        shell: pwsh
+        run: |
+          $jqDir = Join-Path $env:RUNNER_TEMP 'reference-bin'
+          New-Item -ItemType Directory -Path $jqDir | Out-Null
+          $jqPath = Join-Path $jqDir 'jq.exe'
+          Invoke-WebRequest https://github.com/jqlang/jq/releases/download/jq-1.6/jq-win64.exe -OutFile $jqPath
+          if ((Get-FileHash $jqPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'a51d36968dcbdeabb3142c6f5cf9b401a65dc3a095f3144bd0c118d5bb192753') { throw 'jq checksum mismatch' }
+          $jqDir | Out-File -FilePath $env:GITHUB_PATH -Append
+          "GOAT_FLOW_JQ16_BIN=$jqPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Record divergence and host identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          uname -a
+          git rev-parse HEAD
+          jq --version
+          locale
+          node scripts/check-hook-parity.mjs --stage=extraction --list-divergent
+
   # Reviewed Gruff warning-debt ratchet (scripts/check-gruff-warning-ratchet.mjs
   # against scripts/gruff-warning-baseline.json). Runs in a dedicated job
   # because the analyzer package requires Node 22 while the compatibility jobs

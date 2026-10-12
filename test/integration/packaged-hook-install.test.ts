@@ -601,6 +601,18 @@ describe("packaged hook installation canary", () => {
         "utf8",
       ),
     );
+    const corpusPath = ".goat-flow/hooks/deny-dangerous/corpus.json";
+    assert.deepEqual(
+      readFileSync(join(freshProjectPath, corpusPath)),
+      readFileSync(
+        join(packedPackageRoot, "workflow/hooks/deny-dangerous/corpus.json"),
+      ),
+      "archive consumers receive declared corpus bytes without checkout fallback",
+    );
+    assert.equal(
+      existsSync(join(packedPackageRoot, "test/fixtures/hooks-bash")),
+      false,
+    );
     assertInstalledCodexPolicy(freshProjectPath);
   });
 

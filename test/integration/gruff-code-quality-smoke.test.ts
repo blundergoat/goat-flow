@@ -1,3 +1,4 @@
+import { hookTreeRoot, spawnSelectedHook } from "../helpers/hook-entrypoint.js";
 /**
  * Integration smoke tests for the gruff-code-quality hook's changed-line filtering
  * behavior on the legacy analyse path: payload/git range resolution, extension
@@ -48,11 +49,11 @@ const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const GRUFF_HOOK_COPY_ENTRIES = [
   {
     label: "workflow",
-    path: join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh"),
+    path: join(hookTreeRoot("workflow"), "gruff-code-quality.sh"),
   },
   {
     label: "installed",
-    path: join(PROJECT_ROOT, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+    path: join(hookTreeRoot("installed"), "gruff-code-quality.sh"),
   },
 ] as const;
 
@@ -124,7 +125,7 @@ function runHookArguments(
   args: string[],
   pathPrefix: string,
 ): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", [hookPath, ...args], {
+  return spawnSelectedHook(hookPath, args, {
     cwd: makeRoot(),
     encoding: "utf-8",
     env: { ...process.env, PATH: pathPrefix },

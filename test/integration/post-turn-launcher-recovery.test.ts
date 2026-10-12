@@ -4,6 +4,7 @@
  * Each test uses a disposable selected project and the shipped launcher, with no live provider or real user files.
  * Use this matrix to protect bounded retries, actionable findings and byte-safe delivery together.
  */
+import { hookTreeRoot, selectedHookPath } from "../helpers/hook-entrypoint.js";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -19,7 +20,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
@@ -38,7 +39,9 @@ import {
   decodeHookResultOutput,
 } from "../../workflow/hooks/hook-provider-adapters.mjs";
 
-const launcherPath = resolve("workflow/hooks/run-with-bash.mjs");
+const launcherPath = selectedHookPath(
+  join(hookTreeRoot(), "run-with-bash.mjs"),
+);
 const stopMode = "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
 const scriptArgument = ".goat-flow/hooks/post-turn-safety.sh";
 const invalidClaudeStopInputs = [
@@ -153,7 +156,7 @@ function writeScanner(projectRoot: string, scriptBody: string) {
   mkdirSync(join(projectRoot, ".goat-flow/hooks/vendor"), { recursive: true });
   writeFileSync(
     join(projectRoot, ".goat-flow/hooks/vendor/js-yaml.cjs"),
-    readFileSync(resolve("workflow/hooks/vendor/js-yaml.cjs")),
+    readFileSync(join(hookTreeRoot(), "vendor/js-yaml.cjs")),
   );
   writeFileSync(
     join(projectRoot, scriptArgument),
@@ -237,7 +240,7 @@ describe("continuation recovery", () => {
         for (const name of ["run-with-bash.mjs", "hook-launch-runtime.mjs"]) {
           writeFileSync(
             join(projectRoot, ".goat-flow/hooks", name),
-            readFileSync(resolve("workflow/hooks", name)),
+            readFileSync(join(hookTreeRoot(), name)),
           );
         }
         const spec = getHookSpec("post-turn-safety")!;
@@ -331,11 +334,11 @@ describe("continuation recovery", () => {
         withProject((projectRoot) => {
           writeScanner(
             projectRoot,
-            readFileSync(resolve("workflow/hooks/post-turn-safety.sh"), "utf8"),
+            readFileSync(join(hookTreeRoot(), "post-turn-safety.sh"), "utf8"),
           );
           writeFileSync(
             join(projectRoot, ".goat-flow/hooks/hook-launch-runtime.mjs"),
-            readFileSync(resolve("workflow/hooks/hook-launch-runtime.mjs")),
+            readFileSync(join(hookTreeRoot(), "hook-launch-runtime.mjs")),
           );
           const environment =
             scannerMode === "compatibility"
@@ -584,11 +587,11 @@ describe("continuation recovery", () => {
     withProject((projectRoot) => {
       writeScanner(
         projectRoot,
-        readFileSync(resolve("workflow/hooks/post-turn-safety.sh"), "utf8"),
+        readFileSync(join(hookTreeRoot(), "post-turn-safety.sh"), "utf8"),
       );
       writeFileSync(
         join(projectRoot, ".goat-flow/hooks/hook-launch-runtime.mjs"),
-        readFileSync(resolve("workflow/hooks/hook-launch-runtime.mjs")),
+        readFileSync(join(hookTreeRoot(), "hook-launch-runtime.mjs")),
       );
       assert.equal(
         spawnSync("git", ["init", "-q"], { cwd: projectRoot }).status,
@@ -681,7 +684,7 @@ describe("continuation recovery", () => {
             eval: true,
             workerData: {
               module: pathToFileURL(
-                resolve("workflow/hooks/hook-launch-runtime.mjs"),
+                join(hookTreeRoot(), "hook-launch-runtime.mjs"),
               ).href,
               projectRoot,
               cycleKey,
@@ -780,7 +783,7 @@ describe("output budgets", () => {
           0,
         );
         const scanner = readFileSync(
-          resolve("workflow/hooks/post-turn-safety.sh"),
+          join(hookTreeRoot(), "post-turn-safety.sh"),
           "utf8",
         ).replace(
           "SECONDS=0\n",
@@ -798,7 +801,7 @@ describe("output budgets", () => {
         ]) {
           writeFileSync(
             join(projectRoot, ".goat-flow/hooks", moduleName),
-            readFileSync(resolve("workflow/hooks", moduleName)),
+            readFileSync(join(hookTreeRoot(), moduleName)),
           );
         }
         writeFileSync(
@@ -880,7 +883,7 @@ describe("output budgets", () => {
         "<<<<<<< HEAD\nfirst\n=======\nsecond\n>>>>>>> branch\n",
       );
       const scanner = readFileSync(
-        resolve("workflow/hooks/post-turn-safety.sh"),
+        join(hookTreeRoot(), "post-turn-safety.sh"),
         "utf8",
       ).replace(
         "SECONDS=0\n",
@@ -894,7 +897,7 @@ describe("output budgets", () => {
       );
       writeFileSync(
         join(projectRoot, ".goat-flow/hooks/hook-launch-runtime.mjs"),
-        readFileSync(resolve("workflow/hooks/hook-launch-runtime.mjs")),
+        readFileSync(join(hookTreeRoot(), "hook-launch-runtime.mjs")),
       );
       writeFileSync(
         join(projectRoot, ".goat-flow/config.yaml"),

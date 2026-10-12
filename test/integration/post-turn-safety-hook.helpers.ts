@@ -9,6 +9,13 @@
  * scanner - including the hook under test - would rightly flag.
  */
 import assert from "node:assert/strict";
+import {
+  hookTreeRoot,
+  selectedHookPath,
+  spawnSelectedHook,
+} from "../helpers/hook-entrypoint.js";
+import { basename, isAbsolute } from "node:path";
+import { bashPath } from "../../scripts/check-hook-parity.mjs";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -24,9 +31,8 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
-export const HOOK_PATH = resolve(
-  PROJECT_ROOT,
-  "workflow/hooks/post-turn-safety.sh",
+export const HOOK_PATH = selectedHookPath(
+  join(hookTreeRoot(), "post-turn-safety.sh"),
 );
 export const FORCE_BASH3_ENV_KEY =
   "GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK";
@@ -235,7 +241,7 @@ export function commitAll(root: string, message: string): void {
  * @param root - non-empty fixture root the user expects the hook to scan
  * @param env - overrides merged onto the process env; absent means the default scanner
  * @param stdinPayload - optional provider JSON; absent means a direct user run
- * @returns the finished process; null status means Bash did not start for the user
+ * @returns captured process metadata; inspect error and signal when status is null
  */
 export function runHook(
   root: string,
@@ -251,7 +257,7 @@ export function runHook(
  * @param hookArguments - exact CLI options; empty means the normal Stop scan
  * @param env - optional process overrides; absent keeps the user's environment
  * @param stdinPayload - optional provider JSON; absent represents direct human use
- * @returns the finished command; a null status means Bash could not start for the user
+ * @returns captured command metadata; inspect error and signal when status is null
  */
 export function runHookCommand(
   root: string,
@@ -268,7 +274,7 @@ export function runHookCommand(
  * @param hookArguments - selected command options; empty starts a normal scan
  * @param env - optional scanner or failure-injection settings; absent keeps defaults
  * @param stdinPayload - provider JSON; absent closes stdin for a direct user run
- * @returns the completed hook process; a null status means Bash could not launch
+ * @returns captured hook metadata; inspect error and signal when status is null
  */
 function runHookProcess(
   root: string,
@@ -309,7 +315,7 @@ function captureHookOutput(
   try {
     for (const path of [stdoutPath, stderrPath])
       descriptors.push(openSync(path, "wx", 0o600));
-    const result = spawnSync("bash", [HOOK_PATH, ...hookArguments], {
+    const result = spawnSelectedHook(HOOK_PATH, hookArguments, {
       cwd: root,
       encoding: "utf8",
       stdio: [stdin, ...descriptors],
@@ -343,47 +349,84 @@ export function buildStopPayload(
   });
 }
 
+/** A command fault names one absolute executable and its observable failure. */
+export interface CommandFault {
+  when?: {
+    first?: string;
+    prefix?: string[];
+    includes?: string[];
+    any?: string[];
+    absoluteOperand?: boolean;
+  };
+  status?: number;
+  stdout?: string;
+  stdoutEnvironment?: string;
+  stderr?: string;
+  delegateThenRemoveEnvironment?: string;
+}
+
+// Child argv belongs to generated source, separate from the parent fixture's write path.
+function commandFaultSource(
+  declaration: CommandFault & { executable: string },
+): string {
+  return `import { spawnSync } from "node:child_process";
+import { rmSync } from "node:fs";
+const fault = ${JSON.stringify(declaration)};
+const args = process.argv.slice(2);
+const predicate = fault.when ?? {};
+const absolute = args.find((argument) => argument.startsWith("/"));
+const matches = (!predicate.first || args[0] === predicate.first)
+  && (!predicate.prefix || predicate.prefix.every((argument, index) => args[index] === argument))
+  && (!predicate.includes || predicate.includes.every((argument) => args.includes(argument)))
+  && (!predicate.any || predicate.any.some((argument) => args.includes(argument)))
+  && (!predicate.absoluteOperand || absolute !== undefined);
+const delegate = () => spawnSync(fault.executable, args, { stdio: "inherit" }).status ?? 1;
+if (!matches) process.exit(delegate());
+if (fault.delegateThenRemoveEnvironment) {
+  const status = delegate();
+  const path = process.env[fault.delegateThenRemoveEnvironment];
+  if (!path) throw new Error("fault removal target missing");
+  rmSync(path, { force: true });
+  process.exit(status);
+}
+if (fault.stdoutEnvironment) process.stdout.write((process.env[fault.stdoutEnvironment] ?? "") + "\\n");
+if (fault.stdout) process.stdout.write(fault.stdout);
+if (fault.stderr) process.stderr.write(fault.stderr.replaceAll("{{cwd}}", process.cwd()).replaceAll("{{absolute}}", absolute ?? ""));
+process.exit(fault.status ?? 2);
+`;
+}
+
 /**
- * Put one deterministic command shim first on PATH for a bounded failure fixture.
- * The supplied body exits on its target invocation; other calls fall through to
- * the real command using the original PATH.
- *
- * @param command - required command name; empty cannot produce a usable shim
- * @param scriptBody - failure predicate; empty delegates every call to the real command
- * @param scenario - required scenario callback given the shim environment; absence runs no proof
- * @returns nothing; the temporary shim is removed after the scenario
+ * Inject a declared command fault into a disposable reference PATH adapter.
+ * The Node driver owns predicates/output; its POSIX adapter only invokes Node.
+ * Candidate ports consume declared command dependencies in their owning milestone.
+ * The absolute target is resolved by the caller, without shell lookup.
  */
 export function withCommandShim(
-  command: string,
-  scriptBody: string,
+  executable: string,
+  fault: CommandFault,
   scenario: (env: Record<string, string>) => void,
 ): void {
+  assert(isAbsolute(executable), "fault target must be an absolute executable");
   const shimRoot = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-shim-"));
-  // A missing PATH represents a user environment where only the test shim is discoverable.
-  const originalPath = process.env.PATH ?? "";
-  // Resolve before installing the shim; a nested Bash -> Node -> Bash trip can convert an env-carried search path twice.
-  const realCommand = spawnSync(
-    "bash",
-    ["-c", 'command -v "$1"', "sh", command],
-    { encoding: "utf8" },
-  );
-  assert.equal(realCommand.status, 0, realCommand.stderr);
-  const quotedExecutable = `'${realCommand.stdout.trim().replaceAll("'", "'\\''")}'`;
+  const driver = join(shimRoot, "fault.mjs");
+  const declaration = { executable, ...fault };
   try {
-    const commandPath = join(shimRoot, command);
-    writeFileSync(
-      commandPath,
-      [
-        "#!/usr/bin/env bash",
-        "set -u",
-        scriptBody,
-        `exec ${quotedExecutable} "$@"`,
-        "",
-      ].join("\n"),
+    writeFileSync(driver, commandFaultSource(declaration));
+    const quote = (path: string) =>
+      "'" + bashPath(path).replaceAll("'", "'\\''") + "'";
+    const adapter = join(
+      shimRoot,
+      basename(executable).replace(/\.exe$/iu, ""),
     );
-    chmodSync(commandPath, 0o755);
+    writeFileSync(
+      adapter,
+      `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(driver)} "$@"\n`,
+    );
+    chmodSync(adapter, 0o755);
     scenario({
-      PATH: `${shimRoot}${delimiter}${originalPath}`,
+      PATH: `${shimRoot}${delimiter}${process.env.PATH ?? ""}`,
+      GOAT_TEST_COMMAND_FAULT: JSON.stringify(declaration),
     });
   } finally {
     rmSync(shimRoot, { recursive: true, force: true });
@@ -394,7 +437,7 @@ export function withCommandShim(
  *
  * @param root - non-empty fixture root whose scan must remain incomplete
  * @param env - required failure controls; empty means no fault was injected
- * @returns the blocked process; null status means Bash did not start and fails the assertion
+ * @returns the blocked process; a null status fails the completed-exit assertion
  */
 export function assertHookIncomplete(
   root: string,

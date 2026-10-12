@@ -1,6 +1,6 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-12
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
@@ -77,7 +77,7 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 **Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-28
 
-**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only descriptor or shell redirection rather than the runner's `input` option. Capture hook stderr explicitly when the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runPayloadProcess`).
+**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only descriptor or shell redirection rather than the runner's `input` option. Capture hook stderr explicitly when the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `runHook`), `test/unit/hook-registrar.helpers.ts` (search: `runPayloadProcess`).
 
 **What happened:** A hook integration test repeatedly timed out when it invoked the hook through `spawnSync` with an `input` string. Tracing with `bash -x` showed the hook stalled at its `payload="$(cat)"` line: the child saw the payload bytes but never received EOF in this sandbox. The same sequence completed from a normal shell with file redirection and produced the expected exit codes.
 
@@ -132,3 +132,21 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 **What happened:** The full deny-dangerous self-test hung on an interactive terminal while copying a thin hook into a temp directory without its shared helper. The copied hook reached the missing-helper branch before `--check` parsing and then read from the inherited terminal instead of receiving closed stdin.
 
 **Root cause:** The missing-dependency test proved fail-closed behaviour only when stdin was already closed, and an interactive terminal changed the control flow enough to hide the pass or fail line behind a blocked read.
+
+---
+
+## Lesson: Keep analyzer fixture programs outside the analyzed change set
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Store executable mock programs outside a fixture project when the tested hook inventories that project's changed files.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** Put Node analyzer programs in a separate disposable directory. Leave only the launcher required by the reference transport inside the project, and expose an explicit Node invocation for restricted consumers. Preserve the original behavior assertion when correcting fixture placement.
+
+**What happened:** During M07, converting a Bash Gruff mock to Node added `bin/gruff-ts.mjs` inside the fixture project. The Antigravity test without a file path failed: the hook inventoried that untracked source file and the mock returned an old finding. The focused run recorded 41 passes and one failure. Moving the program outside the analyzed project retained the assertion and produced 42 passes with no failures.
+
+**Root cause:** The mock's implementation became an input to the behavior under test. The old extensionless launcher had not entered the source-file inventory, so an apparently equivalent fixture conversion changed the test's scope.
+
+**Evidence:** `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `writeNodeAnalyzer`, `fixtureAnalyzerInvocation`); `test/integration/gruff-code-quality-smoke.test.ts` (search: `runs for Antigravity file-tool payloads without a file path`). The restricted clean control also invokes the Node analyzer directly and checks its finding payload in `test/integration/restricted-env-controls.test.ts` (search: `clean restricted consumer`).
+
+**Verification follow-up 2026-10-12:** The M07 full preflight then found six new warning identities across five edited fixture owners; the earlier scoped scans had omitted some owners. The generated child source also made argv and environment references appear inside parent file-writing calls. Separate source generators now make that boundary explicit. The process guard's executable resolution was extracted without changing PATH order, journal reads use caller-owned paths, and the executable-search catch documents why missing candidates continue. The complete warning ratchet returned zero accepted identities and occurrences; both Node 20.11.0 and 24.21.0 restriction/selector runs retained seven passes and zero failures or skips. Run the ratchet across the complete changed surface before the expensive suite. Evidence anchors: test/helpers/spawn-guard.mjs (search: resolveGuardExecutable), test/integration/restricted-env-controls.test.ts (search: negativeControlScript), and test/integration/post-turn-safety-hook.helpers.ts (search: commandFaultSource).

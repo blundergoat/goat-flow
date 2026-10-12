@@ -7,26 +7,23 @@
  * Use this suite when changing command grammar or policy boundaries.
  */
 import assert from "node:assert/strict";
+import { copyHookTree, spawnSelectedHook } from "../helpers/hook-entrypoint.js";
 import {
   checkInstalledPolicy,
   runHookWithPayload,
 } from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { after, describe, it } from "node:test";
-
-const projectRoot = resolve(import.meta.dirname, "..", "..");
 
 // Canonical entrypoints resolve the target's installed policy store. Keep candidate
 // bytes in their own Git root so this suite never repairs the active installation.
 const policyFixture = mkdtempSync(resolve(tmpdir(), "goat-policy-split-"));
 const fixtureHooks = resolve(policyFixture, ".goat-flow/hooks");
 mkdirSync(fixtureHooks, { recursive: true });
-cpSync(resolve(projectRoot, "workflow/hooks"), fixtureHooks, {
-  recursive: true,
-});
+copyHookTree(fixtureHooks);
 assert.equal(spawnSync("git", ["init", "-q", policyFixture]).status, 0);
 after(() => rmSync(policyFixture, { recursive: true, force: true }));
 type PolicyHook = "deny-dangerous" | "deny-git-mutations";
@@ -59,15 +56,11 @@ function runSplitPolicyCheck(
   command: string,
   env: NodeJS.ProcessEnv = process.env,
 ) {
-  return spawnSync(
-    "bash",
-    [resolve(fixtureHooks, `${hook}.sh`), "--check", command],
-    {
-      cwd: policyFixture,
-      encoding: "utf8",
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
+  return checkInstalledPolicy(
+    resolve(fixtureHooks, `${hook}.sh`),
+    policyFixture,
+    command,
+    env,
   );
 }
 
@@ -175,9 +168,7 @@ describe("split policy partial installation", () => {
         const root = mkdtempSync(resolve(tmpdir(), "goat-policy-partial-"));
         const hooks = resolve(root, ".goat-flow/hooks");
         try {
-          cpSync(resolve(projectRoot, "workflow/hooks"), hooks, {
-            recursive: true,
-          });
+          copyHookTree(hooks);
           assert.equal(spawnSync("git", ["init", "-q", root]).status, 0);
           // An earlier unsplit API reproduces a stale installed runtime that needs a setup refresh.
           if (brokenDependency === "pre-split-api") {
@@ -1040,9 +1031,9 @@ describe("deny-dangerous existing policy boundaries", () => {
   });
 
   it("rejects an unsupported deny self-test value", () => {
-    const policyResult = spawnSync(
-      "bash",
-      [resolve(fixtureHooks, "deny-dangerous.sh"), "--self-test=bogus"],
+    const policyResult = spawnSelectedHook(
+      resolve(fixtureHooks, "deny-dangerous.sh"),
+      ["--self-test=bogus"],
       {
         cwd: policyFixture,
         encoding: "utf8",
