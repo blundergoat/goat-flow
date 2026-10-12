@@ -1,6 +1,6 @@
 ---
 category: verification-outcomes
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-13
 ---
 
 **Scope:** Interpreting verification results - command execution, selected mode, and semantic outcome. General verification discipline remains in [verification.md](verification.md).
@@ -11,7 +11,7 @@ last_reviewed: 2026-10-12
 **Severity:** CORRECTNESS
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 22 | **Latest occurrence:** 2026-10-12
+**Incident count:** 26 | **Latest occurrence:** 2026-10-13
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -23,6 +23,12 @@ last_reviewed: 2026-10-12
 For an agent-driven probe, give the exact source line, commit or index the disposable baseline before launch, and require every mechanical postcondition: a successful tool event, the intended file diff or an independently captured state transition, a hook-start marker, a provider-visible marker, and the expected exit status. When a provider renderer may insert metadata, assert the structured event and the unique semantic marker independently rather than requiring display-label adjacency. Never promote the model's final sentence to proof.
 
 When reading test summaries across Node versions, pin the reporter or parse the observed summary format. Retain the process exit and raw output independently; a mismatched display prefix is a verifier error, not a failing test. For cleanup proof, identify each resource and its owner before asserting an empty temporary directory. Executable fixtures, runtime caches and deliberately retained failure journals have different lifecycles.
+
+For launch diagnostics, enumerate the relevant callers before choosing the instrumentation boundary. A caller-specific wrapper proves context only for that path; exercise the original failing commands as well as a controlled wrapper failure.
+
+Check the configured size metric before adding diagnostics to a nearly full file. Compile generated subprocess fixtures as well as their generator, and retain child stderr before interpreting a failed status as a product failure.
+
+Check enforced operation policy before offering an agent-run probe or asking for approval. Approval cannot release a prohibited operation. Read a report's producer before equating observation rows with unique cases; report mode can retain several observations for one case.
 
 Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (search: `offers deliberate review instead of an automatic rewrite`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`), `src/cli/help.ts` (search: `--harness`), `src/cli/audit/audit.ts` (search: `harness: options.harness`), `src/cli/plans-check-structure.ts` (search: `plain-language section`), `.goat-flow/skill-docs/skill-preamble.md` (search: `Proof Gate`).
 
@@ -58,6 +64,14 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 **Recurrence 2026-10-12 (reporter prefix):** The M07 process-observer verifier accepted Node 20.11.0's TAP summary but rejected the unchanged restricted-controls command on Node 24.21.0 because it required `# fail 0`. The retained output instead reports seven passes, `ℹ fail 0`, and the observer's child-close code zero. Reading that receipt corrected the verifier to recognize both observed summaries; no test or observer code changed. Evidence: `test/integration/restricted-env-controls.test.ts` (search: `clean restricted consumer journals allowed Node and Git with zero denials`) and `test/unit/hook-entrypoint.test.ts` (search: `unknown selection refuses`). The plan-local receipts retain both reporters and the corrected verifier result as diagnostic records. The first learning check rejected a gitignored log path used as a durable anchor; the corrected entry cites the maintained test owners instead.
 
 **Recurrence 2026-10-12 (cleanup ownership):** All M07 observer and reference-control commands met their expected results, but my final verifier asserted that the shared temporary directory was empty. It contained tsx and Node compile caches plus a journal from the reference test's intentional failed assertion. The corrected check admits those named owners, verifies the saved child results and requires zero remaining executable reference projects. No maintained test or observer behavior changed. Evidence: `scripts/check-hook-parity.mjs` (search: `if (!failed) rmSync(work`) and `test/integration/hook-parity-reference.test.ts` (search: `divergence captures failed original assertions without allowing acceptance`).
+
+**Recurrence 2026-10-12 (caller coverage):** The parity runner's new error wrapper identified supplemental extraction rows, but the original Linux reference test called the same launch function directly and still reported only `spawnSync bash ETIMEDOUT`. Its failed row remained unidentified. Caller coverage was missing from the diagnostic verification scope. The approved follow-up moved startup, timeout and incomplete-result context into `runFrozen`; both row-aware callers now pass the original case ID, and other callers receive an input digest. Controlled missing-process, signal and timeout failures verify that shared boundary without changing policy inputs or the Bash deadline. Evidence: `scripts/check-hook-parity.mjs` (search: `function compareExtraRows`, `export function runFrozen`), `test/integration/hook-parity-reference.test.ts` (search: `frozen launches preserve long and UNC literal inputs in both locales`), and `.github/workflows/ci.yml` (search: `Frozen extraction controls`). The hosted timeout's cause remains unresolved.
+
+**Recurrence 2026-10-12 (policy admission):** I asked for permission to cancel a stalled CI run before reading the enforced GitHub write classifier. The user approved, but the policy explicitly blocks `run:cancel` and says conversational approval does not release it. No cancellation was attempted; the exact command was handed to the user. Evidence: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `run:rerun|run:cancel|run:delete`, `conversational approval does not bypass this hook`) and `.goat-flow/learning-loop/decisions/ADR-028-github-cli-mostly-read-only-except-comments.md` (search: `reruns/cancels/deletes`).
+
+**Recurrence 2026-10-12 (report cardinality):** My Git Bash report verifier assumed one divergence row per case ID and failed before writing its receipt. Reading the retained JSON showed that 31/32 observation rows covered 17/18 distinct IDs. An initial explanation also named the wrong comparison paths; I rewound to the producer, which compares both smoke and full reports containing shared availability IDs. The corrected verifier records both counts and preserves the original CI results. Evidence: `scripts/check-hook-parity.mjs` (search: `export function compareExtraction`, `for (const mode of ["smoke", "full"])`, `differences=${divergences.length}`). A completed divergence report does not prove zero differences.
+
+**Recurrence 2026-10-13 (diagnostic preparation):** The first finite-input patch crossed the parity helper's substantive-line cap. Simplifying only the new descriptor lifecycle and failure handling restored the existing gate; its threshold stayed unchanged. The new fault probe then returned Git status 1 because its generated JavaScript decoded a newline inside a quoted string. Changing the wrapper's module shape did not resolve that error. Captured child stderr identified the syntax failure, and a raw template plus a syntax check of the generated program restored the probe. Neither failure established the cause of the hosted stall. After preflight passed all 93 checks, the proof helper rejected temporary projects created by the skill-author, skill-quality and quality-config tests. Reading their constructors established ownership, and a cleanup-only retry verified the saved gate results and zero remaining executable reference projects without rerunning preflight. The original cleanup failure remains retained. Cleanup owners: `test/integration/skill-author.test.ts`, `test/unit/quality-config.test.ts`, `test/unit/skill-quality/helpers.ts` (search: `makeTempProject`). Source owners: `.gruff-ts.yaml` (search: `size.file-length`), `scripts/check-hook-parity.mjs` (search: `validateSnapshot`, `function captureProgram`, `String.raw`). The existing size-budget footgun owns the planning constraint; detailed probe receipts remain with M07.
 
 ---
 

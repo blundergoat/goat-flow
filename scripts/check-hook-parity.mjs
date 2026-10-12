@@ -4,10 +4,12 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  closeSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -54,18 +56,28 @@ export function validateSnapshot(base = fixture) {
     assert.equal(bytes.length, file.bytes, `frozen length: ${file.path}`);
     assert.equal(digest(bytes), file.sha256, `frozen hash: ${file.path}`);
     // Git verifies its historical object identity; SHA-256 above checks integrity.
-    const gitBlob = spawnSync("git", ["hash-object", "--stdin"], {
-      input: bytes,
-      encoding: "utf8",
-      cwd: root,
-    });
-    assert.ifError(gitBlob.error);
-    assert.equal(gitBlob.status, 0, "Git blob identity calculation");
-    assert.equal(
-      gitBlob.stdout.trim(),
-      file.gitBlob,
-      `frozen Git blob: ${file.path}`,
-    );
+    const descriptor = openSync(join(base, file.path), "r");
+    const started = Date.now();
+    try {
+      // A regular file gives Git EOF; its identity must still match the snapshot.
+      const gitBlob = spawnSync("git", ["hash-object", "--stdin"], {
+        stdio: [descriptor, "pipe", "pipe"],
+        encoding: "utf8",
+        cwd: root,
+        timeout: 30_000,
+        killSignal: "SIGKILL",
+      });
+      assert.ifError(gitBlob.error);
+      assert.equal(gitBlob.status, 0, "Git blob identity calculation");
+      assert.equal(gitBlob.stdout.trim(), file.gitBlob, "frozen Git blob");
+    } catch (error) {
+      throw new Error(
+        `Frozen Git blob failed: file=${file.path}; elapsedMs=${Date.now() - started}: ${error.message}`,
+        { cause: error },
+      );
+    } finally {
+      closeSync(descriptor);
+    }
   }
   for (const prefix of ["workflow/hooks/", ".goat-flow/hooks/"]) {
     assert(
@@ -171,21 +183,25 @@ function spawnReferenceCommand(executable, args, options) {
 
 // Classify inert check text or raw provider bytes; proposed commands never run.
 // Process startup, timeout and incomplete output fail extraction visibly.
-export function runFrozen(project, policy, input, locale = "C", extra = {}) {
+export function runFrozen(project, policy, input, locale = "C", env = {}, id) {
   assert(policies.includes(policy), "known policy");
   const command = join(project, ".goat-flow/hooks", `${policy}.sh`);
   const args = input.command === undefined ? [] : [`--check=${input.command}`];
+  const started = Date.now();
   const result = spawnReferenceCommand("bash", [bashPath(command), ...args], {
     cwd: project,
-    env: { ...referenceEnvironment(project, locale), ...extra },
+    env: { ...referenceEnvironment(project, locale), ...env },
     input: input.payloadBase64
       ? Buffer.from(input.payloadBase64, "base64")
       : undefined,
     timeout: 30_000,
     maxBuffer: 8 * 1024 * 1024,
   });
-  assert.ifError(result.error);
-  assert.notEqual(result.status, null, "reference process completed");
+  if (result.error || result.status === null)
+    throw new Error(
+      `Frozen launch failed: case=${id ?? digest(JSON.stringify(input))}; policy=${policy}; locale=${locale}; elapsedMs=${Date.now() - started}: ${result.error?.message ?? "reference process incomplete"}`,
+      { cause: result.error },
+    );
   return {
     status: result.status,
     stdoutBase64: result.stdout.toString("base64"),
@@ -905,22 +921,14 @@ function compareExtraRows(project, rows, comparison, seen, locale) {
   for (const row of rows.filter(
     (row) => row.origin.kind !== "self-test" && selected.has(row.id),
   )) {
-    const started = Date.now();
-    let actual;
-    try {
-      actual = runFrozen(
-        project,
-        row.policy,
-        row.input,
-        locale,
-        row.setup.environment,
-      );
-    } catch (error) {
-      throw new Error(
-        `Frozen launch failed: case=${row.id}; locale=${locale}; elapsedMs=${Date.now() - started}: ${error.message}`,
-        { cause: error },
-      );
-    }
+    const actual = runFrozen(
+      project,
+      row.policy,
+      row.input,
+      locale,
+      row.setup.environment,
+      row.id,
+    );
     if (row.origin.kind === "locale-sentinel")
       assert.equal(
         actual.status,

@@ -89,6 +89,7 @@ test("frozen launches preserve long and UNC literal inputs in both locales", () 
             row.input,
             locale,
             row.setup.environment,
+            row.id,
           ),
           originals.get(row.id).original[locale],
           true,
