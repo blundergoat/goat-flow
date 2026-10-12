@@ -163,3 +163,51 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 **What happened:** PR #69's `hook-port-controls-wsl` job installed Ubuntu and successfully launched its echo command. The subsequent unconditional `wsl --set-version Ubuntu-22.04 2` reported that the distribution was already the requested version, followed by `WSL_E_VM_MODE_INVALID_STATE`. The workflow threw `WSL2 conversion failed` before reaching its identity listing or restricted controls. Treating an already-satisfied conversion as a safe probe blocked the intended proof.
 
 **Evidence:** `.github/workflows/ci.yml` (search: `Require WSL2`, `WSL2 conversion failed`); [failed hosted job](https://github.com/blundergoat/goat-flow/actions/runs/38199639896/job/114649958758). A disposable PowerShell branch fixture reproduced the old failure and exercised seven proposed success/refusal paths. That fixture does not establish hosted WSL2 kernel availability or passing restricted controls; rerun the original hosted job before accepting that proof.
+
+---
+
+## Lesson: Provision native build dependencies in fresh WSL distributions
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Inspect native dependency install scripts before treating a fresh WSL distribution as equivalent to a provisioned Linux CI runner.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Provision the build prerequisites required by locked native dependencies before installation. Preserve install-script output when diagnosing an optional package that disappears: a successful npm exit does not prove that every optional dependency installed.
+
+**What happened:** I added the hosted WSL controls with curl, Git and archive tools, but omitted Python and a compiler toolchain. After the WSL identity correction, the [next hosted job](https://github.com/blundergoat/goat-flow/actions/runs/38208889365/job/114678400988) passed its identity and kernel checks, then failed compilation because `node-pty` was absent despite a successful `npm ci`.
+
+**Evidence and limit:** `package.json` (search: `optionalDependencies`) pins `node-pty` 1.1.0. That package's install script falls back to `node-gyp rebuild` because it ships no Linux prebuild. In two disposable installs on Node 22.22.1/npm 10.9.4, making `make` unavailable produced exit zero with `node-pty` absent; the otherwise identical install with the compiler available retained the package. This proves the omission mechanism, not the hosted machine's exact failure: the hosted job used npm 11.19.0 and did not retain its optional-package failure detail. `.github/workflows/ci.yml` (search: `WSL floor and LTS controls`) owns provisioning; `src/cli/server/terminal.ts` (search: `type NodePtyModule`) still requires the package's types at build time. Hosted execution remains open.
+
+---
+
+## Lesson: Keep native dependencies local to each test platform
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check the test loader's native dependencies before replaying a Windows test from a WSL checkout.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+
+**Prevention:** Use dependencies installed for the executing platform. If a disposable JavaScript translation can isolate the failing contract, retain the original test and production source hashes, preserve assertions and fixtures, and identify that run as reduced proof rather than the original hosted reproduction.
+
+**What happened:** I invoked native Windows Node against `test/integration/preflight-progress.test.ts` and `test/integration/gruff-warning-ratchet.test.ts` in the WSL checkout. The loader failed before either suite ran because the installed `esbuild` binary was `linux-x64`, while Windows required `win32-x64`. A disposable TypeScript-erasure translation of the unchanged npm-timeout case then passed on local Windows Node 24.9.0 with a byte-identical copy of the production runner. The reduced case also passed on a native Windows temporary volume using the hosted job's Node 22.23.3/npm 10.9.9 versions; the temporary copy was removed afterward.
+
+**Evidence and limit:** `package-lock.json` (search: `node_modules/@esbuild/linux-x64`, `node_modules/@esbuild/win32-x64`) records separate native packages. `test/integration/preflight-progress.test.ts` (search: `times out installed npm with exit 124 and removes its script and worker`) owns the original contract. The local reduced pass does not explain or clear the [hosted Node 22 cleanup failure](https://github.com/blundergoat/goat-flow/actions/runs/38208889365/job/114678400808); retain that failure and capture the cleanup command's result before choosing a fix.
+
+---
+
+## Lesson: Reproduce CI prerequisites before replaying its test command
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Reproduce the preceding install and build steps before treating a local replay as the hosted job's reproduction.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+
+**Prevention:** Read the failing job's complete setup, then recreate its dependencies and generated artifacts before running the original command. Preserve an incomplete-setup failure separately; it cannot explain a different hosted assertion.
+
+**What happened:** I copied the current source into a disposable native Windows directory, installed its locked dependencies with Node 22.23.3/npm 10.9.9, and ran the original two-suite command before building. The npm cleanup case passed, but the installed analyzer smoke failed with `design.package-bin-missing` because the package binary was absent. CI had run `npm run build` first. After running that build and the unchanged warning ratchet, the original command reported `# pass 45`, `# fail 0`, `# skipped 2`.
+
+**Evidence and limit:** `.github/workflows/ci.yml` (search: `Build package binary`, `Verification launch contracts`) owns the preceding setup. `test/integration/gruff-warning-ratchet.test.ts` (search: `launches the installed analyzer through the production ratchet`) checks the built package. The original command remains `node --import tsx --test test/integration/preflight-progress.test.ts test/integration/gruff-warning-ratchet.test.ts`. This local pass does not explain or clear the hosted Windows npm-cleanup failure; its hosted result still needs a rerun.
+
+
+**Verification follow-up 2026-10-12:** Linting the extracted `WSL floor and LTS controls` body without an interpreter produced SC2148 because the inline CI script has no shebang. Its action already declares Bash. Running `shellcheck --shell=bash` on the same extracted bytes exited zero. Reproduce the workflow's interpreter as well as its install/build prerequisites when validating extracted shell blocks; this check-setup failure was not evidence of a workflow defect.

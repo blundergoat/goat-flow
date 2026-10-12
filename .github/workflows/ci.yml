@@ -360,7 +360,7 @@ jobs:
             uname -a
             grep -i 'microsoft.*WSL2' /proc/sys/kernel/osrelease
             apt-get update
-            apt-get install -y ca-certificates curl git xz-utils procps
+            apt-get install -y ca-certificates curl git xz-utils procps python3 build-essential
             source_path=$(wslpath -u '${{ github.workspace }}')
             work_path=$(mktemp -d /tmp/goat-flow-ci-XXXXXXXX)
             printf '%s\n' "$work_path" > /tmp/goat-flow-ci-path
@@ -376,7 +376,7 @@ jobs:
               tar -xf "$archive"
             done
             export PATH="$work_path/node-v24.21.0-linux-x64/bin:$PATH"
-            npm ci
+            npm ci --foreground-scripts
             npm run build
             for version in 20.11.0 24.21.0; do
               export PATH="$work_path/node-v$version-linux-x64/bin:$PATH"
