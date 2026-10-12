@@ -11,7 +11,7 @@ last_reviewed: 2026-10-13
 **Severity:** CORRECTNESS
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 26 | **Latest occurrence:** 2026-10-13
+**Incident count:** 27 | **Latest occurrence:** 2026-10-13
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -27,6 +27,8 @@ When reading test summaries across Node versions, pin the reporter or parse the 
 For launch diagnostics, enumerate the relevant callers before choosing the instrumentation boundary. A caller-specific wrapper proves context only for that path; exercise the original failing commands as well as a controlled wrapper failure.
 
 Check the configured size metric before adding diagnostics to a nearly full file. Compile generated subprocess fixtures as well as their generator, and retain child stderr before interpreting a failed status as a product failure.
+
+Read the producer and actual object keys before asserting JSON fields. Join related artifacts by their recorded case ID rather than assuming they share a row schema.
 
 Check enforced operation policy before offering an agent-run probe or asking for approval. Approval cannot release a prohibited operation. Read a report's producer before equating observation rows with unique cases; report mode can retain several observations for one case.
 
@@ -72,6 +74,8 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 **Recurrence 2026-10-12 (report cardinality):** My Git Bash report verifier assumed one divergence row per case ID and failed before writing its receipt. Reading the retained JSON showed that 31/32 observation rows covered 17/18 distinct IDs. An initial explanation also named the wrong comparison paths; I rewound to the producer, which compares both smoke and full reports containing shared availability IDs. The corrected verifier records both counts and preserves the original CI results. Evidence: `scripts/check-hook-parity.mjs` (search: `export function compareExtraction`, `for (const mode of ["smoke", "full"])`, `differences=${divergences.length}`). A completed divergence report does not prove zero differences.
 
 **Recurrence 2026-10-13 (diagnostic preparation):** The first finite-input patch crossed the parity helper's substantive-line cap. Simplifying only the new descriptor lifecycle and failure handling restored the existing gate; its threshold stayed unchanged. The new fault probe then returned Git status 1 because its generated JavaScript decoded a newline inside a quoted string. Changing the wrapper's module shape did not resolve that error. Captured child stderr identified the syntax failure, and a raw template plus a syntax check of the generated program restored the probe. Neither failure established the cause of the hosted stall. After preflight passed all 93 checks, the proof helper rejected temporary projects created by the skill-author, skill-quality and quality-config tests. Reading their constructors established ownership, and a cleanup-only retry verified the saved gate results and zero remaining executable reference projects without rerunning preflight. The original cleanup failure remains retained. Cleanup owners: `test/integration/skill-author.test.ts`, `test/unit/quality-config.test.ts`, `test/unit/skill-quality/helpers.ts` (search: `makeTempProject`). Source owners: `.gruff-ts.yaml` (search: `size.file-length`), `scripts/check-hook-parity.mjs` (search: `validateSnapshot`, `function captureProgram`, `String.raw`). The existing size-budget footgun owns the planning constraint; detailed probe receipts remain with M07.
+
+**Recurrence 2026-10-13 (reference row schema):** A diagnostic lookup guessed `input` on a frozen expectation row and raised `KeyError` before inspecting the sentinel. Reading both row shapes showed that the expectation stores `inputs` by locale, while the canonical corpus owns `input`. The corrected lookup joins the two artifacts by case ID. Read the producer and actual object keys before asserting JSON fields; a failed diagnostic lookup is not a policy failure. Evidence: `test/integration/hook-parity-reference.test.ts` (search: `const originals = new Map`, `row.input`, `originals.get(row.id).original[locale]`).
 
 ---
 
