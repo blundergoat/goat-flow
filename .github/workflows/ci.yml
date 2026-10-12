@@ -342,9 +342,13 @@ jobs:
         shell: pwsh
         run: |
           $env:WSL_UTF8 = '1'
-          wsl --set-version Ubuntu-22.04 2
-          if ($LASTEXITCODE -ne 0) { throw 'WSL2 conversion failed' }
           $listing = (wsl --list --verbose) -replace "`0", ''
+          if ($LASTEXITCODE -ne 0) { throw 'WSL2 identity query failed' }
+          if (($listing -join "`n") -notmatch 'Ubuntu-22\.04\s+\S+\s+2\s*') {
+            wsl --set-version Ubuntu-22.04 2
+            if ($LASTEXITCODE -ne 0) { throw 'WSL2 conversion failed' }
+            $listing = (wsl --list --verbose) -replace "`0", ''
+          }
           $listing
           if ($LASTEXITCODE -ne 0 -or ($listing -join "`n") -notmatch 'Ubuntu-22\.04\s+\S+\s+2\s*') { throw 'WSL2 identity missing' }
       - name: WSL floor and LTS controls

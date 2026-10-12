@@ -150,3 +150,16 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 **Evidence:** `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `writeNodeAnalyzer`, `fixtureAnalyzerInvocation`); `test/integration/gruff-code-quality-smoke.test.ts` (search: `runs for Antigravity file-tool payloads without a file path`). The restricted clean control also invokes the Node analyzer directly and checks its finding payload in `test/integration/restricted-env-controls.test.ts` (search: `clean restricted consumer`).
 
 **Verification follow-up 2026-10-12:** The M07 full preflight then found six new warning identities across five edited fixture owners; the earlier scoped scans had omitted some owners. The generated child source also made argv and environment references appear inside parent file-writing calls. Separate source generators now make that boundary explicit. The process guard's executable resolution was extracted without changing PATH order, journal reads use caller-owned paths, and the executable-search catch documents why missing candidates continue. The complete warning ratchet returned zero accepted identities and occurrences; both Node 20.11.0 and 24.21.0 restriction/selector runs retained seven passes and zero failures or skips. Run the ratchet across the complete changed surface before the expensive suite. Evidence anchors: test/helpers/spawn-guard.mjs (search: resolveGuardExecutable), test/integration/restricted-env-controls.test.ts (search: negativeControlScript), and test/integration/post-turn-safety-hook.helpers.ts (search: commandFaultSource).
+
+## Lesson: Query WSL identity before changing its version
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Query the installed WSL version before requesting a conversion, and require hosted execution evidence after changing provisioning.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Use `wsl --list --verbose` to inspect the target distribution and check the command status. Convert only when the requested version is absent, then query again. Keep the kernel check and fail on unavailable identity or a failed conversion. A conversion command is a state change, not an idempotent readiness probe.
+
+**What happened:** PR #69's `hook-port-controls-wsl` job installed Ubuntu and successfully launched its echo command. The subsequent unconditional `wsl --set-version Ubuntu-22.04 2` reported that the distribution was already the requested version, followed by `WSL_E_VM_MODE_INVALID_STATE`. The workflow threw `WSL2 conversion failed` before reaching its identity listing or restricted controls. Treating an already-satisfied conversion as a safe probe blocked the intended proof.
+
+**Evidence:** `.github/workflows/ci.yml` (search: `Require WSL2`, `WSL2 conversion failed`); [failed hosted job](https://github.com/blundergoat/goat-flow/actions/runs/38199639896/job/114649958758). A disposable PowerShell branch fixture reproduced the old failure and exercised seven proposed success/refusal paths. That fixture does not establish hosted WSL2 kernel availability or passing restricted controls; rerun the original hosted job before accepting that proof.
