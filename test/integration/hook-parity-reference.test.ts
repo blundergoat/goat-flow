@@ -87,7 +87,7 @@ test("frozen launches preserve long and UNC literal inputs in both locales", () 
         const timeoutMs =
           process.platform === "linux" &&
           locale === "C.UTF-8" &&
-          row.id === "contract-locale-sentinel-deny-dangerous"
+          row.origin.kind === "locale-sentinel"
             ? 120_000
             : 30_000;
         assertOutcome(

@@ -11,7 +11,7 @@ last_reviewed: 2026-10-13
 **Severity:** CORRECTNESS
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 32 | **Latest occurrence:** 2026-10-13
+**Incident count:** 34 | **Latest occurrence:** 2026-10-13
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -85,3 +85,8 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 
 ---
 
+**Recurrence 2026-10-13 (resume timer invocation):** A resume wrapper constructed a stop command followed by a start operand and category flag. The CLI rejected it before proof timing began. An explicit start command succeeded; the rejected attempt and prospective timestamps remain separate. Build each timing action from its literal command shape, and require a successful start before dependent work. Evidence: `src/cli/cli-parser-plans.ts` (search: `validatePlansCategoryFlag`, `--category is only valid for plans time start or learn new.`).
+
+---
+
+**Recurrence 2026-10-13 (fail-fast replay hid a peer case):** A Linux reference allowance named only the Unicode sentinel that timed out. The test stops at its first failed launch, so the second sentinel never ran in the failing job, and the next hosted run timed out on it instead. Before scoping a per-case fix from a fail-fast loop, establish each remaining case's cost from a run that reached it. Evidence: `test/integration/hook-parity-reference.test.ts` (search: `frozen launches preserve long and UNC literal inputs in both locales`).

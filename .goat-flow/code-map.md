@@ -255,6 +255,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── gruff-warning-ratchet-checks.mjs = ratchet comparison rules: manifest load/validate, scan shape, debt diff
 ├── ratchet-failure-report.mjs   = bounded per-category failure collector shared by the ratchet modules
 ├── check-hook-parity.mjs        = frozen Bash policy extraction, corpus integrity and host divergence
+├── hook-parity-reference-command.mjs = literal Windows argument handoff for frozen reference commands
 ├── check-instruction-parity.mjs = instruction-file section/order parity
 ├── check-touched.mjs            = read-only checks selected from working-tree changes, including deletion and rename triggers
 ├── check-markdown-links.sh      = markdown link resolver
