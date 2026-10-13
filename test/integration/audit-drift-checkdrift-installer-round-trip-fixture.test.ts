@@ -286,10 +286,16 @@ describe("checkDrift: installer round-trip fixture", () => {
       const inheritedRegistry = process.env.npm_config_registry;
       const auditRegistry = await startLocalAuditRegistry();
       try {
+        // The fast suite runs in its own CI job; the temporary copy checks installed files, hooks and the audit.
         const preflight = runCommand(
           root,
           "bash",
-          ["scripts/preflight-checks.sh", "--verbose", "--no-color"],
+          [
+            "scripts/preflight-checks.sh",
+            "--verbose",
+            "--no-color",
+            "--skip-tests",
+          ],
           400000,
           { npm_config_registry: auditRegistry.registryUrl },
         );

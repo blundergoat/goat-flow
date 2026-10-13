@@ -57,6 +57,10 @@ function isSlowTest(path) {
     "test/integration/quality-constraint-isolation.test.ts",
     "test/integration/hook-effective-state.test.ts",
     "test/integration/hook-parity-reference.test.ts",
+    "test/integration/deny-dangerous-policy.test.ts",
+    "test/integration/deny-native-shells.test.ts",
+    "test/integration/deny-dangerous-operands.test.ts",
+    "test/integration/deny-git-graphql.test.ts",
     "test/integration/setup-quality-lifecycle.test.ts",
     "test/integration/review-validate-large-tree.test.ts",
     "test/unit/audit-harness/check-evidence-before-claims.test.ts",
@@ -94,12 +98,12 @@ function filesForMode(allFiles) {
   }
 }
 
-// Measured CI durations balance the slow suite across machines; refresh them from TAP duration_ms values when shard timings drift.
+// CI durations balance the slow suite across machines; replace estimates and refresh drifted values from measured TAP duration_ms values.
 //
 // A new file uses DEFAULT_FILE_SECONDS until measured, so missing timing data never excludes a maintainer's new test.
 const SLOW_FILE_SECONDS = {
   "test/integration/setup-install-agent-matrix.test.ts": 120,
-  "test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts": 97,
+  "test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts": 180,
   "test/integration/setup-install-write-set.test.ts": 86,
   "test/integration/setup-install-migrations.test.ts": 78,
   "test/integration/setup-install.test.ts": 61,
@@ -107,8 +111,12 @@ const SLOW_FILE_SECONDS = {
   "test/integration/setup-install-force-authority.test.ts": 45,
   "test/integration/setup-install-codex-config-migration.test.ts": 35,
   "test/integration/setup-install-upgrade-1150.test.ts": 33,
+  "test/integration/deny-native-shells.test.ts": 28,
   "test/integration/setup-install-atomic-staging.test.ts": 22,
+  "test/integration/deny-dangerous-policy.test.ts": 22,
   "test/integration/dashboard-audit-api.test.ts": 14,
+  "test/integration/deny-git-graphql.test.ts": 12,
+  "test/integration/deny-dangerous-operands.test.ts": 10,
   "test/integration/dashboard-server-dashboard-api-setup.test.ts": 10,
   "test/integration/dashboard-server-dashboard-api-quality.test.ts": 10,
 };

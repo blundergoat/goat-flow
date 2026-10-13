@@ -51,6 +51,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The repository's own preflight runs once here; the fast suite it would call runs in test-fast.
+      - name: Preflight
+        run: bash scripts/preflight-checks.sh --skip-tests
+
       - name: Lint
         run: npx eslint src/cli src/dashboard
 

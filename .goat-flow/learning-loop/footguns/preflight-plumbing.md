@@ -1,6 +1,6 @@
 ---
 category: preflight-plumbing
-last_reviewed: 2026-09-05
+last_reviewed: 2026-10-14
 ---
 
 **Scope:** Data crossing the Node-to-shell boundary inside preflight and CI scripts: command substitution, formatting that shell arithmetic cannot parse, and stdout fed into pattern matchers. What the audit checks mean lives in [auditor.md](auditor.md).
@@ -15,7 +15,7 @@ last_reviewed: 2026-09-05
 
 **Why it happens:** The installed `node_modules/knip/schema.json` titles `ignore` "Files to exclude from the report (any issue type)" and `ignoreFiles` "Unused files to exclude from the report"; only `project` and `entry` define the analysed set, which here is already `src/**/*.ts`, `scripts/**/*.mjs`, and `test/**/*.ts`. `knip --debug` shows the real cost: it walks the entire checkout collecting every nested `.gitignore` into a `gitignoreFiles` list, and a scratchpad holding cloned repositories contributes hundreds, so the heap is spent deciding what to skip before analysis starts.
 
-**Evidence:** Measured 2026-08-16 with `.goat-flow/scratchpad` holding 31,249 `.ts` files across 5.4 GB: a detached worktree at the same commit passed under the identical 5120 MB cap while this tree exhausted it, adding `.goat-flow/**` and `_temp/**` to `ignore` changed nothing, and a 10240 MB heap completed with zero findings. `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) now passes `--no-gitignore`: 0.845 s, exit 0, and the TypeScript phase fell from about 250 s to 15.9 s. Coverage was proven unchanged: `knip --debug` analysed 425 paths with and without the flag, a planted unused export in `src/` was still reported with exit 1, and `git status --ignored --short src test scripts` plus `git ls-files --others --ignored --exclude-standard` showed nothing gitignored under `src/`, `test/`, or `scripts/` against a `dist/` control that reported `!!`. CI never invokes Knip, so the blast radius is the local gate; re-run the path diff if the `project` globs ever widen to a directory holding gitignored files.
+**Evidence:** Measured 2026-08-16 with `.goat-flow/scratchpad` holding 31,249 `.ts` files across 5.4 GB: a detached worktree at the same commit passed under the identical 5120 MB cap while this tree exhausted it, adding `.goat-flow/**` and `_temp/**` to `ignore` changed nothing, and a 10240 MB heap completed with zero findings. `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) now passes `--no-gitignore`: 0.845 s, exit 0, and the TypeScript phase fell from about 250 s to 15.9 s. Coverage was proven unchanged: `knip --debug` analysed 425 paths with and without the flag, a planted unused export in `src/` was still reported with exit 1, and `git status --ignored --short src test scripts` plus `git ls-files --others --ignored --exclude-standard` showed nothing gitignored under `src/`, `test/`, or `scripts/` against a `dist/` control that reported `!!`. CI runs Knip only through preflight on fresh checkouts, inside the round-trip test's temporary copy and in the `checks` job, so local scratchpad state cannot reach it there; re-run the path diff if the `project` globs ever widen to a directory holding gitignored files.
 
 ## Footgun: Colourized `node -e` output silently disables shell numeric guards
 
@@ -30,6 +30,19 @@ last_reviewed: 2026-09-05
 **Why it happens:** `console.log(x)` inspects a non-string argument, and Node colourizes inspected numbers when `FORCE_COLOR` is set, an agent-harness default in some terminals, so `node -e "console.log(require('./workflow/manifest.json').instruction_file.line_target)"` returns `\e[33m125\e[39m`. Command substitution captures the escapes, `[[ "$count" -gt "$limit" ]]` fails to parse, and both branches are skipped. String-valued extractions print raw, which is why the bug hides in exactly the numeric threshold checks that gate budgets.
 
 **Evidence:** Measured 2026-08-15 with `FORCE_COLOR=3`: `node -e "console.log(...line_target)" | cat -v` printed `^[[33m125^[[39m`, and wrapping the value in `String(...)` printed `125`. `scripts/preflight-checks.sh` (search: `String() is load-bearing`) carries the fix; before it the instruction-file line-budget loop produced four fewer checks (82 to 78) while still reporting PASS.
+
+## Footgun: A preflight diagnostics test cuts the Tests section out by its first marker string
+
+**Status:** active | **Created:** 2026-10-14 | **Evidence:** OBSERVED
+**Decision changed:** Before adding a branch, option or second call near a preflight section, search `test/` for tests that slice `scripts/preflight-checks.sh` by marker strings, and keep each marker's first occurrence in the section it delimits.
+
+**Prevention:** `test/integration/preflight-test-diagnostics.test.ts` (search: `source.indexOf('section "Tests"')`) runs the Tests section alone by cutting the script from the first `section "Tests"` to `# Show coverage only when`. Add new behaviour after the section's closing `fi`, or as an extra test in its opening condition, so the first marker still begins the original body.
+
+**Symptoms:** A `--skip-tests` branch placed before the original Tests block made preflight report `Tests failed (7/3235 failures)`. Each diagnostics case failed with `ENOENT` for its `ledger.tsv`, because the extracted shell began with the new branch and ended at a dangling `elif`, so bash rejected it before writing the ledger.
+
+**Why it happens:** The test treats source text as an interface: `indexOf` returns the first match, so a second `section "Tests"` call earlier in the file silently changes what the test executes.
+
+**Evidence:** `scripts/preflight-checks.sh` (search: `Package tests skipped by --skip-tests`) now records the skip in a separate block after the Tests section, and the diagnostics file passes 7 of 7.
 
 ---
 
