@@ -1,6 +1,6 @@
 ---
 category: verification-outcomes
-last_reviewed: 2026-10-13
+last_reviewed: 2026-10-14
 ---
 
 **Scope:** Interpreting verification results - command execution, selected mode, and semantic outcome. General verification discipline remains in [verification.md](verification.md).
@@ -11,7 +11,7 @@ last_reviewed: 2026-10-13
 **Severity:** CORRECTNESS
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 34 | **Latest occurrence:** 2026-10-13
+**Incident count:** 35 | **Latest occurrence:** 2026-10-14
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -90,3 +90,7 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 ---
 
 **Recurrence 2026-10-13 (fail-fast replay hid a peer case):** A Linux reference allowance named only the Unicode sentinel that timed out. The test stops at its first failed launch, so the second sentinel never ran in the failing job, and the next hosted run timed out on it instead. Before scoping a per-case fix from a fail-fast loop, establish each remaining case's cost from a run that reached it. Evidence: `test/integration/hook-parity-reference.test.ts` (search: `frozen launches preserve long and UNC literal inputs in both locales`).
+
+---
+
+**Recurrence 2026-10-14 (assumed a nested step ran):** A milestone amendment claimed the round-trip test's inner preflight ran the whole fast suite and added `--skip-tests` to save that time. A saved log of the same test showed the step had taken 0.1 seconds and warned `No tests found`, so the published run saved nothing measurable. Before estimating a saving, read the step's own row in a retained log to confirm it executed. Evidence: `scripts/preflight-checks.sh` (search: `No tests found (`).
