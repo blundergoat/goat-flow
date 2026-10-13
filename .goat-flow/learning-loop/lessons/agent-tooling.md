@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-13
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -160,3 +160,14 @@ Inspect literals independently when checking renames, as described in
 **What happened:** While evaluating a GitHub PR, the agent staged scratch files in `/tmp` and ran `cd /tmp` to fetch them. From then on every Bash call was blocked by the PreToolUse guard with `BLOCKED: ... git repository root unavailable`, because the launcher runs `git rev-parse` in the session's persistent cwd and `/tmp` is outside any repo. The agent retried Bash several times, then reached for `dangerouslyDisableSandbox` before concluding it was stuck. The block also rejected the recovering `cd <repo>`, since the guard runs before the command's `cd`.
 
 **Root cause:** Two mistakes. (1) It used `/tmp` as scratch space, moving the persistent shell cwd outside the repo, when a repo-local dir (`.goat-flow/scratchpad/`) would have kept cwd inside the tree. (2) On seeing the same `git repository root unavailable` block on every Bash, it treated each as a one-off and retried or hunted for a bypass instead of recognising a cwd-wedge and asking the user to reset the shell. Trap and fix: `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `outside any git repo`).
+
+## Lesson: Probe and stop commands must match only their intended target
+
+**Status:** active | **Created:** 2026-10-13 | **Evidence:** OBSERVED
+**Decision changed:** Read a repository script's argument handling before passing it a probe flag, and stop processes by an exact PID taken from a filtered process list rather than by a command-line pattern.
+**Trigger phase:** ACT
+**Incident count:** 2 | **Latest occurrence:** 2026-10-13
+
+**Prevention:** Before adding `--help` or another probe flag to a repository script, read how it parses arguments; a script that ignores unknown flags runs its real work. Before stopping a process, list candidates with `ps -eo pid,ppid,args`, select the exact PID by its argument vector, and signal that PID. A `pgrep -f` or `pkill -f` pattern also matches the invoking shell whenever the pattern text appears in that shell's own command line.
+
+**What happened:** While counting test files, the agent appended `--help` to `node scripts/run-tests.mjs slow --shard=1/1`. The runner reads its mode from the first argument and ignores other flags, so the command started the whole slow suite locally until it was stopped. The agent then stopped it with a `pgrep -f` loop whose pattern also appeared in its own Bash command, so the loop signalled its own shell, which exited with status 144 before reaching the test runner. Selecting the runner's PID from `ps` output and signalling it directly stopped the run; no repository file changed. Evidence: `scripts/run-tests.mjs` (search: `const mode = process.argv[2] ?? "fast";`, `function parseShard`).
