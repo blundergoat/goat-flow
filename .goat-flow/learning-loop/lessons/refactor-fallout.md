@@ -91,7 +91,7 @@ last_reviewed: 2026-10-15
 
 **Status:** active | **Created:** 2026-10-15
 
-**Prevention:** When a change adds a third category to a two-way split, search every surface that describes the split for complement wording, such as "every test file outside the slow set" or "the fast and slow suites already run these files", and qualify each one in the same change. Evidence anchors: `scripts/run-tests.mjs` (search: `WEEKLY_ONLY_TESTS`), `.github/workflows/ci.yml` (search: `outside the slow set and the weekly-only list`).
+**Prevention:** When a change adds a third category to a two-way split, search every surface that describes the split for complement wording, such as "every test file outside the slow set" or "the fast and slow suites already run these files", and qualify each one in the same change. Evidence anchors: `scripts/run-tests.mjs` (search: `REFERENCE_JOB_TESTS`), `.github/workflows/ci.yml` (search: `outside the slow set and the reference-job list`).
 
 **What happened:** M49 took `hook-parity-reference.test.ts` out of every test mode into a weekly-only list and commented the weekly step that now runs it. The `ci.yml` header and the `test-fast` comment still said that job runs every file outside the slow set, and the `hook-reference-linux` header still said the fast and slow suites run that job's files. A read-only review found all three after the change was committed; a follow-up commit qualified them.
 

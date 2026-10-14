@@ -1,10 +1,10 @@
 # The CI workflow a developer sees as checks on every pull request to main or dev, and again after each merge to main.
 #
-# Every run includes three Ubuntu jobs; the platform jobs join only on the weekly schedule or a manual run:
+# Every run, each pull-request push included, runs these jobs; after the 1.19.0 release the platform jobs return to weekly and manual runs only:
 # - checks: preflight without its test suite, the shell syntax check and the version-stamp check.
-# - test-fast: every test file outside the slow set and the weekly-only list, with a pinned jq 1.6.
+# - test-fast: every test file outside the slow set and the reference-job list, with a pinned jq 1.6.
 # - test-slow: the subprocess-heavy suite, one file at a time per runner, split across five shards.
-# - Platform jobs: Windows hook contracts, hook port controls (Linux, macOS, Windows, WSL2), the frozen Linux reference and the Windows ratchet.
+# - Platform jobs: Windows hook contracts, hook port controls (Linux, macOS, Windows, WSL2 in three parts), the Linux reference, the Windows ratchet.
 name: CI
 
 # Pull requests are the gate; `dev` is only ever merged to `main` through one.
@@ -16,7 +16,7 @@ on:
     branches: [main, dev]
   push:
     branches: [main]
-  # The platform jobs below run only on this weekly schedule and on manual runs; pull requests and pushes skip them.
+  # A weekly run of every job, so the platform jobs still run when nothing is pushed; until the 1.19.0 release pull requests run them too.
   # They are the hook ports, native Windows contracts, Linux references and the Windows ratchet.
   schedule:
     # Mondays at 18:00 UTC.
@@ -74,7 +74,7 @@ jobs:
       - name: Version consistency (shared script)
         run: npm run check-versions
 
-  # Every file outside the slow set and WEEKLY_ONLY_TESTS (scripts/run-tests.mjs), eight at a time; the same `npm run test:fast` a developer runs.
+  # Every file outside the slow set and REFERENCE_JOB_TESTS (scripts/run-tests.mjs), eight at a time; the same `npm run test:fast` a developer runs.
   test-fast:
     runs-on: ubuntu-latest
     steps:
@@ -95,7 +95,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Of the pull-request jobs, only this one pins jq: gruff-code-quality-smoke.test.ts asserts against jq 1.6 behaviour.
+      # Pins jq 1.6 because gruff-code-quality-smoke.test.ts asserts against its behaviour; the reference and WSL report jobs pin their own copies.
       #
       # The test reads GOAT_FLOW_JQ16_BIN (locally, /tmp/jq16/jq also works) and skips its jq 1.6 checks when neither exists.
       # A changed or tampered download fails the SHA-256 check and stops the job before any test runs.
@@ -154,8 +154,6 @@ jobs:
   # Proves ADR-048/ADR-053 hook contracts and the Windows-only audit/package paths on the package-minimum Node, 20.11.0 from package.json's engines.
   # Apart from that Node, it uses only the runner's preinstalled PowerShell, Git Bash and tar.
   windows-hook-contracts:
-    # Pull requests and pushes skip this job, so a Windows-only hook regression first shows on the weekly run unless someone starts a manual run.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -297,8 +295,6 @@ jobs:
   # No candidate hook is selected; the controls check the port harness itself: restricted child processes, the hook selector and the parity corpus.
   # Linux and Windows check 24.21.0, as the Linux test jobs run Node 20 and windows-hook-contracts runs 20.11.0; macOS checks only 20.11.0.
   hook-port-controls:
-    # Skipped on pull requests and pushes, so a PR never waits on the macOS and Windows runners.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       # A failure on one operating system leaves the other two running, so one run shows every platform's result.
       fail-fast: false
@@ -399,8 +395,6 @@ jobs:
   # Only the C locale runs here; the fast and slow suites already run its hook test files under the runner's UTF-8 locale against the installed hooks.
   # hook-parity-reference.test.ts runs only here and checks its launch rows in both locales itself; the WSL divergence report covers both too.
   hook-reference-linux:
-    # Skipped on pull requests and pushes, so a frozen-reference regression first shows on the weekly run unless someone starts a manual run.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -497,18 +491,27 @@ jobs:
             process.exitCode = code ?? 128 + (constants.signals[signal] ?? 1);
           });
           JS
-      # The only CI run of hook-parity-reference.test.ts: scripts/run-tests.mjs leaves it out of the fast and slow suites (search: WEEKLY_ONLY_TESTS).
+      # The only CI run of hook-parity-reference.test.ts; scripts/run-tests.mjs leaves it out of every suite (search: REFERENCE_JOB_TESTS).
       - name: Frozen extraction controls
         run: node "$RUNNER_TEMP/m07-observe-test-command.mjs" --import tsx --test test/integration/hook-parity-reference.test.ts
 
-  # Repeats the hook port controls inside WSL2 Ubuntu 22.04, then lists where the frozen Bash reference behaves differently there.
+  # Repeats the hook port controls inside WSL2 Ubuntu 22.04 and lists where the frozen Bash reference behaves differently there.
   #
   # WSL has its own identity, so a native Windows pass cannot stand in for it.
   # Fail closed: if the disposable hosted runner cannot provide WSL2, the job fails rather than passing without WSL coverage.
   hook-port-controls-wsl:
-    # Skipped on pull requests and pushes, so installing WSL never delays a PR.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      # Three runners in parallel: the floor and LTS controls, and the divergence report once per locale.
+      # One runner took about 14 minutes, 11 of them in the report (about 5 for C and 6 for C.UTF-8), so splitting it shortens the whole run.
+      matrix:
+        include:
+          - part: controls
+          - part: report
+            locale: C
+          - part: report
+            locale: C.UTF-8
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       # Installs Ubuntu 22.04 into WSL on the Windows runner.
@@ -538,8 +541,8 @@ jobs:
       # - The step fails at once unless /proc reports a WSL2 kernel.
       # - build-essential lets the optional node-pty package compile; without it npm ci still exits 0, with node-pty missing.
       # - Both Node archives must match nodejs.org's SHASUMS256.txt, and the build runs once on 24.21.0.
-      # - The copy's path is saved to /tmp/goat-flow-ci-path for the divergence report step.
       - name: WSL floor and LTS controls
+        if: matrix.part == 'controls'
         uses: Ubuntu/WSL/.github/actions/wsl-bash@3b7a6b2a43af18aa541eeee1669ac27656630097
         with:
           distro: Ubuntu-22.04
@@ -551,7 +554,6 @@ jobs:
             apt-get install -y ca-certificates curl git xz-utils procps python3 build-essential
             source_path=$(wslpath -u '${{ github.workspace }}')
             work_path=$(mktemp -d /tmp/goat-flow-ci-XXXXXXXX)
-            printf '%s\n' "$work_path" > /tmp/goat-flow-ci-path
             cp -a "$source_path/." "$work_path/"
             cd "$work_path"
             git config --global --add safe.directory "$work_path"
@@ -572,33 +574,44 @@ jobs:
               node --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
               node --import tsx --test test/integration/hook-parity.test.ts
             done
-      # Reuses the copy from the step above, adds checksum-verified jq 1.6, and lists where the frozen Bash reference behaves differently under WSL.
-      # It runs once per locale, C then C.UTF-8; differences are listed, not failed, ending in a `PASS: host divergence report` line with their count.
+      # Copies the checkout into WSL, adds checksum-verified Node 24.21.0 and jq 1.6, and lists where the frozen Bash reference behaves differently.
+      #
+      # The report needs no npm install or build: scripts/check-hook-parity.mjs imports only Node built-ins and a sibling script.
+      # Differences are listed, not failed; the log ends in a `PASS: host divergence report` line with their count for this part's locale.
       - name: WSL frozen divergence report
+        if: matrix.part == 'report'
         uses: Ubuntu/WSL/.github/actions/wsl-bash@3b7a6b2a43af18aa541eeee1669ac27656630097
         with:
           distro: Ubuntu-22.04
           exec: |
             set -euo pipefail
-            work_path=$(cat /tmp/goat-flow-ci-path)
+            grep -i 'microsoft.*WSL2' /proc/sys/kernel/osrelease
+            apt-get update
+            apt-get install -y ca-certificates curl git xz-utils procps python3
+            source_path=$(wslpath -u '${{ github.workspace }}')
+            work_path=$(mktemp -d /tmp/goat-flow-ci-XXXXXXXX)
+            cp -a "$source_path/." "$work_path/"
             cd "$work_path"
+            git config --global --add safe.directory "$work_path"
+            git rev-parse HEAD
+            archive="node-v24.21.0-linux-x64.tar.xz"
+            curl -fsSLO "https://nodejs.org/dist/v24.21.0/$archive"
+            curl -fsSL "https://nodejs.org/dist/v24.21.0/SHASUMS256.txt" | grep "  $archive$" > "$archive.sha256"
+            sha256sum --check "$archive.sha256"
+            tar -xf "$archive"
             export PATH="$work_path/node-v24.21.0-linux-x64/bin:$PATH"
             jq_dir=$(mktemp -d /tmp/goat-flow-jq-XXXXXXXX)
             curl -fsSL -o "$jq_dir/jq" https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64
             echo "af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44  $jq_dir/jq" | sha256sum --check
             chmod +x "$jq_dir/jq"
             export PATH="$jq_dir:$PATH" GOAT_FLOW_JQ16_BIN="$jq_dir/jq"
-            for locale in C C.UTF-8; do
-              LC_ALL="$locale" node scripts/check-hook-parity.mjs --stage=extraction --list-divergent
-            done
+            LC_ALL="${{ matrix.locale }}" node scripts/check-hook-parity.mjs --stage=extraction --list-divergent
 
   # Reviewed Gruff warning-debt ratchet (scripts/check-gruff-warning-ratchet.mjs against scripts/gruff-warning-baseline.json) on Windows.
   #
   # The preflight in `checks` runs the same ratchet on Linux every time; this leg checks the script and its tests on Windows paths.
   # It exits 1 when warning debt grows past the reviewed baseline or the baseline or scan is unusable, and 2 when the analyzer cannot run.
   gruff-warning-ratchet:
-    # Skipped on pull requests and pushes, whose checks job already runs this ratchet on Linux through preflight.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

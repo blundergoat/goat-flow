@@ -83,14 +83,14 @@ function isSlowTest(path) {
   );
 }
 
-// No mode selects these files, so `npm test` and the pull-request shards skip them; the weekly hook-reference-linux CI job runs each one by name.
+// No mode selects these files, so `npm test` and the slow shards skip them; the hook-reference-linux CI job runs each one by name instead.
 //
 // hook-parity-reference.test.ts breaks when the frozen reference, its corpus.json or scripts/check-hook-parity.mjs changes, or the runner drifts.
-// Before merging a change to those files, start a manual CI run, for example `gh workflow run ci.yml --ref dev`, which includes the weekly jobs.
-const WEEKLY_ONLY_TESTS = ["test/integration/hook-parity-reference.test.ts"];
+// That job runs on every pull request until the 1.19.0 release, then weekly; after that, start a manual CI run before merging such a change.
+const REFERENCE_JOB_TESTS = ["test/integration/hook-parity-reference.test.ts"];
 
 /**
- * Keep only the tests the developer's chosen mode runs, before any --shard split; files in WEEKLY_ONLY_TESTS are never kept.
+ * Keep only the tests the developer's chosen mode runs, before any --shard split; files in REFERENCE_JOB_TESTS are never kept.
  * An unknown mode writes the valid choices to stderr and exits with code 2 instead of running an unintended suite.
  *
  * @param allFiles - Every discovered test file (from {@link listTestFiles}).
@@ -98,7 +98,7 @@ const WEEKLY_ONLY_TESTS = ["test/integration/hook-parity-reference.test.ts"];
  */
 function filesForMode(allFiles) {
   const modeCandidates = allFiles.filter(
-    (path) => !WEEKLY_ONLY_TESTS.includes(path),
+    (path) => !REFERENCE_JOB_TESTS.includes(path),
   );
   switch (mode) {
     // Fast and coverage select the same files; coverage only adds the coverage report when the tests launch.
