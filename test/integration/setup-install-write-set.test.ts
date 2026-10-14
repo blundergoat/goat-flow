@@ -441,7 +441,8 @@ extends = ":workspace"
 
   // Separate names make the failing agent visible in TAP output and CI summaries.
   for (const agentProfile of supportedAgentProfiles) {
-    it(`${agentProfile.id} previews every path a fresh install writes`, () => {
+    // The previewed fresh install also hosts the sync, disable and enable cycle, so each agent pays for one install.
+    it(`${agentProfile.id} previews a fresh install, then converges install, sync, disable, and enable`, () => {
       const projectPath = makeTempProject();
       const previewedPaths = previewWritePaths(projectPath, agentProfile.id);
       const before = snapshotProject(projectPath);
@@ -470,10 +471,7 @@ extends = ":workspace"
         [],
         `${agentProfile.id} first install must not remove target files`,
       );
-    });
 
-    it(`${agentProfile.id} converges install, sync, disable, and enable`, () => {
-      const projectPath = installedTarget(agentProfile);
       assert.ok(agentProfile.hookConfigFile);
       const hookConfigPath = join(projectPath, agentProfile.hookConfigFile);
       const plantedUserContent = plantUserHookContent(hookConfigPath);

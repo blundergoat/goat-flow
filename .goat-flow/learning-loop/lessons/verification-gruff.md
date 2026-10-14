@@ -131,7 +131,7 @@ last_reviewed: 2026-10-11
 **Decision changed:** Before rewording a comment, or moving, renaming or deleting a symbol, grep the learning loop for that exact string or name; a cited comment or symbol is a durable artifact, not free text.
 **Trigger phase:** READ
 **Caught at:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-10-11
+**Incident count:** 7 | **Latest occurrence:** 2026-10-14
 
 **Prevention:** Before rewording a comment or moving, renaming or deleting a symbol, search the learning loop for the file's path to list every anchor it cites; matching is case-sensitive. Keep a cited substring intact and add analyzer vocabulary in a second sentence, or repoint the citing entry in the same change. Run `stats --check` or the harness audit after any batch that rewrites comments or moves code, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).
 
@@ -146,6 +146,7 @@ last_reviewed: 2026-10-11
 - **Recurrence 2026-09-19 (renamed function):** Renaming the hook function that projects analyzer results passed focused tests, shellcheck and `npm test`, then failed two preflight rows on one cause: `stale-ref` from `stats --check` and `stale-semantic-anchor` from the content audit. The anchor now names `workflow/hooks/gruff-code-quality.sh` (search: `hook_contract_report`). A rename needs the same search.
 - **Recurrence 2026-10-03:** A comment pass lowercased "Shared report contracts", which `lessons/naming.md` cites. Step 0 had retrieved this lesson, but the phrase searches covered other headers, not this one. Evidence anchor: `src/cli/hooks-configured-runtime-evidence.ts` (search: `Shared report contracts`).
 - **Recurrence 2026-10-11 (moved constant):** Moving `VALID_STATUSES` out of `src/cli/plans-check.ts` left a `lessons/milestone-timing.md` anchor on the old file. Focused tests, `npm test` and the touched-file checks passed, then preflight failed the same two rows. The anchor now cites `src/cli/plans-check-structure.ts` (search: `export const VALID_STATUSES`). Search for a constant's name before moving it, not only before deleting or renaming it.
+- **Recurrence 2026-10-14 (removed test title):** Folding the retired plan-guard upgrade case into one Claude upgrade test removed a test title that `lessons/verification-preflight.md` cited. The edited installer suites passed on Node 20.11.0 and 24.21.0, then preflight failed the same two rows. The anchor now cites `test/integration/setup-install-migrations.test.ts` (search: `upgrades a legacy Claude project`). Before removing tests, search the learning loop for every title the removal list names.
 
 ---
 

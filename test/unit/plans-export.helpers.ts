@@ -2,7 +2,7 @@
  * Shared fixtures for the `plans export` suites.
  * Exports are the one plans surface that writes files a user shares outside the repo, so the
  * suites need the same three things over and over: a complete milestone the way an author
- * writes one, a disposable plan directory to run the real CLI against, and link builders for
+ * writes one, a disposable plan directory to run the export against, and link builders for
  * proving the writer refuses symlinked or hardlinked destinations.
  *
  * The link builders skip rather than fail where the platform cannot create links, so the
@@ -11,6 +11,9 @@
 import type { TestContext } from "node:test";
 import { linkSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { CLIError } from "../../src/cli/cli-error.js";
+import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { runPlansExportOutput } from "../../src/cli/plans-export.js";
 import { runPlansCommand } from "./plans-check.helpers.js";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -72,6 +75,39 @@ export function writePlanFixture(
   writeFileSync(join(planPath, sourceFile), body, "utf-8");
 }
 
+/** Run `plans export` in this process and return what the CLI would print and exit with; requested export files are still written.
+ *
+ * Mirrors `src/cli/cli.ts`: a CLIError becomes its message on stderr with its exit code, and any other
+ * error becomes `Fatal error:` with exit 1. `--help` and `--version` are not handled here; use
+ * {@link runPlansExportCli} for them and for the real-process contract.
+ *
+ * @param args - arguments after `plans export`, exactly as an author would type them
+ * @returns the exit status, stdout and stderr the plan author would see
+ * @throws Never; every export error becomes a returned status and stderr text
+ */
+export function runPlansExport(...args: string[]) {
+  try {
+    const { stdout, stderr } = runPlansExportOutput(
+      parseCLIArgs(["plans", "export", ...args]),
+    );
+    return { status: 0, stdout, stderr };
+  } catch (error) {
+    // The CLI prints an expected input error's message and exits with its code.
+    if (error instanceof CLIError) {
+      return {
+        status: error.exitCode,
+        stdout: "",
+        stderr: `${error.message}\n`,
+      };
+    }
+    return {
+      status: 1,
+      stdout: "",
+      stderr: `Fatal error: ${error instanceof Error ? error.message : String(error)}\n`,
+    };
+  }
+}
+
 /**
  * Spawn the real CLI so parser, dispatch, redaction, and filesystem behavior stay integrated.
  *
@@ -79,7 +115,7 @@ export function writePlanFixture(
  * @returns the finished process with stdout/stderr strings, so a test asserts on the same
  *   text the author reads in their terminal
  */
-export function runPlansExport(...args: string[]) {
+export function runPlansExportCli(...args: string[]) {
   return runPlansCommand("export", ...args);
 }
 

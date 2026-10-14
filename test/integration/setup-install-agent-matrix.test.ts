@@ -491,25 +491,17 @@ function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
  * Writes disposable fixture files and launches installer subprocesses only inside that target.
  *
  * @param agentProfile - selected profile; missing config/path evidence fails its named test
+ * @param targetProjectPath - disposable project the Bash installer already installed for this profile
  * @returns preserved user-owned file path; never empty after the repair flow completes
  */
-function verifyAgentRepairAndCleanup(agentProfile: AgentProfile): string {
+function verifyAgentRepairAndCleanup(
+  agentProfile: AgentProfile,
+  targetProjectPath: string,
+): string {
   const [retiredSkillName] = getStaleSkillNames();
   assert.ok(
     retiredSkillName,
     "manifest must retain at least one retired skill for cleanup coverage",
-  );
-
-  const targetProjectPath = makeTempProject();
-  const firstInstall = runInstaller(
-    targetProjectPath,
-    "--agent",
-    agentProfile.id,
-  );
-  assert.equal(
-    firstInstall.status,
-    0,
-    firstInstall.stderr || firstInstall.stdout,
   );
 
   const missingSkillPath = join(
@@ -809,29 +801,18 @@ function seedDuplicateAndStaleDenyRows(
 }
 
 /**
- * Prove the standalone installer converges duplicate and stale deny rows across
+ * Prove the CLI installer converges duplicate and stale deny rows across two consecutive runs while preserving the user's own hook rows.
  *
- * three consecutive runs while preserving the user's own hook rows; it writes into a disposable consumer target.
- * Use per agent so a convergence failure names the exact provider shape.
+ * Use per agent so a convergence failure names the exact provider shape; it writes only into the supplied disposable target.
  *
  * @param agentProfile - agent selected at install time
- * @returns converged hook config path; never empty after the three-run flow
+ * @param targetProjectPath - disposable project already installed for this agent, whose hook config is polluted here
+ * @returns converged hook config path; never empty after the two-run flow
  */
 function verifyInstallerDuplicateConvergence(
   agentProfile: AgentProfile,
+  targetProjectPath: string,
 ): string {
-  const targetProjectPath = makeTempProject();
-  const firstInstall = runInstaller(
-    targetProjectPath,
-    "--agent",
-    agentProfile.id,
-  );
-  assert.equal(
-    firstInstall.status,
-    0,
-    firstInstall.stderr || firstInstall.stdout,
-  );
-
   assert.ok(agentProfile.hookConfigFile);
   const hookConfigPath = join(targetProjectPath, agentProfile.hookConfigFile);
   const installedConfig = JSON.parse(
@@ -848,10 +829,10 @@ function verifyInstallerDuplicateConvergence(
     `${agentProfile.id} fixture must seed duplicate managed rows`,
   );
 
-  // Three consecutive runs must converge once and then hold the exact bytes.
+  // The first run converges and the second must hold the exact bytes; an oscillating result fails that comparison.
   const configBytesPerRun: string[] = [];
   // Repeated installer runs must converge instead of duplicating the user's managed registrations.
-  for (let installerRun = 0; installerRun < 3; installerRun += 1) {
+  for (let installerRun = 0; installerRun < 2; installerRun += 1) {
     const repairRun = runCliInstaller(
       targetProjectPath,
       "--agent",
@@ -861,7 +842,6 @@ function verifyInstallerDuplicateConvergence(
     configBytesPerRun.push(readFileSync(hookConfigPath, "utf-8"));
   }
   assert.equal(configBytesPerRun[1], configBytesPerRun[0]);
-  assert.equal(configBytesPerRun[2], configBytesPerRun[0]);
 
   const convergedConfig = JSON.parse(configBytesPerRun[0]!) as Record<
     string,
@@ -957,7 +937,8 @@ describe("cross-agent install smoke matrix", () => {
 
   // Separate names make the failing agent visible in TAP output and CI summaries.
   for (const agentProfile of supportedAgentProfiles) {
-    it(`${agentProfile.id} installs manifest paths and invocation evidence`, () => {
+    // One project carries the fresh Bash install into the CLI repair and then the convergence runs, so each agent pays for one fresh install.
+    it(`${agentProfile.id} installs, repairs and converges duplicate deny rows on one project`, () => {
       const installedTargetPath = verifyFreshAgentInstall(agentProfile);
       assert.equal(
         existsSync(
@@ -965,14 +946,21 @@ describe("cross-agent install smoke matrix", () => {
         ),
         true,
       );
-    });
 
-    it(`${agentProfile.id} repairs managed files and preserves user content`, () => {
-      const preservedUserFilePath = verifyAgentRepairAndCleanup(agentProfile);
+      const preservedUserFilePath = verifyAgentRepairAndCleanup(
+        agentProfile,
+        installedTargetPath,
+      );
       assert.equal(
         readFileSync(preservedUserFilePath, "utf-8"),
         "keep this user content\n",
       );
+
+      const convergedHookConfigPath = verifyInstallerDuplicateConvergence(
+        agentProfile,
+        installedTargetPath,
+      );
+      assert.equal(existsSync(convergedHookConfigPath), true);
     });
 
     it(`${agentProfile.id} standalone install matches writer hook state`, () => {
@@ -983,12 +971,6 @@ describe("cross-agent install smoke matrix", () => {
         existsSync(join(installedTargetPath, agentProfile.hookConfigFile)),
         true,
       );
-    });
-
-    it(`${agentProfile.id} reinstalls converge duplicate and stale deny rows`, () => {
-      const convergedHookConfigPath =
-        verifyInstallerDuplicateConvergence(agentProfile);
-      assert.equal(existsSync(convergedHookConfigPath), true);
     });
   }
 

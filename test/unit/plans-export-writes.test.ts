@@ -2,8 +2,9 @@
  * How the command behaves at the filesystem boundary: redacted previews by default, writes
  * only on explicit output, force required to regenerate, and symlinked or hardlinked
  * destinations refused outright.
- * Runs the real CLI and parser against written fixtures, so failures read as the author's
- * terminal output rather than as internals.
+ * Runs the parser and export in-process against written fixtures, so failures read as the
+ * author's terminal output rather than as internals; the preview and JSON-write cases start
+ * the real CLI to prove the process prints that output.
  */
 import { describe, it } from "node:test";
 import type { TestContext } from "node:test";
@@ -23,6 +24,7 @@ import {
   completeMilestoneBody,
   writePlanFixture,
   runPlansExport,
+  runPlansExportCli,
   symlinkOrSkip,
   hardlinkOrSkip,
 } from "./plans-export.helpers.js";
@@ -62,7 +64,7 @@ describe("plans export: CLI previews and protected writes", () => {
     );
 
     try {
-      const result = runPlansExport(planPath, "--format", "json");
+      const result = runPlansExportCli(planPath, "--format", "json");
 
       assert.equal(result.status, 0, result.stderr);
       const records = JSON.parse(result.stdout) as Array<{
@@ -78,7 +80,7 @@ describe("plans export: CLI previews and protected writes", () => {
 
   /**
    * Fixture purpose: prove an exceptional-status explanation survives both portable formats without leaking pasted credentials.
-   * Process/filesystem side effects: spawns two previews and writes only the temporary source milestone.
+   * Process/filesystem side effects: runs two in-process previews and writes only the temporary source milestone.
    */
   it("redacts status reasons and Lane values in JSON and Markdown previews", () => {
     const temporaryRoot = mkdtempSync(
@@ -126,7 +128,7 @@ describe("plans export: CLI previews and protected writes", () => {
   for (const lane of ["", "php"]) {
     /**
      * Fixture purpose: preserve explicit Lane metadata without changing other exported bytes.
-     * Process/filesystem side effects: spawns CLI previews and writes then removes a temporary plan.
+     * Process/filesystem side effects: runs in-process previews and writes then removes a temporary plan.
      */
     it(`adds only declared Lane metadata to previews for ${lane || "an empty lane"}`, () => {
       const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-lane-"));
@@ -183,7 +185,7 @@ describe("plans export: CLI previews and protected writes", () => {
     writePlanFixture(planPath, completeMilestoneBody());
 
     try {
-      const result = runPlansExport(
+      const result = runPlansExportCli(
         planPath,
         "--format",
         "json",
@@ -192,6 +194,7 @@ describe("plans export: CLI previews and protected writes", () => {
       );
 
       assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stderr, `Written to ${outputPath}\n`);
       const records = JSON.parse(readFileSync(outputPath, "utf-8")) as Array<{
         title: string;
         verificationMarkdown: string;
@@ -205,7 +208,7 @@ describe("plans export: CLI previews and protected writes", () => {
 
   /**
    * Fixture purpose: cover generated Markdown output and the explicit overwrite contract.
-   * Process/filesystem side effects: spawns three CLI runs and writes only inside one temp directory.
+   * Process/filesystem side effects: runs three in-process exports and writes only inside one temp directory.
    */
   it("writes redacted Markdown and requires force before regeneration", () => {
     const temporaryRoot = mkdtempSync(
@@ -263,7 +266,7 @@ describe("plans export: CLI previews and protected writes", () => {
 
   /**
    * Fixture purpose: prove force never converts a source milestone into its generated export.
-   * Process/filesystem side effects: spawns the CLI and reads one unchanged temp source file.
+   * Process/filesystem side effects: runs the export in-process and reads one unchanged temp source file.
    */
   it("refuses forced Markdown output that aliases a source milestone", () => {
     const temporaryRoot = mkdtempSync(
@@ -294,7 +297,7 @@ describe("plans export: CLI previews and protected writes", () => {
 
   /**
    * Fixture purpose: mirror source protection for the single-file JSON export path.
-   * Process/filesystem side effects: spawns the CLI and reads one unchanged temp source file.
+   * Process/filesystem side effects: runs the export in-process and reads one unchanged temp source file.
    */
   it("refuses forced JSON output that aliases a source through the selected plan path", (testContext) => {
     const temporaryRoot = mkdtempSync(
@@ -330,7 +333,7 @@ describe("plans export: CLI previews and protected writes", () => {
 
   /**
    * Fixture purpose: prove two source names cannot silently overwrite one generated Markdown file.
-   * Process/filesystem side effects: spawns the CLI and writes only temporary source milestones.
+   * Process/filesystem side effects: runs the export in-process and writes only temporary source milestones.
    */
   it("rejects sanitized Markdown filename collisions before writing", () => {
     const temporaryRoot = mkdtempSync(
@@ -361,7 +364,7 @@ describe("plans export: CLI previews and protected writes", () => {
 
   /**
    * Fixture purpose: prove redaction cannot collapse distinct secret-bearing names into one destination.
-   * Process/filesystem side effects: spawns the CLI and writes only temporary source milestones.
+   * Process/filesystem side effects: runs the export in-process and writes only temporary source milestones.
    */
   it("rejects redaction-induced Markdown filename collisions", () => {
     const temporaryRoot = mkdtempSync(
@@ -399,7 +402,7 @@ describe("plans export: CLI previews and protected writes", () => {
 
   /**
    * Fixture purpose: keep a directory-shaped JSON destination on the user-facing usage path.
-   * Process/filesystem side effects: spawns the CLI and creates only temporary directories.
+   * Process/filesystem side effects: runs the export in-process and creates only temporary directories.
    */
   it("rejects a JSON output directory even with force", () => {
     const temporaryRoot = mkdtempSync(

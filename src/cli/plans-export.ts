@@ -9,7 +9,6 @@ import { join } from "node:path";
 
 import { CLIError } from "./cli-error.js";
 import { PlansExportInputError } from "./plans-export-input-error.js";
-import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
 import {
   maskNonRenderedMarkdown,
@@ -727,14 +726,17 @@ export function loadPlanExportRecords(planPath: string): PlanExportRecord[] {
 }
 
 /**
- * Preview or persist one local plan export without invoking any remote adapter.
- * Use from `plans export`; unsupported formats and input errors become usage failures.
+ * Preview or persist one local plan export without invoking any remote adapter, and return the text the CLI prints.
+ * Nothing is printed and no process state changes, so tests can call it in-process; requested export files are still written.
  *
  * @param options - parsed plan path, format, optional output, and explicit force choice
- * @returns nothing; preview goes to stdout and written paths are confirmed on stderr
+ * @returns the preview for stdout, or one `Written to` line per saved file for stderr; each line ends in a newline, and success always exits 0
  * @throws CLIError for unsupported formats, invalid plans, or protected output collisions
  */
-export function handlePlansExportCommand(options: ParsedCLI): void {
+export function runPlansExportOutput(options: ParsedCLI): {
+  stdout: string;
+  stderr: string;
+} {
   // SARIF has no plan-body contract and text aliases the human-readable Markdown preview.
   if (options.format === "sarif") {
     throw new CLIError("plans export supports --format markdown or json.", 2);
@@ -760,8 +762,7 @@ export function handlePlansExportCommand(options: ParsedCLI): void {
 
   // No output path is the safe preview mode and performs no export writes.
   if (!options.output) {
-    writeOutput({ ...options, output: null }, renderedPreview);
-    return;
+    return { stdout: `${renderedPreview}\n`, stderr: "" };
   }
 
   let writtenPaths: string[];
@@ -790,6 +791,23 @@ export function handlePlansExportCommand(options: ParsedCLI): void {
   }
 
   // Written-path confirmations stay on stderr so scripted stdout remains artifact-free.
-  for (const writtenPath of writtenPaths)
-    console.error(`Written to ${writtenPath}`);
+  return {
+    stdout: "",
+    stderr: writtenPaths
+      .map((writtenPath) => `Written to ${writtenPath}\n`)
+      .join(""),
+  };
+}
+
+/**
+ * Run `plans export` for the CLI: print the preview to stdout or confirm each written file on stderr.
+ *
+ * @param options - parsed plan path, format, optional output, and explicit force choice
+ * @returns nothing; preview goes to stdout and written paths are confirmed on stderr
+ * @throws CLIError for unsupported formats, invalid plans, or protected output collisions
+ */
+export function handlePlansExportCommand(options: ParsedCLI): void {
+  const { stdout, stderr } = runPlansExportOutput(options);
+  process.stdout.write(stdout);
+  process.stderr.write(stderr);
 }

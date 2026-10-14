@@ -1,6 +1,6 @@
 /**
  * How a written milestone becomes an export record: which fields parse, which absences warn, and which planning fields survive the round trip.
- * Runs the real CLI and parser against written fixtures, so failures match the terminal guidance an author sees.
+ * Runs the parser and export in-process against written fixtures, so failures match the terminal guidance an author sees.
  * Lifecycle cases also prove those visible fields govern whether milestone timing can start.
  */
 import { describe, it } from "node:test";
@@ -887,7 +887,7 @@ describe("plans export: milestone parsing", () => {
 
   /**
    * Fixture purpose: a user pastes a token into forecast reasoning, then previews both export formats.
-   * Process/filesystem side effects: spawns the CLI and writes only one temporary milestone.
+   * Process/filesystem side effects: runs the export in-process and writes only one temporary milestone.
    */
   it("redacts forecast-basis source text from JSON and Markdown previews", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));
@@ -922,7 +922,7 @@ describe("plans export: milestone parsing", () => {
 
   /**
    * Fixture purpose: a malformed forecast may echo pasted text, but previews must still redact a token before it reaches the user or a file.
-   * Process/filesystem side effects: spawns both preview formats and writes only one temporary source milestone.
+   * Process/filesystem side effects: runs both preview formats in-process and writes only one temporary source milestone.
    */
   it("redacts received values inside malformed-field warnings", () => {
     const temporaryRoot = mkdtempSync(

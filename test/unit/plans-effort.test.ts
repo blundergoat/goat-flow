@@ -2,7 +2,7 @@
  * Verifies the milestone effort grammar shared by `plans export` and `plans check`, including forecasts, task entries, Actuals, and category sums.
  *
  * Keeps legacy absence warning-free while proving malformed user input produces actionable diagnostics.
- * Grammar cases run in memory; forecast-record export cases use disposable plans through the real CLI.
+ * Grammar cases run in memory; forecast-record export and check cases run the commands in-process on disposable plans.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -193,7 +193,7 @@ describe("plans export: forecast context", () => {
     }
   });
   /** Regression contract: stripping a selector must not expose a hidden heading or task.
-   * Writes temporary plans and spawns real checker/export processes; removes only those fixtures. */
+   * Writes temporary plans and runs the checker and export in-process; removes only those fixtures. */
   it("keeps multiline comments attached to forecast methods hidden", () => {
     const document = forecastDocumentFixture();
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-comment-"));
@@ -229,7 +229,7 @@ describe("plans export: forecast context", () => {
   });
 
   /** Regression contract: equal counts cannot substitute a reopened or replacement task for saved residual work.
-   * Spawns real checker processes on temporary plans, with progress and appended-revision controls. */
+   * Runs the checker in-process on temporary plans, with progress and appended-revision controls. */
   it("binds remaining work to saved identities before accepting matching totals", () => {
     const document = remainingForecastFixture();
     const body = forecastBodyFixture(document, true);
@@ -348,7 +348,7 @@ describe("plans export: forecast context", () => {
   });
 
   /** Fixture purpose: preserve originals and receipt-bound revisions across both real export formats.
-   * Filesystem/process side effects: writes a temporary plan, spawns previews and removes the fixture. */
+   * Filesystem/process side effects: writes a temporary plan, runs in-process previews and removes the fixture. */
   it("round-trips original and remaining forecasts without changing their source", () => {
     const document = remainingForecastFixture();
     const body = forecastBodyFixture(document, true);
@@ -593,7 +593,7 @@ describe("plans export: forecast context", () => {
   });
 
   /** Fixture purpose: nested context and rejected raw input must cross the same readable redaction boundary.
-   * Filesystem/process side effects: writes temporary fixtures and runs both CLI previews. */
+   * Filesystem/process side effects: writes temporary fixtures and runs both previews in-process. */
   it("scrubs context strings in JSON and Markdown while preserving numerical inputs", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-redaction-"));
     const marker = ["ghp", "q".repeat(36)].join("_");
