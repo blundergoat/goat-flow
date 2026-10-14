@@ -1,30 +1,46 @@
+# The CI workflow a developer sees as checks on every pull request to main or dev, and again after each merge to main.
+#
+# Every run includes three Ubuntu jobs; the platform jobs join only on the weekly schedule or a manual run:
+# - checks: preflight without its test suite, the shell syntax check and the version-stamp check.
+# - test-fast: every test file outside the slow set, with a pinned jq 1.6.
+# - test-slow: the subprocess-heavy suite, one file at a time per runner, split across five shards.
+# - Platform jobs: Windows hook contracts, hook port controls (Linux, macOS, Windows, WSL2), the frozen Linux reference and the Windows ratchet.
 name: CI
 
-# Pull requests are the gate; `dev` is only ever merged to `main` through one. Listening on `push` for `dev` as well would run every job
-# twice for the same commit - once for the branch, once for the PR - so `push` is limited to `main` as the post-merge check.
+# Pull requests are the gate; `dev` is only ever merged to `main` through one.
+#
+# Listening on `push` for `dev` as well would run every job twice for the same commit, once for the branch and once for the PR.
+# So `push` is limited to `main` as the post-merge check.
 on:
   pull_request:
     branches: [main, dev]
   push:
     branches: [main]
-  # The platform jobs below (hook ports, native Windows contracts, Linux references and the Windows ratchet) run only on this weekly
-  # schedule and on manual runs; pull requests and pushes skip them.
+  # The platform jobs below run only on this weekly schedule and on manual runs; pull requests and pushes skip them.
+  # They are the hook ports, native Windows contracts, Linux references and the Windows ratchet.
   schedule:
+    # Mondays at 18:00 UTC.
     - cron: "0 18 * * 1"
+  # A manual start, for example `gh workflow run ci.yml --ref dev`, runs every job, platform jobs included.
   workflow_dispatch:
 
-# A new commit on a PR branch cancels that PR's in-flight run instead of queueing a second one behind it. Pushes to `main` are never
-# cancelled, so every commit that lands on the default branch keeps its own verified result.
+# A new commit on a PR branch cancels that PR's in-flight run instead of queueing a second one behind it.
+#
+# A running push to `main` is never cancelled, so each merged commit whose run starts keeps its own verified result.
+# GitHub keeps one waiting run per group, so if two merges land while a run is going, the older waiting run is cancelled and only the newest starts.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Jobs get a read-only token: they can check out and test the code, but cannot push, comment on a PR or change the repository.
 permissions:
   contents: read
 
 jobs:
-  # The repository preflight without tests (lint, format, audit, both policy self-tests and the cross-file consistency checks), plus the
-  # version-stamp script preflight does not run. Split from the test jobs so these failures do not wait behind the test suites.
+  # Repository preflight without tests (lint, format, audit, both policy self-tests, cross-file consistency checks), plus the version-stamp check.
+  #
+  # It runs apart from the test jobs, so a lint or version failure on a PR shows without waiting behind the test suites.
+  # Locally, after `npm run build`, run `bash scripts/preflight-checks.sh --skip-tests`, then `npm run check-versions`, which preflight does not run.
   checks:
     runs-on: ubuntu-latest
     steps:
@@ -53,10 +69,12 @@ jobs:
       - name: Shell syntax
         run: bash scripts/maintenance/check-shell-syntax.sh
 
+      # Fails when a shipped skill, reference doc, hook runtime or the manifest carries a version other than package.json's.
+      # For example, editing the version in package.json by hand instead of running `bash scripts/bump-version.sh <ver>` fails here.
       - name: Version consistency (shared script)
         run: npm run check-versions
 
-  # The concurrent unit/contract suite (scripts/run-tests.mjs fast).
+  # Every test file outside the slow set (isSlowTest in scripts/run-tests.mjs), eight at a time; the same `npm run test:fast` a developer runs.
   test-fast:
     runs-on: ubuntu-latest
     steps:
@@ -77,7 +95,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Only the fast suite pins jq: gruff-code-quality-smoke.test.ts asserts against jq 1.6 behaviour.
+      # Of the pull-request jobs, only this one pins jq: gruff-code-quality-smoke.test.ts asserts against jq 1.6 behaviour.
+      #
+      # The test reads GOAT_FLOW_JQ16_BIN (locally, /tmp/jq16/jq also works) and skips its jq 1.6 checks when neither exists.
+      # A changed or tampered download fails the SHA-256 check and stops the job before any test runs.
       - name: Provision jq 1.6
         run: |
           set -euo pipefail
@@ -95,14 +116,17 @@ jobs:
       - name: Test (fast)
         run: npm run test:fast
 
-  # The subprocess-heavy suite, split across runners because its files must stay single-concurrency within one checkout: several share
-  # repository-root state such as .goat-flow/dashboard-state.json. Shards get separate checkouts, so the split is safe where raising
-  # --test-concurrency is not. scripts/run-tests.mjs balances files by measured cost and assigns each file to exactly one shard.
+  # The subprocess-heavy suite, split across five runners that a PR lists as test-slow (1/5) through test-slow (5/5).
+  #
+  # Several of its files share repository-root state such as .goat-flow/dashboard-state.json, so within one checkout they run one at a time.
+  # Shards get separate checkouts, so the split is safe where raising --test-concurrency is not; run-tests.mjs balances files by measured cost.
   test-slow:
     runs-on: ubuntu-latest
     strategy:
+      # One failing shard leaves the other four running, so a single run reports every failing slow test.
       fail-fast: false
       matrix:
+        # Each value starts one runner and becomes --shard=N/5; changing the count means changing every /5 in this job too.
         shard: [1, 2, 3, 4, 5]
     name: test-slow (${{ matrix.shard }}/5)
     steps:
@@ -123,12 +147,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      # To rerun one failing shard locally after `npm run build`, run for example `npm run test:slow:ci -- --shard=3/5`.
       - name: Test (slow shard ${{ matrix.shard }}/5)
         run: npm run test:slow:ci -- --shard=${{ matrix.shard }}/5
 
-  # Proves ADR-048/ADR-053 hook contracts and the Windows-only audit/package paths on the package-minimum Node.
-  # Uses only the runner's preinstalled PowerShell, Git Bash, tar, and Node.
+  # Proves ADR-048/ADR-053 hook contracts and the Windows-only audit/package paths on the package-minimum Node, 20.11.0 from package.json's engines.
+  # Apart from that Node, it uses only the runner's preinstalled PowerShell, Git Bash and tar.
   windows-hook-contracts:
+    # Pull requests and pushes skip this job, so a Windows-only hook regression first shows on the weekly run unless someone starts a manual run.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
@@ -145,6 +171,10 @@ jobs:
         run: node --import tsx --test test/integration/preflight-progress.test.ts
       - name: Path write claim and state migration contracts
         run: node --import tsx --test test/unit/path-write-claim.test.ts test/integration/local-state-migration.test.ts
+      # Writes a Node wrapper to the runner's temp folder; the next step runs its tests through it and keeps their exit code.
+      #
+      # From launch and then every 15 seconds, it logs every process in the test run's tree, with CPU times, as `m07-windows-process-trace` lines.
+      # A failed sample never fails the tests; a process query that takes over two seconds or prints non-JSON is logged as `sample-unavailable`.
       - name: Prepare Windows process observer
         shell: pwsh
         run: |
@@ -262,13 +292,17 @@ jobs:
       - name: Windows packaged install contract
         run: node --import tsx --test --test-name-pattern="runs fresh install through the archived CLI bin" test/integration/packaged-hook-install.test.ts
 
-  # Build with supported tooling before switching to each consumer runtime. These
-  # controls establish the port harness; owning milestones add candidate hooks.
-  # One Node version per operating system covers both: the Linux test jobs already run Node 20 and windows-hook-contracts runs 20.11.0.
+  # Hook port controls on Linux, macOS and Windows: build with Node 24.21.0, then switch each runner to the Node version it checks.
+  #
+  # No candidate hook is selected; the controls check the port harness itself: restricted child processes, the hook selector and the parity corpus.
+  # Linux and Windows check 24.21.0, as the Linux test jobs run Node 20 and windows-hook-contracts runs 20.11.0; macOS checks only 20.11.0.
   hook-port-controls:
+    # Skipped on pull requests and pushes, so a PR never waits on the macOS and Windows runners.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
+      # A failure on one operating system leaves the other two running, so one run shows every platform's result.
       fail-fast: false
+      # One runner per operating system, each switched to the Node version it checks after the build.
       matrix:
         include:
           - os: ubuntu-latest
@@ -286,12 +320,17 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run build
+      # Switch this runner to the Node version it checks; the dependencies and build from Node 24.21.0 stay as they are.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
+      # Prints the Node version, platform, CPU architecture and commit, so a failing log names exactly what it checked.
       - name: Record consumer identity
         run: node -e "console.log(JSON.stringify({node:process.version,platform:process.platform,arch:process.arch,commit:process.env.GITHUB_SHA}))"
+      # Writes a Node wrapper that runs the test command and logs its descendant processes from `ps`, from launch and then every 15 seconds.
+      # A failed sample never fails the tests; for example, a `ps` call that errors or takes over two seconds is logged as `sample-unavailable`.
       - name: Prepare macOS process observer
+        # Linux and Windows skip this step and run the same tests without the wrapper.
         if: runner.os == 'macOS'
         shell: bash
         run: |
@@ -348,23 +387,27 @@ jobs:
             process.exitCode = code ?? 128 + (constants.signals[signal] ?? 1);
           });
           JS
+      # On macOS both test steps run through the wrapper above; elsewhere the expression is empty and node runs the tests directly.
       - name: Restricted process and selector controls
         run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
       # npm pack invokes the platform npm shim outside the restricted child.
       - name: Corpus and package controls
         run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/integration/hook-parity.test.ts
 
-  # Bash extraction stays on native Linux with pinned jq and explicit locales.
-  # macOS runs the Node controls above, never reference extraction.
-  # Only the C locale: the fast and slow suites run these files under the runner's UTF-8 locale against the installed hooks, and the WSL
-  # job's divergence report covers both locales for the frozen reference.
+  # Bash extraction stays on native Linux with pinned jq and explicit locales; macOS runs the Node controls above, never reference extraction.
+  #
+  # Only the C locale runs here; the fast and slow suites already run these files under the runner's UTF-8 locale against the installed hooks.
+  # The WSL job's divergence report covers both locales for the frozen reference.
   hook-reference-linux:
+    # Skipped on pull requests and pushes, so a frozen-reference regression first shows on the weekly run unless someone starts a manual run.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # Each listed locale gets its own runner and becomes LC_ALL below; only C is listed, for the reason above.
       matrix:
         locale: [C]
+    # GOAT_FLOW_HOOK_UNDER_TEST=reference points the hook tests at the frozen copy in test/fixtures/hooks-bash; LC_ALL sets every step's locale.
     env:
       GOAT_FLOW_HOOK_UNDER_TEST: reference
       LC_ALL: ${{ matrix.locale }}
@@ -376,6 +419,7 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run build
+      # Puts checksum-verified jq 1.6 first on PATH and in GOAT_FLOW_JQ16_BIN, so `jq` in every later step is 1.6, not the runner's version.
       - name: Provision reference jq 1.6
         run: |
           set -euo pipefail
@@ -386,6 +430,7 @@ jobs:
           chmod +x "$jq_dir/jq"
           echo "$jq_dir" >> "$GITHUB_PATH"
           echo "GOAT_FLOW_JQ16_BIN=$jq_dir/jq" >> "$GITHUB_ENV"
+      # Prints the Node, kernel, commit, jq and locale this run used, so a failing log can be matched to its exact environment.
       - name: Record reference identity
         run: node --version && uname -a && git rev-parse HEAD && jq --version && locale
       - name: Frozen policy invariants
@@ -394,6 +439,8 @@ jobs:
         run: node --import tsx --test --test-concurrency=1 test/integration/post-turn-safety-hook*.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
       - name: Frozen Gruff and provider invariants
         run: node --import tsx --test --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts test/integration/hook-provider-contracts.test.ts
+      # Writes the same process wrapper as the macOS controls above; only the frozen extraction step below runs through it.
+      # A `ps` sample that errors or takes over two seconds is logged as `sample-unavailable` and never fails the run.
       - name: Prepare Linux process observer
         shell: bash
         run: |
@@ -450,19 +497,28 @@ jobs:
             process.exitCode = code ?? 128 + (constants.signals[signal] ?? 1);
           });
           JS
+      # The only CI run of hook-parity-reference.test.ts: scripts/run-tests.mjs leaves it out of the fast and slow suites (search: WEEKLY_ONLY_TESTS).
       - name: Frozen extraction controls
         run: node "$RUNNER_TEMP/m07-observe-test-command.mjs" --import tsx --test test/integration/hook-parity-reference.test.ts
 
-  # WSL has its own identity and receipts; a native Windows pass cannot credit it.
-  # Fail closed if the disposable hosted runner cannot provide WSL2.
+  # Repeats the hook port controls inside WSL2 Ubuntu 22.04, then lists where the frozen Bash reference behaves differently there.
+  #
+  # WSL has its own identity, so a native Windows pass cannot stand in for it.
+  # Fail closed: if the disposable hosted runner cannot provide WSL2, the job fails rather than passing without WSL coverage.
   hook-port-controls-wsl:
+    # Skipped on pull requests and pushes, so installing WSL never delays a PR.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # Installs Ubuntu 22.04 into WSL on the Windows runner.
       - uses: Ubuntu/WSL/.github/actions/wsl-install@3b7a6b2a43af18aa541eeee1669ac27656630097
         with:
           distro: Ubuntu-22.04
+      # Converts Ubuntu-22.04 to WSL2 only when the listing shows another version, because converting a distro that is already WSL2 errors.
+      #
+      # A failed query or conversion, or a listing still without WSL2, throws and fails the job.
+      # For example, a distro that comes up as WSL1 and cannot be converted stops here with `WSL2 conversion failed`.
       - name: Require WSL2
         shell: pwsh
         run: |
@@ -476,6 +532,13 @@ jobs:
           }
           $listing
           if ($LASTEXITCODE -ne 0 -or ($listing -join "`n") -notmatch 'Ubuntu-22\.04\s+\S+\s+2\s*') { throw 'WSL2 identity missing' }
+      # Copies the checkout into WSL's own filesystem, then runs the hook controls on Node 20.11.0 and on 24.21.0 in one log.
+      #
+      # Before the controls run:
+      # - The step fails at once unless /proc reports a WSL2 kernel.
+      # - build-essential lets the optional node-pty package compile; without it npm ci still exits 0, with node-pty missing.
+      # - Both Node archives must match nodejs.org's SHASUMS256.txt, and the build runs once on 24.21.0.
+      # - The copy's path is saved to /tmp/goat-flow-ci-path for the divergence report step.
       - name: WSL floor and LTS controls
         uses: Ubuntu/WSL/.github/actions/wsl-bash@3b7a6b2a43af18aa541eeee1669ac27656630097
         with:
@@ -509,6 +572,8 @@ jobs:
               node --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
               node --import tsx --test test/integration/hook-parity.test.ts
             done
+      # Reuses the copy from the step above, adds checksum-verified jq 1.6, and lists where the frozen Bash reference behaves differently under WSL.
+      # It runs once per locale, C then C.UTF-8; differences are listed, not failed, ending in a `PASS: host divergence report` line with their count.
       - name: WSL frozen divergence report
         uses: Ubuntu/WSL/.github/actions/wsl-bash@3b7a6b2a43af18aa541eeee1669ac27656630097
         with:
@@ -528,8 +593,11 @@ jobs:
             done
 
   # Reviewed Gruff warning-debt ratchet (scripts/check-gruff-warning-ratchet.mjs against scripts/gruff-warning-baseline.json) on Windows.
+  #
   # The preflight in `checks` runs the same ratchet on Linux every time; this leg checks the script and its tests on Windows paths.
+  # It exits 1 when warning debt grows past the reviewed baseline or the baseline or scan is unusable, and 2 when the analyzer cannot run.
   gruff-warning-ratchet:
+    # Skipped on pull requests and pushes, whose checks job already runs this ratchet on Linux through preflight.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
@@ -540,6 +608,7 @@ jobs:
           cache: "npm"
       - name: Install
         run: npm ci
+      # The ratchet's scan checks that package.json's bin file exists; a fresh checkout without `dist/` reports `design.package-bin-missing`.
       - name: Build package binary
         run: npm run build
       - name: Gruff warning ratchet
