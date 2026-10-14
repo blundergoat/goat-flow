@@ -7,8 +7,8 @@ on:
     branches: [main, dev]
   push:
     branches: [main]
-  # The platform jobs below run when a push touches their paths or its commit range cannot be read; the weekly and manual runs exercise
-  # them regardless.
+  # The platform jobs below (hook ports, native Windows contracts, Linux references and the Windows ratchet) run only on this weekly
+  # schedule and on manual runs; pull requests and pushes skip them.
   schedule:
     - cron: "0 18 * * 1"
   workflow_dispatch:
@@ -23,20 +23,6 @@ permissions:
   contents: read
 
 jobs:
-  # Decides whether this run needs the platform jobs: hook ports, native Windows contracts, Linux references and the Windows ratchet.
-  # It diffs only the commits this push added, because a pull request's own path filter matches its whole diff against the base branch.
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      platform: ${{ steps.decide.outputs.platform }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-      - name: Decide platform jobs
-        id: decide
-        run: node scripts/ci-changed-paths.mjs < "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
-
   # The repository preflight without tests (lint, format, audit, both policy self-tests and the cross-file consistency checks), plus the
   # version-stamp script preflight does not run. Split from the test jobs so these failures do not wait behind the test suites.
   checks:
@@ -143,8 +129,7 @@ jobs:
   # Proves ADR-048/ADR-053 hook contracts and the Windows-only audit/package paths on the package-minimum Node.
   # Uses only the runner's preinstalled PowerShell, Git Bash, tar, and Node.
   windows-hook-contracts:
-    needs: changes
-    if: needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -281,8 +266,7 @@ jobs:
   # controls establish the port harness; owning milestones add candidate hooks.
   # One Node version per operating system covers both: the Linux test jobs already run Node 20 and windows-hook-contracts runs 20.11.0.
   hook-port-controls:
-    needs: changes
-    if: needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -375,8 +359,7 @@ jobs:
   # Only the C locale: the fast and slow suites run these files under the runner's UTF-8 locale against the installed hooks, and the WSL
   # job's divergence report covers both locales for the frozen reference.
   hook-reference-linux:
-    needs: changes
-    if: needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -473,8 +456,7 @@ jobs:
   # WSL has its own identity and receipts; a native Windows pass cannot credit it.
   # Fail closed if the disposable hosted runner cannot provide WSL2.
   hook-port-controls-wsl:
-    needs: changes
-    if: needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -548,8 +530,7 @@ jobs:
   # Reviewed Gruff warning-debt ratchet (scripts/check-gruff-warning-ratchet.mjs against scripts/gruff-warning-baseline.json) on Windows.
   # The preflight in `checks` runs the same ratchet on Linux every time; this leg checks the script and its tests on Windows paths.
   gruff-warning-ratchet:
-    needs: changes
-    if: needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

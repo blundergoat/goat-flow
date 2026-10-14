@@ -35,7 +35,6 @@ verbose=0
 no_color=
 ascii_mode=
 skip_tests=0
-skip_deny_self_tests=0
 # Read display options before choosing the report format the developer will see.
 for arg in "$@"; do
     case "$arg" in
@@ -43,11 +42,9 @@ for arg in "$@"; do
         --no-color)   no_color=1 ;;
         --ascii)      ascii_mode=1 ;;
         --skip-tests) skip_tests=1 ;;
-        --skip-deny-self-tests) skip_deny_self_tests=1 ;;
         -h|--help)
             cat <<'HELP'
-Usage: preflight-checks.sh [--verbose] [--no-color] [--ascii] [--skip-tests]
-                           [--skip-deny-self-tests] [--help]
+Usage: preflight-checks.sh [--verbose] [--no-color] [--ascii] [--skip-tests] [--help]
 
 Runs the local pre-flight quality gate. Exits 0 when all checks pass,
 non-zero otherwise.
@@ -64,11 +61,6 @@ Options:
                    Auto-enabled when LANG/LC_ALL is missing UTF-8.
       --skip-tests Report the package test command as skipped instead of
                    running it; for callers that run the suite separately.
-      --skip-deny-self-tests
-                   Report each installed deny policy's full self-test as
-                   skipped; the runtime mirror check and the installed-hook
-                   smokes still run. For callers that test the same policy
-                   files separately.
   -h, --help       Show this help and exit.
 
 Environment:
@@ -866,9 +858,6 @@ if [[ "${#policy_hook_dirs[@]}" -eq 0 ]]; then
     fail "No installed hook directories declared in workflow/manifest.json"
 elif [[ "$policy_mirrors_match" -eq 0 ]]; then
     skip "Full deny-policy suites (repair runtime mirror drift first)"
-# The default keeps the self-tests on when this section runs without the option parser, as the section-cut tests run it.
-elif [[ "${skip_deny_self_tests:-0}" -eq 1 ]]; then
-    skip "Full deny-policy self-tests skipped by --skip-deny-self-tests"
 else
     # Policy ownership differs, so each policy still needs its own complete corpus.
     for policy_hook in deny-dangerous deny-git-mutations; do

@@ -258,7 +258,6 @@ scripts/                         = development, release, test, and maintenance s
 ├── hook-parity-reference-command.mjs = literal Windows argument handoff for frozen reference commands
 ├── check-instruction-parity.mjs = instruction-file section/order parity
 ├── check-touched.mjs            = read-only checks selected from working-tree changes, including deletion and rename triggers
-├── ci-changed-paths.mjs         = decides from the pushed commits whether CI runs the platform jobs
 ├── check-markdown-links.sh      = markdown link resolver
 ├── check-package-readme-links.mjs = npm-pack README link check
 ├── check-path-integrity.sh      = docs/code path-reference integrity checks
