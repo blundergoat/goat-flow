@@ -419,6 +419,7 @@ describe("install version admission", () => {
   });
 
   const [major, minor, patch] = AUDIT_VERSION.split(".").map(Number);
+  // A malformed value such as "not-a-release" fails the same full X.Y.Z check as the prerelease row, so it has no row of its own.
   const refusedVersions = [
     {
       name: "newer patch",
@@ -433,11 +434,6 @@ describe("install version admission", () => {
     {
       name: "missing",
       line: "# version omitted deliberately",
-      guidance: /review.*version/iu,
-    },
-    {
-      name: "malformed",
-      line: 'version: "not-a-release"',
       guidance: /review.*version/iu,
     },
     {

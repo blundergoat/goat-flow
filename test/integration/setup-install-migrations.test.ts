@@ -40,13 +40,13 @@ import {
 
 describe("setup --apply installer upgrade migrations", () => {
   // ADD INTEGRATION: final-state tests cannot prove Git protection survives an interrupted split.
+  //
   // Each fixture writes legacy Git coverage, interrupts a real atomic installer write, then retries.
+  // Stops at run-with-bash.mjs and deny-dangerous.sh are omitted; they match the deny-git-mutations.sh stop's registrations and legacy hook.
   for (const interruptedPath of [
     ".claude/settings.json",
     ".codex/hooks.json",
-    ".goat-flow/hooks/run-with-bash.mjs",
     ".goat-flow/hooks/deny-git-mutations.sh",
-    ".goat-flow/hooks/deny-dangerous.sh",
     ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
     ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
   ]) {

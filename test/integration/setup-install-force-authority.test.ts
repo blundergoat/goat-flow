@@ -145,33 +145,32 @@ describe("install force authority", () => {
     );
   });
 
-  // Named per flag so a failure reports which authority broke, not just "one of them".
-  for (const authorityFlag of ["--force-managed", "--force"]) {
-    it(`replaces every managed conflict under ${authorityFlag}`, () => {
-      const target = conflictedTarget();
+  // Bare --force is an alias that sets the same authority, so one flag covers both.
+  // See src/cli/install-command.ts (search: "function readManagedSetupAuthority").
+  it("replaces every managed conflict under --force-managed", () => {
+    const target = conflictedTarget();
 
-      const rows = previewRows(target.projectPath, authorityFlag);
-      assert.equal(authorityFor(rows, FIRST_CONFLICT_PATH), "granted-managed");
-      assert.equal(authorityFor(rows, SECOND_CONFLICT_PATH), "granted-managed");
+    const rows = previewRows(target.projectPath, "--force-managed");
+    assert.equal(authorityFor(rows, FIRST_CONFLICT_PATH), "granted-managed");
+    assert.equal(authorityFor(rows, SECOND_CONFLICT_PATH), "granted-managed");
 
-      const forced = runCliInstaller(
-        target.projectPath,
-        "--agent",
-        "codex",
-        authorityFlag,
-      );
-      assert.equal(forced.status, 0, forced.stderr || forced.stdout);
-      assert.notEqual(
-        readFileSync(join(target.projectPath, FIRST_CONFLICT_PATH), "utf-8"),
-        target.localBytes,
-      );
-      // Managed authority reaches system-owned conflicts only; user content is a separate decision.
-      assert.equal(
-        readFileSync(join(target.projectPath, USER_OWNED_PATH), "utf-8"),
-        target.userOwnedBytes,
-      );
-    });
-  }
+    const forced = runCliInstaller(
+      target.projectPath,
+      "--agent",
+      "codex",
+      "--force-managed",
+    );
+    assert.equal(forced.status, 0, forced.stderr || forced.stdout);
+    assert.notEqual(
+      readFileSync(join(target.projectPath, FIRST_CONFLICT_PATH), "utf-8"),
+      target.localBytes,
+    );
+    // Managed authority reaches system-owned conflicts only; user content is a separate decision.
+    assert.equal(
+      readFileSync(join(target.projectPath, USER_OWNED_PATH), "utf-8"),
+      target.userOwnedBytes,
+    );
+  });
 
   it("never replaces user-owned content under managed authority alone", () => {
     const target = conflictedTarget();

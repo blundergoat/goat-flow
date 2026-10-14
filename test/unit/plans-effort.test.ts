@@ -1,8 +1,11 @@
 /**
- * Verifies the milestone effort grammar shared by `plans export` and `plans check`, including forecasts, task entries, Actuals, and category sums.
+ * Tests the effort notation a plan author writes in a milestone file, as `plans check` validates it and `plans export` previews it.
+ * Covers the `Effort estimate:` headline, `(est: ...)` task entries, Actuals, plan/admin overhead, category sums and saved forecast records.
  *
- * Keeps legacy absence warning-free while proving malformed user input produces actionable diagnostics.
- * Grammar cases run in memory; forecast-record export and check cases run the commands in-process on disposable plans.
+ * What these tests pin down:
+ * - A milestone with no effort lines stays warning-free, so plans written before estimates existed keep passing.
+ * - Malformed notation or forecast records produce an actionable warning or a failing `plans check`, never a silently wrong total.
+ * - Grammar cases parse text in memory; some forecast-record cases also run `plans check` or `plans export` in-process on disposable plans.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -30,7 +33,12 @@ import {
   sumTaskEstimates,
 } from "../../src/cli/plans-effort.js";
 
-/** Contract fixture: explicit inputs isolate preservation from estimator fitting. */
+/**
+ * Contract fixture: the saved `## Forecast records` JSON for one whole-work forecast issued before the author started work.
+ * Tests edit one field to reproduce an authoring mistake; explicit inputs isolate preservation from estimator fitting.
+ *
+ * @returns a new schema version 1 document on every call, so a test can mutate it; three one-unit, two-minute items and a 3-6-12 minute range
+ */
 function forecastDocumentFixture(): NonNullable<
   import("../../src/cli/plans-forecast-context.js").PlanForecastContext["document"]
 > {
@@ -96,11 +104,19 @@ function forecastDocumentFixture(): NonNullable<
   };
 }
 
-/** Build a scoped authoring fixture; optional receipt time is synthetic contract data. */
+/**
+ * Build the milestone Markdown an author saves after opting into contextual forecasts, ready for `plans check` or `plans export`.
+ * Optional receipt time is synthetic contract data, not a measured run.
+ *
+ * @param document - forecast records serialized into the JSON fence unchecked, so a test can save a malformed or unsupported document
+ * @param includeRemaining - true: first task ticked, status in-progress, one closed 60-second receipt row; false: not started, no receipt
+ * @returns milestone Markdown with a ~6 minute headline (4 product / 2 proof), two product tasks and one proof task in the Testing Gate
+ */
 function forecastBodyFixture(
   document: unknown,
   includeRemaining = false,
 ): string {
+  // A remaining-work milestone shows the first task ticked and work in progress; a whole-work milestone has not started.
   const body = estimatedMilestoneBody(
     "Effort estimate: ~6 min agent-time (4 product / 2 proof / 0 other)",
     [
@@ -116,9 +132,10 @@ function forecastBodyFixture(
       testingGateLines: ["- [ ] Verify exports. (est: 2 min proof)"],
     },
   );
-  const start = "2026-09-13T00:01:00Z",
-    end = "2026-09-13T00:02:00Z";
+  const segmentStart = "2026-09-13T00:01:00Z",
+    segmentEnd = "2026-09-13T00:02:00Z";
   // Whole-work fixtures have no elapsed time; remaining-work fixtures start after a synthetic closed receipt row.
+  // Example: the author timed one minute of product work, ticked the first task and paused the clock.
   const receipt = includeRemaining
     ? [
         "## Timing Receipt",
@@ -127,14 +144,20 @@ function forecastBodyFixture(
         "",
         "| Segment | Category | Start UTC / epoch | End UTC / epoch | Seconds | State |",
         "|---|---|---|---|---:|---|",
-        `| M01-S01 | product | ${start} / ${Date.parse(start) / 1000} | ${end} / ${Date.parse(end) / 1000} | 60 | closed |`,
+        `| M01-S01 | product | ${segmentStart} / ${Date.parse(segmentStart) / 1000} | ${segmentEnd} / ${Date.parse(segmentEnd) / 1000} | 60 | closed |`,
         "",
       ].join("\n")
     : "";
+  // The method line opts the milestone into contextual forecasts; the records follow it in one JSON fence.
   return `${body}\nForecast method: contextual-v1\n\n${receipt}## Forecast records\n\n\`\`\`json\n${JSON.stringify(document, null, 2)}\n\`\`\`\n`;
 }
 
-/** Contract fixture: append remaining work at a closed receipt boundary without changing the original forecast. */
+/**
+ * Contract fixture: the forecast an author appends after finishing the first task, at a closed receipt boundary, without changing the original.
+ * Pair it with `forecastBodyFixture(document, true)`, whose ticked task and 60-second receipt row match this revision.
+ *
+ * @returns the original whole-work F1 plus a remaining-work F2 that removes T1, keeps T2 and P1, and starts after 60 recorded seconds
+ */
 function remainingForecastFixture(): ReturnType<
   typeof forecastDocumentFixture
 > {
@@ -156,14 +179,26 @@ function remainingForecastFixture(): ReturnType<
   return document;
 }
 
+/**
+ * What `plans check` and `plans export` do with saved forecast records once an author adds a `Forecast method:` line to a milestone.
+ * Some cases write temporary plans and run `plans check`, `plans export` or both in-process; the rest parse milestone text in memory.
+ */
 describe("plans export: forecast context", () => {
+  /**
+   * Proves a whole-work forecast stamped at the same second as the first receipt segment is rejected; it must be issued before work starts.
+   *
+   * Example: the author starts the clock and records the original forecast in that same second.
+   * Runs in memory.
+   */
   it("rejects a whole-work forecast issued exactly when the first receipt starts", () => {
     const document = remainingForecastFixture();
+    // Move the original issue time onto the receipt's first segment start, 00:01:00.
     document.records[0]!.issuedAt = "2026-09-13T00:01:00Z";
     const parsed = parseMilestoneMarkdown(
       forecastBodyFixture(document, true),
       "M01-context.md",
     );
+    // A null method means the forecast is switched off and the author gets the issue-time diagnostic instead of advice.
     assert.equal(parsed.forecastContext?.method, null);
     assert.match(
       parsed.warnings.join("\n"),
@@ -171,12 +206,20 @@ describe("plans export: forecast context", () => {
     );
   });
 
+  /**
+   * Proves a remaining-work forecast stops matching when the author ticks off work no forecast lists or deletes a task it still counts.
+   *
+   * Either change needs an appended revision first.
+   * Runs in memory.
+   */
   it("checks completed additions and removed checklist items against remaining forecast identities", () => {
     const valid = forecastBodyFixture(remainingForecastFixture(), true);
+    // Control: the untouched remaining-work milestone keeps its contextual method.
     assert.equal(
       parseMilestoneMarkdown(valid, "M01-context.md").forecastContext?.method,
       "contextual-v1",
     );
+    // Example edits: tick off extra work nobody forecast, or delete the `Export context.` task the forecast still counts.
     for (const body of [
       valid.replace(
         "## Tasks",
@@ -185,6 +228,7 @@ describe("plans export: forecast context", () => {
       valid.replace("- [ ] Export context. (est: 2 min product)", ""),
     ]) {
       const parsed = parseMilestoneMarkdown(body, "M01-context.md");
+      // Each edit switches the forecast off (null method) and names the live-checklist mismatch.
       assert.equal(parsed.forecastContext?.method, null);
       assert.match(
         parsed.warnings.join("\n"),
@@ -192,27 +236,35 @@ describe("plans export: forecast context", () => {
       );
     }
   });
-  /** Regression contract: stripping a selector must not expose a hidden heading or task.
-   * Writes temporary plans and runs the checker and export in-process; removes only those fixtures. */
+  /**
+   * Regression contract: an HTML comment attached to the `Forecast method:` line must keep its headings and task hidden from check and export.
+   *
+   * Example: the author parks draft `## Forecast records` and `## Tasks` lines in an HTML comment right after the method.
+   * Writes temporary plans and runs the checker and export in-process; removes only those fixtures.
+   */
   it("keeps multiline comments attached to forecast methods hidden", () => {
     const document = forecastDocumentFixture();
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-comment-"));
     try {
+      // The comment opener can follow the method on the same line or start the next line; both must stay hidden.
       for (const separator of [" ", "\n"]) {
         const body = forecastBodyFixture(document).replace(
           "Forecast method: contextual-v1",
           `Forecast method: contextual-v1${separator}<!--\n## Forecast records\n## Tasks\n- [ ] Hidden task. (est: 9 min product)\n-->`,
         );
         const parsed = parseMilestoneMarkdown(body, "M01-context.md");
+        // No warnings and only the two real tasks: the commented `Hidden task.` is never counted.
         assert.deepEqual(parsed.warnings, []);
         assert.equal(parsed.forecastContext?.method, "contextual-v1");
         assert.equal(parsed.tasks.length, 2);
         assert.deepEqual(parsed.forecastContext.document, document);
         writePlanFixture(root, body, "M01-context.md");
+        // Default and `--strict` checks must both pass this milestone with exit 0.
         for (const flags of [[], ["--strict"]]) {
           const checked = runPlansCheck(root, ...flags);
           assert.equal(checked.status, 0, checked.stdout + checked.stderr);
         }
+        // The Markdown preview must parse back to the same records without warnings, and the source file stays unchanged.
         const markdown = runPlansExport(root, "--format", "markdown");
         assert.equal(markdown.status, 0, markdown.stderr);
         const roundTrip = parseMilestoneMarkdown(
@@ -228,11 +280,16 @@ describe("plans export: forecast context", () => {
     }
   });
 
-  /** Regression contract: equal counts cannot substitute a reopened or replacement task for saved residual work.
-   * Runs the checker in-process on temporary plans, with progress and appended-revision controls. */
+  /**
+   * Regression contract: matching counts and minutes must not let a reopened, renamed or duplicated task stand in for saved remaining work.
+   *
+   * Example: the author unticks `Parse context.` and ticks `Export context.`, so totals still match but the work is different.
+   * Writes temporary plans and runs the checker in-process, with progress and appended-revision controls.
+   */
   it("binds remaining work to saved identities before accepting matching totals", () => {
     const document = remainingForecastFixture();
     const body = forecastBodyFixture(document, true);
+    // Three invalid edits: reopen the finished task and tick the open one, rename the open one, or relabel it as a second `Verify exports.` item.
     const reopened = body
       .replace("- [x] Parse context.", "- [ ] Parse context.")
       .replace("- [ ] Export context.", "- [x] Export context.");
@@ -246,6 +303,7 @@ describe("plans export: forecast context", () => {
         "Verify exports. (est: 2 min product)",
         "Verify exports. (est: 2 min proof)",
       );
+    // The valid way to reopen work: append revision F3, issued after F2, that adds T1 back and removes T2.
     const revision = structuredClone(document.records[1]!);
     revision.id = "F3";
     revision.predecessorId = "F2";
@@ -259,6 +317,7 @@ describe("plans export: forecast context", () => {
       .replace("- [ ] Export context.", "- [x] Export context.");
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-identity-"));
     try {
+      // Each invalid edit switches the forecast off (null method) but keeps the saved records readable for repair.
       for (const [variant, invalid] of [
         ["reopened", reopened],
         ["replacement", replacement],
@@ -277,6 +336,7 @@ describe("plans export: forecast context", () => {
           `${variant} body`,
         );
         writePlanFixture(root, invalid, "M01-context.md");
+        // Saved to disk, the same edit must fail default and `--strict` checks with exit 1 and the identity diagnostic.
         for (const flags of [[], ["--strict"]]) {
           const checked = runPlansCheck(root, ...flags);
           assert.equal(checked.status, 1, checked.stdout + checked.stderr);
@@ -287,12 +347,14 @@ describe("plans export: forecast context", () => {
           );
         }
       }
+      // Controls the author can rely on: open tasks, every task ticked, and the appended F3 revision all pass `--strict`.
       for (const [variant, valid] of [
         ["open tasks", body],
         ["all tasks checked", body.replaceAll("- [ ]", "- [x]")],
         ["valid revision", validRevision],
       ] as const) {
         const parsed = parseMilestoneMarkdown(valid, "M01-context.md");
+        // No warnings, and the original F1 record survives unchanged in every control.
         assert.deepEqual(parsed.warnings, [], `${variant} body`);
         assert.equal(
           parsed.forecastContext?.method,
@@ -313,14 +375,21 @@ describe("plans export: forecast context", () => {
     }
   });
 
-  /** Contract: zero-time human rows do not supply identity; duplicate saved descriptions cannot disambiguate scope. */
+  /**
+   * Contract: when two saved items share a description, a live task cannot be matched to one saved item; a zero-minute `[HUMAN]` row needs no saved identity.
+   *
+   * Plan/admin overhead minutes count as work, so they must match a saved `Plan/admin overhead` item.
+   * Runs in memory.
+   */
   it("requires unambiguous saved descriptions and binds counted admin work", () => {
     const ambiguous = remainingForecastFixture();
+    // Rename saved T1 to `Export context.`, so the live `Export context.` task now matches two saved items.
     ambiguous.records[0]!.items[0]!.description = "Export context.";
     const rejected = parseMilestoneMarkdown(
       forecastBodyFixture(ambiguous, true),
       "M01-context.md",
     );
+    // Ambiguity switches the forecast off (null method) with the uniqueness diagnostic.
     assert.equal(rejected.forecastContext?.method, null);
     assert.match(
       rejected.warnings.join("\n"),
@@ -328,9 +397,10 @@ describe("plans export: forecast context", () => {
     );
 
     const document = forecastDocumentFixture();
-    const admin = document.records[0]!.items[2]!;
-    admin.description = "Plan/admin overhead";
-    admin.category = "other";
+    // Accepted shape: the saved proof item becomes 2 minutes of plan/admin overhead and the proof task becomes a zero-minute human check.
+    const adminOverheadItem = document.records[0]!.items[2]!;
+    adminOverheadItem.description = "Plan/admin overhead";
+    adminOverheadItem.category = "other";
     const body = forecastBodyFixture(document)
       .replace("4 product / 2 proof / 0 other", "4 product / 0 proof / 2 other")
       .replace(
@@ -342,23 +412,28 @@ describe("plans export: forecast context", () => {
         "Plan/admin overhead: 2 min other\nForecast method:",
       );
     const accepted = parseMilestoneMarkdown(body, "M01-context.md");
+    // No warnings: the overhead line binds to the saved admin item and the zero-minute human row is skipped.
     assert.deepEqual(accepted.warnings, []);
     assert.equal(accepted.forecastContext?.method, "contextual-v1");
     assert.deepEqual(accepted.forecastContext.document, document);
   });
 
-  /** Fixture purpose: preserve originals and receipt-bound revisions across both real export formats.
-   * Filesystem/process side effects: writes a temporary plan, runs in-process previews and removes the fixture. */
+  /**
+   * Proves the forecast records an author saved come back unchanged from `plans export --format json` and `--format markdown`, and the milestone file is untouched.
+   * Writes a temporary plan, runs both previews in-process and removes the fixture.
+   */
   it("round-trips original and remaining forecasts without changing their source", () => {
     const document = remainingForecastFixture();
     const body = forecastBodyFixture(document, true);
     const parsed = parseMilestoneMarkdown(body, "M01-context.md");
+    // Control: the source milestone parses with no warnings before anything is exported.
     assert.deepEqual(parsed.warnings, []);
     assert.equal(parsed.forecastContext?.method, "contextual-v1");
     assert.deepEqual(parsed.forecastContext?.document, document);
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-export-"));
     try {
       writePlanFixture(root, body, "M01-context.md");
+      // Both previews must exit 0 and carry the exact records the author saved.
       const json = runPlansExport(root, "--format", "json");
       const markdown = runPlansExport(root, "--format", "markdown");
       assert.equal(json.status, 0, json.stderr);
@@ -371,10 +446,12 @@ describe("plans export: forecast context", () => {
         markdown.stdout,
         "M01-context.md",
       );
+      // The Markdown preview reads back with no warnings and the same records.
       assert.deepEqual(roundTrip.warnings, []);
       assert.deepEqual(roundTrip.forecastContext?.document, document);
       // Six minutes is the fixture's issued whole-work point; the smaller remaining forecast must not replace it.
       assert.equal(roundTrip.effort?.totalMinutes, 6);
+      // The receipt's single 60-second segment survives the round trip too.
       assert.equal(roundTrip.timingReceipt?.segments[0]?.seconds, 60);
       assert.equal(readFileSync(join(root, "M01-context.md"), "utf8"), body);
     } finally {
@@ -383,12 +460,15 @@ describe("plans export: forecast context", () => {
   });
 
   /**
-   * Proves the real checker separates the issued headline from a revised remaining allocation.
+   * Proves `plans check` accepts a revised remaining forecast with a larger allocation while the headline keeps the issued 6 minutes.
+   *
+   * Example: the author finds `Export context.` needs 6 minutes, not 2, and raises both its `(est: ...)` entry and the remaining-work F2 record.
    * Side effects: writes temporary plan files, runs CLI checks and removes the fixture directory.
    */
   it("checks revised remaining allocations without charging them to the original headline", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-check-"));
     const document = remainingForecastFixture();
+    // Revise F2 so `Export context.` carries 6 minutes and the remaining range becomes 2-8-10.
     const remaining = document.records[1]!;
     remaining.items[0]!.estimateMinutes = 6;
     remaining.basis.likelyMinutesPerUnit = 4;
@@ -405,6 +485,7 @@ describe("plans export: forecast context", () => {
         const result = runPlansCheck(root, ...flags);
         assert.equal(result.status, 0, result.stdout + result.stderr);
       }
+      // Example: the author ticks every task; the milestone must still parse with no warnings.
       const progressed = parseMilestoneMarkdown(
         body.replaceAll("- [ ]", "- [x]"),
         "M01-progressed.md",
@@ -412,10 +493,12 @@ describe("plans export: forecast context", () => {
       assert.deepEqual(progressed.warnings, []);
       // The original six-minute headline remains visible after all tasks are checked off.
       assert.equal(progressed.effort?.totalMinutes, 6);
+      // The revised remaining forecast still reports its own likely 8 minutes.
       assert.equal(
         progressed.forecastContext?.document?.records[1]?.range.likelyMinutes,
         8,
       );
+      // Raising the live task to 7 minutes overruns the revised product allocation, so the forecast switches off (null method).
       const scopeDrift = parseMilestoneMarkdown(
         body.replace("Export context. (est: 6", "Export context. (est: 7"),
         "M01-drift.md",
@@ -431,10 +514,16 @@ describe("plans export: forecast context", () => {
     }
   });
 
-  /** Proves malformed provenance, revisions and receipt boundaries cannot activate advice. Contract fixtures stay in memory. */
+  /**
+   * Proves hand-edited forecast records or headlines cannot switch on advice; each mistake gets its own diagnostic for the author to fix.
+   *
+   * Example: the author lowers the headline from ~6 to ~4 after the forecast was issued.
+   * Contract fixtures stay in memory.
+   */
   it("rejects changed originals, broken revision links and invalid receipt cutoffs", () => {
     const validBody = forecastBodyFixture(remainingForecastFixture(), true);
-    const cases = [
+    // Each row is one authoring mistake paired with the diagnostic the author should see for it.
+    const malformedRecordCases = [
       [
         validBody.replace(
           '"predecessorId": "F1"',
@@ -495,7 +584,7 @@ describe("plans export: forecast context", () => {
       ],
     ] as const;
     // Each malformed record must disable advice and identify the specific authoring error.
-    for (const [body, diagnostic] of cases) {
+    for (const [body, diagnostic] of malformedRecordCases) {
       const parsed = parseMilestoneMarkdown(body, "M01-invalid.md");
       assert.equal(parsed.forecastContext?.method, null, diagnostic.source);
       assert.match(parsed.warnings.join("\n"), diagnostic);
@@ -503,7 +592,7 @@ describe("plans export: forecast context", () => {
   });
 
   /**
-   * Proves invalid opt-in fails both compatibility modes instead of silently enabling advice.
+   * Proves an unknown `Forecast method:` value such as `future-v2` fails both compatibility modes instead of silently enabling advice.
    * Side effects: writes a temporary plan, runs CLI checks and removes the fixture directory.
    */
   it("reports invalid context in both default and strict checks", () => {
@@ -529,14 +618,21 @@ describe("plans export: forecast context", () => {
     }
   });
 
-  // A malformed opt-in must stay diagnosable rather than selecting a model.
+  /**
+   * Proves a malformed opt-in must stay diagnosable rather than selecting a model, while an older milestone gets no forecast context at all.
+   *
+   * Example: the author types `Forecast method: contextual-v2` or pastes a second records section.
+   * Runs in memory.
+   */
   it("distinguishes absent, invalid, duplicate and unsupported forecast metadata", () => {
     const absent = parseMilestoneMarkdown(
       completeMilestoneBody(),
       "M01-legacy.md",
     );
+    // A milestone written before forecasts existed has no `forecastContext` key, so its export shape is unchanged.
     assert.equal(Object.hasOwn(absent, "forecastContext"), false);
     const body = forecastBodyFixture(forecastDocumentFixture());
+    // Malformed declarations: blank or unknown method, duplicate method or records, unsupported schema, weighted units, unknown rubric.
     const invalidCases = [
       [
         body.replace("Forecast method: contextual-v1", "Forecast method:"),
@@ -574,13 +670,16 @@ describe("plans export: forecast context", () => {
       assert.match(record.warnings.join("\n"), diagnostic);
       assert.ok(record.forecastContext?.recordSections.length);
     }
-    const hidden =
+    // Declarations inside a fenced code block are example text, so the milestone gets no forecast context (undefined).
+    const fencedDeclarations =
       completeMilestoneBody() +
       "\n\`\`\`md\nForecast method: contextual-v1\n## Forecast records\n{}\n\`\`\`\n";
     assert.equal(
-      parseMilestoneMarkdown(hidden, "M01-hidden.md").forecastContext,
+      parseMilestoneMarkdown(fencedDeclarations, "M01-hidden.md")
+        .forecastContext,
       undefined,
     );
+    // `Forecast method: legacy` is a valid opt-out: the method reads `legacy` and the saved records still parse.
     const disabled = parseMilestoneMarkdown(
       body.replace("Forecast method: contextual-v1", "Forecast method: legacy"),
       "M01-disabled.md",
@@ -592,32 +691,37 @@ describe("plans export: forecast context", () => {
     );
   });
 
-  /** Fixture purpose: nested context and rejected raw input must cross the same readable redaction boundary.
-   * Filesystem/process side effects: writes temporary fixtures and runs both previews in-process. */
+  /**
+   * Proves a token pasted into forecast text, including raw input of an unsupported schema, must be redacted in JSON and Markdown previews.
+   *
+   * Example: the author pastes a GitHub-style token into forecast fields and a checklist line, then previews the export.
+   * Filesystem/process side effects: writes temporary fixtures and runs both previews in-process.
+   */
   it("scrubs context strings in JSON and Markdown while preserving numerical inputs", () => {
     const root = mkdtempSync(join(tmpdir(), "goat-flow-context-redaction-"));
-    const marker = ["ghp", "q".repeat(36)].join("_");
+    const pastedToken = ["ghp", "q".repeat(36)].join("_");
     const document = forecastDocumentFixture();
-    document.records[0]!.reason = marker;
-    document.records[0]!.items[0]!.description = marker;
-    document.records[0]!.basis.source = marker;
-    document.records[0]!.selectionReason = marker;
+    // Plant the token in the reason, first item description, basis source and selection reason.
+    document.records[0]!.reason = pastedToken;
+    document.records[0]!.items[0]!.description = pastedToken;
+    document.records[0]!.basis.source = pastedToken;
+    document.records[0]!.selectionReason = pastedToken;
     try {
       // Scrubbing must protect both usable records and unsupported raw input an author still needs to inspect.
       for (const schemaVersion of [1, 2]) {
-        // A pasted JSON escape must receive the same protection as the plain credential markers in the other fields.
+        // A pasted JSON escape must receive the same protection as the plain token copies in the other fields.
         writePlanFixture(
           root,
           forecastBodyFixture({ ...document, schemaVersion })
-            .replace(marker, "\\u0067" + marker.slice(1))
-            .replace("- [ ] Parse context.", `- [ ] ${marker}`),
+            .replace(pastedToken, "\\u0067" + pastedToken.slice(1))
+            .replace("- [ ] Parse context.", `- [ ] ${pastedToken}`),
         );
-        // A credential marker must stay private whether the author previews structured JSON or readable Markdown.
+        // A pasted token must stay private whether the author previews structured JSON or readable Markdown.
         for (const format of ["json", "markdown"]) {
           const result = runPlansExport(root, "--format", format);
           assert.equal(result.status, 0, result.stderr);
           assert.ok(
-            !result.stdout.includes(marker),
+            !result.stdout.includes(pastedToken),
             `schema ${schemaVersion} ${format}`,
           );
           assert.match(
@@ -625,6 +729,7 @@ describe("plans export: forecast context", () => {
             /\[REDACTED:token\]/u,
             `schema ${schemaVersion} ${format}`,
           );
+          // Read each preview back: JSON output is parsed directly, Markdown output goes back through the milestone parser.
           const exported =
             format === "json"
               ? JSON.parse(result.stdout)[0]
@@ -635,7 +740,7 @@ describe("plans export: forecast context", () => {
             rawSection.replace(/^```json\n|\n```$/gu, ""),
           );
           assert.ok(
-            !JSON.stringify(decoded).includes(marker),
+            !JSON.stringify(decoded).includes(pastedToken),
             `${format}, schema ${schemaVersion}: decoded raw source must be scrubbed`,
           );
           // Supported Markdown must remain a usable forecast after scrubbing; rejected versions stay diagnostic evidence.
@@ -664,6 +769,7 @@ describe("plans export: forecast context", () => {
   });
 });
 
+/** Effort grammar an author types by hand (headline, forecast basis, Actual, task entries, admin overhead), plus category sums and rendering. */
 describe("plans effort notation", () => {
   /** Proves a standard headline gives users the same total and category split they authored. No filesystem or process state changes. */
   it("parses a bare effort value with split and no Actual", () => {
@@ -677,12 +783,14 @@ describe("plans effort notation", () => {
       totalMinutes: 25,
       split: { product: 18, proof: 5, other: 2 },
     });
+    // An empty warning list means `plans check` has nothing to report about this headline.
     assert.deepEqual(warnings, []);
   });
 
   /** Proves users can inspect and re-render the countable basis behind a forecast. No filesystem or process state changes. */
   it("parses and renders the countable basis behind a forecast", () => {
     const warnings: string[] = [];
+    // Arguments: the headline, an empty Actual (none recorded), the `Forecast range:` text, then the `Forecast basis:` text.
     const effort = parseEffortLineValue(
       "~30 min agent-time (20 product / 8 proof / 2 other)",
       warnings,
@@ -698,12 +806,14 @@ describe("plans effort notation", () => {
       highMinutesPerUnit: 10,
       source: "cold-start prior",
     });
+    // A lost basis renders as empty text and fails here; a parsed one must reproduce the bold line the author writes.
     assert.equal(
       effort?.forecastBasis
         ? renderForecastBasisLine(effort.forecastBasis)
         : "",
       "**Forecast basis:** 12 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
     );
+    // No warnings: both the range and the basis were readable.
     assert.deepEqual(warnings, []);
   });
 
@@ -711,6 +821,7 @@ describe("plans effort notation", () => {
   it("warns when a supplied forecast basis cannot be counted", () => {
     const warnings: string[] = [];
 
+    // Example: the author describes the basis in prose; the Actual and range arguments are empty, so only the basis is judged.
     parseEffortLineValue(
       "~30 min agent-time (20 product / 8 proof / 2 other)",
       warnings,
@@ -727,23 +838,27 @@ describe("plans effort notation", () => {
   /** Proves an inline Actual remains available for planned-versus-recorded comparison. No filesystem or process state changes. */
   it("parses a structured Actual tail with an optional reason", () => {
     const warnings: string[] = [];
+    // Example: the author appends `| **Actual:** ...` to the headline once the milestone is done.
     const effort = parseEffortLineValue(
       "~44 min agent-time (34 product / 7 proof / 3 other) | **Actual:** ~51 min agent-time (39 product / 9 proof / 3 other) - one extra proof cycle",
       warnings,
     );
 
+    // An Actual with no state prefix reads as retrospective, and the text after ` - ` becomes its reason.
     assert.deepEqual(effort?.actual, {
       state: "retrospective",
       totalMinutes: 51,
       split: { product: 39, proof: 9, other: 3 },
       reason: "one extra proof cycle",
     });
+    // No warnings: the inline `| **Actual:**` tail parses as cleanly as a separate field.
     assert.deepEqual(warnings, []);
   });
 
   /** Proves a separately authored Actual has the same user-visible structure as an inline one. No filesystem or process state changes. */
   it("parses a separate structured Actual field", () => {
     const warnings: string[] = [];
+    // The third argument is the separate `Actual:` field; this headline carries no inline Actual.
     const effort = parseEffortLineValue(
       "~25 min agent-time (18 product / 5 proof / 2 other)",
       warnings,
@@ -756,6 +871,7 @@ describe("plans effort notation", () => {
       split: { product: 22, proof: 10, other: 3 },
       reason: "rotation needed another check",
     });
+    // No warnings: the separate field is as readable as the inline form.
     assert.deepEqual(warnings, []);
   });
 
@@ -763,6 +879,7 @@ describe("plans effort notation", () => {
   it("parses explicit measured, retrospective, unavailable, and incomplete states", () => {
     const warnings: string[] = [];
 
+    // Measured and retrospective Actuals carry minutes and a split; unavailable and incomplete carry only the author's reason.
     assert.deepEqual(
       parseEffortLineValue(
         "~3 min agent-time (1 product / 1 proof / 1 other)",
@@ -811,6 +928,7 @@ describe("plans effort notation", () => {
         reason: "receipt contains a discarded open span",
       },
     );
+    // The shared warning list stays empty across all four states.
     assert.deepEqual(warnings, []);
   });
 
@@ -818,9 +936,11 @@ describe("plans effort notation", () => {
   it("treats an empty value as legacy silence and drifted text as a warning", () => {
     const warnings: string[] = [];
 
+    // An empty `Effort estimate:` value is an older milestone: no effort (undefined) and no warning.
     assert.equal(parseEffortLineValue("", warnings), undefined);
     assert.deepEqual(warnings, []);
 
+    // Example: the author writes `about a day`; the effort is dropped and one fixed warning is reported.
     assert.equal(parseEffortLineValue("about a day", warnings), undefined);
     assert.deepEqual(warnings, ["effort estimate not parseable"]);
   });
@@ -829,6 +949,7 @@ describe("plans effort notation", () => {
   it("rejects trailing estimate text instead of accepting a valid prefix", () => {
     const warnings: string[] = [];
 
+    // The whole value is rejected (undefined), so no partial total reaches the check or export.
     assert.equal(
       parseEffortLineValue(
         "~25 min agent-time (18 product / 5 proof / 2 other) surprise",
@@ -841,13 +962,16 @@ describe("plans effort notation", () => {
 
   /** Proves unsafe minute values cannot become misleading plan totals or checklist estimates. No filesystem or process state changes. */
   it("rejects precision-losing minute values in every effort shape", () => {
+    // 2^53, one past Number.MAX_SAFE_INTEGER: minute values this large can no longer be added or compared exactly.
     const unsafe = "9007199254740992";
+    // One warning list per shape shows which parser reported each rejection.
     const effortWarnings: string[] = [];
     const splitWarnings: string[] = [];
     const actualWarnings: string[] = [];
     const taskWarnings: string[] = [];
     const adminWarnings: string[] = [];
 
+    // Every shape drops the value: headline and split return no effort (undefined), the Actual is unset, task and admin estimates are empty.
     assert.equal(
       parseEffortLineValue(`~${unsafe} min agent-time`, effortWarnings),
       undefined,
@@ -879,6 +1003,7 @@ describe("plans effort notation", () => {
       readPlanAdminEstimate(`${unsafe} min other`, adminWarnings),
       {},
     );
+    // Each parser reports exactly one warning; task and admin warnings quote what the author typed.
     assert.deepEqual(effortWarnings, ["effort estimate not parseable"]);
     assert.deepEqual(splitWarnings, ["effort estimate not parseable"]);
     assert.deepEqual(actualWarnings, ["actual effort not parseable"]);
@@ -893,12 +1018,14 @@ describe("plans effort notation", () => {
   /** Proves vague Actual prose cannot be presented to users as machine-readable evidence. No filesystem or process state changes. */
   it("warns when a supplied Actual is not machine-readable", () => {
     const warnings: string[] = [];
+    // Example: the author records `about half an hour` as the Actual.
     const effort = parseEffortLineValue(
       "~10 min agent-time (7 product / 2 proof / 1 other)",
       warnings,
       "about half an hour",
     );
 
+    // The Actual stays unset (undefined) and one fixed warning is reported instead.
     assert.equal(effort?.actual, undefined);
     assert.deepEqual(warnings, ["actual effort not parseable"]);
   });
@@ -907,14 +1034,17 @@ describe("plans effort notation", () => {
   it("parses well-formed task est entries and warns on drifted ones", () => {
     const warnings: string[] = [];
 
+    // The second argument is the zero-based task index; warnings number tasks from 1, as the author counts them.
     assert.deepEqual(
       readTaskEstimate("Build the parser (est: 8 min product)", 0, warnings),
       { estimateMinutes: 8, estimateCategory: "product" },
     );
+    // A task with no `(est: ...)` entry is legacy: an empty result and no warning.
     assert.deepEqual(
       readTaskEstimate("Plain task without entry", 1, warnings),
       {},
     );
+    // Example: `(est: soon)` or a `docs` category is drifted notation, so the result is empty and the warning shows the expected shape.
     assert.deepEqual(
       readTaskEstimate("Vague task (est: soon)", 2, warnings),
       {},
@@ -937,7 +1067,9 @@ describe("plans effort notation", () => {
       estimateMinutes: 2,
       estimateCategory: "other",
     });
+    // An empty `Plan/admin overhead:` value means none was recorded: an empty result and no warning.
     assert.deepEqual(readPlanAdminEstimate("", warnings), {});
+    // Overhead filed as proof is rejected with a warning; only `other` counts as admin work.
     assert.deepEqual(readPlanAdminEstimate("2 min proof", warnings), {});
     assert.deepEqual(warnings, [
       'plan/admin overhead estimate not parseable; expected "<minutes> min other"; received "2 min proof"',
@@ -946,7 +1078,9 @@ describe("plans effort notation", () => {
 
   /** Proves category totals reflect only tasks with estimates and stay absent for an unestimated list. No filesystem or process state changes. */
   it("sums estimates by category and stays absent without any", () => {
+    // No task carries an estimate, so there is no total to show (undefined, not a row of zeros).
     assert.equal(sumTaskEstimates([{}, {}]), undefined);
+    // Two product tasks add up to 12 minutes; a category with no tasks reports 0.
     assert.deepEqual(
       sumTaskEstimates([
         { estimateMinutes: 8, estimateCategory: "product" },
@@ -959,6 +1093,7 @@ describe("plans effort notation", () => {
 
   /** Proves rendered effort and Actual lines match the notation authors copy into milestones. No filesystem or process state changes. */
   it("renders effort back into the notation authors write", () => {
+    // The headline line leaves the Actual out; the Actual renders on its own `**Actual:**` line.
     assert.equal(
       renderEffortLine({
         totalMinutes: 25,
@@ -981,6 +1116,7 @@ describe("plans effort notation", () => {
       }),
       "**Actual:** retrospective: ~35 min agent-time (22 product / 10 proof / 3 other) - one extra proof cycle",
     );
+    // An unavailable Actual renders only its reason, with no minutes.
     assert.equal(
       renderActualLine({
         state: "unavailable",

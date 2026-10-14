@@ -191,18 +191,20 @@ describe("decisions guide ownership transfer", () => {
     });
   }
 
-  for (const flag of ["--force", "--force-managed"]) {
-    it(`keeps inherited content under broad ${flag}`, () => {
-      const root = inheritedTarget(CUSTOM_GUIDE, false);
-      assert.equal(guidePreview(root, flag).state, "local-preserved");
-      apply(root, flag);
-      assert.equal(readFileSync(join(root, GUIDE), "utf8"), CUSTOM_GUIDE);
-      assert.equal(
-        state(root).files.some((row) => row.path === GUIDE),
-        false,
-      );
-    });
-  }
+  // Bare --force sets the same authority as --force-managed, and the guide transfer never reads broad force, so one flag covers both.
+  it("keeps inherited content under broad --force-managed", () => {
+    const root = inheritedTarget(CUSTOM_GUIDE, false);
+    assert.equal(
+      guidePreview(root, "--force-managed").state,
+      "local-preserved",
+    );
+    apply(root, "--force-managed");
+    assert.equal(readFileSync(join(root, GUIDE), "utf8"), CUSTOM_GUIDE);
+    assert.equal(
+      state(root).files.some((row) => row.path === GUIDE),
+      false,
+    );
+  });
 
   it("adopts only the named guide and then uses normal managed drift rules", () => {
     const root = inheritedTarget(CUSTOM_GUIDE, true);

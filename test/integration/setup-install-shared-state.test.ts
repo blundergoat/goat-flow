@@ -534,46 +534,24 @@ describe("one baseline per managed path", () => {
     assert.equal(antigravityThenClaude, claudeThenAntigravity);
   });
 
-  // Neither equal-version nor unrankable legacy disagreement can let provider selection choose overwrite authority.
-  for (const migrationCase of [
-    {
-      name: "equal-version disagreement",
-      versions: ["1.16.0", "1.16.0"],
-      status: "conflicting",
-    },
-    {
-      name: "unrankable-version disagreement",
-      versions: ["release-blue", "release-green"],
-      status: "conflicting",
-    },
-  ] as const) {
-    it(`blocks every selected agent on ${migrationCase.name}`, () => {
-      const projectPath = installedLegacyPair();
-      setLegacyVersion(projectPath, "codex", migrationCase.versions[0]);
-      setLegacyVersion(projectPath, "antigravity", migrationCase.versions[1]);
-      recordStaleBaselineHashes(projectPath, "antigravity", [SHARED_HOOK_PATH]);
-
-      const codex = preview(projectPath, "codex");
-      const antigravity = preview(projectPath, "antigravity");
-      assert.equal(codex.baselineStatus, migrationCase.status);
-      assert.equal(antigravity.baselineStatus, migrationCase.status);
-      assert.equal(codex.verdict, "blocked");
-      assert.equal(antigravity.verdict, "blocked");
-    });
-  }
-
-  it("labels malformed selected legacy state as bootstrap-blocking", () => {
+  // Equal-version legacy disagreement cannot let provider selection choose overwrite authority.
+  // Unrankable versions reach the same status; test/unit/managed-setup-preview.test.ts (search: "unrankable versions disagree") proves it.
+  it("blocks every selected agent on equal-version disagreement", () => {
     const projectPath = installedLegacyPair();
-    writeFileSync(
-      join(projectPath, ".goat-flow", "state", "install", "antigravity.json"),
-      "not json\n",
-    );
+    setLegacyVersion(projectPath, "codex", "1.16.0");
+    setLegacyVersion(projectPath, "antigravity", "1.16.0");
+    recordStaleBaselineHashes(projectPath, "antigravity", [SHARED_HOOK_PATH]);
 
-    const report = preview(projectPath, "antigravity");
-    assert.equal(report.baselineStatus, "malformed-blocking");
-    assert.equal(report.verdict, "blocked");
+    const codex = preview(projectPath, "codex");
+    const antigravity = preview(projectPath, "antigravity");
+    assert.equal(codex.baselineStatus, "conflicting");
+    assert.equal(antigravity.baselineStatus, "conflicting");
+    assert.equal(codex.verdict, "blocked");
+    assert.equal(antigravity.verdict, "blocked");
   });
 
+  // Preview reads every agent's legacy file, so a malformed file blocks whichever agent is selected.
+  // The selected agent's own malformed file is proved in test/unit/managed-setup-preview.test.ts (search: "malformed JSON").
   it("blocks on malformed legacy state when another agent is selected", () => {
     const projectPath = installedLegacyPair();
     writeFileSync(
