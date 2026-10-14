@@ -2,7 +2,7 @@
 #
 # Every run includes three Ubuntu jobs; the platform jobs join only on the weekly schedule or a manual run:
 # - checks: preflight without its test suite, the shell syntax check and the version-stamp check.
-# - test-fast: every test file outside the slow set, with a pinned jq 1.6.
+# - test-fast: every test file outside the slow set and the weekly-only list, with a pinned jq 1.6.
 # - test-slow: the subprocess-heavy suite, one file at a time per runner, split across five shards.
 # - Platform jobs: Windows hook contracts, hook port controls (Linux, macOS, Windows, WSL2), the frozen Linux reference and the Windows ratchet.
 name: CI
@@ -74,7 +74,7 @@ jobs:
       - name: Version consistency (shared script)
         run: npm run check-versions
 
-  # Every test file outside the slow set (isSlowTest in scripts/run-tests.mjs), eight at a time; the same `npm run test:fast` a developer runs.
+  # Every file outside the slow set and WEEKLY_ONLY_TESTS (scripts/run-tests.mjs), eight at a time; the same `npm run test:fast` a developer runs.
   test-fast:
     runs-on: ubuntu-latest
     steps:
@@ -396,8 +396,8 @@ jobs:
 
   # Bash extraction stays on native Linux with pinned jq and explicit locales; macOS runs the Node controls above, never reference extraction.
   #
-  # Only the C locale runs here; the fast and slow suites already run these files under the runner's UTF-8 locale against the installed hooks.
-  # The WSL job's divergence report covers both locales for the frozen reference.
+  # Only the C locale runs here; the fast and slow suites already run its hook test files under the runner's UTF-8 locale against the installed hooks.
+  # hook-parity-reference.test.ts runs only here and checks its launch rows in both locales itself; the WSL divergence report covers both too.
   hook-reference-linux:
     # Skipped on pull requests and pushes, so a frozen-reference regression first shows on the weekly run unless someone starts a manual run.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

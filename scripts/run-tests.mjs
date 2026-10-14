@@ -84,7 +84,9 @@ function isSlowTest(path) {
 }
 
 // No mode selects these files, so `npm test` and the pull-request shards skip them; the weekly hook-reference-linux CI job runs each one by name.
-// hook-parity-reference.test.ts replays the frozen Bash reference, which only a change to that reference or its parity harness can break.
+//
+// hook-parity-reference.test.ts breaks when the frozen reference, its corpus.json or scripts/check-hook-parity.mjs changes, or the runner drifts.
+// Before merging a change to those files, start a manual CI run, for example `gh workflow run ci.yml --ref dev`, which includes the weekly jobs.
 const WEEKLY_ONLY_TESTS = ["test/integration/hook-parity-reference.test.ts"];
 
 /**
