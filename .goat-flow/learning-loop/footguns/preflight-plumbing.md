@@ -46,6 +46,21 @@ last_reviewed: 2026-10-14
 
 ---
 
+## Footgun: Tests read `ci.yml` as text, so removing a CI step that preflight repeats still breaks them
+
+**Status:** active | **Created:** 2026-10-14 | **Evidence:** OBSERVED
+**Decision changed:** Before removing or reshaping a CI job or step, search `test/` for every reader of `.github/workflows/ci.yml`, including paths built with `join(..., "workflows", "ci.yml")`, and decide for each pin whether the step stays or the test changes.
+
+**Prevention:** Three tests read the workflow: `test/contract/documented-shellcheck-command.test.ts` (search: `const CI_WORKFLOW`), `test/integration/gruff-warning-ratchet.test.ts` (search: `runs the warning ratchet in a dedicated Node 22 CI job`) and `test/integration/preflight-progress.test.ts` (search: `runs each published syntax command against a valid control and a later malformed file`). A literal search for `.github/workflows/ci.yml` misses the ratchet test, which builds the path with `join`.
+
+**Symptoms:** Removing the `checks` steps that preflight already runs, and the Ubuntu ratchet leg, left a workflow that parsed and passed the touched-file checks. Preflight then reported `Tests failed (4/3235 failures)`, and after two tests were updated, `Tests failed (1/3235 failures)` from the third.
+
+**Why it happens:** These tests treat the workflow as a place where a command is published, so a step is a contract even when preflight runs the same check.
+
+**Evidence:** The shell-syntax step stays in `checks` (`.github/workflows/ci.yml`, search: `this published copy is the CI surface`), and the other two tests now assert that CI runs the preflight that owns shell lint and the Linux ratchet.
+
+---
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.

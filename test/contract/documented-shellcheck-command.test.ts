@@ -26,8 +26,10 @@ const DOCUMENTING_SURFACES = [
 const AUTOMATED_SHELL_VALIDATION_OWNERS = [
   ".goat-flow/config.yaml",
   "scripts/preflight-checks.sh",
-  ".github/workflows/ci.yml",
 ] as const;
+
+// CI runs shell lint through preflight rather than a step of its own.
+const CI_WORKFLOW = ".github/workflows/ci.yml";
 
 const WORKFLOW_INSTALLER = "workflow/install-goat-flow.sh";
 const SHELL_SYNTAX_HELPER = "scripts/maintenance/check-shell-syntax.sh";
@@ -178,5 +180,11 @@ describe("documented shell-lint command", () => {
       );
       assert.ok(content.includes(`bash ${SHELL_SYNTAX_HELPER}`), surface);
     }
+    assert.ok(
+      readFileSync(resolve(PROJECT_ROOT, CI_WORKFLOW), "utf8").includes(
+        "bash scripts/preflight-checks.sh",
+      ),
+      `${CI_WORKFLOW}: CI must run the preflight that owns shell lint`,
+    );
   });
 });
