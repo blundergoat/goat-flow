@@ -44,6 +44,7 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 ├── skill-command-parser.ts      = lightweight `skill new|doctor` positional and flag rules
 ├── skill-doctor.ts              = read-only installed skill path, invocation, frontmatter, and mirror diagnosis
 ├── review-command-parser.ts     = `review validate` positional and flag rules
+├── review-command.ts            = `goat-flow review` request runner: usage checks, input reading, rendered result and exit code
 ├── review-validate*.ts          = review Proof Gate parsing, evidence anchors, ledgers, integrity, sections, and verdicts
 ├── help.ts                      = contextual root and per-command `--help` rendering
 ├── hook-*.ts                    = provider-neutral hook and verification contracts shared by CLI and server
