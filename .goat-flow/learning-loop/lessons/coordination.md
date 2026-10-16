@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-09-05
+last_reviewed: 2026-10-15
 ---
 
 **Scope:** Running work across multiple agents or phases - council findings that need normalising before they create work, the version baselines where reviewers hallucinate, and cross-artifact verification. Milestone state, effort accounting, and phase-total arithmetic are [milestone-accounting.md](milestone-accounting.md).
@@ -60,10 +60,14 @@ last_reviewed: 2026-09-05
 
 **Status:** active | **Created:** 2026-05-01
 **Severity:** INTEGRATION
-**Incident count:** 2 | **Latest occurrence:** 2026-08-17
+**Incident count:** 3 | **Latest occurrence:** 2026-10-15
+
+**Decision changed:** Check plan guides against the current manifest, accepted decisions and frozen baseline as well as against other plan files.
 
 **Prevention:** Add "programme document claims match per-plan deliverables" as a verification check. When an artifact changes owner, grep both the old path and its old prose label across every touched artifact; cross-document consistency is the gap between internal-file verification and audit completeness.
 
 **What happened:** Phase 3 verification checked word counts, parity, rubric citations, and `npm test`, all internal to individual files, without cross-referencing programme claims against plan content. Four residual inconsistencies survived and were caught by editorial review instead: a missing qa score in the cumulative table, a critique target of "~95+" against 91 in the plan, stale appendix statuses, and a review plan still using version labels the programme claimed were renamed.
 
 **Recurrence 2026-08-17:** Rerouting the secret-parser footgun to its owning bucket updated the read-first and task text but left Boundary Notes saying "hooks footgun"; a targeted old-owner grep caught the stale wording after the internal plan and learning-loop checks were green. `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `git_log_candidate_without_search_values`), `.goat-flow/learning-loop/footguns/deny-secrets.md` (search: `Secret-path matching must distinguish search data from file operands`).
+
+**Recurrence 2026-10-15:** A local migration-plan review left a guide claiming the decisions README was user-owned and its transfer unshipped, although both the frozen and current manifests already declared system ownership. Structural plan checks did not test that claim. Read `workflow/manifest.json` (search: `.goat-flow/learning-loop/decisions/README.md`), `.goat-flow/learning-loop/decisions/ADR-060-retain-system-ownership-for-extended-managed-docs.md` (search: `D4`) and `src/cli/decisions-readme-transfer.ts` (search: `readDecisionsReadmeTransfer`) before porting ownership; preserve inherited-copy protection rather than trusting a dated guide. Evidence: OBSERVED.

@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-16
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and the static gates a touched TypeScript file must pass before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -46,7 +46,7 @@ last_reviewed: 2026-10-11
 **Decision changed:** After the first focused GREEN on any TypeScript change, run the repository formatter, file-scoped ESLint, the exact Knip command, and targeted Gruff before any suite, preflight, or completion claim; a receipt without their literal output is incomplete.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 69 | **Latest occurrence:** 2026-09-29
+**Incident count:** 73 | **Latest occurrence:** 2026-10-16
 **Merged:** 2026-09-05 - renamed from "New tests need formatter gate before verification claims"; absorbed "Slow installer round-trip catches prompt/test lint debt" (2026-04-26, 5 incidents), "Format touched TypeScript tests before repo-wide preflight" (2026-04-30), "Preflight TypeScript gates include Knip binary policy and touched-test formatting" (2026-06-07, 28 incidents), and "Format patched hook test fixtures before full preflight" (2026-06-02, 2 incidents) from `.goat-flow/learning-loop/lessons/hook-testing.md`, plus five touched-file recurrences previously logged under the attribution lesson above and one 2026-08-09 static-gate recurrence from `.goat-flow/learning-loop/lessons/verification-gruff.md`; the count is the sum of the declared totals.
 
 **Prevention:** After the first focused GREEN that touches TypeScript, and before any later aggregate suite, preflight, or completion claim, run `npm run check:touched` and quote each selected result. It checks touched formatting; for changed `src/*.ts`, it also runs file-scoped ESLint, typecheck, and the repository Gruff ratchet. `test/**` sits outside the lint project. Then run and quote the exact Knip command from `scripts/preflight-checks.sh` (search: `knip_command=(`), never an invented `npm run knip` or a bare `npx knip`, which exhausts the default heap; run targeted Gruff on the touched files too. Keep helpers module-private until a current consumer imports them, and reference child-process fixtures with `fileURLToPath(new URL(...))` so Knip can see them, as in `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`). When a later gate fails, fix it, rerun that gate, then restart the sequence; every earlier proof is stale. A milestone that edits `src/` lists `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` in its Commands table. For goat-clarity, freeze the check and write commands before mutation; anchors `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`) and `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
@@ -56,6 +56,10 @@ last_reviewed: 2026-10-11
 **Root cause:** Typecheck and runtime tests do not exercise formatting, lint complexity, unused-export policy, static fixture reachability, or analyzer size limits; those gates run only in preflight and in the fixture's copied checkout, so a proof sequence that starts with suites pays for them last.
 
 **Incident ledger** (one line per incident: the gate that fired, the repair, the anchor):
+
+**Recurrence 2026-10-16:** M02's isolated native supervisor passed six process tests, but ESLint rejected two shorthand callbacks with `no-confusing-void-expression`. Adding braces and rerunning the exact lint command cleared both errors. Run scoped static gates before treating runtime GREEN as a complete batch result. The learning check then rejected an unverified lint-config anchor; rereading the config and removing that citation restored valid references. The patch dry run also caught missing new-file mode headers; include them before checking a generated Git patch. Evidence: `src/hooks/hook-supervisor.mts` (search: `hookProcess.once`).
+
+**Recurrence 2026-10-16 (application):** Supervisor verification guessed `bin/gruff-ts.js`, which does not exist. Resolve package executables from their installed bin mapping or verified shim before invocation. `node_modules/.bin/gruff-ts` then analyzed the generated module successfully. Evidence: `scripts/check-gruff-warning-ratchet.mjs` (search: `analyzerPackage.bin["gruff-ts"]`).
 
 **Recurrence 2026-04-26:** Round-trip preflight rejected an over-complex compose-quality helper and an unformatted quality-command fixture after prompt tests and typecheck passed. `src/cli/prompt/compose-quality-common.ts` (search: `appendScopeSummary`).
 **Recurrence 2026-04-30:** Preflight stopped at `2 unformatted files`, both new test files; `npm run format` touched only them and a clean rerun passed. `test/unit/check-content-quality.test.ts` (search: `discovers current ADR files`), `src/cli/quality/schema-types.ts` (search: `evidence_warning_count`).
@@ -114,6 +118,7 @@ Continuation: individually registering the same quick/full requests and eight in
 **Decision changed:** Treat lint as evidence only when output proves the selected files were analyzed; an ignored-file warning is not a pass even when exit status is zero.
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-16
 
 **Prevention:** Read every per-file diagnostic before appending pass text, and check the lint scope before choosing a command. If the configured parser excludes the target, record lint as not applicable; do not force the file through an incompatible parser project with `--no-ignore`.
 
@@ -121,4 +126,6 @@ Continuation: individually registering the same quick/full requests and eight in
 
 **Root cause:** The wrapper treated process status as coverage without reading the per-file warning or the configured target set.
 
-**Evidence:** `eslint.config.mjs` (search: `ignores: ["dist/**", "test/**", "node_modules/**", "*.js", "*.mjs"]`) excludes the test tree; `eslint.config.mjs` (search: `project: ["./tsconfig.json", "./tsconfig.dashboard.json"]`) limits typed parsing to the two source projects.
+**Evidence:** `eslint.config.mjs` (search: `ignores: ["dist/**", "test/**", "node_modules/**", "*.js", "*.mjs"]`) excludes the test tree; `eslint.config.mjs` (search: `"./tsconfig.hooks.json"`) declares the separate CLI, dashboard and hook parser projects.
+
+**Recurrence 2026-10-16:** In the isolated M02 proposal, Gruff 0.5.0 returned exit 0 and `analysedFiles: 0` for typed `.mts` hook source. Its installed extension list excludes `.mts`. Check the generated `.mjs` after generation drift checks, and use TypeScript and ESLint for typed source. A shim reached through a linked `node_modules` also returned empty stdout; the verified physical binary returned JSON. Evidence: `node_modules/@blundergoat/gruff-ts/src/discovery.ts` (search: `SCRIPT_FILE_EXTENSIONS`), `scripts/generate-hook-runtime.mjs` (search: `generateHookRuntime`) and `package.json` (search: `typecheck:hooks`).

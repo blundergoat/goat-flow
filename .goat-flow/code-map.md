@@ -151,6 +151,16 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 └── stats/                       = learning-loop health report and renderer
 ```
 
+## src/hooks/ -- Typed source for standalone generated hooks
+
+```text
+src/hooks/
+├── hook-launch.mts              = native child launch, selected-root argv and existing path-safety checks
+├── hook-supervisor.mts          = native single-result delivery with bounded deadline/output cleanup
+├── hook-output.mts              = bounded native result/diagnostic capture and strict UTF-8 completion
+└── process-tree.mts             = native owned-process cleanup; generated into both hook trees
+```
+
 ## src/dashboard/ -- Dashboard frontend
 
 ```text
@@ -227,6 +237,10 @@ workflow/                        = packaged template source copied into target p
 ├── hooks/                       = hook templates and agent hook config templates
 │   ├── run-with-bash.mjs        = cross-platform Git Bash discovery and managed shell launcher
 │   ├── hook-launch-runtime.mjs  = managed launcher runtime shared by every provider hook entry
+│   ├── hook-launch.mjs          = generated native child launch and path checks from src/hooks
+│   ├── hook-supervisor.mjs      = generated native deadline/output supervision from src/hooks
+│   ├── hook-output.mjs          = generated bounded native output capture from src/hooks
+│   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
 │   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy template
 │   ├── deny-git-mutations.sh    = fixed Git commit, publication, destructive-operation and GitHub CLI write policy template
@@ -268,6 +282,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── deploy-landing.sh            = docs/site deployment helper
 ├── generate-hook-policy-parser.mjs = vendors the locked YAML parser and license for dependency-free installed hooks
 ├── generate-hook-graphql-parser.mjs = bundles the locked GraphQL parser and license for dependency-free installed hooks
+├── generate-hook-runtime.mjs    = emits readable typed hook modules, stamps and installed mirrors; checks drift without writing
 ├── generate-managed-hook-desired-state.mjs = regenerates the standalone installer's managed-hook contract from the TypeScript writer
 ├── gruff-ts.sh                  = gruff-ts static-analysis wrapper; args pass through, bare run prints the digest
 ├── install-browser-tools.sh     = browser-use and Playwright install helper
@@ -351,6 +366,10 @@ docs/                            = user and maintainer documentation
 ├── hooks/                       = committed central hook dispatchers and policy store
 │   ├── run-with-bash.mjs        = cross-platform Git Bash discovery and managed shell launcher
 │   ├── hook-launch-runtime.mjs  = managed launcher runtime shared by every provider hook entry
+│   ├── hook-launch.mjs          = generated native child launch and path checks from src/hooks
+│   ├── hook-supervisor.mjs      = generated native deadline/output supervision from src/hooks
+│   ├── hook-output.mjs          = generated bounded native output capture from src/hooks
+│   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
 │   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy entrypoint
 │   ├── deny-git-mutations.sh    = fixed Git commit, publication, destructive-operation and GitHub CLI write policy entrypoint

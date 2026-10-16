@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-10-01
+last_reviewed: 2026-10-16
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. Changing text that a test already pins, and searching for the pin first, is [contract-pinned-wording.md](contract-pinned-wording.md). When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -17,9 +17,9 @@ Related evidence moved intact to [instruction-word-budgets.md](instruction-word-
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Incident count:** 16
+**Incident count:** 17
 
-**Latest occurrence:** 2026-09-22
+**Latest occurrence:** 2026-10-15
 
 **Prevention:** Search indexes, contracts, and tracked semantic-anchor references before changing headings or compacting prose; run focused contracts and `stats --check`; repair anchors together. Before moving entries, search the source bucket path as well as each heading; citations can target text inside an entry. Never head-cap or single-line that sweep: the pinned citation listed thirteenth, or split across a line break, is the one that breaks.
 
@@ -39,9 +39,11 @@ When a cut changes a decision or makes a rule ambiguous, restore it and remove l
 
 **Recurrence 2026-09-13 (bucket split):** Searching only the four moved lesson headings missed two citations to text inside an entry. The first `stats --check` reported two `stale-ref` findings after the split. Before moving entries, inventory references to the source bucket and validate every cited needle against its destination; heading preservation alone does not preserve citation paths. Evidence: `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `go-live activation`) and `.goat-flow/learning-loop/lessons/verification-size-gates.md` (search: `go-live activation`).
 
-**Recurrence 2026-09-21 (v1.17.0 release headroom):** Compaction across functional skill roots and the shared preamble paraphrased exact phrases used by contract consumers. The broad hardening suite rejected the first pass; restoring pinned phrases recovered structural acceptance, but did not prove that all meaning survived. Inventory exact assertions before compaction, then run the whole hardening suite after each canonical-to-installed mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`) and `test/contract/skill-hardening-review-2.test.ts` (search: `pins one severity vocabulary and canonical integrity field shapes`).
+**Recurrence 2026-09-21 (v1.17.0 release headroom):** Compaction across functional skill roots and the shared preamble paraphrased exact phrases used by contract consumers. The broad hardening suite rejected the first pass; restoring pinned phrases recovered structural acceptance, but did not prove that all meaning survived. Inventory exact assertions before compaction, then run the whole hardening suite after each canonical-to-installed mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap in canonical guidance`) and `test/contract/skill-hardening-review-2.test.ts` (search: `pins one severity vocabulary and canonical integrity field shapes`).
 
 **Recurrence 2026-09-22 (release recheck):** Passing phrase contracts missed two semantic mistakes. The new critique bands rated the critic's return, so an isolated application check returned `BLOCK / STRONG` for a plan with a confirmed fatal defect. Clarity compaction also dropped the eligible-documentation qualifier from its fallback question, exposing source-only selections to an irrelevant prompt. Restoring the qualifier and making bands rate the artifact produced `BLOCK / FLAWED`; clean and incomplete-coverage controls stayed separate. Use isolated application checks for changed meanings, not just token presence. The same recheck renamed a preflight test without updating its lesson citation; preflight caught the stale reference. Search callers and durable anchors before renaming test titles as well as code symbols. Evidence: `workflow/skills/goat-critique/references/sub-agent-directives.md` (search: `bands rate the reviewed artifact`), `test/contract/skill-hardening-skills-1.test.ts` (search: `gives goat-critique one result envelope`), and `test/contract/skill-hardening-clarity.test.ts` (search: `intent before keyword`).
+
+**Recurrence 2026-10-15 (canonical contract checks):** Renaming the word-cap test preserved 525 passing tests but left six citations in four learning-loop files stale; `stats --check` reported four stale-reference findings. Search every old test title before renaming it, and include citation repairs in the approved scope. Contract success does not prove citation validity. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap in canonical guidance`) and `scripts/check-touched.mjs` (search: `Stats`).
 
 The follow-up meaning review found further losses that the passing contracts had missed:
 

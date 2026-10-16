@@ -1,9 +1,24 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-16
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
+
+## Lesson: Readiness confirmations belong to named host rows
+
+**Status:** active | **Created:** 2026-10-16 | **Evidence:** OBSERVED
+**Decision changed:** Match readiness updates by host name and inspect unavailable-host rows before saving.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Update each named host row from its own evidence. Keep executable discovery, user-reported authentication and observed live delivery separate. Check unavailable hosts explicitly after replacing repeated status text; a structural plan check cannot establish factual readiness.
+
+**What happened:** While preparing a local runtime plan, a global replacement changed every repeated unverified cell. It copied the user's Windows/WSL sign-in confirmation into native Linux/macOS rows even though the user had no access to either host. Reading the saved table caught the false attribution; host-specific corrections restored both unavailable rows to unverified.
+
+**Root cause:** Identical cell text was treated as identical evidence ownership. This was a local planning error, not an observed provider failure; no provider was launched and no implementation was credited.
+
+---
 
 ## Lesson: Decision spikes need executable no-change exits
 
@@ -93,7 +108,7 @@ last_reviewed: 2026-10-12
 2. Treat any estimate expressed first as hours as unvalidated; decomposing a duration into categories does not convert it into agent-time.
 3. Record `<units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <evidence>` in `Forecast basis:`; derive low by flooring (minimum one), likely by rounding, high by ceiling.
 4. Below three matching completed measured bases, use the conservative cold-start prior; at three or more, use the observed low, median, and high minutes per unit reported by `plans check`. Do not carry an inflated plan's estimates into calibration.
-5. Recount and reforecast before implementation whenever scope changes or the CLI prints `reforecast required`, preserving the original estimate. Derive an ISSUE delivery band by summing milestone forecasts, never the reverse.
+5. Recount and reforecast before implementation whenever scope changes or the CLI prints `reforecast required`, preserving the original estimate. Derive an ISSUE task's likely minutes from its milestone forecasts, never the reverse.
 6. At activation after prerequisite handoff, classify each unit as fresh, inherited complete, or reconciliation-only; forecast the residual agent work and keep the cold estimate separately.
 
 Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgentWorkUnits`) owns the unit definition and range math; `src/cli/plans-check-summary.ts` (search: `function renderRequiredReforecasts`) turns three receipt-backed bases into a visible next action; `workflow/skills/goat-plan/SKILL.md` (search: `Effort estimate (agent-time)`) makes that action block implementation.
@@ -144,7 +159,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Decision changed:** Reserve Tasks for estimated implementation checkboxes and keep each `(est: ...)` entry at the end of its item.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 11 | **Latest occurrence:** 2026-10-11
+**Incident count:** 12 | **Latest occurrence:** 2026-10-16
 **Merged:** 2026-09-05 - absorbed three plan-parsing recurrences (2026-07-29, 2026-07-31, 2026-08-21) from `.goat-flow/learning-loop/lessons/audit-contracts.md`, which filed them under artifact scanners.
 
 **Prevention:** Keep `## Tasks` to estimated work items. Put section-wide guidance before the first checkbox or under its own heading, never after the final estimated item; put discoveries in `## Context` and literal gate output in `## Actual evidence`; place a completion note before the terminal estimate. Keep `Plan/admin overhead` as the forecast input, keep measured variance outside the fixed Actual receipt reason, and rerun strict validation after closeout edits. Evidence anchors: `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task checkbox into an estimate-bearing record; `src/cli/plans-effort.ts` (search: `const TASK_ESTIMATE_PATTERN`) requires the estimate at the item's end; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.
@@ -165,6 +180,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 
 **Recurrence 2026-10-11:** An implementation note after the last task hid its three-minute estimate: strict validation counted 26 product minutes against 29 and 19 work units against 20. Moving the unchanged note into Context restored exit 0. The parser still owns text until the next checkbox or heading; `src/cli/plans-export.ts` (search: `function readChecklistItems`) and `src/cli/plans-effort.ts` (search: `export function readTaskEstimate`) explain the failure.
 
+**Recurrence 2026-10-16:** M02 closeout appended an indented implementation note after Task 6's terminal estimate. Strict validation counted 26 product minutes against 28, one unestimated task and 31 work units against 32. Removing the note, already covered by Context, restored exit 0. Plain prose remains part of its checkbox until the next checkbox or heading. Evidence: `src/cli/plans-export.ts` (search: `function readChecklistItems`) and `src/cli/plans-effort.ts` (search: `export function readTaskEstimate`).
+
 
 ## Lesson: Milestone plans need exporter-contract verification before handoff
 
@@ -172,7 +189,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Severity:** INTEGRATION
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient.
 **Trigger phase:** VERIFY
-**Incident count:** 16 | **Latest occurrence:** 2026-10-12
+**Incident count:** 18 | **Latest occurrence:** 2026-10-15
 
 **Prevention:** After the final write, run `goat-flow plans check <plan-directory> --strict`, require warning-free exporter records, and check cited paths/anchors. Keep one live metadata value; fence history. Current strict plans require a numeric effort split even when runtime is unknown; label the forecast provisional and name the measurement/reforecast checkpoint rather than omitting required fields. Exercise compact/expanded fixtures through `parseMilestoneMarkdown` and plan commands against prepared disposable paths. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Preserve Status, Scope, Tasks, Proof, Exit/Exit criteria and Stop/rescope; compact Stop/rescope belongs inside Exit. Anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`; `readStopMarkdown`), `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
@@ -200,6 +217,10 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-10-11 (ACTUAL_MEASURED):** The first strict check of the 1.19.0 carryover amendment rejected M32's problem summary: `expected "70-120 characters"; received "127 characters"`. Shortening that sentence restored exit 0 without changing its task or proof scope. Run the shipped strict checker after prose reconciliation as well as graph and forecast checks. Source: `src/cli/plans-check-structure.ts` (search: `collectPlainLanguageSectionFindings`).
 
 **Recurrence 2026-10-12 (ACTUAL_MEASURED):** Applying the preceding recurrence exposed a bad citation: `stats --check` rejected its bare local-plan filename as `stale-ref`. Keep local plan mentions as navigation, never durable evidence anchors; retain the committed checker anchor above. Check learning citations before proposing their patch, then run the learning gate after applying it. Source: `src/cli/facts/shared/reference-paths.ts` (search: `gitignored path used as durable evidence anchor`).
+
+**Recurrence 2026-10-15 (ACTUAL_MEASURED):** A plan-reconciliation edit expanded a problem summary to 188 characters and two sentences. Strict validation exited 1 with length and shape errors; one short sentence restored exit 0 without changing implementation code. Check the owned problem/benefit sentence contract before expanding prose, and keep inventory detail in Context or Scope. The incident plan is local workflow state; the durable validator anchor is `src/cli/plans-check-structure.ts` (search: `collectPlainLanguageSectionFindings`).
+
+**Recurrence 2026-10-15 (ACTUAL_MEASURED):** Explanatory paragraphs inserted between the final task and Commands made five tasks lose their parsed estimates; strict validation exited 1 with missing-estimate and work-unit errors. Moving those paragraphs into Scope restored exit 0. Keep shared notes in Context or Scope and rerun the shipped consumer after formatting changes. Durable owners: `src/cli/plans-effort.ts` (search: `readTaskEstimate`) and `src/cli/plans-check.ts` (search: `task(s) missing an (est: ...)`).
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-16
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-size-gates.md](verification-size-gates.md).
@@ -12,7 +12,7 @@ last_reviewed: 2026-10-11
 **Decision changed:** Treat a human-readable comment, boolean name, or compact test as unfinished until the targeted analyzer accepts the exact source shape; read the installed rule before a second rewrite.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 8 | **Latest occurrence:** 2026-10-11
+**Incident count:** 9 | **Latest occurrence:** 2026-10-16
 **Merged:** 2026-09-05 - one static-gate recurrence (2026-08-09) moved to `.goat-flow/learning-loop/lessons/verification-formatting.md`, three size-gate recurrences (2026-08-09 x2, 2026-08-28) moved to `.goat-flow/learning-loop/lessons/verification-size-gates.md`, and two ratchet recurrences (2026-08-16, 2026-08-18) moved to the hidden-complexity lesson below; this entry keeps the analyzer-vocabulary incidents.
 
 **Prevention:** For Gruff-driven comment work, read `.goat-flow/skill-docs/playbooks/code-comments.md`, patch one file or cohesive cluster, then rerun `npx gruff-ts analyse <path>`. If a clear comment stays flagged, open the installed rule in `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` before changing wording or placement again; the rules match whole-word markers and same-line forms, not meaning. Keep internal boolean state in `is...`/`has...` grammar, give each small outcome set direct assertions instead of a test-level loop, and let one concise fixture comment carry purpose and side effect together when the rule reads only the nearest source shape. If a rename replaces a comment, grep the old identifier. Evidence anchors: `src/cli/server/decoders.ts` (search: `Swallows parse errors into the shared decoder failure shape`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/learning-loop/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
@@ -31,6 +31,8 @@ last_reviewed: 2026-10-11
 - **Recurrence 2026-08-18:** A ratchet comment explained a numeric policy as a "floor", but `docs.magic-threshold-without-rationale` stayed because that synonym is outside the marker vocabulary; "threshold" cleared it. `scripts/gruff-warning-ratchet-checks.mjs` (search: `Coverage threshold retained`), `package.json` (search: `@blundergoat/gruff-ts`).
 - **Recurrence 2026-10-11 (delegated comment pass):** Sub-agents rewrote comments in four `plans check` files for plain language and dropped markers the incumbents carried: four docs lost `must` and five test comments lost `writes`. The PostToolUse hook flagged one sorting helper and the stable-identity comparison found eight more introduced `docs.missing-*` findings; restoring truthful `must` and `Writes` wording returned the comparison to zero. Give delegated comment passes the marker vocabulary and compare identities before accepting their edits. `src/cli/plans-check-summary.ts` (search: `in a stable oldest-first order`).
 
+- **Recurrence 2026-10-16 (generator comments):** The generator's truthful `Errors:` and singular `throw` wording did not match Gruff's whole-word `throws` marker. Reading `hasErrorBehaviorMarker` before the second rewrite preserved the meaning and cleared the advisories. `scripts/generate-hook-runtime.mjs` (search: `Throws on`) documents the actual failures; the installed rule remains owned by `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
+
 ## Lesson: Gruff hook compatibility probes need real configs and wrapper PATH
 
 **Status:** active | **Created:** 2026-05-28
@@ -48,7 +50,7 @@ last_reviewed: 2026-10-11
 **Decision changed:** After any docs batch, analyzer upgrade, or conflict resolution, run the full-scan warning count and the ratchet before the lint gate, even while build and typecheck are green.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-08-28
+**Incident count:** 7 | **Latest occurrence:** 2026-10-16
 **Merged:** 2026-09-05 - absorbed the 2026-08-16 upgrade and 2026-08-18 merge-conflict recurrences from the comment-fixes lesson above; all describe warning debt surfacing outside the targeted docs rule.
 
 **Prevention:** After a large Gruff docs batch, run `npx gruff-ts analyse --format json --fail-on none` and compare the warning count, then run the lint and preflight gate for any helper extraction. Run `node scripts/check-gruff-warning-ratchet.mjs` immediately after an analyzer or config upgrade and after resolving a merge or stash conflict; combining two branches can cross a complexity threshold neither side crossed alone. When a documented function clears reviewed warning debt, remove that identity from the accepted-warning record in the same change. Do not remove a useful comment to hide a surfaced warning. Evidence anchors: `src/dashboard/app.ts` (search: `encodeTerminalUploadFiles`), `src/dashboard/app.ts` (search: `showTerminalUploadResult`).
@@ -61,6 +63,8 @@ last_reviewed: 2026-10-11
 **Recurrence 2026-08-17:** The truthful exported-function documentation made Gruff stop reporting an accepted warning while the reviewed manifest still claimed it, and the same preflight found an 11-branch audit helper; removing the stale row and moving agent-ID validation into the baseline helper cleared both. `scripts/gruff-warning-ratchet-checks.mjs` (search: `stale accepted debt`), `src/cli/server/hook-registrar.ts` (search: `applyHookState`), `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineRows`).
 **Recurrence 2026-08-18:** Resolving a committed `git stash pop` conflict left build and typecheck green while the ratchet failed: the merged `dashboardLoadSavedDashboardState` scored cyclomatic 21 and cognitive 23 against the configured 15, and with no accepted-debt manifest any warning is a regression. Extracting the server read and row assembly returned the scan to zero warnings. `src/dashboard/dashboard-projects.ts` (search: `dashboardReadSavedServerState`), `src/dashboard/dashboard-projects.ts` (search: `dashboardBuildProjectRows`), `.gruff-ts.yaml` (search: `complexity.cognitive:`).
 **Recurrence 2026-08-28:** The optional-guard migration retired that baseline helper after migrating the primary hook loop, but the optional registry comparison still called it; the first focused run threw `ReferenceError: managedBaselineHashes is not defined`, and `stats --check` found this lesson's anchor still naming the removed helper. Search a helper's exact symbol across the whole edited file and durable evidence before deleting it. `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineRows`), `src/cli/audit/check-drift-hooks.ts` (search: `function compareRegistryHookScripts`).
+
+**Recurrence 2026-10-16 (standalone generator):** Three focused generator tests and touched checks passed, but preflight rejected cognitive/cyclomatic complexity in `generateHookRuntime`. The touched selector sets `gruff: hasSourceChanges` only for source `.ts` paths, so standalone `.mjs` work still needs the production ratchet. Extracting the existing phases cleared both warnings without changing the tests. `scripts/check-touched.mjs` (search: `gruff: hasSourceChanges`), `scripts/generate-hook-runtime.mjs` (search: `transpileHookModules`; `writeOrCheckRuntimeFiles`) and `test/integration/gruff-warning-ratchet.test.ts` (search: `launches the installed analyzer through the production ratchet`).
 
 ## Lesson: docs.missing-internal-function-doc must not be silenced; baseline the residue
 

@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-16
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -174,7 +174,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 
 **Recurrence 2026-09-08 (comment contracts):** Rewording two private test helpers introduced `docs.missing-invariant-doc` advisories despite the scoped baseline having none. Reading the installed rule showed that it recognizes specific contract words. State the actual must-hold rule in plain English, preserve useful parameter and return context, then repeat the same scoped formatter and analyzer commands. The repaired check reported no findings across the three selected files. **Evidence:** OBSERVED; `test/contract/skill-hardening-security-1.test.ts` (search: `posturesInReadingOrder`, `tokensInReadingOrder`); `scripts/gruff-ts.sh` (search: `exec "$GRUFF_BIN" "$@"`).
 
-**Recurrence 2026-09-18 (ignored test lint):** Installer closeout again treated ESLint's ignored-file exit zero as proof, then `--no-ignore` failed because tests are outside the parser projects. Read the supported target set before issuing a check; keep the ignored result and parser failure visible, and use Prettier plus runtime tests for this test source. Owners: `eslint.config.mjs` (search: `"test/**"`), `scripts/preflight-checks.sh` (search: `lint_targets=(src/cli src/dashboard)`), and `test/integration/hook-sync-recovery.test.ts` (search: `recovers a full v1.16.0 installation`).
+**Recurrence 2026-09-18 (ignored test lint):** Installer closeout again treated ESLint's ignored-file exit zero as proof, then `--no-ignore` failed because tests are outside the parser projects. Read the supported target set before issuing a check; keep the ignored result and parser failure visible, and use Prettier plus runtime tests for this test source. Owners: `eslint.config.mjs` (search: `"test/**"`), `scripts/preflight-checks.sh` (search: `lint_targets=(`), and `test/integration/hook-sync-recovery.test.ts` (search: `recovers a full v1.16.0 installation`).
 
 **Recurrence 2026-09-18 (policy selector):** The broad installer suite failed two archived-package migrations because its helper replayed the first PreToolUse row as the general guard. The migrated first row belonged to Git policy, which correctly allowed the destructive-shell payload. An isolated candidate selecting `deny-dangerous.sh` passed both failures without changing the payload or expected deny result. Bind policy proof to its owned script, preserve user-reviewed row order, and run the packaged cases after registration changes. Owners: `test/integration/packaged-hook-install.test.ts` (search: `readInstalledCodexDenyHandler`) and `src/cli/server/hook-registrar.ts` (search: `prepareGitProtection`). The candidate remained unapplied at the scope gate.
 
