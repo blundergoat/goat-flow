@@ -9,12 +9,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 export const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
-export const INSTALLED_SKILL_ROOTS = [
-  "workflow/skills",
-  ".claude/skills",
-  ".agents/skills",
-  ".github/skills",
-] as const;
+export const CANONICAL_SKILL_ROOT = "workflow/skills";
 
 /**
  * Read the exact project file a guidance contract needs; missing or unreadable files throw.
@@ -164,32 +159,27 @@ export function readPresetPrompt(presetId: string): string {
 }
 
 /**
- * Build paths for every canonical and installed skill copy so contracts catch guidance drift.
+ * Build the canonical skill path; installed-copy equality is checked separately.
  *
  * @param skillName - skill directory name, such as `goat-review`
- * @returns one SKILL.md path per registered root; the fixed root list makes this result nonempty
+ * @returns a singleton array containing the canonical SKILL.md path
  */
-export function installedSkillPaths(skillName: string): string[] {
-  // Each installation root represents a user-visible agent integration.
-  return INSTALLED_SKILL_ROOTS.map(
-    (skillRoot) => `${skillRoot}/${skillName}/SKILL.md`,
-  );
+export function canonicalSkillPaths(skillName: string): string[] {
+  return [`${CANONICAL_SKILL_ROOT}/${skillName}/SKILL.md`];
 }
 
 /**
- * Build paths for one reference across all registered roots so every agent receives the same guidance.
+ * Build the canonical reference path; installed-copy equality is checked separately.
  *
  * @param skillName - skill directory that owns the reference
  * @param referencePath - path inside the skill, such as `references/rubric-examples.md`
- * @returns one reference path per registered root; the fixed root list makes this result nonempty
+ * @returns a singleton array containing the canonical reference path
  */
-export function installedSkillReferencePaths(
+export function canonicalSkillReferencePaths(
   skillName: string,
   referencePath: string,
 ): string[] {
-  return INSTALLED_SKILL_ROOTS.map(
-    (skillRoot) => `${skillRoot}/${skillName}/${referencePath}`,
-  );
+  return [`${CANONICAL_SKILL_ROOT}/${skillName}/${referencePath}`];
 }
 
 /**
