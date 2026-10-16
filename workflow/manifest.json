@@ -49,6 +49,10 @@
     ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/hook-provider-adapters.mjs",
     ".goat-flow/hooks/hook-launch-runtime.mjs",
+    ".goat-flow/hooks/hook-launch.mjs",
+    ".goat-flow/hooks/hook-supervisor.mjs",
+    ".goat-flow/hooks/hook-output.mjs",
+    ".goat-flow/hooks/process-tree.mjs",
     ".goat-flow/hooks/hook-policy-state.cjs",
     ".goat-flow/hooks/vendor/js-yaml.cjs",
     ".goat-flow/hooks/gh-graphql-read.cjs",
@@ -250,6 +254,22 @@
       "ownership": "system-owned",
       "source": "workflow/hooks/hook-launch-runtime.mjs"
     },
+    ".goat-flow/hooks/hook-launch.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-launch.mjs"
+    },
+    ".goat-flow/hooks/hook-supervisor.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-supervisor.mjs"
+    },
+    ".goat-flow/hooks/hook-output.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-output.mjs"
+    },
+    ".goat-flow/hooks/process-tree.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/process-tree.mjs"
+    },
     ".goat-flow/hooks/hook-policy-state.cjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/hook-policy-state.cjs"
@@ -377,7 +397,8 @@
       "goat-debug": ["references/diagnostic-techniques.md"],
       "goat-plan": [
         "references/milestone-examples.md",
-        "references/issue-format.md"
+        "references/issue-format.md",
+        "references/issue-sample.md"
       ],
       "goat-critique": [
         "references/rubric-examples.md",
