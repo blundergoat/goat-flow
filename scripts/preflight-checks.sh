@@ -1924,9 +1924,18 @@ if [[ -f tsconfig.json ]]; then
         fi
     fi
 
+    # Typed hooks are checked without producing dist/hooks.
+    if [[ -f tsconfig.hooks.json ]]; then
+        if node scripts/generate-hook-runtime.mjs --check >/dev/null 2>&1 && npx tsc -p tsconfig.hooks.json --noEmit 2>/dev/null; then
+            pass "Hooks generation + typecheck (tsconfig.hooks.json)"
+        else
+            fail "Hooks generation/typecheck failed - run npm run typecheck:hooks for details"
+        fi
+    fi
+
     # ESLint (type-checked rules)
     if command -v npx >/dev/null 2>&1 && [[ -f eslint.config.mjs ]]; then
-        lint_targets=(src/cli src/dashboard)
+        lint_targets=(src/cli src/dashboard src/hooks)
         lint_output=$(npx eslint "${lint_targets[@]}" 2>&1) && lint_exit=0 || lint_exit=$?
         # Count only diagnostic rows, not ESLint's summary/fixability footer.
         lint_errors=$(echo "$lint_output" | grep -Ec '^[[:space:]]*[0-9]+:[0-9]+[[:space:]]+error[[:space:]]' || true)
