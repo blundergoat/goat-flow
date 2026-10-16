@@ -49,7 +49,7 @@
     ]
   },
   "scripts": {
-    "build": "npm run check:hook-policy-parser && npm run check:hook-graphql-parser && npm run check:managed-hook-contract && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
+    "build": "npm run check:hook-policy-parser && npm run check:hook-graphql-parser && npm run check:managed-hook-contract && npm run check:hook-runtime && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
     "build:dashboard": "tsc -p tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs",
     "test": "npm run test:fast",
     "test:fast": "node scripts/run-tests.mjs fast",
@@ -58,7 +58,7 @@
     "test:full": "npm run test:fast && npm run test:slow",
     "test:coverage": "node scripts/run-tests.mjs coverage",
     "gruff-ts": "gruff-ts",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.dashboard.json --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.dashboard.json --noEmit && npm run typecheck:hooks",
     "check:touched": "node scripts/check-touched.mjs",
     "check:node-pty": "node scripts/warn-node-pty.mjs",
     "goat-flow:cli": "node dist/cli/cli.js",
@@ -76,11 +76,14 @@
     "check:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --check",
     "check:hook-policy-parser": "node scripts/generate-hook-policy-parser.mjs --check",
     "check:hook-graphql-parser": "node scripts/generate-hook-graphql-parser.mjs --check",
-    "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
-    "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
+    "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,mts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,mts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "prepublishOnly": "npm run publish:check",
     "publish:check": "npm run publish:check:quick && npm run test:fast && node scripts/run-tests.mjs slow",
-    "publish:check:quick": "npm run check-versions && npm run check-instruction-parity && npm run build && npm run check-package-links"
+    "publish:check:quick": "npm run check-versions && npm run check-instruction-parity && npm run build && npm run check-package-links",
+    "typecheck:hooks": "npm run check:hook-runtime && tsc -p tsconfig.hooks.json --noEmit",
+    "generate:hook-runtime": "node scripts/generate-hook-runtime.mjs --write",
+    "check:hook-runtime": "node scripts/generate-hook-runtime.mjs --check"
   },
   "keywords": [
     "goat-flow",

@@ -6,12 +6,17 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   tseslint.configs.strictTypeChecked,
   {
+    files: ["src/**/*.{ts,mts}"],
     languageOptions: {
       parserOptions: {
         // Use explicit project list instead of projectService so dashboard
         // files (compiled with a separate tsconfig.dashboard.json) are
         // covered alongside the CLI sources.
-        project: ["./tsconfig.json", "./tsconfig.dashboard.json"],
+        project: [
+          "./tsconfig.json",
+          "./tsconfig.dashboard.json",
+          "./tsconfig.hooks.json",
+        ],
         tsconfigRootDir: import.meta.dirname,
       },
     },
