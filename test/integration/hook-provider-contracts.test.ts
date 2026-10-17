@@ -1,3 +1,4 @@
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 /**
  * Locks provider documentation, live capture, trust, effective-state, and result contracts.
  * Use these fixtures before dashboard or setup claims change, and when a hook result
@@ -732,17 +733,13 @@ describe("hook provider contracts", () => {
       );
 
       withCommandShim(
-        "mkdir",
-        [
-          'for argument in "$@"; do',
-          '  case "$argument" in',
-          "    /*)",
-          '      printf "mkdir: cannot create directory \'%s\': Read-only file system\\n" "$argument" >&2',
-          "      exit 1",
-          "      ;;",
-          "  esac",
-          "done",
-        ].join("\n"),
+        resolveExecutable("mkdir"),
+        {
+          when: { absoluteOperand: true },
+          stderr:
+            "mkdir: cannot create directory '{{absolute}}': Read-only file system\n",
+          status: 1,
+        },
         (commandShimEnvironment) => {
           const firstResult = runHook(
             projectRoot,
@@ -795,15 +792,13 @@ describe("hook provider contracts", () => {
         );
 
         withCommandShim(
-          "git",
-          [
-            'for argument in "$@"; do',
-            '  if [ "$argument" = rev-parse ]; then',
-            '    printf "fatal: detected dubious ownership in repository at \'%s\'\\n" "$PWD" >&2',
-            "    exit 128",
-            "  fi",
-            "done",
-          ].join("\n"),
+          resolveExecutable("git"),
+          {
+            when: { includes: ["rev-parse"] },
+            stderr:
+              "fatal: detected dubious ownership in repository at '{{cwd}}'\n",
+            status: 128,
+          },
           (commandShimEnvironment) => {
             const refusedResult = runHook(
               projectRoot,
@@ -854,89 +849,93 @@ describe("hook provider contracts", () => {
               : [];
           writeFile(projectRoot, "settings.env", "API_KEY=your_api_key_here\n");
 
-          withCommandShim("wc", "exit 2", (commandShimEnvironment) => {
-            const firstFailure = runHook(
-              projectRoot,
-              {
-                ...commandShimEnvironment,
-                [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
-              },
-              buildStopPayload(sessionIdentifier, false),
-            );
-            assert.equal(firstFailure.status, 2, firstFailure.stderr);
-            const writtenStatePaths = reentryStatePaths();
-            assert.equal(writtenStatePaths.length, 1);
-            const reentryStatePath = writtenStatePaths[0] as string;
-            if (process.platform !== "win32") {
-              assert.equal(statSync(reentryStatePath).mode & 0o777, 0o600);
-            }
-            assert.equal(
-              readFileSync(reentryStatePath, "utf8").includes(
-                sessionIdentifier,
-              ),
-              false,
-            );
-            // The per-session filename must carry the hash, never the raw session identifier.
-            assert.equal(reentryStatePath.includes(sessionIdentifier), false);
+          withCommandShim(
+            resolveExecutable("wc"),
+            { status: 2 },
+            (commandShimEnvironment) => {
+              const firstFailure = runHook(
+                projectRoot,
+                {
+                  ...commandShimEnvironment,
+                  [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+                },
+                buildStopPayload(sessionIdentifier, false),
+              );
+              assert.equal(firstFailure.status, 2, firstFailure.stderr);
+              const writtenStatePaths = reentryStatePaths();
+              assert.equal(writtenStatePaths.length, 1);
+              const reentryStatePath = writtenStatePaths[0] as string;
+              if (process.platform !== "win32") {
+                assert.equal(statSync(reentryStatePath).mode & 0o777, 0o600);
+              }
+              assert.equal(
+                readFileSync(reentryStatePath, "utf8").includes(
+                  sessionIdentifier,
+                ),
+                false,
+              );
+              // The per-session filename must carry the hash, never the raw session identifier.
+              assert.equal(reentryStatePath.includes(sessionIdentifier), false);
 
-            // Example: the user edits the file after a failed scan and introduces a real token.
-            writeFile(
-              projectRoot,
-              "settings.env",
-              `API_KEY=${TEST_API_TOKEN}\n`,
-            );
-            const changedFinding = runHook(
-              projectRoot,
-              { [FORCE_BASH3_ENV_KEY]: forceBash3Fallback },
-              buildStopPayload(sessionIdentifier, true),
-            );
-            assert.equal(changedFinding.status, 2, changedFinding.stderr);
-            assert.match(changedFinding.stderr, /API token/u);
+              // Example: the user edits the file after a failed scan and introduces a real token.
+              writeFile(
+                projectRoot,
+                "settings.env",
+                `API_KEY=${TEST_API_TOKEN}\n`,
+              );
+              const changedFinding = runHook(
+                projectRoot,
+                { [FORCE_BASH3_ENV_KEY]: forceBash3Fallback },
+                buildStopPayload(sessionIdentifier, true),
+              );
+              assert.equal(changedFinding.status, 2, changedFinding.stderr);
+              assert.match(changedFinding.stderr, /API token/u);
 
-            writeFile(
-              projectRoot,
-              "settings.env",
-              "API_KEY=your_api_key_here\n",
-            );
-            const fixedResult = runHook(
-              projectRoot,
-              { [FORCE_BASH3_ENV_KEY]: forceBash3Fallback },
-              buildStopPayload(sessionIdentifier, true),
-            );
-            assert.equal(fixedResult.status, 0, fixedResult.stderr);
+              writeFile(
+                projectRoot,
+                "settings.env",
+                "API_KEY=your_api_key_here\n",
+              );
+              const fixedResult = runHook(
+                projectRoot,
+                { [FORCE_BASH3_ENV_KEY]: forceBash3Fallback },
+                buildStopPayload(sessionIdentifier, true),
+              );
+              assert.equal(fixedResult.status, 0, fixedResult.stderr);
 
-            const repeatedFirstFailure = runHook(
-              projectRoot,
-              {
-                ...commandShimEnvironment,
-                [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
-              },
-              buildStopPayload(sessionIdentifier, false),
-            );
-            assert.equal(
-              repeatedFirstFailure.status,
-              2,
-              repeatedFirstFailure.stderr,
-            );
-            const repeatedActiveFailure = runHook(
-              projectRoot,
-              {
-                ...commandShimEnvironment,
-                [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
-              },
-              buildStopPayload(sessionIdentifier, true),
-            );
-            assert.equal(
-              repeatedActiveFailure.status,
-              0,
-              repeatedActiveFailure.stderr,
-            );
-            assert.match(
-              repeatedActiveFailure.stderr,
-              /ending repeated Stop.*infrastructure failure/iu,
-            );
-            assert.deepEqual(reentryStatePaths(), []);
-          });
+              const repeatedFirstFailure = runHook(
+                projectRoot,
+                {
+                  ...commandShimEnvironment,
+                  [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+                },
+                buildStopPayload(sessionIdentifier, false),
+              );
+              assert.equal(
+                repeatedFirstFailure.status,
+                2,
+                repeatedFirstFailure.stderr,
+              );
+              const repeatedActiveFailure = runHook(
+                projectRoot,
+                {
+                  ...commandShimEnvironment,
+                  [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+                },
+                buildStopPayload(sessionIdentifier, true),
+              );
+              assert.equal(
+                repeatedActiveFailure.status,
+                0,
+                repeatedActiveFailure.stderr,
+              );
+              assert.match(
+                repeatedActiveFailure.stderr,
+                /ending repeated Stop.*infrastructure failure/iu,
+              );
+              assert.deepEqual(reentryStatePaths(), []);
+            },
+          );
         });
       });
     }
@@ -976,54 +975,58 @@ describe("hook provider contracts", () => {
           assert.equal(findingEnvelope.findings[0]?.target, "settings.env");
 
           writeFile(projectRoot, "settings.env", "API_KEY=your_api_key_here\n");
-          withCommandShim("wc", "exit 2", (commandShimEnvironment) => {
-            const incompleteEnvironment = {
-              ...commandShimEnvironment,
-              ...managedCodexResultEnvironment,
-              [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
-            };
-            const firstIncompleteResult = runHook(
-              projectRoot,
-              incompleteEnvironment,
-              buildStopPayload(sessionIdentifier, false),
-            );
-            assert.equal(
-              firstIncompleteResult.status,
-              0,
-              firstIncompleteResult.stderr,
-            );
-            const firstIncompleteEnvelope = JSON.parse(
-              firstIncompleteResult.stdout,
-            );
-            assert.equal(firstIncompleteEnvelope.outcome, "incomplete");
-            assert.equal(
-              firstIncompleteEnvelope.reasonCode,
-              "coverage-incomplete",
-            );
+          withCommandShim(
+            resolveExecutable("wc"),
+            { status: 2 },
+            (commandShimEnvironment) => {
+              const incompleteEnvironment = {
+                ...commandShimEnvironment,
+                ...managedCodexResultEnvironment,
+                [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+              };
+              const firstIncompleteResult = runHook(
+                projectRoot,
+                incompleteEnvironment,
+                buildStopPayload(sessionIdentifier, false),
+              );
+              assert.equal(
+                firstIncompleteResult.status,
+                0,
+                firstIncompleteResult.stderr,
+              );
+              const firstIncompleteEnvelope = JSON.parse(
+                firstIncompleteResult.stdout,
+              );
+              assert.equal(firstIncompleteEnvelope.outcome, "incomplete");
+              assert.equal(
+                firstIncompleteEnvelope.reasonCode,
+                "coverage-incomplete",
+              );
 
-            const boundedReentryResult = runHook(
-              projectRoot,
-              incompleteEnvironment,
-              buildStopPayload(sessionIdentifier, true),
-            );
-            assert.equal(
-              boundedReentryResult.status,
-              0,
-              boundedReentryResult.stderr,
-            );
-            const boundedReentryEnvelope = JSON.parse(
-              boundedReentryResult.stdout,
-            );
-            assert.equal(boundedReentryEnvelope.outcome, "incomplete");
-            assert.equal(
-              boundedReentryEnvelope.reasonCode,
-              "bounded-reentry-ended",
-            );
-            assert.match(
-              boundedReentryResult.stderr,
-              /no clean scan was recorded/iu,
-            );
-          });
+              const boundedReentryResult = runHook(
+                projectRoot,
+                incompleteEnvironment,
+                buildStopPayload(sessionIdentifier, true),
+              );
+              assert.equal(
+                boundedReentryResult.status,
+                0,
+                boundedReentryResult.stderr,
+              );
+              const boundedReentryEnvelope = JSON.parse(
+                boundedReentryResult.stdout,
+              );
+              assert.equal(boundedReentryEnvelope.outcome, "incomplete");
+              assert.equal(
+                boundedReentryEnvelope.reasonCode,
+                "bounded-reentry-ended",
+              );
+              assert.match(
+                boundedReentryResult.stderr,
+                /no clean scan was recorded/iu,
+              );
+            },
+          );
         });
       });
     }

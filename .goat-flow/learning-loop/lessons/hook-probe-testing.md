@@ -1,6 +1,6 @@
 ---
 category: hook-probe-testing
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md).
@@ -19,7 +19,7 @@ last_reviewed: 2026-10-10
 
 ## Lesson: Copilot JSON hook probes must use Copilot-shaped payloads
 
-**Status:** active | **Created:** 2026-06-07 | **Incident count:** 2 | **Latest occurrence:** 2026-09-27
+**Status:** active | **Created:** 2026-06-07 | **Incident count:** 3 | **Latest occurrence:** 2026-10-16
 **Severity:** INTEGRATION
 
 **Decision changed:** Copy the provider's exact event shape and serialize command text at every JSON layer before interpreting a probe result.
@@ -29,6 +29,7 @@ last_reviewed: 2026-10-10
 
 Use a JSON serializer instead of interpolating command strings into provider events.
 Include quoted command bodies in deny and allow controls, then require one complete response object.
+Bind reply assertions to the exact provider/event renderer; terminal Stop warnings and policy coverage reports use different text.
 
 **What happened:** A cross-version no-jq probe set an invented JSON-mode switch and called the hook's direct-check interface. That produced stderr and exit 2; the real Copilot-shaped payload returned a JSON denial through the host's expected exit path.
 
@@ -40,6 +41,8 @@ The Copilot and Antigravity command helpers now serialize their payloads; paired
 
 Evidence: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh`
 (search: `expect_copilot_block`, `expect_antigravity_block`, `quoted conditional deletion`, `conditional output returns one Antigravity allow`).
+
+**Recurrence 2026-10-16:** A native Stop-boundary test expected Codex's `coverage none` warning phrase in an Antigravity policy reply. Its renderer correctly reported completed/skipped counts and `(none)`. Reading that owner and correcting the assertion cleared the failure without a runtime change. Evidence: `workflow/hooks/hook-provider-adapters.mjs` (search: `renderHookResultMessage`).
 
 ---
 
@@ -78,7 +81,7 @@ The approved server follow-up restored all 17 managed-divergence cases with priv
 
 ## Lesson: Configured hook smoke must verify the registered guard path
 
-**Status:** active | **Created:** 2026-05-27 | **Incident count:** 12 | **Latest occurrence:** 2026-10-03
+**Status:** active | **Created:** 2026-05-27 | **Incident count:** 13 | **Latest occurrence:** 2026-10-17
 **Severity:** INTEGRATION
 
 **Decision changed:** Treat configured replay as a safe-and-dangerous semantic matrix, and make mocks identify the command boundary rather than infer it from call order.
@@ -114,6 +117,8 @@ The approved server follow-up restored all 17 managed-divergence cases with priv
 **Recurrence 2026-10-03 (Stop input contract):** The managed Codex Stop launcher began rejecting a Stop without `turn_id` as `input-invalid` before its scanner ran, but the configured-replay probes still sent no `turn_id`. The classifier then read the launcher's exit-0 block reply as `clean`, so the valid probe passed without a scan and the wrong-event probe failed. The only Codex post-turn replay test was Windows-gated, so Linux runs stayed green while CI `windows-hook-contracts` failed on three consecutive pushes to PR #67; that gate is now removed. Run a gated test's body on the local platform before trusting a green local suite. Evidence anchors: `src/cli/hooks-configured-runtime-evidence.ts` (search: `POST_TURN_HOOK_SCENARIOS`), (search: `never records a clean scan`), and `test/integration/hook-effective-state.test.ts` (search: `replays Codex Stop results without expiring provider proof`).
 
 **Recurrence 2026-10-03 (reply wording):** An independent review of that fix found the older finding pattern `post-turn-safety: .* at ` still ran before the new unavailable rule and matched the launcher's `Output: at least 70000 stdout` byte counts. A reply from a scanner that never ran therefore passed the valid probe as a finding. The classifier now reads the `post-turn-safety: UNAVAILABLE`, `INCOMPLETE` or `BLOCK` label before free text, and a Linux test drives a real envelope overflow through a `bash` wrapper on PATH. Evidence anchors: `src/cli/hooks-configured-runtime-evidence.ts` (search: `Match whole labels and phrases only`) and `test/unit/hooks-runtime-evidence.test.ts` (search: `fails a Codex Stop hook that never delivers a scan`).
+
+**Recurrence 2026-10-17 (native caller controls):** A missing evaluator fails the first allow probe, before the blocked probe. The next control rewrote settings but reused createFS's cached reads. Assert the failed policy without pinning probe order, and create a fresh filesystem snapshot after fixture mutations. Evidence: `test/integration/hook-native-audit-discovery.test.ts` (search: `const context=()=>`) and `src/cli/facts/fs.ts` (search: `createCachedReadFile`).
 
 ## Lesson: Hook parser regressions need false-positive grammar probes
 

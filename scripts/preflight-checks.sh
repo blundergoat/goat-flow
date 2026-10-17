@@ -34,15 +34,17 @@ MANIFEST_PATH="$ROOT_DIR/workflow/manifest.json"
 verbose=0
 no_color=
 ascii_mode=
+skip_tests=0
 # Read display options before choosing the report format the developer will see.
 for arg in "$@"; do
     case "$arg" in
         -v|--verbose) verbose=1 ;;
         --no-color)   no_color=1 ;;
         --ascii)      ascii_mode=1 ;;
+        --skip-tests) skip_tests=1 ;;
         -h|--help)
             cat <<'HELP'
-Usage: preflight-checks.sh [--verbose] [--no-color] [--ascii] [--help]
+Usage: preflight-checks.sh [--verbose] [--no-color] [--ascii] [--skip-tests] [--help]
 
 Runs the local pre-flight quality gate. Exits 0 when all checks pass,
 non-zero otherwise.
@@ -57,6 +59,8 @@ Options:
       --no-color   Disable ANSI colour. Equivalent to NO_COLOR=1.
       --ascii      Force ASCII fallback for terminals without box-drawing.
                    Auto-enabled when LANG/LC_ALL is missing UTF-8.
+      --skip-tests Report the package test command as skipped instead of
+                   running it; for callers that run the suite separately.
   -h, --help       Show this help and exit.
 
 Environment:
@@ -1920,9 +1924,18 @@ if [[ -f tsconfig.json ]]; then
         fi
     fi
 
+    # Typed hooks are checked without producing dist/hooks.
+    if [[ -f tsconfig.hooks.json ]]; then
+        if node scripts/generate-hook-runtime.mjs --check >/dev/null 2>&1 && npx tsc -p tsconfig.hooks.json --noEmit 2>/dev/null; then
+            pass "Hooks generation + typecheck (tsconfig.hooks.json)"
+        else
+            fail "Hooks generation/typecheck failed - run npm run typecheck:hooks for details"
+        fi
+    fi
+
     # ESLint (type-checked rules)
     if command -v npx >/dev/null 2>&1 && [[ -f eslint.config.mjs ]]; then
-        lint_targets=(src/cli src/dashboard)
+        lint_targets=(src/cli src/dashboard src/hooks)
         lint_output=$(npx eslint "${lint_targets[@]}" 2>&1) && lint_exit=0 || lint_exit=$?
         # Count only diagnostic rows, not ESLint's summary/fixability footer.
         lint_errors=$(echo "$lint_output" | grep -Ec '^[[:space:]]*[0-9]+:[0-9]+[[:space:]]+error[[:space:]]' || true)
@@ -2004,7 +2017,7 @@ if [[ -f tsconfig.json ]]; then
 fi
 
 # ── Tests ────────────────────────────────────────────────────────────
-if [[ -f package.json ]] && grep -q '"test"' package.json; then
+if [[ "$skip_tests" -ne 1 ]] && [[ -f package.json ]] && grep -q '"test"' package.json; then
     section "Tests"
     test_reports_coverage=false
     coverage_output=""
@@ -2116,6 +2129,12 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
             note "Coverage summary unavailable (missing # end of coverage report)"
         fi
     fi
+fi
+
+# A caller that runs the suite in a separate job records the skip instead of running it twice.
+if [[ "$skip_tests" -eq 1 ]] && [[ -f package.json ]] && grep -q '"test"' package.json; then
+    section "Tests"
+    skip "Package tests skipped by --skip-tests"
 fi
 
 # ── Dependency Audit ─────────────────────────────────────────────────

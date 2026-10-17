@@ -3,12 +3,12 @@
  * Edits Gruff has no work for complete silently. Project source the selected install cannot reach stays visible,
  * and that result, a finding and an analyzer failure all reach the model through the handler setup registers for Claude.
  */
+import { copyHookTree, hookSelection } from "../helpers/hook-entrypoint.js";
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   closeSync,
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -84,11 +84,9 @@ function makeGruffWorkspace(analyzerEnvelope: string): GruffWorkspace {
  * @returns the registered `node` arguments, unchanged
  */
 function registerClaudeGruffHandler(projectRoot: string): string[] {
-  cpSync(
-    join(PROJECT_ROOT, "workflow", "hooks"),
-    join(projectRoot, ".goat-flow", "hooks"),
-    { recursive: true },
-  );
+  if (hookSelection() === "candidate")
+    throw new Error("candidate registration seam unavailable until M02");
+  copyHookTree(join(projectRoot, ".goat-flow", "hooks"));
   mkdirSync(join(projectRoot, ".claude"));
   const settingsPath = join(projectRoot, ".claude", "settings.json");
   writeFileSync(settingsPath, "{}\n");

@@ -39,11 +39,13 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 ├── install-command.ts           = install flow: preview, admission, installer launch, post-install verification
 ├── hooks-command.ts             = CLI entry for hook state, toggles, sync, and explicit runtime proof
 ├── hooks-runtime-evidence.ts    = bounded managed deny-hook scenarios, verdicts, renderers, and local events
+├── hook-spawn-descriptor.ts     = platform replay selection shared by configured verification and audit
 ├── install-invocation.ts        = install/setup invocation parsing plus Windows-compatible Bash discovery
 ├── skill-author*.ts             = `goat-flow skill new` authoring flow, scaffold templates, and RED-log support
 ├── skill-command-parser.ts      = lightweight `skill new|doctor` positional and flag rules
 ├── skill-doctor.ts              = read-only installed skill path, invocation, frontmatter, and mirror diagnosis
 ├── review-command-parser.ts     = `review validate` positional and flag rules
+├── review-command.ts            = `goat-flow review` request runner: usage checks, input reading, rendered result and exit code
 ├── review-validate*.ts          = review Proof Gate parsing, evidence anchors, ledgers, integrity, sections, and verdicts
 ├── help.ts                      = contextual root and per-command `--help` rendering
 ├── hook-*.ts                    = provider-neutral hook and verification contracts shared by CLI and server
@@ -150,6 +152,25 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 └── stats/                       = learning-loop health report and renderer
 ```
 
+## src/hooks/ -- Typed source for standalone generated hooks
+
+```text
+src/hooks/
+├── deny-dangerous.mts           = native policy candidate entrypoint
+├── deny-git-mutations.mts       = native policy candidate entrypoint
+├── post-turn-safety.mts         = native Stop scanner candidate entrypoint
+├── gruff-code-quality.mts       = native Gruff candidate entrypoint
+├── run-hook.mts                 = native launcher API and CLI for selected-root validation, execution and provider delivery
+├── hook-launch.mts              = native child launch, selected-root argv and existing path-safety checks
+├── hook-supervisor.mts          = native single-result delivery with bounded deadline/output cleanup
+├── hook-output.mts              = bounded native result/diagnostic capture and strict UTF-8 completion
+├── policy-input.mts             = strict request decoding and provider command/path extraction for both policy candidates
+├── policy-heredoc.mts           = existing non-shell stdin consumers and exact Goat Flow data-command recognition
+├── policy-words.mts             = C-locale word parsing, wrapper payloads and byte-indexed shell parentheses
+├── policy-git.mts               = native Git command-bearing config keys and payload transformations
+└── process-tree.mts             = native owned-process cleanup; generated into both hook trees
+```
+
 ## src/dashboard/ -- Dashboard frontend
 
 ```text
@@ -225,12 +246,25 @@ workflow/                        = packaged template source copied into target p
 │
 ├── hooks/                       = hook templates and agent hook config templates
 │   ├── run-with-bash.mjs        = cross-platform Git Bash discovery and managed shell launcher
+│   ├── run-hook.mjs             = generated native candidate launcher API and CLI from src/hooks
 │   ├── hook-launch-runtime.mjs  = managed launcher runtime shared by every provider hook entry
+│   ├── hook-launch.mjs          = generated native child launch and path checks from src/hooks
+│   ├── hook-supervisor.mjs      = generated native deadline/output supervision from src/hooks
+│   ├── hook-output.mjs          = generated bounded native output capture from src/hooks
+│   ├── policy-input.mjs         = generated native policy request decoding and command/path extraction
+│   ├── policy-heredoc.mjs       = generated non-shell stdin consumer and Goat Flow data-command recognition
+│   ├── policy-words.mjs         = generated shell word parsing, wrapper payloads and byte-indexed parentheses
+│   ├── policy-git.mjs           = generated Git config key and command-payload classification
+│   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
 │   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy template
+│   ├── deny-dangerous.mjs       = generated native policy candidate
 │   ├── deny-git-mutations.sh    = fixed Git commit, publication, destructive-operation and GitHub CLI write policy template
+│   ├── deny-git-mutations.mjs   = generated native policy candidate
 │   ├── gruff-code-quality.sh    = canonical gruff code-quality hook template
+│   ├── gruff-code-quality.mjs   = generated native Gruff candidate
 │   ├── post-turn-safety.sh      = canonical post-turn safety hook template
+│   ├── post-turn-safety.mjs     = generated native Stop scanner candidate
 │   ├── gh-graphql-read.cjs      = admits one literal GitHub GraphQL query for the Git policy without executing command text
 │   ├── hook-policy-state.cjs    = dependency-free reader of saved hook choices for launchers and installers
 │   ├── hook-policy-state.d.cts  = type declarations for the shared hook-choice reader
@@ -254,6 +288,8 @@ scripts/                         = development, release, test, and maintenance s
 ├── check-gruff-warning-ratchet.mjs = reviewed Gruff warning-debt ratchet: launches the analyzer, prints the verdict
 ├── gruff-warning-ratchet-checks.mjs = ratchet comparison rules: manifest load/validate, scan shape, debt diff
 ├── ratchet-failure-report.mjs   = bounded per-category failure collector shared by the ratchet modules
+├── check-hook-parity.mjs        = frozen Bash policy extraction, corpus integrity and host divergence
+├── hook-parity-reference-command.mjs = literal Windows argument handoff for frozen reference commands
 ├── check-instruction-parity.mjs = instruction-file section/order parity
 ├── check-touched.mjs            = read-only checks selected from working-tree changes, including deletion and rename triggers
 ├── check-markdown-links.sh      = markdown link resolver
@@ -265,6 +301,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── deploy-landing.sh            = docs/site deployment helper
 ├── generate-hook-policy-parser.mjs = vendors the locked YAML parser and license for dependency-free installed hooks
 ├── generate-hook-graphql-parser.mjs = bundles the locked GraphQL parser and license for dependency-free installed hooks
+├── generate-hook-runtime.mjs    = emits readable typed hook modules, stamps and installed mirrors; checks drift without writing
 ├── generate-managed-hook-desired-state.mjs = regenerates the standalone installer's managed-hook contract from the TypeScript writer
 ├── gruff-ts.sh                  = gruff-ts static-analysis wrapper; args pass through, bare run prints the digest
 ├── install-browser-tools.sh     = browser-use and Playwright install helper
@@ -283,6 +320,28 @@ scripts/                         = development, release, test, and maintenance s
 ├── installers/                  = installer-related helper scripts
 └── maintenance/                 = cleanup, secret scanning, Zone.Identifier removal
 ```
+
+## test/ -- Hook migration fixtures and controls
+
+```text
+test/
+├── helpers/hook-entrypoint.ts                  = reference/candidate/installed test selection; complete dependency trees, missing-candidate refusal
+├── helpers/restricted-consumer-env.ts          = child-only executable allowlist and preload environment
+├── helpers/spawn-guard.mjs                     = Node child-process instrumentation, propagation and launch journal; not an OS sandbox
+├── helpers/check-installed-policy.ts          = selected policy transport; command inputs remain inert classifier data
+├── integration/restricted-env-controls.test.ts = actual named/namespace/require denials, stripped-child propagation and clean Node/Git/analyzer control
+├── integration/hook-parity.test.ts             = Node corpus, frozen-hash and npm-pack inventory controls
+├── integration/hook-parity-reference.test.ts   = frozen Bash extraction, literal-input and dependency-isolation controls
+├── integration/post-turn-safety-hook.helpers.ts = selected scanner transport and declared absolute command-fault fixtures
+├── integration/gruff-code-quality-smoke.helpers.ts = selected Gruff transport and Node analyzer programs outside analyzed projects
+├── integration/packaged-hook-install.test.ts   = archive consumer installation, including corpus byte identity
+├── unit/hook-entrypoint.test.ts                = selector refusal and frozen dependency-root controls
+└── fixtures/hooks-bash/                        = immutable M01 Bash trees, dependency hashes and per-ID reference outcomes; never packed
+```
+
+`.github/workflows/ci.yml` owns native Linux/macOS/Windows floor/LTS controls, a separately identified WSL2 route, Linux reference tests with jq 1.6 and both locales, and Windows Git Bash/WSL divergence reports. Divergence reports do not accept candidates. The original Bash self-tests stay immutable; each port owns its candidate suite conversion.
+
+The shipped corpus lives at `workflow/hooks/deny-dangerous/corpus.json`, mirrored to `.goat-flow/hooks/deny-dangerous/corpus.json`. `workflow/manifest.json` declares ownership and required delivery; `workflow/install-goat-flow.sh` copies it as data. The test-only reference outcomes stay under `test/fixtures/hooks-bash/`.
 
 ## docs/ -- Documentation
 
@@ -325,12 +384,25 @@ docs/                            = user and maintainer documentation
 │   └── patterns/                = successful reusable approaches
 ├── hooks/                       = committed central hook dispatchers and policy store
 │   ├── run-with-bash.mjs        = cross-platform Git Bash discovery and managed shell launcher
+│   ├── run-hook.mjs             = generated native candidate launcher API and CLI from src/hooks
 │   ├── hook-launch-runtime.mjs  = managed launcher runtime shared by every provider hook entry
+│   ├── hook-launch.mjs          = generated native child launch and path checks from src/hooks
+│   ├── hook-supervisor.mjs      = generated native deadline/output supervision from src/hooks
+│   ├── hook-output.mjs          = generated bounded native output capture from src/hooks
+│   ├── policy-input.mjs         = generated native policy request decoding and command/path extraction
+│   ├── policy-heredoc.mjs       = generated non-shell stdin consumer and Goat Flow data-command recognition
+│   ├── policy-words.mjs         = generated shell word parsing, wrapper payloads and byte-indexed parentheses
+│   ├── policy-git.mjs           = generated Git config key and command-payload classification
+│   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
 │   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy entrypoint
+│   ├── deny-dangerous.mjs       = generated native policy candidate
 │   ├── deny-git-mutations.sh    = fixed Git commit, publication, destructive-operation and GitHub CLI write policy entrypoint
+│   ├── deny-git-mutations.mjs   = generated native policy candidate
 │   ├── gruff-code-quality.sh    = central gruff quality dispatcher used by all agents
+│   ├── gruff-code-quality.mjs   = generated native Gruff candidate
 │   ├── post-turn-safety.sh      = central post-turn safety hook used by supported Stop agents
+│   ├── post-turn-safety.mjs     = generated native Stop scanner candidate
 │   ├── gh-graphql-read.cjs      = admits one literal GitHub GraphQL query for the Git policy without executing command text
 │   ├── hook-policy-state.cjs    = dependency-free reader of saved hook choices for launchers and installers
 │   ├── deny-dangerous/          = shared parser, response implementation, policy modules and routed self-test

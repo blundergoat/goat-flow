@@ -5,12 +5,13 @@
  * Harmless controls preserve investigation workflows that need to display those same words.
  */
 import assert from "node:assert/strict";
+import { copyHookTree } from "../helpers/hook-entrypoint.js";
 import {
   checkInstalledPolicy,
   runHookWithPayload,
 } from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { after, describe, it } from "node:test";
@@ -18,9 +19,7 @@ import { after, describe, it } from "node:test";
 const fixture = mkdtempSync(resolve(tmpdir(), "goat-native-shell-policy-"));
 const hooks = resolve(fixture, ".goat-flow/hooks");
 mkdirSync(hooks, { recursive: true });
-cpSync(resolve(import.meta.dirname, "../../workflow/hooks"), hooks, {
-  recursive: true,
-});
+copyHookTree(hooks);
 assert.equal(spawnSync("git", ["init", "-q", fixture]).status, 0);
 after(() => rmSync(fixture, { recursive: true, force: true }));
 

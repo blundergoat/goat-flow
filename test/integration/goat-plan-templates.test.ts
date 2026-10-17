@@ -18,7 +18,7 @@ import {
 } from "../unit/plans-check.helpers.js";
 
 const EXAMPLES = "workflow/skills/goat-plan/references/milestone-examples.md";
-const ISSUE = "workflow/skills/goat-plan/references/issue-format.md";
+const ISSUE_SAMPLE = "workflow/skills/goat-plan/references/issue-sample.md";
 const PROBLEM =
   "Plan authors lose required verification work when examples use unsupported section headings.";
 const BENEFIT =
@@ -664,21 +664,35 @@ describe("shipped goat-plan templates", () => {
     );
   });
 
-  it("T6: the worked ISSUE headline equals its delivery bands", () => {
-    const issue = shippedFence(ISSUE, "Worked sample");
-    const bands = [...issue.matchAll(/^-[^\n]+ = (\d+)-(\d+)h$/gmu)];
-    assert.equal(bands.length, 3);
+  it("T6: the worked ISSUE headline equals its likely minutes", () => {
+    const issue = shippedFence(ISSUE_SAMPLE, "Worked sample");
+    const tasks = [...issue.matchAll(/^- \[ \] [^\n]+ = (\d+) min$/gmu)];
+    assert.equal(tasks.length, 8);
+    const minutes = tasks.reduce((sum, row) => sum + Number(row[1]), 0);
     const headline = issue.match(
-      /\| How long will it take\? \| (\d+)-(\d+) hours/u,
+      /\| How long will it take\? \| About ([\d.]+) hours of agent work: (\d+) minutes of likely estimates, waiting on people excluded \|/u,
     );
     assert.ok(headline);
-    assert.deepEqual(
-      [Number(headline[1]), Number(headline[2])],
-      [
-        bands.reduce((sum, row) => sum + Number(row[1]), 0),
-        bands.reduce((sum, row) => sum + Number(row[2]), 0),
-      ],
+    assert.equal(Number(headline[2]), minutes);
+    // The hours figure rounds the minutes to the nearest half hour, as issue-format.md states.
+    assert.equal(Number(headline[1]), Math.round(minutes / 30) / 2);
+    // The Tasks total line repeats the sum and the hours figure, as issue-format.md requires.
+    const total = issue.match(
+      /^## Tasks\n\n\w+ tasks totalling (\d+) minutes of likely estimates, about ([\d.]+) hours of agent work\.$/mu,
     );
+    assert.ok(total);
+    assert.equal(Number(total[1]), minutes);
+    assert.equal(Number(total[2]), Math.round(minutes / 30) / 2);
+    // One benefit bullet and one before/after row per task keep the sample honest about the format's one-per-task rule.
+    const benefits = issue.match(
+      /^## What each task gives the user\n\n((?:- [^\n]+\n)+)/mu,
+    );
+    assert.ok(benefits);
+    assert.equal(benefits[1]?.trim().split("\n").length, tasks.length);
+    const rows = [
+      ...issue.matchAll(/^\| [^|\n]+ \| [^|\n]+ \| [^|\n]+ \|$/gmu),
+    ].filter((row) => !row[0].startsWith("| Change |"));
+    assert.equal(rows.length, tasks.length);
   });
 
   it("T6: plans check leaves ISSUE arithmetic and requirement coverage to the author", () => {
@@ -691,9 +705,9 @@ describe("shipped goat-plan templates", () => {
       });
       const baseline = runPlansCheck(plan, "--strict");
       assert.equal(baseline.status, 0, baseline.stdout);
-      const issue = shippedFence(ISSUE, "Worked sample").replace(
-        /\d+-\d+ hours of agent work/u,
-        "999-1000 hours of agent work",
+      const issue = shippedFence(ISSUE_SAMPLE, "Worked sample").replace(
+        /About [\d.]+ hours of agent work: \d+ minutes/u,
+        "About 999 hours of agent work: 59940 minutes",
       );
       writeFileSync(join(plan, "ISSUE.md"), issue);
       const withIssue = runPlansCheck(plan, "--strict");

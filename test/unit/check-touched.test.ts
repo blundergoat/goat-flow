@@ -452,8 +452,10 @@ it("keeps source, configuration and guidance triggers for deletions and renames 
   const cases = [
     ["src/cli/gone.ts", true, true, false],
     ["src/dashboard/gone.ts", true, true, false],
+    ["src/hooks/gone.mts", true, true, false],
     ["tsconfig.json", true, false, false],
     ["tsconfig.dashboard.json", true, false, false],
+    ["tsconfig.hooks.json", true, false, false],
     ["package.json", true, false, false],
     ["package-lock.json", true, false, false],
     ["AGENTS.md", false, false, true],
@@ -492,6 +494,7 @@ it("admits only existing files in each tool's owned paths and deduplicates renam
   const paths = [
     "src/cli/live.ts",
     "src/dashboard/live.ts",
+    "src/hooks/live.mts",
     "src/asset.html",
     "test/live.test.ts",
     "scripts/live.mjs",
@@ -509,11 +512,13 @@ it("admits only existing files in each tool's owned paths and deduplicates renam
     "src/asset.html",
     "src/cli/live.ts",
     "src/dashboard/live.ts",
+    "src/hooks/live.mts",
     "test/live.test.ts",
   ]);
   assert.deepEqual(selected.eslint, [
     "src/cli/live.ts",
     "src/dashboard/live.ts",
+    "src/hooks/live.mts",
   ]);
   assert.equal(selected.unicode.includes("src/gone.ts"), false);
   const testOnly = selectChecks(root, [

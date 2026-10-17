@@ -43,16 +43,30 @@
     ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
     ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
     ".goat-flow/hooks/deny-dangerous.sh",
+    ".goat-flow/hooks/deny-dangerous.mjs",
     ".goat-flow/hooks/deny-git-mutations.sh",
+    ".goat-flow/hooks/deny-git-mutations.mjs",
     ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+    ".goat-flow/hooks/deny-dangerous/corpus.json",
     ".goat-flow/hooks/gruff-code-quality.sh",
+    ".goat-flow/hooks/gruff-code-quality.mjs",
     ".goat-flow/hooks/hook-provider-adapters.mjs",
     ".goat-flow/hooks/hook-launch-runtime.mjs",
+    ".goat-flow/hooks/hook-launch.mjs",
+    ".goat-flow/hooks/run-hook.mjs",
+    ".goat-flow/hooks/hook-supervisor.mjs",
+    ".goat-flow/hooks/hook-output.mjs",
+    ".goat-flow/hooks/policy-input.mjs",
+    ".goat-flow/hooks/policy-heredoc.mjs",
+    ".goat-flow/hooks/policy-words.mjs",
+    ".goat-flow/hooks/policy-git.mjs",
+    ".goat-flow/hooks/process-tree.mjs",
     ".goat-flow/hooks/hook-policy-state.cjs",
     ".goat-flow/hooks/vendor/js-yaml.cjs",
     ".goat-flow/hooks/gh-graphql-read.cjs",
     ".goat-flow/hooks/vendor/graphql.cjs",
     ".goat-flow/hooks/post-turn-safety.sh",
+    ".goat-flow/hooks/post-turn-safety.mjs",
     ".goat-flow/hooks/run-with-bash.mjs",
     ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
     ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
@@ -225,17 +239,33 @@
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-dangerous.sh"
     },
+    ".goat-flow/hooks/deny-dangerous.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous.mjs"
+    },
     ".goat-flow/hooks/deny-git-mutations.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-git-mutations.sh"
+    },
+    ".goat-flow/hooks/deny-git-mutations.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-git-mutations.mjs"
     },
     ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-dangerous/guard-runtime.sh"
     },
+    ".goat-flow/hooks/deny-dangerous/corpus.json": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/corpus.json"
+    },
     ".goat-flow/hooks/gruff-code-quality.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/gruff-code-quality.sh"
+    },
+    ".goat-flow/hooks/gruff-code-quality.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff-code-quality.mjs"
     },
     ".goat-flow/hooks/hook-provider-adapters.mjs": {
       "ownership": "system-owned",
@@ -244,6 +274,42 @@
     ".goat-flow/hooks/hook-launch-runtime.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/hook-launch-runtime.mjs"
+    },
+    ".goat-flow/hooks/hook-launch.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-launch.mjs"
+    },
+    ".goat-flow/hooks/run-hook.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/run-hook.mjs"
+    },
+    ".goat-flow/hooks/hook-supervisor.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-supervisor.mjs"
+    },
+    ".goat-flow/hooks/hook-output.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-output.mjs"
+    },
+    ".goat-flow/hooks/policy-input.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-input.mjs"
+    },
+    ".goat-flow/hooks/policy-heredoc.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-heredoc.mjs"
+    },
+    ".goat-flow/hooks/policy-words.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-words.mjs"
+    },
+    ".goat-flow/hooks/policy-git.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-git.mjs"
+    },
+    ".goat-flow/hooks/process-tree.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/process-tree.mjs"
     },
     ".goat-flow/hooks/hook-policy-state.cjs": {
       "ownership": "system-owned",
@@ -264,6 +330,10 @@
     ".goat-flow/hooks/post-turn-safety.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/post-turn-safety.sh"
+    },
+    ".goat-flow/hooks/post-turn-safety.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/post-turn-safety.mjs"
     },
     ".goat-flow/hooks/run-with-bash.mjs": {
       "ownership": "system-owned",
@@ -372,7 +442,8 @@
       "goat-debug": ["references/diagnostic-techniques.md"],
       "goat-plan": [
         "references/milestone-examples.md",
-        "references/issue-format.md"
+        "references/issue-format.md",
+        "references/issue-sample.md"
       ],
       "goat-critique": [
         "references/rubric-examples.md",

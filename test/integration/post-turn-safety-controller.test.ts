@@ -4,11 +4,13 @@
  * These cases use real independent Git repositories beneath one non-Git directory.
  * Use them to verify that a controller reports every configured project's findings without scanning unlisted workspaces.
  */
+import { hookTreeRoot } from "../helpers/hook-entrypoint.js";
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
@@ -53,7 +55,7 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
         "<<<<<<< HEAD\nfirst\n=======\nsecond\n>>>>>>> branch\n",
       );
       const scanner = readFileSync(
-        resolve("workflow/hooks/post-turn-safety.sh"),
+        join(hookTreeRoot(), "post-turn-safety.sh"),
         "utf8",
       ).replace(
         "SECONDS=0\n",
@@ -68,7 +70,7 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
         writeFile(
           controllerRoot,
           `.goat-flow/hooks/${dependency}`,
-          readFileSync(resolve("workflow/hooks", dependency)),
+          readFileSync(join(hookTreeRoot(), dependency)),
         );
       }
       writeFile(
@@ -219,8 +221,8 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
   it("ends one unchanged child command failure only on its active re-entry", () => {
     withTempController(["gruff-go"], (controllerRoot) => {
       withCommandShim(
-        "git",
-        'if [ "${1:-}" = diff ]; then exit 70; fi',
+        resolveExecutable("git"),
+        { when: { first: "diff" }, status: 70 },
         (shimEnvironment) => {
           const sessionIdentifier = "controller-command-failure";
           const firstResult = assertManagedEnvelope(
@@ -258,8 +260,8 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
   it("ends an exhausted child re-entry on a legacy host with no provider adapter", () => {
     withTempController(["gruff-go"], (controllerRoot) => {
       withCommandShim(
-        "git",
-        'if [ "${1:-}" = diff ]; then exit 70; fi',
+        resolveExecutable("git"),
+        { when: { first: "diff" }, status: 70 },
         (shimEnvironment) => {
           const sessionIdentifier = "controller-legacy-reentry";
           const firstResult = runHook(

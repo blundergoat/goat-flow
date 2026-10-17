@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   runPlansCheck,
+  runPlansCheckCli,
   writeCheckFixture,
   writeCheckPlan,
   estimatedMilestoneBody,
@@ -610,7 +611,8 @@ describe("plans check: effort arithmetic and plan shapes", () => {
     );
 
     try {
-      const result = runPlansCheck(planPath);
+      // The real process proves the printed report and a zero exit code.
+      const result = runPlansCheckCli(planPath);
 
       assert.equal(result.status, 0, result.stderr);
       assert.match(
@@ -637,7 +639,8 @@ describe("plans check: effort arithmetic and plan shapes", () => {
     );
 
     try {
-      const result = runPlansCheck(planPath);
+      // The real process proves that an error line sets exit code 1.
+      const result = runPlansCheckCli(planPath);
 
       assert.equal(result.status, 1);
       assert.match(

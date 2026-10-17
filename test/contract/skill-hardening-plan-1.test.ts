@@ -10,11 +10,11 @@ import {
   assertForEachTarget,
   assertTimingObligationsDocumented,
   countSkillBodyWords,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readProjectFile,
-  INSTALLED_SKILL_ROOTS,
+  CANONICAL_SKILL_ROOT,
 } from "./skill-hardening.helpers.js";
 
 const ISSUE_FORMAT_PATH =
@@ -22,7 +22,7 @@ const ISSUE_FORMAT_PATH =
 
 describe("skill hardening contracts: goat-plan (1/2)", () => {
   it("carries one timing and forecast contract into every installed harness", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const breakdown = readMarkdownSection(
         skillPath,
         "Phase 1 - Milestone Breakdown",
@@ -85,7 +85,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-plan",
         "references/milestone-examples.md",
       ),
@@ -146,7 +146,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("keeps goat-plan failure-first thinking inside the existing risk flow", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -162,7 +162,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("keeps goat-plan mid-implementation proof explicit and within budget", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -182,7 +182,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("keeps goat-plan path-only task intake read-only", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Path-only guard runs first/, skillPath);
       assert.match(
@@ -249,7 +249,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       );
     });
 
-    const milestoneExamplePaths = INSTALLED_SKILL_ROOTS.map(
+    const milestoneExamplePaths = [CANONICAL_SKILL_ROOT].map(
       (skillRoot) => `${skillRoot}/goat-plan/references/milestone-examples.md`,
     );
     assertForEachTarget(milestoneExamplePaths, (examplePath) => {
@@ -471,7 +471,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("makes explicit no-write signals outrank named-file mutation verbs", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const pathOnlyIndex = intake.indexOf("**0: Path-Only Intake");
       const readOnlyIndex = intake.indexOf("**No-file guard: Mode R or 2**");
@@ -527,7 +527,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("routes dispatcher build handoffs to File-Write with milestone gates", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const noFileIndex = intake.indexOf("**No-file guard: Mode R or 2**");
       const existingPlanIndex = intake.indexOf(
@@ -576,7 +576,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("keeps an inline Small plan compact when file writing is authorized later", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const delivery = readMarkdownSection(
         skillPath,
         "Phase 2 - Deliver Milestones",
@@ -592,7 +592,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("orders goat-plan path-only classification before bounded retrieval and plan reads", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       const classifyIndex = skillGuidance.indexOf(
         "1. **Classify the input shape before any plan-state read.**",
@@ -637,7 +637,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("lets goat-plan File-Write persist without phase-one approval or critique handoff", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Small File-Write/, skillPath);
       assert.match(skillGuidance, /no Phase 1 approval pause/, skillPath);
@@ -666,7 +666,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("keeps goat-plan amendments behind the milestone approval gate", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -686,7 +686,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
     });
 
     // A user reaches this example after an assumption fails during milestone verification.
-    const milestoneExamplePaths = INSTALLED_SKILL_ROOTS.map(
+    const milestoneExamplePaths = [CANONICAL_SKILL_ROOT].map(
       (skillRoot) => `${skillRoot}/goat-plan/references/milestone-examples.md`,
     );
 
@@ -705,7 +705,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   });
 
   it("keeps goat-plan ISSUE close-out conditional for compact Small plans", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const artifactRules = readMarkdownSection(
         skillPath,
         "Phase 2 - Deliver Milestones",
@@ -753,7 +753,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       },
     );
 
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const completionGate = readMarkdownSection(
         skillPath,
         "Phase 4 - Plan Complete",
@@ -785,7 +785,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   // Effort guidance exists to change agent behaviour; pin it so compaction cannot silently drop it.
 
   it("keeps goat-plan effort estimation agent-calibrated and plan-level", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Effort estimate \(agent-time\)/, skillPath);
       assert.match(skillGuidance, /Never use duration intuition/, skillPath);
@@ -809,7 +809,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-plan",
         "references/milestone-examples.md",
       ),

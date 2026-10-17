@@ -265,9 +265,13 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
  * Use for approved argv handlers to preserve root selection while loading the shipped launcher in-process.
  *
  * @param hookResponseMode - host response selected for this hook; empty uses fail-closed policy behavior
+ * @param candidateTransport - test-only native transport; omitted retains the installed bootstrap
  * @returns structured bootstrap source; never empty because it becomes args[1] of the handler
  */
-function structuredHookLaunchBootstrap(hookResponseMode: string): string {
+function structuredHookLaunchBootstrap(
+  hookResponseMode: string,
+  candidateTransport?: "node",
+): string {
   const unavailableResponseProgram =
     unavailableHookResponseProgram(hookResponseMode);
   // Only the Gruff edit hook resolves its entry from the provider project (ADR-066); policy and Stop handlers keep the shared contract.
@@ -278,11 +282,18 @@ function structuredHookLaunchBootstrap(hookResponseMode: string): string {
       : hookResponseMode;
   const rootRule =
     responseKind === "gruff" ? "provider-project-first" : "shared";
+  // M21 owns production renames; disposable candidates retain the existing launcher operand slot.
+  const importTail =
+    candidateTransport === "node"
+      ? STRUCTURED_IMPORT_TAIL_FRAGMENTS.map((fragment) =>
+          fragment.replaceAll("runHookWithBash", "runHookNative"),
+        )
+      : STRUCTURED_IMPORT_TAIL_FRAGMENTS;
   const fragments = [
     ...bootstrapPreludeFragments(unavailableResponseProgram),
     ...STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS,
     ...rootDiscoveryFragments(rootRule),
-    ...STRUCTURED_IMPORT_TAIL_FRAGMENTS,
+    ...importTail,
   ];
   // A Claude startup refusal waits for bounded Stop input; return from the bootstrap instead of continuing root discovery.
   if (hookResponseMode === "post-turn") {
@@ -444,52 +455,7 @@ function codexWindowsHookCommand(
   return `Set-Location -LiteralPath ([Environment]::CurrentDirectory); $global:LASTEXITCODE = $null; & ${nodeCommand}; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE`;
 }
 
-/**
- * Choose the process that replays a registered hook when the user runs `goat-flow hooks verify` on this platform.
- * A Windows override such as Codex's `commandWindows` wins; other shell handlers run their Bash source unchanged.
- *
- * @param descriptor - Registered handler whose current-platform command is selected.
- * @param platform - Host platform used for selection; defaults to the running Node process.
- * @returns Executable, arguments and optional environment additions; absent env means ordinary platform quoting is sufficient.
- */
-export function agentHookSpawnDescriptor(
-  descriptor: AgentHookHandlerDescriptor,
-  platform: NodeJS.Platform = process.platform,
-): AgentHookSpawnDescriptor {
-  // Claude's exec registration is already literal argv and needs no intermediate shell.
-  if (descriptor.form === "argv") {
-    // Shell-routing fields belong to host config identity, never Claude's direct exec replay.
-    return { command: descriptor.command, args: [...descriptor.args] };
-  }
-  // A registered Windows override takes precedence; without one, the original Bash contract remains authoritative.
-  if (platform === "win32" && descriptor.commandWindows !== undefined) {
-    return {
-      command: "powershell.exe",
-      args: [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        descriptor.commandWindows,
-      ],
-    };
-  }
-  // Windows argv conversion can strip nested quotes; environment transport preserves source and leaves stdin for the event.
-  if (platform === "win32") {
-    // This executes the selected trusted handler for local verification; provider delivery still needs its own capture.
-    // If a caller drops env, the replay fails with a named error instead of running nothing and reporting a passing hook.
-    return {
-      command: "bash",
-      args: [
-        "--noprofile",
-        "--norc",
-        "-c",
-        'eval "${GOAT_FLOW_HOOK_REPLAY_COMMAND:?hook replay command missing}"',
-      ],
-      env: { GOAT_FLOW_HOOK_REPLAY_COMMAND: descriptor.command },
-    };
-  }
-  return { command: "bash", args: ["-c", descriptor.command] };
-}
+export { agentHookSpawnDescriptor } from "../hook-spawn-descriptor.js";
 
 /**
  * Build the handler descriptor written into the selected agent's configuration.
@@ -500,6 +466,7 @@ export function agentHookSpawnDescriptor(
  * @param agentId - agent receiving the handler; empty is impossible after setup validation
  * @param hooksDirectory - project hook folder; empty would produce an invalid managed path
  * @param spec - hook behavior and script; missing metadata is rejected before config generation
+ * @param candidateTransport - test-only native registration; omitted leaves installed descriptors unchanged
  * @returns complete provider handler descriptor; never empty because enabled hooks must be runnable
  * @throws when the selected provider has no hook config path
  */
@@ -507,9 +474,18 @@ export function buildAgentHookDescriptor(
   agentId: AgentId,
   hooksDirectory: string,
   spec: HookSpec,
+  candidateTransport?: "node",
 ): AgentHookHandlerDescriptor {
-  const hookScriptPath = commandPath(hooksDirectory, spec.primaryScript);
-  const bashLauncherPath = commandPath(hooksDirectory, "run-with-bash.mjs");
+  const hookScriptPath = commandPath(
+    hooksDirectory,
+    candidateTransport === "node"
+      ? spec.primaryScript.replace(/\.sh$/u, ".mjs")
+      : spec.primaryScript,
+  );
+  const bashLauncherPath = commandPath(
+    hooksDirectory,
+    candidateTransport === "node" ? "run-hook.mjs" : "run-with-bash.mjs",
+  );
   const hookResponseMode = hookLaunchMode(agentId, spec);
   const registrationPath = PROFILES[agentId].hookConfigFile;
   // A provider without a config surface cannot receive the handler the user enabled.
@@ -518,12 +494,18 @@ export function buildAgentHookDescriptor(
   const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
   // Claude's live capture approves exec form, while cross-loading shell hosts receive inert routes.
   if (agentId === "claude") {
+    // Set the per-file scan limit in Node so literal argv works on POSIX and Windows.
+    const scanBudget =
+      spec.id === "post-turn-safety"
+        ? "process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304';"
+        : "";
     return {
       form: "argv",
       command: "node",
       args: [
         "-e",
-        structuredHookLaunchBootstrap(hookResponseMode),
+        scanBudget +
+          structuredHookLaunchBootstrap(hookResponseMode, candidateTransport),
         hookScriptPath,
         hookResponseMode,
         rootEnvironmentName,
@@ -557,6 +539,11 @@ export function buildAgentHookDescriptor(
       registrationPath,
       bashLauncherPath,
     ]);
+    // The shipped policy corpus exceeds Stop's default one-MiB file limit.
+    if (spec.id === "post-turn-safety") {
+      shellDescriptor.command = `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304 ${shellDescriptor.command}`;
+      shellDescriptor.commandWindows = `$env:GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304'; ${shellDescriptor.commandWindows}`;
+    }
   }
   return shellDescriptor;
 }

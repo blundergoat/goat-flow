@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-12
 ---
 
 **Scope:** Hook test coverage strategy and provider evidence - what a self-test actually exercises, which support layer a capture proves, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -124,7 +124,7 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_
 **Severity:** INTEGRATION
 **Decision changed:** Split all-in-one shell verification into bounded direct commands, and feed hook payloads from a temporary file when the live shell guard inspects the outer command.
 **Trigger phase:** VERIFY
-**Incident count:** 13 | **Latest occurrence:** 2026-10-03
+**Incident count:** 15 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** For manual guardrail matrices, run one direct case at a time or create a temporary harness file with a plain invocation command. Construct secret-path payloads from variables when the outer live guard would otherwise see them, prefer here-strings or file redirection over `printf | bash hook`, and record temp roots in the parent shell before using command substitution. Use the interpreter returned by `command -v python3 || command -v python` rather than assuming a `python` shim. Keep large captured output out of executable command text; capture and parse it locally as data, and use stdin when data exceeds the hook command-size ceiling or the operating system’s argument limit. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command has more than 50 chained segments`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`), `.goat-flow/learning-loop/lessons/verification-scanners.md` (search: `Temp cleanup must satisfy destructive-command hooks`).
 
@@ -180,6 +180,10 @@ The local matrix then selected a clean assertion using only `stop-competing-repa
 The first preservation probe also resolved producer basenames at repository root and failed on `deny-dangerous.sh`; the second compared a heading-inclusive Requirements hash against a different hash carried in the summary. After two corrections, reading the saved checkpoint's exact region definition resolved the mismatch. Resolve manifest names under `workflow/hooks/` and compare the same byte region recorded by the checkpoint; source hashes, historical receipt fields and Requirements were preserved.
 Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`); `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`); `src/cli/plans-check.ts` (search: `open implementation tasks`).
 
+**Recurrence 2026-10-11:** A plan generator embedded its whole source in an oversized terminal heredoc. The live policy rejected the command before it created any file. Writing the reviewed generator through the file-edit tool and invoking the file with a short command followed the rejection's file-input route; the same bounded plan writes then completed with the policy unchanged. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
+
+**Recurrence 2026-10-17:** A large inline JSON receipt timed out guard inspection; a native file edit preserved the controls. Evidence: `workflow/hooks/run-with-bash.mjs` (`reportLauncherUnavailable`).
+
 ---
 
 ## Lesson: Restoring coverage by cloning a monolith is not a real split
@@ -216,15 +220,22 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is 
 **Decision changed:** Before writing a fixture for an analyzer error or refusal branch, capture that branch from a real executable; a measured clean envelope does not measure its error fields.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-09-22
+**Incident count:** 7 | **Latest occurrence:** 2026-10-12
 
-**Prevention:** When tests model an external protocol, take each branch's payload from a real run of that branch: clean, finding, config refusal, fatal diagnostic, ignored operand. A scratch project with a broken config or an ignore pattern produces the refusal and ignored shapes without touching the real project. Run the finished consumer against the real executables before calling the protocol covered. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `shows the analyzer's own message`), `workflow/hooks/gruff-code-quality.sh` (search: `if type == "object" then (.message // tostring)`).
+**Prevention:** Measure clean, finding, config-refusal, fatal and ignored-operand branches separately. Use a scratch project for refusals, then run the finished consumer against the real executables. Evidence: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `shows the analyzer's own message`); `workflow/hooks/gruff-code-quality.sh` (search: `if type == "object" then (.message // tostring)`).
 
-**What happened:** A milestone taught the Gruff hook the v2 analyzer protocol. Its clean fixture envelope came from a real gruff-ts run, but the refused-config case wrote `config.error` as a string. All protocol tests passed. The real-binary check then ran the hook against all five ports with a config missing `schemaVersion`: every port sent `config.error` as an object with `message` and `remediation`, and the hook showed users raw JSON. The hook now reads the message, and the fixture uses the measured object shape.
+**What happened:** The Gruff v2 clean fixture came from a real gruff-ts run, but its refused-config fixture guessed that `config.error` was a string. Protocol tests passed. Running all five real ports with a missing `schemaVersion` exposed an object with `message` and `remediation`; the hook displayed raw JSON. The hook now reads the message and the fixture uses that measured shape.
 
 **Root cause:** One measured payload was treated as proof of the whole envelope's shape, so the unmeasured error branch was modelled from the field name.
 
-**Recurrence 2026-09-22:** A Codex renewal control used the tool API fields `exec_command` and `cmd` as hook-event input; the Git policy returned zero because that was not its shell-event contract. Reading the configured probe and extractor corrected the fixture to `Bash` and `tool_input.command`. Six local controls then preserved production bytes and exits, and a live CLI 0.155.1 capture independently observed `tool_input.command` and both denials. Derive local inputs from the provider hook contract, not the calling tool API; qualify delivery separately. Evidence: `src/cli/hooks-runtime-evidence.ts` (search: `tool_name: "Bash"`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `tool_is_shell_command`, `.tool_input.command`), and `workflow/hooks/README.md` (search: `On 2026-09-21,`).
+**Recurrence 2026-09-22:** A Codex renewal control used tool API fields `exec_command` and `cmd`; the Git policy returned zero because this was not its shell-event contract. The configured extractor required `Bash` and `tool_input.command`. Six corrected controls preserved production bytes/exits, and a live CLI 0.155.1 capture observed that field and both denials. Evidence: `src/cli/hooks-runtime-evidence.ts` (search: `tool_name: "Bash"`); `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `tool_is_shell_command`, `.tool_input.command`); `workflow/hooks/README.md` (search: `On 2026-09-21,`).
+
+
+**Recurrence 2026-10-11:** A supervised timeout probe expected legacy exit 2 from managed Claude. The adapter correctly returned exit 0 with JSON denial. Reading its schema test corrected the probe to require the denial and timeout reason; the regex and busy-loop reproductions then passed on WSL and native Windows. A zero exit can carry denial, and pre-timeout output cannot establish completed allowance. Evidence: `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptPreToolResult`); `test/unit/hook-provider-adapters.test.ts` (search: `preserves pre-tool blocking across provider schemas`).
+
+**Recurrence 2026-10-12:** M01 selected Git assertions with `--policy` while leaving the dangerous dispatcher active; root-fallback returned zero. Matching `GOAT_DENY_DANGEROUS_HOOK` restored smoke/full runs under both locales. A later negative control guessed a nonexistent `echo hello` smoke input and failed before injection. Reading `run_smoke` supplied the actual `echo safe` assertion; the corrected control rejects failed acceptance while capturing complete divergence rows. Evidence: `scripts/check-hook-parity.mjs` (search: `extractSelfTests`); `test/integration/hook-parity-reference.test.ts` (search: `divergence captures failed original assertions`); `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `POLICY_ENTRYPOINT`).
+
+**Recurrence 2026-10-12:** A configured Stop probe omitted Codex's required `turn_id` and received an invalid-context block. After correcting the payload, it received clean silent exit 0, but the probe incorrectly tried to parse JSON. Reading both branches corrected these two diagnostics: require native identity fields and compare empty streams for clean Codex Stop. The actual configured command then passed. Evidence: `workflow/hooks/hook-launch-runtime.mjs` (search: `readManagedStopContext`); `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptCleanResult`).
 
 ---
 
@@ -240,3 +251,18 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is 
 **What happened:** A milestone taught the Gruff hook to respect a project's saved `enabled: false`. An installer test ran the installed hook in a freshly installed project, whose saved choice is off by default, and still expected analysis. That milestone and the next three ran their named Gruff suites, `npm test` and preflight, all green, while CI's `test-slow (5/5)` job failed on every commit of the pull request. The final milestone's release gate hit the same failure, and the user reported the CI job. The test now enables Gruff before running the hook and proves the hook stays quiet while the choice is off.
 
 **Root cause:** Proof was chosen from the files the change was about, not from the files that run the changed script, and the pull request's own CI was never read.
+
+---
+
+## Lesson: Finalize extraction normalization before freezing parity outcomes
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Freeze capture normalization before building the reference corpus; changes require fresh original captures, not edits to saved expected messages.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Run the complete extractor after its last normalization change, reconcile assertion identities and exact per-locale inputs, then generate the corpus from those captures. Repeat the public extraction command before accepting the baseline. Keep failed reports and distinguish fixture-path normalization from changed policy messages.
+
+**What happened:** M01 built its first corpus before the extractor changed an outside-project path from `$CWD` to `$FIXTURE0`. Fresh C and C.UTF-8 comparisons rejected the saved unavailable-fixture message. The approved rewind repeated all eight original captures and rebuilt the pair. Only fixture-root tokens changed in inputs and messages; assertion identities and verdicts were preserved. Bash also decoded six Unicode-escape inputs differently across locales, so IDs now follow assertions while the reference retains exact per-locale inputs. The working-tree check then rejected an actual U+200B in JSON; escaping it preserved the parsed reference values.
+
+**Evidence:** `scripts/check-hook-parity.mjs` (search: `captureProgram`, `caseRows`, `asserted message drift`); `test/integration/hook-parity.test.ts` (search: `saved pair binds every original case and both mirror bytes`). Structural controls passed while fresh extraction failed; pair consistency alone did not prove producer consistency.

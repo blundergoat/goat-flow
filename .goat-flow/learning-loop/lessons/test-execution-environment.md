@@ -1,6 +1,6 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-09-28
+last_reviewed: 2026-10-13
 ---
 
 **Scope:** Choosing and invoking the right runner - which binary and loader actually execute, why a file argument may not narrow the suite, and when proof needs the published invocation path rather than source mode. Shell and process behaviour is [test-shell-environment.md](test-shell-environment.md).
@@ -164,3 +164,15 @@ last_reviewed: 2026-09-28
 **Recurrence 2026-09-28:** Hook-input diagnostics used name filters that selected zero tests. Their successful exit was discarded as evidence; the unfiltered owning suites supplied the proof. Check both the selected test names and nonzero executed count before accepting a focused run. Evidence: `test/integration/deny-dangerous-operands.test.ts` (search: `classify`) and `test/helpers/check-installed-policy.ts` (search: `runHookWithPayload`).
 
 **Recurrence 2026-10-04:** A filter built from an assertion message matched no test, yet the run printed `# tests 1` and `# pass 1` for the file itself and was first counted as a pass. A nonzero count is not proof: require the named subtest line. The rerun under the real test title passed. Evidence: `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`).
+
+---
+
+## Lesson: Per-file durations from a concurrent test run are not wall-time savings
+
+**Status:** active | **Created:** 2026-10-13 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Before promising a CI time saving, time the candidate files alone and scale by the suite's measured parallelism; never subtract a file's concurrent-run duration from the job's wall time.
+**Trigger phase:** SCOPE
+
+**Prevention:** The fast suite runs eight files at once (`scripts/run-tests.mjs`, search: `mode === "slow" ? "1" : mode === "fast" ? "8" : "8"`), so each file's TAP `duration_ms` includes time spent waiting for a CPU. Rank files by those durations if useful, but estimate a saving from the file's share of total suite time multiplied by the job's wall time, or from a sequential local run of the same file.
+
+**What happened:** A test-suite review summed CI `duration_ms` values for the plan-checker files to 437 seconds and reported "about 390 seconds off the fast suite". The whole `test-fast` job ran tests for 4 minutes 23 seconds. Running the same files alone on Node 20.11.0 took about 46 seconds; the plan checker is about a quarter of fast-suite work, so the realistic saving is about a minute. Process-spawning files inflate most under contention, about 9.5 times here. The corrected figure was recorded before any test changed.

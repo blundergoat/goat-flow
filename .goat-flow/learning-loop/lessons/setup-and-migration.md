@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-16
 ---
 
 **Scope:** Installing goat-flow into a project and migrating an existing install - what a package smoke proves, mirror fan-out, the scope a setup agent may write, and concepts that survive their own removal. Repo-wide gates that catch the fallout are [verification-preflight.md](verification-preflight.md).
@@ -28,7 +28,7 @@ last_reviewed: 2026-10-08
 
 **Status:** active | **Created:** 2026-07-18
 **Severity:** INTEGRATION
-**Incident count:** 2 | **Latest occurrence:** 2026-09-10
+**Incident count:** 3 | **Latest occurrence:** 2026-10-16
 
 **Prevention:** Treat one canonical skill edit as a four-target fan-out, `workflow/skills/` plus the `.claude/`, `.agents/`, and `.github/` mirrors, and verify with `goat-flow audit . --check-drift`. After deleting or renaming any anchored function, run `goat-flow stats . --check`, rewrite the citing footgun and lesson anchors as dated resolved-history prose, then re-check bucket size. Evidence anchors: `test/unit/support-bundle.test.ts` (search: `emits clean JSON through the CLI`), `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `removed 2026-07-18`).
 
@@ -37,6 +37,8 @@ last_reviewed: 2026-10-08
 **Root cause:** The mirror set was treated as three targets, and anchor repair was treated as free of size consequences.
 
 **Recurrence 2026-09-10:** The committed security-skill wording change (`6e554aa2`) removed the phrase `If no admissible and available specialist exists` that `.goat-flow/learning-loop/lessons/agent-behavior.md` cited as an anchor; the four mirrors were synced correctly, but `goat-flow stats . --check` did not run with the source change, so the stale reference surfaced only during the later learning-loop closeout. Run the stats check whenever a skill edit deletes or rewrites a phrase, and grep the learning-loop buckets for the removed text before syncing mirrors. `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `coverage degrades; continue without waiting`).
+
+**Recurrence 2026-10-16:** Changing the ISSUE length target in `workflow/skills/goat-plan/references/issue-format.md` removed the phrase `60 nonblank lines` that `.goat-flow/learning-loop/lessons/verification.md` cited as an anchor. The full contract suite and the mirror sync passed; `goat-flow stats --check` caught the stale reference only at milestone proof, and repointing the anchor then required an authorized index regeneration. Before a wording edit, grep the learning loop for every exact phrase the edit removes and plan the repoint and index step with it.
 
 ---
 

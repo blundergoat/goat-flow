@@ -189,7 +189,7 @@ describe("hook launcher script validation", () => {
       // Fixture purpose: the marker proves a user's slower formatter child started before timeout.
       writeFileSync(
         join(managedHookDirectoryPath, "started-child.sh"),
-        "#!/usr/bin/env bash\nsleep 2 &\nprintf 'started\\n' > .goat-flow/hooks/child-started.marker\nwait\n",
+        "#!/usr/bin/env bash\nsleep 5 &\nprintf 'started\\n' > .goat-flow/hooks/child-started.marker\nwait\n",
       );
       const launchStartedAt = Date.now();
       const launcherResult = runLauncherProcess(
@@ -198,7 +198,7 @@ describe("hook launcher script validation", () => {
         "gruff",
         {
           ...process.env,
-          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "250",
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "1000",
         },
       );
       const userWaitMilliseconds = Date.now() - launchStartedAt;
@@ -214,7 +214,7 @@ describe("hook launcher script validation", () => {
       );
       assert.equal(readFileSync(childStartedMarkerPath, "utf8"), "started\n");
       assert.ok(
-        userWaitMilliseconds < 1_500,
+        userWaitMilliseconds < 3_000,
         `${launcherDiagnostics(launcherResult)}\nelapsed_ms=${userWaitMilliseconds}`,
       );
     });

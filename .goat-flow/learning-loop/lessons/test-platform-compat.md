@@ -1,26 +1,36 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-09-27
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** Platform and runtime differences that break tests - CI Node versions older than local, Windows path/URL shapes and symlink privileges, filesystem-clock skew, and npm scripts that assume a POSIX shell. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); shell and process behaviour under a test is [test-shell-environment.md](test-shell-environment.md).
 
 ## Lesson: Test runners need CI-runtime reproduction when local Node is newer
 
-**Status:** active | **Created:** 2026-06-07 | **Incident count:** 4 | **Latest occurrence:** 2026-08-18
+**Status:** active | **Created:** 2026-06-07 | **Incident count:** 8 | **Latest occurrence:** 2026-10-17
 **Severity:** INTEGRATION
 
 **Prevention:** When changing test infrastructure or platform-sensitive runtime code, reproduce the package's minimum supported Node path or the exact CI runner before treating local output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. For shell-wrapped binaries, put the alternate Node on `PATH`; do not pass the wrapper to Node. Timing overrides must define zero explicitly and include a future-timestamp fixture instead of assuming the filesystem clock never leads `Date.now()`. A Windows path comparison that decides ownership or containment must handle aliases by proven filesystem identity, not case and separators alone. Evidence anchors: `scripts/run-tests.mjs` (search: `--import`), `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`), and `test/unit/hook-registrar-surfaces.test.ts` (search: `uses directory identity when Windows aliases have different spellings`).
 
 **What happened:** PR #48 local verification ran on Node 22 and passed the programmatic `node:test` runner path. GitHub Actions ran Node 20.20.2 and failed every `.ts` test with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts"` because the programmatic runner's `execArgv: ["--import", "tsx"]` path did not behave like the CLI preload path on the supported minimum Node version.
 
-**Recurrence 2026-08-01:** PR #57 passed the staged-quality capture suite on local Node 22 but failed seven or eight cases per Node 20 CI run. The test override used `stableMs: 0`, yet the runtime still compared `Date.now() - stats.mtimeMs < 0`; CI filesystem timestamps could therefore leave a just-written draft unprocessed when its mtime appeared slightly ahead of the process clock. A deterministic future-mtime fixture reproduced the skipped draft. The correction makes zero explicitly disable the stability gate and keeps that future-mtime case in the focused suite.
+**Incident ledger:**
 
-**Recurrence 2026-08-02:** An alternate-Node probe passed Gruff's POSIX wrapper to Node as JavaScript, causing a false `SyntaxError`. Putting Node 20 on `PATH` and executing the wrapper normally proved `gruff-ts 0.4.0` ran.
+- **Recurrence 2026-10-17:** Node 20.12.0 CI exposed two fixture assumptions: WSL reached a 250 ms hook deadline before the descendant-start marker, and Windows raised initial-directory EBUSY despite configured rmSync retries. Reproductions confirmed both. Keep the marker and prompt-return assertion with enough startup time; explicitly retry only transient Windows EBUSY and propagate persistent errors. Inspect the floor runtime's failing filesystem path instead of assuming an option covers it. Evidence: `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`) and `test/unit/hook-registrar.helpers.ts` (search: `withTempProject`).
 
-**Recurrence 2026-08-18:** PR #60 passed its focused hook suite on local Linux but both Node 20.11.0 Windows jobs failed the same three post-turn cases. The shared root gate accepted case and separator changes but compared directory spellings only, so another Windows alias form could make one Git root look like two locations and suppress its Stop registration. The correction keeps the spelling fast path, falls back to the directory's device and inode/file ID, and adds an alias-form regression; the exact Windows job remains the release proof.
+- **Recurrence 2026-08-01:** PR #57's Node 20 CI failures came from treating `stableMs: 0` as an active mtime check. Future filesystem timestamps suppressed fresh drafts. Zero now disables the check, with a future-mtime regression in `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`).
 
-**Root cause:** The package advertised `node >=20.11.0`, but the implementations were verified only on a newer local runtime. A green local test did not prove the CI-supported runtime and filesystem-time behavior matched.
+- **Recurrence 2026-08-02:** Passing Gruff's POSIX wrapper to Node as JavaScript caused a false `SyntaxError`. Put the alternate Node on `PATH` and execute the wrapper normally; this proved `gruff-ts 0.4.0` ran. The npm invocation is owned by `package.json` (search: `"gruff-ts": "gruff-ts"`).
+
+- **Recurrence 2026-08-18:** PR #60's Windows jobs failed three post-turn cases because the root gate compared directory spellings, suppressing Stop registration for another alias of the same Git root. Keep the spelling fast path, then compare device and inode/file ID. The alias regression is in `test/unit/hook-registrar-surfaces.test.ts` (search: `uses directory identity when Windows aliases have different spellings`); the exact Windows job remains the release proof.
+
+- **Recurrence 2026-10-17:** Node 24.21.0 failed nine native audit/probe cases that passed on Node 22.22.1 and 20.11.0: `--import tsx` started esbuild inside the restricted child, and the guard refused it. Build first with the producer runtime, then import built CLI JavaScript; keep the compiler outside the consumer allowlist. Evidence: `test/helpers/spawn-guard.mjs` (search: `GOAT_TEST_SPAWN_DENIED`), `test/integration/hook-direct-native-probe.test.ts` (search: `PROBE_MODULE`) and `test/integration/hook-native-audit-mechanism.test.ts` (search: `MECHANISM_MODULE`).
+
+- **Recurrence 2026-10-17:** The hosted hook matrix lacked supported Bash on macOS and jq in WSL. Windows expanded short fixture paths, omitted the admitted PowerShell directory from restricted PATH and reported EPERM during timeout teardown. Provision retained controls' tools, use native physical paths, include admitted executable directories on PATH and bound cleanup retries. Local WSL proof did not cover the other hosts. Evidence: `.github/workflows/ci.yml` (search: `Prepare macOS Bash controls`), `test/integration/hook-command-native-replay.test.ts` (search: `realpathSync.native`), `test/helpers/restricted-consumer-env.ts` (search: `powershellDirectory`) and `test/unit/hook-registrar.helpers.ts` (search: `maxRetries`).
+
+- **Recurrence 2026-10-17:** Windows/20.11.0 hook CI stopped reporting progress while the same suites passed on Linux, macOS and Windows/24.21.0. A native Windows probe isolated an upstream filesystem defect: creating an emoji directory returned ENOENT, and recursive creation hung until the parent's three-second timeout. The same recursive probe and focused launcher checks passed on 20.12.0. Keep the Unicode-path assertions and seek approval for a runtime-floor amendment rather than hiding the gap with ASCII fixtures. Evidence: `test/unit/hook-launch.test.ts` (search: `project '$& 🐐`), `test/integration/hook-command-native-replay.test.ts` (search: `native's flow & (quoted) [fixture] 🐐`), `package.json` (search: `"engines"`) and the [upstream Windows filename incident and 20.12.0 backport](https://github.com/nodejs/node/issues/48673). The bounded local reproduction establishes the filesystem defect; it does not establish the complete hosted job's state.
+
+**Root cause:** Local verification did not reproduce the supported runtime, host tools, path aliases or filesystem timing. A local pass could therefore miss failures in CI's actual environment.
 
 ---
 

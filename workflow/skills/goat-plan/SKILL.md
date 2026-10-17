@@ -165,7 +165,7 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 ### File Artifact Rules (Modes 3 and 4)
 
-Fresh plan: honour supplied destinations; otherwise create a slugged directory. Write zero-padded `M*.md`, `investigation-notes` (empty allowed; no filler), and `_PROGRESS.md` containing only `# Plan and implementation progress`; follow the plans README. Existing plans adopt notes/progress only explicitly. Only explicit active-plan selection updates `.active`. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` bands and totals.
+Fresh plan: honour supplied destinations; otherwise create a slugged directory. Write zero-padded `M*.md`, `investigation-notes` (empty allowed; no filler), and `_PROGRESS.md` containing only `# Plan and implementation progress`; follow the plans README. Existing plans adopt notes/progress only explicitly. Only explicit active-plan selection updates `.active`. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` minutes and totals.
 
 **Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty sections; retain Phase 1 core and claim-based Proof.
 
@@ -203,7 +203,7 @@ Begin only when the unique final join is `human-verification-pending`, every oth
 
 ### AI Verification Gate
 
-Verify every implementation task and, when `ISSUE.md` exists, every ISSUE Tasks item is closed. Require fresh exit/Proof evidence, resolved assumptions, coherent statuses and required learning-loop updates. Keep Requirements stable and mapped to outcomes/proof. Reconcile ISSUE delivery bands with its headline separately: `plans check` reads milestones only. Aggregate gaps/UNVERIFIED; reuse fresh evidence.
+Verify every implementation task and, when `ISSUE.md` exists, every ISSUE Tasks item is closed. Require fresh exit/Proof evidence, resolved assumptions, coherent statuses and required learning-loop updates. Keep Requirements stable and mapped to outcomes/proof. Reconcile ISSUE likely minutes with its headline separately: `plans check` reads milestones only. Aggregate gaps/UNVERIFIED; reuse fresh evidence.
 
 ### Human Verification Gate
 

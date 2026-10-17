@@ -1,3 +1,4 @@
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 /**
  * How the hook decides what to scan: dirty and staged states, ignored files, binary and
  * oversized content, renames - and the batched scanner's obligation to preserve per-line
@@ -70,13 +71,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when the reported repository root cannot be entered", () => {
       withTempRepo((root) => {
         withCommandShim(
-          "git",
-          [
-            'if [ "$1" = "rev-parse" ] && [ "${2:-}" = "--show-toplevel" ]; then',
-            '  printf "%s\\n" "$GOAT_FLOW_TEST_MISSING_ROOT"',
-            "  exit 0",
-            "fi",
-          ].join("\n"),
+          resolveExecutable("git"),
+          {
+            when: { prefix: ["rev-parse", "--show-toplevel"] },
+            stdoutEnvironment: "GOAT_FLOW_TEST_MISSING_ROOT",
+            status: 0,
+          },
           (shimEnv) => {
             assertIncompleteOnBothScanners(root, {
               ...shimEnv,
@@ -90,9 +90,13 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when the scan workspace cannot be created", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
-        withCommandShim("mktemp", "exit 2", (shimEnv) => {
-          assertIncompleteOnBothScanners(root, shimEnv);
-        });
+        withCommandShim(
+          resolveExecutable("mktemp"),
+          { status: 2 },
+          (shimEnv) => {
+            assertIncompleteOnBothScanners(root, shimEnv);
+          },
+        );
       });
     });
 
@@ -100,8 +104,13 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
         withCommandShim(
-          "git",
-          'case " $* " in *" ls-files --others --exclude-standard -z "*) exit 2 ;; esac',
+          resolveExecutable("git"),
+          {
+            when: {
+              includes: ["ls-files", "--others", "--exclude-standard", "-z"],
+            },
+            status: 2,
+          },
           (shimEnv) => {
             assertIncompleteOnBothScanners(root, shimEnv);
           },
@@ -115,8 +124,8 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         commitAll(root, "add tracked diff fixture");
         writeFile(root, "settings.env", "safe=2\n");
         withCommandShim(
-          "git",
-          'case " $* " in *" diff "*" --unified=0 "*) exit 2 ;; esac',
+          resolveExecutable("git"),
+          { when: { includes: ["diff", "--unified=0"] }, status: 2 },
           (shimEnv) => {
             assertIncompleteOnBothScanners(root, shimEnv);
           },
@@ -128,8 +137,8 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
         withCommandShim(
-          "grep",
-          'case " $* " in *" -aUHnZE "*|*" -iaUHnZE "*) exit 2 ;; esac',
+          resolveExecutable("grep"),
+          { when: { any: ["-aUHnZE", "-iaUHnZE"] }, status: 2 },
           (shimEnv) => {
             assertHookIncomplete(root, {
               ...shimEnv,
@@ -144,8 +153,8 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
         withCommandShim(
-          "grep",
-          'case " $* " in *" -IlZ "*|*" -Iq "*) exit 2 ;; esac',
+          resolveExecutable("grep"),
+          { when: { any: ["-IlZ", "-Iq"] }, status: 2 },
           (shimEnv) => {
             assertIncompleteOnBothScanners(root, shimEnv);
           },
@@ -156,7 +165,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when byte counting fails on both paths", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
-        withCommandShim("wc", "exit 2", (shimEnv) => {
+        withCommandShim(resolveExecutable("wc"), { status: 2 }, (shimEnv) => {
           assertIncompleteOnBothScanners(root, shimEnv);
         });
       });
@@ -165,13 +174,8 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when selected content disappears after byte counting", () => {
       withTempRepo((root) => {
         withCommandShim(
-          "wc",
-          [
-            'PATH="$GOAT_FLOW_TEST_ORIGINAL_PATH" wc "$@"',
-            "status=$?",
-            'rm -f -- "$GOAT_FLOW_TEST_VANISH_PATH"',
-            'exit "$status"',
-          ].join("\n"),
+          resolveExecutable("wc"),
+          { delegateThenRemoveEnvironment: "GOAT_FLOW_TEST_VANISH_PATH" },
           (shimEnv) => {
             // Recreate the user's file because each scanner sees the shim delete it once.
             for (const forceFallback of ["0", "1"]) {
@@ -190,7 +194,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when fallback text normalization fails", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
-        withCommandShim("tr", "exit 2", (shimEnv) => {
+        withCommandShim(resolveExecutable("tr"), { status: 2 }, (shimEnv) => {
           assertHookIncomplete(root, {
             ...shimEnv,
             [FORCE_BASH3_ENV_KEY]: "1",
@@ -208,8 +212,8 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         writeFile(root, "settings.env", "safe=1\n");
         // A failed Git coverage inventory means the user cannot be told every changed path was checked.
         withCommandShim(
-          "git",
-          'case " $* " in *" --numstat "*) exit 2 ;; esac',
+          resolveExecutable("git"),
+          { when: { includes: ["--numstat"] }, status: 2 },
           (shimEnv) => {
             assertIncompleteOnBothScanners(root, shimEnv);
           },

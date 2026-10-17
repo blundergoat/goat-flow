@@ -540,7 +540,28 @@ export function withTempProject(scenario: (root: string) => void): void {
   try {
     scenario(root);
   } finally {
-    rmSync(root, { force: true, recursive: true });
+    // Node 20.12.0 skips rmSync's retries when the initial rmdir reports EBUSY.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        rmSync(root, {
+          force: true,
+          recursive: true,
+          maxRetries: process.platform === "win32" ? 5 : 0,
+          retryDelay: 100,
+        });
+        break;
+      } catch (error) {
+        // Retry only a briefly held Windows directory; other failures still propagate.
+        if (
+          process.platform !== "win32" ||
+          (error as NodeJS.ErrnoException).code !== "EBUSY" ||
+          attempt === 5
+        ) {
+          throw error;
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+      }
+    }
   }
 }
 

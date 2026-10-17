@@ -6,7 +6,7 @@
  */
 import * as childProcess from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { AUDIT_VERSION } from "../constants.js";
 import {
   buildInstallerSpawnSpec,
@@ -107,28 +107,59 @@ function listShellHookFiles(ctx: AuditContext, hooksDir: string): string[] {
 }
 
 /**
- * Spawns Bash to parse one installed hook so users learn about syntax errors before relying on its protection.
- * Reports launch restrictions separately because a shell that never started provides no syntax verdict.
+ * Spawns the selected runtime to parse one hook without executing its policy.
+ * Reports launch restrictions separately because a runtime that never started provides no syntax verdict.
  *
  * @param ctx - target project root used to locate the installed hook on disk
  * @param hooksDir - project-relative directory containing the selected agent's hook
- * @param hookFilename - shell filename found in that directory
- * @returns - syntax result or launch failure; unavailable Bash receives environment repair guidance
+ * @param hookFilename - installed shell filename or explicit native .mjs candidate
+ * @param candidateTransport - test-only native syntax check; omission keeps installed Bash
+ * @returns - syntax result or launch failure; an unavailable runtime receives repair guidance
  */
-function checkHookFileSyntax(
+export function checkHookFileSyntax(
   ctx: AuditContext,
   hooksDir: string,
   hookFilename: string,
+  candidateTransport?: "node",
 ): HookSyntaxCheckResult {
   const hookPath = `${hooksDir}/${hookFilename}`;
-  // Bash reads the actual project file; an in-memory audit adapter alone cannot supply the shell's syntax evidence.
+  // Syntax checks read the actual project file; an in-memory adapter alone cannot supply parser evidence.
   const hookAbsolutePath = join(ctx.projectPath, hooksDir, hookFilename);
+  if (
+    candidateTransport === "node" &&
+    (!hookFilename.endsWith(".mjs") || !existsSync(hookAbsolutePath))
+  ) {
+    return {
+      status: "spawn-failure",
+      failure: {
+        check: "Agent deny mechanism",
+        message: `Native syntax check requires an existing .mjs hook: ${hookPath}`,
+        evidence: evidencePath(hookPath),
+        howToFix: "Generate the native candidate before checking its syntax.",
+      },
+    };
+  }
   try {
-    runHookBash(["-n", hookAbsolutePath], 5000);
+    if (candidateTransport === "node")
+      runHookNode(["--check", hookAbsolutePath], 5000);
+    else runHookBash(["-n", hookAbsolutePath], 5000);
     return { status: "ok" };
   } catch (error) {
-    return classifyHookSyntaxFailure(error, hookPath);
+    return classifyHookSyntaxFailure(error, hookPath, candidateTransport);
   }
+}
+
+/** Spawns Node with literal native-check arguments; throws launch, timeout and nonzero-exit failures for audit classification. */
+function runHookNode(
+  args: string[],
+  timeout: number,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  childProcess.execFileSync(process.execPath, args, {
+    env,
+    stdio: "pipe",
+    timeout,
+  });
 }
 
 /**
@@ -177,12 +208,14 @@ function runHookBash(
 function classifyHookSyntaxFailure(
   error: unknown,
   hookPath: string,
+  candidateTransport?: "node",
 ): HookSyntaxCheckResult {
   // A recorded zero exit still proves syntax acceptance even if the process API also returned an error object.
   if (commandCompletedSuccessfully(error)) return { status: "ok" };
   const spawnFailure = spawnFailureFor(
     error,
-    `bash syntax check for ${hookPath}`,
+    `${candidateTransport ?? "bash"} syntax check for ${hookPath}`,
+    candidateTransport ?? "bash",
   );
   // Launch restrictions need environment repair rather than edits to a hook that Bash could not inspect.
   if (spawnFailure !== null) {
@@ -416,71 +449,138 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
 }
 
 /**
- * Spawns the installed deny self-test only after the caller requested full target-hook evidence.
- *
- * Shared dispatchers run once because repeating the same self-test adds time without new evidence.
- * It reports policy or launch failures without claiming provider delivery.
- *
- * @param ctx - target project and included agents whose installed dispatcher can be supplied to the self-test
- * @returns - self-test or environment failure, or null when runnable tests pass or no self-test file was readable
+ * Spawns one deny self-test and classifies its result for the selected dispatcher.
+ * Reports explicit failures for missing native files; installed checks retain their unreadable-file skip.
  */
-function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
-  // Test each included agent against its dispatcher so a shared policy test checks the installed entry point users invoke.
+function checkDispatcherSelfTest(
+  ctx: AuditContext,
+  agentId: string,
+  dispatcherRelPath: string,
+  candidateTransport?: "node",
+): AuditFailure | null {
+  const runtime = candidateTransport ?? "bash";
+  const suffix = runtime === "node" ? ".mjs" : ".sh";
+  const hookId = basename(dispatcherRelPath, suffix);
+  const denyRelPath = join(
+    ".goat-flow",
+    "hooks",
+    "deny-dangerous",
+    `deny-dangerous-self-test${suffix}`,
+  );
+  const content = ctx.fs.readFile(denyRelPath);
+  if (content === null) {
+    return runtime === "node"
+      ? {
+          check: "Agent deny mechanism",
+          message:
+            "Native deny self-test is unavailable; no native result was recorded.",
+          evidence: evidencePath(denyRelPath),
+          howToFix:
+            "Generate the native self-test before requesting its runtime evidence.",
+        }
+      : null;
+  }
+  if (runtime === "node" && ctx.fs.readFile(dispatcherRelPath) === null) {
+    return {
+      check: "Agent deny mechanism",
+      message: `Native self-test dispatcher is unavailable: ${dispatcherRelPath}`,
+      evidence: evidencePath(dispatcherRelPath),
+      howToFix:
+        "Generate the selected native dispatcher before requesting self-test evidence.",
+    };
+  }
+  // A present dispatcher must be the self-test's target; installed checks retain their historical default when it is absent.
+  const env =
+    ctx.fs.readFile(dispatcherRelPath) === null
+      ? process.env
+      : {
+          ...process.env,
+          GOAT_DENY_DANGEROUS_HOOK: join(ctx.projectPath, dispatcherRelPath),
+        };
+  try {
+    const runSelfTest = runtime === "node" ? runHookNode : runHookBash;
+    runSelfTest(
+      [join(ctx.projectPath, denyRelPath), "--self-test=smoke"],
+      DENY_POLICY_SMOKE_TIMEOUT_MS,
+      env,
+    );
+    return null;
+  } catch (error) {
+    return classifyHookSelfTestFailure(error, {
+      agentId,
+      hookId,
+      denyRelPath,
+      runtime,
+      suffix,
+    });
+  }
+}
+
+/** Preserve completed exits and separate launcher failures from failed policy self-tests. */
+function classifyHookSelfTestFailure(
+  error: unknown,
+  invocation: {
+    agentId: string;
+    hookId: string;
+    denyRelPath: string;
+    runtime: "bash" | "node";
+    suffix: string;
+  },
+): AuditFailure | null {
+  if (commandCompletedSuccessfully(error)) return null;
+  const { agentId, hookId, denyRelPath, runtime, suffix } = invocation;
+  const spawnFailure = spawnFailureFor(
+    error,
+    `${hookId} self-test for ${agentId}`,
+    runtime,
+  );
+  if (spawnFailure !== null) {
+    return {
+      check: "Agent deny mechanism",
+      message: spawnFailure.message,
+      evidence: evidencePath(denyRelPath),
+      howToFix: spawnFailure.howToFix,
+    };
+  }
+  return {
+    check: "Agent deny mechanism",
+    message: `${hookId} self-test --self-test=smoke failed for ${agentId}`,
+    evidence: evidencePath(denyRelPath),
+    howToFix: `Run ${runtime} .goat-flow/hooks/${hookId}${suffix} --self-test=smoke to see which cases fail.`,
+  };
+}
+
+/**
+ * Spawns deny self-tests after the caller authorizes target execution; shared dispatchers run once.
+ * Test-only native selection requires candidate files; omission retains installed Bash and paths.
+ *
+ * @param ctx - selected project and included agents whose dispatchers the self-test must exercise
+ * @param candidateTransport - explicit native candidate; omitted keeps installed transport
+ * @returns first self-test or environment failure, or null when runnable checks pass or installed self-tests are absent
+ */
+export function checkHookSelfTest(
+  ctx: AuditContext,
+  candidateTransport?: "node",
+): AuditFailure | null {
+  const suffix = candidateTransport === "node" ? ".mjs" : ".sh";
   const testedDispatchers = new Set<string>();
   for (const agentFacts of ctx.agents) {
     for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
-      // An agent without a shell hook directory cannot supply a dispatcher for this test.
       if (!agentFacts.agent.hooksDir) continue;
-      const denyRelPath = join(
-        ".goat-flow",
-        "hooks",
-        "deny-dangerous",
-        "deny-dangerous-self-test.sh",
+      const dispatcherRelPath = join(
+        agentFacts.agent.hooksDir,
+        `${hookId}${suffix}`,
       );
-      const content = ctx.fs.readFile(denyRelPath);
-      // A missing or unreadable self-test provides no runtime verdict; only an installed shell test can be executed.
-      if (content === null) continue;
-      const denyPath = join(ctx.projectPath, denyRelPath);
-      const dispatcherRelPath = join(agentFacts.agent.hooksDir, `${hookId}.sh`);
       const dispatcherPath = join(ctx.projectPath, dispatcherRelPath);
-      // Several agents can share this hook directory; one completed replay covers the same installed bytes.
       if (testedDispatchers.has(dispatcherPath)) continue;
       testedDispatchers.add(dispatcherPath);
-      // When a dispatcher exists, the shared self-test must exercise that agent's installed entry point instead of its default.
-      const env =
-        ctx.fs.readFile(dispatcherRelPath) === null
-          ? process.env
-          : { ...process.env, GOAT_DENY_DANGEROUS_HOOK: dispatcherPath };
-      try {
-        runHookBash(
-          [denyPath, "--self-test=smoke"],
-          DENY_POLICY_SMOKE_TIMEOUT_MS,
-          env,
-        );
-      } catch (error) {
-        // A user-edited deny policy can fail its self-test; a missing shell or sandbox restriction may stop the test before it runs.
-        // A recorded zero exit means the self-test completed successfully despite the process API's error object.
-        if (commandCompletedSuccessfully(error)) continue;
-        const spawnFailure = spawnFailureFor(
-          error,
-          `${hookId} self-test for ${agentFacts.agent.id}`,
-        );
-        // Launch failures point the user at their environment instead of claiming that the hook policy itself failed.
-        if (spawnFailure !== null) {
-          return {
-            check: "Agent deny mechanism",
-            message: spawnFailure.message,
-            evidence: evidencePath(denyRelPath),
-            howToFix: spawnFailure.howToFix,
-          };
-        }
-        return {
-          check: "Agent deny mechanism",
-          message: `${hookId} self-test --self-test=smoke failed for ${agentFacts.agent.id}`,
-          evidence: evidencePath(denyRelPath),
-          howToFix: `Run bash .goat-flow/hooks/${hookId}.sh --self-test=smoke to see which cases fail.`,
-        };
-      }
+      const failure = checkDispatcherSelfTest(
+        ctx,
+        agentFacts.agent.id,
+        dispatcherRelPath,
+        candidateTransport,
+      );
+      if (failure !== null) return failure;
     }
   }
   return null;

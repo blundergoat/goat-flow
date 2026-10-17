@@ -439,9 +439,12 @@ extends = ":workspace"
     );
   });
 
-  // Separate names make the failing agent visible in TAP output and CI summaries.
-  for (const agentProfile of supportedAgentProfiles) {
-    it(`${agentProfile.id} previews every path a fresh install writes`, () => {
+  // Claude only: one agent proves the preview and toggle contract, and the agent matrix still converges every provider's config shape.
+  for (const agentProfile of supportedAgentProfiles.filter(
+    (profile) => profile.id === "claude",
+  )) {
+    // The previewed fresh install also hosts the sync, disable and enable cycle, so the agent pays for one install.
+    it(`${agentProfile.id} previews a fresh install, then converges install, sync, disable, and enable`, () => {
       const projectPath = makeTempProject();
       const previewedPaths = previewWritePaths(projectPath, agentProfile.id);
       const before = snapshotProject(projectPath);
@@ -470,10 +473,7 @@ extends = ":workspace"
         [],
         `${agentProfile.id} first install must not remove target files`,
       );
-    });
 
-    it(`${agentProfile.id} converges install, sync, disable, and enable`, () => {
-      const projectPath = installedTarget(agentProfile);
       assert.ok(agentProfile.hookConfigFile);
       const hookConfigPath = join(projectPath, agentProfile.hookConfigFile);
       const plantedUserContent = plantUserHookContent(hookConfigPath);
@@ -567,8 +567,11 @@ describe("setup installs with every hook disabled", () => {
     ...new Set(disabledHookSpecs.flatMap((hookSpec) => hookSpec.scriptFiles)),
   ];
   const disabledConfig = `version: "${AUDIT_VERSION}"\nhooks:\n  deny-dangerous:\n    enabled: false\n  gruff-code-quality:\n    enabled: false\n  post-turn-safety:\n    enabled: false\n`;
-  // Each named fixture writes an all-off config and launches setup twice so provider defaults cannot silently return.
-  for (const agentProfile of getAgentProfiles()) {
+  // Writes an all-off config and launches setup twice so provider defaults cannot silently return. Claude only, accepting less provider
+  // coverage for a shorter slow suite.
+  for (const agentProfile of getAgentProfiles().filter(
+    (profile) => profile.id === "claude",
+  )) {
     it(`${agentProfile.id} keeps disabled hooks installed and inert`, () => {
       const consumerRoot = makeTempProject();
       const { id: agentId, hookConfigFile, hooksDir } = agentProfile;

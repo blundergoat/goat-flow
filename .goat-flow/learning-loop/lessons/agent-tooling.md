@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -31,10 +31,10 @@ last_reviewed: 2026-10-11
 
 **Created:** 2026-03-28
 **Severity:** INTEGRATION
-**Updated:** 2026-09-30
+**Updated:** 2026-10-17
 **Decision changed:** After a guard rejects cleanup syntax, keep every destructive target literal and use the narrowest permitted file and directory operations.
 **Trigger phase:** ACT
-**Incident count:** 12 | **Latest occurrence:** 2026-09-30
+**Incident count:** 15 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves. This entry owns recovery after a block; authoring a search pattern that avoids the block is `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`).
 
@@ -58,6 +58,9 @@ For read-only reconciliation, run Git and checksum commands directly and compare
 - **Recurrence 2026-09-04:** Two read-only diagnostics were rejected before execution: a double-quoted search embedded Markdown backticks, and an inline Node wrapper referenced `spawnSync`. Literal-safe search terms and a direct CLI-to-`jq` pipeline produced the same evidence without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 - **Recurrence 2026-09-29:** Closeout put Git status and checksum reconciliation inside a Python `-c` helper using `subprocess.check_output`; PreToolUse rejected the helper before execution. Direct `git status`, `git diff --cached --binary` and `sha256sum` commands, compared in the orchestration layer, verified unchanged intake bytes and staging without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 - **Recurrence 2026-09-30:** Inventory piped `stats --format json` into an inline Node summarizer, and the `Pipe to interpreter` guard rejected it before execution. Writing the CLI JSON to a temporary file and feeding that file to the summarizer preserved the read-only count check. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`).
+- **Recurrence 2026-10-16:** M02 inventory again put Git reads inside a Python `-c` helper using `subprocess.check_output`; the guard rejected it before execution. Direct `git ls-files` and `git rev-parse` supplied the inventory, then a filesystem-only helper recorded hashes. The existing direct-command prevention rule applies. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-10-17:** An oversized evidence-save command was refused before execution. Bounded failure extracts and field-specific JSON writes preserved the receipt without bypassing inspection. The learning update then failed stale-last-reviewed and stale-ref checks. After two corrections, the note was rewound, its validator read, and the review date and citation reapplied. Keep evidence commands small and verify learning metadata and cited owners before indexing. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`) and `src/cli/stats/stats.ts` (search: `stale-last-reviewed`).
+- **Recurrence 2026-10-17 (plan snapshots):** Embedding two milestone documents in an inline Node command exceeded the command-size limit before execution. The file-edit tool saved those bounded temporary snapshots, then direct Git commands built and checked their patch. Keep document bodies out of shell command arguments. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
 
 ---
 
@@ -160,3 +163,14 @@ Inspect literals independently when checking renames, as described in
 **What happened:** While evaluating a GitHub PR, the agent staged scratch files in `/tmp` and ran `cd /tmp` to fetch them. From then on every Bash call was blocked by the PreToolUse guard with `BLOCKED: ... git repository root unavailable`, because the launcher runs `git rev-parse` in the session's persistent cwd and `/tmp` is outside any repo. The agent retried Bash several times, then reached for `dangerouslyDisableSandbox` before concluding it was stuck. The block also rejected the recovering `cd <repo>`, since the guard runs before the command's `cd`.
 
 **Root cause:** Two mistakes. (1) It used `/tmp` as scratch space, moving the persistent shell cwd outside the repo, when a repo-local dir (`.goat-flow/scratchpad/`) would have kept cwd inside the tree. (2) On seeing the same `git repository root unavailable` block on every Bash, it treated each as a one-off and retried or hunted for a bypass instead of recognising a cwd-wedge and asking the user to reset the shell. Trap and fix: `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `outside any git repo`).
+
+## Lesson: Probe and stop commands must match only their intended target
+
+**Status:** active | **Created:** 2026-10-13 | **Evidence:** OBSERVED
+**Decision changed:** Read a repository script's argument handling before passing it a probe flag, and stop processes by an exact PID taken from a filtered process list rather than by a command-line pattern.
+**Trigger phase:** ACT
+**Incident count:** 2 | **Latest occurrence:** 2026-10-13
+
+**Prevention:** Before adding `--help` or another probe flag to a repository script, read how it parses arguments; a script that ignores unknown flags runs its real work. Before stopping a process, list candidates with `ps -eo pid,ppid,args`, select the exact PID by its argument vector, and signal that PID. A `pgrep -f` or `pkill -f` pattern also matches the invoking shell whenever the pattern text appears in that shell's own command line.
+
+**What happened:** While counting test files, the agent appended `--help` to `node scripts/run-tests.mjs slow --shard=1/1`. The runner reads its mode from the first argument and ignores other flags, so the command started the whole slow suite locally until it was stopped. The agent then stopped it with a `pgrep -f` loop whose pattern also appeared in its own Bash command, so the loop signalled its own shell, which exited with status 144 before reaching the test runner. Selecting the runner's PID from `ps` output and signalling it directly stopped the run; no repository file changed. Evidence: `scripts/run-tests.mjs` (search: `const mode = process.argv[2] ?? "fast";`, `function parseShard`).

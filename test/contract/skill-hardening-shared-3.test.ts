@@ -8,11 +8,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertForEachTarget,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readProjectFile,
-  INSTALLED_SKILL_ROOTS,
+  CANONICAL_SKILL_ROOT,
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: shared surfaces (3/3)", () => {
@@ -278,7 +278,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
   });
 
   it("keeps consumer-installed guidance honest about framework-only paths", () => {
-    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat"), (skillPath) => {
       assert.doesNotMatch(
         readProjectFile(skillPath),
         /lessons\/review-feedback\.md/,
@@ -346,25 +346,24 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
 
   it("labels shipped scenarios and removes framework-only evidence claims", () => {
     const planScenarioTargets = [
-      "workflow/skills/goat-plan/references/milestone-examples.md",
-      ...INSTALLED_SKILL_ROOTS.map(
+      ...[CANONICAL_SKILL_ROOT].map(
         (skillRoot) =>
           `${skillRoot}/goat-plan/references/milestone-examples.md`,
       ),
     ];
     const scenarioTargets = [
-      ...installedSkillReferencePaths(
+      ...canonicalSkillReferencePaths(
         "goat-debug",
         "references/diagnostic-techniques.md",
       ),
-      ...installedSkillPaths("goat-security"),
-      ...installedSkillPaths("goat-qa"),
+      ...canonicalSkillPaths("goat-security"),
+      ...canonicalSkillPaths("goat-qa"),
       ...planScenarioTargets,
-      ...INSTALLED_SKILL_ROOTS.map(
+      ...[CANONICAL_SKILL_ROOT].map(
         (skillRoot) =>
           `${skillRoot}/goat-critique/references/rubric-examples.md`,
       ),
-      ...INSTALLED_SKILL_ROOTS.map(
+      ...[CANONICAL_SKILL_ROOT].map(
         (skillRoot) => `${skillRoot}/goat-review/references/examples.md`,
       ),
       "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",

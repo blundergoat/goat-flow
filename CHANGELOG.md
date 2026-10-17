@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Issue briefs show likely minutes and per-task benefits** - Each `ISSUE.md` task ends in one likely figure, a total line and the headline sum them in hours, two new sections say what each task gives the user before and after the change, and the worked sample ships beside the format.
+
 ## v1.18.0 - 2026-10-11
 
 ### Added
