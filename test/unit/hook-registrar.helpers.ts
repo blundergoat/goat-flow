@@ -540,7 +540,12 @@ export function withTempProject(scenario: (root: string) => void): void {
   try {
     scenario(root);
   } finally {
-    rmSync(root, { force: true, recursive: true });
+    rmSync(root, {
+      force: true,
+      recursive: true,
+      maxRetries: process.platform === "win32" ? 5 : 0,
+      retryDelay: 100,
+    });
   }
 }
 

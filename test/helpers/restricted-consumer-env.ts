@@ -61,15 +61,19 @@ export function restrictedConsumerEnvironment(
   let pathValue: string;
   if (process.platform === "win32") {
     const system = join(process.env.SystemRoot ?? "C:\\Windows", "System32");
+    const powershellDirectory = join(system, "WindowsPowerShell", "v1.0");
     for (const helper of [
       join(system, "taskkill.exe"),
-      join(system, "WindowsPowerShell", "v1.0", "powershell.exe"),
+      join(powershellDirectory, "powershell.exe"),
     ]) {
       allowed.push(resolveExecutable(helper));
     }
-    pathValue = [dirname(process.execPath), dirname(allowed[1]), system].join(
-      delimiter,
-    );
+    pathValue = [
+      dirname(process.execPath),
+      dirname(allowed[1]),
+      system,
+      powershellDirectory,
+    ].join(delimiter);
   } else {
     allowed.push(resolveExecutable("ps"));
     for (const [index, name] of ["node", "git", "ps"].entries()) {

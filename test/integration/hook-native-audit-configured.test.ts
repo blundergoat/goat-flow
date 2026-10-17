@@ -156,7 +156,7 @@ function createFixture(parent: string, provider: Provider) {
 
 /** Writes and spawns an audit runner under restricted child controls; all evaluator input remains inert JSON. */
 function runScenario(kind: "responses" | "failures") {
-  const parent = realpathSync(
+  const parent = realpathSync.native(
     mkdtempSync(join(tmpdir(), "goat-audit-configured-")),
   );
   try {

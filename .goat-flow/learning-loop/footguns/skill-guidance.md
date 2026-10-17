@@ -1,6 +1,6 @@
 ---
 category: skill-guidance
-last_reviewed: 2026-10-09
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** Editing shipped skill and playbook guidance: behavioural wording, authority alignment, contract caps, and load-budget signals. Skill candidacy and runtime authoring traps live in [skill-authoring.md](skill-authoring.md); mirror sync lives in [skills.md](skills.md).
@@ -140,6 +140,8 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 **Evidence:** On 2026-09-07, twelve isolated goat-review runs across six cases all wrapped JSON rows in code spans and all dropped the literal `exactly once`; none emitted the `goat-review-gates/v1` record. Scored by reading, four format classes looked fixed. `review validate-draft` on one produced report returned 12 violations, and stripping only the code spans cleared two of them. Three confirmation runs against the corrected root then produced zero violations in the corrected classes, while two of them still carried prose inside canonical rows and one defended zero findings as bullets under the Findings heading; both shapes are recorded here and left for the next review-skill wording pass rather than edited without a run behind them. The root now states each rule once: `workflow/skills/goat-review/SKILL.md` (search: `**JSON rows:**`), (search: `literal "exactly once"`), and (search: `**Gate authority:**`), pinned by `test/contract/skill-hardening-review-2.test.ts` (search: `bare canonical JSON, never code spans`).
 
 **Recurrence 2026-09-30:** A review draft used the wrong bundle name/extension, counted five ledger refutations as finding evidence, omitted the literal bold `Decision:` row, and claimed `confident` despite `gates-not-run`. Draft validation returned four violations, then one remaining bundle violation. Reading the executable grammar and correcting the declarations produced `review validate-draft: PASS (persistence unverified)` and `review validate: PASS`. Use `goat-review-bundle.<random>.diff`, count visible finding evidence only, and derive conclusion/verdict from the emitted flags. Owners: `src/cli/review-validate-common.ts` (search: `REVIEW_BUNDLE_PATH`; `Decision:`), `src/cli/review-validate-verdict.ts` (search: `conclusionForDegradationFlags`), and `src/cli/review-validate-sections.ts` (search: `Evidence claims`).
+
+**Recurrence 2026-10-17:** A review of live uncommitted files used `uncommitted=yes` with explicit-path authority. Draft validation rejected the mismatch; guessing `source=paths` then broke the readable-row grammar. Reading `src/cli/review-validate-authority.ts` (search: `reviewScopeLabels`) showed the required labels: `source=explicit path list`, `base=n/a`, `head=per-path`, `uncommitted=n/a`. The corrected draft reported `review validate-draft: PASS (persistence unverified)`. Derive scope labels from the authority's source kind; describe the selected files' dirty state separately.
 
 ## Footgun: The review degradation vocabulary has no honest token for an unavailable authority producer
 

@@ -318,6 +318,13 @@ jobs:
       # Prints the Node version, platform, CPU architecture and commit, so a failing log names exactly what it checked.
       - name: Record consumer identity
         run: node -e "console.log(JSON.stringify({node:process.version,platform:process.platform,arch:process.arch,commit:process.env.GITHUB_SHA}))"
+      # Retained installed-hook controls require Bash 4.4+; macOS ships Bash 3.2.
+      - name: Prepare macOS Bash controls
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew install bash
+          echo "$(brew --prefix bash)/bin" >> "$GITHUB_PATH"
       # Writes a Node wrapper that runs the test command and logs its descendant processes from `ps`, from launch and then every 15 seconds.
       # A failed sample never fails the tests; for example, a `ps` call that errors or takes over two seconds is logged as `sample-unavailable`.
       - name: Prepare macOS process observer
@@ -549,7 +556,7 @@ jobs:
             uname -a
             grep -i 'microsoft.*WSL2' /proc/sys/kernel/osrelease
             apt-get update
-            apt-get install -y ca-certificates curl git xz-utils procps python3 build-essential
+            apt-get install -y ca-certificates curl git jq xz-utils procps python3 build-essential
             source_path=$(wslpath -u '${{ github.workspace }}')
             work_path=$(mktemp -d /tmp/goat-flow-ci-XXXXXXXX)
             cp -a "$source_path/." "$work_path/"

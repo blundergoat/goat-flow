@@ -133,7 +133,7 @@ function nativeFixtureEntry(
 
 /** Writes a disposable provider registration and transport-only Node policy fixture; no policy corpus is credited. */
 function createNativePolicyFixture(agent: NativeFixtureAgent) {
-  const parent = realpathSync(
+  const parent = realpathSync.native(
     mkdtempSync(join(tmpdir(), "goat-native-replay-")),
   );
   disposableParents.push(parent);

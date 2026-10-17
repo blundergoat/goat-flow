@@ -67,7 +67,7 @@ function findHandler(
 
 /** Writes both policies through the real provider writer and spawns Git; explicit native selection replaces only the fixture's saved handlers. */
 function fixture(context: TestContext, provider: Provider, transport?: "node") {
-  const parent = realpathSync(
+  const parent = realpathSync.native(
     mkdtempSync(join(tmpdir(), "goat-audit-discovery-")),
   );
   context.after(() => rmSync(parent, { recursive: true, force: true }));
