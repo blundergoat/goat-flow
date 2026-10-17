@@ -2,6 +2,7 @@
 import { spawn } from "node:child_process";
 import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, win32 } from "node:path";
+import type { HookOutputMeasurement } from "./hook-output.mjs";
 import {
   captureHookProcessUntilDeadline,
   type CapturedHookProcessResult,
@@ -132,5 +133,492 @@ export function runNativeHookProcessUntilDeadline(
     launchTimeout,
     hostPlatform,
     shouldCaptureResult,
+  );
+}
+
+/** Provider identity and deadline validated by the existing shared adapter. */
+export interface HookLaunchContract {
+  providerIdentifier: string;
+  responseKind: string;
+  resultProtocol: string;
+  hookEvent: string;
+  adapterVersion: string;
+  launcherDeadlineMs: number;
+}
+
+/** The existing provider module owns contract/result decoding and failure presentation. */
+export interface HookProviderAdapterRuntime {
+  decodeHookLaunchContract(mode: string): HookLaunchContract | null;
+  decodeHookResultOutput(
+    output: string,
+  ):
+    | { state: "valid"; result: Record<string, unknown> }
+    | { state: "invalid"; reason: string };
+  adaptHookResultForProvider(
+    result: Record<string, unknown>,
+    provider: string,
+    event: string,
+  ):
+    | { state: "adapted"; exitCode: number; stdout: string; stderr: string }
+    | { state: "invalid" | "unsupported"; reason: string };
+  prepareProviderHookResultDelivery(
+    execution: CapturedHookProcessResult,
+    contract: HookLaunchContract | null,
+    stopContext: ManagedStopContext | null,
+  ): NativeHookDelivery;
+}
+
+export type PreparedHookLaunchRuntime =
+  | { failureReason: string }
+  | {
+      failureReason: null;
+      hookEnvironment: NodeJS.ProcessEnv;
+      launchContract: HookLaunchContract | null;
+      providerAdapterRuntime: HookProviderAdapterRuntime | null;
+      launchTimeout: number;
+    };
+
+const LEGACY_HOOK_DEADLINES_MS = new Map([
+  ["policy", 25_000],
+  ["antigravity", 25_000],
+  ["copilot", 25_000],
+  ["gruff", 75_000],
+  ["post-turn", 75_000],
+]);
+
+/** Select the registered ceiling or a shorter decimal override; returns null for unusable settings. */
+function resolveHookLaunchTimeoutMs(
+  timeoutCeiling: number,
+  hookEnvironment: NodeJS.ProcessEnv,
+): number | null {
+  const configured = hookEnvironment.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS;
+  if (configured === undefined || configured === "") return timeoutCeiling;
+  if (!/^[0-9]+$/u.test(configured)) return null;
+  const milliseconds = Number(configured);
+  if (milliseconds < 1) return null;
+  return Math.min(milliseconds, timeoutCeiling);
+}
+
+/** Explain a rejected override so the user can repair the named setting. */
+function describeInvalidHookLaunchTimeout(
+  timeoutCeiling: number,
+  hookEnvironment: NodeJS.ProcessEnv,
+): string {
+  const configured = hookEnvironment.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS ?? "";
+  return `hook timeout configuration is invalid: GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS=${JSON.stringify(configured)} must be a whole number of milliseconds from 1 to ${timeoutCeiling}`;
+}
+
+/**
+ * Validate startup mode and deadline before the native evaluator receives provider identity.
+ * Reports invalid settings or an unavailable adapter without starting a hook.
+ */
+export async function prepareHookLaunchRuntime(
+  hookResponseMode: string,
+  initialHookEnvironment: NodeJS.ProcessEnv,
+): Promise<PreparedHookLaunchRuntime> {
+  const legacyDeadline = LEGACY_HOOK_DEADLINES_MS.get(hookResponseMode);
+  if (legacyDeadline !== undefined) {
+    const launchTimeout = resolveHookLaunchTimeoutMs(
+      legacyDeadline,
+      initialHookEnvironment,
+    );
+    if (launchTimeout === null) {
+      return {
+        failureReason: describeInvalidHookLaunchTimeout(
+          legacyDeadline,
+          initialHookEnvironment,
+        ),
+      };
+    }
+    return {
+      failureReason: null,
+      hookEnvironment: initialHookEnvironment,
+      launchContract: null,
+      providerAdapterRuntime: null,
+      launchTimeout,
+    };
+  }
+  if (!hookResponseMode.includes(":")) {
+    return { failureReason: "hook launch contract is invalid" };
+  }
+  let providerAdapterRuntime: HookProviderAdapterRuntime;
+  let launchContract: HookLaunchContract | null;
+  try {
+    // The packaged JavaScript adapter owns this decoder contract; URL loading preserves missing-module recovery.
+    providerAdapterRuntime = (await import(
+      new URL("./hook-provider-adapters.mjs", import.meta.url).href
+    )) as HookProviderAdapterRuntime;
+    launchContract =
+      providerAdapterRuntime.decodeHookLaunchContract(hookResponseMode);
+  } catch {
+    return { failureReason: "hook provider adapter could not load" };
+  }
+  if (launchContract === null) {
+    return { failureReason: "hook launch contract is invalid" };
+  }
+  const hookEnvironment = {
+    ...initialHookEnvironment,
+    GOAT_FLOW_HOOK_PROVIDER: launchContract.providerIdentifier,
+    GOAT_FLOW_HOOK_EVENT: launchContract.hookEvent,
+    GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+    GOAT_FLOW_HOOK_ADAPTER_VERSION: launchContract.adapterVersion,
+    GOAT_FLOW_HOOK_RESULT_PROTOCOL: launchContract.resultProtocol,
+  };
+  const launchTimeout = resolveHookLaunchTimeoutMs(
+    launchContract.launcherDeadlineMs,
+    hookEnvironment,
+  );
+  if (launchTimeout === null) {
+    return {
+      failureReason: describeInvalidHookLaunchTimeout(
+        launchContract.launcherDeadlineMs,
+        hookEnvironment,
+      ),
+    };
+  }
+  return {
+    failureReason: null,
+    hookEnvironment,
+    launchContract,
+    providerAdapterRuntime,
+    launchTimeout,
+  };
+}
+
+/** Write the existing provider denial JSON; returns null when the host uses a shell status instead. */
+function reportProviderPolicyUnavailable(
+  provider: string,
+  reason: string,
+): number | null {
+  if (provider === "antigravity") {
+    process.stdout.write(JSON.stringify({ decision: "deny", reason }) + "\n");
+    return 0;
+  }
+  if (provider === "copilot") {
+    process.stdout.write(
+      JSON.stringify({
+        permissionDecision: "deny",
+        permissionDecisionReason: reason,
+      }) + "\n",
+    );
+    return 0;
+  }
+  return null;
+}
+
+/** Report the existing policy refusal, blocking post-turn failure or advisory Gruff skip; returns the host status. */
+function reportNativeHookUnavailable(
+  mode: string,
+  reason: string,
+  hookIdentifier: string,
+): number {
+  const parts = mode.split(":");
+  const provider = ["antigravity", "copilot"].includes(mode)
+    ? mode
+    : parts[0] || "unknown";
+  const responseKind = ["gruff", "post-turn"].includes(mode)
+    ? mode
+    : parts[1] || "policy";
+  const policyReason =
+    "Policy hook unavailable: " + hookIdentifier + ": " + reason + ".";
+  const providerStatus =
+    responseKind === "policy"
+      ? reportProviderPolicyUnavailable(provider, policyReason)
+      : null;
+  if (providerStatus !== null) return providerStatus;
+  if (responseKind === "gruff") {
+    process.stderr.write(
+      "gruff-code-quality: hook unavailable: " + reason + "; skipped.\n",
+    );
+    return 0;
+  }
+  if (responseKind === "post-turn") {
+    process.stderr.write(
+      "post-turn-safety: hook unavailable: " + reason + ".\n",
+    );
+    return 2;
+  }
+  process.stderr.write("BLOCKED: " + policyReason + "\n");
+  return 2;
+}
+
+/**
+ * Honor a saved policy choice after script-path validation and before evaluator launch.
+ * Returns null to continue, or writes the existing allow/repair response and returns its host status.
+ */
+export async function policyChoiceBeforeNativeLaunch(
+  projectRoot: string,
+  hookIdentifier: string,
+  mode: string,
+): Promise<number | null> {
+  if (
+    hookIdentifier !== "deny-dangerous" &&
+    hookIdentifier !== "deny-git-mutations"
+  ) {
+    return null;
+  }
+  if (!["policy", "antigravity", "copilot"].includes(mode)) {
+    return reportNativeHookUnavailable(
+      mode,
+      "unsupported policy response mode",
+      hookIdentifier,
+    );
+  }
+  try {
+    // The installed CJS reader owns YAML validation; URL loading preserves interrupted-install recovery.
+    const { default: policyState } = (await import(
+      new URL("./hook-policy-state.cjs", import.meta.url).href
+    )) as {
+      default: {
+        readPolicyChoices(root: string): Record<string, boolean | undefined>;
+      };
+    };
+    if (policyState.readPolicyChoices(projectRoot)[hookIdentifier] === false) {
+      if (mode === "antigravity") {
+        process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+      }
+      return 0;
+    }
+  } catch {
+    return reportNativeHookUnavailable(
+      mode,
+      "policy configuration or reader is unavailable",
+      hookIdentifier,
+    );
+  }
+  return null;
+}
+
+/** Context validated by the shared Stop owner; fields differ between Claude, Codex and invalid input. */
+export interface ManagedStopContext {
+  state: "valid" | "invalid";
+  provider?: "claude";
+  isContinuation?: boolean;
+  acceptedInput?: Buffer;
+  projectRoot?: string;
+  cycleKey?: string;
+  deadlineAt?: number;
+}
+
+/** Launcher-owned failure facts; absent child detail means startup ended before useful scanning. */
+export interface NativeLauncherFailure {
+  unavailableReasonCode: string;
+  userFacingReason: string;
+  childStandardError?: string;
+  launcherDurationMs?: number;
+  stopContext?: ManagedStopContext | null;
+  outputMeasurement?: HookOutputMeasurement | undefined;
+}
+
+type NativeHookDelivery =
+  | { state: "delivered"; exitCode: number; stdout: string; stderr: string }
+  | { state: "unavailable"; reason: string; stdout: ""; stderr: string };
+
+interface SharedHookLaunchRuntime {
+  readManagedStopContext(
+    mode: string,
+    root: string,
+    input?: NodeJS.ReadableStream,
+  ): Promise<ManagedStopContext | null>;
+  prepareProviderLauncherUnavailableDelivery(
+    adapter: HookProviderAdapterRuntime | null,
+    contract: HookLaunchContract,
+    code: string,
+    reason: string,
+    options: NativeLauncherFailure & {
+      registeredHookIdentifier: string;
+      stopContext: ManagedStopContext | null;
+    },
+  ): NativeHookDelivery;
+}
+
+/** Load the existing validator/recovery owner; throws if its installed module cannot load. */
+async function loadSharedHookLaunchRuntime(): Promise<SharedHookLaunchRuntime> {
+  // The packaged JavaScript module owns these APIs; URL loading preserves its installed relative dependencies.
+  return (await import(
+    new URL("./hook-launch-runtime.mjs", import.meta.url).href
+  )) as SharedHookLaunchRuntime;
+}
+
+/**
+ * Preserve shared Stop validation and original accepted bytes; unverified modes retain stdin.
+ * Input/read failures recover as invalid context; throws if the installed shared runtime cannot load.
+ */
+export async function readNativeManagedStopContext(
+  mode: string,
+  projectRoot: string,
+  input: NodeJS.ReadableStream = process.stdin,
+): Promise<ManagedStopContext | null> {
+  const runtime = await loadSharedHookLaunchRuntime();
+  return runtime.readManagedStopContext(mode, projectRoot, input);
+}
+
+/** Recognize the verified Claude continuation that ends only a launcher startup failure. */
+function isRepeatedClaudeStop(
+  mode: string,
+  context: ManagedStopContext | null,
+): boolean {
+  return (
+    mode === "post-turn" &&
+    context?.state === "valid" &&
+    context.provider === "claude" &&
+    context.isContinuation === true
+  );
+}
+
+/** Write one translated provider reply and return its host status. */
+function writeDeliveredHookOutput(
+  delivery: Extract<NativeHookDelivery, { state: "delivered" }>,
+): number {
+  if (delivery.stderr.length > 0) process.stderr.write(delivery.stderr);
+  if (delivery.stdout.length > 0) process.stdout.write(delivery.stdout);
+  return delivery.exitCode;
+}
+
+/**
+ * Report one launcher failure through existing provider recovery or the legacy fallback.
+ * Returns the host status; shared-runtime loading errors propagate to the caller.
+ */
+export async function reportNativeLauncherUnavailable(
+  mode: string,
+  adapter: HookProviderAdapterRuntime | null,
+  contract: HookLaunchContract | null,
+  hookIdentifier: string,
+  failure: NativeLauncherFailure,
+): Promise<number> {
+  const stopContext = failure.stopContext ?? null;
+  if (isRepeatedClaudeStop(mode, stopContext)) {
+    process.stderr.write(
+      "post-turn-safety: hook unavailable: " +
+        failure.userFacingReason +
+        ".\n" +
+        "post-turn-safety: ending repeated Stop after launcher infrastructure failure; no clean scan was recorded.\n",
+    );
+    return 0;
+  }
+  if (contract === null || (adapter === null && stopContext === null)) {
+    return reportNativeHookUnavailable(
+      mode,
+      failure.userFacingReason,
+      hookIdentifier,
+    );
+  }
+  const runtime = await loadSharedHookLaunchRuntime();
+  const delivery = runtime.prepareProviderLauncherUnavailableDelivery(
+    adapter,
+    contract,
+    failure.unavailableReasonCode,
+    failure.userFacingReason,
+    { ...failure, stopContext, registeredHookIdentifier: hookIdentifier },
+  );
+  if (delivery.state === "delivered") return writeDeliveredHookOutput(delivery);
+  if (delivery.stderr.length > 0) process.stderr.write(delivery.stderr);
+  return reportNativeHookUnavailable(mode, delivery.reason, hookIdentifier);
+}
+
+/** Hold legacy policy output until a complete allow or host-specific deny status can be trusted. */
+function renderNativeLegacyPolicyExecution(
+  mode: string,
+  execution: CapturedHookProcessResult,
+  hookIdentifier: string,
+): number {
+  if (execution.hasExceededOutputLimit) {
+    return reportNativeHookUnavailable(
+      mode,
+      "policy output exceeded the result limit",
+      hookIdentifier,
+    );
+  }
+  const status = execution.status;
+  if (status !== 0 && !(mode === "policy" && status === 2)) {
+    return reportNativeHookUnavailable(
+      mode,
+      `policy exited with status ${status} without a decision`,
+      hookIdentifier,
+    );
+  }
+  if (execution.stdout.length > 0) process.stdout.write(execution.stdout);
+  if (execution.stderr.length > 0) process.stderr.write(execution.stderr);
+  return status;
+}
+
+/**
+ * Deliver one native execution through its existing provider or legacy response contract.
+ * Keep the prepared adapter/contract paired; legacy feedback is already relayed during execution.
+ * Writes captured provider/policy output and returns host status; shared-runtime errors propagate.
+ */
+export async function renderNativeHookExecutionResult(
+  mode: string,
+  adapter: HookProviderAdapterRuntime | null,
+  contract: HookLaunchContract | null,
+  execution: CapturedHookProcessResult,
+  launchTimeout: number,
+  hookIdentifier: string,
+  stopContext: ManagedStopContext | null = null,
+): Promise<number> {
+  if (execution.timedOut) {
+    return reportNativeLauncherUnavailable(
+      mode,
+      adapter,
+      contract,
+      hookIdentifier,
+      {
+        unavailableReasonCode: "execution-timeout",
+        userFacingReason:
+          "hook exceeded its deadline; process-tree termination was requested",
+        childStandardError: execution.stderr,
+        launcherDurationMs: launchTimeout,
+        stopContext,
+        outputMeasurement: execution.output,
+      },
+    );
+  }
+  if (execution.launchError) {
+    return reportNativeLauncherUnavailable(
+      mode,
+      adapter,
+      contract,
+      hookIdentifier,
+      {
+        unavailableReasonCode: "hook-unavailable",
+        userFacingReason: "Node could not start",
+        childStandardError: execution.stderr,
+        stopContext,
+        outputMeasurement: execution.output,
+      },
+    );
+  }
+  if (adapter !== null) {
+    const delivery = adapter.prepareProviderHookResultDelivery(
+      execution,
+      contract,
+      stopContext,
+    );
+    if (delivery.state === "delivered")
+      return writeDeliveredHookOutput(delivery);
+    return reportNativeLauncherUnavailable(
+      mode,
+      adapter,
+      contract,
+      hookIdentifier,
+      {
+        unavailableReasonCode: "adapter-delivery-failed",
+        userFacingReason: delivery.reason,
+        childStandardError: delivery.stderr,
+        stopContext,
+        outputMeasurement: execution.output,
+      },
+    );
+  }
+  if (["policy", "antigravity", "copilot"].includes(mode)) {
+    return renderNativeLegacyPolicyExecution(mode, execution, hookIdentifier);
+  }
+  if (execution.status !== null && Number.isInteger(execution.status)) {
+    return execution.status;
+  }
+  return reportNativeHookUnavailable(
+    mode,
+    "Node ended without an exit status",
+    hookIdentifier,
   );
 }

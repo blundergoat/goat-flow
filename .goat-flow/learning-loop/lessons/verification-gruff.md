@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-10-16
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-size-gates.md](verification-size-gates.md).
@@ -12,7 +12,7 @@ last_reviewed: 2026-10-16
 **Decision changed:** Treat a human-readable comment, boolean name, or compact test as unfinished until the targeted analyzer accepts the exact source shape; read the installed rule before a second rewrite.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 9 | **Latest occurrence:** 2026-10-16
+**Incident count:** 14 | **Latest occurrence:** 2026-10-17
 **Merged:** 2026-09-05 - one static-gate recurrence (2026-08-09) moved to `.goat-flow/learning-loop/lessons/verification-formatting.md`, three size-gate recurrences (2026-08-09 x2, 2026-08-28) moved to `.goat-flow/learning-loop/lessons/verification-size-gates.md`, and two ratchet recurrences (2026-08-16, 2026-08-18) moved to the hidden-complexity lesson below; this entry keeps the analyzer-vocabulary incidents.
 
 **Prevention:** For Gruff-driven comment work, read `.goat-flow/skill-docs/playbooks/code-comments.md`, patch one file or cohesive cluster, then rerun `npx gruff-ts analyse <path>`. If a clear comment stays flagged, open the installed rule in `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` before changing wording or placement again; the rules match whole-word markers and same-line forms, not meaning. Keep internal boolean state in `is...`/`has...` grammar, give each small outcome set direct assertions instead of a test-level loop, and let one concise fixture comment carry purpose and side effect together when the rule reads only the nearest source shape. If a rename replaces a comment, grep the old identifier. Evidence anchors: `src/cli/server/decoders.ts` (search: `Swallows parse errors into the shared decoder failure shape`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/learning-loop/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
@@ -32,6 +32,16 @@ last_reviewed: 2026-10-16
 - **Recurrence 2026-10-11 (delegated comment pass):** Sub-agents rewrote comments in four `plans check` files for plain language and dropped markers the incumbents carried: four docs lost `must` and five test comments lost `writes`. The PostToolUse hook flagged one sorting helper and the stable-identity comparison found eight more introduced `docs.missing-*` findings; restoring truthful `must` and `Writes` wording returned the comparison to zero. Give delegated comment passes the marker vocabulary and compare identities before accepting their edits. `src/cli/plans-check-summary.ts` (search: `in a stable oldest-first order`).
 
 - **Recurrence 2026-10-16 (generator comments):** The generator's truthful `Errors:` and singular `throw` wording did not match Gruff's whole-word `throws` marker. Reading `hasErrorBehaviorMarker` before the second rewrite preserved the meaning and cleared the advisories. `scripts/generate-hook-runtime.mjs` (search: `Throws on`) documents the actual failures; the installed rule remains owned by `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
+
+- **Recurrence 2026-10-17 (candidate selection):** Rewriting selectedHookPath's routing comment dropped its missing-entry fallback consequence and introduced one error-behavior advisory. Restoring the explicit throws/no-fallback clause removed that identity; the sixteen baseline advisories remained unchanged. Preserve existing failure clauses when adding routing guidance. Evidence: `test/helpers/hook-entrypoint.ts` (search: `Throws for a missing selection`).
+
+- **Recurrence 2026-10-17 (CLI fixture data):** The production ratchet treated argv assertions inside a generated child-program template as external filesystem-path input. The destination was an owned temporary file; the flagged argument was its data. Named node:process imports kept the child assertions and cleared the warning. Check which argument the rule flagged before changing a fixture. Evidence: `test/unit/run-hook.test.ts` (search: `import { argv, env } from`) and `node_modules/@blundergoat/gruff-ts/src/security-flow-rules.ts` (search: `AST_FLOW_SINKS`).
+
+- **Recurrence 2026-10-17 (audit fixture data):** The ratchet treated process.env inside generated evaluator-runner text as external input to the fixed writeFileSync destination. Rule inspection confirmed the matched text was the data argument. A named node:process env import preserves the runner and clears the warning. The new exported fallback's comment also needed the truthful Spawns marker. Read the source/sink argument and documentation vocabulary before changing fixture behavior. Evidence: `test/integration/hook-native-audit-direct.test.ts` (search: `import { env } from`) and `src/cli/audit/check-agent-deny-runtime.ts` (search: `Spawns one blocked request`).
+
+- **Recurrence 2026-10-17 (configured audit fixtures):** Targeted analysis flagged a non-null config assertion and two test bodies whose assertions were hidden in a helper. Assert the profile path before joining it, and return the forbidden-launch journal for each test to assert directly. Both tests retain their runtime protocol checks. Evidence: `test/integration/hook-native-audit-configured.test.ts` (search: `assert.deepEqual(runScenario`) and `createFixture`.
+
+- **Recurrence 2026-10-17 (native discovery caller):** The configured-replay test hid its assertions in a helper, triggering the no-assertions warning. Returning the forbidden-launch journal lets the test assert the observed result directly. Large generated fixtures also needed nearby purpose comments. Evidence: `test/integration/hook-native-audit-discovery.test.ts` (search: `verifyNativeCaller`, `Fixture purpose:`).
 
 ## Lesson: Gruff hook compatibility probes need real configs and wrapper PATH
 

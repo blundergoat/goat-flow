@@ -124,7 +124,7 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_
 **Severity:** INTEGRATION
 **Decision changed:** Split all-in-one shell verification into bounded direct commands, and feed hook payloads from a temporary file when the live shell guard inspects the outer command.
 **Trigger phase:** VERIFY
-**Incident count:** 14 | **Latest occurrence:** 2026-10-11
+**Incident count:** 15 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** For manual guardrail matrices, run one direct case at a time or create a temporary harness file with a plain invocation command. Construct secret-path payloads from variables when the outer live guard would otherwise see them, prefer here-strings or file redirection over `printf | bash hook`, and record temp roots in the parent shell before using command substitution. Use the interpreter returned by `command -v python3 || command -v python` rather than assuming a `python` shim. Keep large captured output out of executable command text; capture and parse it locally as data, and use stdin when data exceeds the hook command-size ceiling or the operating system’s argument limit. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command has more than 50 chained segments`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`), `.goat-flow/learning-loop/lessons/verification-scanners.md` (search: `Temp cleanup must satisfy destructive-command hooks`).
 
@@ -181,6 +181,8 @@ The first preservation probe also resolved producer basenames at repository root
 Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`); `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`); `src/cli/plans-check.ts` (search: `open implementation tasks`).
 
 **Recurrence 2026-10-11:** A plan generator embedded its whole source in an oversized terminal heredoc. The live policy rejected the command before it created any file. Writing the reviewed generator through the file-edit tool and invoking the file with a short command followed the rejection's file-input route; the same bounded plan writes then completed with the policy unchanged. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
+
+**Recurrence 2026-10-17:** A large inline JSON receipt timed out guard inspection; a native file edit preserved the controls. Evidence: `workflow/hooks/run-with-bash.mjs` (`reportLauncherUnavailable`).
 
 ---
 

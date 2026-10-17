@@ -3661,6 +3661,7 @@ fi
 if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-with-bash.mjs" "$HOOKS_DIR/run-with-bash.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-hook.mjs" "$HOOKS_DIR/run-hook.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-provider-adapters.mjs" "$HOOKS_DIR/hook-provider-adapters.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-launch-runtime.mjs" "$HOOKS_DIR/hook-launch-runtime.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-launch.mjs" "$HOOKS_DIR/hook-launch.mjs" "system-owned" "755"
@@ -3672,9 +3673,13 @@ if $HOOKS_ENABLED; then
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gh-graphql-read.cjs" "$HOOKS_DIR/gh-graphql-read.cjs" "system-owned" "644"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/vendor/graphql.cjs" "$HOOKS_DIR/vendor/graphql.cjs" "system-owned" "644"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-git-mutations.sh" "$HOOKS_DIR/deny-git-mutations.sh" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-git-mutations.mjs" "$HOOKS_DIR/deny-git-mutations.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.mjs" "$HOOKS_DIR/deny-dangerous.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.mjs" "$HOOKS_DIR/gruff-code-quality.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.mjs" "$HOOKS_DIR/post-turn-safety.mjs" "system-owned" "755"
   prune_unlisted_hook_files "$HOOKS_DIR"
   prune_legacy_agent_hook_copies
   echo "Hook policy → .goat-flow/hooks/deny-dangerous/:"

@@ -1,9 +1,22 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Parser-specific coverage and producer shapes are [test-fixtures-parsers.md](test-fixtures-parsers.md). Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
+
+## Lesson: Generated child-program fixtures need proof of the emitted syntax
+
+**Status:** active | **Created:** 2026-10-17
+**Decision changed:** Preserve child-source escapes explicitly and execute the emitted fixture before aggregate proof.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Use String.raw when a fixture template must retain JavaScript escape sequences. Run the emitted program; typecheck of its TypeScript container cannot validate the generated syntax.
+
+**What happened:** Both configured audit fixture cases failed while parsing their generated runner. Ordinary template interpolation turned the child source's newline escapes into literal newlines inside quoted strings. String.raw preserves those escapes; rerunning both cases reached and verified their saved handlers. Evidence: `test/integration/hook-native-audit-configured.test.ts` (search: `String.raw`).
+
+---
 
 ## Lesson: Replacement fixtures must preallocate a distinct file identity
 
@@ -135,9 +148,15 @@ last_reviewed: 2026-10-10
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 24 | **Latest occurrence:** 2026-10-09
+**Incident count:** 27 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the system under test or the assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behaviour, run the fixture through the unchanged strict baseline so unrelated errors are absent, and keep every non-target value inside its passing bounds. Assert that every text substitution changed its fixture before using the result as simulated input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. For an invalid-state case, name and trigger the exact production predicate; arbitrary content is not invalid when the implementation treats its bytes as opaque. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+
+**Recurrence 2026-10-17 (learning-patch validation):** An isolated stats check copied the learning buckets but omitted their repository citations. Adding tracked source still omitted cited installed Gruff source. After both failures, validation was rewound to a complete source-context copy with the existing dependencies available read-only. Enumerate reference dependencies before claiming an isolated learning patch passes. `src/cli/stats/stats.ts` (search: `stale-ref`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
+
+**Recurrence 2026-10-17 (CI recipe validation):** A comparison used raw YAML indentation to remove a command from an already parsed shell block, so the validation failed on its own normalization. Extracted-shell lint also lacked its known Bash dialect. Compare the parsed representation and select the declared shell before judging a workflow edit; baseline diagnostics from GitHub expression syntax remain separate. `.github/workflows/ci.yml` (search: `WSL floor and LTS controls`).
+
+**Recurrence 2026-10-17 (packaged candidates):** Adding native entrypoints made a missing-policy fixture valid; its saved opt-out correctly returned zero, breaking the expected missing-path refusal. Remove the candidate only inside that fixture before asserting the refusal, preserving production opt-out behavior. A reused CI verifier also expected an ignored workspace receipt absent from the copy; explicit command/suite inputs removed that dependency. `test/unit/run-hook.test.ts` (search: `native CLI rejects missing, escaped and non-file scripts before an opt-out`).
 
 **What happened:** The first ADR-024 enforcement test for `stats --check` used `package.json` with a line suffix to trigger an `invalid-line-ref` finding, but the temp fixture repo had no `package.json`, so the checker correctly reported a stale ref and the test failed with "expected an invalid-line-ref finding".
 

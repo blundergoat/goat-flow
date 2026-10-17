@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-10-16
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
@@ -42,9 +42,11 @@ last_reviewed: 2026-10-16
 **Decision changed:** Compare the recorded baseline tree, current HEAD, and file hashes before attempting recovery when a changed path disappears from `git status`.
 **Trigger phase:** READ
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-14
+**Incident count:** 3 | **Latest occurrence:** 2026-10-16
 
 **Prevention:** Before restoring or recreating apparently missing work, compare `git diff <recorded-tree>`, `git diff HEAD`, `git log -1`, and hashes for the affected mirrors. Treat an unexpected HEAD change as shared-workspace evidence to reconcile, not proof of data loss. Evidence anchor: `workflow/skills/goat-debug/SKILL.md` (search: `ALWAYS in Diagnose mode`).
+
+After HEAD advances, compare generated files with the current baseline plus the approved patch so unrelated committed updates remain intact.
 
 **What happened:** During verification, goat-debug paths disappeared from `git status` and writes were paused on the assumption that a test process had restored them; the files still had the expected hashes, differed from the recorded baseline tree, and HEAD had advanced to a user-created commit that already contained them.
 
@@ -52,15 +54,19 @@ last_reviewed: 2026-10-16
 
 **Recurrence 2026-08-14:** ADR-059 and both playbook mirrors disappeared from `git status` after HEAD advanced to `8a8eb2f`; a read-only comparison showed the commit contained all seven doctrine paths while six later corrections stayed uncommitted. `.goat-flow/learning-loop/decisions/ADR-059-useful-comment-doctrine.md` (search: `Prefer useful comment contracts`), `test/contract/comment-playbook-doctrine.test.ts` (search: `treats 150 as a ceiling instead of a width target`).
 
+**Recurrence 2026-10-16:** M02 verification compared an applied generated index with an isolated copy from before the user's later commits. Its full-file hash differed because two unrelated index rows had already changed in HEAD. Comparing against committed `cb0e67d` plus the approved patch proved only the intended row changed; all later committed rows survived. **Evidence:** OBSERVED; `.goat-flow/learning-loop/lessons/INDEX.md` (search: `When deny hook blocks a command, use the unblocked equivalent`), `git diff cb0e67d -- .goat-flow/learning-loop/lessons/INDEX.md`.
+
 ---
 
 ## Lesson: Activate prerequisites before the numerically next milestone
 
 **Status:** active | **Created:** 2026-07-13
 **Severity:** INTEGRATION
-**Incident count:** 5 | **Latest occurrence:** 2026-10-02
+**Incident count:** 6 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** Before changing milestone status or deriving proof, read every declared prerequisite and named evidence owner. Record authorized activation before checking implementation tasks; a checked task contradicts `not-started`. Recompute mutable counts at the named revision and current worktree; never use a historical endpoint as the live expectation. Run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs) and put rationale in narrative fields.
+
+Check order within milestones too: fixtures precede consuming checks, and failing contracts precede target edits. Appending a task does not settle its execution order.
 
 **What happened:** After approval of the preceding task, the next task was marked in progress before its dependency header was read; a later parent-plan run started final evidence while four semantic prerequisites were unfinished, then amended `Depends on` with explanatory prose that strict validation rejected. Those lifecycle incidents live only in gitignored plans.
 
@@ -69,6 +75,8 @@ last_reviewed: 2026-10-16
 **Recurrence 2026-08-28:** The paused task’s timing receipt was paused for the PR #61 follow-up while its status stayed `in-progress`, so strict validation reported two active milestones when another task reached `human-verification-pending`; marking the paused task `blocked` with a current-state reason made the hold machine-readable. `src/cli/plans-check-structure.ts` (search: `multiple active milestones`).
 **Recurrence 2026-09-03:** Closing the final lesson lane reused an earlier 121-footgun baseline without reopening its evidence; the live index returned 123 because the bulk-rewrite correction added row 122 and the inherited-`SECONDS` incident added row 123. `.goat-flow/learning-loop/footguns/learning-loop-extraction.md` (search: `Bulk learning-loop rewrites can duplicate entries`), `.goat-flow/learning-loop/footguns/hooks.md` (search: `Bash SECONDS can inherit a parent offset`).
 **Recurrence 2026-10-02:** A resume inventory task was checked before its milestone header changed from `not-started`, despite an accepted prerequisite and explicit start approval. Strict validation rejected the contradictory state; recording authorized activation resolved it before source work. `src/cli/plans-check.ts` (search: `not-started milestone has checked implementation tasks`).
+
+**Recurrence 2026-10-17:** The local M08 amendment put fixtures after ports whose immediate proof needed them; M51 put failing contracts after instruction replacement. Review reordered both before implementation, following `workflow/skills/goat-plan/SKILL.md` (search: `Risk-weighted task ordering`). No runtime fix was credited.
 
 ---
 

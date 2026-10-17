@@ -60,7 +60,10 @@ export function copyHookTree(
   cpSync(source, destination, { recursive: true });
 }
 
-/** Resolve a hook inside its fixture; candidate absence is an error, never a fallback. */
+/**
+ * Preserve installed paths and translate only explicit candidates.
+ * Throws for a missing selection without falling back to another runtime.
+ */
 export function selectedHookPath(
   path: string,
   selection = hookSelection(),
@@ -69,12 +72,7 @@ export function selectedHookPath(
   const nodePath = absolute
     .replace(/\.sh$/u, ".mjs")
     .replace(/run-with-bash\.mjs$/u, "run-hook.mjs");
-  const selected =
-    selection === "candidate"
-      ? nodePath
-      : selection === "installed" && existsSync(nodePath)
-        ? nodePath
-        : absolute;
+  const selected = selection === "candidate" ? nodePath : absolute;
   if (!existsSync(selected))
     throw new Error(`${selection} hook unavailable: ${selected}`);
   if (!reported.has(selected)) {

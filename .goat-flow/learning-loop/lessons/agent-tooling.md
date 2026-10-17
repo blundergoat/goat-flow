@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-10-13
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -31,10 +31,10 @@ last_reviewed: 2026-10-13
 
 **Created:** 2026-03-28
 **Severity:** INTEGRATION
-**Updated:** 2026-09-30
+**Updated:** 2026-10-17
 **Decision changed:** After a guard rejects cleanup syntax, keep every destructive target literal and use the narrowest permitted file and directory operations.
 **Trigger phase:** ACT
-**Incident count:** 12 | **Latest occurrence:** 2026-09-30
+**Incident count:** 14 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves. This entry owns recovery after a block; authoring a search pattern that avoids the block is `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`).
 
@@ -58,6 +58,8 @@ For read-only reconciliation, run Git and checksum commands directly and compare
 - **Recurrence 2026-09-04:** Two read-only diagnostics were rejected before execution: a double-quoted search embedded Markdown backticks, and an inline Node wrapper referenced `spawnSync`. Literal-safe search terms and a direct CLI-to-`jq` pipeline produced the same evidence without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 - **Recurrence 2026-09-29:** Closeout put Git status and checksum reconciliation inside a Python `-c` helper using `subprocess.check_output`; PreToolUse rejected the helper before execution. Direct `git status`, `git diff --cached --binary` and `sha256sum` commands, compared in the orchestration layer, verified unchanged intake bytes and staging without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 - **Recurrence 2026-09-30:** Inventory piped `stats --format json` into an inline Node summarizer, and the `Pipe to interpreter` guard rejected it before execution. Writing the CLI JSON to a temporary file and feeding that file to the summarizer preserved the read-only count check. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`).
+- **Recurrence 2026-10-16:** M02 inventory again put Git reads inside a Python `-c` helper using `subprocess.check_output`; the guard rejected it before execution. Direct `git ls-files` and `git rev-parse` supplied the inventory, then a filesystem-only helper recorded hashes. The existing direct-command prevention rule applies. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-10-17:** An oversized evidence-save command was refused before execution. Bounded failure extracts and field-specific JSON writes preserved the receipt without bypassing inspection. The learning update then failed stale-last-reviewed and stale-ref checks. After two corrections, the note was rewound, its validator read, and the review date and citation reapplied. Keep evidence commands small and verify learning metadata and cited owners before indexing. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`) and `src/cli/stats/stats.ts` (search: `stale-last-reviewed`).
 
 ---
 

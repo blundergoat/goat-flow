@@ -30,7 +30,14 @@ test("missing candidate never falls back to an existing Bash entrypoint", () => 
     const node = join(project, "deny-dangerous.mjs");
     writeFileSync(node, "process.exit(0);\n");
     assert.equal(selectedHookPath(bash, "candidate"), node);
-    assert.equal(selectedHookPath(bash, "installed"), node);
+    assert.equal(selectedHookPath(bash, "installed"), bash);
+    assert.equal(selectedHookPath(node, "installed"), node);
+    const launcher = join(project, "run-with-bash.mjs");
+    const nativeLauncher = join(project, "run-hook.mjs");
+    writeFileSync(launcher, "process.exit(0);\n");
+    writeFileSync(nativeLauncher, "process.exit(0);\n");
+    assert.equal(selectedHookPath(launcher, "installed"), launcher);
+    assert.equal(selectedHookPath(launcher, "candidate"), nativeLauncher);
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

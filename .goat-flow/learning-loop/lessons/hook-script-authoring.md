@@ -1,9 +1,24 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-16
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
+
+## Lesson: Typed hook boundaries must distinguish absent fields from explicit undefined
+
+**Status:** active | **Created:** 2026-10-16
+**Severity:** INTEGRATION
+**Decision changed:** Compare each typed boundary with its producer's absence contract before wiring callers.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** With exact optional property types, an optional field does not accept an explicit undefined value unless its type includes undefined. Match the producer and shared runtime: permit explicit undefined when supported, or omit the property when absent. Run the hooks typecheck after connecting the caller.
+
+**What happened:** The native result renderer forwarded CapturedHookProcessResult.output into NativeLauncherFailure.outputMeasurement. Three call sites failed with TS2379 because the producer permits undefined but the optional destination field did not. Adding undefined to the destination's type preserved runtime behavior and cleared the same typecheck.
+
+**Evidence:** src/hooks/hook-supervisor.mts (search: `output: HookOutputMeasurement | undefined`), src/hooks/hook-launch.mts (search: `outputMeasurement?: HookOutputMeasurement | undefined`) and tsconfig.json (search: `exactOptionalPropertyTypes`).
+
+---
 
 ## Lesson: Bash case patterns need syntax proof for template delimiters
 

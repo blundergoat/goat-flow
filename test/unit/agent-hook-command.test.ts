@@ -133,3 +133,102 @@ describe("Claude Stop scan budget", () => {
     );
   });
 });
+
+describe("native candidate replay descriptors", () => {
+  it("retains provider forms, inert routes and the Codex Stop budget while installed defaults remain on Bash", () => {
+    const spec = getHookSpec("deny-dangerous");
+    assert.ok(spec);
+    for (const agent of [
+      "claude",
+      "codex",
+      "copilot",
+      "antigravity",
+    ] as const) {
+      const installed = buildAgentHookDescriptor(
+        agent,
+        ".goat-flow/hooks",
+        spec,
+      );
+      const candidate = buildAgentHookDescriptor(
+        agent,
+        ".goat-flow/hooks",
+        spec,
+        "node",
+      );
+      assert.equal(candidate.form, installed.form);
+      const replay = agentHookSpawnDescriptor(candidate, "linux", "node");
+      assert.equal(replay.command, "node");
+      assert.equal(replay.args[2], ".goat-flow/hooks/deny-dangerous.mjs");
+      assert.equal(replay.args[6], ".goat-flow/hooks/run-hook.mjs");
+      if (installed.form === "argv") {
+        assert.equal(installed.args[6], ".goat-flow/hooks/run-with-bash.mjs");
+        assert.ok(candidate.form === "argv");
+        assert.equal(candidate.bash, "exit 0");
+        assert.equal(candidate.powershell, "exit 0");
+      } else {
+        assert.match(installed.command, /run-with-bash\.mjs/u);
+      }
+      if (agent === "codex") {
+        assert.equal(
+          agentHookSpawnDescriptor(candidate, "win32", "node").command,
+          "powershell.exe",
+        );
+      }
+    }
+    const stopSpec = getHookSpec("post-turn-safety");
+    assert.ok(stopSpec);
+    const stop = buildAgentHookDescriptor(
+      "codex",
+      ".goat-flow/hooks",
+      stopSpec,
+      "node",
+    );
+    assert.deepEqual(agentHookSpawnDescriptor(stop, "linux", "node").env, {
+      GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "4194304",
+    });
+  });
+
+  it("refuses installed and custom commands when native replay was explicitly requested", () => {
+    const spec = getHookSpec("deny-dangerous");
+    assert.ok(spec);
+    for (const agent of ["claude", "codex"] as const) {
+      const installed = buildAgentHookDescriptor(
+        agent,
+        ".goat-flow/hooks",
+        spec,
+      );
+      assert.throws(
+        () => agentHookSpawnDescriptor(installed, "linux", "node"),
+        /native candidate replay/u,
+      );
+      assert.throws(
+        () => agentHookSpawnDescriptor(installed, "win32", "node"),
+        /native candidate replay/u,
+      );
+    }
+    assert.throws(
+      () =>
+        agentHookSpawnDescriptor(
+          { form: "shell", command: "exit 0" },
+          "linux",
+          "node",
+        ),
+      /canonical Node command/u,
+    );
+    const native = buildAgentHookDescriptor(
+      "claude",
+      ".goat-flow/hooks",
+      spec,
+      "node",
+    );
+    assert.throws(
+      () =>
+        agentHookSpawnDescriptor(
+          { ...native, command: "bash" },
+          "linux",
+          "node",
+        ),
+      /native candidate replay/u,
+    );
+  });
+});

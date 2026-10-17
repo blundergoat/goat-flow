@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-10-16
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -134,9 +134,11 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **Severity:** CORRECTNESS
 **Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove.
 **Trigger phase:** VERIFY
-**Incident count:** 31 | **Latest occurrence:** 2026-10-11
+**Incident count:** 32 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** Run `npm run check:touched` for its supported format, source lint, typecheck, Gruff, and guidance scopes; capture every selected check's result line. Run the repository-owned Knip and owning test gates separately with captured output. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`).
+
+**Recurrence 2026-10-17 (manifest gate):** Scaffold validation guessed a manifest-check script name and failed because that command does not exist. Reading the preflight owner and actual test paths led to the manifest and ownership suites; the combined manifest/candidate run reported 42 passes. Discover a gate before invoking it. `scripts/preflight-checks.sh` (search: `manifest_eval`) and `test/unit/manifest.test.ts` (search: `checkManifest (real repo)`).
 
 **What happened:** Several closeouts sent ignored tests or workflow `.mjs` files to TypeScript-only ESLint, and one ran `npm test` beside expensive checks and lost the failing block; a captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
 
