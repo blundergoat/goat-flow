@@ -56,6 +56,10 @@
     ".goat-flow/hooks/run-hook.mjs",
     ".goat-flow/hooks/hook-supervisor.mjs",
     ".goat-flow/hooks/hook-output.mjs",
+    ".goat-flow/hooks/policy-input.mjs",
+    ".goat-flow/hooks/policy-heredoc.mjs",
+    ".goat-flow/hooks/policy-words.mjs",
+    ".goat-flow/hooks/policy-git.mjs",
     ".goat-flow/hooks/process-tree.mjs",
     ".goat-flow/hooks/hook-policy-state.cjs",
     ".goat-flow/hooks/vendor/js-yaml.cjs",
@@ -286,6 +290,22 @@
     ".goat-flow/hooks/hook-output.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/hook-output.mjs"
+    },
+    ".goat-flow/hooks/policy-input.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-input.mjs"
+    },
+    ".goat-flow/hooks/policy-heredoc.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-heredoc.mjs"
+    },
+    ".goat-flow/hooks/policy-words.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-words.mjs"
+    },
+    ".goat-flow/hooks/policy-git.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-git.mjs"
     },
     ".goat-flow/hooks/process-tree.mjs": {
       "ownership": "system-owned",

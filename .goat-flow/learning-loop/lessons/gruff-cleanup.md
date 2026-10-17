@@ -174,7 +174,7 @@ Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `1638
 **Status:** active | **Created:** 2026-10-03
 **Severity:** INTEGRATION
 
-**Incident count:** 5 | **Latest occurrence:** 2026-10-17
+**Incident count:** 6 | **Latest occurrence:** 2026-10-17
 **Decision changed:** Before adding a test or assertion messages to a large test file, compare its substantive line count with Gruff's 1,000-line `size.file-length` limit and leave room for Prettier wrapping.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -192,6 +192,8 @@ The same batch put the controller YAML bundle in every temporary project, which 
 **Recurrence 2026-10-10 (installer fixtures):** Adding version prerequisites to `test/integration/setup-install-agent-matrix.test.ts` expanded a constants import and pushed the file to 1,004 substantive lines. Reusing the existing test facade for `AUDIT_VERSION` and keeping the serialized version/header together retained the fixture behavior; the formatted targeted scan cleared `size.file-length`. Check formatted headroom before launching the full ratchet, even when the change adds no test cases. Anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `legacyHookChoices`).
 
 **Recurrence 2026-10-17:** Three native-replay integration cases made `test/integration/hook-command-spawn-matrix.test.ts` reach 1,199 substantive lines. All 39 runnable cases passed, but the production ratchet rejected `size.file-length`. The draft now places the native cases and their disposable fixtures in `test/integration/hook-command-native-replay.test.ts` (search: `native candidate registered policy replay`), preserving the original suite byte for byte. Check the formatted file's headroom before adding a test family; a passing behavioral suite does not clear the size gate.
+
+**Recurrence 2026-10-17 (policy transport):** Adding thirty large-report cases to `test/integration/deny-dangerous-policy.test.ts` passed behavioral checks but reached 1,101 substantive lines. Gruff and preflight rejected `size.file-length`. The isolated correction places that family in `test/integration/deny-large-report-transport.test.ts` (search: `bounded large-report heredoc transport`) and restores the existing suite byte for byte. Measure formatted headroom before choosing an existing test owner.
 
 ## Lesson: Check each Gruff-driven comment against the code it describes
 

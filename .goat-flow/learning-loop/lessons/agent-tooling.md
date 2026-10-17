@@ -34,7 +34,7 @@ last_reviewed: 2026-10-17
 **Updated:** 2026-10-17
 **Decision changed:** After a guard rejects cleanup syntax, keep every destructive target literal and use the narrowest permitted file and directory operations.
 **Trigger phase:** ACT
-**Incident count:** 14 | **Latest occurrence:** 2026-10-17
+**Incident count:** 15 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves. This entry owns recovery after a block; authoring a search pattern that avoids the block is `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`).
 
@@ -60,6 +60,7 @@ For read-only reconciliation, run Git and checksum commands directly and compare
 - **Recurrence 2026-09-30:** Inventory piped `stats --format json` into an inline Node summarizer, and the `Pipe to interpreter` guard rejected it before execution. Writing the CLI JSON to a temporary file and feeding that file to the summarizer preserved the read-only count check. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`).
 - **Recurrence 2026-10-16:** M02 inventory again put Git reads inside a Python `-c` helper using `subprocess.check_output`; the guard rejected it before execution. Direct `git ls-files` and `git rev-parse` supplied the inventory, then a filesystem-only helper recorded hashes. The existing direct-command prevention rule applies. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 - **Recurrence 2026-10-17:** An oversized evidence-save command was refused before execution. Bounded failure extracts and field-specific JSON writes preserved the receipt without bypassing inspection. The learning update then failed stale-last-reviewed and stale-ref checks. After two corrections, the note was rewound, its validator read, and the review date and citation reapplied. Keep evidence commands small and verify learning metadata and cited owners before indexing. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`) and `src/cli/stats/stats.ts` (search: `stale-last-reviewed`).
+- **Recurrence 2026-10-17 (plan snapshots):** Embedding two milestone documents in an inline Node command exceeded the command-size limit before execution. The file-edit tool saved those bounded temporary snapshots, then direct Git commands built and checked their patch. Keep document bodies out of shell command arguments. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
 
 ---
 

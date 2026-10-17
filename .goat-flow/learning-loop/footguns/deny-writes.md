@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-10-01
+last_reviewed: 2026-10-17
 ---
 
 Git command-policy traps: publication, remote locks, history changes, aliases and commands hosted by Git.
@@ -12,7 +12,7 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 
 **Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
 **Severity:** SECURITY
-**Incident count:** 6 | **Latest occurrence:** 2026-10-01
+**Incident count:** 7 | **Latest occurrence:** 2026-10-17
 
 **Prevention:**
 1. Normalize to the command word before calling `is_git_push`, and read "command word" as every unquoting layer the target program applies, not only the shell's. Do not add one-off regexes for the latest bypass.
@@ -20,6 +20,9 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 3. Keep the workflow hook source and the installed `.goat-flow/hooks` mirror byte-identical after policy changes.
 4. Fail closed when wrapper option arity is unknown, and apply the full policy to each pipeline stage. Preserve `xargs` context: its input can supply recursive-delete targets absent from the visible payload.
 5. Parse the entire provider response as one JSON object, and end the parent on any nested denial: JSON providers deny with exit 0 and the captured decision is forwarded once; text providers deny with exit 2, which exits the parent instead of reaching the unavailable-result message.
+6. Remove only one outer quote layer from an env split-string payload; preserve inner executable quotes for ordinary word normalization.
+
+**Recurrence 2026-10-17:** Classifier-only checks returned exit 0 for `env -S '"git" push'`, while `env -S 'git push'` returned exit 2. No Git command ran. In `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `normalize_env_prefix`), two independent quote branches remove an outer single quote and then an inner executable double quote. The unmatched closing quote hides the verb. Use mutually exclusive outer-quote removal and retain a quoted read control beside the publication regression. The production repair is pending; the frozen reference remains historical evidence.
 
 **Symptoms:** The hook blocks a direct `git push` and allows the same push through `env -i`, a quoted assignment such as `FOO='a b'`, an `if true; then ... fi` body, a function body, `bash -lc '...'`, or a Git alias whose value carries a second quoting layer.
 

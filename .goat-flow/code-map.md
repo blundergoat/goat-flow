@@ -164,6 +164,10 @@ src/hooks/
 ├── hook-launch.mts              = native child launch, selected-root argv and existing path-safety checks
 ├── hook-supervisor.mts          = native single-result delivery with bounded deadline/output cleanup
 ├── hook-output.mts              = bounded native result/diagnostic capture and strict UTF-8 completion
+├── policy-input.mts             = strict request decoding and provider command/path extraction for both policy candidates
+├── policy-heredoc.mts           = existing non-shell stdin consumers and exact Goat Flow data-command recognition
+├── policy-words.mts             = C-locale word parsing, wrapper payloads and byte-indexed shell parentheses
+├── policy-git.mts               = native Git command-bearing config keys and payload transformations
 └── process-tree.mts             = native owned-process cleanup; generated into both hook trees
 ```
 
@@ -247,6 +251,10 @@ workflow/                        = packaged template source copied into target p
 │   ├── hook-launch.mjs          = generated native child launch and path checks from src/hooks
 │   ├── hook-supervisor.mjs      = generated native deadline/output supervision from src/hooks
 │   ├── hook-output.mjs          = generated bounded native output capture from src/hooks
+│   ├── policy-input.mjs         = generated native policy request decoding and command/path extraction
+│   ├── policy-heredoc.mjs       = generated non-shell stdin consumer and Goat Flow data-command recognition
+│   ├── policy-words.mjs         = generated shell word parsing, wrapper payloads and byte-indexed parentheses
+│   ├── policy-git.mjs           = generated Git config key and command-payload classification
 │   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
 │   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy template
@@ -381,6 +389,10 @@ docs/                            = user and maintainer documentation
 │   ├── hook-launch.mjs          = generated native child launch and path checks from src/hooks
 │   ├── hook-supervisor.mjs      = generated native deadline/output supervision from src/hooks
 │   ├── hook-output.mjs          = generated bounded native output capture from src/hooks
+│   ├── policy-input.mjs         = generated native policy request decoding and command/path extraction
+│   ├── policy-heredoc.mjs       = generated non-shell stdin consumer and Goat Flow data-command recognition
+│   ├── policy-words.mjs         = generated shell word parsing, wrapper payloads and byte-indexed parentheses
+│   ├── policy-git.mjs           = generated Git config key and command-payload classification
 │   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
 │   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy entrypoint

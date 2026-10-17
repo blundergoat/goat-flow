@@ -62,11 +62,13 @@ After HEAD advances, compare generated files with the current baseline plus the 
 
 **Status:** active | **Created:** 2026-07-13
 **Severity:** INTEGRATION
-**Incident count:** 6 | **Latest occurrence:** 2026-10-17
+**Incident count:** 7 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** Before changing milestone status or deriving proof, read every declared prerequisite and named evidence owner. Record authorized activation before checking implementation tasks; a checked task contradicts `not-started`. Recompute mutable counts at the named revision and current worktree; never use a historical endpoint as the live expectation. Run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs) and put rationale in narrative fields.
 
 Check order within milestones too: fixtures precede consuming checks, and failing contracts precede target edits. Appending a task does not settle its execution order.
+
+Check each ported function's callees before assigning it to an independent stage; unique ownership alone does not prove the function can run there.
 
 **What happened:** After approval of the preceding task, the next task was marked in progress before its dependency header was read; a later parent-plan run started final evidence while four semantic prerequisites were unfinished, then amended `Depends on` with explanatory prose that strict validation rejected. Those lifecycle incidents live only in gitignored plans.
 
@@ -77,6 +79,8 @@ Check order within milestones too: fixtures precede consuming checks, and failin
 **Recurrence 2026-10-02:** A resume inventory task was checked before its milestone header changed from `not-started`, despite an accepted prerequisite and explicit start approval. Strict validation rejected the contradictory state; recording authorized activation resolved it before source work. `src/cli/plans-check.ts` (search: `not-started milestone has checked implementation tasks`).
 
 **Recurrence 2026-10-17:** The local M08 amendment put fixtures after ports whose immediate proof needed them; M51 put failing contracts after instruction replacement. Review reordered both before implementation, following `workflow/skills/goat-plan/SKILL.md` (search: `Risk-weighted task ordering`). No runtime fix was credited.
+
+**Recurrence 2026-10-17 (callee ownership):** An independent port batch retained `__goat_git_strip_globals` despite calls into later alias tracking and refusal dispatch. Inventory uniqueness missed that execution dependency. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_strip_globals`, `record_git_alias_config`) and `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `record_git_persistent_alias`). Move composed ownership to the stage with those dependencies; do not stub protection to close an earlier gate.
 
 ---
 
