@@ -1,12 +1,18 @@
 /**
- * Checks the failure details a maintainer sees under preflight's Tests row.
+ * Checks preflight failure details and isolated parallel-worker reporting.
  *
  * Recorded TAP and Windows output exercise the production summary without another full-suite run.
  * Disposable projects isolate diagnostics; a missing counter must never become a fabricated zero.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, it } from "node:test";
@@ -14,8 +20,18 @@ const PREFLIGHT_SCRIPT_PATH = resolve(
   import.meta.dirname,
   "../../scripts/preflight-checks.sh",
 );
+const PROJECT_ROOT = resolve(import.meta.dirname, "../..");
+const fixtureProcessIds = new Set<number>();
 const fixtureTemporaryDirectories = new Set<string>();
 afterEach(() => {
+  for (const pid of fixtureProcessIds) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    }
+  }
+  fixtureProcessIds.clear();
   for (const directory of fixtureTemporaryDirectories)
     rmSync(directory, { recursive: true, force: true });
   fixtureTemporaryDirectories.clear();
@@ -125,6 +141,11 @@ describe("preflight Tests failure details", () => {
   // These illustrative package declarations exercise the real selection branch without launching another complete suite.
   for (const [scripts, command, label] of [
     [
+      { test: "", "test:preflight": "", "test:fast": "" },
+      ["npm", "run", "test:preflight"],
+      "Preflight suite",
+    ],
+    [
       { test: "", "test:fast": "", "test:coverage": "" },
       ["npm", "run", "test:fast"],
       "Fast suite",
@@ -217,4 +238,220 @@ describe("preflight Tests failure details", () => {
       "every Tests failure detail line must fit the byte bound",
     );
   });
+});
+
+/** Wait for a scheduler fixture's child to disappear after the parent cancels its workers. */
+async function waitForFixtureProcessExit(processId: number): Promise<boolean> {
+  const deadline = Date.now() + 1500;
+  while (Date.now() <= deadline) {
+    try {
+      process.kill(processId, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      fixtureProcessIds.delete(processId);
+      return true;
+    }
+    await new Promise((resolvePoll) => setTimeout(resolvePoll, 25));
+  }
+  return false;
+}
+
+/** Build a harmless workload around the production scheduler, keeping its process and ledger boundaries real. */
+function preflightSchedulerFixture(
+  failingWorker = false,
+  lingeringWorker = false,
+) {
+  const directory = mkdtempSync(join(tmpdir(), "goat-preflight-scheduler-"));
+  fixtureTemporaryDirectories.add(directory);
+  const source = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf8");
+  const end = source.lastIndexOf("\nrun_preflight_workers\n");
+  assert.ok(end > 0);
+  const labels: Record<string, string> = {
+    shell: "Shell Scripts",
+    contracts: "Version Consistency",
+    typescript: "TypeScript",
+    tests: "Tests",
+    dependency: "Dependency Audit",
+    gruff: "Gruff Policy",
+    audit: "GOAT Flow Audit",
+    memory: "Learning-Loop Schema",
+    content: "Content Drift",
+    drift: "Doc/Code Drift",
+    sync: "Skill Docs Sync",
+    links: "Markdown Links",
+  };
+  let overrides = "\ncache_manifest_inventory() { :; }\n";
+  for (const [name, label] of Object.entries(labels)) {
+    const buildReady =
+      name === "typescript" ? ': > "$PREFLIGHT_BUILD_READY"' : ":";
+    const requireBuild = [
+      "tests",
+      "audit",
+      "memory",
+      "content",
+      "drift",
+    ].includes(name)
+      ? '[[ -f "$PREFLIGHT_BUILD_READY" ]] || exit 9'
+      : ":";
+    const failure =
+      failingWorker && name === "shell"
+        ? 'printf "fixture child diagnostic\\n"; exit 7'
+        : ":";
+    const linger =
+      lingeringWorker && name === "tests"
+        ? 'sleep 20 & printf "%s\\n" "$!" > "$PREFLIGHT_TEST_DIRECTORY/descendant"; wait'
+        : ":";
+    overrides += `
+check_${name}() {
+  section "${label}"
+  ${requireBuild}
+  printf 'start ${name}\\n' >> "$PREFLIGHT_TEST_DIRECTORY/events"
+  sleep 0.1
+  ${buildReady}
+  pass "fixture ${name}"
+  ${failure}
+  ${linger}
+  printf 'end ${name}\\n' >> "$PREFLIGHT_TEST_DIRECTORY/events"
+}
+`;
+  }
+  const script = join(directory, "scheduler.sh");
+  writeFileSync(
+    script,
+    `${source.slice(0, end)}${overrides}
+run_preflight_workers
+merge_preflight_workers
+[[ "$errors" -eq 0 ]]
+`,
+  );
+  return { directory, script };
+}
+
+describe("preflight parallel scheduler", () => {
+  it("runs every check once with bounded overlap and renders the established order", () => {
+    const fixture = preflightSchedulerFixture();
+    const result = spawnSync(
+      "bash",
+      [fixture.script, "--no-color", "--ascii", "--verbose"],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+        timeout: 15000,
+        env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
+      },
+    );
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /PASS\s+12 checks \+ 0 warnings/u);
+    const events = readFileSync(join(fixture.directory, "events"), "utf8")
+      .trim()
+      .split("\n");
+    const started = new Set<string>();
+    let active = 0;
+    let maximumActive = 0;
+    for (const event of events) {
+      const [operation, name] = event.split(" ");
+      assert.ok(name);
+      if (operation === "start") {
+        assert.ok(!started.has(name));
+        started.add(name);
+        active++;
+        maximumActive = Math.max(maximumActive, active);
+      } else active--;
+    }
+    assert.equal(started.size, 12);
+    assert.equal(active, 0);
+    assert.ok(maximumActive > 1 && maximumActive <= 4);
+    const reportOrder = [
+      "fixture shell",
+      "fixture contracts",
+      "fixture typescript",
+      "fixture tests",
+      "fixture dependency",
+      "fixture gruff",
+      "fixture audit",
+      "fixture memory",
+      "fixture content",
+      "fixture drift",
+      "fixture sync",
+      "fixture links",
+    ];
+    let previous = -1;
+    for (const label of reportOrder) {
+      const position = result.stdout.indexOf(label);
+      assert.ok(position > previous, label);
+      previous = position;
+    }
+  });
+
+  it("retains a worker's partial results and diagnostic while failing the complete run", () => {
+    const fixture = preflightSchedulerFixture(true);
+    const result = spawnSync(
+      "bash",
+      [fixture.script, "--no-color", "--ascii", "--verbose"],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+        timeout: 15000,
+        env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
+      },
+    );
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /fixture shell/u);
+    assert.match(result.stdout, /shell worker failed \(exit 7\)/u);
+    assert.match(result.stdout, /fixture child diagnostic/u);
+    assert.match(result.stdout, /FAIL\s+13 checks/u);
+    assert.doesNotMatch(result.stdout, /PASS\s+13 checks/u);
+  });
+
+  it("reports a worker that exits before opening a report section", () => {
+    const fixture = preflightSchedulerFixture();
+    const script = readFileSync(fixture.script, "utf8").replace(
+      "\nrun_preflight_workers\n",
+      '\ncheck_shell() { printf "fixture startup failure\\n"; exit 7; }\nrun_preflight_workers\n',
+    );
+    writeFileSync(fixture.script, script);
+    const result = spawnSync(
+      "bash",
+      [fixture.script, "--no-color", "--ascii", "--verbose"],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+        timeout: 15000,
+        env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
+      },
+    );
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /shell worker failed \(exit 7\)/u);
+    assert.match(result.stdout, /fixture startup failure/u);
+    assert.match(result.stdout, /FAIL\s+12 checks/u);
+  });
+
+  it(
+    "terminates running worker descendants when the complete preflight is interrupted",
+    { skip: process.platform === "win32" },
+    async () => {
+      const fixture = preflightSchedulerFixture(false, true);
+      const child = spawn("bash", [fixture.script, "--no-color", "--ascii"], {
+        cwd: PROJECT_ROOT,
+        stdio: "ignore",
+        env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
+      });
+      if (child.pid) fixtureProcessIds.add(child.pid);
+      const closed = new Promise<number | null>((resolveExit, rejectExit) => {
+        child.once("error", rejectExit);
+        child.once("close", resolveExit);
+      });
+      const marker = join(fixture.directory, "descendant");
+      const deadline = Date.now() + 10000;
+      while (!existsSync(marker) && Date.now() < deadline) {
+        await new Promise((resolvePoll) => setTimeout(resolvePoll, 20));
+      }
+      assert.ok(existsSync(marker), "worker reached the live descendant");
+      const descendant = Number(readFileSync(marker, "utf8").trim());
+      fixtureProcessIds.add(descendant);
+      child.kill("SIGTERM");
+      assert.equal(await closed, 143);
+      assert.equal(await waitForFixtureProcessExit(descendant), true);
+    },
+  );
 });

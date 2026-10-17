@@ -53,6 +53,7 @@
     "build:dashboard": "tsc -p tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs",
     "test": "npm run test:fast",
     "test:fast": "node scripts/run-tests.mjs fast",
+    "test:preflight": "node scripts/run-tests.mjs preflight",
     "test:slow": "npm run build && node scripts/run-tests.mjs slow",
     "test:slow:ci": "node scripts/run-tests.mjs slow",
     "test:full": "npm run test:fast && npm run test:slow",

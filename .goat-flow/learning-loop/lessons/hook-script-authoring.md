@@ -1,6 +1,6 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-10-16
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
@@ -92,7 +92,7 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `captureHookProcessUntil
 **Decision changed:** Trace SC2329 callers before suppression and run the exact published lint command with the analyzer version under test.
 **Incident count:** 4 | **Latest occurrence:** 2026-09-21
 
-**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. For SC2329, trace traps and sourced callers before adding a function-scoped directive naming the call path. Verify the workflow and installed mirrors with the same no-`-x` ShellCheck command used by preflight. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
+**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. For SC2329, trace traps and sourced callers before adding a function-scoped directive naming the call path. When editing those hooks, verify the workflow and installed mirrors with the published no-`-x` ShellCheck command. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
 
 **What happened:** After extracting `deny-dangerous.sh`, I expected `# shellcheck source=deny-dangerous.sh` above the runtime-computed source line to satisfy linting. The repo's hook lint command does not run ShellCheck with `-x`, so ShellCheck failed or warned with SC1091/SC1090 on every mirrored policy hook before any behavior checks could matter.
 

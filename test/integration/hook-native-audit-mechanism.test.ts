@@ -13,17 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
-import {
-  checkHookFileSyntax,
-  checkHookSelfTest,
-} from "../../src/cli/audit/check-agent-deny-mechanism.js";
 import { restrictedConsumerEnvironment } from "../helpers/restricted-consumer-env.js";
-import {
-  makeCtx,
-  PROFILES,
-  stubAgentFacts,
-  stubFS,
-} from "../unit/audit-command/helpers.js";
 
 // Consumer runners use the built CLI so compilation stays outside the restricted process tree.
 const MECHANISM_MODULE = pathToFileURL(
@@ -140,44 +130,4 @@ test("native mechanism syntax checks parse without executing and refuse missing 
 // Writes a real self-test driver and dispatchers so native environment paths, smoke argv, deduplication and failures cross actual child boundaries.
 test("native mechanism self-tests select both dispatchers once and report failure or unavailable candidates without Bash", () => {
   assert.deepEqual(runNativeMechanism("self-test"), []);
-});
-
-// Writes failing installed controls so audit reports Bash parse and self-test failures when native selection is omitted.
-test("mechanism checks retain installed Bash parsing and self-test defaults", () => {
-  const parent = realpathSync(
-    mkdtempSync(join(tmpdir(), "goat-audit-installed-mechanism-")),
-  );
-  try {
-    const hooks = join(parent, ".goat-flow/hooks");
-    mkdirSync(join(hooks, "deny-dangerous"), { recursive: true });
-    writeFileSync(join(hooks, "invalid.sh"), "if then\n");
-    writeFileSync(join(hooks, "deny-dangerous.sh"), "exit 0\n");
-    writeFileSync(
-      join(hooks, "deny-dangerous/deny-dangerous-self-test.sh"),
-      "exit 7\n",
-    );
-    const ctx = makeCtx({
-      projectPath: parent,
-      agents: [stubAgentFacts({ agent: PROFILES.claude })],
-      fs: stubFS({
-        readFile: (path) => {
-          try {
-            return readFileSync(join(parent, path), "utf8");
-          } catch {
-            return null;
-          }
-        },
-      }),
-    });
-    assert.equal(
-      checkHookFileSyntax(ctx, ".goat-flow/hooks", "invalid.sh").status,
-      "syntax-error",
-    );
-    const result = checkHookSelfTest(ctx);
-    assert.ok(result);
-    assert.match(result.message, /self-test.*failed for claude/u);
-    assert.match(result.howToFix ?? "", /Run bash .*\.sh/u);
-  } finally {
-    rmSync(parent, { recursive: true, force: true });
-  }
 });

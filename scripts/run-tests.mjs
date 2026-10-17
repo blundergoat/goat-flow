@@ -3,13 +3,15 @@
 // It collects every .test.ts file under test/, keeps the ones the chosen mode needs, and hands them to `node --test`, exiting with its result.
 //
 // What each mode, and the --shard flag, gives the developer:
-// - fast (the default, behind `npm test` and preflight) skips the slow suite so ordinary local verification stays short.
+// - fast (the default, behind `npm test`) skips the slow suite so ordinary local verification stays short.
+// - preflight also omits legacy Bash-hook execution suites during the Node runtime retirement.
 // - coverage runs the same files as fast and adds Node's experimental coverage report.
 // - slow runs costly integration, installer, dashboard and audit tests one at a time; they share repo state such as .goat-flow/dashboard-state.json.
 // - --shard=<index>/<total> splits the chosen mode across separate CI machines; CI uses it to spread the slow suite over parallel jobs.
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join, sep } from "node:path";
+import { availableParallelism } from "node:os";
 
 // Only the first argument picks the mode, e.g. `node scripts/run-tests.mjs slow`; with none, the developer gets the fast suite.
 // Other arguments except --shard are ignored, so `npm test -- <file>` still runs the whole fast suite and `slow --help` starts the slow suite.
@@ -89,6 +91,31 @@ function isSlowTest(path) {
 // That job runs on every pull request until the 1.19.0 release, then weekly; after that, start a manual CI run before merging such a change.
 const REFERENCE_JOB_TESTS = ["test/integration/hook-parity-reference.test.ts"];
 
+// These suites execute the legacy Bash hooks or their compatibility launcher.
+// They remain in the normal fast/slow selections; only preflight omits them.
+const LEGACY_BASH_HOOK_TESTS = new Set([
+  "test/integration/deny-large-report-transport.test.ts",
+  "test/integration/gruff-code-quality-contract.test.ts",
+  "test/integration/gruff-code-quality-quiet-feedback.test.ts",
+  "test/integration/gruff-code-quality-smoke.test.ts",
+  "test/integration/hook-command-spawn-matrix.test.ts",
+  "test/integration/hook-consumer-canary.test.ts",
+  "test/integration/hook-provider-contracts.test.ts",
+  "test/integration/hook-sync-recovery.test.ts",
+  "test/integration/post-turn-launcher-recovery.test.ts",
+  "test/integration/post-turn-safety-controller.test.ts",
+  "test/integration/post-turn-safety-hook-scanning.test.ts",
+  "test/integration/post-turn-safety-hook.test.ts",
+  "test/integration/preflight-deny-policy.test.ts",
+  "test/unit/audit-command/agent-deny-hooks-drift.test.ts",
+  "test/unit/audit-command/agent-deny-hooks.test.ts",
+  "test/unit/hook-launcher.test.ts",
+  "test/unit/hook-registrar-surfaces.test.ts",
+  "test/unit/hook-registrar.test.ts",
+  "test/unit/hooks-runtime-evidence.test.ts",
+  "test/unit/quality-report-contract.test.ts",
+]);
+
 /**
  * Keep only the tests the developer's chosen mode runs, before any --shard split; files in REFERENCE_JOB_TESTS are never kept.
  * An unknown mode writes the valid choices to stderr and exits with code 2 instead of running an unintended suite.
@@ -105,12 +132,16 @@ function filesForMode(allFiles) {
     case "fast":
     case "coverage":
       return modeCandidates.filter((path) => !isSlowTest(path));
+    case "preflight":
+      return modeCandidates.filter(
+        (path) => !isSlowTest(path) && !LEGACY_BASH_HOOK_TESTS.has(path),
+      );
     case "slow":
       return modeCandidates.filter(isSlowTest);
     // A typo such as `slwo`, or a flag typed first such as `node scripts/run-tests.mjs --shard=1/5`, lands here.
     default:
       console.error(
-        `Unknown test mode "${mode}". Expected fast, coverage, or slow.`,
+        `Unknown test mode "${mode}". Expected fast, preflight, coverage, or slow.`,
       );
       process.exit(2);
   }
@@ -233,17 +264,19 @@ if (testFilesToRun.length === 0) {
   process.exit(1);
 }
 
-// The developer sees TAP output from `node --import tsx --test`; slow runs one file at a time, fast and coverage up to eight at once.
-//
-// Keep the concurrency expression verbatim, duplicate "8" included: test/integration/preflight-progress.test.ts matches its exact text.
-// Keep the CLI `--import tsx` preload: on Node 20, the supported minimum, the programmatic runner failed .ts files with ERR_UNKNOWN_FILE_EXTENSION.
+/** Pick a bounded file count from the CPUs available to this process; slow fixtures still run alone. */
+function testConcurrencyForMode(selectedMode, availableCpus) {
+  return selectedMode === "slow" ? 1 : Math.min(16, Math.max(1, availableCpus));
+}
+
+// Keep the CLI preload: Node 20 needs it to load the TypeScript test files.
 const testRunnerArguments = [
   "--import",
   "tsx",
   "--test",
   "--test-reporter=tap",
   "--test-concurrency",
-  mode === "slow" ? "1" : mode === "fast" ? "8" : "8",
+  String(testConcurrencyForMode(mode, availableParallelism())),
 ];
 // Coverage mode records the actual Node runtime so developers can reproduce a version-specific reporter failure.
 if (mode === "coverage") {

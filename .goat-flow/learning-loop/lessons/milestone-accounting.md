@@ -145,7 +145,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Decision changed:** Run the plan arithmetic gate immediately after writing estimates, then independently derive every ISSUE-level roll-up from the validated milestone headlines.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 8 | **Latest occurrence:** 2026-08-26
+**Incident count:** 9 | **Latest occurrence:** 2026-10-17
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/coordination.md`; every recurrence is plan and ISSUE arithmetic, which this bucket owns.
 
 **Prevention:** Show effort accounting explicitly and derive each roll-up from the milestone headlines after strict validation, never by transcribing a mental sum. If two totals intentionally differ, name the accounting difference. Recompute a plan-wide total by exact sum over every milestone file rather than adjusting a stale prior total, because strict validation's milestone inventory excludes `ISSUE.md` and cannot catch that drift. Evidence anchors: `src/cli/plans-check.ts` (search: `task estimates`), `src/cli/plans-effort.ts` (search: `forecast basis derives`), `src/cli/plans-export.ts` (search: `function listMilestoneFiles`).
@@ -161,6 +161,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-08-14:** Reforecasting three downstream milestones rounded bounds to the nearest integer instead of applying the floor and ceiling rule; strict validation derived `16-42`, `12-32`, and `15-39` against a plan displaying `17-41`, `13-32`, and `15-38`, and the ISSUE roll-up needed recomputation from `45-111` to `43-113`.
 **Recurrence 2026-08-17:** The change multiplied 10 work units by a 1.16-minute low rate but transcribed the range floor as 12; strict validation derived 11 and rejected the plan until both the milestone and the roll-up used `11-72`.
 **Recurrence 2026-08-26:** After two milestones were trimmed, the 1.17.0 ISSUE headline was adjusted by subtracting only those deltas from a stale prior total; a fresh exact sum over all 53 milestone files measured `557-2,997` likely `1,368`, not `537-3,331` likely `1,338`. Strict validation still passed because its inventory excludes `ISSUE.md`.
+
+**Recurrence 2026-10-17:** The 1.19.0 ISSUE retained accepted M02's 55 minutes; derive remaining work from open headers.
 
 ---
 

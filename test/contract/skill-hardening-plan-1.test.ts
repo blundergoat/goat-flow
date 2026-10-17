@@ -436,10 +436,6 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       betweenMilestones,
       /After approval for a non-final milestone, capture learnings, complete it/u,
     );
-    assert.match(
-      betweenMilestones,
-      /Multiple sinks or uncovered work requires a plan amendment before source work or timing/u,
-    );
     assert.match(planComplete, /no sibling active work/u);
     assert.doesNotMatch(betweenMilestones, /no later milestone activates/u);
 

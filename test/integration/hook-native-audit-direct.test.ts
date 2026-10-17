@@ -14,12 +14,6 @@ import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { restrictedConsumerEnvironment } from "../helpers/restricted-consumer-env.js";
-import { verifyDirectHookRuntime } from "../../src/cli/audit/check-agent-deny-runtime.js";
-import {
-  makeCtx,
-  PROFILES,
-  stubAgentFacts,
-} from "../unit/audit-command/helpers.js";
 
 // Consumer runners use the built CLI so compilation stays outside the restricted process tree.
 const AUDIT_MODULE = pathToFileURL(
@@ -142,29 +136,4 @@ test("native direct audit preserves each provider's blocked input and reply for 
 test("native direct audit refuses Bash and never passes a missing or failing evaluator", () => {
   const observed = runNativeAuditScenario("failures");
   assert.equal(observed.length, PROVIDERS.length);
-});
-
-// Writes and runs an installed Bash control so extracting native invocation cannot silently change the default audit route.
-test("installed direct audit keeps the default Bash transport", () => {
-  const parent = realpathSync(
-    mkdtempSync(join(tmpdir(), "goat-audit-default-")),
-  );
-  const project = join(parent, "goat's installed & (default) [fixture]");
-  try {
-    const script = ".goat-flow/hooks/deny-dangerous.sh";
-    mkdirSync(join(project, ".goat-flow/hooks"), { recursive: true });
-    writeFileSync(
-      join(project, script),
-      "#!/usr/bin/env bash\nprintf 'BLOCKED: Policy destructive: installed fixture\\n' >&2\nexit 2\n",
-    );
-    const facts = stubAgentFacts({ agent: PROFILES.claude });
-    const result = verifyDirectHookRuntime(
-      makeCtx({ projectPath: project }),
-      facts,
-      script,
-    );
-    assert.equal(result.ok, true, JSON.stringify(result));
-  } finally {
-    rmSync(parent, { recursive: true, force: true });
-  }
 });

@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-10-17
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Parser-specific coverage and producer shapes are [test-fixtures-parsers.md](test-fixtures-parsers.md). Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -148,9 +148,13 @@ last_reviewed: 2026-10-17
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 27 | **Latest occurrence:** 2026-10-17
+**Incident count:** 29 | **Latest occurrence:** 2026-10-18
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the system under test or the assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behaviour, run the fixture through the unchanged strict baseline so unrelated errors are absent, and keep every non-target value inside its passing bounds. Assert that every text substitution changed its fixture before using the result as simulated input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. For an invalid-state case, name and trigger the exact production predicate; arbitrary content is not invalid when the implementation treats its bytes as opaque. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+
+**Recurrence 2026-10-18 (compiler-fixture control):** After replacing repository clones with a tiny project, a mutation using an invalid module suffix made the complete deletion test pass even though its compiler already failed before deletion. The expected TS2307 was present in both states. Compile the intact fixture successfully before applying the deletion; the same mutation must then fail at that healthy-control assertion. Keep the control inside the existing case rather than adding another suite. Evidence: `test/unit/check-touched.test.ts` (search: `healthy.status`).
+
+**Recurrence 2026-10-17 (fresh worktree):** Native wrapper tests and hook typecheck passed in an isolated checkout, but Gruff rejected the absent package binary with `design.package-bin-missing`. Build the checkout before the production ratchet; a dependency link does not create ignored output. The lesson's first draft then cited warning text absent from its named producer; read each citation before indexing. Evidence: `package.json` (search: `dist/cli/cli.js`) and `scripts/check-gruff-warning-ratchet.mjs` (search: `compareScanAgainstAcceptedDebt`).
 
 **Recurrence 2026-10-17 (learning-patch validation):** An isolated stats check copied the learning buckets but omitted their repository citations. Adding tracked source still omitted cited installed Gruff source. After both failures, validation was rewound to a complete source-context copy with the existing dependencies available read-only. Enumerate reference dependencies before claiming an isolated learning patch passes. `src/cli/stats/stats.ts` (search: `stale-ref`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
 

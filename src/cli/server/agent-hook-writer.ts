@@ -319,6 +319,10 @@ function claudeCodexEntries(
       command.args = [...handlerDescriptor.args];
       command.bash = handlerDescriptor.bash;
       command.powershell = handlerDescriptor.powershell;
+      // Only policy rows ask the host to refuse the tool call when the handler itself cannot run.
+      if (handlerDescriptor.onFailure !== undefined) {
+        command.onFailure = handlerDescriptor.onFailure;
+      }
     }
     // Include the Windows override only for providers whose launcher descriptor supplies one.
     else if (handlerDescriptor.commandWindows !== undefined) {

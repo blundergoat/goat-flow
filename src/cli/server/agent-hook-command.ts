@@ -399,8 +399,9 @@ export function agentRegistersHostTimeout(
 /**
  * Complete handler shape one provider registers for a managed hook.
  *
- * Shell handlers carry a command and optional Windows override; Claude argv handlers carry an executable, ordered arguments, and inert shell routes.
- * Compare the complete descriptor when reporting installation drift; reconstructing a command string loses provider-specific identity.
+ * Shell handlers carry a command and optional Windows override; Claude argv handlers carry an executable, ordered arguments, inert shell routes,
+ * and a host failure policy on policy rows. Compare the complete descriptor when reporting installation drift; reconstructing a command string
+ * loses provider-specific identity.
  */
 export type AgentHookHandlerDescriptor =
   | { form: "shell"; command: string; commandWindows?: string }
@@ -410,6 +411,8 @@ export type AgentHookHandlerDescriptor =
       args: string[];
       bash: string;
       powershell: string;
+      /** Claude Code 2.1.295+ refuses the tool call when this handler cannot start, times out, or exits outside 0/2; absent on feedback and Stop rows. */
+      onFailure?: "block";
     };
 
 /**
@@ -514,6 +517,10 @@ export function buildAgentHookDescriptor(
       ],
       bash: "exit 0",
       powershell: "exit 0",
+      // A policy handler that never answers must not let the command through; Gruff stays a visible skip and Stop ignores the field.
+      ...(hookResponseKind(spec) === "policy"
+        ? { onFailure: "block" as const }
+        : {}),
     };
   }
   const bootstrapSource = hookLaunchBootstrap(hookResponseMode);
@@ -726,7 +733,7 @@ export function entryCarriesHandlerDescriptor(
       entry.powershell === descriptor.command
     );
   }
-  // Argv handlers must match the executable, every ordered argument, and both inert shell routes exactly.
+  // Argv handlers must match the executable, every ordered argument, both inert shell routes, and the failure policy exactly.
   if (descriptor.form === "argv") {
     // Missing argv cannot reproduce the structured handler the user enabled.
     if (!Array.isArray(entry.args)) return false;
@@ -734,13 +741,15 @@ export function entryCarriesHandlerDescriptor(
       entry.command,
       entry.bash,
       entry.powershell,
+      entry.onFailure,
     ];
     const expectedIdentityFields = [
       descriptor.command,
       descriptor.bash,
       descriptor.powershell,
+      descriptor.onFailure,
     ];
-    // A changed executable or shell route is registration drift even when the argument list still matches.
+    // A changed executable, shell route, or failure policy is registration drift even when the argument list still matches.
     if (
       !registeredIdentityFields.every(
         (fieldValue, fieldIndex) =>

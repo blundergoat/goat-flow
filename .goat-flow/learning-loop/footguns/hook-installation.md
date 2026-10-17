@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** Hook install, launch, registration, and config-drift plumbing. The `deny-dangerous` policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md); runtime delivery and provider adapters live in [hooks.md](hooks.md).
@@ -93,7 +93,7 @@ Public-install convergence requires a separate replay after Sync and saved-handl
 
 **Why it happens:** Agent configs name launch paths, not the abstract hook file. A stale path, lost executable bit, unsupported shell substitution, cwd assumption, or host-shell retokenization fails before `deny-dangerous.sh` starts, and a `bash workflow/hooks/<guard>.sh` smoke test skips that surface entirely.
 
-**Evidence:** Preflight and audit parse the configured command strings from every agent config, require an exact guard script path, and replay them with safe deny payloads: `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`) and `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredGuardCommands`). Contract anchors: `workflow/hooks/README.md` (search: `Failure Modes / Runtime Contracts`) and `src/cli/server/agent-hook-command.ts` (search: `managed root unavailable`).
+**Evidence:** Audit parses the configured command strings from every agent config, requires an exact guard script path, and replays them with safe deny payloads: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredGuardCommands`). Contract anchors: `workflow/hooks/README.md` (search: `Failure Modes / Runtime Contracts`) and `src/cli/server/agent-hook-command.ts` (search: `managed root unavailable`).
 
 **Compatibility proof 2026-09-17:** A complete pinned v1.16.0 install confirms recovery through its exact saved general-policy handler after reviewed Sync.
 That release has shared policy modules but no separate Git hook; capture the new Git handler only after upgrade.

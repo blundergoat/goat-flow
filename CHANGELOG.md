@@ -6,6 +6,10 @@
 
 - **Issue briefs show likely minutes and per-task benefits** - Each `ISSUE.md` task ends in one likely figure, a total line and the headline sum them in hours, two new sections say what each task gives the user before and after the change, and the worked sample ships beside the format.
 
+### Security
+
+- **Claude blocks a command when a policy hook cannot run** - Both PreToolUse policy registrations carry `onFailure: "block"`, so Claude Code 2.1.295 or later refuses the command when the hook fails to start, times out or exits with an unexpected status instead of letting it through. Run `goat-flow hooks sync` to add the field to an existing installation.
+
 ## v1.18.0 - 2026-10-11
 
 ### Added

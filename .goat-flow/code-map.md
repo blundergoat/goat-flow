@@ -168,6 +168,8 @@ src/hooks/
 ├── policy-heredoc.mts           = existing non-shell stdin consumers and exact Goat Flow data-command recognition
 ├── policy-words.mts             = C-locale word parsing, wrapper payloads and byte-indexed shell parentheses
 ├── policy-git.mts               = native Git command-bearing config keys and payload transformations
+├── policy-prefixes.mts          = timing, privilege and launch-wrapper payload normalization
+├── policy-syntax.mts            = redirection stripping, native group boundaries and substitution budgets
 └── process-tree.mts             = native owned-process cleanup; generated into both hook trees
 ```
 
@@ -255,6 +257,8 @@ workflow/                        = packaged template source copied into target p
 │   ├── policy-heredoc.mjs       = generated non-shell stdin consumer and Goat Flow data-command recognition
 │   ├── policy-words.mjs         = generated shell word parsing, wrapper payloads and byte-indexed parentheses
 │   ├── policy-git.mjs           = generated Git config key and command-payload classification
+│   ├── policy-prefixes.mjs      = generated timing, privilege and launch-wrapper payload normalization
+│   ├── policy-syntax.mjs        = generated redirection, native-group and substitution primitives
 │   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
 │   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy template
@@ -393,6 +397,8 @@ docs/                            = user and maintainer documentation
 │   ├── policy-heredoc.mjs       = generated non-shell stdin consumer and Goat Flow data-command recognition
 │   ├── policy-words.mjs         = generated shell word parsing, wrapper payloads and byte-indexed parentheses
 │   ├── policy-git.mjs           = generated Git config key and command-payload classification
+│   ├── policy-prefixes.mjs      = generated timing, privilege and launch-wrapper payload normalization
+│   ├── policy-syntax.mjs        = generated redirection, native-group and substitution primitives
 │   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
 │   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy entrypoint

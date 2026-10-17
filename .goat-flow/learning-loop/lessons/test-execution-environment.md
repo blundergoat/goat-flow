@@ -1,6 +1,6 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-10-13
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** Choosing and invoking the right runner - which binary and loader actually execute, why a file argument may not narrow the suite, and when proof needs the published invocation path rather than source mode. Shell and process behaviour is [test-shell-environment.md](test-shell-environment.md).
@@ -173,6 +173,6 @@ last_reviewed: 2026-10-13
 **Decision changed:** Before promising a CI time saving, time the candidate files alone and scale by the suite's measured parallelism; never subtract a file's concurrent-run duration from the job's wall time.
 **Trigger phase:** SCOPE
 
-**Prevention:** The fast suite runs eight files at once (`scripts/run-tests.mjs`, search: `mode === "slow" ? "1" : mode === "fast" ? "8" : "8"`), so each file's TAP `duration_ms` includes time spent waiting for a CPU. Rank files by those durations if useful, but estimate a saving from the file's share of total suite time multiplied by the job's wall time, or from a sequential local run of the same file.
+**Prevention:** The fast suite runs up to sixteen files at once, bounded by the available CPUs (`scripts/run-tests.mjs`, search: `testConcurrencyForMode`), so each file's TAP `duration_ms` includes time spent waiting for a CPU. Rank files by those durations if useful, but estimate a saving from the file's share of total suite time multiplied by the job's wall time, or from a sequential local run of the same file.
 
 **What happened:** A test-suite review summed CI `duration_ms` values for the plan-checker files to 437 seconds and reported "about 390 seconds off the fast suite". The whole `test-fast` job ran tests for 4 minutes 23 seconds. Running the same files alone on Node 20.11.0 took about 46 seconds; the plan checker is about a quarter of fast-suite work, so the realistic saving is about a minute. Process-spawning files inflate most under contention, about 9.5 times here. The corrected figure was recorded before any test changed.

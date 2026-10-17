@@ -646,73 +646,48 @@ describe("preflight Tests-phase progress", () => {
     assert.doesNotMatch(preflightSource, /run npx knip for details/u);
   });
 
-  it("selects Codex's Windows override for native configured-hook smokes", () => {
-    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
-    const functionStart = preflightSource.indexOf("function runCommand(");
-    const functionEnd = preflightSource.indexOf(
-      "\nfunction spawnFailureMessage(",
-      functionStart,
-    );
-    assert.ok(functionStart >= 0 && functionEnd > functionStart);
-    const runCommandSource = preflightSource.slice(functionStart, functionEnd);
-    const calls: unknown[][] = [];
-    const runCommand = runInNewContext(`${runCommandSource}\nrunCommand`, {
-      process: { platform: "win32", env: {} },
-      spawnSync: (...args: unknown[]) => {
-        calls.push(args);
-        return { status: 0 };
-      },
-    }) as (
-      entry: { command: string; commandWindows?: string; args?: string[] },
-      input: string,
-      cwd: string,
-    ) => unknown;
-
-    assert.match(preflightSource, /typeof value\.commandWindows === "string"/u);
-    assert.match(
-      preflightSource,
-      /process\.platform === "win32" && entry\.commandWindows !== undefined/u,
-    );
-    assert.match(
-      preflightSource,
-      /\["-NoProfile", "-NonInteractive", "-Command", entry\.commandWindows\]/u,
-    );
-    assert.match(preflightSource, /entry\.commandWindows \?\? ""/u);
-
-    runCommand(
-      { command: "echo default", commandWindows: "" },
-      "payload",
-      "C:\\fixture",
-    );
-    assert.equal(calls[0]?.[0], "powershell.exe");
-    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      "",
-    ]);
-
-    calls.length = 0;
-    runCommand({ command: "echo default" }, "payload", "C:\\fixture");
-    assert.equal(calls[0]?.[0], "bash");
-    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
-      "--noprofile",
-      "--norc",
-      "-s",
-    ]);
-    assert.equal(
-      (calls[0]?.[2] as { input: string }).input,
-      'printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { echo default; }\n',
-    );
+  it("excludes legacy hook execution only from the preflight selection", () => {
+    const source = readFileSync(TEST_RUNNER_PATH, "utf8");
+    const start = source.indexOf("function isSlowTest(");
+    const end = source.indexOf("// Measured seconds per slow test file", start);
+    assert.ok(start >= 0 && end > start);
+    const files = [
+      "test/integration/deny-large-report-transport.test.ts",
+      "test/integration/post-turn-safety-hook.test.ts",
+      "test/unit/audit-command/agent-deny-hooks.test.ts",
+      "test/unit/hook-registrar-surfaces.test.ts",
+      "test/unit/hooks-runtime-evidence.test.ts",
+      "test/unit/quality-report-contract.test.ts",
+      "test/integration/hook-policy-node.test.ts",
+      "test/unit/hook-policy-primitives.test.ts",
+      "test/integration/deny-dangerous-policy.test.ts",
+    ];
+    const select = (mode: string) =>
+      Array.from(
+        runInNewContext(`${source.slice(start, end)}\nfilesForMode(files)`, {
+          mode,
+          files,
+        }) as string[],
+      );
+    assert.deepEqual(select("preflight"), files.slice(6, 8));
+    assert.deepEqual(select("fast"), files.slice(0, 8));
+    assert.deepEqual(select("coverage"), files.slice(0, 8));
+    assert.deepEqual(select("slow"), files.slice(8));
   });
 
   it("keeps fast concurrency bounded and isolates observed subprocess-heavy suites", () => {
     const runnerSource = readFileSync(TEST_RUNNER_PATH, "utf-8");
 
-    assert.match(
-      runnerSource,
-      /mode === "slow" \? "1" : mode === "fast" \? "8" : "8"/u,
-    );
+    const start = runnerSource.indexOf("function testConcurrencyForMode(");
+    const end = runnerSource.indexOf("\n}", start) + 2;
+    assert.ok(start >= 0 && end > start);
+    const concurrency = runInNewContext(
+      `${runnerSource.slice(start, end)}; testConcurrencyForMode`,
+    ) as (mode: string, cpus: number) => number;
+    assert.equal(concurrency("slow", 24), 1);
+    assert.equal(concurrency("fast", 24), 16);
+    assert.equal(concurrency("fast", 8), 8);
+    assert.equal(concurrency("coverage", 2), 2);
     assert.match(
       runnerSource,
       /test\/integration\/hook-effective-state\.test\.ts/u,

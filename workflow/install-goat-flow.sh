@@ -3671,6 +3671,8 @@ if $HOOKS_ENABLED; then
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/policy-heredoc.mjs" "$HOOKS_DIR/policy-heredoc.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/policy-words.mjs" "$HOOKS_DIR/policy-words.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/policy-git.mjs" "$HOOKS_DIR/policy-git.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/policy-prefixes.mjs" "$HOOKS_DIR/policy-prefixes.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/policy-syntax.mjs" "$HOOKS_DIR/policy-syntax.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/process-tree.mjs" "$HOOKS_DIR/process-tree.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-policy-state.cjs" "$HOOKS_DIR/hook-policy-state.cjs" "system-owned" "644"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/vendor/js-yaml.cjs" "$HOOKS_DIR/vendor/js-yaml.cjs" "system-owned" "644"

@@ -751,6 +751,7 @@ describe("hook registrar: launchers and installation", () => {
             args: expectedDescriptor.args,
             bash: expectedDescriptor.bash,
             powershell: expectedDescriptor.powershell,
+            onFailure: "block",
             timeout: denySpec.timeoutSec,
           },
         ],
@@ -765,33 +766,40 @@ describe("hook registrar: launchers and installation", () => {
     });
   });
 
-  // Writes one mutated installed row, proving a loader cannot drop a no-op field and revive Copilot's bare-node failure after sync.
-  it("reports a partial Claude routing descriptor as command drift", () => {
-    withTempProject((root) => {
-      installClaudeDenyHook(root);
-      const configPath = join(root, ".claude", "settings.json");
-      const config = JSON.parse(readFileSync(configPath, "utf-8")) as {
-        hooks: {
-          PreToolUse: Array<{
-            hooks: Array<Record<string, unknown>>;
-          }>;
+  // Writes one mutated installed row per field, proving a loader cannot drop the no-op route that stops Copilot's bare-node
+  // failure, or the host failure policy an older install lacks, without sync repairing it.
+  for (const droppedField of ["powershell", "onFailure"] as const) {
+    it(`reports a Claude policy row without ${droppedField} as command drift`, () => {
+      withTempProject((root) => {
+        installClaudeDenyHook(root);
+        const configPath = join(root, ".claude", "settings.json");
+        const config = JSON.parse(readFileSync(configPath, "utf-8")) as {
+          hooks: {
+            PreToolUse: Array<{
+              hooks: Array<Record<string, unknown>>;
+            }>;
+          };
         };
-      };
-      const dangerRow = config.hooks.PreToolUse.flatMap(
-        (group) => group.hooks,
-      ).find((row) => JSON.stringify(row).includes("deny-dangerous.sh"));
-      assert.ok(dangerRow);
-      delete dangerRow.powershell;
-      writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+        const dangerRow = config.hooks.PreToolUse.flatMap(
+          (group) => group.hooks,
+        ).find((row) => JSON.stringify(row).includes("deny-dangerous.sh"));
+        assert.ok(dangerRow);
+        assert.ok(
+          droppedField in dangerRow,
+          `${droppedField} must be registered`,
+        );
+        delete dangerRow[droppedField];
+        writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
-      const denySpec = getHookSpec(HOOK_IDENTIFIER);
-      assert.ok(denySpec);
-      assert.equal(
-        readAgentHookState(root, PROFILES.claude, denySpec).registrationIssue,
-        "command-or-response-mismatch",
-      );
+        const denySpec = getHookSpec(HOOK_IDENTIFIER);
+        assert.ok(denySpec);
+        assert.equal(
+          readAgentHookState(root, PROFILES.claude, denySpec).registrationIssue,
+          "command-or-response-mismatch",
+        );
+      });
     });
-  });
+  }
 
   it("keeps provider deny descriptors byte-identical to the committed installer contract", () => {
     assertProviderDenyDescriptorsMatchInstallerContract();

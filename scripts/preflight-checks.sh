@@ -86,6 +86,15 @@ done
 # Read the manifest-owned inventory used by preflight so checks follow supported agents and managed files.
 
 manifest_eval() {
+    local key="$*" index
+    if [[ "${manifest_cache_ready:-0}" -eq 1 ]]; then
+        for index in "${!manifest_cache_keys[@]}"; do
+            if [[ "${manifest_cache_keys[index]}" == "$key" ]]; then
+                printf '%s\n' "${manifest_cache_values[index]}"
+                return 0
+            fi
+        done
+    fi
     node - "$MANIFEST_PATH" "$@" <<'NODE'
 const fs = require("node:fs");
 
@@ -168,6 +177,30 @@ if (mode === "skill-files") {
 process.stderr.write(`unknown manifest_eval mode: ${mode}\n`);
 process.exit(1);
 NODE
+}
+
+# Snapshot manifest inventories once; uncached readers retain their original behaviour.
+manifest_cache_keys=()
+manifest_cache_values=()
+manifest_cache_ready=0
+cache_manifest_inventory() {
+    local mode skill key value
+    manifest_cache_ready=0
+    for mode in hook-dirs skill-roots instruction-files supported-skills; do
+        if value=$(manifest_eval "$mode"); then
+            manifest_cache_keys+=("$mode")
+            manifest_cache_values+=("$value")
+        fi
+    done
+    while IFS= read -r skill; do
+        [[ -n "$skill" ]] || continue
+        key="skill-files $skill"
+        if value=$(manifest_eval skill-files "$skill"); then
+            manifest_cache_keys+=("$key")
+            manifest_cache_values+=("$value")
+        fi
+    done < <(manifest_eval supported-skills)
+    manifest_cache_ready=1
 }
 
 # ── Output formatter (M-preflight-redesign) ────────────────────────── Buffer-then-render: helpers append rows to a TSV ledger; render_report walks
@@ -259,6 +292,11 @@ _on_exit() {
     # clobber it on every row and `exit "$rc"` ends up as `exit ""`.
     local _exit_rc=$?
     [[ "$_exit_rc" =~ ^[0-9]+$ ]] || _exit_rc=0
+    stop_preflight_workers
+    if [[ "$_exit_rc" -ne 0 && "${errors:-0}" -eq 0 ]]; then
+        section "Preflight runner"
+        fail "Preflight stopped before every check completed (exit $_exit_rc)"
+    fi
     # Render the final report once even when a failed check exits through the shell trap.
     if [[ "$_render_done" -eq 0 ]]; then
         _render_done=1
@@ -283,6 +321,8 @@ _on_exit() {
     exit "$_exit_rc"
 }
 trap '_on_exit' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 errors=0
 warnings=0
@@ -328,13 +368,15 @@ _record_section_elapsed() {
     return 0
 }
 
-# Close the previous section and start the next group of checks in the terminal report.
+# Close the previous timing interval and select the next section in this worker ledger.
 
 section() {
     _record_section_elapsed
-    _emit_header_once
+    if [[ "${preflight_worker:-0}" -eq 0 ]]; then
+        _emit_header_once
+    fi
     # Finish the previous section before displaying the next group of checks.
-    if [[ -n "$current_section" ]]; then
+    if [[ "${preflight_worker:-0}" -eq 0 && -n "$current_section" ]]; then
         _emit_section_row "$current_section"
     fi
     current_section="$1"
@@ -342,7 +384,9 @@ section() {
     printf 'SECTION\t%s\n' "$current_section" >> "$LEDGER"
     local phase
     phase=$(phase_for "$1")
-    _emit_phase_if_changed "$phase"
+    if [[ "${preflight_worker:-0}" -eq 0 ]]; then
+        _emit_phase_if_changed "$phase"
+    fi
     return 0
 }
 
@@ -410,7 +454,7 @@ run_command_capture_with_timeout() {
 phase_for() {
     case "$1" in
         "Shell Scripts"|"TypeScript") printf 'STATIC' ;;
-        "Deny Policy"|"ADR Enforcement"|"Gruff Policy") printf 'POLICY' ;;
+        "ADR Enforcement"|"Gruff Policy") printf 'POLICY' ;;
         "Agent Config Parity"|"Skill and Reference Versions"|"Version Consistency") printf 'CONFIG INTEGRITY' ;;
         "Skill Static Contracts"|"Reference Budgets"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
         "Tests"|"Dependency Audit") printf 'TESTS' ;;
@@ -426,7 +470,6 @@ display_for() {
     case "$1" in
         "Shell Scripts") printf 'Shell scripts' ;;
         "TypeScript") printf 'TypeScript' ;;
-        "Deny Policy") printf 'Deny policy' ;;
         "ADR Enforcement") printf 'ADR enforcement' ;;
         "Gruff Policy") printf 'Gruff policy' ;;
         "Agent Config Parity") printf 'Agent config parity' ;;
@@ -458,7 +501,6 @@ collapsed_desc_for() {
     case "$1" in
         "Shell Scripts") printf 'bash syntax + shellcheck' ;;
         "TypeScript") printf 'build · lint · knip · prettier' ;;
-        "Deny Policy") printf 'self-test + runtime smokes' ;;
         "ADR Enforcement") printf 'no removed patterns' ;;
         "Gruff Policy") printf 'no disabled rules · warning-debt ratchet' ;;
         "Agent Config Parity") printf 'claude · codex · antigravity · copilot' ;;
@@ -484,10 +526,10 @@ collapsed_desc_for() {
     esac
 }
 
-# ── Live renderer ──────────────────────────────────────────────────── Each section's collapsed row (and any auto-expansion on FAIL/WARN) is printed
-# when the section completes - i.e. when the next section() call fires, or when _on_exit runs for the last section.
-#
-# The header prints once, lazily, on the first section() call.
+# ── Ordered renderer ─────────────────────────────────────────────────
+# Completed worker ledgers are rendered in the established section order.
+# Failed or warning sections expand their own captured diagnostics.
+# The header prints once before the first collected section.
 # Phase headings print whenever the phase changes between two consecutive sections.
 #
 # Widths are computed once from a fixed list of known sections, so the columns stay aligned across all rows regardless of which sections end up
@@ -571,7 +613,7 @@ _compute_widths() {
     local sec disp d
     local known=(
         "Shell Scripts" "TypeScript"
-        "Deny Policy" "ADR Enforcement" "Gruff Policy"
+        "ADR Enforcement" "Gruff Policy"
         "Agent Config Parity" "Skill and Reference Versions" "Version Consistency"
         "Skill Static Contracts" "Cross-Agent Consistency"
         "Reference Budgets"
@@ -778,6 +820,7 @@ _emit_footer() {
     printf '%s%s%s\n' "$DIM" "$RULE_MID_LINE" "$RST"
 }
 
+check_shell() {
 # ── Shell Scripts ────────────────────────────────────────────────────
 section "Shell Scripts"
 # Only a successful syntax check earns a pass for project scripts and hooks.
@@ -797,350 +840,15 @@ if command -v shellcheck >/dev/null 2>&1; then
         fail "Shellcheck (scripts) - run shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh for details"
     fi
 
-    # Also shellcheck installed hooks. SC2001 stays excluded (sed rewrites are deliberate); SC2016 no longer is,
-    # because the one literal that raised it now carries a narrow directive at its own site.
-    while IFS= read -r hookdir; do
-        hook_shell_files=()
-        # Installed entrypoints and sourced modules both contribute to the developer's lint verdict.
-        for hook_shell_file in "$hookdir"/*.sh "$hookdir"/deny-dangerous/*.sh; do
-            [[ ! -f "$hook_shell_file" ]] || hook_shell_files+=("$hook_shell_file")
-        done
-        # Include sourced policy modules so this gate covers the published shell-lint command.
-        if [[ "${#hook_shell_files[@]}" -gt 0 ]]; then
-            # Each hook directory needs a successful shellcheck result before receiving a pass.
-            if shellcheck --exclude=SC2001 "${hook_shell_files[@]}" >/dev/null 2>&1; then
-                pass "Shellcheck ($hookdir/)"
-            else
-                fail "Shellcheck ($hookdir/) - run the instruction file's shellcheck command for details"
-            fi
-        fi
-    done < <(
-        manifest_eval hook-dirs
-        # Framework development also checks canonical copies; consumer projects need only their installed hooks.
-        if [[ -d workflow/hooks ]]; then printf '%s\n' workflow/hooks; fi
-    )
 else
     warn "Shellcheck not installed - run: bash scripts/setup-initial.sh"
 fi
 
-# ── Deny Policy ──────────────────────────────────────────────────────
-section "Deny Policy"
-# Both entrypoints load the installed runtime, even when invoked from workflow/hooks.
-# Compare the complete policy unit before reusing one full run per policy across its mirrors.
-policy_hook_dirs=()
-policy_mirrors_match=1
-while IFS= read -r hookdir; do
-    policy_hook_dirs+=("$hookdir")
-    hook_mirror_matches=1
-    for policy_file in deny-dangerous.sh deny-git-mutations.sh gh-graphql-read.cjs vendor/graphql.cjs; do
-        if [[ ! -f "workflow/hooks/$policy_file" || ! -f "$hookdir/$policy_file" ]] ||
-            ! cmp -s -- "workflow/hooks/$policy_file" "$hookdir/$policy_file"; then
-            fail "$hookdir/$policy_file missing or differs from workflow/hooks/$policy_file"
-            hook_mirror_matches=0
-        fi
-    done
-    if [[ ! -d workflow/hooks/deny-dangerous || ! -d "$hookdir/deny-dangerous" ]]; then
-        fail "$hookdir/deny-dangerous or workflow/hooks/deny-dangerous runtime directory missing"
-        hook_mirror_matches=0
-    elif ! policy_mirror_output=$(diff -qr -- workflow/hooks/deny-dangerous "$hookdir/deny-dangerous" 2>&1); then
-        fail "$hookdir/deny-dangerous runtime differs from workflow/hooks/deny-dangerous"
-        printf '%s\n' "$policy_mirror_output" | sed -n '1,20p' | details_pipe
-        hook_mirror_matches=0
-    fi
-    if [[ "$hook_mirror_matches" -eq 1 ]]; then
-        pass "$hookdir deny policy runtime matches workflow/hooks (entrypoints, modules, corpus, GraphQL helpers)"
-    else
-        policy_mirrors_match=0
-    fi
-done < <(manifest_eval hook-dirs)
 
-if [[ "${#policy_hook_dirs[@]}" -eq 0 ]]; then
-    fail "No installed hook directories declared in workflow/manifest.json"
-elif [[ "$policy_mirrors_match" -eq 0 ]]; then
-    skip "Full deny-policy suites (repair runtime mirror drift first)"
-else
-    # Policy ownership differs, so each policy still needs its own complete corpus.
-    for policy_hook in deny-dangerous deny-git-mutations; do
-        installed_policy_hook="${policy_hook_dirs[0]}/$policy_hook.sh"
-        if deny_self_test_output=$(bash "$installed_policy_hook" --self-test=full 2>&1); then
-            pass "$installed_policy_hook ${deny_self_test_output}"
-        else
-            deny_self_test_exit=$?
-            fail "$installed_policy_hook full self-test (exit $deny_self_test_exit)"
-            printf '%s\n' "$deny_self_test_output" | sed -n '1,20p' | details_pipe
-        fi
-    done
-fi
-
-# Runtime smoke test: pipe a known-blocked command through installed deny hooks
-while IFS= read -r hookdir; do
-    # Exercise an installed dangerous-command hook when its entrypoint exists.
-    if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
-        # Copilot needs its own payload and JSON denial contract for this smoke test.
-        if [[ "$hookdir" == ".github/hooks" ]]; then
-            test_payload='{"toolName":"bash","toolArgs":"{\"command\":\"rm -rf /\"}"}'
-            # The provider must exit successfully before its denial response can be assessed.
-            if output=$(bash "$hookdir/deny-dangerous.sh" <<< "$test_payload" 2>&1); then
-                # Only an explicit Copilot deny response proves this smoke request was blocked.
-                if echo "$output" | grep -q '"permissionDecision":"deny"'; then
-                    pass "$hookdir/deny-dangerous.sh runtime smoke test (copilot payload denied rm -rf)"
-                else
-                    fail "$hookdir/deny-dangerous.sh did not return a deny decision for Copilot payload"
-                fi
-            else
-                exit_code=$?
-                warn "$hookdir/deny-dangerous.sh exited $exit_code on Copilot deny payload (expected 0 + deny JSON)"
-            fi
-        # Antigravity needs its own payload and JSON denial contract for this smoke test.
-        elif [[ "$hookdir" == ".agents/hooks" ]]; then
-            test_payload='{"hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"rm -rf /"}}}'
-            # A successful provider exit permits inspection of the returned Antigravity denial.
-            if output=$(bash "$hookdir/deny-dangerous.sh" <<< "$test_payload" 2>&1); then
-                # Only an explicit Antigravity deny response earns a passing smoke row.
-                if echo "$output" | grep -q '"decision":"deny"'; then
-                    pass "$hookdir/deny-dangerous.sh runtime smoke test (antigravity payload denied rm -rf)"
-                else
-                    fail "$hookdir/deny-dangerous.sh did not return a deny decision for Antigravity payload"
-                fi
-            else
-                exit_code=$?
-                warn "$hookdir/deny-dangerous.sh exited $exit_code on Antigravity deny payload (expected 0 + deny JSON)"
-            fi
-        else
-            # Simulate a VS Code-style Bash tool call with a dangerous command
-            test_payload='{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
-            # An allowed destructive smoke request is a failed protection check.
-            if bash "$hookdir/deny-dangerous.sh" <<< "$test_payload" >/dev/null 2>&1; then
-                fail "$hookdir/deny-dangerous.sh did not block 'rm -rf /' (exit 0)"
-            else
-                exit_code=$?
-                # The documented blocked exit distinguishes a real denial from a launcher failure.
-                if [[ $exit_code -eq 2 ]]; then
-                    pass "$hookdir/deny-dangerous.sh runtime smoke test (blocked rm -rf)"
-                else
-                    warn "$hookdir/deny-dangerous.sh exited $exit_code on blocked command (expected 2)"
-                fi
-            fi
-        fi
-    fi
-done < <(manifest_eval hook-dirs)
-
-# Runtime smoke test the exact command strings in installed agent configs.
-# This catches failures before the guard script starts, including stale paths and exit-127 command-shape regressions.
-configured_hook_smoke_output=$(
-    node <<'NODE'
-const fs = require("node:fs");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
-
-const guardScripts = ["deny-dangerous.sh", "deny-git-mutations.sh"];
-const configs = [
-  { agent: "claude", path: ".claude/settings.json", mode: "stderr" },
-  { agent: "codex", path: ".codex/hooks.json", mode: "stderr" },
-  { agent: "antigravity", path: ".agents/hooks.json", mode: "antigravity-json" },
-  { agent: "copilot", path: ".github/hooks/hooks.json", mode: "copilot-json" },
-];
-
-function emit(status, message) {
-  console.log(`${status}\t${message}`);
+return 0
 }
 
-function payloadFor(mode, script) {
-  // Probe the action each saved policy owns after GitHub writes moved to the Git policy.
-  const command = script === "deny-git-mutations.sh" ? "git push origin main" : "cat .env";
-  if (mode === "copilot-json") {
-    return {
-      input: JSON.stringify({ toolName: "bash", toolArgs: { command } }),
-      status: 0,
-      stream: "stdout",
-      pattern: /"permissionDecision"\s*:\s*"deny"/,
-    };
-  }
-  if (mode === "antigravity-json") {
-    return {
-      input: JSON.stringify({
-        hookEventName: "PreToolUse",
-        toolCall: { name: "run_command", args: { CommandLine: command } },
-      }),
-      status: 0,
-      stream: "stdout",
-      pattern: /"decision"\s*:\s*"deny"/,
-    };
-  }
-  return {
-    input: JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
-    status: 2,
-    stream: "stderr",
-    pattern: /BLOCKED:/,
-  };
-}
-
-function collect(value, out = []) {
-  if (Array.isArray(value)) {
-    for (const item of value) collect(item, out);
-    return out;
-  }
-  if (!value || typeof value !== "object") return out;
-  // Structured exec-form rows (ADR-053) name the guard script as an argv element.
-  if (typeof value.command === "string" && Array.isArray(value.args)) {
-    const argumentOperands = value.args.filter(
-      (argumentValue) => typeof argumentValue === "string",
-    );
-    const script = guardScripts.find((name) =>
-      argumentOperands.some((argumentValue) => argumentValue.includes(name)),
-    );
-    if (script) out.push({ command: value.command, args: argumentOperands, script });
-  }
-  // Shell rows retain the provider's default command and any Windows-only override as one descriptor.
-  if (typeof value.command === "string" && !Array.isArray(value.args)) {
-    const commandWindows =
-      typeof value.commandWindows === "string" ? value.commandWindows : undefined;
-    const script = guardScripts.find((name) =>
-      [value.command, commandWindows].some(
-        (commandText) =>
-          typeof commandText === "string" && commandText.includes(name),
-      ),
-    );
-    if (script) out.push({ command: value.command, commandWindows, script });
-  }
-  for (const key of ["bash"]) {
-    if (typeof value[key] !== "string") continue;
-    const script = guardScripts.find((name) => value[key].includes(name));
-    if (script) out.push({ command: value[key], script });
-  }
-  for (const child of Object.values(value)) {
-    if (child && typeof child === "object") collect(child, out);
-  }
-  return out;
-}
-
-function smokeCwds(agent) {
-  const root = process.cwd();
-  const cwds = [{ label: "project root", cwd: root }];
-  if (agent === "copilot") return cwds;
-  const nested = path.join(root, ".goat-flow");
-  if (fs.existsSync(nested)) cwds.push({ label: ".goat-flow", cwd: nested });
-  return cwds;
-}
-
-function runCommand(entry, input, cwd) {
-  // Exec-form handlers replay their exact argv with the payload on stdin, as the provider runs them.
-  if (entry.args) {
-    return spawnSync(entry.command, entry.args, {
-      cwd,
-      encoding: "utf8",
-      input,
-      timeout: 5000,
-    });
-  }
-  // Codex documents commandWindows as the native Windows replacement for its default shell command.
-  if (process.platform === "win32" && entry.commandWindows !== undefined) {
-    return spawnSync(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", entry.commandWindows],
-      {
-        cwd,
-        encoding: "utf8",
-        input,
-        timeout: 5000,
-      },
-    );
-  }
-  // Stdin preserves the configured shell text across Node -> Git Bash on Windows; -c argv can lose nested quotes.
-  // This is local Bash replay, not evidence that the provider delivers this descriptor.
-  return spawnSync("bash", ["--noprofile", "--norc", "-s"], {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: input },
-    input: `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${entry.command}; }\n`,
-    timeout: 5000,
-  });
-}
-
-function spawnFailureMessage(result, label) {
-  if (!result.error) return null;
-  if (typeof result.status === "number") return null;
-  const code = result.error.code ? `${result.error.code}: ` : "";
-  return `${label} could not spawn (${code}${result.error.message}). The current sandbox or permission profile may block child-process execution.`;
-}
-
-let checked = 0;
-for (const config of configs) {
-  if (!fs.existsSync(config.path)) {
-    emit("SKIP", `${config.agent}: hook config missing (${config.path})`);
-    continue;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(fs.readFileSync(config.path, "utf8"));
-  } catch (error) {
-    emit("FAIL", `${config.agent}: hook config JSON parse failed (${error.message})`);
-    continue;
-  }
-  const seen = new Set();
-  const commands = collect(parsed).filter((entry) => {
-    // Args join the identity so two handlers sharing one executable stay distinct.
-    const key = [
-      entry.command,
-      entry.commandWindows ?? "",
-      ...(entry.args ?? []),
-      entry.script,
-    ].join("\0");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  for (const script of guardScripts) {
-    if (!commands.some((entry) => entry.script === script)) {
-      emit("FAIL", `${config.agent}: required ${script} registration missing in ${config.path}`);
-    }
-  }
-  if (commands.length === 0) {
-    emit("FAIL", `${config.agent}: no configured guard hook commands found in ${config.path}`);
-    continue;
-  }
-  for (const entry of commands) {
-    checked += 1;
-    const smoke = payloadFor(config.mode, entry.script);
-    for (const smokeCwd of smokeCwds(config.agent)) {
-      const result = runCommand(entry, smoke.input, smokeCwd.cwd);
-      const spawnFailure = spawnFailureMessage(
-        result,
-        `${config.agent}: ${entry.script} configured command`,
-      );
-      if (spawnFailure) {
-        emit("FAIL", spawnFailure);
-        continue;
-      }
-      const status = result.status ?? (result.error ? -1 : 0);
-      if (status === 126 || status === 127) {
-        const shownCommand = entry.args ? [entry.command, ...entry.args].join(" ") : entry.command;
-        emit("FAIL", `${config.agent}: ${entry.script} configured command exited ${status} from ${smokeCwd.label}: ${shownCommand}`);
-        continue;
-      }
-      const stream = smoke.stream === "stdout" ? result.stdout : result.stderr;
-      if (status === smoke.status && smoke.pattern.test(stream)) {
-        emit("PASS", `${config.agent}: ${entry.script} configured command smoke denied payload from ${smokeCwd.label}`);
-      } else {
-        emit("FAIL", `${config.agent}: ${entry.script} configured command smoke failed from ${smokeCwd.label} (exit ${status})`);
-      }
-    }
-  }
-}
-if (checked === 0) emit("SKIP", "No configured guard hook commands checked");
-NODE
-)
-# Translate each machine-produced result into the developer's preflight report.
-while IFS=$'\t' read -r status message; do
-    [[ -z "${status:-}" ]] && continue
-    case "$status" in
-        PASS) pass "$message" ;;
-        FAIL) fail "$message" ;;
-        SKIP) skip "$message" ;;
-        *) fail "Configured hook smoke emitted unexpected result: $status $message" ;;
-    esac
-done <<< "$configured_hook_smoke_output"
-
+check_contracts() {
 # ── Agent Config Parity ──────────────────────────────────────────────
 section "Agent Config Parity"
 agent_config_output=$(
@@ -1903,6 +1611,11 @@ if $enc_ok; then
     pass "No encyclopedia content in instruction files"
 fi
 
+
+return 0
+}
+
+check_typescript() {
 # ── TypeScript ───────────────────────────────────────────────────────
 if [[ -f tsconfig.json ]]; then
     section "TypeScript"
@@ -1913,6 +1626,8 @@ if [[ -f tsconfig.json ]]; then
     else
         fail "Typecheck/build - run npx tsc for details"
     fi
+
+    : > "$PREFLIGHT_BUILD_READY"
 
     # Dashboard TypeScript (excluded from main tsconfig.json)
     if [[ -f tsconfig.dashboard.json ]]; then
@@ -2016,13 +1731,23 @@ if [[ -f tsconfig.json ]]; then
     # TODO/FIXME check removed (false-positive rate too high in string literals)
 fi
 
+
+: > "$PREFLIGHT_BUILD_READY"
+
+return 0
+}
+
+check_tests() {
 # ── Tests ────────────────────────────────────────────────────────────
 if [[ "$skip_tests" -ne 1 ]] && [[ -f package.json ]] && grep -q '"test"' package.json; then
     section "Tests"
     test_reports_coverage=false
     coverage_output=""
-    # Prefer the stable fast suite for the release gate; maintainers can run experimental coverage explicitly.
-    if grep -q '"test:fast"' package.json; then
+    # Prefer the retirement-aware suite when the project declares it.
+    if grep -q '"test:preflight"' package.json; then
+        test_command=(npm run test:preflight)
+        test_label="Preflight suite"
+    elif grep -q '"test:fast"' package.json; then
         test_command=(npm run test:fast)
         test_label="Fast suite"
     # A project with only a coverage suite can still use it as its declared test gate.
@@ -2137,6 +1862,11 @@ if [[ "$skip_tests" -eq 1 ]] && [[ -f package.json ]] && grep -q '"test"' packag
     skip "Package tests skipped by --skip-tests"
 fi
 
+
+return 0
+}
+
+check_dependency() {
 # ── Dependency Audit ─────────────────────────────────────────────────
 if [[ -f package.json ]]; then
     section "Dependency Audit"
@@ -2175,6 +1905,11 @@ if [[ -f package.json ]]; then
     fi
 fi
 
+
+return 0
+}
+
+check_gruff() {
 # ── Removed Patterns (ADR Enforcement) ───────────────────────────────
 section "ADR Enforcement"
 removed_patterns=(
@@ -2240,6 +1975,11 @@ else
     skip "Gruff Policy (.gruff-ts.yaml not found)"
 fi
 
+
+return 0
+}
+
+check_audit() {
 # ── GOAT Flow Audit ────────────────────────────────────────────────────
 if [[ -f dist/cli/cli.js ]]; then
     section "GOAT Flow Audit"
@@ -2255,6 +1995,11 @@ else
     skip "GOAT Flow Audit (dist/cli/cli.js not built)"
 fi
 
+
+return 0
+}
+
+check_memory() {
 # ── Learning-Loop Schema ────────────────────────────────────────────── Gates footgun schema rules: machine-simple status (active|resolved),
 # file:line or (search:) evidence on active entries, resolved-below-section.
 if [[ -f dist/cli/cli.js ]]; then
@@ -2289,6 +2034,11 @@ else
     skip "Learning-Loop Schema (dist/cli/cli.js not built)"
 fi
 
+
+return 0
+}
+
+check_content() {
 # ── Content Drift ──────────────────────────────────────────────────── Sibling auditor: surface `audit --check-content` (cold-path content lint +
 #
 # dashboard view-name drift) in the preflight gate so a green preflight cannot hide warning-severity drift in code-map.md, docs/dashboard.md, or
@@ -2315,6 +2065,11 @@ else
     skip "Content Drift (dist/cli/cli.js not built)"
 fi
 
+
+return 0
+}
+
+check_drift() {
 # ── Doc/Code Drift ───────────────────────────────────────────────────
 if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
     section "Doc/Code Drift"
@@ -2501,6 +2256,11 @@ NODE
     fi
 fi
 
+
+return 0
+}
+
+check_sync() {
 # ── Skill Docs Sync ─────────────────────────────────────────────────
 section "Skill Docs Sync"
 # Matching canonical and installed bytes keep the agent's reference guidance consistent.
@@ -2785,17 +2545,21 @@ if [[ "$skill_parity_ok" == true ]]; then
     pass "All installed skill files match workflow templates"
 fi
 
+
+return 0
+}
+
+check_links() {
 # ── Path Integrity ───────────────────────────────────────────────────
 section "Path Integrity"
 # A successful path-integrity check confirms inspected internal references resolve.
-if bash scripts/check-path-integrity.sh . >/dev/null 2>&1; then
+if pi_output=$(bash scripts/check-path-integrity.sh . 2>&1); then
     pass "All internal path references resolve"
 else
     # Process substitution keeps the `while` body in the current shell, so fail() correctly increments the global error counter (cmd | while reads in
     #
     # a subshell and counter mutations get lost).
     # The first invocation captures stdout into a variable so set -e + pipefail don't kill the script when the helper exits non-zero.
-    pi_output=$(bash scripts/check-path-integrity.sh . 2>&1 || true)
     # Show each broken internal reference as an actionable preflight failure.
     while IFS= read -r line; do
         fail "$line"
@@ -2805,11 +2569,10 @@ fi
 # ── Markdown Links ───────────────────────────────────────────────────
 section "Markdown Links"
 # A successful link report confirms the inspected documentation links resolve.
-if bash scripts/check-markdown-links.sh . 2>&1 | grep -q "^All"; then
-    link_count=$(bash scripts/check-markdown-links.sh . 2>&1 | grep -oP '\d+' | head -1)
+if ml_output=$(bash scripts/check-markdown-links.sh . 2>&1) && grep -q "^All" <<< "$ml_output"; then
+    link_count=$(grep -oP '\d+' <<< "$ml_output" | head -1)
     pass "All $link_count markdown links resolve"
 else
-    ml_output=$(bash scripts/check-markdown-links.sh . 2>&1 || true)
     # Show each broken Markdown link separately so the maintainer can repair it.
     while IFS= read -r line; do
         fail "$line"
@@ -2832,8 +2595,143 @@ else
     skip "Package README link check (scripts/check-package-readme-links.mjs missing)"
 fi
 
-# ── Summary ────────────────────────────────────────────────────────── render_report runs from the EXIT trap registered near the top.
-if [[ "$errors" -gt 0 ]]; then
-    exit 1
-fi
+
+return 0
+}
+
+# Each worker owns its counters, ledger and captured diagnostics. The parent only
+# combines completed results, so parallel checks cannot overwrite another verdict.
+finish_preflight_worker() {
+    local status=$?
+    trap - EXIT
+    _record_section_elapsed
+    if [[ "$errors" -gt 0 && "$status" -eq 0 ]]; then status=1; fi
+    printf '%s %s %s %s\n' "$status" "$checks" "$errors" "$warnings" > "$PREFLIGHT_WORKER_RESULT"
+    exit "$status"
+}
+
+# The command runner handles the worker's complete process group, including test
+# grandchildren. Wait for it before removing any worker files.
+stop_preflight_workers() {
+    local pid
+    for pid in "${preflight_pids[@]:-}"; do
+        [[ -z "$pid" ]] || kill -TERM "$pid" 2>/dev/null || true
+    done
+    for pid in "${preflight_pids[@]:-}"; do
+        [[ -z "$pid" ]] || wait "$pid" 2>/dev/null || true
+    done
+}
+
+# Record every helper and only the configuration needed by workers; no inherited
+# environment values are serialized into the temporary script.
+write_preflight_worker() {
+    {
+        printf '#!/usr/bin/env bash\nset -euo pipefail\n'
+        declare -f
+        declare -p ROOT_DIR MANIFEST_PATH manifest_cache_keys manifest_cache_values manifest_cache_ready skip_tests preflight_heartbeat_seconds
+        cat <<'WORKER'
+cd "$ROOT_DIR"
+preflight_worker=1
+_is_tty=0
+LEDGER="$2"
+PREFLIGHT_WORKER_RESULT="$3"
+PREFLIGHT_BUILD_READY="$4"
+current_section=""
+section_start=$(now_ms)
+checks=0
+errors=0
+warnings=0
+: > "$LEDGER"
+trap finish_preflight_worker EXIT
+"check_$1"
+WORKER
+    } > "$LEDGER_DIR/worker.sh"
+}
+
+# Keep four outer workers active. The package runner separately limits test-file
+# concurrency; build consumers become eligible only after the compiler finishes.
+run_preflight_workers() {
+    local -a names=(typescript shell contracts tests dependency gruff audit memory content drift sync links)
+    local -a started=() finished=()
+    local active=0 remaining=${#names[@]} index name status progress_fd
+    preflight_pids=()
+    cache_manifest_inventory
+    write_preflight_worker
+    while (( remaining > 0 )); do
+        for index in "${!names[@]}"; do
+            [[ "${started[$index]:-0}" -eq 1 && "${finished[$index]:-0}" -eq 0 ]] || continue
+            if ! kill -0 "${preflight_pids[index]}" 2>/dev/null; then
+                if wait "${preflight_pids[index]}"; then status=0; else status=$?; fi
+                printf '%s\n' "$status" > "$LEDGER_DIR/${names[$index]}.exit"
+                preflight_pids[index]=""
+                finished[index]=1
+                active=$((active - 1))
+                remaining=$((remaining - 1))
+            fi
+        done
+        for index in "${!names[@]}"; do
+            [[ "${started[$index]:-0}" -eq 0 && "$active" -lt 4 ]] || continue
+            name="${names[$index]}"
+            case "$name" in
+                tests|audit|memory|content|drift)
+                    [[ -f "$LEDGER_DIR/build.ready" || "${finished[0]:-0}" -eq 1 ]] || continue ;;
+            esac
+            local -a runner=(scripts/preflight-command-runner.mjs --timeout-seconds 0 --heartbeat-seconds "$preflight_heartbeat_seconds" --label "Preflight $name")
+            progress_fd=""
+            if [[ "$_is_tty" -eq 1 ]]; then
+                exec {progress_fd}>&1
+                runner+=(--progress-fd "$progress_fd")
+            fi
+            node "${runner[@]}" -- bash "$LEDGER_DIR/worker.sh" "$name" "$LEDGER_DIR/$name.tsv" "$LEDGER_DIR/$name.result" "$LEDGER_DIR/build.ready" > "$LEDGER_DIR/$name.output" 2>&1 &
+            preflight_pids[index]=$!
+            [[ -z "$progress_fd" ]] || exec {progress_fd}>&-
+            started[index]=1
+            active=$((active + 1))
+        done
+        (( remaining == 0 )) || sleep 0.05
+    done
+}
+
+# Return to the established display order regardless of which worker completed
+# first. Counter receipts retain warnings that intentionally count more than once.
+merge_preflight_workers() {
+    local name status worker_status worker_checks worker_errors worker_warnings label
+    local -a order=(shell contracts typescript tests dependency gruff audit memory content drift sync links)
+    for name in "${order[@]}"; do
+        status=$(cat "$LEDGER_DIR/$name.exit")
+        if [[ ! -s "$LEDGER_DIR/$name.tsv" ]] && { [[ "$status" -ne 0 ]] || [[ ! -f "$LEDGER_DIR/$name.result" ]]; }; then
+            printf 'SECTION\tPreflight %s\n' "$name" > "$LEDGER_DIR/$name.tsv"
+        fi
+        if [[ -f "$LEDGER_DIR/$name.tsv" ]]; then cat "$LEDGER_DIR/$name.tsv" >> "$LEDGER"; fi
+        if [[ -f "$LEDGER_DIR/$name.result" ]]; then
+            read -r worker_status worker_checks worker_errors worker_warnings < "$LEDGER_DIR/$name.result"
+            checks=$((checks + worker_checks))
+            errors=$((errors + worker_errors))
+            warnings=$((warnings + worker_warnings))
+        else
+            worker_errors=0
+            worker_status=1
+        fi
+        current_section=$(awk -F '\t' '$1=="SECTION" { section=$2 } END { print section }' "$LEDGER_DIR/$name.tsv" 2>/dev/null || true)
+        if [[ "$status" -ne 0 || "$worker_status" -ne 0 ]]; then
+            if [[ "$worker_errors" -eq 0 ]]; then
+                [[ -n "$current_section" ]] || section "Preflight $name"
+                fail "Preflight $name worker failed (exit $status)"
+            fi
+        fi
+        if [[ -s "$LEDGER_DIR/$name.output" ]]; then
+            details_pipe < "$LEDGER_DIR/$name.output"
+        fi
+        current_section=""
+        while IFS= read -r label; do
+            _emit_header_once
+            _emit_phase_if_changed "$(phase_for "$label")"
+            _emit_section_row "$label"
+        done < <(awk -F '\t' '$1=="SECTION" { print $2 }' "$LEDGER_DIR/$name.tsv" 2>/dev/null || true)
+    done
+}
+
+run_preflight_workers
+merge_preflight_workers
+if [[ "$errors" -gt 0 ]]; then exit 1; fi
 exit 0

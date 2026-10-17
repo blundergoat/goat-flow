@@ -1,6 +1,6 @@
 /**
- * Exercise preflight's byte-parity gate and full-suite selection on real files and Bash processes.
- * Fixture hooks record executions; the real policy corpus remains owned by the umbrella preflight.
+ * Keep retired Bash policy checks out of preflight's direct stages.
+ * The separately published verification command retains its fixture-based contract.
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -9,12 +9,13 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
-import { afterEach, describe, it } from "node:test";
+import { dirname, join, resolve } from "node:path";
+import { afterEach, describe, it, test } from "node:test";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const fixtureDirectories: string[] = [];
@@ -68,116 +69,15 @@ function createFixture() {
   return directory;
 }
 
-// Spawns Bash on production manifest discovery and policy checks, replacing only the report renderer.
-function runPolicySection(directory: string) {
-  const source = readFileSync(
-    join(repositoryRoot, "scripts/preflight-checks.sh"),
-    "utf8",
-  );
-  const manifestReader = source.match(
-    /manifest_eval\(\) \{[\s\S]*?\nNODE\n\}/u,
-  );
-  const start = source.indexOf('section "Deny Policy"');
-  const end = source.indexOf("# Runtime smoke test:", start);
-  assert.ok(manifestReader && start >= 0 && end > start);
-  return spawnSync(
-    "bash",
-    [
-      "-c",
-      `
-set -euo pipefail
-MANIFEST_PATH="$PWD/workflow/manifest.json"
-failures=0
-section(){ :; }
-pass(){ printf 'PASS %s\\n' "$*"; }
-fail(){ failures=$((failures + 1)); printf 'FAIL %s\\n' "$*"; }
-skip(){ printf 'SKIP %s\\n' "$*"; }
-details_pipe(){ cat; }
-${manifestReader[0]}
-${source.slice(start, end)}
-[[ "$failures" -eq 0 ]]
-`,
-    ],
-    { cwd: directory, encoding: "utf8", timeout: 10_000 },
-  );
-}
-
-describe("preflight deny-policy deduplication", () => {
-  it("runs each installed full corpus once after proving source parity", () => {
-    const directory = createFixture();
-    const result = runPolicySection(directory);
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.deepEqual(
-      readFileSync(join(directory, "full-suite-runs"), "utf8")
-        .trim()
-        .split("\n")
-        .sort(),
-      policies
-        .map((policy) => `${installedDirectory}/${policy}.sh --self-test=full`)
-        .sort(),
+describe("preflight policy retirement", () => {
+  it("does not schedule or invoke the retired Bash policy checks", () => {
+    const source = readFileSync(
+      join(repositoryRoot, "scripts/preflight-checks.sh"),
+      "utf8",
     );
-    assert.match(result.stdout, /runtime matches workflow\/hooks/u);
-  });
-
-  // Writes or removes one runtime member per case; equal entrypoints alone cannot authorize reuse.
-  it("rejects entrypoint, shared-runtime, corpus and GraphQL drift before executing suites", () => {
-    const cases = [
-      ["deny-dangerous.sh", "change"],
-      ["deny-git-mutations.sh", "change"],
-      ["deny-dangerous/guard-runtime.sh", "change"],
-      ["deny-dangerous/deny-dangerous-self-test.sh", "change"],
-      ["gh-graphql-read.cjs", "change"],
-      ["vendor/graphql.cjs", "change"],
-      ["deny-dangerous/unexpected.sh", "change"],
-      ["deny-git-mutations.sh", "remove"],
-      ["deny-dangerous", "remove"],
-    ];
-    for (const [path, mutation] of cases) {
-      const directory = createFixture();
-      const relativePath = `${installedDirectory}/${path}`;
-      if (mutation === "remove") {
-        rmSync(join(directory, relativePath), { recursive: true });
-      } else {
-        writeFixture(directory, relativePath, "different runtime bytes\n");
-      }
-      const result = runPolicySection(directory);
-      assert.equal(
-        result.status,
-        1,
-        `${path}: ${result.stdout}${result.stderr}`,
-      );
-      assert.match(result.stdout, /FAIL/u);
-      assert.ok(result.stdout.includes(basename(path)), result.stdout);
-      assert.equal(existsSync(join(directory, "full-suite-runs")), false, path);
-    }
-  });
-
-  it("fails when the manifest declares no installed policy runtime", () => {
-    const directory = createFixture();
-    writeFixture(directory, "workflow/manifest.json", '{"agents":{}}');
-    const result = runPolicySection(directory);
-    assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(result.stdout, /FAIL .*installed.*hook/u);
-    assert.equal(existsSync(join(directory, "full-suite-runs")), false);
-  });
-
-  it("preserves a failing corpus verdict and its captured diagnostics", () => {
-    const directory = createFixture();
-    for (const root of ["workflow/hooks", installedDirectory]) {
-      writeFixture(
-        directory,
-        `${root}/deny-dangerous.sh`,
-        '#!/usr/bin/env bash\nprintf "%s\\n" "FAIL: fixture policy regression" >&2\nexit 7\n',
-      );
-    }
-    const result = runPolicySection(directory);
-    assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(
-      result.stdout,
-      /FAIL .*deny-dangerous\.sh full self-test \(exit 7\)/u,
-    );
-    assert.match(result.stdout, /FAIL: fixture policy regression/u);
-    assert.match(result.stdout, /PASS .*deny-git-mutations\.sh/u);
+    assert.doesNotMatch(source, /deny-dangerous\.sh|deny-git-mutations\.sh/u);
+    assert.doesNotMatch(source, /--self-test=full|run_configured_hook_smokes/u);
+    assert.doesNotMatch(source, /section "Deny Policy"/u);
   });
 
   // Spawns the published command against complete, incomplete and consumer-only fixture trees; each must get its documented verdict.
@@ -232,4 +132,81 @@ describe("preflight deny-policy deduplication", () => {
       }
     }
   });
+});
+
+import { verifyDirectHookRuntime } from "../../src/cli/audit/check-agent-deny-runtime.js";
+import {
+  checkHookFileSyntax,
+  checkHookSelfTest,
+} from "../../src/cli/audit/check-agent-deny-mechanism.js";
+import {
+  makeCtx,
+  PROFILES,
+  stubAgentFacts,
+  stubFS,
+} from "../unit/audit-command/helpers.js";
+
+// Writes and runs an installed Bash control so extracting native invocation cannot silently change the default audit route.
+test("installed direct audit keeps the default Bash transport", () => {
+  const parent = realpathSync(
+    mkdtempSync(join(tmpdir(), "goat-audit-default-")),
+  );
+  const project = join(parent, "goat's installed & (default) [fixture]");
+  try {
+    const script = ".goat-flow/hooks/deny-dangerous.sh";
+    mkdirSync(join(project, ".goat-flow/hooks"), { recursive: true });
+    writeFileSync(
+      join(project, script),
+      "#!/usr/bin/env bash\nprintf 'BLOCKED: Policy destructive: installed fixture\\n' >&2\nexit 2\n",
+    );
+    const facts = stubAgentFacts({ agent: PROFILES.claude });
+    const result = verifyDirectHookRuntime(
+      makeCtx({ projectPath: project }),
+      facts,
+      script,
+    );
+    assert.equal(result.ok, true, JSON.stringify(result));
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+// Writes failing installed controls so audit reports Bash parse and self-test failures when native selection is omitted.
+test("mechanism checks retain installed Bash parsing and self-test defaults", () => {
+  const parent = realpathSync(
+    mkdtempSync(join(tmpdir(), "goat-audit-installed-mechanism-")),
+  );
+  try {
+    const hooks = join(parent, ".goat-flow/hooks");
+    mkdirSync(join(hooks, "deny-dangerous"), { recursive: true });
+    writeFileSync(join(hooks, "invalid.sh"), "if then\n");
+    writeFileSync(join(hooks, "deny-dangerous.sh"), "exit 0\n");
+    writeFileSync(
+      join(hooks, "deny-dangerous/deny-dangerous-self-test.sh"),
+      "exit 7\n",
+    );
+    const ctx = makeCtx({
+      projectPath: parent,
+      agents: [stubAgentFacts({ agent: PROFILES.claude })],
+      fs: stubFS({
+        readFile: (path) => {
+          try {
+            return readFileSync(join(parent, path), "utf8");
+          } catch {
+            return null;
+          }
+        },
+      }),
+    });
+    assert.equal(
+      checkHookFileSyntax(ctx, ".goat-flow/hooks", "invalid.sh").status,
+      "syntax-error",
+    );
+    const result = checkHookSelfTest(ctx);
+    assert.ok(result);
+    assert.match(result.message, /self-test.*failed for claude/u);
+    assert.match(result.howToFix ?? "", /Run bash .*\.sh/u);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
 });

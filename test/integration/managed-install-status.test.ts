@@ -19,8 +19,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import { quoteManagedInstallProjectArgument } from "../../src/cli/managed-install-evidence.js";
+import {
+  buildManagedInstallEvidenceReport,
+  quoteManagedInstallProjectArgument,
+  type ManagedInstallEvidenceReport,
+} from "../../src/cli/managed-install-evidence.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
+import { dispatchCommand } from "../../src/cli/cli-handlers.js";
+import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 
 import {
   createManagedInstallStateRow,
@@ -38,34 +44,9 @@ const CLI_ENTRY = join(PROJECT_ROOT, "src", "cli", "cli.ts");
 const ORPHAN_PATH = ".goat-flow/retired-orphan.md";
 const SHARED_PATH = "AGENTS.md";
 
-type EvidenceStatus =
-  | "confirmed"
-  | "stale"
-  | "legacy-unconfirmed"
-  | "malformed-blocking"
-  | "conflicting"
-  | "cutover-incompatible"
-  | "orphan";
-
-/** Public evidence-entry fields asserted through the status process boundary. */
-interface EvidenceEntry {
-  status: EvidenceStatus;
-  subjects: {
-    agents: string[];
-    paths: string[];
-  };
-  canSelectInstalledAgent: boolean;
-  reason: string;
-  recovery: string | null;
-}
-
 /** Minimal public status JSON envelope required by this process contract. */
 interface StatusJson {
-  managedInstallEvidence?: {
-    schemaVersion: "goat-flow.managed-install-evidence.v1";
-    baselineStatus: string;
-    entries: EvidenceEntry[];
-  };
+  managedInstallEvidence?: ManagedInstallEvidenceReport;
 }
 
 /** Spawns the public status CLI, captures its output in private files, then removes those files. */
@@ -99,9 +80,7 @@ function runStatus(projectPath: string, format: "json" | "text" | "markdown") {
 }
 
 /** Parse status JSON and require the managed evidence envelope. */
-function readEvidence(
-  projectPath: string,
-): StatusJson["managedInstallEvidence"] {
+function readEvidence(projectPath: string): ManagedInstallEvidenceReport {
   const result = runStatus(projectPath, "json");
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout) as StatusJson;
@@ -114,9 +93,9 @@ function readEvidence(
 
 /** Find the sole entry with one status, failing with the complete report when absent. */
 function evidenceEntry(
-  report: NonNullable<StatusJson["managedInstallEvidence"]>,
-  status: EvidenceStatus,
-): EvidenceEntry {
+  report: ManagedInstallEvidenceReport,
+  status: ManagedInstallEvidenceReport["entries"][number]["status"],
+): ManagedInstallEvidenceReport["entries"][number] {
   const entries = report.entries.filter((entry) => entry.status === status);
   assert.equal(
     entries.length,
@@ -170,9 +149,9 @@ function writeLegacyState(
 describe("managed install status evidence", () => {
   /**
    * Fixture purpose: distinguish complete saved scalars and absent versions from the CLI version in all formats.
-   * Filesystem and process effects: write disposable config and run the public status CLI.
+   * Run every format through the real dispatcher; one version also proves identical public CLI output.
    */
-  it("distinguishes complete project and CLI versions in JSON, text and Markdown", () => {
+  it("distinguishes complete project and CLI versions in JSON, text and Markdown", async () => {
     const projectPath = makeTempProject();
     mkdirSync(join(projectPath, ".goat-flow"));
     const [major, minor, patch] = AUDIT_VERSION.split(".").map(Number);
@@ -190,38 +169,50 @@ describe("managed install status evidence", () => {
           ? "# no version\n"
           : `version: "${version}" # keep the whole scalar\n`,
       );
-      const json = runStatus(projectPath, "json");
-      assert.equal(json.status, 0, json.stderr);
-      const report = JSON.parse(json.stdout);
-      assert.equal(
-        report.version,
-        AUDIT_VERSION,
-        "legacy version remains the executing CLI",
-      );
-      assert.equal(report.projectVersion, version);
-      if (
-        version !== null &&
-        version !== "0.0.0" &&
-        version !== AUDIT_VERSION
-      ) {
-        assert.equal(report.state, "error");
-        assert.equal(report.action, "none");
-        assert.match(report.details, /CLI|review.*version/iu);
-      }
-      for (const format of ["text", "markdown"] as const) {
-        const result = runStatus(projectPath, format);
-        assert.equal(result.status, 0, result.stderr);
+      for (const format of ["json", "text", "markdown"] as const) {
+        const outputPath = join(projectPath, "status-output.txt");
+        await dispatchCommand(
+          parseCLIArgs([
+            "status",
+            projectPath,
+            "--format",
+            format,
+            "--output",
+            outputPath,
+          ]),
+        );
+        const output = readFileSync(outputPath, "utf8");
+        if (version === "0.0.0") {
+          const cli = runStatus(projectPath, format);
+          assert.equal(cli.status, 0, cli.stderr);
+          assert.equal(cli.stdout, output);
+        }
+        if (format === "json") {
+          const report = JSON.parse(output);
+          assert.equal(report.version, AUDIT_VERSION);
+          assert.equal(report.projectVersion, version);
+          if (
+            version !== null &&
+            version !== "0.0.0" &&
+            version !== AUDIT_VERSION
+          ) {
+            assert.equal(report.state, "error");
+            assert.equal(report.action, "none");
+            assert.match(report.details, /CLI|review.*version/iu);
+          }
+          continue;
+        }
         assert.ok(
-          result.stdout.includes(
+          output.includes(
             `Project version:${format === "markdown" ? "**" : ""} ${version ?? "not recorded"}`,
           ),
-          result.stdout,
+          output,
         );
         assert.ok(
-          result.stdout.includes(
+          output.includes(
             `CLI version:${format === "markdown" ? "**" : ""} ${AUDIT_VERSION}`,
           ),
-          result.stdout,
+          output,
         );
       }
     }
@@ -335,7 +326,7 @@ describe("managed install status evidence", () => {
     const projectPath = makeTempProject();
     writeLegacyState(projectPath, "codex", "a".repeat(64));
 
-    const report = readEvidence(projectPath);
+    const report = buildManagedInstallEvidenceReport(projectPath);
     const legacy = evidenceEntry(report, "legacy-unconfirmed");
     assert.deepEqual(legacy.subjects.agents, ["codex"]);
     assert.deepEqual(legacy.subjects.paths, [SHARED_PATH]);
@@ -353,7 +344,7 @@ describe("managed install status evidence", () => {
     });
     writeFileSync(join(projectPath, evidencePath), "not json\n");
 
-    const report = readEvidence(projectPath);
+    const report = buildManagedInstallEvidenceReport(projectPath);
     assert.equal(report.baselineStatus, "malformed-blocking");
     const malformed = evidenceEntry(report, "malformed-blocking");
     assert.deepEqual(malformed.subjects.agents, ["antigravity"]);
@@ -377,7 +368,7 @@ describe("managed install status evidence", () => {
     writeLegacyState(projectPath, "antigravity", "a".repeat(64));
     writeLegacyState(projectPath, "codex", "b".repeat(64));
 
-    const report = readEvidence(projectPath);
+    const report = buildManagedInstallEvidenceReport(projectPath);
     assert.equal(report.baselineStatus, "conflicting");
     const conflicting = evidenceEntry(report, "conflicting");
     assert.deepEqual(conflicting.subjects.agents, ["antigravity", "codex"]);

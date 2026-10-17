@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** Hook test coverage strategy and provider evidence - what a self-test actually exercises, which support layer a capture proves, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -114,7 +114,7 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_
 
 **Root cause:** Expected copy was derived from each fixture's intent and command text instead of the block reason owned by the policy module, and a scope-only integration assertion cannot catch that mismatch.
 
-**Recurrence 2026-09-27:** The preflight mirror-drift test inferred a contiguous path from its fixture name. `diff -qr` instead reported an extra file as `Only in <directory>: <filename>`, so the first verification run failed despite rejecting the drift correctly. Capture each diagnostic shape before asserting its text; require the failure verdict and affected filename without inventing a path format. Evidence: `test/integration/preflight-deny-policy.test.ts` (search: `rejects entrypoint, shared-runtime, corpus and GraphQL drift before executing suites`).
+**Recurrence 2026-09-27:** A preflight drift test expected a contiguous path; `diff -qr` reported `Only in <directory>: <filename>`. Require the verdict and filename, not an invented path. That case retired with Bash preflight checks on 2026-10-18; related completeness coverage: `test/integration/preflight-deny-policy.test.ts` (search: `requires complete canonical runtime in the documented verification command`).
 
 ---
 

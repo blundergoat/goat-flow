@@ -11,7 +11,7 @@ last_reviewed: 2026-10-14
 **Severity:** CORRECTNESS
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 35 | **Latest occurrence:** 2026-10-14
+**Incident count:** 36 | **Latest occurrence:** 2026-10-18
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -94,3 +94,5 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 ---
 
 **Recurrence 2026-10-14 (assumed a nested step ran):** A milestone amendment claimed the round-trip test's inner preflight ran the whole fast suite and added `--skip-tests` to save that time. A saved log of the same test showed the step had taken 0.1 seconds and warned `No tests found`, so the published run saved nothing measurable. Before estimating a saving, read the step's own row in a retained log to confirm it executed. Evidence: `scripts/preflight-checks.sh` (search: `No tests found (`).
+
+**Recurrence 2026-10-18 (concatenated range read):** One `sed -n '1,8p;60,68p'` print joined the Unreleased head to a published release's Changed and Security bullets, and the agent drafted a CHANGELOG replacement anchor from the second range as though it sat under Unreleased. The replace failed on an absent string, and a fresh read of the first fourteen lines corrected it before any text landed. Print the owning section alone before copying an anchor from it; a multi-range print carries no section boundary. Evidence: `CHANGELOG.md` (search: `## Unreleased`).

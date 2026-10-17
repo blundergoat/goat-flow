@@ -106,6 +106,7 @@
                       ],
                       "bash": "exit 0",
                       "powershell": "exit 0",
+                      "onFailure": "block",
                       "timeout": 30
                     }
                   ],
@@ -169,6 +170,7 @@
                       ],
                       "bash": "exit 0",
                       "powershell": "exit 0",
+                      "onFailure": "block",
                       "timeout": 30
                     }
                   ],

@@ -134,6 +134,62 @@ describe("Claude Stop scan budget", () => {
   });
 });
 
+describe("Claude host failure policy", () => {
+  // Covers the one host-boundary gap the launcher cannot close itself: Claude must refuse the command when the policy
+  // handler never starts, while optional Gruff feedback and the Stop scan keep their non-blocking host behaviour.
+  it("marks only Claude policy rows to block when the handler cannot run", () => {
+    const policyIds = ["deny-dangerous", "deny-git-mutations"];
+    const feedbackIds = ["gruff-code-quality", "post-turn-safety"];
+    for (const hookId of [...policyIds, ...feedbackIds]) {
+      const spec = getHookSpec(hookId);
+      assert.ok(spec, hookId);
+      const descriptor = buildAgentHookDescriptor(
+        "claude",
+        ".goat-flow/hooks",
+        spec,
+      );
+      assert.ok(descriptor.form === "argv", "Claude uses argv descriptors");
+      assert.equal(
+        descriptor.onFailure,
+        policyIds.includes(hookId) ? "block" : undefined,
+        hookId,
+      );
+      // Replay never carries the host-only field, so `hooks verify` spawns the same argv as before.
+      assert.deepEqual(agentHookSpawnDescriptor(descriptor, "linux"), {
+        command: descriptor.command,
+        args: descriptor.args,
+      });
+      // Shell-form providers never receive the Claude-only field.
+      for (const agent of ["codex", "copilot", "antigravity"] as const) {
+        assert.equal(
+          "onFailure" in
+            buildAgentHookDescriptor(agent, ".goat-flow/hooks", spec),
+          false,
+          `${agent} ${hookId}`,
+        );
+      }
+    }
+    // A policy row written by an older install lacks the field and must read as drift so sync repairs it.
+    const denySpec = getHookSpec("deny-dangerous");
+    assert.ok(denySpec);
+    const denyDescriptor = buildAgentHookDescriptor(
+      "claude",
+      ".goat-flow/hooks",
+      denySpec,
+    );
+    assert.ok(denyDescriptor.form === "argv");
+    const { onFailure: _dropped, ...rowWithoutPolicy } = denyDescriptor;
+    assert.equal(
+      entryCarriesHandlerDescriptor(rowWithoutPolicy, "claude", denyDescriptor),
+      false,
+    );
+    assert.equal(
+      entryCarriesHandlerDescriptor(denyDescriptor, "claude", denyDescriptor),
+      true,
+    );
+  });
+});
+
 describe("native candidate replay descriptors", () => {
   it("retains provider forms, inert routes and the Codex Stop budget while installed defaults remain on Bash", () => {
     const spec = getHookSpec("deny-dangerous");
