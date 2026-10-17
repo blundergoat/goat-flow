@@ -587,12 +587,12 @@ describe("gruff warning ratchet", () => {
     assert.match(jobBlock, /node scripts\/check-gruff-warning-ratchet\.mjs/);
     // The Node 20 compatibility job must remain alongside the ratchet job.
     assert.match(ciWorkflow.slice(0, jobStart), /node-version: "20"/);
-    // windows-hook-contracts runs on the package's minimum Node, 20.11.0; this slice runs from that job up to the ratchet job.
+    // windows-hook-contracts runs on the package's minimum Node, 20.12.0; this slice runs from that job up to the ratchet job.
     const minimumNodeJob = ciWorkflow.slice(
       ciWorkflow.indexOf("windows-hook-contracts:"),
       jobStart,
     );
-    assert.match(minimumNodeJob, /node-version: "20\.11\.0"/u);
+    assert.match(minimumNodeJob, /node-version: "20\.12\.0"/u);
     assert.match(
       minimumNodeJob,
       /node --import tsx --test test\/integration\/preflight-progress\.test\.ts/u,

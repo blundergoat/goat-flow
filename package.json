@@ -41,7 +41,7 @@
     "workflow"
   ],
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=20.12.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
