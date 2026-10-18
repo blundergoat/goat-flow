@@ -129,12 +129,14 @@ export function asciiLowerCase(value: string): string {
   );
 }
 
-/** Route only the existing provider shell tools through command-policy inspection. */
+/** Route supported provider command tools through command-policy inspection. */
 export function isPolicyShellTool(tool: string): boolean {
-  return ["bash", "shell", "sh", "run_command"].includes(asciiLowerCase(tool));
+  return ["bash", "shell", "sh", "run_command", "monitor"].includes(
+    asciiLowerCase(tool),
+  );
 }
 
-/** Route provider file tools through the selected secret-path policy. */
+/** Route supported provider content tools through the selected secret-path policy. */
 export function isPolicySecretFileTool(tool: string): boolean {
   return [
     "read",
@@ -146,5 +148,32 @@ export function isPolicySecretFileTool(tool: string): boolean {
     "write_to_file",
     "replace_file_content",
     "multi_replace_file_content",
+    "create",
+    "grep",
+    "rg",
+    "str_replace_editor",
+    "grep_search",
   ].includes(asciiLowerCase(tool));
+}
+
+/** Enforce UTF-8 byte ceilings after the caller has classified and masked any bounded quality-report data. */
+export function policyCommandSizeRefusal(
+  command: string,
+  maskedCommand: string,
+  boundedQualityData = false,
+): string | null {
+  const commandBytes = Buffer.byteLength(command, "utf8");
+  if (commandBytes > 262144)
+    return "Command exceeds the 262144-byte policy inspection limit. Split executable commands into smaller independent calls or use a supported script route; send report data through the approved stdin/file transport.";
+  if (commandBytes <= 16384) return null;
+  if (boundedQualityData && Buffer.byteLength(maskedCommand, "utf8") <= 16384)
+    return null;
+  return "Command exceeds the 16384-byte policy inspection limit. Split executable commands into smaller independent calls or use a supported script route; send report data through the approved stdin/file transport.";
+}
+
+/** Limit executable segments at every inspection depth; callers count their actual split result. */
+export function policySegmentCountRefusal(segmentCount: number): string | null {
+  return segmentCount > 50
+    ? "Command exceeds the 50-segment policy inspection limit. Split it into smaller independent calls or use a supported script route."
+    : null;
 }

@@ -3673,6 +3673,7 @@ if $HOOKS_ENABLED; then
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/policy-git.mjs" "$HOOKS_DIR/policy-git.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/policy-prefixes.mjs" "$HOOKS_DIR/policy-prefixes.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/policy-syntax.mjs" "$HOOKS_DIR/policy-syntax.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/policy-segments.mjs" "$HOOKS_DIR/policy-segments.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/process-tree.mjs" "$HOOKS_DIR/process-tree.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-policy-state.cjs" "$HOOKS_DIR/hook-policy-state.cjs" "system-owned" "644"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/vendor/js-yaml.cjs" "$HOOKS_DIR/vendor/js-yaml.cjs" "system-owned" "644"
@@ -3699,6 +3700,11 @@ if $HOOKS_ENABLED; then
   do
     copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/$hook_policy_script" ".goat-flow/hooks/deny-dangerous/$hook_policy_script" "system-owned" "755"
   done
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/patterns-writes.mjs" "$HOOKS_DIR/deny-dangerous/patterns-writes.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/git-command.mjs" "$HOOKS_DIR/deny-dangerous/git-command.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/github-command.mjs" "$HOOKS_DIR/deny-dangerous/github-command.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/patterns-shell.mjs" "$HOOKS_DIR/deny-dangerous/patterns-shell.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/patterns-paths.mjs" "$HOOKS_DIR/deny-dangerous/patterns-paths.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/corpus.json" "$HOOKS_DIR/deny-dangerous/corpus.json" "system-owned" "644"
   ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/"
   # A changed result makes the shipped hook directory visible to version control.

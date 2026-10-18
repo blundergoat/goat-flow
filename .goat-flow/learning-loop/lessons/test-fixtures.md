@@ -8,13 +8,20 @@ last_reviewed: 2026-10-18
 ## Lesson: Generated child-program fixtures need proof of the emitted syntax
 
 **Status:** active | **Created:** 2026-10-17
+**Incident count:** 5 | **Latest occurrence:** 2026-10-18
 **Decision changed:** Preserve child-source escapes explicitly and execute the emitted fixture before aggregate proof.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Use String.raw when a fixture template must retain JavaScript escape sequences. Run the emitted program; typecheck of its TypeScript container cannot validate the generated syntax.
+**Prevention:** Use String.raw when a fixture template must retain JavaScript escape sequences. Run the emitted program; typecheck of its TypeScript container cannot validate the generated syntax. Compare parser fixtures at the runtime string boundary; encoded source spelling can conceal a second backslash.
 
 **What happened:** Both configured audit fixture cases failed while parsing their generated runner. Ordinary template interpolation turned the child source's newline escapes into literal newlines inside quoted strings. String.raw preserves those escapes; rerunning both cases reached and verified their saved handlers. Evidence: `test/integration/hook-native-audit-configured.test.ts` (search: `String.raw`).
+
+**Recurrence 2026-10-18:** A generated shell-parser fixture supplied two backslashes but expected both after decoding. The first focused run correctly collapsed them to one. Checking against frozen Bash confirmed the expected value; a separate dangling-backslash control preserves the distinct case. Evidence: `test/unit/hook-policy-shell.test.ts` (search: `stripPolicyShellQuotesForPathScanCases`). A later inline-program fixture omitted the existing space before a masked string: both native code and frozen Bash produced two spaces. Keep exact decoded whitespace when writing expected parser output. Evidence: the same file (search: `inlineProgramVisibleCodeCases`).
+
+**Recurrence 2026-10-18 (path prefixes):** Generated M12 expectations omitted the extra trailing space emitted when Bash prints an empty redirect array. Both native and frozen `literal_output_prefix_candidate` returned the same two-space suffix after a wrapper; only the fixture expected one. Compare raw classifier output before normalizing whitespace. Evidence: `test/unit/hook-policy-paths.test.ts` (search: `keeps wrapper files and redirects outside literal-output exemptions`) retains the measured wrapper prefixes.
+
+**Recurrence 2026-10-18 (temporary path spelling):** The directory parser fixture inserted an unquoted temporary root into a `cd` command. A run with spaces in TMPDIR failed because the parser correctly saw extra operands. Keep absolute-path controls independent of temporary names, and exercise space-containing fixture roots in the existing case. Evidence: `test/unit/hook-policy-segments.test.ts` (search: `directoryContextCases`, `goat-git-segment with spaces-`) uses `cd /` for the absolute controls.
 
 ---
 
@@ -148,11 +155,13 @@ last_reviewed: 2026-10-18
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 29 | **Latest occurrence:** 2026-10-18
+**Incident count:** 30 | **Latest occurrence:** 2026-10-18
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the system under test or the assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behaviour, run the fixture through the unchanged strict baseline so unrelated errors are absent, and keep every non-target value inside its passing bounds. Assert that every text substitution changed its fixture before using the result as simulated input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. For an invalid-state case, name and trigger the exact production predicate; arbitrary content is not invalid when the implementation treats its bytes as opaque. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
 **Recurrence 2026-10-18 (compiler-fixture control):** After replacing repository clones with a tiny project, a mutation using an invalid module suffix made the complete deletion test pass even though its compiler already failed before deletion. The expected TS2307 was present in both states. Compile the intact fixture successfully before applying the deletion; the same mutation must then fail at that healthy-control assertion. Keep the control inside the existing case rather than adding another suite. Evidence: `test/unit/check-touched.test.ts` (search: `healthy.status`).
+
+**Recurrence 2026-10-18 (installer convergence):** A CI runtime prototype removed the first repeat install because the next invocation was a no-op. A before-first-call snapshot showed that the removed invocation still changed `.claude/settings.json` after user content was planted. Retain the convergence call; shorten only Sync after the existing install pair has converged. Before removing setup, compare its input and output rather than inferring redundancy from a later no-op. Evidence: `test/integration/setup-install-write-set.test.ts` (search: `plantUserHookContent`, `assertRepeatIsNoOp`, `beforeSync`).
 
 **Recurrence 2026-10-17 (fresh worktree):** Native wrapper tests and hook typecheck passed in an isolated checkout, but Gruff rejected the absent package binary with `design.package-bin-missing`. Build the checkout before the production ratchet; a dependency link does not create ignored output. The lesson's first draft then cited warning text absent from its named producer; read each citation before indexing. Evidence: `package.json` (search: `dist/cli/cli.js`) and `scripts/check-gruff-warning-ratchet.mjs` (search: `compareScanAgainstAcceptedDebt`).
 

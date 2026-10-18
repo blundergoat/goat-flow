@@ -62,6 +62,12 @@
     ".goat-flow/hooks/policy-git.mjs",
     ".goat-flow/hooks/policy-prefixes.mjs",
     ".goat-flow/hooks/policy-syntax.mjs",
+    ".goat-flow/hooks/policy-segments.mjs",
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs",
+    ".goat-flow/hooks/deny-dangerous/git-command.mjs",
+    ".goat-flow/hooks/deny-dangerous/github-command.mjs",
+    ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs",
+    ".goat-flow/hooks/deny-dangerous/patterns-paths.mjs",
     ".goat-flow/hooks/process-tree.mjs",
     ".goat-flow/hooks/hook-policy-state.cjs",
     ".goat-flow/hooks/vendor/js-yaml.cjs",
@@ -316,6 +322,30 @@
     ".goat-flow/hooks/policy-syntax.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/policy-syntax.mjs"
+    },
+    ".goat-flow/hooks/policy-segments.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-segments.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/patterns-writes.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/git-command.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/git-command.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/github-command.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/github-command.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/patterns-shell.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/patterns-paths.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/patterns-paths.mjs"
     },
     ".goat-flow/hooks/process-tree.mjs": {
       "ownership": "system-owned",

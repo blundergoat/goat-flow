@@ -3,8 +3,8 @@
  * disable, or enable leaves the selected target byte-stable.
  *
  * These fixtures run the public CLI against disposable targets and compare content snapshots, so an undisclosed
- * write or a non-converging hook toggle fails by path name. Removals stay outside the compared set by contract,
- * which the preview itself declares.
+ * write or a non-converging hook toggle fails by path name. The preview does not promise removals;
+ * these workflows require that no target paths disappear.
  *
  * The all-hooks-off cases run the standalone installer twice and check which registrations and saved choices remain.
  */
@@ -486,12 +486,13 @@ extends = ":workspace"
         "--agent",
         agentProfile.id,
       );
-      assertRepeatIsNoOp(
-        projectPath,
-        `${agentProfile.id} hooks sync`,
-        "hooks",
-        "sync",
-        projectPath,
+      // The repeated install above has already converged this target.
+      const beforeSync = snapshotProject(projectPath);
+      runCliStep(`${agentProfile.id} hooks sync`, "hooks", "sync", projectPath);
+      assert.deepEqual(
+        snapshotDelta(beforeSync, snapshotProject(projectPath)),
+        { written: [], deleted: [] },
+        `${agentProfile.id} sync must leave the converged target unchanged`,
       );
 
       assertRepeatIsNoOp(

@@ -9,6 +9,8 @@ import {
   extractPolicyCommandText,
   isPolicyShellTool,
   isPolicySecretFileTool,
+  policyCommandSizeRefusal,
+  policySegmentCountRefusal,
 } from "../../workflow/hooks/policy-input.mjs";
 import {
   isInertHeredocConsumer,
@@ -700,8 +702,16 @@ describe("policy visible Git configuration sources", () => {
 });
 
 describe("policy tool ownership and stdin consumers", () => {
-  it("routes only provider shell tool names to command inspection", () => {
-    for (const tool of ["Bash", "bash", "SHELL", "sh", "run_command"])
+  it("routes supported provider command tools to command inspection", () => {
+    for (const tool of [
+      "Bash",
+      "bash",
+      "SHELL",
+      "sh",
+      "run_command",
+      "Monitor",
+      "MONITOR",
+    ])
       assert.equal(isPolicyShellTool(tool), true, tool);
     for (const tool of [
       "",
@@ -714,7 +724,7 @@ describe("policy tool ownership and stdin consumers", () => {
       assert.equal(isPolicyShellTool(tool), false, tool);
   });
 
-  it("routes the existing provider file tools to secret-path inspection", () => {
+  it("routes supported provider content tools to secret-path inspection", () => {
     for (const tool of [
       "Read",
       "view",
@@ -725,9 +735,22 @@ describe("policy tool ownership and stdin consumers", () => {
       "write_to_file",
       "replace_file_content",
       "multi_replace_file_content",
+      "Create",
+      "grep",
+      "RG",
+      "str_replace_editor",
+      "Grep_Search",
     ])
       assert.equal(isPolicySecretFileTool(tool), true, tool);
-    for (const tool of ["", "Bash", "read_file", "view_file ", "delete_file"])
+    for (const tool of [
+      "",
+      "Bash",
+      "read_file",
+      "view_file ",
+      "delete_file",
+      "glob",
+      "apply_patch",
+    ])
       assert.equal(isPolicySecretFileTool(tool), false, tool);
   });
 
@@ -781,5 +804,42 @@ describe("policy tool ownership and stdin consumers", () => {
       "goat-flow redact; bash",
     ])
       assert.equal(goatFlowCliConsumesHeredocData(command), false, command);
+  });
+});
+
+describe("policy command inspection limits", () => {
+  it("measures command ceilings in UTF-8 bytes and admits only classified bounded report data", () => {
+    for (const [command, masked, boundedData] of [
+      ["a".repeat(16384), "", false],
+      ["λ".repeat(8192), "", false],
+      ["a".repeat(262144), "short", true],
+      ["a".repeat(20000), "a".repeat(16384), true],
+    ] as const) {
+      assert.equal(
+        policyCommandSizeRefusal(command, masked, boundedData),
+        null,
+      );
+    }
+    for (const [command, masked, boundedData, expectedLimit] of [
+      ["a".repeat(16385), "", false, 16384],
+      ["λ".repeat(8193), "", false, 16384],
+      ["a".repeat(262145), "short", true, 262144],
+      ["a".repeat(20000), "a".repeat(16385), true, 16384],
+    ] as const) {
+      const refusal = policyCommandSizeRefusal(command, masked, boundedData);
+      assert.ok(refusal?.includes(String(expectedLimit) + "-byte"));
+      assert.match(
+        refusal,
+        /smaller independent calls|supported script route/u,
+      );
+    }
+  });
+  it("retains the 50-segment ceiling and names a safe recovery action", () => {
+    assert.equal(policySegmentCountRefusal(50), null);
+    assert.equal(policySegmentCountRefusal(0), null);
+    assert.match(
+      policySegmentCountRefusal(51) ?? "",
+      /50-segment.*smaller independent calls/u,
+    );
   });
 });

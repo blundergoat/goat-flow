@@ -16,6 +16,8 @@ import {
 } from "../../scripts/check-hook-parity.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
+// JSON-only mutations share this validated input; filesystem corruption is checked separately.
+const validatedArtifacts = loadArtifacts();
 
 // Mutations model distinct ways a port can silently lose reference coverage.
 // They affect cloned JSON only; no test can repair or rewrite the saved oracle.
@@ -64,7 +66,7 @@ function damagePair(pair, kind: string) {
 }
 
 test("saved pair binds every original case and both mirror bytes", () => {
-  const pair = loadArtifacts();
+  const pair = validatedArtifacts;
   assert.deepEqual(
     validateCorpora(pair.corpus, pair.reference, pair.snapshot),
     {
@@ -88,7 +90,7 @@ for (const kind of [
   "incomplete coverage",
 ]) {
   test(`rejects ${kind}`, () => {
-    const pair = structuredClone(loadArtifacts());
+    const pair = structuredClone(validatedArtifacts);
     damagePair(pair, kind);
     assert.throws(() =>
       validateCorpora(pair.corpus, pair.reference, pair.snapshot),

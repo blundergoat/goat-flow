@@ -1,0 +1,929 @@
+/** Native Git write classifiers and alias state shared by repository-policy rules. */
+import { statSync } from "node:fs";
+import { homedir } from "node:os";
+import {
+  splitIfs,
+  joinPolicyShellWords,
+  splitPolicyShellWords,
+} from "../policy-words.mjs";
+
+/** Supply decoded argv when inspecting a direct Git command or an expanded alias. */
+export interface GitWriteTargetContext {
+  mode?: "strict" | "direct" | "alias";
+  commandWords?: readonly string[];
+  invokedAliasWords?: readonly string[];
+}
+
+/** Decode a short bundle until a value-taking option owns its remaining text. */
+function cobraShortFlags(
+  bundle: string,
+  valueShorts: string,
+): { flags: string[]; consumesNext: boolean } {
+  const flags: string[] = [];
+  for (let index = 0; index < bundle.length; index++) {
+    const short = bundle.charAt(index);
+    const rest = bundle.slice(index + 1);
+    if (valueShorts.includes(short))
+      return { flags, consumesNext: rest === "" };
+    flags.push("-" + short + (rest.startsWith("=") ? rest : ""));
+    if (rest.startsWith("=")) break;
+  }
+  return { flags, consumesNext: false };
+}
+
+/** Keep option values out of flag and command classification, retaining operands after --. */
+function scanCobraArguments(
+  words: readonly string[],
+  valueOptions: string,
+  valueShorts: string,
+): { flags: string[]; operands: string[] } {
+  const flags: string[] = [];
+  const operands: string[] = [];
+  for (let index = 1; index < words.length; index++) {
+    const word = words[index] ?? "";
+    if (word === "--") {
+      operands.push(...words.slice(index + 1));
+      break;
+    }
+    if (word.startsWith("--")) {
+      flags.push(word);
+      if (` ${valueOptions} `.includes(` ${word} `)) index++;
+    } else if (word.startsWith("-") && word.length > 1) {
+      const bundle = cobraShortFlags(word.slice(1), valueShorts);
+      flags.push(...bundle.flags);
+      if (bundle.consumesNext) index++;
+    } else operands.push(word);
+  }
+  return { flags, operands };
+}
+
+/** Read Cobra flags after option values, respecting bundles and the last Boolean value. */
+export function cobraBooleanFlagEnabled(
+  words: readonly string[],
+  longName: string,
+  shortName: string,
+  valueOptions: string,
+  valueShorts: string,
+): boolean {
+  const spellings = [`--${longName}`, `-${shortName}`];
+  const flags = scanCobraArguments(words, valueOptions, valueShorts).flags;
+  const last = flags
+    .filter((flag) => spellings.includes(flag.split("=", 1)[0] ?? ""))
+    .pop();
+  if (last === undefined) return false;
+  const equals = last.indexOf("=");
+  return (
+    equals < 0 ||
+    ["1", "t", "T", "true", "TRUE", "True"].includes(last.slice(equals + 1))
+  );
+}
+
+/** Use caller-owned word boundaries when Git has already decoded the direct command or alias. */
+function gitLfsWords(
+  candidate: string,
+  context: GitWriteTargetContext,
+): readonly string[] {
+  if (context.mode === "direct") return context.commandWords ?? [];
+  if (context.mode === "alias") return context.invokedAliasWords ?? [];
+  return splitPolicyShellWords(candidate);
+}
+
+/** Match the mutation family after Cobra option values have been removed. */
+function isLfsWriteCommand(
+  commands: readonly string[],
+  writeKind: "publication" | "history" | "locks",
+): boolean {
+  const verbs = {
+    publication: ["push", "pre-push"],
+    history: ["migrate"],
+    locks: ["lock", "unlock"],
+  };
+  if (!verbs[writeKind].includes(commands[0] ?? "")) return false;
+  return (
+    writeKind !== "history" || ["import", "export"].includes(commands[1] ?? "")
+  );
+}
+
+/** Classify LFS writes using the original argv when invoked directly or through an alias. */
+export function isGitLfsWriteTarget(
+  candidate: string,
+  writeKind: "publication" | "history" | "locks",
+  context: GitWriteTargetContext = {},
+): boolean {
+  if (context.mode === "strict") return false;
+  const words = gitLfsWords(candidate, context);
+  if (!/^[lL][fF][sS]$/u.test(words[0] ?? "")) return false;
+  const valueOptions =
+    "--include --exclude --include-ref --exclude-ref --above --top --unit --pointers --object-map --message --remote --id";
+  const valueShorts = "IXmri";
+  const commands = scanCobraArguments(
+    words,
+    valueOptions,
+    valueShorts,
+  ).operands;
+  if (!isLfsWriteCommand(commands, writeKind)) return false;
+  if (cobraBooleanFlagEnabled(words, "help", "h", valueOptions, valueShorts))
+    return false;
+  return (
+    writeKind !== "publication" ||
+    !cobraBooleanFlagEnabled(words, "dry-run", "d", valueOptions, valueShorts)
+  );
+}
+
+/** Recognize publication verbs while preserving LFS help and dry runs. */
+export function isGitPublicationTarget(
+  candidate: string,
+  context: GitWriteTargetContext = {},
+): boolean {
+  const command = candidate.replace(/^[ \t\r\n\v\f]+/u, "");
+  if (/^[lL][fF][sS](?: |$)/u.test(command))
+    return isGitLfsWriteTarget(command, "publication", context);
+  return (
+    command.startsWith("!") ||
+    [
+      "push",
+      "send-pack",
+      "http-push",
+      "svn dcommit",
+      "p4 submit",
+      "subtree push",
+    ].some((verb) => command === verb || command.startsWith(verb + " "))
+  );
+}
+
+/** Decode the additional word-quoting layer Git applies to an alias value. */
+export function normalizeGitAliasExpansion(expansion: string): string {
+  return joinPolicyShellWords(splitPolicyShellWords(expansion), 0);
+}
+
+/** Recognize only alias config operands whose decoded value can publish. */
+export function isGitPublicationAliasConfig(operand: string): boolean {
+  const match = /^alias\.[A-Za-z0-9_-]+=([^]*)$/u.exec(operand);
+  return (
+    match !== null &&
+    // Bash command substitution strips final newlines before this classification.
+    isGitPublicationTarget(
+      normalizeGitAliasExpansion(match[1] ?? "").replace(/\n+$/u, ""),
+    )
+  );
+}
+
+/** Match a single recovery argument without accepting surrounding whitespace or extra operands. */
+export function gitArgumentsAreOneOf(
+  argumentsText: string,
+  allowed: string,
+): boolean {
+  return (
+    argumentsText !== "" &&
+    !/[ \t\r\n\v\f]/u.test(argumentsText) &&
+    ` ${allowed} `.includes(` ${argumentsText} `)
+  );
+}
+
+/** Check every flag, including flags after newlines; operands do not affect this allowlist. */
+export function gitFlagsWithin(
+  argumentsText: string,
+  allowed: string,
+): boolean {
+  return argumentsText
+    .split(/[ \t\n]+/u)
+    .every(
+      (word) => !word.startsWith("-") || ` ${allowed} `.includes(` ${word} `),
+    );
+}
+
+/** Preserve the caller's literal-space argument boundaries. */
+export function gitArgumentsInclude(
+  argumentsText: string,
+  flag: string,
+): boolean {
+  return ` ${argumentsText} `.includes(` ${flag} `);
+}
+
+/** Split the raw argument text like Bash read -r -d '' with its default IFS. */
+function gitArgumentWords(argumentsText: string): string[] {
+  return argumentsText.split(/[ \t\n]+/u).filter((word) => word !== "");
+}
+
+/** Inspect one short bundle without treating a value as another flag. */
+function gitShortOption(
+  bundle: string,
+  shortName: string,
+  valueShorts: string,
+): { present: boolean; consumesNext: boolean } {
+  for (let index = 0; index < bundle.length; index++) {
+    const letter = bundle.charAt(index);
+    if (letter === shortName) return { present: true, consumesNext: false };
+    if (valueShorts.includes(letter))
+      return { present: false, consumesNext: index === bundle.length - 1 };
+  }
+  return { present: false, consumesNext: false };
+}
+
+/** Inspect one Git option word; separated option values are skipped by the caller. */
+function gitOptionWord(
+  word: string,
+  shortName: string,
+  longName: string,
+  minimumPrefix: number,
+  valueShorts: string,
+  valueLong: string,
+  originalWords: boolean,
+): { present: boolean; consumesNext: boolean } {
+  if (word.startsWith("--")) {
+    const option = word.slice(2).split("=", 1)[0] ?? "";
+    return {
+      present: option.length >= minimumPrefix && longName.startsWith(option),
+      consumesNext:
+        valueLong !== "" && valueLong.startsWith(option) && !word.includes("="),
+    };
+  }
+  if (shortName === "" || !word.startsWith("-") || word.length < 2)
+    return { present: false, consumesNext: false };
+  const bundle = gitShortOption(word.slice(1), shortName, valueShorts);
+  return {
+    present: bundle.present,
+    consumesNext: originalWords && bundle.consumesNext,
+  };
+}
+
+/** Match Git short bundles and accepted long prefixes before --; original argv preserves quoted option values. */
+export function gitOptionPresent(
+  argumentsText: string,
+  shortName: string,
+  longName: string,
+  minimumPrefix: number,
+  valueShorts: string,
+  valueLong = "",
+  originalWords?: readonly string[],
+): boolean {
+  const words = originalWords
+    ? originalWords.slice(1)
+    : gitArgumentWords(argumentsText);
+  let skipValue = false;
+  for (const word of words) {
+    if (skipValue) {
+      skipValue = false;
+      continue;
+    }
+    if (word === "--") return false;
+    const option = gitOptionWord(
+      word,
+      shortName,
+      longName,
+      minimumPrefix,
+      valueShorts,
+      valueLong,
+      originalWords !== undefined,
+    );
+    if (option.present) return true;
+    skipValue = option.consumesNext;
+  }
+  return false;
+}
+
+/** Recognize fetch destinations that update local refs rather than remote-tracking refs. */
+export function gitFetchRefspecMovesLocalRef(refspec: string): boolean {
+  const colon = refspec.indexOf(":");
+  if (colon < 0) return false;
+  const destination = refspec.slice(colon + 1);
+  return (
+    destination !== "" &&
+    !destination.startsWith("refs/remotes/") &&
+    destination !== "FETCH_HEAD"
+  );
+}
+
+interface GitFetchState {
+  remoteSeen: boolean;
+  multiple: boolean;
+}
+const fetchValueOptions = new Set([
+  "--upload-pack",
+  "--jobs",
+  "-j",
+  "--depth",
+  "--deepen",
+  "--shallow-since",
+  "--shallow-exclude",
+  "--server-option",
+  "-o",
+  "--negotiation-tip",
+  "--filter",
+]);
+
+/** Consume option values before exposing a fetch operand as a possible refspec. */
+function readFetchWord(
+  words: readonly string[],
+  index: number,
+  state: GitFetchState,
+): { next: number; unsafe?: boolean; operand?: string } {
+  const word = words[index] ?? "";
+  if (gitOptionPresent(word, "", "stdin", 3, ""))
+    return { next: index + 1, unsafe: true };
+  if (gitOptionPresent(word, "", "refmap", 4, "")) {
+    const equals = word.indexOf("=");
+    const refspec =
+      equals < 0 ? (words[index + 1] ?? "") : word.slice(equals + 1);
+    return {
+      next: index + (equals < 0 ? 2 : 1),
+      unsafe: gitFetchRefspecMovesLocalRef(refspec),
+    };
+  }
+  if (gitOptionPresent(word, "m", "multiple", 4, "")) {
+    state.multiple = true;
+    return { next: index + 1 };
+  }
+  if (fetchValueOptions.has(word)) return { next: index + 2 };
+  return word.startsWith("-")
+    ? { next: index + 1 }
+    : { next: index + 1, operand: word };
+}
+
+/** Preserve the distinction between a colon in an SSH remote and an explicit local ref destination. */
+export function gitFetchMovesLocalRef(argumentsText: string): boolean {
+  const words = gitArgumentWords(argumentsText);
+  const state: GitFetchState = { remoteSeen: false, multiple: false };
+  for (let index = 0; index < words.length;) {
+    const word = readFetchWord(words, index, state);
+    index = word.next;
+    if (word.unsafe) return true;
+    if (word.operand === undefined) continue;
+    if (
+      state.remoteSeen &&
+      !state.multiple &&
+      gitFetchRefspecMovesLocalRef(word.operand)
+    )
+      return true;
+    state.remoteSeen = true;
+  }
+  return false;
+}
+
+interface GitResetState {
+  firstOperand: string | null;
+  path: boolean;
+  indexMode: boolean;
+  separator: boolean;
+}
+const resetHistoryModes = new Set(["--hard", "--soft", "--merge", "--keep"]);
+const resetIndexModes = new Set(["-p", "--patch", "--pathspec-from-file"]);
+const resetSafeFlags = new Set([
+  "-q",
+  "--quiet",
+  "--mixed",
+  "--no-refresh",
+  "--refresh",
+  "--pathspec-file-nul",
+]);
+
+/** Accumulate reset path/index modes while refusing unknown history-changing options. */
+function readResetWord(word: string, state: GitResetState): boolean {
+  if (state.separator) {
+    state.path = true;
+    return true;
+  }
+  if (resetHistoryModes.has(word)) return false;
+  if (word === "--") {
+    state.separator = true;
+    return true;
+  }
+  if (resetIndexModes.has(word) || word.startsWith("--pathspec-from-file=")) {
+    state.indexMode = true;
+    return true;
+  }
+  if (resetSafeFlags.has(word)) return true;
+  if (word.startsWith("-")) return false;
+  if (state.firstOperand === null) state.firstOperand = word;
+  else state.path = true;
+  return true;
+}
+
+/** Allow resets of the index or selected paths while retaining branch-moving resets. */
+export function gitResetIsIndexOnly(argumentsText: string): boolean {
+  const state: GitResetState = {
+    firstOperand: null,
+    path: false,
+    indexMode: false,
+    separator: false,
+  };
+  for (const word of gitArgumentWords(argumentsText))
+    if (!readResetWord(word, state)) return false;
+  return (
+    state.indexMode ||
+    state.path ||
+    state.firstOperand === null ||
+    state.firstOperand === "HEAD"
+  );
+}
+
+/** A short bundle stops at -b's branch value; -B before that point resets an existing branch. */
+function worktreeBundleResetsBranch(bundle: string): boolean {
+  for (const letter of bundle) {
+    if (letter === "B") return true;
+    if (letter === "b") return false;
+  }
+  return false;
+}
+
+/** Detect worktree add branch resets without inspecting branch names or lock reasons as flags. */
+export function gitWorktreeAddResetsBranch(words: readonly string[]): boolean {
+  if (words[0] !== "worktree" || words[1] !== "add") return false;
+  return worktreeArgumentsResetBranch(words);
+}
+
+/** Read only worktree-add options; branch names and reason strings remain operands. */
+function worktreeArgumentsResetBranch(words: readonly string[]): boolean {
+  for (let index = 2; index < words.length; index++) {
+    const word = words[index] ?? "";
+    if (word === "--") return false;
+    if (word === "--reason" || word === "-b") {
+      index++;
+      continue;
+    }
+    if (word.startsWith("--reason=") || word.startsWith("-b")) continue;
+    if (word.startsWith("-") && worktreeBundleResetsBranch(word.slice(1)))
+      return true;
+  }
+  return false;
+}
+
+const symbolicRefReadFlags = new Set([
+  "-q",
+  "--quiet",
+  "--short",
+  "--recurse",
+  "--no-recurse",
+]);
+/** A symbolic-ref read has exactly one operand and no write or unknown flags. */
+export function gitSymbolicRefIsReadOnly(argumentsText: string): boolean {
+  let operands = 0;
+  let afterSeparator = false;
+  for (const word of gitArgumentWords(argumentsText)) {
+    if (!afterSeparator) {
+      if (word === "--") {
+        afterSeparator = true;
+        continue;
+      }
+      if (symbolicRefReadFlags.has(word)) continue;
+      if (word.startsWith("-")) return false;
+    }
+    operands++;
+  }
+  return operands === 1;
+}
+
+/** Skip note-ref selectors without mistaking their value for a read-only notes verb. */
+function notesModeIndex(words: readonly string[]): number {
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "--ref") index += 2;
+    else if (word.startsWith("--ref=") || word === "--no-ref") index++;
+    else if (word === "--") return index + 1;
+    else if (word === "-h" || word === "--help") return index;
+    else return word.startsWith("-") ? -1 : index;
+  }
+  return index;
+}
+
+/** Preserve notes inspection and explicit recovery without exempting notes commits. */
+function notesModePreservesHistory(mode: string, args: string): boolean {
+  if (mode === "-h" || mode === "--help") return args === "";
+  if (["list", "show", "get-ref"].includes(mode)) return true;
+  if (mode === "prune")
+    return (
+      gitFlagsWithin(args, "-n --dry-run -v --verbose") &&
+      (gitArgumentsInclude(args, "-n") ||
+        gitArgumentsInclude(args, "--dry-run"))
+    );
+  if (mode === "merge")
+    return (
+      gitFlagsWithin(args, "--abort -v --verbose -q --quiet") &&
+      gitArgumentsInclude(args, "--abort")
+    );
+  return false;
+}
+
+/** Read-only notes modes remain available after optional ref selectors. */
+export function gitNotesPreservesHistory(argumentsText: string): boolean {
+  const words = gitArgumentWords(argumentsText);
+  const index = notesModeIndex(words);
+  if (index < 0) return false;
+  if (index >= words.length) return true;
+  const args = words.slice(index + 1).join(" ");
+  return (
+    gitArgumentsAreOneOf(args, "-h --help") ||
+    notesModePreservesHistory(words[index] ?? "", args)
+  );
+}
+
+/** Allow stash inspection/apply; drop and clear retain the separate destructive rule. */
+export function gitStashPreservesHistory(argumentsText: string): boolean {
+  const words = gitArgumentWords(argumentsText);
+  if (["list", "show", "apply", "drop", "clear"].includes(words[0] ?? ""))
+    return true;
+  return (
+    ["push", "save", "create", "store", "pop", "branch"].includes(
+      words[0] ?? "",
+    ) &&
+    words.length === 2 &&
+    ["-h", "--help"].includes(words[1] ?? "")
+  );
+}
+
+/** Keep the raw argument text after the first command word for exact flag matching. */
+function gitTargetParts(candidate: string): {
+  command: string;
+  verb: string;
+  args: string;
+} {
+  const command = candidate.replace(/^[ \t\r\n\v\f]+/u, "");
+  const split = command.search(/[ \t\r\n\v\f]/u);
+  return split < 0
+    ? { command, verb: command, args: "" }
+    : {
+        command,
+        verb: command.slice(0, split),
+        args: command.slice(split + 1),
+      };
+}
+const gitHistoryVerbs = new Set(
+  "commit commit-tree update-ref cherry-pick revert am merge rebase pull filter-branch filter-repo fast-import reset branch checkout switch fetch symbolic-ref replace notes worktree stash subtree lfs".split(
+    " ",
+  ),
+);
+const gitConditionalHistoryVerbs = new Set(
+  "reset branch checkout switch fetch symbolic-ref replace notes worktree stash".split(
+    " ",
+  ),
+);
+
+/** A merge avoids moving HEAD only in explicit recovery, squash or no-fast-forward/no-commit modes. */
+function gitMergePreservesHistory(args: string): boolean {
+  if (gitArgumentsAreOneOf(args, "--abort --quit")) return true;
+  return (
+    gitFlagsWithin(
+      args,
+      "--squash --no-ff --no-commit --stat --no-stat -q --quiet",
+    ) &&
+    (gitArgumentsInclude(args, "--squash") ||
+      (gitArgumentsInclude(args, "--no-ff") &&
+        gitArgumentsInclude(args, "--no-commit")))
+  );
+}
+
+const gitHistoryExemptions: Record<
+  string,
+  (args: string, context: GitWriteTargetContext, command: string) => boolean
+> = {
+  stash: gitStashPreservesHistory,
+  notes: gitNotesPreservesHistory,
+  reset: (args) =>
+    /(^|[ \t\r\n\v\f])--hard([ \t\r\n\v\f]|$)/u.test(args) ||
+    gitResetIsIndexOnly(args),
+  branch: (args) =>
+    !gitOptionPresent(args, "f", "force", 1, "cC") &&
+    !gitOptionPresent(args, "D", "", 0, "cC") &&
+    !gitOptionPresent(args, "M", "", 0, "cC") &&
+    !gitOptionPresent(args, "C", "", 0, "c"),
+  "symbolic-ref": gitSymbolicRefIsReadOnly,
+  replace: (args) =>
+    args === "" ||
+    (gitFlagsWithin(
+      args,
+      "-l --list --format=short --format=medium --format=long",
+    ) &&
+      (gitArgumentsInclude(args, "-l") || gitArgumentsInclude(args, "--list"))),
+  checkout: (args) => !gitOptionPresent(args, "B", "force-create", 7, "b"),
+  switch: (args) => !gitOptionPresent(args, "C", "force-create", 7, "c"),
+  fetch: (args) => !gitFetchMovesLocalRef(args),
+  worktree: (_args, context, command) =>
+    !gitWorktreeAddResetsBranch(
+      context.mode === "direct"
+        ? (context.commandWords ?? [])
+        : splitPolicyShellWords(command),
+    ),
+  "cherry-pick": (args) =>
+    gitArgumentsAreOneOf(args, "--abort --quit") ||
+    (gitFlagsWithin(args, "-n --no-commit") &&
+      (gitArgumentsInclude(args, "-n") ||
+        gitArgumentsInclude(args, "--no-commit"))),
+  revert: (args, context, command) =>
+    gitHistoryExemptions["cherry-pick"]?.(args, context, command) ?? false,
+  am: (args) =>
+    gitArgumentsAreOneOf(
+      args,
+      "--abort --quit --show-current-patch --show-current-patch=diff --show-current-patch=raw",
+    ),
+  merge: gitMergePreservesHistory,
+  rebase: (args) =>
+    gitArgumentsAreOneOf(args, "--abort --quit --show-current-patch"),
+};
+
+/** Identify history creation after command parsing; strict alias definitions do not inherit cancellable exemptions. */
+export function isGitCommitTarget(
+  candidate: string,
+  context: GitWriteTargetContext = {},
+): boolean {
+  const { command, verb, args } = gitTargetParts(candidate);
+  if (/^[lL][fF][sS]$/u.test(verb))
+    return isGitLfsWriteTarget(command, "history", context);
+  if (!gitHistoryVerbs.has(verb)) return false;
+  if (context.mode === "strict" && !gitConditionalHistoryVerbs.has(verb))
+    return true;
+  if (gitArgumentsAreOneOf(args, "-h --help")) return false;
+  const exemption = gitHistoryExemptions[verb];
+  return !(exemption?.(args, context, command) ?? false);
+}
+
+/** Selected directories used by pathspec checks; unknownDirectory records conservative bulk refusals. */
+export interface GitPathspecContext {
+  homeDirectory: string;
+  commandDirectory: string;
+  selectedDirectory: string;
+  commandDirectoryUnknown?: boolean;
+  selectedDirectoryUnknown?: boolean;
+  unknownDirectory?: boolean;
+}
+
+function defaultGitPathspecContext(): GitPathspecContext {
+  return {
+    homeDirectory: process.env.HOME ?? homedir(),
+    commandDirectory: process.cwd(),
+    selectedDirectory: process.cwd(),
+  };
+}
+
+/** Bash -d follows directory links and treats inaccessible or vanished paths as non-directories. */
+function isPolicyDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Normalize dot components lexically before testing a Git pathspec's scope. */
+function normalizeGitPathspecPath(path: string): string {
+  const components: string[] = [];
+  const absolute = path.startsWith("/");
+  for (const component of path.split("/")) {
+    if (component === "" || component === ".") continue;
+    if (component === "..") {
+      if (components.length > 0 && components.at(-1) !== "..") components.pop();
+      else if (!absolute) components.push(component);
+    } else components.push(component);
+  }
+  return (absolute ? "/" : "") + components.join("/");
+}
+
+/** Resolve only the home/PWD spellings the shell policy recognizes. */
+function expandGitPathspec(path: string, context: GitPathspecContext): string {
+  const replacements = [
+    ["~", context.homeDirectory],
+    ["$HOME", context.homeDirectory],
+    ["${HOME}", context.homeDirectory],
+    ["$PWD", context.commandDirectory || process.cwd()],
+    ["${PWD}", context.commandDirectory || process.cwd()],
+  ] as const;
+  for (const [prefix, value] of replacements) {
+    if (path === prefix || path.startsWith(prefix + "/"))
+      return value + path.slice(prefix.length);
+  }
+  return path.startsWith("$") ? path.slice(1) : path;
+}
+
+/** Preserve literal pathspecs while marking exclusion, glob or unknown magic as bulk. */
+function readGitPathspecMagic(path: string): {
+  path: string;
+  literal: boolean;
+  bulk: boolean;
+} {
+  if (path.startsWith(":(")) {
+    const match = /^:\(([a-z,]*)\)([^]*)$/u.exec(path);
+    if (!match) return { path, literal: false, bulk: true };
+    const tags = splitIfs(match[1] ?? "", ",");
+    return {
+      path: match[2] ?? "",
+      literal: tags.includes("literal"),
+      bulk: tags.some((tag) => !["top", "icase", "literal"].includes(tag)),
+    };
+  }
+  if (!path.startsWith(":")) return { path, literal: false, bulk: false };
+  const match = /^:([/!^]*):?([^]*)$/u.exec(path);
+  return {
+    path: match?.[2] ?? path,
+    literal: false,
+    bulk: !match || /[!^]/u.test(match[1] ?? ""),
+  };
+}
+
+/** Inspect one visible pathspec without executing substitutions or expanding shell globs. */
+function isBulkGitPathspec(
+  path: string,
+  verb: string,
+  afterSeparator: boolean,
+  context: GitPathspecContext,
+): boolean {
+  if (path.includes("$(") || path.includes("`"))
+    return verb === "restore" || afterSeparator;
+  if (context.commandDirectoryUnknown && /^(?:\$PWD|\$\{PWD\})/u.test(path)) {
+    context.unknownDirectory = true;
+    return true;
+  }
+  return isBulkResolvedGitPathspec(
+    readGitPathspecMagic(expandGitPathspec(path, context)),
+    context,
+    verb === "restore" || afterSeparator,
+  );
+}
+
+/** Check normalized path scope after substitutions and visible PWD uncertainty have been handled. */
+function isBulkResolvedGitPathspec(
+  magic: { path: string; literal: boolean; bulk: boolean },
+  context: GitPathspecContext,
+  allowUnknown: boolean,
+): boolean {
+  if (magic.bulk || (!magic.literal && /[*?]/u.test(magic.path))) return true;
+  const normalized = normalizeGitPathspecPath(magic.path);
+  if (normalized.startsWith("/")) return isPolicyDirectory(normalized);
+  if (
+    normalized === "" ||
+    normalized === "." ||
+    /^\.\.(?:\/\.\.)*$/u.test(normalized)
+  )
+    return true;
+  if (context.selectedDirectoryUnknown && allowUnknown) {
+    context.unknownDirectory = true;
+    return true;
+  }
+  return isPolicyDirectory(context.selectedDirectory + "/" + normalized);
+}
+
+/** Detect broad restore/checkout paths; unresolved directories remain explicitly visible to the caller. */
+export function gitPathspecsNameBulk(
+  verb: string,
+  args: string,
+  context = defaultGitPathspecContext(),
+): boolean {
+  if (gitOptionPresent(args, "", "pathspec-from-file", 11, "s")) return true;
+  let afterSeparator = false;
+  let skipValue = false;
+  for (const word of gitArgumentWords(args)) {
+    if (skipValue) {
+      skipValue = false;
+      continue;
+    }
+    if (!afterSeparator) {
+      if (word === "--") {
+        afterSeparator = true;
+        continue;
+      }
+      if (["-s", "--source"].includes(word)) {
+        skipValue = true;
+        continue;
+      }
+      if (word.startsWith("-")) continue;
+    }
+    if (isBulkGitPathspec(word, verb, afterSeparator, context)) return true;
+  }
+  return false;
+}
+
+/** Identify usage-only requests with at most one leading subcommand. */
+export function gitArgumentsRequestUsageOnly(args: string): boolean {
+  const words = gitArgumentWords(args);
+  if (words.length === 2 && !words[0]?.startsWith("-")) words.shift();
+  return words.length === 1 && ["-h", "--help"].includes(words[0] ?? "");
+}
+
+type GitDestructiveRule = (
+  args: string,
+  words: readonly string[] | undefined,
+  paths: GitPathspecContext,
+) => boolean;
+const gitDestructiveRules: Record<string, GitDestructiveRule> = {
+  clean: (args, words) =>
+    gitOptionPresent(args, "f", "force", 1, "e", "exclude", words),
+  prune: (args) =>
+    !(
+      gitFlagsWithin(args, "-n --dry-run -v --verbose") &&
+      (gitArgumentsInclude(args, "-n") ||
+        gitArgumentsInclude(args, "--dry-run"))
+    ),
+  gc: () => true,
+  submodule: (args) =>
+    /^(?:(?:--quiet|-q)[ \t\r\n\v\f]+)*(?:deinit|update)(?:[ \t\r\n\v\f]|$)/u.test(
+      args,
+    ) && gitOptionPresent(args, "f", "force", 1, ""),
+  tag: (args) =>
+    gitOptionPresent(args, "d", "delete", 1, "mF") ||
+    gitOptionPresent(args, "f", "force", 1, "mF"),
+  remote: (args) =>
+    /^(?:(?:-v|--verbose)[ \t\r\n\v\f]+)*(?:remove|rm)(?:[ \t\r\n\v\f]|$)/u.test(
+      args,
+    ),
+  rm: (args) =>
+    !gitOptionPresent(args, "n", "dry-run", 3, "") &&
+    !gitOptionPresent(args, "", "cached", 3, "") &&
+    gitOptionPresent(args, "f", "force", 1, ""),
+  "checkout-index": (args) =>
+    !gitOptionPresent(args, "n", "", 0, "") &&
+    gitOptionPresent(args, "f", "force", 1, ""),
+  "read-tree": (args) =>
+    gitOptionPresent(args, "u", "", 0, "") &&
+    gitOptionPresent(args, "", "reset", 2, ""),
+  worktree: (args) =>
+    /^remove(?:[ \t\r\n\v\f]|$)/u.test(args) &&
+    gitOptionPresent(args, "f", "force", 1, ""),
+  restore: (args, _words, paths) =>
+    gitPathspecsNameBulk("restore", args, paths) &&
+    (gitOptionPresent(args, "W", "worktree", 1, "s") ||
+      !gitOptionPresent(args, "S", "staged", 2, "s")),
+  checkout: (args, _words, paths) =>
+    gitOptionPresent(args, "f", "force", 1, "bB") ||
+    gitPathspecsNameBulk("checkout", args, paths),
+  switch: (args) =>
+    gitOptionPresent(args, "f", "force", 1, "cC") ||
+    gitOptionPresent(args, "", "discard-changes", 2, "cC"),
+  stash: (args) => /^(?:drop|clear)(?:[ \t\r\n\v\f]|$)/u.test(args),
+  reflog: (args) => /^(?:expire|delete)(?:[ \t\r\n\v\f]|$)/u.test(args),
+};
+
+/** Recognize destructive Git flags after normalization, preserving the original clean argv when supplied. */
+export function isGitDestructiveTarget(
+  candidate: string,
+  originalWords?: readonly string[],
+  paths = defaultGitPathspecContext(),
+): boolean {
+  const { command, verb, args } = gitTargetParts(candidate);
+  const hard = /(^|[ \t\r\n\v\f])--hard([ \t\r\n\v\f]|$)/u;
+  if (/(^|[ \t\r\n\v\f])--no-verify([ \t\r\n\v\f]|$)/u.test(command))
+    return true;
+  if (verb === "reset" && hard.test(command)) return true;
+  if (gitArgumentsRequestUsageOnly(args)) return false;
+  const rule = Object.hasOwn(gitDestructiveRules, verb)
+    ? gitDestructiveRules[verb]
+    : undefined;
+  return rule?.(args, originalWords, paths) ?? false;
+}
+
+/** Per-command alias state; reset it before classifying a different Git command. */
+export class GitAliasState {
+  push = false;
+  commit = false;
+  destructive = false;
+  expansions = new Map<string, string>();
+  rawExpansions = new Map<string, string>();
+}
+
+/** Clear per-command alias classifications and both expansion representations. */
+export function resetGitAliasFlags(state: GitAliasState): void {
+  state.push = false;
+  state.commit = false;
+  state.destructive = false;
+  state.expansions.clear();
+  state.rawExpansions.clear();
+}
+
+/** Classify an alias definition conservatively before later visible arguments are appended. */
+export function recordGitAliasExpansion(
+  expansion: string,
+  state: GitAliasState,
+  paths = defaultGitPathspecContext(),
+): void {
+  const normalized = normalizeGitAliasExpansion(expansion).replace(/\n+$/u, "");
+  if (isGitPublicationTarget(normalized, { mode: "strict" })) state.push = true;
+  if (isGitCommitTarget(normalized, { mode: "strict" })) state.commit = true;
+  if (
+    isGitDestructiveTarget(normalized, splitPolicyShellWords(expansion), paths)
+  )
+    state.destructive = true;
+}
+
+/** Record only Git alias configuration; retain raw word boundaries beside the normalized expansion. */
+export function recordGitAliasConfig(
+  operand: string,
+  state: GitAliasState,
+  paths = defaultGitPathspecContext(),
+): void {
+  const match = /^alias\.([A-Za-z0-9_-]+)=([^]*)$/u.exec(operand);
+  if (!match) return;
+  const name = (match[1] ?? "").toLowerCase();
+  const expansion = match[2] ?? "";
+  recordGitAliasExpansion(expansion, state, paths);
+  state.expansions.set(
+    name,
+    normalizeGitAliasExpansion(expansion).replace(/\n+$/u, ""),
+  );
+  state.rawExpansions.set(name, expansion);
+}
+
+const gitBuiltinWords =
+  " add am annotate apply archive bisect blame branch bugreport bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout checkout--worker checkout-index cherry cherry-pick clean clone column commit commit-graph commit-tree config count-objects credential credential-cache credential-cache--daemon credential-store describe diagnose diff diff-files diff-index diff-tree difftool fast-export fast-import fetch fetch-pack fmt-merge-msg for-each-ref for-each-repo format-patch fsck fsck-objects fsmonitor--daemon gc get-tar-commit-id grep hash-object help hook index-pack init init-db interpret-trailers log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-index merge-ours merge-recursive merge-recursive-ours merge-recursive-theirs merge-subtree merge-tree mktag mktree multi-pack-index mv name-rev notes pack-objects pack-redundant pack-refs patch-id pickaxe prune prune-packed pull push range-diff read-tree rebase receive-pack reflog remote remote-ext remote-fd repack replace rerere reset restore rev-list rev-parse revert rm send-pack shortlog show show-branch show-index show-ref sparse-checkout stage stash status stripspace submodule--helper switch symbolic-ref tag unpack-file unpack-objects update-index update-ref update-server-info upload-archive upload-archive--writer upload-pack var verify-commit verify-pack verify-tag version whatchanged worktree write-tree ";
+
+/** Match Git builtins before attempting a persistent alias lookup. */
+export function isGitBuiltinWord(word: string): boolean {
+  return gitBuiltinWords.includes(` ${word} `);
+}

@@ -62,7 +62,7 @@ After HEAD advances, compare generated files with the current baseline plus the 
 
 **Status:** active | **Created:** 2026-07-13
 **Severity:** INTEGRATION
-**Incident count:** 7 | **Latest occurrence:** 2026-10-17
+**Incident count:** 8 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** Before changing milestone status or deriving proof, read every declared prerequisite and named evidence owner. Record authorized activation before checking implementation tasks; a checked task contradicts `not-started`. Recompute mutable counts at the named revision and current worktree; never use a historical endpoint as the live expectation. Run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs) and put rationale in narrative fields.
 
@@ -80,7 +80,8 @@ Check each ported function's callees before assigning it to an independent stage
 
 **Recurrence 2026-10-17:** The local M08 amendment put fixtures after ports whose immediate proof needed them; M51 put failing contracts after instruction replacement. Review reordered both before implementation, following `workflow/skills/goat-plan/SKILL.md` (search: `Risk-weighted task ordering`). No runtime fix was credited.
 
-**Recurrence 2026-10-17 (callee ownership):** An independent port batch retained `__goat_git_strip_globals` despite calls into later alias tracking and refusal dispatch. Inventory uniqueness missed that execution dependency. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_strip_globals`, `record_git_alias_config`) and `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `record_git_persistent_alias`). Move composed ownership to the stage with those dependencies; do not stub protection to close an earlier gate.
+**Recurrence 2026-10-17 (callee ownership):** M08's `__goat_git_strip_globals` needed later alias tracking and refusal dispatch. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_strip_globals`, `record_git_alias_config`) and `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `record_git_persistent_alias`). Use real callees, never protection stubs.
+**Recurrence 2026-10-17 (context):** M09's `prepare_segment_context` needed M13 callees. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `prepare_segment_context`).
 
 ---
 

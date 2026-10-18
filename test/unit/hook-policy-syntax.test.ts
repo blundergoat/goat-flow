@@ -475,6 +475,16 @@ describe("policy native host and conditional parsing", () => {
         { kind: "commands", commands: ["echo λ"] },
       ],
       [
+        "if defined equ equ git push origin main",
+        "cmd",
+        { kind: "commands", commands: ["git push origin main"] },
+      ],
+      [
+        "if /i not defined equ equ git push origin main",
+        "cmd.exe",
+        { kind: "commands", commands: ["git push origin main"] },
+      ],
+      [
         "if errorlevel 1 (echo safe) else git status",
         "cmd",
         { kind: "commands", commands: ["echo safe", "git status"] },

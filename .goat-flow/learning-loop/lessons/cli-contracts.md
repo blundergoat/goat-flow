@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -43,7 +43,7 @@ last_reviewed: 2026-10-11
 **Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 7 | **Latest occurrence:** 2026-09-19
+**Incident count:** 10 | **Latest occurrence:** 2026-10-18
 
 **Prevention:**
 1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
@@ -65,6 +65,14 @@ last_reviewed: 2026-10-11
 - **Recurrence 2026-09-01:** Playbook inventory tests passed before preflight rejected `driftSkillPlaybookInventory` at complexity 11. Extracting `describePlaybookInventoryProblems` preserved the exact-set cases and restored ESLint.
 - **Recurrence 2026-09-05:** Adding `--max-active` produced 1,015 substantive lines against the configured 1,000-line gate. Folding flag checks together still left 1,008 lines after formatting. Moving plan argument handling into `src/cli/cli-parser-plans.ts` (search: `validatePlansFlags`) cleared the size error without importing plan runtime into the parser.
 - **Recurrence 2026-09-19:** A test file hit the same gate twice in one milestone. Seven new hook cases took `test/integration/gruff-code-quality-contract.test.ts` to 1,002 substantive lines; shortening the case labels bought 14 lines, and two more tests then took it to 1,038. The cases moved to `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `quiets edits outside the analysed scope`), which needed a second allowlist approval mid-milestone. Measure a test file's Gruff headroom before the first case is added, and plan the new file when the headroom is smaller than the planned cases.
+
+
+- **Recurrence 2026-10-18:** The M09 native segment port hit the same verification limits: quote, separator and tracking helpers exceeded ESLint complexity 10, and the directory fixture table exceeded the test-function length limit. Focused behavior tests alone did not establish acceptance. In `src/hooks/policy-segments.mts` (search: `segmentSeparatorWidth`, `directoryCommandStart`, `configCommandStart`), separate parsing decisions restored typed lint. In `test/unit/hook-policy-segments.test.ts` (search: `directoryContextCases`), keeping the unchanged table outside the test function restored the warning ratchet. Measure both source and test headroom before extending either; preserve every assertion when relocating fixture data.
+
+- **Recurrence 2026-10-18 (write rules):** The M10 direct port passed five focused tests before ESLint rejected `cobraBooleanFlagEnabled` at complexity 17 and `isGitLfsWriteTarget` at 30. The first extraction still left the LFS classifier at 12. In `src/hooks/deny-dangerous/patterns-writes.mts` (search: `scanCobraArguments`, `isLfsWriteCommand`), sharing option scanning and separating mutation-family matching brought every function below the unchanged limit. Read lint complexity before broad proof; a first helper extraction alone is not evidence that the whole file passes. The broader checks also rejected a test non-null assertion and a nested code-map row; both were corrected without dropping cases. The continuation hit complexity limits in Git option/pathspec loops and exact optional-property typing in fetch parsing. Split option recognition from traversal, omit absent fields instead of assigning undefined, and run typed lint immediately after each batch. A frozen comparison exposed lost command-substitution newline trimming in `isGitPublicationAliasConfig`; its quoted trailing-newline assertion now retains the publication decision. The invocation continuation also exceeded complexity limits in global-option and saved-alias helpers. Separating option retention, directory selection and supervised lookup restored the same limit; the first split still exceeded it and required another inspection. In `src/hooks/deny-dangerous/git-command.mts` (search: `consumeGlobalOption`, `readGitAlias`), the caller supplies the remaining deadline and the existing supervisor owns bounded output and cleanup. The new direct test initially expected a bare `stash` alias to omit the conservative history flag; 281 frozen invocation comparisons established the retained result, and `test/unit/hook-policy-writes.test.ts` (search: `preserves direct and inline-alias write decisions`) now asserts it.
+
+
+- **Recurrence 2026-10-18 (path rules):** The M12 port passed its first frozen comparisons but still exceeded ESLint complexity 10 in quote, search and credential handlers. Shared option-state traversal also triggered TypeScript's circular inference until its local result had an explicit type. In `src/hooks/deny-dangerous/patterns-paths.mts` (search: `searchOptionAt`, `searchWordsTouchSecret`, `ghAuthShowsToken`), keeping option recognition separate from traversal restored typed lint without changing the reference outcomes. Run the actual ESLint limit and compiler after each bounded source batch; Gruff's separate complexity threshold is not a substitute.
 
 ---
 
@@ -169,3 +177,33 @@ array without changing the plan's effort state.
 **What happened:** Applying "an unreadable field means wait" to a milestone's own Status gave every such milestone a `waiting:` line that also listed the others as possible cap holders. Focused tests passed. A before-and-after snapshot of local plans, measured 2026-10-11, changed 141 plan-and-mode blocks, mostly archived plans written with older Status wording such as `done (date)`. Printing no line for a milestone whose own Status is unreadable, while still counting it as possibly active for others, kept the guarantee and cut the change to 22 blocks, each from a plan that really contained an unreadable field.
 
 **Root cause:** The fixtures placed one invalid milestone among valid ones, so they could not show how the rule scaled when most milestones in a plan used legacy vocabulary.
+
+---
+
+## Lesson: Preserve newline matching when porting Bash regular expressions
+
+**Status:** active | **Created:** 2026-10-18
+**Decision changed:** Compare quoted filenames and C-locale character boundaries against the original engine before accepting a regex port.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Bash ERE dot matches newlines inside a quoted word. Use JavaScript dotAll only where that original rule requires it; keep ASCII character classes explicit. Compare both engines on newline-bearing operands before broad proof.
+
+**What happened:** The first native key-extension matcher copied Bash's pattern into JavaScript without dotAll. All 99 initial helper comparisons agreed, but additional boundary probes found that quoted filenames containing LF or U+2028 were protected by Bash and missed by the candidate. The candidate was isolated and no proposed command ran.
+
+**Evidence:** `src/hooks/deny-dangerous/patterns-paths.mts` (search: `keyMaterialPathTouch`) preserves dotAll for that filename rule. `test/unit/hook-policy-paths.test.ts` (search: `private\nname.key`) retains both reproduced operands beside ordinary key files and query-data controls.
+
+---
+
+## Lesson: Preserve longest-match semantics when porting command parsers
+
+**Status:** active | **Created:** 2026-10-18 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
+**Decision changed:** Compare ambiguous command grammar against the original parser before accepting a regex port.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** A POSIX expression can select a longer alternative than JavaScript's first successful alternative. For command conditions, compare every valid form and optional-prefix interpretation, then retain the longest consumed span. Test an ambiguous keyword operand alongside the ordinary forms.
+
+**What happened:** The M09 Node parser exposed `equ git push origin main` from `if defined equ equ git push origin main`; the frozen Bash parser exposed `git push origin main`. Treating the leading `equ` as an executable could hide the protected Git command. The existing ordinary-condition cases had passed.
+
+**Fix and evidence:** `src/hooks/policy-syntax.mts` (search: `longestPolicyCmdCondition`) compares unary and comparison forms with their valid optional prefixes. `test/unit/hook-policy-syntax.test.ts` (search: `if defined equ equ git push origin main`) retains the reproduction and its prefixed form. The reference remains `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `native_cmd_condition_re`); its bytes were unchanged. Direct comparisons now expose the same command. Complete policy verdicts remain a separate integration requirement.

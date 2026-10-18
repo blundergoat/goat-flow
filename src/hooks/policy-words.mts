@@ -139,6 +139,61 @@ function consumeBoundaryQuote(
   }
 }
 
+/** Consume only path-scan quote delimiters; their contents remain visible to path matching. */
+function consumePathScanQuote(
+  state: BoundaryQuoteState,
+  char: string,
+): boolean {
+  if (!state.inSingle && char === "\\") {
+    state.escaped = true;
+    return true;
+  }
+  if (!state.inDouble && char === "'") {
+    state.inSingle = !state.inSingle;
+    return true;
+  }
+  if (!state.inSingle && char === '"') {
+    state.inDouble = !state.inDouble;
+    return true;
+  }
+  return false;
+}
+
+function isPathScanInputRedirect(
+  input: string,
+  index: number,
+  state: BoundaryQuoteState,
+): boolean {
+  return (
+    !state.inSingle &&
+    !state.inDouble &&
+    input.charAt(index) === "<" &&
+    !/[<&(]/u.test(input.charAt(index + 1)) &&
+    input.charAt(index - 1) !== "<"
+  );
+}
+
+/** Reveal path text while retaining the reference's distinction between input redirects and quoted data. */
+export function stripPolicyShellQuotesForPathScan(input: string): string {
+  const state: BoundaryQuoteState = {
+    inSingle: false,
+    inDouble: false,
+    escaped: false,
+  };
+  let output = "";
+  for (let index = 0; index < input.length; index++) {
+    const char = input.charAt(index);
+    if (state.escaped) {
+      output += char;
+      state.escaped = false;
+      continue;
+    }
+    if (consumePathScanQuote(state, char)) continue;
+    output += isPathScanInputRedirect(input, index, state) ? "< " : char;
+  }
+  return output + (state.escaped ? "\\" : "");
+}
+
 /** Return the matching UTF-8 byte offset, or null when quoting or nesting leaves no complete close. */
 export function findMatchingPolicyShellParen(
   input: Uint8Array,

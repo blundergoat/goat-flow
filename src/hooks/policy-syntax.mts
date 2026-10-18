@@ -702,8 +702,29 @@ const powerShellHosts = new Set([
 ]);
 const cmdHosts = new Set(["cmd", "cmd.exe"]);
 // cmd `if` conditions the parser understands: optional `/i` and `not`, then exist/defined/errorlevel/cmdextversion or a comparison.
-const cmdCondition =
-  /^(?:\/i[ \t\r\n\v\f]+)?(?:not[ \t\r\n\v\f]+)?(?:(?:exist|defined|errorlevel|cmdextversion)[ \t\r\n\v\f]+("[^"]*"|[^ \t\r\n\v\f=]+)|("[^"]*"|[^ \t\r\n\v\f=]+)(?:[ \t\r\n\v\f]*==[ \t\r\n\v\f]*|[ \t\r\n\v\f]+(?:equ|neq|lss|leq|gtr|geq)[ \t\r\n\v\f]+)("[^"]*"|[^ \t\r\n\v\f=]+))[ \t\r\n\v\f]+/u;
+const cmdUnaryCondition =
+  /^(?:exist|defined|errorlevel|cmdextversion)[ \t\r\n\v\f]+("[^"]*"|[^ \t\r\n\v\f=]+)[ \t\r\n\v\f]+/u;
+const cmdComparisonCondition =
+  /^("[^"]*"|[^ \t\r\n\v\f=]+)(?:[ \t\r\n\v\f]*==[ \t\r\n\v\f]*|[ \t\r\n\v\f]+(?:equ|neq|lss|leq|gtr|geq)[ \t\r\n\v\f]+)("[^"]*"|[^ \t\r\n\v\f=]+)[ \t\r\n\v\f]+/u;
+
+/** Preserve POSIX longest matching when condition keywords can also be comparison operands. */
+function longestPolicyCmdCondition(input: string): number {
+  const offsets = [0];
+  const insensitive = /^\/i[ \t\r\n\v\f]+/u.exec(input);
+  if (insensitive) offsets.push(insensitive[0].length);
+  for (const offset of [...offsets]) {
+    const negation = /^not[ \t\r\n\v\f]+/u.exec(input.slice(offset));
+    if (negation) offsets.push(offset + negation[0].length);
+  }
+  let longest = 0;
+  for (const offset of offsets) {
+    for (const pattern of [cmdUnaryCondition, cmdComparisonCondition]) {
+      const match = pattern.exec(input.slice(offset));
+      if (match) longest = Math.max(longest, offset + match[0].length);
+    }
+  }
+  return longest;
+}
 
 /**
  * Consume the condition of a native `if` and return where its first branch starts.
@@ -721,8 +742,8 @@ function readPolicyNativeCondition(
 ): string | null {
   if (cmdHosts.has(host)) {
     // Matching on lowercased text keeps the keywords case-insensitive; ASCII lowercasing keeps the length, so the slice stays aligned.
-    const condition = cmdCondition.exec(asciiLowerCase(input));
-    return condition ? input.slice(condition[0].length) : null;
+    const length = longestPolicyCmdCondition(asciiLowerCase(input));
+    return length > 0 ? input.slice(length) : null;
   }
   if (!input.startsWith("(")) return null;
   const group = findPolicyNativeCommandGroup(input, host);
