@@ -52,7 +52,7 @@ The approved selector-wide clarification then produced a replacement with all se
 **Status:** active | **Created:** 2026-09-07 | **Evidence:** OBSERVED
 **Severity:** CORRECTNESS
 **Decision changed:** Execute every evaluation fixture and re-derive run counts from artifacts before any claim rests on them; a scorer and its fixtures are graded material, not scaffolding.
-**Incident count:** 13 | **Latest occurrence:** 2026-10-18
+**Incident count:** 14 | **Latest occurrence:** 2026-10-18
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
 
@@ -103,6 +103,9 @@ The preservation comparison then rejected its own prospectively advancing timing
 **Recurrence 2026-10-18 (permission-fixture qualification):** A probe assumed `runInstaller` produced v2 state, but its standalone Bash fixture reported `source: missing`. Compare relocated fixtures with the actual producer's state and bytes instead of borrowing the public CLI's receipt contract. Evidence: `test/integration/setup-install-permission-convergence.test.ts` (search: `installedProject`), `test/integration/setup-install.helpers.ts` (search: `runInstaller`), and `src/cli/managed-setup-state.ts` (search: `readManagedInstallStateFacade`).
 
 **Recurrence 2026-10-18 (preview-fixture copy):** Copy qualification found recursive copying changed three private directory modes from `0700` to `0755`. Preserve and compare directory permissions as well as file bytes and modes before reusing an installed fixture. The first wrapper also marked the failed probe complete; update proof state only after checking the child exit. Evidence: `test/integration/setup-install-preview.test.ts` (search: `installedCodexProject`) and `src/cli/path-write-claim.ts` (search: `ensureCoordinationDirectory`).
+
+
+**Recurrence 2026-10-18 (ownership-test proof):** A scoped analyzer comparison asserted zero introduced findings before classifying the new side-effect advisory. Preserve and inspect each new identity before deciding whether it requires a fix. The consolidated test comment omitted its temporary file writes and anchor deletion; making those effects explicit removed the advisory without changing executable syntax. Evidence: `test/integration/setup-install.test.ts` (search: `reinstalls system-owned, user-owned and generated files by declared ownership`).
 
 ---
 

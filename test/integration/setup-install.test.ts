@@ -494,8 +494,9 @@ describe("setup --apply installer", () => {
     assert.match(gitignore, /^dist\/$/m);
   });
 
-  // Runs two installs and writes one temp system file to prove canonical content replaces it.
-  it("overwrites system-owned files from their declared source", () => {
+  // Runs two installs in one temp project, writes system and user files, and
+  // removes one generated anchor to verify each ownership rule on reinstall.
+  it("reinstalls system-owned, user-owned and generated files by declared ownership", () => {
     const projectRoot = makeTempProject();
     const firstInstall = runInstaller(projectRoot, "--agent", "codex");
     assert.equal(
@@ -522,6 +523,23 @@ describe("setup --apply installer", () => {
       installedPatternsReadmePath,
       "user edited the patterns guide\n",
     );
+
+    const securityPolicyPath = join(
+      projectRoot,
+      ".goat-flow",
+      "security-policy.md",
+    );
+    const customizedPolicy =
+      "# Team security policy\n\nKeep this local rule.\n";
+    writeFileSync(securityPolicyPath, customizedPolicy);
+    const sessionAnchorPath = join(
+      projectRoot,
+      ".goat-flow",
+      "logs",
+      "sessions",
+      ".gitkeep",
+    );
+    unlinkSync(sessionAnchorPath);
 
     const reinstall = runCliInstaller(projectRoot, "--agent", "codex");
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
@@ -557,51 +575,7 @@ describe("setup --apply installer", () => {
       readFileSync(installedPatternsReadmePath, "utf-8"),
       canonicalPatternsReadme,
     );
-  });
-
-  // Runs two installs and writes one temp policy to prove project-owner content survives.
-  it("preserves user-owned files during a normal reinstall", () => {
-    const projectRoot = makeTempProject();
-    const firstInstall = runInstaller(projectRoot, "--agent", "codex");
-    assert.equal(
-      firstInstall.status,
-      0,
-      firstInstall.stderr || firstInstall.stdout,
-    );
-    const securityPolicyPath = join(
-      projectRoot,
-      ".goat-flow",
-      "security-policy.md",
-    );
-    const customizedPolicy =
-      "# Team security policy\n\nKeep this local rule.\n";
-    writeFileSync(securityPolicyPath, customizedPolicy);
-
-    const reinstall = runCliInstaller(projectRoot, "--agent", "codex");
-    assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
     assert.equal(readFileSync(securityPolicyPath, "utf-8"), customizedPolicy);
-  });
-
-  // Runs two installs and removes one temp anchor to prove local session storage is recreated.
-  it("regenerates declared generated anchors", () => {
-    const projectRoot = makeTempProject();
-    const firstInstall = runInstaller(projectRoot, "--agent", "codex");
-    assert.equal(
-      firstInstall.status,
-      0,
-      firstInstall.stderr || firstInstall.stdout,
-    );
-    const sessionAnchorPath = join(
-      projectRoot,
-      ".goat-flow",
-      "logs",
-      "sessions",
-      ".gitkeep",
-    );
-    unlinkSync(sessionAnchorPath);
-
-    const reinstall = runCliInstaller(projectRoot, "--agent", "codex");
-    assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
     assert.equal(existsSync(sessionAnchorPath), true);
     assert.equal(readFileSync(sessionAnchorPath, "utf-8"), "");
   });
