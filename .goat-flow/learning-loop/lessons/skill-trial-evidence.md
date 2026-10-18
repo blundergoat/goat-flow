@@ -1,6 +1,6 @@
 ---
 category: skill-trial-evidence
-last_reviewed: 2026-09-15
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** Skill-trial evidence: validate produced output, observe the action behind a behavioural claim, run every evaluation fixture, and keep an unskilled baseline loaded with every current owner before crediting a candidate.
@@ -52,7 +52,7 @@ The approved selector-wide clarification then produced a replacement with all se
 **Status:** active | **Created:** 2026-09-07 | **Evidence:** OBSERVED
 **Severity:** CORRECTNESS
 **Decision changed:** Execute every evaluation fixture and re-derive run counts from artifacts before any claim rests on them; a scorer and its fixtures are graded material, not scaffolding.
-**Incident count:** 10 | **Latest occurrence:** 2026-09-12
+**Incident count:** 11 | **Latest occurrence:** 2026-10-18
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
 
@@ -95,6 +95,9 @@ Closeout also caught an unmatched metadata replacement: plans time finalized the
 **Recurrence 2026-09-12 (forecast diagnostics):** A bare token-scanner hash rejected three comment-only edits; inverse substitution of those exact comment spans recovered the complete prior file digest. Treat an unvalidated preservation checker as a hypothesis, and verify the actual changed bytes before attributing its failure to source behavior. The focused forecast suite also omitted an adjacent whole-stdout assertion whose expected transcript lacked both new diagnostic lines. Search consumers of changed output before freezing the write scope, then rerun the actual failing fixture after its approved reconciliation. Evidence: `src/cli/plans-check-summary.ts` (search: `renderCalibrationSummary`) and `test/unit/plans-check.test.ts` (search: `reports the same cap-one transcript with omitted and explicit policy`).
 
 The preservation comparison then rejected its own prospectively advancing timing receipt while the completed corpus and original numerical output were unchanged. Separate the executing owner's permitted lifecycle changes from the frozen measured corpus: identify the exact changed fields before granting an owner-only exception, and continue comparing its forecast fields and every other record. Evidence: `src/cli/plans-time.ts` (search: `applyPlanTimeTransition`, `writeReceiptSection`) and `src/cli/plans-check-summary.ts` (search: `renderCalibrationSummary`).
+
+
+**Recurrence 2026-10-18 (test-runtime proof):** A temporary source-equivalence probe treated formatter layout and trailing commas as changed behavior in `test/integration/quality-history-diff.test.ts` (search: `renderQualityOutput`). Inspect the flagged delta before changing the product, then compare syntax structure without layout metadata and retain real CLI output controls. All fourteen moved outputs matched public CLI bytes; the candidate needed no correction.
 
 ---
 

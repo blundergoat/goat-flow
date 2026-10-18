@@ -24,6 +24,8 @@ import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { CLIError } from "../../src/cli/cli-error.js";
+import { dispatchCommand } from "../../src/cli/cli-handlers.js";
+import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
 import { parseQualityReport } from "../../src/cli/quality/schema.js";
 import type {
@@ -351,8 +353,23 @@ function runCLI(
   );
 }
 
+/** Run saved-report content checks through the real parser, dispatcher and file writer; process controls stay in runCLI. */
+async function renderQualityOutput(
+  projectPath: string,
+  args: string[],
+): Promise<string> {
+  const directory = mkdtempSync(join(tmpdir(), "quality-command-output-"));
+  disposables.push(directory);
+  const output = join(directory, "result");
+  await dispatchCommand({
+    ...parseCLIArgs([...args, "--output", output]),
+    projectPath,
+  });
+  return readFileSync(output, "utf8");
+}
+
 describe("quality history and diff CLI", () => {
-  it("accepts prior reports saved through project aliases and rejects another project", () => {
+  it("accepts prior reports saved through project aliases and rejects another project", async () => {
     const fixture = makeFixProject();
     const alias = join(makeTempProject(), "selected");
     symlinkSync(
@@ -369,9 +386,12 @@ describe("quality history and diff CLI", () => {
       JSON.parse(savedBytes).fixes[0].reference_check.status,
       "confirmed",
     );
-    const history = runCLI(fixture.root, ["quality", "history", "--all"]);
-    assert.equal(history.status, 0, history.stderr);
-    const current = JSON.parse(history.stdout).reports.find(
+    const history = await renderQualityOutput(fixture.root, [
+      "quality",
+      "history",
+      "--all",
+    ]);
+    const current = JSON.parse(history).reports.find(
       (entry: { path: string }) => entry.path === saved,
     );
     assert.equal(current.fixRecords[0].evidence_availability, "available");
@@ -393,7 +413,7 @@ describe("quality history and diff CLI", () => {
   });
 
   // Writes the result file only after admission; history must not rewrite or promote that admission.
-  it("reports restored references as available without promoting an unconfirmed fix", () => {
+  it("reports restored references as available without promoting an unconfirmed fix", async () => {
     const fixture = makeFixProject();
     const proofFile = ".goat-flow/logs/restored-result.txt";
     const proof = "original reproduction and control results\n";
@@ -415,9 +435,12 @@ describe("quality history and diff CLI", () => {
       "unconfirmed",
     );
     writeFileSync(join(fixture.root, proofFile), proof);
-    const history = runCLI(fixture.root, ["quality", "history", "--all"]);
-    assert.equal(history.status, 0, history.stderr);
-    const current = JSON.parse(history.stdout).reports.find(
+    const history = await renderQualityOutput(fixture.root, [
+      "quality",
+      "history",
+      "--all",
+    ]);
+    const current = JSON.parse(history).reports.find(
       (entry: { path: string }) => entry.path === saved,
     );
     assert.equal(current.fixRecords[0].status, "unconfirmed");
@@ -511,7 +534,7 @@ describe("quality history and diff CLI", () => {
   });
 
   // Writes a later edit to the fixed file, which must not change how history shows the saved report's concern counts and committed proof.
-  it("shows concern counts and committed proof at its recorded revision without rewriting history", () => {
+  it("shows concern counts and committed proof at its recorded revision without rewriting history", async () => {
     const fixture = makeFixProject();
     const saved = saveFixReport(fixture, [fixture.fix]);
     const savedBytes = readFileSync(saved, "utf8");
@@ -519,15 +542,14 @@ describe("quality history and diff CLI", () => {
       join(fixture.root, "rule.ts"),
       "export const laterEdit = true;\n",
     );
-    const history = runCLI(fixture.root, [
+    const history = await renderQualityOutput(fixture.root, [
       "quality",
       "history",
       "--all",
       "--format",
       "json",
     ]);
-    assert.equal(history.status, 0, history.stderr);
-    const current = JSON.parse(history.stdout).reports.find(
+    const current = JSON.parse(history).reports.find(
       (entry: { path: string }) => entry.path === saved,
     );
     assert.equal(current.concernCounts.constraints, 1);
@@ -538,34 +560,32 @@ describe("quality history and diff CLI", () => {
       agent: "claude",
       report_id: current.id,
     });
-    const diff = runCLI(fixture.root, [
+    const diff = await renderQualityOutput(fixture.root, [
       "quality",
       "diff",
       `${fixture.fix.prior_report_id}:${current.id}`,
       "--format",
       "json",
     ]);
-    assert.equal(diff.status, 0, diff.stderr);
-    assert.equal(JSON.parse(diff.stdout).to.concernCounts.constraints, 1);
-    const text = runCLI(fixture.root, [
+    assert.equal(JSON.parse(diff).to.concernCounts.constraints, 1);
+    const text = await renderQualityOutput(fixture.root, [
       "quality",
       "diff",
       `${fixture.fix.prior_report_id}:${current.id}`,
       "--format",
       "text",
     ]);
-    assert.equal(text.status, 0, text.stderr);
     assert.match(
-      text.stdout,
+      text,
       /reported findings by concern:.*constraints 1.*not all open defects/u,
     );
-    assert.match(text.stdout, /assessor-verified:.*committed/u);
+    assert.match(text, /assessor-verified:.*committed/u);
     assert.equal(readFileSync(fixture.priorPath, "utf8"), fixture.priorBytes);
     assert.equal(readFileSync(saved, "utf8"), savedBytes);
   });
 
   // Writes over the captured bytes after saving; workspace static proof stays bound to the capture, so the saved conclusion must not change.
-  it("binds workspace static proof to captured bytes and retains the conclusion after those bytes change", () => {
+  it("binds workspace static proof to captured bytes and retains the conclusion after those bytes change", async () => {
     const fixture = makeFixProject();
     const fix: QualityFix = {
       ...fixture.fix,
@@ -602,15 +622,14 @@ describe("quality history and diff CLI", () => {
         .status,
       "unconfirmed",
     );
-    const history = runCLI(fixture.root, [
+    const history = await renderQualityOutput(fixture.root, [
       "quality",
       "history",
       "--all",
       "--format",
       "json",
     ]);
-    assert.equal(history.status, 0, history.stderr);
-    const current = JSON.parse(history.stdout).reports.find(
+    const current = JSON.parse(history).reports.find(
       (entry: { path: string }) => entry.path === saved,
     );
     assert.equal(current.fixRecords[0].status, "assessor-verified");
@@ -622,7 +641,7 @@ describe("quality history and diff CLI", () => {
   });
 
   for (const lostReference of ["capture", "evidence"] as const) {
-    it(`retains workspace conclusions after ${lostReference} loss without executing saved commands`, () => {
+    it(`retains workspace conclusions after ${lostReference} loss without executing saved commands`, async () => {
       const fixture = makeFixProject();
       const proofFile = ".goat-flow/logs/reproduction.txt";
       const proof = "reproduction: prior failure absent; control passes\n";
@@ -653,34 +672,29 @@ describe("quality history and diff CLI", () => {
         JSON.parse(savedBytes).fixes[0].reference_check.status,
         "confirmed",
       );
-      const before = runCLI(fixture.root, [
+      const before = await renderQualityOutput(fixture.root, [
         "quality",
         "history",
         "--all",
         "--format",
         "text",
       ]);
-      assert.equal(before.status, 0, before.stderr);
-      assert.match(before.stdout, /workspace snapshot/u);
-      assert.doesNotMatch(
-        before.stdout,
-        /evidence unavailable; not reverified/u,
-      );
+      assert.match(before, /workspace snapshot/u);
+      assert.doesNotMatch(before, /evidence unavailable; not reverified/u);
       rmSync(
         join(
           fixture.root,
           lostReference === "capture" ? fixture.captureFile : proofFile,
         ),
       );
-      const after = runCLI(fixture.root, [
+      const after = await renderQualityOutput(fixture.root, [
         "quality",
         "history",
         "--all",
         "--format",
         "json",
       ]);
-      assert.equal(after.status, 0, after.stderr);
-      const current = JSON.parse(after.stdout).reports.find(
+      const current = JSON.parse(after).reports.find(
         (entry: { path: string }) => entry.path === saved,
       );
       assert.equal(current.fixRecords[0].status, "assessor-verified");
@@ -688,15 +702,14 @@ describe("quality history and diff CLI", () => {
         current.fixRecords[0].warning,
         "evidence unavailable; not reverified",
       );
-      const text = runCLI(fixture.root, [
+      const text = await renderQualityOutput(fixture.root, [
         "quality",
         "history",
         "--all",
         "--format",
         "text",
       ]);
-      assert.equal(text.status, 0, text.stderr);
-      assert.match(text.stdout, /evidence unavailable; not reverified/u);
+      assert.match(text, /evidence unavailable; not reverified/u);
       assert.equal(existsSync(marker), false);
       assert.equal(readFileSync(saved, "utf8"), savedBytes);
       assert.equal(readFileSync(fixture.priorPath, "utf8"), fixture.priorBytes);
@@ -763,7 +776,7 @@ describe("quality history and diff CLI", () => {
   });
 
   // Writes three saved reports straddling a rubric change; deltas across that boundary are suppressed while legacy fields stay readable.
-  it("retains legacy fields and suppresses setup/system deltas at the new rubric boundary", () => {
+  it("retains legacy fields and suppresses setup/system deltas at the new rubric boundary", async () => {
     const root = makeTempProject();
     const ids = [
       "2026-04-01-0900-claude-aaaaa",
@@ -780,7 +793,7 @@ describe("quality history and diff CLI", () => {
         JSON.stringify(report),
       );
     }
-    const history = runCLI(root, [
+    const history = await renderQualityOutput(root, [
       "quality",
       "history",
       "--agent",
@@ -788,8 +801,7 @@ describe("quality history and diff CLI", () => {
       "--format",
       "json",
     ]);
-    assert.equal(history.status, 0, history.stderr);
-    const payload = JSON.parse(history.stdout);
+    const payload = JSON.parse(history);
     assert.deepEqual(
       payload.deltas.map(
         (row: { setup_delta: number | null; system_delta: number | null }) => [
@@ -808,15 +820,14 @@ describe("quality history and diff CLI", () => {
       Object.hasOwn(payload.reports[2].report, "rubric_version"),
       false,
     );
-    const diff = runCLI(root, [
+    const diff = await renderQualityOutput(root, [
       "quality",
       "diff",
       `${ids[0]}:${ids[1]}`,
       "--format",
       "json",
     ]);
-    assert.equal(diff.status, 0, diff.stderr);
-    const warnings: string[] = JSON.parse(diff.stdout).comparisonWarnings;
+    const warnings: string[] = JSON.parse(diff).comparisonWarnings;
     assert.equal(
       warnings.filter((w) => w.startsWith("Legacy rubric")).length,
       1,

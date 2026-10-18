@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   closeSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -105,11 +106,22 @@ function evidenceEntry(
   return entries[0]!;
 }
 
-/** Install one verified Codex fixture and require its receipt publication. */
+let codexFixturePath: string | undefined;
+
+/** Build one real CLI installation per process; give each caller an independent copy with a verified receipt. */
 function installedCodexProject(): string {
+  if (codexFixturePath === undefined) {
+    const fixturePath = makeTempProject();
+    const install = runCliInstaller(fixturePath, "--agent", "codex");
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    codexFixturePath = fixturePath;
+  }
   const projectPath = makeTempProject();
-  const install = runCliInstaller(projectPath, "--agent", "codex");
-  assert.equal(install.status, 0, install.stderr || install.stdout);
+  cpSync(codexFixturePath, projectPath, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+  });
   const facade = readManagedInstallStateFacade(projectPath);
   assert.equal(facade.source, "v2");
   assert.ok(
