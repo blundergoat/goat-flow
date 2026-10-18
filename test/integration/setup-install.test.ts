@@ -135,6 +135,44 @@ function withGruffBinaryOverride(config: string, binaryPath: string): string {
   return next;
 }
 
+/**
+ * Spawns the installer's exact agents-allowlist removal, which reads and writes one disposable config without a full install.
+ * The full-install case `removes an existing agents allowlist from config.yaml` still proves setup runs this owner.
+ *
+ * @param configPath - disposable config.yaml the removal rewrites in place
+ * @returns the Node process result; stdout is `changed` or `unchanged`
+ */
+function runConfigAgentsRemoval(configPath: string) {
+  const source = readFileSync(
+    join(PROJECT_ROOT, "workflow/install-goat-flow.sh"),
+    "utf8",
+  );
+  const start = source.indexOf("\nremove_config_agents_entry() {");
+  const end = source.indexOf("\nmigrate_config_tasks_entry() {", start);
+  assert.ok(
+    start >= 0 && end > start,
+    "agents allowlist removal boundaries must exist",
+  );
+  const blocks = [
+    ...source
+      .slice(start, end)
+      .matchAll(/<<'NODE'\r?\n([\s\S]*?)\r?\nNODE\r?\n/gu),
+  ];
+  assert.equal(
+    blocks.length,
+    1,
+    "agents allowlist removal must contain one Node block",
+  );
+  const block = blocks[0]?.[1];
+  assert.ok(block, "the shipped agents allowlist removal must not be empty");
+  return spawnSync(process.execPath, ["-", configPath], {
+    cwd: PROJECT_ROOT,
+    encoding: "utf-8",
+    input: block,
+    timeout: process.platform === "win32" ? 120_000 : 30_000,
+  });
+}
+
 describe("setup --apply installer", () => {
   // A fresh Claude user needs enough runner time to see the hook's own incomplete-scan warning.
   it("registers Claude post-turn safety with the registry timeout", () => {
@@ -439,7 +477,7 @@ describe("setup --apply installer", () => {
       'version: "1.6.0"\n\nagents:\n  - claude\n  - codex\n\nskills:\n  install: all\n',
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runConfigAgentsRemoval(join(configDir, "config.yaml"));
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
@@ -456,7 +494,7 @@ describe("setup --apply installer", () => {
       'version: "1.6.0"\n\nskills:\n  install: all\n',
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runConfigAgentsRemoval(join(configDir, "config.yaml"));
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
@@ -473,7 +511,7 @@ describe("setup --apply installer", () => {
       'version: "1.6.0"\n\nagents: null\n\nskills:\n  install: all\n',
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runConfigAgentsRemoval(join(configDir, "config.yaml"));
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
