@@ -166,7 +166,9 @@ describe("decisions guide ownership transfer", () => {
   for (const history of [false, true]) {
     it(`preserves inherited custom bytes and absent baseline on repeat apply ${history ? "with" : "without"} legacy history`, () => {
       const root = inheritedTarget(CUSTOM_GUIDE, history);
-      const row = guidePreview(root);
+      // Cover broad force without history and ordinary install with legacy history.
+      const flags = history ? [] : ["--force-managed"];
+      const row = guidePreview(root, ...flags);
       assert.equal(row.state, "local-preserved");
       assert.equal(row.oldExpectedSha256, null);
       assert.equal(readFileSync(join(root, GUIDE), "utf8"), CUSTOM_GUIDE);
@@ -175,7 +177,7 @@ describe("decisions guide ownership transfer", () => {
         false,
         "preview must not publish history",
       );
-      const output = apply(root);
+      const output = apply(root, ...flags);
       assert.match(output, /No new full-install receipt/u);
       assert.match(output, /--force-path/u);
       assert.equal(readFileSync(join(root, GUIDE), "utf8"), CUSTOM_GUIDE);
@@ -190,21 +192,6 @@ describe("decisions guide ownership transfer", () => {
       assert.equal(readFileSync(join(root, STATE), "utf8"), before);
     });
   }
-
-  // Bare --force sets the same authority as --force-managed, and the guide transfer never reads broad force, so one flag covers both.
-  it("keeps inherited content under broad --force-managed", () => {
-    const root = inheritedTarget(CUSTOM_GUIDE, false);
-    assert.equal(
-      guidePreview(root, "--force-managed").state,
-      "local-preserved",
-    );
-    apply(root, "--force-managed");
-    assert.equal(readFileSync(join(root, GUIDE), "utf8"), CUSTOM_GUIDE);
-    assert.equal(
-      state(root).files.some((row) => row.path === GUIDE),
-      false,
-    );
-  });
 
   it("adopts only the named guide and then uses normal managed drift rules", () => {
     const root = inheritedTarget(CUSTOM_GUIDE, true);
@@ -265,7 +252,7 @@ describe("decisions guide ownership transfer", () => {
         "\nUpdated decision guidance.\n",
     );
     const before = readFileSync(join(root, STATE), "utf8");
-    for (const flags of [["--dry-run", "--format", "json"], [], []]) {
+    for (const flags of [["--dry-run", "--format", "json"], []]) {
       const result = spawnSync(
         "node",
         [

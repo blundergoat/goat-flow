@@ -7,8 +7,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  chmodSync,
+  cpSync,
   existsSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -34,6 +37,35 @@ import {
 const CODEX_GOAT_CLARITY_PATH = ".agents/skills/goat-clarity/SKILL.md";
 const MANAGED_INSTALL_STATE_PATH =
   ".goat-flow/state/install/managed.json" as const;
+
+let codexFixturePath: string | undefined;
+
+/** Build one real Codex installation and give each mutation case an independent copy. */
+function installedCodexProject(): string {
+  if (codexFixturePath === undefined) {
+    const fixturePath = makeTempProject();
+    const install = runCliInstaller(fixturePath, "--agent", "codex");
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    codexFixturePath = fixturePath;
+  }
+  const projectPath = makeTempProject();
+  const directories: Array<{ path: string; mode: number }> = [];
+  cpSync(codexFixturePath, projectPath, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+    filter(source, destination) {
+      const stats = lstatSync(source);
+      if (stats.isDirectory()) {
+        directories.push({ path: destination, mode: stats.mode & 0o777 });
+      }
+      return true;
+    },
+  });
+  // Recursive copying recreates directories with default modes; retain the seed's private permissions.
+  for (const { path, mode } of directories) chmodSync(path, mode);
+  return projectPath;
+}
 
 /**
  * Read, mutate, and canonically replace the disposable project's v2 state fixture.
@@ -337,13 +369,7 @@ describe("managed setup preview", () => {
   });
 
   it("upgrades a seven-skill baseline and repeats without drift", () => {
-    const projectPath = makeTempProject();
-    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
-    assert.equal(
-      firstInstall.status,
-      0,
-      firstInstall.stderr || firstInstall.stdout,
-    );
+    const projectPath = installedCodexProject();
     downgradeManagedStateToSevenCodexSkills(projectPath);
     const installedClarityPath = join(projectPath, CODEX_GOAT_CLARITY_PATH);
     rmSync(installedClarityPath);
@@ -386,13 +412,7 @@ describe("managed setup preview", () => {
   });
 
   it("protects an existing goat-clarity path a loaded baseline never owned", () => {
-    const projectPath = makeTempProject();
-    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
-    assert.equal(
-      firstInstall.status,
-      0,
-      firstInstall.stderr || firstInstall.stdout,
-    );
+    const projectPath = installedCodexProject();
     downgradeManagedStateToSevenCodexSkills(projectPath);
     const installedClarityPath = join(projectPath, CODEX_GOAT_CLARITY_PATH);
     const developerOwnedBytes =
@@ -430,13 +450,7 @@ describe("managed setup preview", () => {
   });
 
   it("blocks a changed template over a local edit until the user supplies force", () => {
-    const projectPath = makeTempProject();
-    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
-    assert.equal(
-      firstInstall.status,
-      0,
-      firstInstall.stderr || firstInstall.stdout,
-    );
+    const projectPath = installedCodexProject();
     const managedReadmePath = join(
       projectPath,
       ".goat-flow",
@@ -473,13 +487,7 @@ describe("managed setup preview", () => {
   /** Fixture purpose: force refreshes one edited managed file while preserving user choices and separate cleanup authority.
    * Filesystem side effects: creates and rewrites a disposable project, then spawns the installer subprocess. */
   it("limits force to managed conflicts and preserves user-owned content and inherited guides", () => {
-    const projectPath = makeTempProject();
-    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
-    assert.equal(
-      firstInstall.status,
-      0,
-      firstInstall.stderr || firstInstall.stdout,
-    );
+    const projectPath = installedCodexProject();
 
     const managedReadmePath = join(
       projectPath,
@@ -628,13 +636,7 @@ describe("managed setup preview", () => {
   });
 
   it("keeps dry-run state unchanged after a local managed edit", () => {
-    const projectPath = makeTempProject();
-    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
-    assert.equal(
-      firstInstall.status,
-      0,
-      firstInstall.stderr || firstInstall.stdout,
-    );
+    const projectPath = installedCodexProject();
     const managedReadmePath = join(
       projectPath,
       ".goat-flow",
@@ -745,13 +747,7 @@ describe("managed setup preview", () => {
    * Filesystem side effects: rewrites a disposable hook config, previews it, then applies reconciliation.
    */
   it("previews the hook-config reconciliation that apply performs", () => {
-    const projectPath = makeTempProject();
-    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
-    assert.equal(
-      firstInstall.status,
-      0,
-      firstInstall.stderr || firstInstall.stdout,
-    );
+    const projectPath = installedCodexProject();
     const hooksPath = join(projectPath, ".codex", "hooks.json");
     const hooksConfig = JSON.parse(readFileSync(hooksPath, "utf-8")) as {
       hooks?: Record<string, unknown[]>;
