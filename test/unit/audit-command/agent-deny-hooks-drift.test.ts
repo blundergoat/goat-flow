@@ -332,12 +332,15 @@ describe("agent deny hook template comparison", () => {
     return readInstalledGuardrail;
   }
 
-  it("replays literal non-Git launchers and separates policy results from unavailability", () => {
+  it("replays literal non-Git launchers through both real policy hooks", () => {
     withRealCodexAudit((targetProjectPath, auditContext) => {
       assert.equal(existsSync(join(targetProjectPath, ".git")), false);
       assert.equal(checkHookRuntimeSmoke(auditContext), null);
     });
+  });
 
+  // Fixture purpose: writes a deny hook that rejects a safe command; the audit replay spawns it and must report the false denial.
+  it("fails the audit when a non-Git launcher denies a safe command", () => {
     withRealCodexAudit((targetProjectPath, auditContext) => {
       writeFileSync(
         join(targetProjectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),
@@ -361,7 +364,9 @@ describe("agent deny hook template comparison", () => {
       );
       assert.match(failure.message, /allow/u);
     });
+  });
 
+  it("keeps a missing non-Git launcher distinct from a policy denial", () => {
     withRealCodexAudit((targetProjectPath, auditContext) => {
       unlinkSync(
         join(targetProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
@@ -370,7 +375,9 @@ describe("agent deny hook template comparison", () => {
       assert.ok(failure, "missing launcher must not look like policy denial");
       assert.match(failure.message, /unavailable|expected/iu);
     });
+  });
 
+  it("keeps a non-Git launcher timeout distinct from a policy denial", () => {
     withRealCodexAudit((targetProjectPath, auditContext) => {
       writeFileSync(
         join(targetProjectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),

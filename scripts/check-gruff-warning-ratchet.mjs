@@ -1,7 +1,7 @@
 /**
  * Release gate that stops reviewed Gruff warning debt from growing unnoticed.
  * Run from `bash scripts/preflight-checks.sh` before accepting risky work or tagging a release, and
- * from the Node 22 CI job on every pull request. This file owns launching the analyzer and reporting
+ * from the weekly and manual Windows Node 22 CI job. This file owns launching the analyzer and reporting
  * the verdict; gruff-warning-ratchet-checks.mjs owns the rules for what counts as a regression, and
  * ratchet-failure-report.mjs collects the failure lines. A
  * maintainer reads one summary line on pass, or a short bounded list of what regressed on fail.

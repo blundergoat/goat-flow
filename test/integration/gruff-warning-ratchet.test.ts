@@ -567,10 +567,12 @@ describe("gruff warning ratchet", () => {
     // The ratchet job is the last job in ci.yml, so this slice is exactly its block; keep it last or tighten this slice when reordering.
     const jobBlock = ciWorkflow.slice(jobStart);
     assert.match(jobBlock, /node-version: "22"/);
-    // Until the 1.19.0 release the Windows job runs on every event, so it has no job-level condition.
-    // Linux runs the ratchet in the checks job's preflight, pinned next.
+    // Windows runs only on the weekly schedule and manual runs; Linux runs the ratchet in the checks job's preflight, pinned next.
     assert.match(jobBlock, /runs-on: windows-latest/u);
-    assert.doesNotMatch(jobBlock, /^ {4}if:/mu);
+    assert.match(
+      jobBlock,
+      /if: github\.event_name == 'schedule' \|\| github\.event_name == 'workflow_dispatch'/u,
+    );
     assert.match(
       ciWorkflow.slice(0, jobStart),
       /run: bash scripts\/preflight-checks\.sh --skip-tests/u,

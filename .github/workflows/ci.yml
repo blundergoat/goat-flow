@@ -1,6 +1,6 @@
 # The CI workflow a developer sees as checks on every pull request to main or dev, and again after each merge to main.
 #
-# Every run, each pull-request push included, runs these jobs; after the 1.19.0 release the platform jobs return to weekly and manual runs only:
+# Every run includes three Ubuntu jobs; the platform jobs join only on the weekly schedule or a manual run:
 # - checks: preflight without its test suite, the shell syntax check and the version-stamp check.
 # - test-fast: every test file outside the slow set and the reference-job list, with a pinned jq 1.6.
 # - test-slow: the subprocess-heavy suite, one file at a time per runner, split across five shards.
@@ -16,7 +16,7 @@ on:
     branches: [main, dev]
   push:
     branches: [main]
-  # A weekly run of every job, so the platform jobs still run when nothing is pushed; until the 1.19.0 release pull requests run them too.
+  # The platform jobs below run only on this weekly schedule and on manual runs; pull requests and pushes skip them.
   # They are the hook ports, native Windows contracts, Linux references and the Windows ratchet.
   schedule:
     # Mondays at 18:00 UTC.
@@ -154,6 +154,8 @@ jobs:
   # Proves ADR-048/ADR-053 hook contracts and the Windows-only audit/package paths on the package-minimum Node, 20.12.0 from package.json's engines.
   # Apart from that Node, it uses only the runner's preinstalled PowerShell, Git Bash and tar.
   windows-hook-contracts:
+    # Pull requests and pushes skip this job, so a Windows-only hook regression first shows on the weekly run unless someone starts a manual run.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -295,6 +297,8 @@ jobs:
   # Every host checks both pinned consumer runtimes; native fixtures use explicit test-only transports.
   # Parser parity and live provider delivery retain their separate milestone gates.
   hook-port-controls:
+    # Skipped on pull requests and pushes, so a PR never waits on the macOS and Windows runners.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       # Keep every remaining host/runtime cell running after one fails.
       fail-fast: false
@@ -400,6 +404,8 @@ jobs:
   # Only the C locale runs here; the fast and slow suites already run its hook test files under the runner's UTF-8 locale against the installed hooks.
   # hook-parity-reference.test.ts runs only here and checks its launch rows in both locales itself; the WSL divergence report covers both too.
   hook-reference-linux:
+    # Skipped on pull requests and pushes, so a frozen-reference regression first shows on the weekly run unless someone starts a manual run.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -505,6 +511,8 @@ jobs:
   # WSL has its own identity, so a native Windows pass cannot stand in for it.
   # Fail closed: if the disposable hosted runner cannot provide WSL2, the job fails rather than passing without WSL coverage.
   hook-port-controls-wsl:
+    # Skipped on pull requests and pushes, so installing WSL never delays a PR.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-2025
     strategy:
       fail-fast: false
@@ -618,6 +626,8 @@ jobs:
   # The preflight in `checks` runs the same ratchet on Linux every time; this leg checks the script and its tests on Windows paths.
   # It exits 1 when warning debt grows past the reviewed baseline or the baseline or scan is unusable, and 2 when the analyzer cannot run.
   gruff-warning-ratchet:
+    # Skipped on pull requests and pushes, whose checks job already runs this ratchet on Linux through preflight.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
