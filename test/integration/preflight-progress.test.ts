@@ -629,6 +629,50 @@ describe("preflight Tests-phase progress", () => {
       preflightSource,
       /warning_label="warning"[\s\S]+warnings" -ne 1[\s\S]+warning_label="warnings"[\s\S]+"\$warnings" "\$warning_label"/u,
     );
+
+    const memoryStart = preflightSource.indexOf("check_memory() {");
+    const memoryEnd = preflightSource.indexOf(
+      "\ncheck_content() {",
+      memoryStart,
+    );
+    assert.ok(memoryStart >= 0 && memoryEnd > memoryStart);
+    const directory = mkdtempSync(join(tmpdir(), "goat-flow-stats-receipt-"));
+    fixtureTemporaryDirectories.add(directory);
+    mkdirSync(join(directory, "dist", "cli"), { recursive: true });
+    writeFileSync(join(directory, "dist", "cli", "cli.js"), "");
+    // Force the reproduced pipe-close race without relying on scheduler timing.
+    writeFileSync(
+      join(directory, "stats-receipt.txt"),
+      [
+        "stats --check: PASS (3 warnings)",
+        ...Array.from({ length: 3 }, () => "advisory ".repeat(16_384)),
+        "",
+      ].join("\n"),
+    );
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        `set -euo pipefail
+        warnings=0
+        section() { :; }
+        node() { cat stats-receipt.txt; }
+        warn() { warnings=$((warnings + 1)); printf 'WARN %s\\n' "$1"; }
+        pass() { printf 'PASS %s\\n' "$1"; }
+        fail() { printf 'FAIL %s\\n' "$1"; exit 1; }
+        details_pipe() { cat >/dev/null; }
+        ${preflightSource.slice(memoryStart, memoryEnd)}
+        check_memory
+        printf 'WARNINGS %s\\n' "$warnings"`,
+      ],
+      { cwd: directory, encoding: "utf8", timeout: 10_000 },
+    );
+    assert.equal(result.status, 0, `${result.error ?? ""}${result.stderr}`);
+    assert.match(
+      result.stdout,
+      /WARN Footgun\/lesson schema passes \(3 warnings\)/u,
+    );
+    assert.match(result.stdout, /WARNINGS 3/u);
   });
 
   it("keeps Knip failure guidance on the heap-safe preflight invocation", () => {

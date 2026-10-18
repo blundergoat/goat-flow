@@ -2007,7 +2007,7 @@ if [[ -f dist/cli/cli.js ]]; then
     stats_output=$(node dist/cli/cli.js stats . --check --format text 2>&1) && stats_exit=0 || stats_exit=$?
     # A successful memory check still needs its warning summary preserved.
     if [[ "$stats_exit" -eq 0 ]]; then
-        stats_summary=$(printf '%s\n' "$stats_output" | head -1)
+        stats_summary=${stats_output%%$'\n'*}
         # The memory checker's warning receipt supplies the number shown to the maintainer.
         if [[ "$stats_summary" =~ ^stats\ --check:\ PASS\ \(([0-9]+)\ warnings?\)$ ]]; then
             stats_warning_count="${BASH_REMATCH[1]}"

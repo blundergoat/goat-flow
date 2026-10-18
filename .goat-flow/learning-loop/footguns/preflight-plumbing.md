@@ -1,6 +1,6 @@
 ---
 category: preflight-plumbing
-last_reviewed: 2026-10-14
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** Data crossing the Node-to-shell boundary inside preflight and CI scripts: command substitution, formatting that shell arithmetic cannot parse, and stdout fed into pattern matchers. What the audit checks mean lives in [auditor.md](auditor.md).
@@ -58,6 +58,40 @@ last_reviewed: 2026-10-14
 **Why it happens:** These tests treat the workflow as a place where a command is published, so a step is a contract even when preflight runs the same check.
 
 **Evidence:** The shell-syntax step stays in `checks` (`.github/workflows/ci.yml`, search: `this published copy is the CI surface`), and the other two tests now assert that CI runs the preflight that owns shell lint and the Linux ratchet.
+
+---
+
+## Footgun: First-line shell pipelines can turn passing preflight stats into exit 141
+
+**Status:** active | **Created:** 2026-10-18 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Extract the first line of captured shell output without an early-closing pipeline when pipefail is enabled.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** For a captured Bash variable, use parameter expansion to read its first line. If output must cross a pipe, let the reader consume the full stream. A short successful run does not disprove a scheduling-dependent SIGPIPE.
+
+**Symptoms:** CI run [39110726824](https://github.com/blundergoat/goat-flow/actions/runs/39110726824) reported `Preflight memory worker failed (exit 141)` before counting the three stats advisories. All test jobs succeeded.
+
+**Why it happens:** `scripts/preflight-checks.sh` (`check_memory`, search: `stats_summary=`) previously used `printf` piped into `head -1` under the worker's `set -euo pipefail`. Bash can write each output line separately. Once head reads the summary and closes its input, a later printf write receives SIGPIPE; pipefail makes the assignment fail and errexit stops the worker before its warning verdict.
+
+**Evidence:** The actual 604-byte passing stats receipt completed 1,000 ordinary pipeline attempts locally. A syscall trace showed four separate printf writes. Delaying its second write by 10 ms reproduced EPIPE, SIGPIPE and exit 141 with those same bytes; parameter expansion returned the same summary with exit zero under the same delay. The controlled large-receipt extension of `test/integration/preflight-progress.test.ts` (search: `surfaces passing stats advisories as non-blocking preflight warnings`) fails with status 141 on the original parser and passes on the proposed replacement. The failed CI run has no syscall trace, so its exact interleaving remains inferred.
+
+---
+
+## Footgun: Filtering results does not prune local-state traversal
+
+**Status:** active | **Created:** 2026-10-18 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Exclude local working directories before recursive discovery or fixture copying enters them, rather than filtering their results afterward.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Prune `.goat-flow/plans` and `.goat-flow/scratchpad` during broad discovery. Preserve explicit plan access and maintained README checks separately. When copying a checkout into an integration fixture, keep required root anchors and reject working descendants before recursion. With `find`, use `-prune`; `-not -path` filters output but still visits directories. Trace directory opens when proving absence, including file-descriptor-relative opens (`strace -yy`).
+
+**Symptoms:** A local full-suite run used a checkout containing a 4.3G scratchpad and 567M of plans, measured on 2026-10-18. Its installer round-trip group took 197.668 seconds. That duration includes other work and is not a measurement of copy overhead or hosted CI savings.
+
+**Why it happens:** `src/cli/audit/check-content-quality.ts` (`resolveAdditionalEvidenceTargets`) filtered local Markdown after `src/cli/facts/fs.ts` (`walkGlobStar`, `walkGlobStarExists`) had traversed it. `test/integration/audit-drift.helpers.ts` (`setupInstallRoundTripFixture`) also copied the working trees. `scripts/check-markdown-links.sh` (search: `files_with_links=`) excluded local paths from results without pruning traversal.
+
+**Evidence:** Small real-directory probes reproduced both traversal and copying with the original code. After the fixes, broad discovery opened neither local tree; the fixture retained README/.gitignore/.gitkeep anchors and learning data without copying working descendants. The Markdown checker retained the same valid-link count, rejected a broken-link control, and opened no excluded local directories. Existing filesystem coverage proves explicit rooted access remains available: `test/unit/filesystem.test.ts` (search: `uses the same ignored-directory behavior`); the real-copy regression is `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `copies maintained inputs without local plan or scratchpad contents`). These checks establish excluded IO, not a percentage speedup.
 
 ---
 

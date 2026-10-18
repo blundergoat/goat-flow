@@ -14,11 +14,17 @@ import {
   INSTALL_FIXTURE_SKILL,
   it,
   join,
+  dirname,
+  mkdirSync,
+  mkdtempSync,
   patchInstallRoundTripFixture,
   PROJECT_ROOT,
+  readFileSync,
   rmSync,
   runCommand,
   setupInstallRoundTripFixture,
+  tmpdir,
+  writeFileSync,
 } from "./audit-drift.helpers.ts";
 
 /** Required offline proofs that let the fixture's audit show real effective coverage. */
@@ -35,6 +41,55 @@ const REQUIRED_EFFECTIVE_HOOK_PROOFS = [
   { agentId: "copilot", scenario: "gruff-hook" },
   { agentId: "claude", scenario: "post-turn-hook" },
 ] as const;
+
+// Writes and copies a small temporary checkout, then removes both trees after checking the exclusions.
+it("copies maintained inputs without local plan or scratchpad contents", () => {
+  const source = mkdtempSync(join(tmpdir(), "goat-flow-roundtrip-source-"));
+  let fixture: string | undefined;
+  const retained = {
+    ".goat-flow/plans/README.md": "plan anchor",
+    ".goat-flow/plans/.gitignore": "*",
+    ".goat-flow/scratchpad/README.md": "scratchpad anchor",
+    ".goat-flow/scratchpad/.gitkeep": "",
+    ".goat-flow/config.yaml": "version: 1",
+    ".goat-flow/learning-loop/lessons/fixture.md": "retained evidence",
+    "docs/guide.md": "maintained documentation",
+  };
+  const local = [
+    ".goat-flow/plans/active/work.md",
+    ".goat-flow/scratchpad/archive/work.md",
+  ];
+  try {
+    for (const [path, content] of Object.entries(retained)) {
+      mkdirSync(dirname(join(source, path)), { recursive: true });
+      writeFileSync(join(source, path), content);
+    }
+    for (const path of local) {
+      mkdirSync(dirname(join(source, path)), { recursive: true });
+      writeFileSync(join(source, path), "local working content");
+    }
+    mkdirSync(join(source, "node_modules"));
+    const copiedRoot = setupInstallRoundTripFixture(source);
+    fixture = copiedRoot;
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.keys(retained).map((path) => [
+          path,
+          readFileSync(join(copiedRoot, path), "utf8"),
+        ]),
+      ),
+      retained,
+    );
+    assert.deepEqual(
+      local.filter((path) => existsSync(join(copiedRoot, path))),
+      [],
+    );
+  } finally {
+    if (fixture !== undefined)
+      rmSync(dirname(fixture), { recursive: true, force: true });
+    rmSync(source, { recursive: true, force: true });
+  }
+});
 
 describe("checkDrift: installer round-trip fixture", () => {
   let root: string;

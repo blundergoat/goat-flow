@@ -663,7 +663,7 @@ function isLocalMarkdownArtifact(path: string): boolean {
 }
 
 /**
- * Discover additional Markdown for readiness and semantic-anchor checks after curated prose scans.
+ * Discover additional Markdown without walking local plans or scratchpad contents; retain README anchors.
  * Sort filesystem results to preserve the order of findings across repeated audits.
  *
  * @param ctx - audit context supplying the selected project's filesystem
@@ -674,8 +674,11 @@ function resolveAdditionalEvidenceTargets(
   ctx: AuditContext,
   scanned: ReadonlySet<string>,
 ): string[] {
-  return ctx.fs
-    .glob("**/*.md")
+  const targets = new Set(ctx.fs.glob("**/*.md"));
+  for (const path of COMMITTED_LOCAL_STATE_READMES) {
+    if (ctx.fs.exists(path)) targets.add(path);
+  }
+  return [...targets]
     .filter((path) => !scanned.has(path) && !isLocalMarkdownArtifact(path))
     .sort();
 }

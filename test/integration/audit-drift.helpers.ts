@@ -347,24 +347,40 @@ export function writeHookFixtures(root: string): void {
 /**
  * Clone this repo into a temp fixture and git-init it, so install-then-drift round trips run
  * against a real tree. Writes the copied tree to the filesystem without repository metadata,
- * dependencies, session logs, or local install receipts; symlinks node_modules back to the source
+ * dependencies, local working contents, session logs, or install receipts; symlinks node_modules back to the source
  * to avoid a slow copy; and spawns git init. Asserts git init succeeds.
  *
+ * @param sourceRoot - source checkout; defaults to this repository, with small local-state anchors retained
  * @returns the cloned repo root inside the temp fixture; the caller cleans up its parent dir
  */
-export function setupInstallRoundTripFixture(): string {
+export function setupInstallRoundTripFixture(
+  sourceRoot = PROJECT_ROOT,
+): string {
   const parent = mkdtempSync(join(tmpdir(), "goat-flow-install-roundtrip-"));
   const root = join(parent, "repo");
   const localInstallStateDirectory = join(".goat-flow", "state", "install");
-  cpSync(PROJECT_ROOT, root, {
+  const localWorkingDirectories = [
+    join(".goat-flow", "plans"),
+    join(".goat-flow", "scratchpad"),
+  ];
+  cpSync(sourceRoot, root, {
     recursive: true,
     filter: (src) => {
-      const rel = relative(PROJECT_ROOT, src);
+      const rel = relative(sourceRoot, src);
       // The root itself must remain so the user's fixture directory is created.
       if (rel === "") return true;
       const [topLevel] = rel.split(sep);
       // Repository metadata and dependencies are supplied separately to keep setup fast.
       if (topLevel === ".git" || topLevel === "node_modules") return false;
+      const localWorkingDirectory = localWorkingDirectories.find((directory) =>
+        rel.startsWith(`${directory}${sep}`),
+      );
+      // Retain setup anchors without descending into local plans or scratch repositories.
+      if (localWorkingDirectory !== undefined) {
+        return ["README.md", ".gitignore", ".gitkeep"].some(
+          (name) => rel === join(localWorkingDirectory, name),
+        );
+      }
       // Local receipts would make this clean-install fixture depend on the caller's ignored state.
       if (
         rel === localInstallStateDirectory ||
@@ -375,7 +391,7 @@ export function setupInstallRoundTripFixture(): string {
       return rel !== join(".goat-flow", "logs", "sessions");
     },
   });
-  symlinkSync(join(PROJECT_ROOT, "node_modules"), join(root, "node_modules"));
+  symlinkSync(join(sourceRoot, "node_modules"), join(root, "node_modules"));
   const git = spawnSync("git", ["init", "-q"], {
     cwd: root,
     encoding: "utf-8",

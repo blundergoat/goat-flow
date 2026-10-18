@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-10-17
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
@@ -146,14 +146,14 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Decision changed:** Run the plan arithmetic gate immediately after writing estimates, then independently derive every ISSUE-level roll-up from the validated milestone headlines.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 9 | **Latest occurrence:** 2026-10-17
+**Incident count:** 10 | **Latest occurrence:** 2026-10-18
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/coordination.md`; every recurrence is plan and ISSUE arithmetic, which this bucket owns.
 
-**Prevention:** Show effort accounting explicitly and derive each roll-up from the milestone headlines after strict validation, never by transcribing a mental sum. If two totals intentionally differ, name the accounting difference. Recompute a plan-wide total by exact sum over every milestone file rather than adjusting a stale prior total, because strict validation's milestone inventory excludes `ISSUE.md` and cannot catch that drift. Evidence anchors: `src/cli/plans-check.ts` (search: `task estimates`), `src/cli/plans-effort.ts` (search: `forecast basis derives`), `src/cli/plans-export.ts` (search: `function listMilestoneFiles`).
+**Prevention:** Derive roll-ups from strictly validated milestone headlines; never transcribe a mental sum. If two totals intentionally differ, name the accounting difference. Recompute a plan-wide total by exact sum over every milestone file rather than adjusting a stale prior total, because strict validation's milestone inventory excludes `ISSUE.md` and cannot catch that drift. Evidence anchors: `src/cli/plans-check.ts` (search: `task estimates`), `src/cli/plans-effort.ts` (search: `forecast basis derives`), `src/cli/plans-export.ts` (search: `function listMilestoneFiles`).
 
-**What happened:** A programme headline stated about 33 weekends from the council's estimate while the phase breakdowns summed to about 26, and the gap was never explained: some combination of cross-file items, overhead, and double-counted shared infrastructure. The headline lost legitimacy once the arithmetic did not add up.
+**What happened:** A programme headline estimated 33 weekends while its phases totalled 26. The unexplained gap left scope, overhead and double-counting unclear.
 
-**Root cause:** A roll-up was written as an independent claim rather than derived from the parts it summarises, so nothing forced the two to agree.
+**Root cause:** The roll-up was written independently instead of being derived from its component estimates.
 
 **Recurrence 2026-08-04:** The quality-findings milestone declared 70 minutes as 45 product, 20 proof, and 5 other, while its proof tasks summed to 28; `plans check` rejected it with the category-overrun diagnostic and the estimate was corrected to 78 before implementation continued.
 **Recurrence 2026-08-07:** Strict validation confirmed every milestone's internal arithmetic, but the seven-task sum was transcribed as 13.25 hours against validated headlines totalling 815 minutes, about 13.6 hours; a separate cross-artifact pass caught it before delivery.
@@ -164,6 +164,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-08-26:** After two milestones were trimmed, the 1.17.0 ISSUE headline was adjusted by subtracting only those deltas from a stale prior total; a fresh exact sum over all 53 milestone files measured `557-2,997` likely `1,368`, not `537-3,331` likely `1,338`. Strict validation still passed because its inventory excludes `ISSUE.md`.
 
 **Recurrence 2026-10-17:** The 1.19.0 ISSUE retained accepted M02's 55 minutes; derive remaining work from open headers.
+
+**Recurrence 2026-10-18:** The M04 preflight repair used 37 for floor(152 × 0.24) = 36. Strict validation rejected the range before source edits. Use `src/cli/plans-effort.ts` (`deriveForecastRangeFromBasis`).
 
 ---
 
