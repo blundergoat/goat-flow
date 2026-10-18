@@ -5,7 +5,9 @@
 import assert from "node:assert/strict";
 import {
   chmodSync,
+  cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
@@ -25,6 +27,35 @@ import {
 
 const LOCAL_PATH = ".goat-flow/hooks/run-with-bash.mjs";
 const SUMMARY = "Install verified for";
+
+let codexFixturePath: string | undefined;
+
+/** Build one real Codex install, then copy files and permissions into independent temporary targets. */
+function installedCodexProject(): string {
+  if (codexFixturePath === undefined) {
+    const fixturePath = makeTempProject();
+    const initial = runCliInstaller(fixturePath, "--agent", "codex");
+    assert.equal(initial.status, 0, initial.stderr || initial.stdout);
+    codexFixturePath = fixturePath;
+  }
+  const projectPath = makeTempProject();
+  const directories: Array<{ path: string; mode: number }> = [];
+  cpSync(codexFixturePath, projectPath, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+    // Reads directory modes so copied fixtures retain private permissions.
+    filter(source, destination) {
+      const stats = lstatSync(source);
+      if (stats.isDirectory()) {
+        directories.push({ path: destination, mode: stats.mode & 0o777 });
+      }
+      return true;
+    },
+  });
+  for (const { path, mode } of directories) chmodSync(path, mode);
+  return projectPath;
+}
 
 describe("verified install summary", () => {
   // A retained legacy baseline puts both renamed paths in the admitted preview before installer cleanup removes them.
@@ -147,9 +178,7 @@ describe("verified install summary", () => {
   });
 
   it("preserves local content and does not report force authority as a replacement", () => {
-    const projectPath = makeTempProject();
-    const initial = runCliInstaller(projectPath, "--agent", "codex");
-    assert.equal(initial.status, 0, initial.stderr || initial.stdout);
+    const projectPath = installedCodexProject();
     const localBytes = `${readFileSync(join(projectPath, LOCAL_PATH), "utf-8")}\n// preserved local edit\n`;
     writeFileSync(join(projectPath, LOCAL_PATH), localBytes);
     const install = runCliInstaller(
@@ -179,9 +208,7 @@ describe("verified install summary", () => {
           process.platform === "win32" ? "POSIX Bash wrapper fixture" : false,
       },
       () => {
-        const projectPath = makeTempProject();
-        const initial = runCliInstaller(projectPath, "--agent", "codex");
-        assert.equal(initial.status, 0, initial.stderr || initial.stdout);
+        const projectPath = installedCodexProject();
         const statePath = join(
           projectPath,
           ".goat-flow/state/install/managed.json",
