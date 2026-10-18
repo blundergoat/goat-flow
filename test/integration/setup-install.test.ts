@@ -136,22 +136,29 @@ function withGruffBinaryOverride(config: string, binaryPath: string): string {
 }
 
 /**
- * Spawns the installer's exact agents-allowlist removal, which reads and writes one disposable config without a full install.
- * The full-install case `removes an existing agents allowlist from config.yaml` still proves setup runs this owner.
+ * Spawns one installer function's exact Node block, which reads and writes one disposable file without a full install.
+ * Full installs elsewhere still prove setup calls these owners: `removes an existing agents allowlist from config.yaml`
+ * here, and the Claude settings scopes in setup-install-permission-convergence.test.ts.
  *
- * @param configPath - disposable config.yaml the removal rewrites in place
- * @returns the Node process result; stdout is `changed` or `unchanged`
+ * @param ownerFunction - installer function whose single heredoc Node block performs the migration
+ * @param nextFunction - installer function defined after the owner, which bounds the search
+ * @param targetPath - disposable file the block rewrites in place
+ * @returns the Node process result; stdout is the block's one-word status
  */
-function runConfigAgentsRemoval(configPath: string) {
+function runInstallerNodeBlock(
+  ownerFunction: string,
+  nextFunction: string,
+  targetPath: string,
+) {
   const source = readFileSync(
     join(PROJECT_ROOT, "workflow/install-goat-flow.sh"),
     "utf8",
   );
-  const start = source.indexOf("\nremove_config_agents_entry() {");
-  const end = source.indexOf("\nmigrate_config_tasks_entry() {", start);
+  const start = source.indexOf(`\n${ownerFunction}() {`);
+  const end = source.indexOf(`\n${nextFunction}() {`, start);
   assert.ok(
     start >= 0 && end > start,
-    "agents allowlist removal boundaries must exist",
+    `${ownerFunction} boundaries must exist`,
   );
   const blocks = [
     ...source
@@ -161,11 +168,11 @@ function runConfigAgentsRemoval(configPath: string) {
   assert.equal(
     blocks.length,
     1,
-    "agents allowlist removal must contain one Node block",
+    `${ownerFunction} must contain one Node block`,
   );
   const block = blocks[0]?.[1];
-  assert.ok(block, "the shipped agents allowlist removal must not be empty");
-  return spawnSync(process.execPath, ["-", configPath], {
+  assert.ok(block, `the shipped ${ownerFunction} block must not be empty`);
+  return spawnSync(process.execPath, ["-", targetPath], {
     cwd: PROJECT_ROOT,
     encoding: "utf-8",
     input: block,
@@ -477,7 +484,11 @@ describe("setup --apply installer", () => {
       'version: "1.6.0"\n\nagents:\n  - claude\n  - codex\n\nskills:\n  install: all\n',
     );
 
-    const result = runConfigAgentsRemoval(join(configDir, "config.yaml"));
+    const result = runInstallerNodeBlock(
+      "remove_config_agents_entry",
+      "migrate_config_tasks_entry",
+      join(configDir, "config.yaml"),
+    );
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
@@ -494,7 +505,11 @@ describe("setup --apply installer", () => {
       'version: "1.6.0"\n\nskills:\n  install: all\n',
     );
 
-    const result = runConfigAgentsRemoval(join(configDir, "config.yaml"));
+    const result = runInstallerNodeBlock(
+      "remove_config_agents_entry",
+      "migrate_config_tasks_entry",
+      join(configDir, "config.yaml"),
+    );
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
@@ -511,7 +526,11 @@ describe("setup --apply installer", () => {
       'version: "1.6.0"\n\nagents: null\n\nskills:\n  install: all\n',
     );
 
-    const result = runConfigAgentsRemoval(join(configDir, "config.yaml"));
+    const result = runInstallerNodeBlock(
+      "remove_config_agents_entry",
+      "migrate_config_tasks_entry",
+      join(configDir, "config.yaml"),
+    );
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
@@ -852,7 +871,7 @@ describe("setup --apply installer", () => {
 describe("setup --apply permission upgrade migrations", () => {
   // Fixture purpose: a 1.16-era settings file carrying the retired shell and folder-name denies, the in-project
   // credential-store rules, and two rules the project added itself.
-  // Filesystem side effects: creates one temporary project and runs the standalone installer against it.
+  // Filesystem side effects: creates one temporary project and runs the installer's Claude permission migration on its settings.
   it("retires shipped shell and folder-name denies, anchors credential-store rules at home, and keeps project rules", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".claude"), { recursive: true });
@@ -891,9 +910,13 @@ describe("setup --apply permission upgrade migrations", () => {
       ) + "\n",
     );
 
-    const result = runInstaller(root, "--agent", "claude");
+    const result = runInstallerNodeBlock(
+      "migrate_claude_permission_deny",
+      "validate_codex_settings_after_install",
+      join(root, ".claude", "settings.json"),
+    );
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /stale or superseded permission rules/);
+    assert.equal(result.stdout.trim(), "migrated");
     assert.match(
       result.stderr,
       /retired Claude deny rule removed: "Read\(\*\*\/secrets\/\*\*\)"/,
@@ -984,9 +1007,13 @@ describe("setup --apply permission upgrade migrations", () => {
       ) + "\n",
     );
 
-    const result = runInstaller(root, "--agent", "claude");
+    const result = runInstallerNodeBlock(
+      "migrate_claude_permission_deny",
+      "validate_codex_settings_after_install",
+      join(root, ".claude", "settings.json"),
+    );
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /stale or superseded permission rules/);
+    assert.equal(result.stdout.trim(), "migrated");
 
     const { deny, allow, ask } = readClaudePermissionGroups(root);
     assert.deepEqual(
@@ -1027,9 +1054,13 @@ describe("setup --apply permission upgrade migrations", () => {
       "user-added WebFetch deny preserved",
     );
 
-    // Idempotent: a second upgrade reports no further permission migration.
-    const second = runCliInstaller(root, "--agent", "claude");
+    // Idempotent: a second migration run finds nothing left to change.
+    const second = runInstallerNodeBlock(
+      "migrate_claude_permission_deny",
+      "validate_codex_settings_after_install",
+      join(root, ".claude", "settings.json"),
+    );
     assert.equal(second.status, 0, second.stderr || second.stdout);
-    assert.doesNotMatch(second.stdout, /stale or superseded permission rules/);
+    assert.equal(second.stdout.trim(), "unchanged");
   });
 });
