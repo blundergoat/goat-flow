@@ -179,7 +179,21 @@ function runScenario(kind: "responses" | "failures") {
           for(const cwd of [root,nested])for(const command of ["native fixture allow '$&| (literal) 🐐","native fixture deny"]) {
             const input=payload(command), blocked=command==="native fixture deny";
             const result=spawnConfiguredHookProbe(configured,probe(input),cwd,"node");
-            assert.equal(result.status,blocked&&(provider==="claude"||provider==="codex")?2:0,result.stderr);
+            assert.equal(
+              result.status,
+              blocked&&(provider==="claude"||provider==="codex")?2:0,
+              JSON.stringify({
+                provider,
+                cwd:cwd===root?"root":"nested",
+                command,
+                status:result.status,
+                signal:result.signal,
+                errorCode:result.error?.code??null,
+                errorMessage:result.error?.message??null,
+                stdout:result.stdout,
+                stderr:result.stderr,
+              }),
+            );
             assert.equal(result.signal,null);
             if(provider==="copilot")assert.equal(JSON.parse(result.stdout).permissionDecision,blocked?"deny":"allow");
             else if(provider==="antigravity")assert.equal(JSON.parse(result.stdout).decision,blocked?"deny":"allow");
