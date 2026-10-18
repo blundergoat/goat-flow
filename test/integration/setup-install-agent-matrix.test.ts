@@ -31,6 +31,48 @@ import {
   runCliInstaller,
 } from "./setup-install.helpers.js";
 
+/**
+ * Spawns the installer's shipped hook-choice migration, which rewrites one disposable config.
+ * The alias case retains the full CLI install so staging and publication stay covered.
+ */
+function runHookChoiceMigration(root: string) {
+  const installerSource = readFileSync(
+    join(PROJECT_ROOT, "workflow", "install-goat-flow.sh"),
+    "utf8",
+  );
+  const start = installerSource.indexOf("\nensure_config_hooks_entry() {");
+  const end = installerSource.indexOf(
+    "\nremove_config_plan_guard_entry() {",
+    start,
+  );
+  assert.ok(
+    start >= 0 && end > start,
+    "hook-choice migration boundaries must exist",
+  );
+  const blocks = [
+    ...installerSource
+      .slice(start, end)
+      .matchAll(/<<'NODE'\r?\n([\s\S]*?)\r?\nNODE\r?\n/gu),
+  ];
+  assert.equal(
+    blocks.length,
+    1,
+    "the hook-choice owner must contain one Node migration",
+  );
+  const block = blocks[0]?.[1];
+  assert.ok(block, "the shipped hook-choice migration must not be empty");
+  return spawnSync(
+    process.execPath,
+    ["-", join(root, ".goat-flow/config.yaml"), PROJECT_ROOT],
+    {
+      cwd: PROJECT_ROOT,
+      encoding: "utf-8",
+      input: block,
+      timeout: process.platform === "win32" ? 120_000 : 30_000,
+    },
+  );
+}
+
 /** Machine-readable doctor fields used to verify one installed consumer skill. */
 interface MatrixDoctorReport {
   status: string;
@@ -864,7 +906,7 @@ describe("cross-agent install smoke matrix", () => {
   // Preserve serialized choices while adding the Git policy in every reproduced YAML form.
   const legacyHookChoices =
     '"deny-dangerous": { enabled: false }, "gruff-code-quality": { enabled: true }';
-  // Replay block aliases and flow mappings so config migration preserves the user's existing YAML relationships.
+  // The alias keeps the public CLI round trip; other forms run the same shipped migration without unrelated installation stages.
   for (const [shape, hooksConfig] of Object.entries({
     "plain flow": `hooks: { ${legacyHookChoices} }\n`,
     "anchored flow": `hooks: &policy { ${legacyHookChoices} }\ncopy: *policy\n`,
@@ -872,14 +914,18 @@ describe("cross-agent install smoke matrix", () => {
     "trailing comma": `hooks: { ${legacyHookChoices}, }\n`,
     "multiline flow": `hooks: {\n  ${legacyHookChoices}\n}\n`,
   })) {
-    it(`preserves ${shape} hook choices during the Git split and repeated installation`, () => {
+    it(`preserves ${shape} hook choices during the Git split and repeated ${shape === "alias" ? "installation" : "migration"}`, () => {
       const config = `version: "${AUDIT_VERSION}"\n${hooksConfig}`;
       const root = makeTempProject();
       const path = join(root, ".goat-flow/config.yaml");
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, config);
       const original = load(config) as Record<string, object>;
-      const first = runCliInstaller(root, "--agent", "claude");
+      const migrate =
+        shape === "alias"
+          ? () => runCliInstaller(root, "--agent", "claude")
+          : () => runHookChoiceMigration(root);
+      const first = migrate();
       assert.equal(first.status, 0, first.stderr);
       const migrated = readFileSync(path, "utf8");
       const parsed = load(migrated) as Record<string, object>;
@@ -899,7 +945,7 @@ describe("cross-agent install smoke matrix", () => {
       // Non-alias flow updates preserve the compact line layout of the user's config.
       if (shape !== "alias")
         assert.equal(migrated.split("\n").length, config.split("\n").length);
-      const second = runCliInstaller(root, "--agent", "claude");
+      const second = migrate();
       assert.equal(second.status, 0, second.stderr);
       assert.equal(readFileSync(path, "utf8"), migrated);
     });

@@ -52,7 +52,7 @@ The approved selector-wide clarification then produced a replacement with all se
 **Status:** active | **Created:** 2026-09-07 | **Evidence:** OBSERVED
 **Severity:** CORRECTNESS
 **Decision changed:** Execute every evaluation fixture and re-derive run counts from artifacts before any claim rests on them; a scorer and its fixtures are graded material, not scaffolding.
-**Incident count:** 15 | **Latest occurrence:** 2026-10-18
+**Incident count:** 16 | **Latest occurrence:** 2026-10-18
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
 
@@ -108,6 +108,8 @@ The preservation comparison then rejected its own prospectively advancing timing
 **Recurrence 2026-10-18 (ownership-test proof):** A scoped analyzer comparison asserted zero introduced findings before classifying the new side-effect advisory. Preserve and inspect each new identity before deciding whether it requires a fix. The consolidated test comment omitted its temporary file writes and anchor deletion; making those effects explicit removed the advisory without changing executable syntax. Evidence: `test/integration/setup-install.test.ts` (search: `reinstalls system-owned, user-owned and generated files by declared ownership`).
 
 **Recurrence 2026-10-18 (hosted CI conclusions):** The handoff called eighteen completed Actions jobs successful although the saved rows already contained seventeen successes and one failure. Count successful jobs from each `conclusion`, separately from completed `status`; inspect every non-success before reporting the run. The eventual result was eighteen successes and one failure in the Windows Node 20 native audit controls. Preserve failed samples as diagnostics rather than accepting them as final timing proof. Evidence: `.github/workflows/ci.yml` (search: `Native launcher and audit controls`) and `test/integration/hook-native-audit-configured.test.ts` (search: `native configured audit preserves saved provider forms`).
+
+**Recurrence 2026-10-18 (migration-owner probe):** A temporary ambiguity control placed an extra Node heredoc against the end of a scoped source slice. Cutting at the next Bash header excluded the delimiter's trailing newline, so the probe counted one block and reached its spawn stub. A retry also had a syntax error. After two probe corrections, rewind to a saved, syntax-checked script and insert mutations inside the actual owner body with complete framing. The unchanged helper then refused missing and ambiguous owners before spawn. Final stats and preflight also caught a stale footgun anchor: changing the case-title template removed the literal old title although the retained alias still produced it at runtime. Search learning-loop source anchors before changing generated test titles, and repair their references with the same change. Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `runHookChoiceMigration`).
 
 ---
 
