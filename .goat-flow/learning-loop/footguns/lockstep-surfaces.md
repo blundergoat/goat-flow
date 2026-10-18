@@ -1,6 +1,6 @@
 ---
 category: lockstep-surfaces
-last_reviewed: 2026-09-16
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** Changes where adding or renaming one artifact obliges a matching edit on several other surfaces at once, and the partial-update failures that follow. Stale pointers, path validation, and evidence rot live in [docs-and-crossrefs.md](docs-and-crossrefs.md).
@@ -20,7 +20,7 @@ last_reviewed: 2026-09-16
 
 **Why it happens:** The parity test pins only the template against the audit constant. `src/cli/server/hook-managed-installation.ts` (search: `ensureHookGitignoreEntries`) and `workflow/install-goat-flow.sh` (search: `ensure_gitignore_entry ".goat-flow/.gitignore"`) append their own literals, and several tests carry hand-written fixtures (`test/integration/dashboard-server.helpers.ts`, search: `!hooks/**`; `test/integration/audit-build.test.ts`, search: `stay ignored`; `test/contract/skill-hardening-shared-3.test.ts`, search: `logs\/sessions`). A spelling change such as `!hooks/**` to `!**/hooks/**` leaves them all behind silently.
 
-**Evidence:** During 1.16.0 on 2026-08-18 the template moved every slash-containing rule to the `**/` prefix while the constant, mirror, parity test, and 2071-test fast suite stayed green; `ensureHookGitignoreEntries` still appended `!hooks/**`, and a fresh install carried 43 effective lines and failed its own audit. `test/unit/hook-registrar-surfaces.test.ts` (search: `leaves a template-spelled goat-flow gitignore byte-identical`) failed 2 cases before the fix. Because that proved only the TypeScript toggle, `test/integration/setup-install-agent-matrix.test.ts` (search: `standalone installer must preserve the canonical goat-flow gitignore exactly`) now runs the real installer and compares exact bytes for every agent fixture.
+**Evidence:** During 1.16.0 on 2026-08-18 the template moved every slash-containing rule to the `**/` prefix while the constant, mirror, parity test, and 2071-test fast suite stayed green; `ensureHookGitignoreEntries` still appended `!hooks/**`, and a fresh install carried 43 effective lines and failed its own audit. `test/unit/hook-registrar-surfaces.test.ts` (search: `leaves a template-spelled goat-flow gitignore byte-identical`) failed 2 cases before the fix. Because that proved only the TypeScript toggle, `test/integration/setup-install-agent-matrix.test.ts` (search: `CLI installer must preserve the canonical goat-flow gitignore exactly`) now runs the real installer and compares exact bytes for every agent fixture.
 
 ---
 

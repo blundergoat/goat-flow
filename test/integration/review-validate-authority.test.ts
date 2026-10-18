@@ -1,6 +1,7 @@
 /**
  * Exercises review authority where it meets real Git objects, index entries, files, and CLI processes.
  * Controls distinguish valid selected bytes from substitutions, drift, unsupported sources, and uncredited execution.
+ * One finding per report exercises source selection; multi-finding grammar belongs to the validator unit tests.
  *
  * Fixture arrangement may write its disposable repository; snapshots and validation must preserve all fixture bytes and modes.
  */

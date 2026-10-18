@@ -231,23 +231,35 @@ function setLegacyVersion(
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
+let legacyPairFixturePath: string | undefined;
+
 /**
- * Install two agents through the CLI, then reconstruct legacy history with the retained v1 writer.
- * The disposable fixture keeps installed files but removes v2 history so tests exercise actual cutover.
+ * Copy a real two-agent installation with reconstructed legacy history into an isolated target.
+ * Builds the private template once per test process, replacing only its v2 history with v1 records.
+ * Each caller gets a separate disposable directory, so local patches and malformed state stay isolated.
  */
 function installedLegacyPair(): string {
-  const projectPath = makeTempProject();
-  const agents = ["codex", "antigravity"] as const;
-  for (const agent of agents) {
-    const result = runCliInstaller(projectPath, "--agent", agent);
-    assert.equal(result.status, 0, result.stderr || result.stdout);
+  if (legacyPairFixturePath === undefined) {
+    const fixturePath = makeTempProject();
+    const agents = ["codex", "antigravity"] as const;
+    for (const agent of agents) {
+      const result = runCliInstaller(fixturePath, "--agent", agent);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    }
+    const previews = agents.map((agent) =>
+      buildManagedSetupPreview(fixturePath, agent),
+    );
+    rmSync(join(fixturePath, ".goat-flow/state/install"), { recursive: true });
+    for (const preview of previews)
+      writeManagedInstallState(fixturePath, preview);
+    legacyPairFixturePath = fixturePath;
   }
-  const previews = agents.map((agent) =>
-    buildManagedSetupPreview(projectPath, agent),
-  );
-  rmSync(join(projectPath, ".goat-flow/state/install"), { recursive: true });
-  for (const preview of previews)
-    writeManagedInstallState(projectPath, preview);
+  const projectPath = makeTempProject();
+  cpSync(legacyPairFixturePath, projectPath, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+  });
   return projectPath;
 }
 

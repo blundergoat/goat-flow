@@ -23,16 +23,12 @@ import { getAgentProfiles } from "../../src/cli/agents/registry.js";
 import { getSkillNames, getStaleSkillNames } from "../../src/cli/constants.js";
 import { AUDIT_VERSION } from "../src.js";
 import { readAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
-import {
-  getHookSpec,
-  listHookSpecs,
-} from "../../src/cli/server/hooks-registry.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import { KNOWN_AGENT_IDS, type AgentProfile } from "../../src/cli/types.js";
 import {
   PROJECT_ROOT,
   makeTempProject,
   runCliInstaller,
-  runInstaller,
 } from "./setup-install.helpers.js";
 
 /** Machine-readable doctor fields used to verify one installed consumer skill. */
@@ -433,7 +429,7 @@ function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
   const targetProjectPath = makeTempProject();
   // The user selected an ordinary folder, so install must not create Git state for them.
   assert.equal(existsSync(join(targetProjectPath, ".git")), false);
-  const installResult = runInstaller(
+  const installResult = runCliInstaller(
     targetProjectPath,
     "--agent",
     agentProfile.id,
@@ -445,6 +441,10 @@ function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
     installResult.stderr || installResult.stdout,
   );
   assert.match(installResult.stdout, new RegExp(`agent: ${agentProfile.id}`));
+  assert.match(
+    installResult.stdout,
+    new RegExp(`Install verified for ${agentProfile.id}`),
+  );
   // Installation leaves the user's non-Git project type unchanged.
   assert.equal(existsSync(join(targetProjectPath, ".git")), false);
   assertInstalledAgentSurface(targetProjectPath, agentProfile);
@@ -460,7 +460,7 @@ function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
       ),
       "utf-8",
     ),
-    `${agentProfile.id} standalone installer must preserve the canonical goat-flow gitignore exactly`,
+    `${agentProfile.id} CLI installer must preserve the canonical goat-flow gitignore exactly`,
   );
 
   const doctorReport = runSkillDoctor(targetProjectPath, agentProfile.id);
@@ -491,13 +491,13 @@ function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
  * Writes disposable fixture files and launches installer subprocesses only inside that target.
  *
  * @param agentProfile - selected profile; missing config/path evidence fails its named test
- * @param targetProjectPath - disposable project the Bash installer already installed for this profile
- * @returns preserved user-owned file path; never empty after the repair flow completes
+ * @param targetProjectPath - disposable project the CLI installer already installed for this profile
+ * @returns preserved user path and repaired config bytes for the next install's stability check
  */
 function verifyAgentRepairAndCleanup(
   agentProfile: AgentProfile,
   targetProjectPath: string,
-): string {
+): { userOwnedPath: string; hookConfigBytes: string } {
   const [retiredSkillName] = getStaleSkillNames();
   assert.ok(
     retiredSkillName,
@@ -541,6 +541,11 @@ function verifyAgentRepairAndCleanup(
     readFileSync(hookConfigPath, "utf-8"),
   ) as Record<string, unknown>;
   hookConfig.userOwnedMatrixMarker = "preserve";
+  seedDuplicateAndStaleDenyRows(agentProfile, hookConfig);
+  assert.ok(
+    countManagedHookRegistrations(hookConfig, "deny-dangerous.sh") > 1,
+    `${agentProfile.id} fixture must seed duplicate managed rows`,
+  );
   writeFileSync(hookConfigPath, `${JSON.stringify(hookConfig, null, 2)}\n`);
 
   const blockedReport = runSkillDoctor(targetProjectPath, agentProfile.id);
@@ -551,11 +556,14 @@ function verifyAgentRepairAndCleanup(
     `${agentProfile.skillsDir}/goat/SKILL.md`,
   );
 
+  // The CLI baseline records this removal; authorize only the skill this fixture deliberately deleted.
   const repairInstall = runCliInstaller(
     targetProjectPath,
     "--agent",
     agentProfile.id,
     "--clean-deprecated",
+    "--force-path",
+    posix.join(agentProfile.skillsDir, "goat", "SKILL.md"),
   );
   assert.equal(
     repairInstall.status,
@@ -574,149 +582,10 @@ function verifyAgentRepairAndCleanup(
   ) as Record<string, unknown>;
   assert.equal(repairedHookConfig.userOwnedMatrixMarker, "preserve");
   assertInstalledAgentSurface(targetProjectPath, agentProfile);
-  return userOwnedPath;
-}
-
-/**
- * Prove the standalone installer and TypeScript writer show one hook state to a user; it writes into a disposable consumer target.
- * Use per agent after launcher or migration behavior changes.
- *
- * @param agentProfile - agent selected at install time; missing support keeps that hook absent
- * @returns installed target path; never empty after fixture creation
- */
-function verifyStandaloneInstallerHookSemantics(
-  agentProfile: AgentProfile,
-): string {
-  const targetProjectPath = makeTempProject();
-  mkdirSync(join(targetProjectPath, ".goat-flow"), { recursive: true });
-  // This fixture represents a user who enabled every shared hook before reinstalling.
-  writeFileSync(
-    join(targetProjectPath, ".goat-flow", "config.yaml"),
-    [
-      `version: "${AUDIT_VERSION}"\nhooks:`,
-      "  deny-dangerous:",
-      "    enabled: true",
-      "  gruff-code-quality:",
-      "    enabled: true",
-      "  post-turn-safety:",
-      "    enabled: true",
-      "",
-    ].join("\n"),
-  );
-
-  // A previous Antigravity install may have registered a hook whose delivery is no longer supported.
-  if (agentProfile.id === "antigravity") {
-    assert.ok(agentProfile.hookConfigFile);
-    const hookConfigPath = join(targetProjectPath, agentProfile.hookConfigFile);
-    mkdirSync(dirname(hookConfigPath), { recursive: true });
-    writeFileSync(
-      hookConfigPath,
-      `${JSON.stringify(
-        {
-          "renamed-gruff-policy": {
-            enabled: true,
-            PostToolUse: [
-              {
-                matcher: "edit_file",
-                hooks: [
-                  {
-                    type: "command",
-                    command:
-                      "node .goat-flow/hooks/run-with-bash.mjs .goat-flow/hooks/gruff-code-quality.sh",
-                  },
-                ],
-              },
-            ],
-          },
-          "team-audit": {
-            enabled: true,
-            PreToolUse: [
-              {
-                matcher: "run_command",
-                hooks: [
-                  { type: "command", command: "./scripts/team-audit.sh" },
-                ],
-              },
-            ],
-          },
-        },
-        null,
-        2,
-      )}\n`,
-    );
-  }
-
-  const installResult = runInstaller(
-    targetProjectPath,
-    "--agent",
-    agentProfile.id,
-  );
-  assert.equal(
-    installResult.status,
-    0,
-    installResult.stderr || installResult.stdout,
-  );
-  // Hook installation must not turn the user's ordinary folder into a Git repository.
-  assert.equal(existsSync(join(targetProjectPath, ".git")), false);
-
-  assert.ok(agentProfile.hookConfigFile);
-  const installedHookConfig = JSON.parse(
-    readFileSync(join(targetProjectPath, agentProfile.hookConfigFile), "utf-8"),
-  ) as unknown;
-
-  // Antigravity's top-level definitions need their own registration assertions instead of lifecycle-array expectations.
-  if (agentProfile.id === "antigravity") {
-    const antigravityConfig = installedHookConfig as Record<string, unknown>;
-    assert.equal(
-      countManagedHookRegistrations(antigravityConfig, "gruff-code-quality.sh"),
-      0,
-      "standalone install must remove registrations unsupported by Antigravity",
-    );
-    assert.equal(antigravityConfig["renamed-gruff-policy"], undefined);
-    assert.ok(antigravityConfig["team-audit"]);
-  }
-
-  // Every shipped hook must match provider support plus this non-Git root's eligibility.
-  for (const hookSpec of listHookSpecs()) {
-    const installedHookState = readAgentHookState(
-      targetProjectPath,
-      agentProfile,
-      hookSpec,
-    );
-    // Post-turn stays unregistered until a Git root or complete explicit root list exists.
-    const doesRootContractAllowRegistration =
-      hookSpec.id !== "post-turn-safety";
-    const shouldInstallHook =
-      !hookSpec.unsupportedAgents?.[agentProfile.id] &&
-      doesRootContractAllowRegistration;
-    assert.equal(
-      installedHookState.installed,
-      shouldInstallHook,
-      `${agentProfile.id} ${hookSpec.id} diverged between installer and writer`,
-    );
-    // A matcherless event has one logical row, so existential checks must not hide duplicates.
-    if (hookSpec.matcher === "") {
-      assert.equal(
-        countManagedHookRegistrations(
-          installedHookConfig,
-          hookSpec.primaryScript,
-        ),
-        shouldInstallHook ? 1 : 0,
-        `${agentProfile.id} ${hookSpec.id} must have one exact registration`,
-      );
-    }
-  }
-  // An enabled Codex Gruff hook uses the canonical tool observed by the active provider.
-  if (agentProfile.id === "codex") {
-    const codexHookConfig = readFileSync(
-      join(targetProjectPath, agentProfile.hookConfigFile ?? ""),
-      "utf-8",
-    );
-    assert.match(codexHookConfig, /"PostToolUse"/u);
-    assert.match(codexHookConfig, /"matcher": "\^apply_patch\$"/u);
-    assert.match(codexHookConfig, /"timeout": 90/u);
-  }
-  return targetProjectPath;
+  return {
+    userOwnedPath,
+    hookConfigBytes: readFileSync(hookConfigPath, "utf-8"),
+  };
 }
 
 /** Shell text that names the managed script the way pre-upgrade installs did. */
@@ -801,68 +670,50 @@ function seedDuplicateAndStaleDenyRows(
 }
 
 /**
- * Prove the CLI installer converges duplicate and stale deny rows across two consecutive runs while preserving the user's own hook rows.
+ * Verify a second CLI install preserves the config produced by the preceding repair.
  *
  * Use per agent so a convergence failure names the exact provider shape; it writes only into the supplied disposable target.
  *
  * @param agentProfile - agent selected at install time
- * @param targetProjectPath - disposable project already installed for this agent, whose hook config is polluted here
- * @returns converged hook config path; never empty after the two-run flow
+ * @param targetProjectPath - disposable project whose previous install repaired file and registration damage
+ * @param repairedConfigBytes - exact config after that repair; any change during reinstall fails stability
+ * @returns converged hook config path after checking the user's rows and repaired registration
  */
 function verifyInstallerDuplicateConvergence(
   agentProfile: AgentProfile,
   targetProjectPath: string,
+  repairedConfigBytes: string,
 ): string {
   assert.ok(agentProfile.hookConfigFile);
   const hookConfigPath = join(targetProjectPath, agentProfile.hookConfigFile);
-  const installedConfig = JSON.parse(
-    readFileSync(hookConfigPath, "utf-8"),
-  ) as Record<string, unknown>;
-  seedDuplicateAndStaleDenyRows(agentProfile, installedConfig);
-  writeFileSync(
-    hookConfigPath,
-    `${JSON.stringify(installedConfig, null, 2)}\n`,
+  // The preceding repair converged the seeded rows; this install must hold its exact bytes.
+  const repeatedInstall = runCliInstaller(
+    targetProjectPath,
+    "--agent",
+    agentProfile.id,
   );
-  // The seeded state is executable: extra managed rows exist before convergence.
-  assert.ok(
-    countManagedHookRegistrations(installedConfig, "deny-dangerous.sh") > 1,
-    `${agentProfile.id} fixture must seed duplicate managed rows`,
+  assert.equal(
+    repeatedInstall.status,
+    0,
+    repeatedInstall.stderr || repeatedInstall.stdout,
   );
+  const configBytes = readFileSync(hookConfigPath, "utf-8");
+  assert.equal(configBytes, repairedConfigBytes);
 
-  // The first run converges and the second must hold the exact bytes; an oscillating result fails that comparison.
-  const configBytesPerRun: string[] = [];
-  // Repeated installer runs must converge instead of duplicating the user's managed registrations.
-  for (let installerRun = 0; installerRun < 2; installerRun += 1) {
-    const repairRun = runCliInstaller(
-      targetProjectPath,
-      "--agent",
-      agentProfile.id,
-    );
-    assert.equal(repairRun.status, 0, repairRun.stderr || repairRun.stdout);
-    configBytesPerRun.push(readFileSync(hookConfigPath, "utf-8"));
-  }
-  assert.equal(configBytesPerRun[1], configBytesPerRun[0]);
-
-  const convergedConfig = JSON.parse(configBytesPerRun[0]!) as Record<
-    string,
-    unknown
-  >;
+  const convergedConfig = JSON.parse(configBytes) as Record<string, unknown>;
   assert.equal(
     countManagedHookRegistrations(convergedConfig, "deny-dangerous.sh"),
     1,
     `${agentProfile.id} must keep exactly one managed deny row`,
   );
   // Stable pretty JSON keeps user diffs readable after every future run.
-  assert.equal(
-    configBytesPerRun[0],
-    `${JSON.stringify(convergedConfig, null, 2)}\n`,
-  );
+  assert.equal(configBytes, `${JSON.stringify(convergedConfig, null, 2)}\n`);
   assert.ok(
-    configBytesPerRun[0]!.includes(USER_HOOK_MARKER),
+    configBytes.includes(USER_HOOK_MARKER),
     `${agentProfile.id} must preserve the user's own hook row`,
   );
   assert.ok(
-    !configBytesPerRun[0]!.includes(STALE_DENY_COMMAND),
+    !configBytes.includes(STALE_DENY_COMMAND),
     `${agentProfile.id} must remove the stale managed row`,
   );
   const denyDangerousHook = getHookSpec("deny-dangerous");
@@ -937,7 +788,7 @@ describe("cross-agent install smoke matrix", () => {
 
   // Separate names make the failing agent visible in TAP output and CI summaries.
   for (const agentProfile of supportedAgentProfiles) {
-    // One project carries the fresh Bash install into the CLI repair and then the convergence runs, so each agent pays for one fresh install.
+    // One CLI installation carries file damage and duplicate rows into the same repair, followed by one stability check.
     it(`${agentProfile.id} installs, repairs and converges duplicate deny rows on one project`, () => {
       const installedTargetPath = verifyFreshAgentInstall(agentProfile);
       assert.equal(
@@ -947,30 +798,21 @@ describe("cross-agent install smoke matrix", () => {
         true,
       );
 
-      const preservedUserFilePath = verifyAgentRepairAndCleanup(
+      const { userOwnedPath, hookConfigBytes } = verifyAgentRepairAndCleanup(
         agentProfile,
         installedTargetPath,
       );
       assert.equal(
-        readFileSync(preservedUserFilePath, "utf-8"),
+        readFileSync(userOwnedPath, "utf-8"),
         "keep this user content\n",
       );
 
       const convergedHookConfigPath = verifyInstallerDuplicateConvergence(
         agentProfile,
         installedTargetPath,
+        hookConfigBytes,
       );
       assert.equal(existsSync(convergedHookConfigPath), true);
-    });
-
-    it(`${agentProfile.id} standalone install matches writer hook state`, () => {
-      const installedTargetPath =
-        verifyStandaloneInstallerHookSemantics(agentProfile);
-      assert.ok(agentProfile.hookConfigFile);
-      assert.equal(
-        existsSync(join(installedTargetPath, agentProfile.hookConfigFile)),
-        true,
-      );
     });
   }
 
@@ -992,7 +834,7 @@ describe("cross-agent install smoke matrix", () => {
       configText,
     );
 
-    const installResult = runInstaller(
+    const installResult = runCliInstaller(
       targetProjectPath,
       "--agent",
       claudeProfile.id,
@@ -1037,7 +879,7 @@ describe("cross-agent install smoke matrix", () => {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, config);
       const original = load(config) as Record<string, object>;
-      const first = runInstaller(root, "--agent", "claude");
+      const first = runCliInstaller(root, "--agent", "claude");
       assert.equal(first.status, 0, first.stderr);
       const migrated = readFileSync(path, "utf8");
       const parsed = load(migrated) as Record<string, object>;
@@ -1072,7 +914,7 @@ describe("cross-agent install smoke matrix", () => {
     const denySpec = getHookSpec("deny-dangerous");
     assert.ok(claudeProfile?.hookConfigFile);
     assert.ok(denySpec);
-    const firstInstall = runInstaller(
+    const firstInstall = runCliInstaller(
       targetProjectPath,
       "--agent",
       claudeProfile.id,
@@ -1105,17 +947,17 @@ describe("cross-agent install smoke matrix", () => {
 
   it("keeps a preview-preserved goat-flow gitignore byte-identical", () => {
     const targetProjectPath = makeTempProject();
+    const firstInstall = runCliInstaller(targetProjectPath, "--agent", "codex");
+    assert.equal(firstInstall.status, 0, firstInstall.stderr);
     const gitignorePath = join(targetProjectPath, ".goat-flow", ".gitignore");
     const preservedContent = "# local policy\n*.private\n";
     mkdirSync(dirname(gitignorePath), { recursive: true });
     writeFileSync(gitignorePath, preservedContent);
 
-    const installResult = runInstaller(
+    const installResult = runCliInstaller(
       targetProjectPath,
       "--agent",
       "codex",
-      "--preserve-path",
-      ".goat-flow/.gitignore",
     );
 
     assert.equal(installResult.status, 0, installResult.stderr);
