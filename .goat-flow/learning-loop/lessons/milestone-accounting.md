@@ -1,24 +1,9 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-10-18
+last_reviewed: 2026-10-19
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
-
-## Lesson: Readiness confirmations belong to named host rows
-
-**Status:** active | **Created:** 2026-10-16 | **Evidence:** OBSERVED
-**Decision changed:** Match readiness updates by host name and inspect unavailable-host rows before saving.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** Update each named host row from its own evidence. Keep executable discovery, user-reported authentication and observed live delivery separate. Check unavailable hosts explicitly after replacing repeated status text; a structural plan check cannot establish factual readiness.
-
-**What happened:** While preparing a local runtime plan, a global replacement changed every repeated unverified cell. It copied the user's Windows/WSL sign-in confirmation into native Linux/macOS rows even though the user had no access to either host. Reading the saved table caught the false attribution; host-specific corrections restored both unavailable rows to unverified.
-
-**Root cause:** Identical cell text was treated as identical evidence ownership. This was a local planning error, not an observed provider failure; no provider was launched and no implementation was credited.
-
----
 
 ## Lesson: Decision spikes need executable no-change exits
 
@@ -89,21 +74,24 @@ Check each ported function's callees before assigning it to an independent stage
 
 **Status:** active | **Created:** 2026-08-01
 **Severity:** INTEGRATION
-**Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked, separate agent handoff work from human execution, prefix each open human-owned Proof item with `[HUMAN]`, and assign it zero agent minutes.
+**Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked, separate agent handoff work from human execution, prefix each open human-owned Proof item with `[HUMAN]`, and assign it zero agent minutes; an unmet executor proof keeps the milestone at `testing-gate`.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-09-04
+**Incident count:** 7 | **Latest occurrence:** 2026-10-19
 
-**Prevention:** Before a pending transition, require no open Tasks, keep agent handoff as checked Proof, put each zero-minute open `[HUMAN]` item under Proof, reconcile work units, and rerun strict validation. Evidence anchors: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`), `src/cli/plans-effort.ts` (search: `countAgentWorkUnits`).
+**Prevention:** Before a pending transition, require no open Tasks, keep agent handoff as checked Proof, put each zero-minute open `[HUMAN]` item under Proof, reconcile work units, and rerun strict validation. An unmet executor proof is not a human gate: stay at `testing-gate`, present the measured deviation, and reword that proof to the Exit's acceptance clause only after the human accepts; never relabel it `[HUMAN]`. Evidence anchors: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`), `src/cli/plans-effort.ts` (search: `countAgentWorkUnits`).
 
 **What happened:** A finished release milestone put final human approval under Tasks, and strict pending validation rejected the open implementation item.
 
 **Root cause:** Human ownership is positional metadata: every open Task is executor work, and Proof recognises human ownership only from a leading `[HUMAN]`.
 
-**Recurrence 2026-07-31:** The change added a plain unchecked human-review item while the milestone sat at `human-verification-pending`, and strict validation correctly treated it as executor proof; human-owned open proof must carry the leading marker. `src/cli/plans-check.ts` (search: `isHumanOwnedItem`).
-**Recurrence 2026-08-10:** A release proof used trailing `[manual, HUMAN-PENDING]` and mixed handoff preparation with human execution; splitting checked handoff from a leading zero-minute `[HUMAN]` gate preserved the forecast.
-**Recurrence 2026-08-23:** An ADR review used trailing `HUMAN-PENDING`; moving `[HUMAN]` to the front and reconciling six agent units restored the handoff. `src/cli/plans-check.ts` (search: `Human ownership is explicit metadata`), `src/cli/plans-effort.ts` (search: `keeps approval time outside coding-agent forecasts`).
-**Recurrence 2026-09-04:** The change left its zero-minute candidate decision under Tasks; moving the leading `[HUMAN]` item to Proof restored strict pending validation. `src/cli/plans-check.ts` (search: `human-verification-pending milestone has open implementation tasks`).
+The recurring failure is reaching the pending transition with open work the validator must treat as the executor's. This ledger preserves the distinct evidence:
+
+- **Recurrence 2026-07-31:** The change added a plain unchecked human-review item while the milestone sat at `human-verification-pending`, and strict validation correctly treated it as executor proof; human-owned open proof must carry the leading marker. `src/cli/plans-check.ts` (search: `isHumanOwnedItem`).
+- **Recurrence 2026-08-10:** A release proof used trailing `[manual, HUMAN-PENDING]` and mixed handoff preparation with human execution; splitting checked handoff from a leading zero-minute `[HUMAN]` gate preserved the forecast.
+- **Recurrence 2026-08-23:** An ADR review used trailing `HUMAN-PENDING`; moving `[HUMAN]` to the front and reconciling six agent units restored the handoff. `src/cli/plans-check.ts` (search: `Human ownership is explicit metadata`), `src/cli/plans-effort.ts` (search: `keeps approval time outside coding-agent forecasts`).
+- **Recurrence 2026-09-04:** The change left its zero-minute candidate decision under Tasks; moving the leading `[HUMAN]` item to Proof restored strict pending validation. `src/cli/plans-check.ts` (search: `human-verification-pending milestone has open implementation tasks`).
+- **Recurrence 2026-10-19:** Closing the CI test-runtime plan, the agent set M04 to `human-verification-pending` while C6, the executor proof of a 180-second hosted target, was still unmet. Strict validation rejected it; returning to `testing-gate` held the milestone until the user accepted the measured deviation, after which C6 was reworded to the Exit's acceptance clause and ticked. `src/cli/plans-check.ts` (search: `executor proof item remains open at human-verification-pending`).
 
 ---
 

@@ -1,9 +1,9 @@
 ---
 category: evidence-attribution
-last_reviewed: 2026-10-01
+last_reviewed: 2026-10-19
 ---
 
-**Scope:** Attributing guarantees to the implementation that supplies them and checking whether reused evidence still describes current bytes. General guidance remains in [agent-evidence-claims.md](agent-evidence-claims.md).
+**Scope:** Attributing guarantees to the implementation that supplies them, attributing readiness and run details to the host row or command output that recorded them, and checking whether reused evidence still describes current bytes. General guidance remains in [agent-evidence-claims.md](agent-evidence-claims.md).
 
 ## Lesson: Naming the component that satisfies a rule is a claim about its code
 
@@ -33,3 +33,37 @@ last_reviewed: 2026-10-01
 
 **Root cause:** Reuse was treated as a property of the earlier run rather than as a claim about the current tree. A narrow replacement for a broad rule silently drops whatever else the broad rule covered, and nothing in the change itself surfaces the loss. Recurrence is likeliest when one file governs several routes and a fix targets one of them. Evidence anchors: `workflow/skills/goat-qa/references/output-templates.md` (search: `never combine a gate report with the plan that follows it`), `test/contract/skill-hardening-skills-2.test.ts` (search: `lets an auto-released goat-qa gate carry both phases in one response`).
 
+---
+
+## Lesson: Readiness confirmations belong to named host rows
+
+**Status:** active | **Created:** 2026-10-16 | **Evidence:** OBSERVED
+**Decision changed:** Match readiness updates by host name and inspect unavailable-host rows before saving.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Update each named host row from its own evidence. Keep executable discovery, user-reported authentication and observed live delivery separate. Check unavailable hosts explicitly after replacing repeated status text; a structural plan check cannot establish factual readiness.
+
+**What happened:** While preparing a local runtime plan, a global replacement changed every repeated unverified cell. It copied the user's Windows/WSL sign-in confirmation into native Linux/macOS rows even though the user had no access to either host. Reading the saved table caught the false attribution; host-specific corrections restored both unavailable rows to unverified.
+
+**Root cause:** Identical cell text was treated as identical evidence ownership. This was a local planning error, not an observed provider failure; no provider was launched and no implementation was credited.
+
+
+---
+
+## Lesson: A run record is read from the session's command outputs, not recalled
+
+**Status:** active | **Created:** 2026-09-19
+**Severity:** CORRECTNESS
+**Decision changed:** Before writing which harness, model and effort ran a piece of work, search the session for the requester's model and effort commands and copy what their outputs say.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-09-19
+
+**Prevention:** Model and effort commands leave output lines in the conversation. Find them, quote their values, and tie each change to its timing segment. A harness notice naming a new model is the effect of such a command: look for the command just before it. Write "not observable" only for a setting no output mentions; never say a command was not seen without searching.
+
+**What happened:** One closeout recorded effort xhigh and an unseen model switch; the requester had set effort max and switched models in visible commands. The next closeout corrected it, then missed a second model switch and a new effort command in one turn. A requested second check caught it.
+
+**Recurrence 2026-09-19:** The next milestone, written after this lesson, again claimed no command for a switch to Opus 5; its "Set model to Opus 5" output sat just before the notice the record cited. A second check caught it.
+
+**Root cause:** The record came from settings remembered at the start. Mid-turn commands arrive between tool results, and the closeout never searched for them.
