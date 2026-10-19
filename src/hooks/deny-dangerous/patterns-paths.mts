@@ -1,12 +1,18 @@
 /** Recognize protected credential operands without reading files or executing commands. */
-import { asciiLowerCase } from "../policy-input.mjs";
+import { asciiLowerCase, type PolicyDenial } from "../policy-input.mjs";
+import {
+  splitPolicyTopLevelPipelineStages,
+  type PolicySegmentContext,
+} from "../policy-segments.mjs";
 import {
   normalizePolicyCommandCandidate,
   stripPolicyShellRedirections,
 } from "../policy-syntax.mjs";
 import {
+  inspectGitCommand,
   normalizeGitPolicyCandidate,
   type GitCommandContext,
+  type GitCommandOptions,
 } from "./git-command.mjs";
 import { ghSkipOptionsIndex } from "./github-command.mjs";
 import {
@@ -731,4 +737,145 @@ export function literalOutputPrefixCandidate(command: string): string | null {
     .map((word) => joinPolicyShellWords([word], 0, "argv") + " ")
     .join("");
   return prefixText + split.redirects.join(" ") + " ";
+}
+
+const secretSyntaxRefusal =
+  "Cannot inspect command syntax; use a literal executable and supported wrapper options.";
+
+/** Join words as Bash `printf '%s '` does: each word gets a trailing space, and no words still print one space. */
+function spaceTerminatedWords(words: readonly string[]): string {
+  return words.length === 0 ? " " : words.map((word) => `${word} `).join("");
+}
+
+interface SecretTextScan {
+  text: string;
+  touches: boolean;
+  allowed: boolean;
+}
+
+/** Separate redirect targets from command words; a proven literal output prefix that names no secret allows the segment. */
+function scanSecretRedirections(context: PolicySegmentContext): SecretTextScan {
+  const command = context.trimmed;
+  const scan = { text: command, touches: false, allowed: false };
+  const eligible =
+    context.verb === "echo" ||
+    context.verb === "printf" ||
+    command.includes("<") ||
+    command.includes(">");
+  const split = eligible ? splitSecretRedirections(command) : null;
+  if (split === null) return scan;
+  scan.text = spaceTerminatedWords(split.words);
+  if (isSecretPathTouch(spaceTerminatedWords(split.redirects), context.verb)) {
+    scan.touches = true;
+    return scan;
+  }
+  const prefix = literalOutputPrefixCandidate(scan.text)?.replace(/\n+$/u, "");
+  if (prefix === undefined) return scan;
+  if (isSecretPathTouch(prefix, context.verb)) scan.touches = true;
+  else scan.allowed = true;
+  return scan;
+}
+
+/** Refuse token and credential output; a Git command Git itself cannot resolve keeps the destructive scope it has in the reference. */
+async function credentialDisclosureDenial(
+  command: string,
+  options: GitCommandOptions,
+): Promise<{ denial: PolicyDenial | null; git: GitCommandContext | null }> {
+  const secret = (reason: string) => ({
+    denial: { scope: "secret", reason },
+    git: null,
+  });
+  const token = isGhTokenDisclosure(command);
+  if (token === null) return secret(secretSyntaxRefusal);
+  if (token)
+    return secret(
+      "GitHub authentication token output exposes a stored credential to the agent. Use gh auth status without token display.",
+    );
+  const candidate = normalizeGitPolicyCandidate(command);
+  if (candidate === null) return secret(secretSyntaxRefusal);
+  const inspection = await inspectGitCommand(candidate, options);
+  if (inspection.kind === "unresolved")
+    return {
+      denial: { scope: "destructive", reason: inspection.reason },
+      git: null,
+    };
+  if (inspection.kind === "other") return { denial: null, git: null };
+  return isGitCredentialDisclosure(inspection.context)
+    ? secret(
+        "Git credential output exposes stored passwords or tokens to the agent. Use git config --get credential.helper or request sanitized status.",
+      )
+    : { denial: null, git: inspection.context };
+}
+
+/** Scan search operands when this is a search or `git grep` command; undefined means the search rule does not apply. */
+function searchCommandTouchesSecret(
+  context: PolicySegmentContext,
+  git: GitCommandContext | null,
+): boolean | null | undefined {
+  const { trimmed, verb, normalized } = context;
+  // Ordered-letter checks are deliberate supersets: quotes or escapes can split the visible grep/log spelling.
+  if (
+    !isSearchCommandVerb(verb) &&
+    !(verb === "git" && /g.*r.*e.*p/su.test(normalized))
+  )
+    return undefined;
+  const candidate = secretSearchCommandCandidate(trimmed, git);
+  return candidate === null
+    ? undefined
+    : searchFileOperandsTouchSecret(candidate);
+}
+
+/** Pick the operand scan for this verb: curl options, search operands, git log paths, or the generic path scan; null cannot be inspected. */
+function commandTouchesSecret(
+  context: PolicySegmentContext,
+  text: string,
+  git: GitCommandContext | null,
+): boolean | null {
+  const { trimmed, verb, normalized } = context;
+  if (verb === "curl") {
+    const curl = curlFileOperandsTouchSecret(trimmed);
+    if (curl !== false) return curl;
+  }
+  const search = searchCommandTouchesSecret(context, git);
+  if (search !== undefined) return search;
+  if (verb === "git" && git !== null && /l.*o.*g/su.test(normalized)) {
+    const candidate = gitLogCandidateWithoutSearchValues(trimmed, git);
+    if (candidate !== null) return isSecretPathTouch(candidate, verb);
+  }
+  return isSecretPathTouch(text, verb);
+}
+
+/**
+ * Apply the secret-file rules to one prepared segment: token and credential output, curl uploads, search and git log
+ * operands, redirect targets and literal output, then the generic credential-path scan, e.g. `cat .env` or `grep x ~/.ssh/id_rsa`.
+ * A segment with several real pipeline stages is skipped because preparation already checked each stage on its own.
+ *
+ * @param context - the prepared segment
+ * @param options - Git's directory, deadline and environment for the one Git inspection the credential and search rules share
+ * @returns the first denial, scoped `secret`, or `destructive` when Git's own command cannot be resolved; null when allowed
+ */
+export async function checkSecretSegment(
+  context: PolicySegmentContext,
+  options: GitCommandOptions,
+): Promise<PolicyDenial | null> {
+  if (context.hasPipe) {
+    const stages = splitPolicyTopLevelPipelineStages(
+      context.trimmed,
+      context.inlineCommandHost,
+    );
+    if (stages.kind === "segments" && stages.segments.length > 1) return null;
+  }
+  const scan = scanSecretRedirections(context);
+  if (scan.allowed) return null;
+  const disclosure = await credentialDisclosureDenial(context.trimmed, options);
+  if (disclosure.denial !== null) return disclosure.denial;
+  const touches =
+    scan.touches || commandTouchesSecret(context, scan.text, disclosure.git);
+  if (touches === null) return { scope: "secret", reason: secretSyntaxRefusal };
+  return touches
+    ? {
+        scope: "secret",
+        reason: `Secret-file access (${context.verb}). Reading or editing .env / SSH/AWS/GCP keys / credentials through the agent is an exfil risk. Use a checked-in example or ask the user for sanitized fields.`,
+      }
+    : null;
 }

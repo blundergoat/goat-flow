@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-10-17
+last_reviewed: 2026-10-19
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and the static gates a touched TypeScript file must pass before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -106,6 +106,8 @@ last_reviewed: 2026-10-17
 **Release recurrence 2026-08-09 (different mechanism, kept for the suite failure):** Hook notes gained a dated release heading before that release's manifest snapshot existed, so the full suite failed; keep notes under `Unreleased` until release identity and snapshot propagate together. `CHANGELOG.md` (search: `## Unreleased`), `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 
 **Recurrence 2026-09-29:** The stats integration tests and typecheck were green before scoped ESLint found `collectGraduationCandidates` at complexity 18 against a limit of 10. Extracting optional-metadata readers brought the function within the limit; the focused suite and lint were rerun. Evidence: `src/cli/facts/shared/learning-loop.ts` (search: `function collectGraduationCandidates`).
+
+**Recurrence 2026-10-19:** An approved six-file hook patch passed its tests on both pinned runtimes, but `npm run check:touched` failed Prettier on the test file: only the source module had been formatted in the scratch tree. Formatting changed two string literals' quote style and the rerun stayed green. Run Prettier on every file in a proposed patch before asking for approval. Evidence: `test/unit/hook-policy-primitives.test.ts` (search: `not a real quoted heredoc`).
 
 Knip handling: run it with the repository gate's heap and traversal flags, `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) and `.goat-flow/learning-loop/footguns/preflight-plumbing.md` (search: `Knip's \`ignore\` cannot shrink`); a default `npx knip` out-of-memory abort is not the gate result. Binary policy lives in `knip.json` (search: `ignoreBinaries`).
 

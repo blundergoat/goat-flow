@@ -12,7 +12,23 @@ import {
 import {
   findPolicyNativeCommandGroup,
   type PolicyNativeCommands,
+  type PolicyReadOnlyContext,
 } from "./policy-syntax.mjs";
+
+/**
+ * What preparation learned about one segment, shared by every rule that inspects it.
+ * `trimmed` is the comment- and subshell-stripped text without leading whitespace; `normalized` peels wrappers to the command
+ * that really runs. `unquoted` drops quoted spans so operators inside strings are ignored, and `lower` is the ASCII-lowercased
+ * stripped text; both keep its leading whitespace. `inlineCommandHost` names the shell whose inline body this segment came from, or is empty.
+ */
+export interface PolicySegmentContext extends PolicyReadOnlyContext {
+  trimmed: string;
+  normalized: string;
+  unquoted: string;
+  lower: string;
+  depth: number;
+  inlineCommandHost: string;
+}
 
 interface BlockQuoteState {
   quote: string;
@@ -184,6 +200,15 @@ export function findPolicyNativeLaunchedCommands(
 export type PolicySegmentSplit =
   | { kind: "segments"; segments: string[]; background: boolean }
   | { kind: "unresolved"; reason: "script-block" | "native-conditional" };
+
+/** Phrase an unreadable native group as the user-facing refusal the splitter's callers return. */
+export function policyUnresolvedSplitRefusal(
+  reason: "script-block" | "native-conditional",
+): string {
+  return reason === "script-block"
+    ? "Cannot inspect this PowerShell script block. Use separate literal commands through Bash."
+    : "Cannot inspect this native conditional. Use separate literal commands through Bash.";
+}
 
 interface SegmentScan {
   input: string;

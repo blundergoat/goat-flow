@@ -163,3 +163,91 @@ export function isGitConfigEnvironmentUnresolved(raw, verb, priorSourceChange = 
     }
     return false;
 }
+const environmentAssignment = /^([A-Za-z_][A-Za-z0-9_]*)=([^]*)$/u;
+const shellDeclarationVerbs = new Set([
+    "export",
+    "declare",
+    "typeset",
+    "local",
+    "readonly",
+]);
+/** Skip env's options so its assignments still reach inspection; `-u` and `--unset` consume the next word. */
+function skipEnvOptions(words) {
+    let index = 1;
+    while (index < words.length) {
+        const word = words[index] ?? "";
+        if (word === "--")
+            return index + 1;
+        if (word === "-u" || word === "--unset")
+            index += 2;
+        else if (word.startsWith("-"))
+            index++;
+        else
+            break;
+    }
+    return index;
+}
+/** Read command-hosting values from the assignments that prefix a Git command; a later argument quoting the same text is data. */
+function gitPrefixEnvironmentCommands(raw) {
+    const words = splitPolicyShellWords(raw);
+    const first = words[0] ?? "";
+    const hosted = [];
+    let index = first.slice(first.lastIndexOf("/") + 1) === "env"
+        ? skipEnvOptions(words)
+        : 0;
+    for (; index < words.length; index++) {
+        const assignment = environmentAssignment.exec(words[index] ?? "");
+        if (assignment === null)
+            break;
+        if (isGitCommandEnvironmentVariable(assignment[1] ?? ""))
+            hosted.push(assignment[2] ?? "");
+    }
+    return hosted;
+}
+/** Read one declaration operand's command-hosting value; options and the declaration word itself carry none. */
+function exportedAssignmentCommand(word, verb) {
+    if (word.startsWith("-") || word.startsWith("+"))
+        return null;
+    if (word.slice(word.lastIndexOf("/") + 1) === verb)
+        return null;
+    const assignment = environmentAssignment.exec(word);
+    return assignment && isGitCommandEnvironmentVariable(assignment[1] ?? "")
+        ? (assignment[2] ?? "")
+        : null;
+}
+/** Read command-hosting values that `export` or any `-x` declaration hands to a later Git command; a plain declaration stays shell-local. */
+function exportedEnvironmentCommands(raw, verb) {
+    const words = splitPolicyShellWords(raw);
+    const exported = verb === "export" ||
+        words.some((word) => word.startsWith("-") && word.includes("x"));
+    if (!exported)
+        return [];
+    return words
+        .map((word) => exportedAssignmentCommand(word, verb))
+        .filter((value) => value !== null);
+}
+/**
+ * Give each command a Git environment variable carries its own verdict, e.g. the `rm -rf x` in `GIT_EDITOR='rm -rf x' git commit`
+ * or in `export GIT_SSH_COMMAND='rm -rf x'`; Git runs these values just as it runs a `-c` command setting.
+ *
+ * @param raw - the trimmed segment text, before prefix assignments are normalized away
+ * @param verb - the segment's command word; only Git commands and shell declarations can carry these values
+ * @param depth - the nesting depth of the segment; each value is evaluated at depth + 1
+ * @param evaluate - the complete segment policy for each nonempty value
+ * @returns the first nested denial, or null when every carried command is allowed
+ */
+export async function checkGitCommandEnvironment(raw, verb, depth, evaluate) {
+    let hosted = [];
+    if (verb === "git" || verb.startsWith("git-"))
+        hosted = gitPrefixEnvironmentCommands(raw);
+    else if (shellDeclarationVerbs.has(verb))
+        hosted = exportedEnvironmentCommands(raw, verb);
+    for (const payload of hosted) {
+        if (payload === "")
+            continue;
+        const denial = await evaluate(payload, depth + 1);
+        if (denial !== null)
+            return denial;
+    }
+    return null;
+}

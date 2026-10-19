@@ -1,14 +1,9 @@
 #!/usr/bin/env node
-/** Writes an unavailable reply while this candidate evaluator is unported; requests are never classified. */
-import { reportNativeLauncherUnavailable } from "./hook-launch.mjs";
+/** Decide Git and GitHub write policy natively; the launcher has already honored the saved policy choice. */
+import { runPolicySelfTest } from "./policy-corpus.mjs";
+import { runPolicyEntrypoint } from "./policy-evaluation.mjs";
 
-process.exitCode = await reportNativeLauncherUnavailable(
-  "policy",
-  null,
-  null,
+process.exitCode = await runPolicyEntrypoint(
   "deny-git-mutations",
-  {
-    unavailableReasonCode: "candidate-unported",
-    userFacingReason: "candidate evaluator has not been ported",
-  },
+  runPolicySelfTest,
 );

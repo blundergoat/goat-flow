@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-10-16
+last_reviewed: 2026-10-20
 ---
 
 **Scope:** Installing goat-flow into a project and migrating an existing install - what a package smoke proves, mirror fan-out, the scope a setup agent may write, and concepts that survive their own removal. Repo-wide gates that catch the fallout are [verification-preflight.md](verification-preflight.md).
@@ -155,6 +155,8 @@ last_reviewed: 2026-10-16
 **What happened:** Asked to rename a v0.3 improvements TODO file to v0.4, the agent ran `mv` without checking that v0.4 already existed, overwriting it. When the user said "undo", the agent moved v0.4, by then holding v0.3's content, back to v0.3, destroying v0.4's original content. The file was untracked and unrecoverable.
 
 **Root cause:** A rename was treated as a move of one file rather than a write to a path that might already hold something.
+
+**Recurrence 2026-10-20:** Preparing an M13 patch in a scratch tree exported from HEAD, the agent wrote a supposedly new integration test over an existing tracked suite. The Write result said "updated" rather than "created", so the original was restored before any patch was built. A scratch copy of HEAD holds every tracked file, so check the destination there as well. Evidence: `test/integration/hook-policy-node.test.ts` (search: `honors the saved ${policyIdentifier} opt-out`).
 
 ---
 

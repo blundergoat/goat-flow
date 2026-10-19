@@ -25,8 +25,11 @@ import {
   pipelineContainsShellEvalStage,
   checkXargsDestructivePayload,
   checkPipelineXargsDestructivePayloads,
+  findHasDestructiveAction,
+  checkDestructiveSegment,
 } from "../../workflow/hooks/deny-dangerous/patterns-shell.mjs";
 import { stripPolicyShellQuotesForPathScan } from "../../workflow/hooks/policy-words.mjs";
+import { segmentContext } from "./hook-policy-context.helpers.js";
 
 const rmHasRecursiveCases: ReadonlyArray<readonly [string, boolean]> = [
   ["rm -rf node_modules", true],
@@ -570,5 +573,91 @@ describe("native shell pipeline and execution rules", () => {
     for (const [input, expected] of pipelineContainsShellEvalStageCases)
       assert.equal(pipelineContainsShellEvalStage(input), expected, input);
     assert.equal(pipelineContainsShellEvalStage("${IFS}eval cmd"), null);
+  });
+});
+
+/** A recording evaluator that denies any nested command naming `deny`, under its own scope. */
+function recordingEvaluator(calls: string[]) {
+  return async (command: string, depth: number) => {
+    calls.push(`${command}|${depth}`);
+    return command.includes("deny")
+      ? { scope: "repository", reason: "nested" }
+      : null;
+  };
+}
+
+describe("native destructive segment rules", () => {
+  it("evaluates find exec payloads before calling deletion, and keeps a nested denial's scope", async () => {
+    for (const [command, kind, calls] of [
+      ["find . -delete", "destructive", []],
+      ["find . -exec rm -rf {} ;", "destructive", ["rm -rf {}|1"]],
+      ["find . -exec deny {} +", "denied", ["deny {}|1"]],
+      ["find . -name x -execdir ls {} ;", "clean", ["ls {}|1"]],
+      ["echo find . -delete", "clean", []],
+    ] as const) {
+      const recorded: string[] = [];
+      const inspection = await findHasDestructiveAction(
+        command,
+        0,
+        recordingEvaluator(recorded),
+      );
+      assert.equal(inspection.kind, kind, command);
+      assert.deepEqual(recorded, [...calls], command);
+    }
+    assert.deepEqual(
+      await checkDestructiveSegment(
+        segmentContext("find . -exec deny {} +"),
+        recordingEvaluator([]),
+      ),
+      { scope: "repository", reason: "nested" },
+    );
+  });
+
+  it("refuses destructive commands in reference order and allows ordinary or read-only ones", async () => {
+    for (const [command, host, reason] of [
+      ["rm -rf /", "", /rm -r without safe scoping/],
+      ["rm -rf ../x", "", /path traversal/],
+      ["ls | xargs rm -rf", "", /xargs feeding rm -r/],
+      ["chmod -R 0777 dir", "", /chmod 777/],
+      ["dd if=/dev/zero of=/dev/sda", "", /dd writing to a device/],
+      ["sed -i s/a/b/ Cargo.lock", "", /Direct lockfile modification/],
+      ["echo x | eval y", "", /eval hides commands/],
+      [": > file", "", /Null-command/],
+      ["printf '' > f", "", /Empty-output redirect/],
+      ['psql -c "DROP TABLE users"', "", /Destructive database command/],
+      [
+        "python3 -c \"import os; os.system('rm -rf /')\"",
+        "",
+        /Interpreter -c\/-e/,
+      ],
+      ['bash <<< "rm -rf /"', "", /Shell stdin/],
+      ["Remove-Item build", "powershell", /PowerShell destructive verb/],
+      ["format.com c:", "cmd.exe", /cmd\.exe destructive verb/],
+      ["terraform apply -auto-approve", "", /infrastructure destructive/],
+    ] as const) {
+      const denial = await checkDestructiveSegment(
+        segmentContext(command, host),
+        recordingEvaluator([]),
+      );
+      assert.equal(denial?.scope, "destructive", command);
+      assert.match(denial?.reason ?? "", reason, command);
+    }
+    for (const command of [
+      "rm -rf build",
+      "cat file",
+      "dd if=x of=/dev/null",
+      "chmod 755 f",
+      "mysql -e \"select 'drop table x'\"",
+      'node -e "console.log(1)"',
+      "npm install",
+    ])
+      assert.equal(
+        await checkDestructiveSegment(
+          segmentContext(command),
+          recordingEvaluator([]),
+        ),
+        null,
+        command,
+      );
   });
 });

@@ -63,6 +63,9 @@
     ".goat-flow/hooks/policy-prefixes.mjs",
     ".goat-flow/hooks/policy-syntax.mjs",
     ".goat-flow/hooks/policy-segments.mjs",
+    ".goat-flow/hooks/policy-substitutions.mjs",
+    ".goat-flow/hooks/policy-evaluation.mjs",
+    ".goat-flow/hooks/policy-corpus.mjs",
     ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs",
     ".goat-flow/hooks/deny-dangerous/git-command.mjs",
     ".goat-flow/hooks/deny-dangerous/github-command.mjs",
@@ -326,6 +329,18 @@
     ".goat-flow/hooks/policy-segments.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/policy-segments.mjs"
+    },
+    ".goat-flow/hooks/policy-substitutions.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-substitutions.mjs"
+    },
+    ".goat-flow/hooks/policy-evaluation.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-evaluation.mjs"
+    },
+    ".goat-flow/hooks/policy-corpus.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-corpus.mjs"
     },
     ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs": {
       "ownership": "system-owned",

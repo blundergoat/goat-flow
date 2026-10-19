@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-10-18
+last_reviewed: 2026-10-19
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -192,6 +192,21 @@ array without changing the plan's effort state.
 **What happened:** The first native key-extension matcher copied Bash's pattern into JavaScript without dotAll. All 99 initial helper comparisons agreed, but additional boundary probes found that quoted filenames containing LF or U+2028 were protected by Bash and missed by the candidate. The candidate was isolated and no proposed command ran.
 
 **Evidence:** `src/hooks/deny-dangerous/patterns-paths.mts` (search: `keyMaterialPathTouch`) preserves dotAll for that filename rule. `test/unit/hook-policy-paths.test.ts` (search: `private\nname.key`) retains both reproduced operands beside ordinary key files and query-data controls.
+
+---
+
+## Lesson: Type an injected policy evaluator from its whole callee chain
+
+**Status:** active | **Created:** 2026-10-19
+**Decision changed:** Before fixing the callback type of an evaluator that is not ported yet, trace the callees it will reach; if any of them waits on a process, the callback returns a promise.
+**Trigger phase:** ACT
+**Caught at:** ACT
+
+**Prevention:** A helper ported ahead of its evaluator must still compose with the real one. Saved Git alias lookup spawns `git` under the hook deadline, so any evaluator that can reach Git rules is asynchronous.
+
+**What happened:** M13 batch 2 typed the substitution checker's evaluator as synchronous, and that batch was approved and applied with matching comparisons. Designing batch 3 showed the shared evaluator reaches saved-alias lookup, so batch 3 changed the checker to await an asynchronous evaluator before any real caller existed.
+
+**Evidence:** `src/hooks/policy-substitutions.mts` (search: `export type PolicySegmentEvaluator`) and `src/hooks/deny-dangerous/git-command.mts` (search: `async function readGitAlias`).
 
 ---
 

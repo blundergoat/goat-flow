@@ -15,6 +15,9 @@ import {
 import {
   isInertHeredocConsumer,
   goatFlowCliConsumesHeredocData,
+  heredocCommandListIsInert,
+  maskSafeQuotedHeredocBodies,
+  largeQualitySaveHeredocIsBoundedData,
 } from "../../workflow/hooks/policy-heredoc.mjs";
 import {
   firstPolicyWordBase,
@@ -804,6 +807,106 @@ describe("policy tool ownership and stdin consumers", () => {
       "goat-flow redact; bash",
     ])
       assert.equal(goatFlowCliConsumesHeredocData(command), false, command);
+  });
+});
+
+describe("policy heredoc body masking", () => {
+  it("treats an opener as data only when every stage and substitution consumer is inert", () => {
+    const stages = (count: number) =>
+      Array.from({ length: count }, () => "cat").join(" | ");
+    for (const opener of [
+      "cat > out.json <<'EOF'",
+      "python3 - <<'PY'",
+      "goat-flow quality save . <<'JSON'",
+      "timeout 5 sudo cat <<'X' && echo done",
+      "cat > >(tee out.log) <<'X'",
+      `${stages(64)} <<'X'`,
+    ])
+      assert.equal(heredocCommandListIsInert(opener), true, opener);
+    for (const opener of [
+      "cat <<'EOF' | bash",
+      "xargs -I{} bash -c '{}' <<'X'",
+      "source /dev/stdin <<'X'",
+      "cat > >(bash) <<'X'",
+      "read x <<'X'",
+      "timeout --bogus cat <<'X'",
+      `${stages(65)} <<'X'`,
+      `cat ${"<(cat) ".repeat(33)}<<'X'`,
+      "",
+    ])
+      assert.equal(heredocCommandListIsInert(opener), false, opener);
+  });
+
+  it("collapses inert quoted bodies and keeps shell-fed bodies and later commands visible", () => {
+    const python = `python3 - <<'PY'\n${"print(1)\n".repeat(60)}PY`;
+    for (const [input, expected] of [
+      [
+        "cat <<'EOF'\nrm -rf /\nEOF",
+        "cat <<'EOF'\n__goat_quoted_heredoc_body__\nEOF",
+      ],
+      [
+        "cat <<-'EOF'\n\trm -rf /\n\tEOF\nrm -rf ~",
+        "cat <<-'EOF'\n__goat_quoted_heredoc_body__\n\tEOF\nrm -rf ~",
+      ],
+      [python, "python3 - <<'PY'\n__goat_quoted_heredoc_body__\nPY"],
+      ["bash <<'EOF'\nrm -rf /\nEOF", "bash <<'EOF'\nrm -rf /\nEOF"],
+      [
+        "cat <<'EOF' \\\n| bash\nrm -rf /\nEOF",
+        "cat <<'EOF' | bash\nrm -rf /\nEOF",
+      ],
+      ["cat <<EOF\nrm -rf /\nEOF", "cat <<EOF\nrm -rf /\nEOF"],
+    ])
+      assert.equal(maskSafeQuotedHeredocBodies(input), expected, input);
+  });
+
+  it("keeps later lines visible when opener-like text is not a real quoted heredoc", () => {
+    // Each row was allowed by the shipped Bash hook: its masker hid the `rm` line Bash would run.
+    for (const input of [
+      "cat <<<'x'\nrm -rf /\nx",
+      "echo \"<<'x'\"\nrm -rf /\nx",
+      "echo '<<\"x\"'\nrm -rf /\nx",
+      "true # <<'x'\nrm -rf /\nx",
+      "cat <<'EO'\"F\"\ndata\nEOF\nrm -rf /\nEO",
+      "cat <<EOF\ncat <<'y'\n$(rm -rf /)\ny\nEOF",
+      'echo $(( 1 <<"2" ))\nrm -rf /\n2',
+      'echo "$(echo "<<\'x\'")"\nrm -rf /\nx',
+      "cat <<'EOF'\r\nbody\r\nEOF\r\nrm -rf /\r",
+      "echo \"\ncat <<'x'\n\"; rm -rf /\nx",
+      'echo "$(x)"#"\ncat <<\'y\'\n"; rm -rf /\ny',
+    ])
+      assert.equal(maskSafeQuotedHeredocBodies(input), input, input);
+  });
+
+  it("admits the larger report allowance only for a masked quality save from the installed or source CLI", () => {
+    const report = (opener: string) =>
+      maskSafeQuotedHeredocBodies(`${opener}\n{"findings":[]}\nJSON`);
+    for (const opener of [
+      "goat-flow quality save . <<'JSON'",
+      "/usr/local/bin/goat-flow quality save --json <<'JSON'",
+      "sudo goat-flow quality save . <<'JSON'",
+      "node --import tsx src/cli/cli.ts quality save . <<'JSON'",
+      "nodejs --import=tsx src/cli/cli.ts quality save . <<'JSON'",
+    ])
+      assert.equal(
+        largeQualitySaveHeredocIsBoundedData(report(opener)),
+        true,
+        opener,
+      );
+    for (const opener of [
+      "goat-flow quality save . <<'JSON' | bash",
+      "goat-flow quality save . <<JSON",
+      "goat-flow quality save-more <<'JSON'",
+      "goat-flow review validate <<'JSON'",
+      "cat > report.json <<'JSON'",
+      "node src/cli/cli.ts quality save . <<'JSON'",
+      "node --import tsx ./src/cli/cli.ts quality save . <<'JSON'",
+      "timeout --bogus goat-flow quality save . <<'JSON'",
+    ])
+      assert.equal(
+        largeQualitySaveHeredocIsBoundedData(report(opener)),
+        false,
+        opener,
+      );
   });
 });
 

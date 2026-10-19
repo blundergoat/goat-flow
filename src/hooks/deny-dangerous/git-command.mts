@@ -6,13 +6,18 @@ import {
   gitConfigCommandPayload,
   gitConfigKeyMayHostCommand,
 } from "../policy-git.mjs";
-import { splitPolicyTopLevelPipelineStages } from "../policy-segments.mjs";
+import type { PolicyDenial } from "../policy-input.mjs";
+import {
+  policyUnresolvedSplitRefusal,
+  splitPolicyTopLevelPipelineStages,
+} from "../policy-segments.mjs";
 import {
   normalizePolicyCommandCandidate,
   isUnredirectedUnpipedPolicyReadOnly,
   type PolicyReadOnlyContext,
 } from "../policy-syntax.mjs";
 import {
+  joinPolicyShellWords,
   normalizeLeadingPolicyWord,
   normalizePolicyGitExecutableWord,
   splitPolicyShellWords,
@@ -556,16 +561,18 @@ function gitWriteBlockReason(context: GitCommandContext): string | null {
   return isGitDestructive(context) ? gitDestructiveBlockReason(context) : null;
 }
 
-/** Inspect every executable pipeline stage; the evaluator owns rendering the returned denial. */
+/** Inspect every executable pipeline stage, splitting with the inline shell host's grammar; the evaluator renders the denial. */
 export async function checkGitSegment(
   command: string,
   options: GitCommandOptions,
   readOnlyContext: PolicyReadOnlyContext,
+  host = "",
 ): Promise<string | null> {
   if (isUnredirectedUnpipedPolicyReadOnly(command, readOnlyContext))
     return null;
-  const stages = splitPolicyTopLevelPipelineStages(command);
-  if (stages.kind === "unresolved") return stages.reason;
+  const stages = splitPolicyTopLevelPipelineStages(command, host);
+  if (stages.kind === "unresolved")
+    return policyUnresolvedSplitRefusal(stages.reason);
   for (const stage of stages.segments) {
     const candidate = normalizeGitPolicyCandidate(stage);
     if (candidate === null)
@@ -577,4 +584,301 @@ export async function checkGitSegment(
     if (reason !== null) return reason;
   }
   return null;
+}
+
+/** Directory facts for one Git-hosted payload: Git's selected repository, and whether the payload may run elsewhere. */
+export interface GitHostedDirectory {
+  directory: string;
+  directoryUnknown: boolean;
+  hostedDirectoryUnknown: boolean;
+}
+
+/**
+ * Evaluate one command Git will run, e.g. the `rm -rf x` in `git -c core.pager='rm -rf x' log`, with the complete segment policy.
+ *
+ * @param command - the hosted command text, after any `ext::` prefix is removed
+ * @param depth - the nesting depth of the hosted command
+ * @param directory - where Git runs it and whether that place is known
+ * @returns the nested denial with its own scope, or null when the hosted command is allowed
+ */
+export type GitHostedEvaluator = (
+  command: string,
+  depth: number,
+  directory: GitHostedDirectory,
+) => Promise<PolicyDenial | null>;
+
+interface HostedVerbScan {
+  start: number;
+  scanExternal: boolean;
+}
+
+const noHostedVerbScan: HostedVerbScan = { start: 0, scanExternal: false };
+const grepMatchOperand = " ./__goat_git_grep_match__";
+const configStopWords =
+  /^(?:--get.*|--list|-l|--unset.*|--remove-section|--rename-section|--edit|-e|get|list|unset|remove-section|rename-section|edit)$/su;
+const configValueOptions = new Set(["-f", "--file", "--blob", "--type"]);
+const externalValueOptions = new Set([
+  "--branch",
+  "-b",
+  "--depth",
+  "--sort",
+  "-t",
+  "--track",
+  "--origin",
+  "-o",
+]);
+const externalAttachedValue =
+  /^(?:--(?:branch|depth|sort|track|origin)=.*|-[bto].+)$/su;
+const externalCommandOptions = new Set(["-u", "--upload-pack", "--exec"]);
+
+/** Quote argv as Bash `printf '%q '` does, trailing space included. */
+function quoteHostedArgv(words: readonly string[]): string {
+  return joinPolicyShellWords(words, 0, "argv") + " ";
+}
+
+/** Expand the invoked alias as Git runs it: a shell alias gets the quoted remaining argv, a Git alias keeps the global options first. */
+function expandHostedAlias(context: GitCommandContext): string | null {
+  const name = context.commandWords[0] ?? "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(name) || isGitBuiltinWord(name))
+    return null;
+  const raw = context.aliases.rawExpansions.get(name.toLowerCase()) ?? "";
+  if (raw === "") return null;
+  const visible = context.commandWords.slice(1);
+  if (raw.startsWith("!"))
+    return `${raw.slice(1)} ${visible.length > 0 ? quoteHostedArgv(visible) : ""}`;
+  return quoteHostedArgv([
+    ...context.globalWords,
+    ...splitPolicyShellWords(raw),
+    ...visible,
+  ]);
+}
+
+/** Skip submodule quiet flags; `add`/`set-url` take transport URLs and `foreach` runs the rest as a command. */
+function scanSubmoduleWords(words: readonly string[]): HostedVerbScan {
+  let index = 1;
+  while (words[index] === "--quiet" || words[index] === "-q") index++;
+  const action = words[index] ?? "";
+  const scanExternal = action === "add" || action === "set-url";
+  if (action !== "foreach") return { start: 0, scanExternal };
+  index++;
+  while (["--recursive", "--quiet", "--"].includes(words[index] ?? "")) index++;
+  return { start: index, scanExternal };
+}
+
+/** Collect `difftool -x`/`--extcmd` commands, which Git runs for every changed file. */
+function collectDifftoolCommands(
+  words: readonly string[],
+  hosted: string[],
+): HostedVerbScan {
+  for (let index = 1; index < words.length; index++) {
+    const word = words[index] ?? "";
+    if (word === "--") break;
+    if (word === "-x" || word === "--extcmd") hosted.push(words[++index] ?? "");
+    else if (word.startsWith("--extcmd="))
+      hosted.push(word.slice(word.indexOf("=") + 1));
+    else if (/^-x./su.test(word)) hosted.push(word.slice(2));
+  }
+  return noHostedVerbScan;
+}
+
+/** Collect `grep -O` pagers; Git passes each matching path to them. */
+function collectGrepPagers(
+  words: readonly string[],
+  hosted: string[],
+): HostedVerbScan {
+  for (let index = 1; index < words.length; index++) {
+    const word = words[index] ?? "";
+    if (word === "--") break;
+    if (/^-O./su.test(word)) hosted.push(word.slice(2) + grepMatchOperand);
+    else if (/^--open-files-in-pager=./su.test(word))
+      hosted.push(word.slice(word.indexOf("=") + 1) + grepMatchOperand);
+  }
+  return noHostedVerbScan;
+}
+
+/** Collect a command installed by `git config <key> <value>`; queries and removals install nothing. */
+function collectConfigCommand(
+  words: readonly string[],
+  hosted: string[],
+): HostedVerbScan {
+  for (let index = 1; index < words.length; index++) {
+    const word = words[index] ?? "";
+    if (configStopWords.test(word)) break;
+    if (configValueOptions.has(word)) index++;
+    else if (word !== "set" && !word.startsWith("-")) {
+      const payload = gitConfigCommandPayload(word, words[index + 1] ?? "");
+      if (payload !== null) hosted.push(payload);
+      break;
+    }
+  }
+  return noHostedVerbScan;
+}
+
+const transportVerbScan = (): HostedVerbScan => ({
+  start: 0,
+  scanExternal: true,
+});
+
+// A Map keeps verbs such as `__proto__` from reaching object prototype members.
+const hostedVerbScanners = new Map<
+  string,
+  (words: readonly string[], hosted: string[]) => HostedVerbScan
+>([
+  ["clone", transportVerbScan],
+  ["fetch", transportVerbScan],
+  ["pull", transportVerbScan],
+  ["push", transportVerbScan],
+  ["archive", transportVerbScan],
+  [
+    "ls-remote",
+    (words) => ({
+      start: 0,
+      scanExternal: !words.slice(1).includes("--get-url"),
+    }),
+  ],
+  [
+    "remote",
+    (words) => ({
+      start: 0,
+      scanExternal: words[1] === "add" || words[1] === "set-url",
+    }),
+  ],
+  [
+    "bisect",
+    (words) => ({ start: words[1] === "run" ? 2 : 0, scanExternal: false }),
+  ],
+  ["submodule", scanSubmoduleWords],
+  ["difftool", collectDifftoolCommands],
+  ["grep", collectGrepPagers],
+  ["config", collectConfigCommand],
+]);
+
+/** Read a command carried inside one transport word, such as `-ucmd`, `--exec=cmd` or an `ext::` URL. */
+function attachedTransportCommand(word: string): string | null {
+  if (/^-u./su.test(word)) return word.slice(2);
+  if (/^--(?:upload-pack|exec)=/u.test(word))
+    return word.slice(word.indexOf("=") + 1);
+  if (word.startsWith("ext::") || word.startsWith("--remote=ext::"))
+    return word.replace(/^--remote=/u, "");
+  return null;
+}
+
+/** Collect upload-pack, exec and `ext::` transport commands; values of data options are skipped even when they look like URLs. */
+function collectExternalTransportCommands(
+  words: readonly string[],
+  hosted: string[],
+): void {
+  for (let index = 1; index < words.length; index++) {
+    const word = words[index] ?? "";
+    if (externalValueOptions.has(word)) index++;
+    else if (externalCommandOptions.has(word))
+      hosted.push(words[++index] ?? "");
+    else if (!externalAttachedValue.test(word)) {
+      const command = attachedTransportCommand(word);
+      if (command !== null) hosted.push(command);
+    }
+  }
+}
+
+/** Gather every command this Git invocation hosts, in the reference order; returns the alias payload's index, or -1. */
+function collectHostedCommands(
+  context: GitCommandContext,
+  hosted: string[],
+): number {
+  let words = context.commandWords;
+  let aliasIndex = -1;
+  const alias = expandHostedAlias(context);
+  if (alias !== null) {
+    aliasIndex = hosted.length;
+    hosted.push(alias);
+    words = [];
+  }
+  const scan =
+    hostedVerbScanners.get(words[0] ?? "")?.(words, hosted) ?? noHostedVerbScan;
+  if (scan.scanExternal) collectExternalTransportCommands(words, hosted);
+  if (scan.start > 0 && scan.start < words.length)
+    hosted.push(
+      words.length - scan.start === 1
+        ? (words[scan.start] ?? "")
+        : quoteHostedArgv(words.slice(scan.start)),
+    );
+  return aliasIndex;
+}
+
+/** Evaluate hosted commands in order; only Git's own alias expansion keeps the selected repository's known directory. */
+async function evaluateHostedCommands(
+  hosted: readonly string[],
+  aliasIndex: number,
+  context: GitCommandContext,
+  check: { depth: number; scope: string; evaluate: GitHostedEvaluator },
+): Promise<PolicyDenial | null> {
+  for (const [index, raw] of hosted.entries()) {
+    if (raw === "") continue;
+    const directory: GitHostedDirectory = {
+      directory: context.paths.selectedDirectory,
+      directoryUnknown:
+        index === aliasIndex
+          ? (context.paths.selectedDirectoryUnknown ?? false)
+          : true,
+      hostedDirectoryUnknown: index !== aliasIndex,
+    };
+    let payload = raw;
+    // git-remote-ext decodes "% " inside an argument; that boundary is not shell syntax.
+    if (payload.startsWith("ext::")) {
+      if (payload.includes("% "))
+        return {
+          scope: check.scope,
+          reason:
+            "Git ext transport with escaped spaces cannot be inspected; invoke the command directly.",
+        };
+      payload = payload.slice(5);
+    }
+    if (check.depth >= 8)
+      return {
+        scope: check.scope,
+        reason:
+          "Git-hosted command nesting exceeds inspection depth; invoke the command directly.",
+      };
+    const denial = await check.evaluate(payload, check.depth + 1, directory);
+    if (denial !== null) return denial;
+  }
+  return null;
+}
+
+/**
+ * Give every command Git would run for this invocation its own verdict: inline `-c` command config, a saved or inline alias,
+ * `bisect run` and `submodule foreach` commands, difftool and grep pagers, config writes and transport helpers.
+ * Unknown config-env command sources, escaped-space ext transports and excessive nesting are refused instead of guessed.
+ *
+ * @param command - the normalized segment; non-Git commands return null
+ * @param depth - the nesting depth of `command`
+ * @param scope - the protection named by this check's own refusals; nested denials keep their own scope
+ * @param options - Git's starting directory, deadline and environment for saved-alias lookup
+ * @param evaluate - the complete segment policy for each hosted command
+ * @returns the first denial, or null when every hosted command is allowed
+ */
+export async function checkGitHostedCommands(
+  command: string,
+  depth: number,
+  scope: string,
+  options: GitCommandOptions,
+  evaluate: GitHostedEvaluator,
+): Promise<PolicyDenial | null> {
+  const inspection = await inspectGitCommand(command, options);
+  if (inspection.kind === "other") return null;
+  if (inspection.kind === "unresolved")
+    return { scope, reason: inspection.reason };
+  const { context } = inspection;
+  if (context.unresolvedConfigEnvKey)
+    return {
+      scope,
+      reason: `Git --config-env may supply a command through ${context.unresolvedConfigEnvKey}; use a literal inspected value or ask the user to run it manually.`,
+    };
+  const hosted = [...context.inlineCommands];
+  const aliasIndex = collectHostedCommands(context, hosted);
+  return evaluateHostedCommands(hosted, aliasIndex, context, {
+    depth,
+    scope,
+    evaluate,
+  });
 }

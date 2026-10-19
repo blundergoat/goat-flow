@@ -3,6 +3,12 @@ type PolicyObject = Record<string, unknown>;
 export type PolicyOutputMode =
   "copilot-json" | "antigravity-json" | "stderr-exit";
 
+/** A denial with the protection that owns it; `{ scope: "destructive", reason }` renders as `Policy destructive: <reason>`. */
+export interface PolicyDenial {
+  scope: string;
+  reason: string;
+}
+
 /** Decode original request bytes strictly; retain Bash's removal of terminal LF characters. */
 export function readPolicyPayload(
   checkCommand: string,

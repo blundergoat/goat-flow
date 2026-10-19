@@ -8,6 +8,7 @@ import {
   assertOutcome,
   assertMirrorBytes,
   checkPackInventory,
+  compareCandidate,
   loadArtifacts,
   materializeReference,
   parseOptions,
@@ -137,20 +138,43 @@ test("acceptance filters and unavailable candidate stages fail through the CLI",
   );
   assert.equal(filtered.status, 1);
   assert.match(filtered.stderr, /complete acceptance rejects case filters/);
-  const candidate = spawnSync(
+  const installed = spawnSync(
     process.execPath,
     [
       "scripts/check-hook-parity.mjs",
-      "--stage=candidate",
+      "--stage=installed",
       "--require-complete",
     ],
     { cwd: root, encoding: "utf8" },
   );
-  assert.equal(candidate.status, 1);
-  assert.match(candidate.stderr, /candidate runtime unavailable/);
+  assert.equal(installed.status, 1);
+  assert.match(installed.stderr, /installed runtime unavailable/);
   assert.throws(
     () => parseOptions(["--require-complete", "--list-divergent"]),
     /not acceptance/,
+  );
+});
+
+test("candidate stage runs real entrypoints over fixture rows and rejects outcome drift", async () => {
+  const cases = [
+    "selftest-deny-dangerous-05c6ef8113f35b5d-1",
+    // A file token for the global Git config, plus a selected repository whose captured fixture omits its object store.
+    "selftest-deny-git-mutations-6c04fb19b11edeb5-1",
+  ];
+  const options = parseOptions([
+    "--stage=candidate",
+    ...cases.map((id) => `--case=${id}`),
+  ]);
+  const passed = await compareCandidate(options, validatedArtifacts);
+  assert.deepEqual(passed.divergences, []);
+  const drifted = structuredClone(validatedArtifacts);
+  const row = drifted.corpus.rows.find(
+    (candidate) => candidate.id === cases[1],
+  );
+  row.expected.status = 0;
+  await assert.rejects(
+    compareCandidate(options, drifted),
+    /unapproved candidate differences/,
   );
 });
 

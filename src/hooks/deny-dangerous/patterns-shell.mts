@@ -1,9 +1,15 @@
 /** Classify recursive cleanup and shell/interpreter inputs without executing proposed commands. */
+import { asciiLowerCase, type PolicyDenial } from "../policy-input.mjs";
+import type { PolicySegmentEvaluator } from "../policy-substitutions.mjs";
 import {
+  isUnredirectedUnpipedPolicyReadOnly,
   normalizePolicyCommandCandidate,
   stripLeadingPolicyShellRedirections,
 } from "../policy-syntax.mjs";
-import { splitPolicyTopLevelPipelineStages } from "../policy-segments.mjs";
+import {
+  splitPolicyTopLevelPipelineStages,
+  type PolicySegmentContext,
+} from "../policy-segments.mjs";
 import {
   dropFirstPolicyShellWord,
   firstPolicyWordBase,
@@ -620,4 +626,360 @@ export function pipelineContainsShellEvalStage(
     if (firstPolicyWordBase(normalized) === "eval") return true;
   }
   return false;
+}
+
+/** What find's actions do: an `-exec` payload the policy denied, a deletion, or nothing destructive. */
+export type FindActionInspection =
+  | { kind: "denied"; denial: PolicyDenial }
+  | { kind: "destructive" }
+  | { kind: "clean" };
+
+/** Return find's argv after wrapper normalization; any other command, including an unresolved one, returns null. */
+function normalizedFindWords(command: string): string[] | null {
+  const normalized = (normalizePolicyCommandCandidate(command) ?? "").replace(
+    /\n+$/u,
+    "",
+  );
+  return firstPolicyWordBase(normalized) === "find"
+    ? splitPolicyShellWords(normalized)
+    : null;
+}
+
+/** Collect one `-exec`/`-execdir` payload up to find's `;` or `+` terminator, returning the terminator's index. */
+function findExecPayload(
+  words: readonly string[],
+  start: number,
+): { command: string; end: number } {
+  let end = start;
+  const payload: string[] = [];
+  while (end < words.length && words[end] !== ";" && words[end] !== "+")
+    payload.push(words[end++] ?? "");
+  return { command: payload.join(" "), end };
+}
+
+/**
+ * Walk find's actions in order: `-delete` is destructive, and every `-exec`/`-execdir` payload first gets its own complete
+ * verdict, e.g. `find . -exec git push \;` is judged on `git push`, then a recursive `rm` payload counts as deletion.
+ *
+ * @param command - the segment text; only a command whose normalized first word is `find` is inspected
+ * @param depth - the nesting depth of `command`; payloads are evaluated at depth + 1
+ * @param evaluate - the complete segment policy for each nonempty payload
+ * @returns the first nested denial, `destructive` for a deletion action, or `clean`
+ */
+export async function findHasDestructiveAction(
+  command: string,
+  depth: number,
+  evaluate: PolicySegmentEvaluator,
+): Promise<FindActionInspection> {
+  const words = normalizedFindWords(command);
+  if (words === null) return { kind: "clean" };
+  let index = 1;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "-delete") return { kind: "destructive" };
+    if (word !== "-exec" && word !== "-execdir") {
+      index++;
+      continue;
+    }
+    const payload = findExecPayload(words, index + 1);
+    index = payload.end;
+    const denial =
+      payload.command === ""
+        ? null
+        : await evaluate(payload.command, depth + 1);
+    if (denial !== null) return { kind: "denied", denial };
+    if (rmHasRecursive(payload.command)) return { kind: "destructive" };
+  }
+  return { kind: "clean" };
+}
+
+const syntaxRefusal =
+  "Cannot inspect command syntax; use a literal executable and supported wrapper options.";
+const chmodCommand = /(?:^|[ \t\n\v\f\r])chmod(?:[ \t\n\v\f\r]|$)/u;
+const chmodWorldWritable =
+  /chmod[ \t\n\v\f\r]+(?:[^;&|]*[ \t\n\v\f\r])?0?777(?:[ \t\n\v\f\r]|$)/u;
+const mkfsCommand =
+  /(?:^|[ \t\n\v\f\r])mkfs(?:\.[^ \t\n\v\f\r]*)?(?:[ \t\n\v\f\r]|$)/u;
+const ddCommand = /(?:^|[ \t\n\v\f\r])dd(?:[ \t\n\v\f\r]|$)/u;
+const ddDeviceTarget = /(?:^|[ \t\n\v\f\r])of=\/dev\/([^ \t\n\v\f\r]+)/u;
+const lockfileRedirect =
+  /(?:>|>>)[ \t\n\v\f\r]*["']?(?:[^ \t\n\v\f\r<>|;&"']*\/)*(?:package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock)["']?(?:[ \t\n\v\f\r|;&]|$)/u;
+const lockfileToolWrite =
+  /(?:^|[ \t\n\v\f\r])(?:[^ \t\n\v\f\r]*\/)?(?:tee|sed[ \t\n\v\f\r]+-i)[ \t\n\v\f\r]+.*(?:package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock)(?:[ \t\n\v\f\r|;&]|$)/su;
+const bareRedirect = /^[ \t\n\v\f\r]*>[ \t\n\v\f\r]/u;
+const nullCommandRedirect =
+  /^[ \t\n\v\f\r]*(?::|true)[ \t\n\v\f\r]+>{1,2}\|?[ \t\n\v\f\r]*[^ \t\n\v\f\r<>]/u;
+const devNullRedirect =
+  /(?:^|[ \t\n\v\f\r])cat[ \t\n\v\f\r]+\/dev\/null[ \t\n\v\f\r]*>{1,2}\|?[ \t\n\v\f\r]*[^ \t\n\v\f\r<>]/u;
+const emptyOutputRedirect =
+  /(?:printf[ \t\n\v\f\r]+|echo[ \t\n\v\f\r]+(?:-n[ \t\n\v\f\r]+)?)(?:''|"")[ \t\n\v\f\r]*>\|?[ \t\n\v\f\r]+[^ \t\n\v\f\r]/u;
+const truncateCommand = /truncate[ \t\n\v\f\r]/u;
+const databaseClient =
+  /(?:^|[ \t\n\v\f\r])(?:mysql|mariadb|psql|sqlite3|mongosh|cqlsh)(?:[ \t\n\v\f\r]|$)/u;
+const databaseInlineFlag = /-e|-c|--command|--eval/u;
+const databaseDestructiveStatement =
+  /drop[ \t\n\v\f\r]+(?:database|table|schema|index|view)|truncate[ \t\n\v\f\r]+table|delete[ \t\n\v\f\r]+from|\.drop[ \t\n\v\f\r]*\(|\.deletemany[ \t\n\v\f\r]*\(|\.deleteone[ \t\n\v\f\r]*\(|\.remove[ \t\n\v\f\r]*\(/u;
+const databaseFileInput =
+  /(?:^|[ \t\n\v\f\r])(?:psql|mysql|mariadb|sqlite3|mongosh)(?:[ \t\n\v\f\r]+|$).*-f[ \t\n\v\f\r]/su;
+const npmTokenRevocation =
+  /^npm[ \t\n\v\f\r]+token[ \t\n\v\f\r]+(?:delete|revoke)/u;
+const interpreterEval =
+  /(^|[ \t\n\v\f\r])(python|python2|python3|node|nodejs|deno|perl|ruby|php)([ \t\n\v\f\r]+-[a-zA-Z]+)*[ \t\n\v\f\r]+-(c|e|-eval|-execute)/u;
+const phpEval =
+  /(^|[ \t\n\v\f\r])(php)([ \t\n\v\f\r]+-[a-zA-Z]+)*[ \t\n\v\f\r]+-r/u;
+const denoEval = /(^|[ \t\n\v\f\r])(deno)[ \t\n\v\f\r]+eval([ \t\n\v\f\r]|$)/u;
+const shellHereString =
+  /(?:^|[ \t\n\v\f\r])(?:ba)?sh(?:[ \t\n\v\f\r]+-[a-zA-Z]+)*[ \t\n\v\f\r]+<<</u;
+const shellHereDocument =
+  /(?:^|[ \t\n\v\f\r])(?:ba)?sh(?:[ \t\n\v\f\r]+-[a-zA-Z]+)*[ \t\n\v\f\r]+<<-?[ \t\n\v\f\r]*['"]?[A-Za-z_]/u;
+const powerShellHosts = new Set([
+  "powershell",
+  "powershell.exe",
+  "pwsh",
+  "pwsh.exe",
+]);
+const powerShellDestructiveVerbs = new Set([
+  "remove-item",
+  "ri",
+  "rm",
+  "rmdir",
+  "rd",
+  "del",
+  "erase",
+  "clear-disk",
+  "format-volume",
+  "stop-computer",
+  "restart-computer",
+]);
+const powerShellUnsafePolicy =
+  /(?:^|[ \t\n\v\f\r'"])(?:unrestricted|bypass)(?:[ \t\n\v\f\r'"]|$)/u;
+const cmdDestructiveVerbs = new Set(["del", "erase", "rmdir", "rd", "format"]);
+const privilegedPackageChange =
+  /(?:^|[ \t\n\v\f\r;&|])sudo[ \t\n\v\f\r]+(?:apt(?:-get)?|dnf|yum|pacman|brew)[ \t\n\v\f\r]+(?:install|remove|upgrade|update)/u;
+const infrastructureCommand =
+  /(?:^|[ \t\n\v\f\r;&|])(?:docker[ \t\n\v\f\r]+push|terraform[ \t\n\v\f\r]+destroy|terraform[ \t\n\v\f\r]+apply[^;&|]*-auto-approve|aws[ \t\n\v\f\r]+s3[ \t\n\v\f\r]+rm|aws[ \t\n\v\f\r]+ec2[ \t\n\v\f\r]+terminate)/u;
+const leadingInfrastructureCommand =
+  /^(?:docker[ \t\n\v\f\r]+push|terraform[ \t\n\v\f\r]+destroy|terraform[ \t\n\v\f\r]+apply[^;&|]*-auto-approve|aws[ \t\n\v\f\r]+s3[ \t\n\v\f\r]+rm|aws[ \t\n\v\f\r]+ec2[ \t\n\v\f\r]+terminate)/u;
+
+type SegmentRule = (context: PolicySegmentContext) => string | null;
+
+/** Recursive cleanup needs a resolved, scoped target before it can run. */
+function recursiveRemovalReason(context: PolicySegmentContext): string | null {
+  if (!rmHasRecursive(context.normalized)) return null;
+  if (context.normalized.includes(".."))
+    return "rm -r with path traversal (..). Resolve the full path first.";
+  return rmIsSafelyScoped(context.normalized)
+    ? null
+    : "rm -r without safe scoping. Only for already-approved deletion: use rm on each reviewed literal file, then rmdir on the empty directory. Confirm targets before deleting 5+ files; secret and human-only restrictions still apply.";
+}
+
+/** Only a write to a real device is refused; `/dev/null`, stdout, stderr and file descriptors stay allowed. */
+function deviceWriteReason(context: PolicySegmentContext): string | null {
+  if (!ddCommand.test(context.normalized)) return null;
+  const target = ddDeviceTarget.exec(context.normalized)?.[1];
+  if (target === undefined || /^(?:null|stdout|stderr|fd\/.*)$/su.test(target))
+    return null;
+  return "dd writing to a device path can overwrite disks. Write to an ordinary file or run manually.";
+}
+
+/** An eval stage reinterprets reviewed text; an unresolved stage cannot be checked at all. */
+function evalStageReason(context: PolicySegmentContext): string | null {
+  const evalStage = pipelineContainsShellEvalStage(
+    context.trimmed,
+    context.inlineCommandHost,
+  );
+  if (evalStage === null) return syntaxRefusal;
+  return evalStage
+    ? "eval hides commands from safety checks. Write the command directly."
+    : null;
+}
+
+/** Destructive inline SQL needs manual verification; quoted SQL values are removed first so query data cannot match. */
+function databaseStatementReason(context: PolicySegmentContext): string | null {
+  const scan =
+    context.lower.includes('"') && context.lower.includes("'")
+      ? stripSqlLiteralsInsideDoubleQuotes(context.lower)
+      : context.lower;
+  if (
+    databaseClient.test(scan) &&
+    databaseInlineFlag.test(scan) &&
+    databaseDestructiveStatement.test(scan)
+  )
+    return "Destructive database command (DROP/TRUNCATE/DELETE). Run manually with verification.";
+  return databaseFileInput.test(context.lower)
+    ? "File-fed database command. Inspect the SQL file and run it manually."
+    : null;
+}
+
+/** Inline interpreter code can launch commands hidden from the outer shell. */
+function interpreterEvalReason(context: PolicySegmentContext): string | null {
+  const command = context.trimmed;
+  const match =
+    interpreterEval.exec(command) ??
+    phpEval.exec(command) ??
+    denoEval.exec(command);
+  if (match === null) return null;
+  const program = inlineInterpreterProgram(command, match[0]).replace(
+    /\n+$/u,
+    "",
+  );
+  return inlineProgramExecutesCommands(match[2] ?? "", command, program)
+    ? "Interpreter -c/-e with shell-execution primitive, or equivalent PHP -r. Run the destructive operation directly so the hook can review it."
+    : null;
+}
+
+/** Inside a PowerShell or cmd body, refuse the verbs that delete, format or shut down. */
+function windowsHostReason(context: PolicySegmentContext): string | null {
+  const verb = asciiLowerCase(context.verb);
+  if (powerShellHosts.has(context.inlineCommandHost)) {
+    const unsafe =
+      powerShellDestructiveVerbs.has(verb) ||
+      (verb === "set-executionpolicy" &&
+        powerShellUnsafePolicy.test(asciiLowerCase(context.normalized)));
+    return unsafe
+      ? "PowerShell destructive verb. Run manually with explicit confirmation."
+      : null;
+  }
+  if (
+    context.inlineCommandHost !== "cmd" &&
+    context.inlineCommandHost !== "cmd.exe"
+  )
+    return null;
+  const windowsVerb = verb.replace(/\.exe$/u, "").replace(/\.com$/u, "");
+  return cmdDestructiveVerbs.has(windowsVerb)
+    ? "cmd.exe destructive verb (del/rmdir/rd/format). Run manually with explicit confirmation."
+    : null;
+}
+
+/** Return `reason` when `matched` holds, keeping each simple pattern rule to one line. */
+function ruleReason(matched: boolean, reason: string): string | null {
+  return matched ? reason : null;
+}
+
+const destructiveRules: readonly SegmentRule[] = [
+  (c) =>
+    ruleReason(
+      chmodCommand.test(c.normalized) && chmodWorldWritable.test(c.normalized),
+      "chmod 777 sets world-writable permissions. Use a more restrictive mode.",
+    ),
+  (c) =>
+    ruleReason(
+      mkfsCommand.test(c.normalized),
+      "mkfs formats filesystems and can destroy data. Run manually with explicit confirmation.",
+    ),
+  deviceWriteReason,
+  (c) =>
+    ruleReason(
+      lockfileRedirect.test(c.trimmed) || lockfileToolWrite.test(c.trimmed),
+      "Direct lockfile modification. Use the package manager (npm install, composer update, etc.).",
+    ),
+  evalStageReason,
+  (c) =>
+    ruleReason(
+      bareRedirect.test(c.trimmed),
+      "Redirect to empty file. This truncates the target. Preserve the file; ask the user to truncate or overwrite it manually.",
+    ),
+  (c) =>
+    ruleReason(
+      nullCommandRedirect.test(c.normalized),
+      "Null-command (: / true) followed by redirect truncates the target. Preserve the file; ask the user to truncate or overwrite it manually.",
+    ),
+  (c) =>
+    ruleReason(
+      devNullRedirect.test(c.normalized),
+      "cat /dev/null redirected to a file truncates the target. Preserve the file; ask the user to truncate or overwrite it manually.",
+    ),
+  (c) =>
+    ruleReason(
+      emptyOutputRedirect.test(c.trimmed),
+      "Empty-output redirect truncates the target file. Preserve the file; ask the user to truncate or overwrite it manually.",
+    ),
+  (c) =>
+    ruleReason(
+      c.unquoted.includes(">|"),
+      "Clobber redirect (>|) overrides noclobber and truncates the target. Preserve the file; ask the user to truncate or overwrite it manually.",
+    ),
+  (c) =>
+    ruleReason(
+      truncateCommand.test(c.trimmed),
+      "truncate can destroy file contents. Preserve the file; ask the user to truncate or overwrite it manually.",
+    ),
+  databaseStatementReason,
+  (c) =>
+    ruleReason(
+      npmTokenRevocation.test(asciiLowerCase(c.normalized)),
+      "npm token delete/revoke is irreversible. Manage tokens manually via the npm website.",
+    ),
+  interpreterEvalReason,
+  (c) =>
+    ruleReason(
+      shellHereString.test(c.trimmed) || shellHereDocument.test(c.trimmed),
+      "Shell stdin (<<< / here-doc) hides commands from inspection. Run the command directly.",
+    ),
+  windowsHostReason,
+  (c) =>
+    ruleReason(
+      privilegedPackageChange.test(c.lower),
+      "Privileged package-manager mutation. Ask the user to run it manually.",
+    ),
+  (c) =>
+    ruleReason(
+      infrastructureCommand.test(c.lower) ||
+        leadingInfrastructureCommand.test(c.normalized),
+      "Cloud or infrastructure destructive command. Ask the user to run it manually.",
+    ),
+];
+
+/** Return the first rule's reason in reference order. */
+function firstSegmentRuleReason(
+  rules: readonly SegmentRule[],
+  context: PolicySegmentContext,
+): string | null {
+  for (const rule of rules) {
+    const reason = rule(context);
+    if (reason !== null) return reason;
+  }
+  return null;
+}
+
+/**
+ * Apply the destructive-shell rules to one prepared segment in reference order, e.g. unscoped `rm -rf`, `chmod 777`, `mkfs`,
+ * device `dd`, lockfile edits, eval, truncating redirects, destructive SQL, interpreter shell escapes and cloud teardown.
+ * Piped consumers are checked first, then a plain unredirected read skips the remaining rules. find's `-exec` payloads are
+ * evaluated with the complete policy, and a nested denial keeps its own scope.
+ *
+ * @param context - the prepared segment
+ * @param evaluate - the complete segment policy for find payloads
+ * @returns the first denial, scoped `destructive` unless it came from a nested find payload, or null
+ */
+export async function checkDestructiveSegment(
+  context: PolicySegmentContext,
+  evaluate: PolicySegmentEvaluator,
+): Promise<PolicyDenial | null> {
+  const deny = (reason: string | null): PolicyDenial | null =>
+    reason === null ? null : { scope: "destructive", reason };
+  if (context.hasPipe) {
+    const consumer = checkPipelineShellConsumers(
+      context.unquoted,
+      context.depth,
+    );
+    if (consumer !== null) return deny(consumer);
+  }
+  if (isUnredirectedUnpipedPolicyReadOnly(context.trimmed, context))
+    return null;
+  const cleanup =
+    recursiveRemovalReason(context) ??
+    checkPipelineXargsDestructivePayloads(context.unquoted);
+  if (cleanup !== null) return deny(cleanup);
+  const find = await findHasDestructiveAction(
+    context.normalized,
+    context.depth,
+    evaluate,
+  );
+  if (find.kind === "denied") return find.denial;
+  if (find.kind === "destructive")
+    return deny(
+      "find deletion action (-delete / -exec rm -r) can remove many files. Review matches and run manually.",
+    );
+  return deny(firstSegmentRuleReason(destructiveRules, context));
 }

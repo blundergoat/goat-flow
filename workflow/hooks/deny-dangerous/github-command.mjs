@@ -3,7 +3,7 @@
 /** Classify GitHub CLI writes without executing gh, aliases, extensions or GraphQL subprocesses. */
 import { createRequire } from "node:module";
 import { asciiLowerCase } from "../policy-input.mjs";
-import { splitPolicyTopLevelPipelineStages } from "../policy-segments.mjs";
+import { policyUnresolvedSplitRefusal, splitPolicyTopLevelPipelineStages, } from "../policy-segments.mjs";
 import { isUnredirectedUnpipedPolicyReadOnly, stripPolicyShellRedirections, } from "../policy-syntax.mjs";
 import { splitPolicyShellWords } from "../policy-words.mjs";
 import { normalizeGitPolicyCandidate } from "./git-command.mjs";
@@ -241,13 +241,13 @@ export function inspectGhWriteOperation(command) {
 export function isGhWriteOperation(command) {
     return inspectGhWriteOperation(command).write;
 }
-/** Inspect every GitHub pipeline stage under the repository-write switch. */
-export function checkRepositorySegment(command, context) {
+/** Inspect every GitHub pipeline stage under the repository-write switch, splitting with the inline shell host's grammar. */
+export function checkRepositorySegment(command, context, host = "") {
     if (isUnredirectedUnpipedPolicyReadOnly(command, context))
         return null;
-    const stages = splitPolicyTopLevelPipelineStages(command);
+    const stages = splitPolicyTopLevelPipelineStages(command, host);
     if (stages.kind === "unresolved")
-        return stages.reason;
+        return policyUnresolvedSplitRefusal(stages.reason);
     for (const stage of stages.segments) {
         const operation = inspectGhWriteOperation(stage);
         if (!operation.write)

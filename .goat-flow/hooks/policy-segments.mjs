@@ -153,6 +153,12 @@ export function findPolicyNativeLaunchedCommands(input, host) {
         return readPolicyPowerShellLaunch(input);
     return { kind: "absent" };
 }
+/** Phrase an unreadable native group as the user-facing refusal the splitter's callers return. */
+export function policyUnresolvedSplitRefusal(reason) {
+    return reason === "script-block"
+        ? "Cannot inspect this PowerShell script block. Use separate literal commands through Bash."
+        : "Cannot inspect this native conditional. Use separate literal commands through Bash.";
+}
 const powerShellHost = /^(?:powershell|pwsh)(?:\.exe)?$/u;
 const cmdHost = /^cmd(?:\.exe)?$/u;
 const nativeConditionalStart = /^[ \t\r\n\v\f]*if(?:[ \t\r\n\v\f(]|$)/u;
