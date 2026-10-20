@@ -1,6 +1,6 @@
 /** Real candidate entrypoints decide policy natively, report unported hooks unavailable and honor launcher choices. */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   cpSync,
   mkdirSync,
@@ -282,4 +282,76 @@ for (const policyIdentifier of ["deny-dangerous", "deny-git-mutations"]) {
       [],
     );
   });
+}
+
+/** Delay a provider payload until the child has started waiting on its pipe. */
+async function delayedPolicyInput(
+  context: TestContext,
+  policy: string,
+  isIncomplete: boolean,
+) {
+  const { root, hooks, environment } = candidateFixture(context);
+  if (isIncomplete) rmSync(join(hooks, "policy-evaluation.mjs"));
+  const payload = isIncomplete
+    ? { toolName: "bash", toolArgs: { command: "echo safe" } }
+    : { tool_name: "PowerShell", tool_input: { command: "echo safe" } };
+  const child = spawn(process.execPath, [join(hooks, `${policy}.mjs`)], {
+    cwd: root,
+    env: environment,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += String(chunk);
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+  child.stdin.on("error", () => {});
+  const result = await new Promise<{
+    status: number | null;
+    stdout: string;
+    stderr: string;
+  }>((resolve, reject) => {
+    const send = setTimeout(
+      () => child.stdin.end(JSON.stringify(payload)),
+      400,
+    );
+    const deadline = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("delayed policy input timed out"));
+    }, 5000);
+    child.once("error", reject);
+    child.once("close", (status) => {
+      clearTimeout(send);
+      clearTimeout(deadline);
+      resolve({ status, stdout, stderr });
+    });
+  });
+  assertNoSpawnDenials(environment);
+  return result;
+}
+
+for (const policy of ["deny-dangerous", "deny-git-mutations"]) {
+  for (const isIncomplete of [false, true]) {
+    test(`${policy} waits for delayed provider input with ${isIncomplete ? "missing" : "healthy"} modules`, async (context) => {
+      const result = await delayedPolicyInput(context, policy, isIncomplete);
+      if (isIncomplete) {
+        assert.equal(result.status, 0, result.stderr);
+        const response = JSON.parse(result.stdout);
+        assert.equal(response.permissionDecision, "deny");
+        assert.match(
+          response.permissionDecisionReason,
+          /Policy hook unavailable/u,
+        );
+        assert.equal(result.stderr, "");
+      } else {
+        assert.equal(result.status, 2, result.stderr);
+        assert.equal(result.stdout, "");
+        assert.match(result.stderr, /Native PowerShell tool commands/u);
+        assert.doesNotMatch(result.stderr, /Policy hook unavailable/u);
+      }
+    });
+  }
 }

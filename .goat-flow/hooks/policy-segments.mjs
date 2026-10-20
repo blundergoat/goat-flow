@@ -2,6 +2,7 @@
 // goat-flow-hook-version: 1.18.0
 /** Split executable segments, inspect native launches and blocks, and track Git context without executing shell text. */
 import { statSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { asciiLowerCase } from "./policy-input.mjs";
 import { isGitConfigSourceVariable, isGitConfigSourceAmbientlyExported, } from "./policy-git.mjs";
 import { joinPolicyShellWords, splitPolicyShellWords, } from "./policy-words.mjs";
@@ -393,7 +394,7 @@ export function trackPolicyGitShellDirectory(segment, context) {
     if (action.kind === "unknown" || context.background)
         return { ...context, unknown: true };
     let directory = action.target;
-    if (!directory.startsWith("/")) {
+    if (!isAbsolute(directory)) {
         if (context.unknown || action.inlineCdPath || context.cdPath !== "")
             return { ...context, unknown: true };
         directory = context.directory + "/" + directory;

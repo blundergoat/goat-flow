@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-10-17
+last_reviewed: 2026-10-20
 ---
 
 Git command-policy traps: publication, remote locks, history changes, aliases and commands hosted by Git.
@@ -181,6 +181,23 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Recurrence 2026-09-27:** LFS import/export and import `--no-rewrite` exited 0 despite history writes. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_lfs_write_target`) guards them. The shared corpus (search: `LFS migration import writes history`) retains info/help. Recheck caught quoted `--help` messages falsely blamed on aliases; `git_history_block_reason` now uses original arguments. Probes classified text; no migration ran.
 
 **Recurrence 2026-09-28 (forced clean):** The installed classifier allowed `git clean --for -d`, `git clean --forc`, `git clean -d --fo -x` and `git clean --f -d`, but denied `git clean -efolder` and `git clean -- --force`. A prefix-only substitution also risks reading exclusion patterns as flags. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Original words let clean consume`) passes original direct and alias words to `git_option_present`; clean consumes separated and quoted exclusion values and stops at `--`. Existing string callers keep their grammar. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `clean force prefix for`, `clean quoted exclude value preserves words`, `clean alias force after quoted exclude value`) failed before repair and passed in the complete candidate hook store. Plain dry runs stay allowed; a dry run with force stays denied. Probes classified text without running cleanup.
+
+## Footgun: Native Windows paths need absolute checks and shell-safe fixture tokens
+
+**Status:** active | **Created:** 2026-10-20 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Use the host path API for absolute Git paths; normalize only fixture tokens entering shell command text.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Test drive-qualified directories on native Windows after changing Git context or bulk pathspec handling. Keep filesystem and environment values native; render injected command-token paths with forward slashes before shell tokenization. Run the complete candidate corpus in both locales and retain safe-command controls beside denied writes.
+
+**Symptoms:** M14 native Windows parity on Node 20.12.0 found eleven differences per locale on 2026-10-20: six bulk restores were allowed, three safe commands were refused, and two denials named the wrong reason. WSL parity had zero differences for the same source set.
+
+**Why it happens:** Three slash-prefix checks treated drive-qualified absolute paths as relative. Separately, corpus materialization inserted native backslashes into command text, where the shell tokenizer consumed them as escapes. Normalizing filesystem or environment values would conflate these two boundaries.
+
+**Evidence:** `src/hooks/policy-segments.mts` (search: "trackPolicyGitShellDirectory"), `src/hooks/deny-dangerous/git-command.mts` (search: "selectGitDirectory") and `src/hooks/deny-dangerous/patterns-writes.mts` (search: "isBulkResolvedGitPathspec") own directory and pathspec classification. `src/hooks/policy-corpus.mts` (search: "commandTokens") separates command substitution from cwd/environment substitution. M14's local `evidence/m14-windows-divergences.json` retains all twenty-two observations; `evidence/m14-native-path-probes.json` retains the measured path and token probes under `.goat-flow/plans/1.19.0/`.
+
+---
 
 ## Resolved Entries
 

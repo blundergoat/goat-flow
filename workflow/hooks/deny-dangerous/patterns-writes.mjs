@@ -3,6 +3,7 @@
 /** Native Git write classifiers and alias state shared by repository-policy rules. */
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
+import { isAbsolute } from "node:path";
 import { splitIfs, joinPolicyShellWords, splitPolicyShellWords, } from "../policy-words.mjs";
 /** Decode a short bundle until a value-taking option owns its remaining text. */
 function cobraShortFlags(bundle, valueShorts) {
@@ -568,7 +569,7 @@ function isBulkResolvedGitPathspec(magic, context, allowUnknown) {
     if (magic.bulk || (!magic.literal && /[*?]/u.test(magic.path)))
         return true;
     const normalized = normalizeGitPathspecPath(magic.path);
-    if (normalized.startsWith("/"))
+    if (isAbsolute(normalized))
         return isPolicyDirectory(normalized);
     if (normalized === "" ||
         normalized === "." ||

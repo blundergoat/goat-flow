@@ -442,9 +442,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGhhcyBtb3JlIHRoYW4gNTAgY2hhaW5lZCBzZWdtZW50czsgcmV2aWV3IGFuZCBydW4gbWFudWFsbHkgaWYgaW50ZW5kZWQuCg=="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGV4Y2VlZHMgdGhlIDUwLXNlZ21lbnQgcG9saWN5IGluc3BlY3Rpb24gbGltaXQuIFNwbGl0IGl0IGludG8gc21hbGxlciBpbmRlcGVuZGVudCBjYWxscyBvciB1c2UgYSBzdXBwb3J0ZWQgc2NyaXB0IHJvdXRlLgo="
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -477,9 +477,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZ2l0LW11dGF0aW9uczogQ29tbWFuZCBoYXMgbW9yZSB0aGFuIDUwIGNoYWluZWQgc2VnbWVudHM7IHJldmlldyBhbmQgcnVuIG1hbnVhbGx5IGlmIGludGVuZGVkLgo="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZ2l0LW11dGF0aW9uczogQ29tbWFuZCBleGNlZWRzIHRoZSA1MC1zZWdtZW50IHBvbGljeSBpbnNwZWN0aW9uIGxpbWl0LiBTcGxpdCBpdCBpbnRvIHNtYWxsZXIgaW5kZXBlbmRlbnQgY2FsbHMgb3IgdXNlIGEgc3VwcG9ydGVkIHNjcmlwdCByb3V0ZS4K"
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -512,9 +512,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGhhcyBtb3JlIHRoYW4gNTAgY2hhaW5lZCBzZWdtZW50czsgcmV2aWV3IGFuZCBydW4gbWFudWFsbHkgaWYgaW50ZW5kZWQuCg=="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGV4Y2VlZHMgdGhlIDUwLXNlZ21lbnQgcG9saWN5IGluc3BlY3Rpb24gbGltaXQuIFNwbGl0IGl0IGludG8gc21hbGxlciBpbmRlcGVuZGVudCBjYWxscyBvciB1c2UgYSBzdXBwb3J0ZWQgc2NyaXB0IHJvdXRlLgo="
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -547,9 +547,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZ2l0LW11dGF0aW9uczogQ29tbWFuZCBoYXMgbW9yZSB0aGFuIDUwIGNoYWluZWQgc2VnbWVudHM7IHJldmlldyBhbmQgcnVuIG1hbnVhbGx5IGlmIGludGVuZGVkLgo="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZ2l0LW11dGF0aW9uczogQ29tbWFuZCBleGNlZWRzIHRoZSA1MC1zZWdtZW50IHBvbGljeSBpbnNwZWN0aW9uIGxpbWl0LiBTcGxpdCBpdCBpbnRvIHNtYWxsZXIgaW5kZXBlbmRlbnQgY2FsbHMgb3IgdXNlIGEgc3VwcG9ydGVkIHNjcmlwdCByb3V0ZS4K"
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -644,7 +644,7 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGlzIHRvbyBsYXJnZSBmb3IgcG9saWN5IGluc3BlY3Rpb247IHVzZSBmaWxlIG9yIHN0ZGluIGlucHV0IGZvciBsYXJnZSBkYXRhLgo="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGV4Y2VlZHMgdGhlIDE2Mzg0LWJ5dGUgcG9saWN5IGluc3BlY3Rpb24gbGltaXQuIFNwbGl0IGV4ZWN1dGFibGUgY29tbWFuZHMgaW50byBzbWFsbGVyIGluZGVwZW5kZW50IGNhbGxzIG9yIHVzZSBhIHN1cHBvcnRlZCBzY3JpcHQgcm91dGU7IHNlbmQgcmVwb3J0IGRhdGEgdGhyb3VnaCB0aGUgYXBwcm92ZWQgc3RkaW4vZmlsZSB0cmFuc3BvcnQuCg=="
       },
       "exceptionId": "locale-C",
       "predicates": {
@@ -679,7 +679,7 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZ2l0LW11dGF0aW9uczogQ29tbWFuZCBpcyB0b28gbGFyZ2UgZm9yIHBvbGljeSBpbnNwZWN0aW9uOyB1c2UgZmlsZSBvciBzdGRpbiBpbnB1dCBmb3IgbGFyZ2UgZGF0YS4K"
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZ2l0LW11dGF0aW9uczogQ29tbWFuZCBleGNlZWRzIHRoZSAxNjM4NC1ieXRlIHBvbGljeSBpbnNwZWN0aW9uIGxpbWl0LiBTcGxpdCBleGVjdXRhYmxlIGNvbW1hbmRzIGludG8gc21hbGxlciBpbmRlcGVuZGVudCBjYWxscyBvciB1c2UgYSBzdXBwb3J0ZWQgc2NyaXB0IHJvdXRlOyBzZW5kIHJlcG9ydCBkYXRhIHRocm91Z2ggdGhlIGFwcHJvdmVkIHN0ZGluL2ZpbGUgdHJhbnNwb3J0Lgo="
       },
       "exceptionId": "locale-C",
       "predicates": {
@@ -8256,9 +8256,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLnNoIGNhbm5vdCBzdGFydDogbWlzc2luZyByZXF1aXJlZCBwb2xpY3kgcnVudGltZSAkRklYVFVSRTEvLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cy9ndWFyZC1ydW50aW1lLnNoLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLgo="
+        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLm1qcyBjYW5ub3Qgc3RhcnQ6IHJlcXVpcmVkIHBvbGljeSBydW50aW1lIGlzIHVuYXZhaWxhYmxlLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLgo="
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -10390,9 +10390,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLnNoIGNhbm5vdCBzdGFydDogbWlzc2luZyByZXF1aXJlZCBwb2xpY3kgcnVudGltZSAkRklYVFVSRTAvLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cy9ndWFyZC1ydW50aW1lLnNoLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLgo="
+        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLm1qcyBjYW5ub3Qgc3RhcnQ6IHJlcXVpcmVkIHBvbGljeSBydW50aW1lIGlzIHVuYXZhaWxhYmxlLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLgo="
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -15759,9 +15759,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGhhcyBtb3JlIHRoYW4gNTAgY2hhaW5lZCBzZWdtZW50czsgcmV2aWV3IGFuZCBydW4gbWFudWFsbHkgaWYgaW50ZW5kZWQuCg=="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGV4Y2VlZHMgdGhlIDUwLXNlZ21lbnQgcG9saWN5IGluc3BlY3Rpb24gbGltaXQuIFNwbGl0IGl0IGludG8gc21hbGxlciBpbmRlcGVuZGVudCBjYWxscyBvciB1c2UgYSBzdXBwb3J0ZWQgc2NyaXB0IHJvdXRlLgo="
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -24329,9 +24329,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGlzIHRvbyBsYXJnZSBmb3IgcG9saWN5IGluc3BlY3Rpb247IHVzZSBmaWxlIG9yIHN0ZGluIGlucHV0IGZvciBsYXJnZSBkYXRhLgo="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGV4Y2VlZHMgdGhlIDE2Mzg0LWJ5dGUgcG9saWN5IGluc3BlY3Rpb24gbGltaXQuIFNwbGl0IGV4ZWN1dGFibGUgY29tbWFuZHMgaW50byBzbWFsbGVyIGluZGVwZW5kZW50IGNhbGxzIG9yIHVzZSBhIHN1cHBvcnRlZCBzY3JpcHQgcm91dGU7IHNlbmQgcmVwb3J0IGRhdGEgdGhyb3VnaCB0aGUgYXBwcm92ZWQgc3RkaW4vZmlsZSB0cmFuc3BvcnQuCg=="
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -24866,9 +24866,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGhhcyBtb3JlIHRoYW4gNTAgY2hhaW5lZCBzZWdtZW50czsgcmV2aWV3IGFuZCBydW4gbWFudWFsbHkgaWYgaW50ZW5kZWQuCg=="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGV4Y2VlZHMgdGhlIDUwLXNlZ21lbnQgcG9saWN5IGluc3BlY3Rpb24gbGltaXQuIFNwbGl0IGl0IGludG8gc21hbGxlciBpbmRlcGVuZGVudCBjYWxscyBvciB1c2UgYSBzdXBwb3J0ZWQgc2NyaXB0IHJvdXRlLgo="
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -29097,9 +29097,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLnNoIGNhbm5vdCBzdGFydDogbWlzc2luZyByZXF1aXJlZCBwb2xpY3kgcnVudGltZSAkRklYVFVSRTAvLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cy9ndWFyZC1ydW50aW1lLnNoLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLgo="
+        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLm1qcyBjYW5ub3Qgc3RhcnQ6IHJlcXVpcmVkIHBvbGljeSBydW50aW1lIGlzIHVuYXZhaWxhYmxlLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLgo="
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -29259,9 +29259,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLnNoIGNhbm5vdCBzdGFydDogbWlzc2luZyByZXF1aXJlZCBwb2xpY3kgcnVudGltZSAkRklYVFVSRTAvLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cy9ndWFyZC1ydW50aW1lLnNoLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLgo="
+        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLm1qcyBjYW5ub3Qgc3RhcnQ6IHJlcXVpcmVkIHBvbGljeSBydW50aW1lIGlzIHVuYXZhaWxhYmxlLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLgo="
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -29792,9 +29792,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGhhcyBtb3JlIHRoYW4gNTAgY2hhaW5lZCBzZWdtZW50czsgcmV2aWV3IGFuZCBydW4gbWFudWFsbHkgaWYgaW50ZW5kZWQuCg=="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGV4Y2VlZHMgdGhlIDUwLXNlZ21lbnQgcG9saWN5IGluc3BlY3Rpb24gbGltaXQuIFNwbGl0IGl0IGludG8gc21hbGxlciBpbmRlcGVuZGVudCBjYWxscyBvciB1c2UgYSBzdXBwb3J0ZWQgc2NyaXB0IHJvdXRlLgo="
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -30256,9 +30256,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGlzIHRvbyBsYXJnZSBmb3IgcG9saWN5IGluc3BlY3Rpb247IHVzZSBmaWxlIG9yIHN0ZGluIGlucHV0IGZvciBsYXJnZSBkYXRhLgo="
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBDb21tYW5kIGV4Y2VlZHMgdGhlIDE2Mzg0LWJ5dGUgcG9saWN5IGluc3BlY3Rpb24gbGltaXQuIFNwbGl0IGV4ZWN1dGFibGUgY29tbWFuZHMgaW50byBzbWFsbGVyIGluZGVwZW5kZW50IGNhbGxzIG9yIHVzZSBhIHN1cHBvcnRlZCBzY3JpcHQgcm91dGU7IHNlbmQgcmVwb3J0IGRhdGEgdGhyb3VnaCB0aGUgYXBwcm92ZWQgc3RkaW4vZmlsZSB0cmFuc3BvcnQuCg=="
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -40965,10 +40965,10 @@
       "availabilityCase": true,
       "expected": {
         "status": 0,
-        "stdoutBase64": "eyJwZXJtaXNzaW9uRGVjaXNpb24iOiJkZW55IiwicGVybWlzc2lvbkRlY2lzaW9uUmVhc29uIjoiUG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLnNoIGNhbm5vdCBzdGFydDogbWlzc2luZyByZXF1aXJlZCBwb2xpY3kgcnVudGltZSAkRklYVFVSRTAvLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cy9ndWFyZC1ydW50aW1lLnNoLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLiJ9Cg==",
+        "stdoutBase64": "eyJwZXJtaXNzaW9uRGVjaXNpb24iOiJkZW55IiwicGVybWlzc2lvbkRlY2lzaW9uUmVhc29uIjoiUG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLm1qcyBjYW5ub3Qgc3RhcnQ6IHJlcXVpcmVkIHBvbGljeSBydW50aW1lIGlzIHVuYXZhaWxhYmxlLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLiJ9Cg==",
         "stderrBase64": ""
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -41127,10 +41127,10 @@
       "availabilityCase": true,
       "expected": {
         "status": 0,
-        "stdoutBase64": "eyJwZXJtaXNzaW9uRGVjaXNpb24iOiJkZW55IiwicGVybWlzc2lvbkRlY2lzaW9uUmVhc29uIjoiUG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLnNoIGNhbm5vdCBzdGFydDogbWlzc2luZyByZXF1aXJlZCBwb2xpY3kgcnVudGltZSAkRklYVFVSRTAvLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cy9ndWFyZC1ydW50aW1lLnNoLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLiJ9Cg==",
+        "stdoutBase64": "eyJwZXJtaXNzaW9uRGVjaXNpb24iOiJkZW55IiwicGVybWlzc2lvbkRlY2lzaW9uUmVhc29uIjoiUG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZGFuZ2Vyb3VzLm1qcyBjYW5ub3Qgc3RhcnQ6IHJlcXVpcmVkIHBvbGljeSBydW50aW1lIGlzIHVuYXZhaWxhYmxlLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLiJ9Cg==",
         "stderrBase64": ""
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -41289,10 +41289,10 @@
       "availabilityCase": true,
       "expected": {
         "status": 0,
-        "stdoutBase64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJyZWFzb24iOiJQb2xpY3kgaG9vayB1bmF2YWlsYWJsZTogZGVueS1kYW5nZXJvdXMuc2ggY2Fubm90IHN0YXJ0OiBtaXNzaW5nIHJlcXVpcmVkIHBvbGljeSBydW50aW1lICRGSVhUVVJFMC8uZ29hdC1mbG93L2hvb2tzL2RlbnktZGFuZ2Vyb3VzL2d1YXJkLXJ1bnRpbWUuc2guIFJlLXJ1biBnb2F0LWZsb3cgc2V0dXAgc28gLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cyBpcyBpbnN0YWxsZWQgYW5kIHRyYWNrZWQuIn0K",
+        "stdoutBase64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJyZWFzb24iOiJQb2xpY3kgaG9vayB1bmF2YWlsYWJsZTogZGVueS1kYW5nZXJvdXMubWpzIGNhbm5vdCBzdGFydDogcmVxdWlyZWQgcG9saWN5IHJ1bnRpbWUgaXMgdW5hdmFpbGFibGUuIFJlLXJ1biBnb2F0LWZsb3cgc2V0dXAgc28gLmdvYXQtZmxvdy9ob29rcyBpcyBpbnN0YWxsZWQgYW5kIHRyYWNrZWQuIn0K",
         "stderrBase64": ""
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -41451,10 +41451,10 @@
       "availabilityCase": true,
       "expected": {
         "status": 0,
-        "stdoutBase64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJyZWFzb24iOiJQb2xpY3kgaG9vayB1bmF2YWlsYWJsZTogZGVueS1kYW5nZXJvdXMuc2ggY2Fubm90IHN0YXJ0OiBtaXNzaW5nIHJlcXVpcmVkIHBvbGljeSBydW50aW1lICRGSVhUVVJFMC8uZ29hdC1mbG93L2hvb2tzL2RlbnktZGFuZ2Vyb3VzL2d1YXJkLXJ1bnRpbWUuc2guIFJlLXJ1biBnb2F0LWZsb3cgc2V0dXAgc28gLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cyBpcyBpbnN0YWxsZWQgYW5kIHRyYWNrZWQuIn0K",
+        "stdoutBase64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJyZWFzb24iOiJQb2xpY3kgaG9vayB1bmF2YWlsYWJsZTogZGVueS1kYW5nZXJvdXMubWpzIGNhbm5vdCBzdGFydDogcmVxdWlyZWQgcG9saWN5IHJ1bnRpbWUgaXMgdW5hdmFpbGFibGUuIFJlLXJ1biBnb2F0LWZsb3cgc2V0dXAgc28gLmdvYXQtZmxvdy9ob29rcyBpcyBpbnN0YWxsZWQgYW5kIHRyYWNrZWQuIn0K",
         "stderrBase64": ""
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -45202,9 +45202,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5zaCBjYW5ub3Qgc3RhcnQ6IG1pc3NpbmcgcmVxdWlyZWQgcG9saWN5IHJ1bnRpbWUgJEZJWFRVUkUxLy5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMvZ3VhcmQtcnVudGltZS5zaC4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzL2RlbnktZGFuZ2Vyb3VzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4K"
+        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5tanMgY2Fubm90IHN0YXJ0OiByZXF1aXJlZCBwb2xpY3kgcnVudGltZSBpcyB1bmF2YWlsYWJsZS4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4K"
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -47852,9 +47852,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5zaCBjYW5ub3Qgc3RhcnQ6IG1pc3NpbmcgcmVxdWlyZWQgcG9saWN5IHJ1bnRpbWUgJEZJWFRVUkUwLy5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMvZ3VhcmQtcnVudGltZS5zaC4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzL2RlbnktZGFuZ2Vyb3VzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4K"
+        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5tanMgY2Fubm90IHN0YXJ0OiByZXF1aXJlZCBwb2xpY3kgcnVudGltZSBpcyB1bmF2YWlsYWJsZS4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4K"
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -71751,9 +71751,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5zaCBjYW5ub3Qgc3RhcnQ6IG1pc3NpbmcgcmVxdWlyZWQgcG9saWN5IHJ1bnRpbWUgJEZJWFRVUkUwLy5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMvZ3VhcmQtcnVudGltZS5zaC4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzL2RlbnktZGFuZ2Vyb3VzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4K"
+        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5tanMgY2Fubm90IHN0YXJ0OiByZXF1aXJlZCBwb2xpY3kgcnVudGltZSBpcyB1bmF2YWlsYWJsZS4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4K"
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -71913,9 +71913,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5zaCBjYW5ub3Qgc3RhcnQ6IG1pc3NpbmcgcmVxdWlyZWQgcG9saWN5IHJ1bnRpbWUgJEZJWFRVUkUwLy5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMvZ3VhcmQtcnVudGltZS5zaC4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzL2RlbnktZGFuZ2Vyb3VzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4K"
+        "stderrBase64": "UG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5tanMgY2Fubm90IHN0YXJ0OiByZXF1aXJlZCBwb2xpY3kgcnVudGltZSBpcyB1bmF2YWlsYWJsZS4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4K"
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -73184,9 +73184,9 @@
       "expected": {
         "status": 2,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IHJlcG9zaXRvcnk6IERlc3RydWN0aXZlIGdpdCBvcGVyYXRpb24gKC0tbm8tdmVyaWZ5LCByZXNldCAtLWhhcmQsIGNsZWFuIC1mLCBmb3JjZWQgcm0gb3IgY2hlY2tvdXQtaW5kZXgsIHJlYWQtdHJlZSByZXNldCwgd29ya3RyZWUgcmVtb3ZlLCBidWxrIHJlc3RvcmUgb3IgY2hlY2tvdXQsIGZvcmNlZCBjaGVja291dCBvciBzd2l0Y2gsIHN0YXNoIGRyb3Agb3IgY2xlYXIsIHJlZmxvZyBleHBpcmUgb3IgZGVsZXRlLCBwcnVuZSBvciBnYykgY2FuIHNraXAgY2hlY2tzIG9yIGRpc2NhcmQgd29yay4gRHJvcCAtLW5vLXZlcmlmeSBpZiBpdCBpcyBub3QgbmVlZGVkOyBvdGhlcndpc2UgYXNrIHRoZSB1c2VyIHRvIHJ1biBpdCBtYW51YWxseS4K"
+        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IHJlcG9zaXRvcnk6IEdpdCB3b3JrdHJlZSByZW1vdmFsIGlzIG5vdCBhbGxvd2VkLiBMZWF2ZSB0aGUgd29ya3RyZWUgYW5kIGl0cyBjb250ZW50cyBpbnRhY3Q7IGFzayB0aGUgdXNlciB0byByZXZpZXcgYW5kIHJlbW92ZSBpdCBtYW51YWxseS4K"
       },
-      "exceptionId": null,
+      "exceptionId": "recovery-message",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -85269,10 +85269,10 @@
       "availabilityCase": true,
       "expected": {
         "status": 0,
-        "stdoutBase64": "eyJwZXJtaXNzaW9uRGVjaXNpb24iOiJkZW55IiwicGVybWlzc2lvbkRlY2lzaW9uUmVhc29uIjoiUG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5zaCBjYW5ub3Qgc3RhcnQ6IG1pc3NpbmcgcmVxdWlyZWQgcG9saWN5IHJ1bnRpbWUgJEZJWFRVUkUwLy5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMvZ3VhcmQtcnVudGltZS5zaC4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzL2RlbnktZGFuZ2Vyb3VzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4ifQo=",
+        "stdoutBase64": "eyJwZXJtaXNzaW9uRGVjaXNpb24iOiJkZW55IiwicGVybWlzc2lvbkRlY2lzaW9uUmVhc29uIjoiUG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5tanMgY2Fubm90IHN0YXJ0OiByZXF1aXJlZCBwb2xpY3kgcnVudGltZSBpcyB1bmF2YWlsYWJsZS4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4ifQo=",
         "stderrBase64": ""
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -85431,10 +85431,10 @@
       "availabilityCase": true,
       "expected": {
         "status": 0,
-        "stdoutBase64": "eyJwZXJtaXNzaW9uRGVjaXNpb24iOiJkZW55IiwicGVybWlzc2lvbkRlY2lzaW9uUmVhc29uIjoiUG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5zaCBjYW5ub3Qgc3RhcnQ6IG1pc3NpbmcgcmVxdWlyZWQgcG9saWN5IHJ1bnRpbWUgJEZJWFRVUkUwLy5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMvZ3VhcmQtcnVudGltZS5zaC4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzL2RlbnktZGFuZ2Vyb3VzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4ifQo=",
+        "stdoutBase64": "eyJwZXJtaXNzaW9uRGVjaXNpb24iOiJkZW55IiwicGVybWlzc2lvbkRlY2lzaW9uUmVhc29uIjoiUG9saWN5IGhvb2sgdW5hdmFpbGFibGU6IGRlbnktZ2l0LW11dGF0aW9ucy5tanMgY2Fubm90IHN0YXJ0OiByZXF1aXJlZCBwb2xpY3kgcnVudGltZSBpcyB1bmF2YWlsYWJsZS4gUmUtcnVuIGdvYXQtZmxvdyBzZXR1cCBzbyAuZ29hdC1mbG93L2hvb2tzIGlzIGluc3RhbGxlZCBhbmQgdHJhY2tlZC4ifQo=",
         "stderrBase64": ""
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -85593,10 +85593,10 @@
       "availabilityCase": true,
       "expected": {
         "status": 0,
-        "stdoutBase64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJyZWFzb24iOiJQb2xpY3kgaG9vayB1bmF2YWlsYWJsZTogZGVueS1naXQtbXV0YXRpb25zLnNoIGNhbm5vdCBzdGFydDogbWlzc2luZyByZXF1aXJlZCBwb2xpY3kgcnVudGltZSAkRklYVFVSRTAvLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cy9ndWFyZC1ydW50aW1lLnNoLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLiJ9Cg==",
+        "stdoutBase64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJyZWFzb24iOiJQb2xpY3kgaG9vayB1bmF2YWlsYWJsZTogZGVueS1naXQtbXV0YXRpb25zLm1qcyBjYW5ub3Qgc3RhcnQ6IHJlcXVpcmVkIHBvbGljeSBydW50aW1lIGlzIHVuYXZhaWxhYmxlLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLiJ9Cg==",
         "stderrBase64": ""
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }
@@ -85755,10 +85755,10 @@
       "availabilityCase": true,
       "expected": {
         "status": 0,
-        "stdoutBase64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJyZWFzb24iOiJQb2xpY3kgaG9vayB1bmF2YWlsYWJsZTogZGVueS1naXQtbXV0YXRpb25zLnNoIGNhbm5vdCBzdGFydDogbWlzc2luZyByZXF1aXJlZCBwb2xpY3kgcnVudGltZSAkRklYVFVSRTAvLmdvYXQtZmxvdy9ob29rcy9kZW55LWRhbmdlcm91cy9ndWFyZC1ydW50aW1lLnNoLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MvZGVueS1kYW5nZXJvdXMgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLiJ9Cg==",
+        "stdoutBase64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJyZWFzb24iOiJQb2xpY3kgaG9vayB1bmF2YWlsYWJsZTogZGVueS1naXQtbXV0YXRpb25zLm1qcyBjYW5ub3Qgc3RhcnQ6IHJlcXVpcmVkIHBvbGljeSBydW50aW1lIGlzIHVuYXZhaWxhYmxlLiBSZS1ydW4gZ29hdC1mbG93IHNldHVwIHNvIC5nb2F0LWZsb3cvaG9va3MgaXMgaW5zdGFsbGVkIGFuZCB0cmFja2VkLiJ9Cg==",
         "stderrBase64": ""
       },
-      "exceptionId": null,
+      "exceptionId": "native-startup",
       "predicates": {
         "requiresAvailable": false
       }

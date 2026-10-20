@@ -295,7 +295,7 @@ jobs:
   # Hook port controls on Linux, macOS and Windows: build with Node 24.21.0, then switch each runner to the Node version it checks.
   #
   # Every host checks both pinned consumer runtimes; native fixtures use explicit test-only transports.
-  # Parser parity and live provider delivery retain their separate milestone gates.
+  # Complete policy parity and owning suites run here; live provider delivery retains its separate milestone gate.
   hook-port-controls:
     # Skipped on pull requests and pushes, so a PR never waits on the macOS and Windows runners.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -322,6 +322,33 @@ jobs:
       # Prints the Node version, platform, CPU architecture and commit, so a failing log names exactly what it checked.
       - name: Record consumer identity
         run: node -e "console.log(JSON.stringify({node:process.version,platform:process.platform,arch:process.arch,commit:process.env.GITHUB_SHA}))"
+      - name: Record policy artifact identity
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { createHash } from "node:crypto";
+          import { readFileSync, readdirSync } from "node:fs";
+          const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+          function files(directory) {
+            return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+              const path = `${directory}/${entry.name}`;
+              if (entry.isDirectory()) return files(path);
+              if (!entry.isFile()) throw new Error(`Unsupported policy artifact: ${path}`);
+              return [[path, digest(readFileSync(path))]];
+            }).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+          }
+          for (const [group, directory] of [
+            ["source", "src/hooks"],
+            ["generated", "workflow/hooks"],
+            ["installed", ".goat-flow/hooks"],
+            ["oracle", "test/fixtures/hooks-bash"],
+          ]) {
+            const rows = files(directory);
+            console.log("m14-policy-artifact " + JSON.stringify({
+              group, files: rows.length, sha256: digest(JSON.stringify(rows)),
+            }));
+          }
+          JS
       # Retained installed-hook controls require Bash 4.4+; macOS ships Bash 3.2.
       - name: Prepare macOS Bash controls
         if: runner.os == 'macOS'
@@ -398,6 +425,17 @@ jobs:
       # npm pack invokes the platform npm shim outside the restricted child.
       - name: Corpus and package controls
         run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/integration/hook-parity.test.ts
+
+      - name: Complete native policy parity
+        shell: bash
+        run: |
+          unset LC_ALL
+          node scripts/check-hook-parity.mjs --stage=candidate --require-complete
+      - name: Native policy integration suites
+        shell: bash
+        env:
+          GOAT_FLOW_HOOK_UNDER_TEST: candidate
+        run: node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts
 
   # Bash extraction stays on native Linux with pinned jq and explicit locales; macOS runs the Node controls above, never reference extraction.
   #
@@ -581,12 +619,38 @@ jobs:
             export PATH="$work_path/node-v24.21.0-linux-x64/bin:$PATH"
             npm ci --foreground-scripts
             npm run build
+            node --input-type=module <<'JS'
+            import { createHash } from "node:crypto";
+            import { readFileSync, readdirSync } from "node:fs";
+            const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+            function files(directory) {
+              return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+                const path = `${directory}/${entry.name}`;
+                if (entry.isDirectory()) return files(path);
+                if (!entry.isFile()) throw new Error(`Unsupported policy artifact: ${path}`);
+                return [[path, digest(readFileSync(path))]];
+              }).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+            }
+            for (const [group, directory] of [
+              ["source", "src/hooks"],
+              ["generated", "workflow/hooks"],
+              ["installed", ".goat-flow/hooks"],
+              ["oracle", "test/fixtures/hooks-bash"],
+            ]) {
+              const rows = files(directory);
+              console.log("m14-policy-artifact " + JSON.stringify({
+                group, files: rows.length, sha256: digest(JSON.stringify(rows)),
+              }));
+            }
+            JS
             for version in 20.12.0 24.21.0; do
               export PATH="$work_path/node-v$version-linux-x64/bin:$PATH"
               node --version
               node --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
               node --import tsx --test test/unit/hook-launch.test.ts test/unit/run-hook.test.ts test/unit/hook-launcher.test.ts test/unit/hook-result-delivery.test.ts test/unit/hook-stop-delivery.test.ts test/unit/agent-hook-command.test.ts test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-command-native-replay.test.ts test/integration/hook-direct-native-probe.test.ts test/integration/hook-native-audit-configured.test.ts test/integration/hook-native-audit-direct.test.ts test/integration/hook-native-audit-discovery.test.ts test/integration/hook-native-audit-mechanism.test.ts test/integration/hook-policy-node.test.ts
               node --import tsx --test test/integration/hook-parity.test.ts
+              (unset LC_ALL; node scripts/check-hook-parity.mjs --stage=candidate --require-complete)
+              GOAT_FLOW_HOOK_UNDER_TEST=candidate node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts
             done
       # Copies the checkout into WSL, adds checksum-verified Node 24.21.0 and jq 1.6, and lists where the frozen Bash reference behaves differently.
       #

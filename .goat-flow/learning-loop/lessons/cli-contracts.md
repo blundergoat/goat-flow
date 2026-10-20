@@ -1,9 +1,67 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-10-19
+last_reviewed: 2026-10-20
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
+
+## Lesson: Preserve escaped controls when rewriting saved policy evidence
+
+**Status:** active | **Created:** 2026-10-20
+**Decision changed:** Check serialized bytes as well as parsed equality when editing a saved policy oracle; preserve escaped control characters.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Keep intentional Unicode test inputs escaped in JSON source. After rebuilding expectations, compare every original input and outcome, then run the repository's touched-file checks before presenting the patch. JSON parse equality alone does not prove the serialized artifact meets its text contract.
+
+**What happened:** M13 recovery-message reconciliation used JSON serialization that turned two existing escape sequences into literal U+200B and U+202E. The candidate comparison and parsed-value checks passed, but live verification reported `FAIL Unicode` for `test/fixtures/hooks-bash/policy-reference.json`. Restoring the escaped spellings preserved all parsed values and yielded `PASS Unicode (0.12s) - 16 changed text file(s); 0 invisible control(s)`. The retained cases are `selftest-deny-git-mutations-4fa00485f47710e2-1` and `selftest-deny-git-mutations-bb2b605927dfbe1b-1`; the checker is `scripts/check-touched.mjs` (search: `runUnicodeCheck`).
+
+---
+
+## Lesson: Keep installer templates stable while verification runs
+
+**Status:** active | **Created:** 2026-10-20
+**Decision changed:** Finish template and generated-mirror writes before starting tests that copy or verify those templates; keep the live source tree stable until the run ends.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Parallelize read-only checks, but do not regenerate workflow hooks while installer or recovery tests are using them. If a run overlaps a source edit, retain its failure and rerun the owning test and required preflight against stable bytes before drawing a conclusion.
+
+**What happened:** During M13, a hook-comment correction regenerated the live runtime mirrors while preflight was running. The recovery test in `test/integration/managed-divergence-messaging.test.ts` (search: `leaves a receipt-free checkpoint after interrupted cutover`) failed with the installer's managed-template mismatch error. With no further template writes, all 17 tests in that file passed, and the failing case also passed in isolation. The overlap suggests a template-copy race; a controlled interleaving has not reproduced that cause. The verification guard is in `src/cli/install-command.ts` (search: `Installer exited successfully, but`). The subsequent stable-tree preflight reported `PASS (with warnings)   74 checks · 4 warnings · 38.1s`.
+
+---
+
+## Lesson: Pipeline continuation changes must preserve heredoc and comment boundaries
+
+**Status:** active | **Created:** 2026-10-20
+**Decision changed:** Run the full retained corpus after changing pipeline boundaries; focused executable-pipeline cases do not prove that comment and heredoc text stay inert.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Before joining physical lines, distinguish an executable trailing pipe from pipe text inside a comment or heredoc body. Retain the corpus's ordinary-data controls alongside the executable cases. When those contexts are unresolved, keep the working parser and narrow the patch rather than introducing a new boundary rule.
+
+**What happened:** A draft Node pipeline fix joined newlines after trailing pipes. Its focused tests passed, but full comparison changed two retained controls: an unquoted heredoc body containing `step one |` was refused, and a trailing comment ending in a pipe hid the following download-to-shell command. The newline change was rewound, both controls were rerun successfully, and newline-pipeline gaps remain open. The committed inputs and expectations are in `workflow/hooks/deny-dangerous/corpus.json` (search: `history-matrix-34-deny-dangerous`, `history-matrix-38-deny-dangerous`); executable boundaries are owned by `src/hooks/policy-segments.mts` (search: `consumeSegmentSeparator`).
+
+**Recurrence (2026-10-20, substitution pipelines):** A combined output-flow draft passed its focused policy tests but exceeded the ESLint complexity limit and changed the existing denial text for `selftest-deny-dangerous-e5133c4c859034ae-1` without changing its denied status. The draft was withdrawn. Keep command-string and process-stream changes in separate batches, run lint before broad comparison, and compare diagnostic bytes as well as decisions. Evidence: `workflow/hooks/deny-dangerous/corpus.json` (search: `selftest-deny-dangerous-e5133c4c859034ae-1`) and `src/hooks/policy-evaluation.mts` (search: `preparePolicySegment`). The replacement command-string rule was kept isolated for review and applied after approval.
+
+**Recurrence 2026-10-20, scanner integration:** The context-aware continuation draft hit the complexity limit in `scanHeredocCharacter`, then in `evaluatePolicyCommand`. The integration step was rewound before retrying. A typed command-frame predicate and a separate deferred-refusal ordering helper kept both dispatchers within their limits. Check an owning dispatcher's lint headroom before adding scan modes or another refusal branch. Evidence: `src/hooks/policy-heredoc.mts` (search: `scanHeredocCharacter`) and `src/hooks/policy-evaluation.mts` (search: `evaluatePolicyCommand`). The replacement remains an isolated candidate; its full comparisons retain the heredoc/comment controls and report 28 differences without new difference IDs.
+
+
+
+---
+
+## Lesson: Exercise the CLI after extracting a dynamically imported module
+
+**Status:** active | **Created:** 2026-10-20
+**Decision changed:** After extracting a dynamically imported module, test the real CLI as well as its imported API, and check whether the new module imports its entrypoint.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Do not await a dynamic import at module top level when the imported module needs exports from that same entrypoint. Start the asynchronous CLI dispatch after defining the module, and preserve a process-level success case alongside the direct API test.
+
+**What happened:** The candidate runner was extracted from `scripts/check-hook-parity.mjs` into `scripts/check-hook-parity-candidate.mjs`, which imports shared reference helpers from the original module. The direct parity suite passed, but the CLI's top-level `await import()` stalled module initialization and Node exited 13 with an unsettled-top-level-await warning. `scripts/check-hook-parity.mjs` (search: `async function runCli`) now starts the dispatch without a top-level wait. `test/integration/hook-parity.test.ts` (search: `assert.equal(cli.status, 0, cli.stderr)`) exercises the actual CLI before the direct API checks.
+
+---
 
 ## Lesson: Validator fixtures must exercise documented input alternatives
 

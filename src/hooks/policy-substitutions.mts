@@ -15,6 +15,20 @@ export type PolicySegmentEvaluator = (
   depth: number,
 ) => Promise<PolicyDenial | null>;
 
+/** The outer command uses this inert marker where a substitution supplies text or a descriptor. */
+export interface PolicySubstitutionOutput {
+  marker: string;
+  command: string;
+  kind: "command" | "input" | "output";
+}
+
+interface SubstitutionOutputRange {
+  start: number;
+  end: number;
+  command: string;
+  kind: PolicySubstitutionOutput["kind"];
+}
+
 interface SubstitutionScan {
   bytes: Uint8Array;
   index: number;
@@ -26,6 +40,7 @@ interface SubstitutionScan {
   inSingle: boolean;
   inDouble: boolean;
   escaped: boolean;
+  outputs: SubstitutionOutputRange[];
 }
 
 const decoder = new TextDecoder();
@@ -91,6 +106,17 @@ async function inspectNestedCommand(
   const denial =
     inner === "" ? null : await scan.evaluate(inner, scan.depth + 1);
   if (denial !== null) return denial;
+  scan.outputs.push({
+    start: scan.index,
+    end: close + 1,
+    command: inner,
+    kind:
+      scan.bytes[scan.index] === 0x24
+        ? "command"
+        : scan.bytes[scan.index] === 0x3c
+          ? "input"
+          : "output",
+  });
   appendSubstitutionMarker(scan, marker);
   scan.index = close;
   return null;
@@ -120,13 +146,18 @@ async function inspectSubstitutionOpener(
  * @param depth - the nesting depth of `remaining`; nested interiors are evaluated at depth + 1
  * @param scope - the protection named by this checker's own refusals; nested denials keep their own scope
  * @param evaluate - the complete segment policy used for each nonempty interior
- * @returns the first denial, or null when every interior is allowed and no unresolved substitution remains
+ * @param inspectOutputs - optional policy for output used by the outer command; receives inert markers with outer quoting intact
+ * @returns the first interior, syntax or output-flow denial, or null when every applicable check allows the command
  */
 export async function checkPolicyCommandSubstitutions(
   remaining: string,
   depth: number,
   scope: string,
   evaluate: PolicySegmentEvaluator,
+  inspectOutputs?: (
+    projection: string,
+    outputs: readonly PolicySubstitutionOutput[],
+  ) => PolicyDenial | null,
 ): Promise<PolicyDenial | null> {
   const scan: SubstitutionScan = {
     bytes: new TextEncoder().encode(remaining),
@@ -139,6 +170,7 @@ export async function checkPolicyCommandSubstitutions(
     inSingle: false,
     inDouble: false,
     escaped: false,
+    outputs: [],
   };
   for (; scan.index < scan.bytes.length; scan.index++) {
     const char = String.fromCharCode(scan.bytes[scan.index] ?? 0);
@@ -153,7 +185,33 @@ export async function checkPolicyCommandSubstitutions(
     }
   }
   const reason = unresolvedSubstitutionReason(scan);
-  return reason === null ? null : { scope, reason };
+  if (reason !== null) return { scope, reason };
+  if (!inspectOutputs || scan.outputs.length === 0) return null;
+  return inspectSubstitutionOutputs(scan, remaining, inspectOutputs);
+}
+
+/** Preserve outer quoting while replacing inspected command and process expansions with collision-free inert words. */
+function inspectSubstitutionOutputs(
+  scan: SubstitutionScan,
+  original: string,
+  inspect: (
+    projection: string,
+    outputs: readonly PolicySubstitutionOutput[],
+  ) => PolicyDenial | null,
+): PolicyDenial | null {
+  let prefix = "__goat_substitution_";
+  while (original.includes(prefix)) prefix += "_";
+  let projection = "";
+  let cursor = 0;
+  const outputs = scan.outputs.map((range, index) => {
+    const marker = `${prefix}${index}__`;
+    projection +=
+      decoder.decode(scan.bytes.subarray(cursor, range.start)) + marker;
+    cursor = range.end;
+    return { marker, command: range.command, kind: range.kind };
+  });
+  projection += decoder.decode(scan.bytes.subarray(cursor));
+  return inspect(projection, outputs);
 }
 
 /** An opener that never closed cannot be inspected, and a backtick hides its command from review. */

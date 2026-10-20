@@ -5,7 +5,7 @@
  * Harmless controls preserve investigation workflows that need to display those same words.
  */
 import assert from "node:assert/strict";
-import { copyHookTree } from "../helpers/hook-entrypoint.js";
+import { copyHookTree, hookSelection } from "../helpers/hook-entrypoint.js";
 import {
   checkInstalledPolicy,
   runHookWithPayload,
@@ -523,15 +523,20 @@ describe("Windows LFS executable lookup", () => {
 });
 
 describe("Unqualified native PowerShell tool", () => {
-  // Unsupported native-tool input needs a visible Bash recovery route from either enabled policy.
+  // Each runtime must reject unsupported native-tool input with its own supported recovery route.
   for (const [policy, command] of [
     ["deny-git-mutations", "git push origin HEAD"],
     ["deny-dangerous", "Remove-Item -Recurse -Force C:\\goat-probe-target"],
   ]) {
-    it(`rejects ${policy} PowerShell events with a Bash recovery route`, () => {
+    it(`rejects ${policy} PowerShell events with a supported recovery route`, () => {
       const result = checkProposedCommand(policy, command, "PowerShell");
       assert.equal(result.status, 2, result.stderr);
-      assert.match(result.stderr, /PowerShell.*Bash/u);
+      assert.match(
+        result.stderr,
+        hookSelection() === "candidate"
+          ? /PowerShell.*supported shell tool/u
+          : /PowerShell.*Bash/u,
+      );
     });
   }
 });

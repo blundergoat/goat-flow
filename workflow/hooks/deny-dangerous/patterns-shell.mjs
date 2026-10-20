@@ -3,7 +3,7 @@
 /** Classify recursive cleanup and shell/interpreter inputs without executing proposed commands. */
 import { asciiLowerCase } from "../policy-input.mjs";
 import { isUnredirectedUnpipedPolicyReadOnly, normalizePolicyCommandCandidate, stripLeadingPolicyShellRedirections, } from "../policy-syntax.mjs";
-import { splitPolicyTopLevelPipelineStages, } from "../policy-segments.mjs";
+import { splitPolicyCommandSegments, splitPolicyTopLevelPipelineStages, } from "../policy-segments.mjs";
 import { dropFirstPolicyShellWord, firstPolicyWordBase, splitPolicyShellWords, splitIfs, stripPolicyXargsPayload, stripPolicyShellQuotesForPathScan, } from "../policy-words.mjs";
 /** Require rm's basename and a recursive option, preserving the reference's short bundles. */
 export function rmHasRecursive(command) {
@@ -462,8 +462,7 @@ function checkPipelineConsumer(current, sawDownload, explicitLocalInput) {
     return null;
 }
 /** Track download provenance through every filter before allowing a script or interpreter consumer. */
-export function checkPipelineShellConsumers(unquoted, depth = 0) {
-    const parts = legacyPipelineParts(unquoted);
+function checkPipelineParts(parts, depth) {
     let sawDownload = false;
     let allLocal = true;
     for (let index = 1; index < parts.length; index++) {
@@ -473,6 +472,23 @@ export function checkPipelineShellConsumers(unquoted, depth = 0) {
         allLocal &&= isLocalDataPipeSource(previous);
         const explicitLocalInput = depth === 0 && !sawDownload && allLocal;
         const reason = checkPipelineConsumer(current, sawDownload, explicitLocalInput);
+        if (reason !== null)
+            return reason;
+    }
+    return null;
+}
+/** Check actual pipeline stages under the selected shell's quoting rules; separate command lists do not share input. */
+export function checkPipelineShellConsumers(command, depth = 0, host = "") {
+    const commands = splitPolicyCommandSegments(command, host);
+    if (commands.kind === "unresolved")
+        return syntaxRefusal;
+    for (const segment of commands.segments) {
+        const pipeline = splitPolicyTopLevelPipelineStages(segment, host);
+        if (pipeline.kind === "unresolved")
+            return syntaxRefusal;
+        if (!pipeline.segments[0]?.trim())
+            continue;
+        const reason = checkPipelineParts(pipeline.segments, depth);
         if (reason !== null)
             return reason;
     }
@@ -737,7 +753,7 @@ function firstSegmentRuleReason(rules, context) {
 export async function checkDestructiveSegment(context, evaluate) {
     const deny = (reason) => reason === null ? null : { scope: "destructive", reason };
     if (context.hasPipe) {
-        const consumer = checkPipelineShellConsumers(context.unquoted, context.depth);
+        const consumer = checkPipelineShellConsumers(context.trimmed, context.depth, context.inlineCommandHost);
         if (consumer !== null)
             return deny(consumer);
     }

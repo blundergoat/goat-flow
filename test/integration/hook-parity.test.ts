@@ -8,13 +8,13 @@ import {
   assertOutcome,
   assertMirrorBytes,
   checkPackInventory,
-  compareCandidate,
   loadArtifacts,
   materializeReference,
   parseOptions,
   validateCorpora,
   validateSnapshot,
 } from "../../scripts/check-hook-parity.mjs";
+import { compareCandidate } from "../../scripts/check-hook-parity-candidate.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 // JSON-only mutations share this validated input; filesystem corruption is checked separately.
@@ -52,6 +52,10 @@ function damagePair(pair, kind: string) {
     case "unknown exception":
       row.exceptionId = "approve-anything";
       break;
+    case "misplaced startup exception":
+      row.exceptionId = "native-startup";
+      pair.reference.rows[0].exceptionId = "native-startup";
+      break;
     case "missing locale":
       delete pair.reference.rows[0].original.C;
       break;
@@ -87,6 +91,7 @@ for (const kind of [
   "reference input drift",
   "candidate outcome drift",
   "unknown exception",
+  "misplaced startup exception",
   "missing locale",
   "incomplete coverage",
 ]) {
@@ -160,11 +165,26 @@ test("candidate stage runs real entrypoints over fixture rows and rejects outcom
     "selftest-deny-dangerous-05c6ef8113f35b5d-1",
     // A file token for the global Git config, plus a selected repository whose captured fixture omits its object store.
     "selftest-deny-git-mutations-6c04fb19b11edeb5-1",
+    // Missing modules must fail from the copied entrypoint, including open self-test stdin and provider JSON.
+    "selftest-deny-dangerous-aa999e6b4a9f641e-1",
+    "selftest-deny-dangerous-1b200cef4d0becea-1",
+    "selftest-deny-git-mutations-f048cf459ba093b1-1",
   ];
   const options = parseOptions([
     "--stage=candidate",
     ...cases.map((id) => `--case=${id}`),
   ]);
+  const cli = spawnSync(
+    process.execPath,
+    [
+      "scripts/check-hook-parity.mjs",
+      "--stage=candidate",
+      ...cases.map((id) => `--case=${id}`),
+    ],
+    { cwd: root, encoding: "utf8" },
+  );
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.match(cli.stdout, /PASS: candidate parity/);
   const passed = await compareCandidate(options, validatedArtifacts);
   assert.deepEqual(passed.divergences, []);
   const drifted = structuredClone(validatedArtifacts);

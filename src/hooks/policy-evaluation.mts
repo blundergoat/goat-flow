@@ -1,5 +1,6 @@
 /** Reach complete native policy decisions for both guards: request routing, segment preparation, rule dispatch and provider responses. */
 import { readFileSync } from "node:fs";
+import { isatty } from "node:tty";
 import { homedir } from "node:os";
 import {
   checkGitHostedCommands,
@@ -12,6 +13,9 @@ import {
   checkCommandChainPolicy,
   checkDestructiveSegment,
   findHasDestructiveAction,
+  isDownloaderPipeSource,
+  isShellCommand,
+  checkPipelineShellConsumers,
 } from "./deny-dangerous/patterns-shell.mjs";
 import {
   checkGitCommandEnvironment,
@@ -20,6 +24,7 @@ import {
 import {
   largeQualitySaveHeredocIsBoundedData,
   maskSafeQuotedHeredocBodies,
+  joinPolicyPipelineLines,
 } from "./policy-heredoc.mjs";
 import {
   asciiLowerCase,
@@ -48,6 +53,7 @@ import {
 import {
   checkPolicyCommandSubstitutions,
   type PolicySegmentEvaluator,
+  type PolicySubstitutionOutput,
 } from "./policy-substitutions.mjs";
 import {
   countPolicySubstitutionOpeners,
@@ -76,7 +82,7 @@ export interface PolicyRun {
   environment?: NodeJS.ProcessEnv;
 }
 
-/** Shell facts the reference keeps in dynamic scope; every nested check receives a copy, so its changes never leak back. */
+/** Shell facts are copied into nested checks; shared deferred refusals wait until all existing rules allow the request. */
 interface EvaluationState {
   directory: string;
   directoryUnknown: boolean;
@@ -84,6 +90,8 @@ interface EvaluationState {
   configEnvUnresolved: boolean;
   inlineCommandHost: string;
   activeScope: string;
+  processSubstitution: { denial: PolicyDenial | null };
+  continuedPipeline: { denial: PolicyDenial | null };
 }
 
 const leadingSpace = /^[ \t\n\v\f\r]+/u;
@@ -182,7 +190,8 @@ async function checkPipelineStages(
 }
 
 type InlineBody =
-  { kind: "body"; body: string } | { kind: "refused"; reason: string };
+  | { kind: "body"; body: string; script?: string }
+  | { kind: "refused"; reason: string };
 
 /** Read the `-c` operand; the word parser keeps an ANSI-C quote marker, and escape decoding needs ordinary quoting the hook can read. */
 function rawCommandString(
@@ -250,7 +259,8 @@ function posixShellBody(source: string): InlineBody {
     if (word === "-o" || word === "+o") index++;
     else if (word === "-c" || /^-[a-zA-Z].*c/su.test(word))
       return commandStringBody(source, words, index);
-    else if (!word.startsWith("-")) break;
+    else if (!word.startsWith("-"))
+      return { kind: "body", body: "", script: word };
   }
   return { kind: "body", body: "" };
 }
@@ -311,6 +321,116 @@ type PreparedSegment =
   | { kind: "context"; context: PolicySegmentContext }
   | { kind: "denied"; denial: PolicyDenial };
 
+/** A download expanded by the outer shell into its child's -c argument becomes executable source. */
+function checkDownloadedCommandString(
+  projection: string,
+  outputs: readonly PolicySubstitutionOutput[],
+): PolicyDenial | null {
+  const normalized = normalizePolicyCommandCandidate(projection);
+  if (normalized === null || !isShellCommand(normalized)) return null;
+  const inline = posixShellBody(normalized);
+  if (inline.kind === "refused") return null;
+  for (const output of outputs) {
+    if (output.kind !== "command" || !inline.body.includes(output.marker))
+      continue;
+    const producers = splitPolicyTopLevelPipelineStages(output.command);
+    if (
+      producers.kind === "segments" &&
+      producers.segments.some(isDownloaderPipeSource)
+    )
+      return {
+        scope: "destructive",
+        reason:
+          "Downloaded content becomes shell code through command substitution. Save and inspect it before running it.",
+      };
+  }
+  return null;
+}
+
+/** A process descriptor supplies a stream only when it is the target of a matching redirection. */
+function substitutionIsRedirected(
+  words: readonly string[],
+  output: PolicySubstitutionOutput,
+): boolean {
+  const direction = output.kind === "input" ? "<" : ">";
+  return words.some((word, index) => {
+    const operator =
+      word === output.marker
+        ? (words[index - 1] ?? "")
+        : word.endsWith(output.marker)
+          ? word.slice(0, -output.marker.length)
+          : "";
+    return /^[0-9]*[<>]$/u.test(operator) && operator.endsWith(direction);
+  });
+}
+
+/** Source operands and shell script operands execute their descriptor; other shell input uses the usual pipeline rules. */
+function inputProcessConsumer(
+  command: string,
+  words: readonly string[],
+  output: PolicySubstitutionOutput,
+): string | null {
+  if ([".", "source"].includes(words[0] ?? "") && words[1] === output.marker)
+    return "sh";
+  if (!isShellCommand(command)) return null;
+  const program = posixShellBody(command);
+  if (program.kind === "body" && program.script === output.marker) return "sh";
+  return substitutionIsRedirected(words, output) ? command : null;
+}
+
+/** Check descriptor streams with pipeline provenance, deferring this new refusal behind existing command diagnostics. */
+function checkProcessSubstitutionFlows(
+  projection: string,
+  outputs: readonly PolicySubstitutionOutput[],
+  depth: number,
+): PolicyDenial | null {
+  const command = normalizePolicyCommandCandidate(projection);
+  if (command === null) return null;
+  const words = splitPolicyShellWords(command);
+  for (const output of outputs.filter((value) => value.kind !== "command")) {
+    const consumer =
+      output.kind === "input"
+        ? inputProcessConsumer(command, words, output)
+        : substitutionIsRedirected(words, output)
+          ? output.command
+          : null;
+    if (consumer === null) continue;
+    const producer = output.kind === "input" ? output.command : command;
+    const reason = checkPipelineShellConsumers(
+      `${producer} | ${consumer}`,
+      depth,
+    );
+    if (reason !== null) return { scope: "destructive", reason };
+  }
+  return null;
+}
+
+/** Inspect POSIX continuation pipelines without changing the existing command splitter or its denial order. */
+function checkContinuedPipeline(
+  command: string,
+  guard: PolicyGuard,
+  host: string,
+  depth: number,
+): PolicyDenial | null {
+  if (guard !== "deny-dangerous") return null;
+  if (host !== "" && !posixShells.has(host)) return null;
+  const joined = joinPolicyPipelineLines(command);
+  if (joined === command) return null;
+  const reason =
+    joined === null
+      ? syntaxRefusal
+      : checkPipelineShellConsumers(joined, depth, host);
+  return reason === null ? null : { scope: "destructive", reason };
+}
+
+/** Preserve the shipped process-stream refusal before considering the new continuation-pipeline refusal. */
+function firstDeferredShellDenial(
+  process: PolicyDenial | null,
+  continued: PolicyDenial | null,
+): PolicyDenial | null {
+  return process ?? continued;
+}
+
 /**
  * Prepare one segment as the reference does: strip comments and subshell parentheses, inspect substitutions, normalize wrappers,
  * derive operator facts, then check every pipeline stage and inline shell body with the complete policy.
@@ -332,6 +452,16 @@ async function preparePolicySegment(
     depth,
     scope,
     evaluate,
+    run.guard === "deny-dangerous"
+      ? (projection, outputs) => {
+          state.processSubstitution.denial ??= checkProcessSubstitutionFlows(
+            projection,
+            outputs,
+            depth,
+          );
+          return checkDownloadedCommandString(projection, outputs);
+        }
+      : undefined,
   );
   if (substitution !== null) return { kind: "denied", denial: substitution };
   const normalized = normalizePolicyCommandCandidate(
@@ -641,6 +771,12 @@ async function checkPolicyCommandSegments(
   const state = { ...inherited };
   const split = splitInspectedChain(input, depth, run, state);
   if ("reason" in split) return split;
+  state.continuedPipeline.denial ??= checkContinuedPipeline(
+    input,
+    run.guard,
+    state.inlineCommandHost,
+    depth,
+  );
   const chainState: { background: boolean; stack: SubshellSnapshot[] } = {
     background: split.background,
     stack: [],
@@ -881,15 +1017,26 @@ async function evaluatePolicyCommand(
     return guardDenial(
       "Command has too many command substitutions; review and run manually if intended.",
     );
+  const processSubstitution: { denial: PolicyDenial | null } = { denial: null };
+  const continuedPipeline: { denial: PolicyDenial | null } = { denial: null };
   try {
-    return await checkPolicyCommandSegments(policy, 0, run, {
+    const denial = await checkPolicyCommandSegments(policy, 0, run, {
       directory: run.directory,
       directoryUnknown: false,
       hostedDirectoryUnknown: false,
       configEnvUnresolved: false,
       inlineCommandHost: "",
       activeScope: run.guard,
+      processSubstitution,
+      continuedPipeline,
     });
+    return (
+      denial ??
+      firstDeferredShellDenial(
+        processSubstitution.denial,
+        continuedPipeline.denial,
+      )
+    );
   } catch {
     // An evaluation fault leaves no trustworthy decision, so the request is refused rather than allowed.
     return guardDenial(
@@ -981,7 +1128,7 @@ export async function runPolicyEntrypoint(
     {
       argv,
       readStdin: () => readFileSync(0),
-      stdinIsTerminal: process.stdin.isTTY === true,
+      stdinIsTerminal: isatty(0),
     },
   );
   if (outcome.kind === "self-test") return runSelfTest(guard, outcome.mode);

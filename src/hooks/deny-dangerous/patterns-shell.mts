@@ -7,6 +7,7 @@ import {
   stripLeadingPolicyShellRedirections,
 } from "../policy-syntax.mjs";
 import {
+  splitPolicyCommandSegments,
   splitPolicyTopLevelPipelineStages,
   type PolicySegmentContext,
 } from "../policy-segments.mjs";
@@ -559,11 +560,10 @@ function checkPipelineConsumer(
 }
 
 /** Track download provenance through every filter before allowing a script or interpreter consumer. */
-export function checkPipelineShellConsumers(
-  unquoted: string,
-  depth = 0,
+function checkPipelineParts(
+  parts: readonly string[],
+  depth: number,
 ): string | null {
-  const parts = legacyPipelineParts(unquoted);
   let sawDownload = false;
   let allLocal = true;
   for (let index = 1; index < parts.length; index++) {
@@ -577,6 +577,24 @@ export function checkPipelineShellConsumers(
       sawDownload,
       explicitLocalInput,
     );
+    if (reason !== null) return reason;
+  }
+  return null;
+}
+
+/** Check actual pipeline stages under the selected shell's quoting rules; separate command lists do not share input. */
+export function checkPipelineShellConsumers(
+  command: string,
+  depth = 0,
+  host = "",
+): string | null {
+  const commands = splitPolicyCommandSegments(command, host);
+  if (commands.kind === "unresolved") return syntaxRefusal;
+  for (const segment of commands.segments) {
+    const pipeline = splitPolicyTopLevelPipelineStages(segment, host);
+    if (pipeline.kind === "unresolved") return syntaxRefusal;
+    if (!pipeline.segments[0]?.trim()) continue;
+    const reason = checkPipelineParts(pipeline.segments, depth);
     if (reason !== null) return reason;
   }
   return null;
@@ -960,8 +978,9 @@ export async function checkDestructiveSegment(
     reason === null ? null : { scope: "destructive", reason };
   if (context.hasPipe) {
     const consumer = checkPipelineShellConsumers(
-      context.unquoted,
+      context.trimmed,
       context.depth,
+      context.inlineCommandHost,
     );
     if (consumer !== null) return deny(consumer);
   }

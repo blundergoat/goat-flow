@@ -1,9 +1,24 @@
 ---
 category: hooks
-last_reviewed: 2026-10-12
+last_reviewed: 2026-10-20
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, Stop recovery, and policy-module correctness. Execution cost and performance live in [hook-performance.md](hook-performance.md); scanner blind spots in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
+
+## Footgun: Inspecting process.stdin before a synchronous read makes pipes nonblocking
+
+**Status:** active | **Created:** 2026-10-20 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Use `node:tty.isatty(0)` to inspect stdin before `readFileSync(0)`; do not initialize `process.stdin` first.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Keep terminal detection on the file descriptor when the next read is synchronous. Verify delayed pipe input through the real native entrypoint for both a healthy runtime and a missing dependency; preloaded input does not expose this race.
+
+**Symptoms:** During M13 verification, a healthy native policy intermittently reported that its runtime was unavailable. A payload delayed by 400 ms reproduced the false startup failure. The missing-module path also lost the provider-specific JSON denial.
+
+**Why it happens:** Accessing `process.stdin.isTTY` initializes Node's stdin stream and makes the pipe nonblocking. A subsequent synchronous read before the payload arrives throws `EAGAIN`; the entrypoint catches it as a startup failure. The descriptor-level `isatty(0)` check avoids initializing the stream.
+
+**Evidence:** `src/hooks/policy-evaluation.mts` (search: "runPolicyEntrypoint") and `src/hooks/deny-dangerous.mts` / `src/hooks/deny-git-mutations.mts` (`reportStartupUnavailable`) use descriptor-level checks. `test/integration/hook-policy-node.test.ts` (`delayedPolicyInput`; search: `waits for delayed provider input`) exercises both policies with healthy and missing modules. On 2026-10-20, the original stream check produced `EAGAIN` in the isolated delayed-pipe probe; the four entrypoint regression cases passed after the replacement.
 
 ## Footgun: Codex config preservation can leave old permission profiles behind
 

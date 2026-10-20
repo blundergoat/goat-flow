@@ -1,6 +1,7 @@
 /** Native Git write classifiers and alias state shared by repository-policy rules. */
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
+import { isAbsolute } from "node:path";
 import {
   splitIfs,
   joinPolicyShellWords,
@@ -747,7 +748,7 @@ function isBulkResolvedGitPathspec(
 ): boolean {
   if (magic.bulk || (!magic.literal && /[*?]/u.test(magic.path))) return true;
   const normalized = normalizeGitPathspecPath(magic.path);
-  if (normalized.startsWith("/")) return isPolicyDirectory(normalized);
+  if (isAbsolute(normalized)) return isPolicyDirectory(normalized);
   if (
     normalized === "" ||
     normalized === "." ||

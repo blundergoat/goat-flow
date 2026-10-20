@@ -11,14 +11,13 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { availableParallelism, tmpdir, release } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { tmpdir, release } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   bashPath,
   spawnReferenceCommand,
@@ -128,7 +127,7 @@ export function referenceEnvironment(
     for (const key of Object.keys(env)) {
       if (key.toUpperCase() === "PATH" && key !== "PATH") {
         env.PATH = env[key];
-        delete env[key];
+        Reflect.deleteProperty(env, key);
       }
     }
   }
@@ -138,7 +137,7 @@ export function referenceEnvironment(
     "GOAT_FLOW_ROOT",
     "GOAT_HOOK_LIB_DIR",
   ])
-    delete env[key];
+    Reflect.deleteProperty(env, key);
   if (jqBin) {
     const version = spawnSync(jqBin, ["--version"], { encoding: "utf8" });
     assert.equal(version.status, 0, "pinned jq starts");
@@ -548,7 +547,12 @@ export function buildCorpora(reports, extras, snapshot, historicalSha256) {
   };
   const corpus = {
     ...common,
-    rows: rows.map(({ original, inputs, ...row }) => row),
+    rows: rows.map((row) => {
+      const candidate = { ...row };
+      delete candidate.original;
+      delete candidate.inputs;
+      return candidate;
+    }),
   };
   const reference = {
     ...common,
@@ -647,6 +651,16 @@ function validateCorpusHeader(artifact, snapshot) {
   );
 }
 
+// Startup exceptions belong only to fixtures that deliberately omit the runtime.
+function isApprovedException(row) {
+  return row.exceptionId === "native-startup"
+    ? row.availabilityCase
+    : !row.exceptionId ||
+        /^(historical-gap-(?:[1-6]|8|9|10)|full-json-decoding|locale-C|invalid-request-encoding|obsolete-advice|recovery-message)$/.test(
+          row.exceptionId,
+        );
+}
+
 // Refuse missing identities, changed inputs and unrecorded expectation changes.
 // Original generated counts and the named exception inventory must reconcile.
 export function validateCorpora(
@@ -675,34 +689,23 @@ export function validateCorpora(
     );
     const original = originals.get(row.id);
     assert(original, `orphaned candidate ID: ${row.id}`);
-    assert.equal(
-      original.inputSha256,
-      row.inputSha256,
-      `reference input drift: ${row.id}`,
-    );
+    for (const [field, label] of Object.entries({
+      inputSha256: "reference input drift",
+      policy: "policy ownership",
+      exceptionId: "exception identity",
+    }))
+      assert.equal(original[field], row[field], `${label}: ${row.id}`);
     assert.deepEqual(
       original.inputs.C,
       row.input,
       `C candidate input binding: ${row.id}`,
     );
-    assert.equal(original.policy, row.policy, `policy ownership: ${row.id}`);
     assert.deepEqual(
       original.expected,
       row.expected,
       `candidate expectation drift: ${row.id}`,
     );
-    assert.equal(
-      original.exceptionId,
-      row.exceptionId,
-      `exception identity: ${row.id}`,
-    );
-    assert(
-      !row.exceptionId ||
-        /^(historical-gap-(?:[1-6]|8|9|10)|full-json-decoding|locale-C|invalid-request-encoding|obsolete-advice)$/.test(
-          row.exceptionId,
-        ),
-      `unknown exception: ${row.id}`,
-    );
+    assert(isApprovedException(row), `unknown exception: ${row.id}`);
     assert(
       !row.expected.stderrIncludes ||
         (row.exceptionId?.startsWith("historical-gap-") &&
@@ -1039,210 +1042,26 @@ export function compareExtraction(options, artifacts = loadArtifacts()) {
   return { host, cases: selected.size, divergences };
 }
 
-// Candidate hooks may start only Node and Git. The test preload journals every
-// launch in each child so acceptance can require zero denials.
-function spawnGuardEnvironment(work, env) {
-  const pathValue =
-    Object.entries(env).find(([key]) => key.toUpperCase() === "PATH")?.[1] ??
-    "";
-  const names =
-    process.platform === "win32"
-      ? [".exe", ".com", ".cmd", ".bat"].map((suffix) => `git${suffix}`)
-      : ["git"];
-  const git = pathValue
-    .split(delimiter)
-    .filter(Boolean)
-    .flatMap((directory) => names.map((name) => join(directory, name)))
-    .find((candidate) => existsSync(candidate));
-  assert(git, "candidate parity requires git on PATH");
-  const preload = pathToFileURL(
-    join(root, "test/helpers/spawn-guard.mjs"),
-  ).href;
-  return {
-    NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} --import=${preload}`.trim(),
-    GOAT_TEST_SPAWN_PRELOAD: preload,
-    GOAT_TEST_SPAWN_ALLOWED: JSON.stringify([
-      realpathSync(process.execPath),
-      realpathSync(git),
-    ]),
-    GOAT_TEST_SPAWN_LOG: join(work, "spawn-journal.jsonl"),
-  };
-}
-
-// Turn a row's temporary paths, including resolved and forward-slash spellings,
-// back into its corpus tokens; longer paths go first so nested tokens survive.
-function tokenizer(tokens) {
-  const pairs = tokens.flatMap(([token, path]) =>
-    [...new Set([path, realpathSync.native(path)])].flatMap((form) => [
-      [form, token],
-      [form.replaceAll("\\", "/"), token],
-    ]),
-  );
-  pairs.sort((left, right) => right[0].length - left[0].length);
-  return (text) =>
-    pairs.reduce((value, [from, to]) => value.split(from).join(to), text);
-}
-
-// Run the real candidate entrypoint for one materialized row, as the launcher
-// would, and record its outcome in the corpus's token form.
-function runCandidateRow(row, request) {
-  const args =
-    row.input.kind === "self-test"
-      ? [`--self-test=${row.input.mode}`]
-      : request.argv;
-  const tokenize = tokenizer(request.tokens);
-  const entrypoint = join(root, "workflow/hooks", `${row.policy}.mjs`);
-  return new Promise((resolveRow, rejectRow) => {
-    const child = spawn(process.execPath, [entrypoint, ...args], {
-      cwd: request.cwd,
-      env: request.environment,
-      timeout: 30_000,
-    });
-    const stdout = [];
-    const stderr = [];
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
-    // A hook deciding from argv may exit before it reads stdin.
-    child.stdin.on("error", () => {});
-    child.on("error", rejectRow);
-    child.on("close", (status) => {
-      if (status === null) {
-        rejectRow(new Error(`Candidate launch incomplete: case=${row.id}`));
-        return;
-      }
-      resolveRow({
-        status,
-        stdoutBase64: Buffer.from(
-          tokenize(Buffer.concat(stdout).toString()),
-        ).toString("base64"),
-        stderrBase64: Buffer.from(
-          tokenize(Buffer.concat(stderr).toString()),
-        ).toString("base64"),
-      });
-    });
-    child.stdin.end(request.stdin);
-  });
-}
-
-// Compare one locale's selected rows with their approved expectations, a few at a time.
-async function compareCandidateLocale(rows, project, environment, comparison) {
-  const { materializePolicyRow, divergences, locale } = comparison;
-  let next = 0;
-  const worker = async () => {
-    while (next < rows.length) {
-      const row = rows[next++];
-      const request = materializePolicyRow(row, project, environment);
-      try {
-        const actual = await runCandidateRow(row, request);
-        try {
-          assertOutcome(
-            actual,
-            row.expected,
-            row.predicates.requiresAvailable,
-            row.id,
-          );
-        } catch (error) {
-          divergences.push({
-            id: row.id,
-            locale,
-            expected: row.expected,
-            actual,
-            message: error.message,
-          });
-        }
-      } finally {
-        request.cleanup();
-      }
-    }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(availableParallelism(), 8) }, worker),
-  );
-}
-
-// Every selected row runs through the real candidate entrypoint in each pinned
-// locale and must meet the corpus's approved expectation, with zero spawn denials.
-export async function compareCandidate(options, artifacts = loadArtifacts()) {
-  assert.equal(options.stage, "candidate", "candidate stage");
-  for (const id of options.cases)
-    assert(
-      artifacts.corpus.rows.some((row) => row.id === id),
-      `unknown case: ${id}`,
-    );
-  const rows = options.cases.length
-    ? artifacts.corpus.rows.filter((row) => options.cases.includes(row.id))
-    : artifacts.corpus.rows;
-  const locales = ["C", "C.UTF-8"].includes(process.env.LC_ALL)
-    ? [process.env.LC_ALL]
-    : ["C", "C.UTF-8"];
-  const { materializePolicyRow } = await import(
-    pathToFileURL(join(root, "workflow/hooks/policy-corpus.mjs")).href
-  );
-  console.log(
-    `Candidate host: ${JSON.stringify({ node: process.version, platform: process.platform, arch: process.arch, locales })}`,
-  );
-  const project = materializeReference();
-  const work = mkdtempSync(join(tmpdir(), "goat-hook-candidate-"));
-  const divergences = [];
+// Avoid top-level await: the candidate runner imports helpers from this module,
+// so this module must finish loading before waiting for the candidate import.
+// Failures print on stderr and set exit status 1.
+async function runCli() {
   try {
-    for (const locale of locales) {
-      const base = referenceEnvironment(project, locale);
-      const environment = { ...base, ...spawnGuardEnvironment(work, base) };
-      const before = divergences.length;
-      await compareCandidateLocale(rows, project, environment, {
-        materializePolicyRow,
-        divergences,
-        locale,
-      });
-      const found = divergences.length - before;
-      console.log(
-        `${found ? "DIVERGENT" : "PASS"}: candidate ${locale} cases=${rows.length} differences=${found}`,
-      );
-    }
-    const journal = readFileSync(join(work, "spawn-journal.jsonl"), "utf8")
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
-    assert(
-      journal.some((entry) => entry.event === "loaded"),
-      "spawn guard loaded",
-    );
-    assert.deepEqual(
-      journal.filter((entry) => entry.event === "denied"),
-      [],
-      "spawn-guard denials",
-    );
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-    rmSync(work, { recursive: true, force: true });
+    const options = parseOptions(process.argv.slice(2));
+    if (options.stage === "candidate") {
+      const { compareCandidate } =
+        await import("./check-hook-parity-candidate.mjs");
+      await compareCandidate(options);
+    } else compareExtraction(options);
+  } catch (error) {
+    console.error(`FAIL: hook parity: ${error.message}`);
+    process.exitCode = 1;
   }
-  if (options.listDivergent)
-    console.log(JSON.stringify({ divergences }, null, 2));
-  else
-    assert.equal(
-      divergences.length,
-      0,
-      `unapproved candidate differences: ${divergences.length}; first ${divergences
-        .slice(0, 5)
-        .map(({ id, locale }) => `${id}/${locale}`)
-        .join(", ")}`,
-    );
-  console.log(
-    `PASS: ${options.listDivergent ? "candidate divergence report" : "candidate parity"}; cases=${rows.length}; differences=${divergences.length}; spawn-denials=0`,
-  );
-  return { cases: rows.length, divergences };
 }
 
 if (
   process.argv[1] &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  try {
-    const options = parseOptions(process.argv.slice(2));
-    if (options.stage === "candidate") await compareCandidate(options);
-    else compareExtraction(options);
-  } catch (error) {
-    console.error(`FAIL: hook parity: ${error.message}`);
-    process.exitCode = 1;
-  }
+  void runCli();
 }

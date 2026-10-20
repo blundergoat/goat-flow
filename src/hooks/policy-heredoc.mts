@@ -38,10 +38,17 @@ const doubleQuotedSpan = /"[^"\n]*"/gu;
 const processSubstitution = /[<>]\(([^()]*)\)/u;
 const leadingSpace = /^[ \t\n\v\f\r]+/u;
 
-/** Accept one opener stage only when its normalized command reads stdin as data; an unresolved wrapper is never data. */
+/** Accept inert stdin consumers and literal setup commands; unresolved wrappers remain inspectable. */
 function openerStageIsInert(segment: string): boolean {
   if (segment === "") return true;
-  const normalized = normalizePolicyCommandCandidate(segment) ?? "";
+  const normalized = normalizePolicyCommandCandidate(segment);
+  if (normalized === null) return false;
+  // Literal assignments and cd do not consume the heredoc as commands; a substitution could.
+  if (
+    !/[$\x60]/u.test(segment) &&
+    (normalized === "" || firstPolicyWordBase(normalized) === "cd")
+  )
+    return true;
   return (
     isInertHeredocConsumer(firstPolicyWordBase(normalized)) ||
     goatFlowCliConsumesHeredocData(normalized)
@@ -96,6 +103,7 @@ interface HeredocScan {
   frames: HeredocFrame[];
   wordStart: boolean;
   pending: ConfirmedHeredoc | null;
+  pipelineInspection?: boolean;
 }
 
 type HeredocStep = "next" | "newline" | "ambiguous";
@@ -109,6 +117,7 @@ const commandFrameOpeners: ReadonlyArray<readonly [string, HeredocFrame]> = [
   ['$"', '"'],
   ["<(", "<("],
   [">(", "<("],
+  ["((", "(("],
   ["(", "("],
   ["'", "'"],
   ['"', '"'],
@@ -178,6 +187,22 @@ function readQuotedHeredocDelimiter(
   return { text, end: close + 1 };
 }
 
+/** Pipeline inspection also recognizes plain literal delimiters; unresolved quoting stays a refusal rather than hiding later commands. */
+function readPipelineHeredocDelimiter(
+  input: string,
+  start: number,
+): { text: string; end: number } | null {
+  const quoted = readQuotedHeredocDelimiter(input, start);
+  if (quoted !== null) return quoted;
+  let index = start;
+  while (input.charAt(index) === " " || input.charAt(index) === "\t") index++;
+  const match = /^[^ \t\n;&|()<>'"\\$\x60]+/u.exec(input.slice(index));
+  if (match === null) return null;
+  const end = index + match[0].length;
+  if (!/^[ \t\n;&|()<>]?$/u.test(input.charAt(end))) return null;
+  return { text: match[0], end };
+}
+
 /** Record one quoted heredoc operator, skip a here-string, and refuse any delimiter whose body boundary is uncertain. */
 function scanHeredocOperator(scan: HeredocScan): HeredocStep {
   const { input, index } = scan;
@@ -188,10 +213,10 @@ function scanHeredocOperator(scan: HeredocScan): HeredocStep {
     return "next";
   }
   const stripTabs = input.charAt(index + 2) === "-";
-  const delimiter = readQuotedHeredocDelimiter(
-    input,
-    index + (stripTabs ? 3 : 2),
-  );
+  const readDelimiter = scan.pipelineInspection
+    ? readPipelineHeredocDelimiter
+    : readQuotedHeredocDelimiter;
+  const delimiter = readDelimiter(input, index + (stripTabs ? 3 : 2));
   // A second body on one command line is outside this masker's one-body model.
   if (delimiter === null || scan.pending !== null) return "ambiguous";
   scan.pending = {
@@ -209,7 +234,11 @@ function scanHeredocOperator(scan: HeredocScan): HeredocStep {
 function skipHeredocComment(scan: HeredocScan): HeredocStep {
   const end = scan.input.indexOf("\n", scan.index);
   const stop = end < 0 ? scan.input.length : end;
-  if (scan.input.slice(scan.index, stop).includes("<<")) return "ambiguous";
+  if (
+    !scan.pipelineInspection &&
+    scan.input.slice(scan.index, stop).includes("<<")
+  )
+    return "ambiguous";
   advanceHeredocScan(scan, stop - scan.index);
   return "next";
 }
@@ -235,7 +264,7 @@ function startsUntrackedSyntax(
   scan: HeredocScan,
   frame: HeredocFrame | undefined,
 ): boolean {
-  if (scan.input.startsWith("((", scan.index)) return true;
+  if (scan.input.startsWith("((", scan.index)) return !scan.pipelineInspection;
   return (
     frame !== undefined &&
     scan.wordStart &&
@@ -324,12 +353,22 @@ function scanHeredocExpansionCharacter(
   return "next";
 }
 
+/** Command contexts share operator rules; quoted and arithmetic contexts read the same bytes as data. */
+function isHeredocCommandFrame(
+  frame: HeredocFrame | undefined,
+): frame is undefined | "$(" | "<(" | "(" {
+  return (
+    frame === undefined || frame === "$(" || frame === "<(" || frame === "("
+  );
+}
+
 /** Dispatch one character by its innermost context; heredoc-like text outside a command context stops confirmation. */
 function scanHeredocCharacter(scan: HeredocScan): HeredocStep {
   const frame = scan.frames.at(-1);
-  if (frame === undefined || frame === "$(" || frame === "<(" || frame === "(")
+  if (isHeredocCommandFrame(frame))
     return scanHeredocCommandCharacter(scan, frame);
-  if (scan.input.startsWith("<<", scan.index)) return "ambiguous";
+  if (!scan.pipelineInspection && scan.input.startsWith("<<", scan.index))
+    return "ambiguous";
   if (frame === "'" || frame === "$'" || frame === '"' || frame === "\x60")
     return scanHeredocQuotedCharacter(scan, frame);
   return scanHeredocExpansionCharacter(scan, frame);
@@ -376,6 +415,90 @@ function findConfirmedQuotedHeredocs(
     }
   }
   return confirmed;
+}
+
+interface PipelineLineScan {
+  syntax: HeredocScan;
+  pendingPipe: boolean;
+  joins: number;
+  edits: { start: number; end: number; text: string }[];
+}
+
+/** Only an executable pipe can continue a pipeline; comments and quoted or escaped pipe text remain data. */
+function rememberPipelineToken(state: PipelineLineScan, char: string): void {
+  const scan = state.syntax;
+  if (char === "#" && scan.wordStart) {
+    const newline = scan.input.indexOf("\n", scan.index);
+    state.edits.push({
+      start: scan.index,
+      end: newline < 0 ? scan.input.length : newline,
+      text: "",
+    });
+    return;
+  }
+  if (/^[ \t\n]$/u.test(char)) return;
+  if (char === "&" && scan.input.charAt(scan.index - 1) === "|") return;
+  state.pendingPipe =
+    char === "|" &&
+    scan.input.charAt(scan.index - 1) !== "|" &&
+    scan.input.charAt(scan.index + 1) !== "|";
+}
+
+/** Mark continuation newlines before advancing the shared syntax scan; a heredoc cannot supply the missing consumer. */
+function scanPipelineLineCharacter(state: PipelineLineScan): HeredocStep {
+  const scan = state.syntax;
+  const index = scan.index;
+  if (isHeredocCommandFrame(scan.frames.at(-1)))
+    rememberPipelineToken(state, scan.input.charAt(index));
+  const step = scanHeredocCharacter(scan);
+  if (step !== "newline" || !state.pendingPipe) return step;
+  if (scan.pending !== null) return "ambiguous";
+  state.edits.push({ start: index, end: index + 1, text: " " });
+  state.joins++;
+  return step;
+}
+
+/**
+ * Join executable pipeline continuations while preserving heredoc bodies and quoted text.
+ * Comments on joined lines are removed; unresolved body or syntax boundaries return null for a policy refusal.
+ */
+export function joinPolicyPipelineLines(input: string): string | null {
+  if (!/\|&?[ \t]*(?:#[^\n]*)?\n/u.test(input)) return input;
+  const syntax: HeredocScan = {
+    input,
+    index: 0,
+    line: 0,
+    frames: [],
+    wordStart: true,
+    pending: null,
+    pipelineInspection: true,
+  };
+  const state: PipelineLineScan = {
+    syntax,
+    pendingPipe: false,
+    joins: 0,
+    edits: [],
+  };
+  while (syntax.index < input.length) {
+    const step = scanPipelineLineCharacter(state);
+    if (step === "ambiguous") return null;
+    if (step === "newline" && syntax.pending !== null) {
+      skipHeredocBody(syntax, syntax.pending);
+      syntax.pending = null;
+      syntax.wordStart = true;
+      state.pendingPipe = false;
+    }
+  }
+  if (syntax.frames.length > 0) return null;
+  if (state.joins === 0) return input;
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const edit of state.edits) {
+    chunks.push(input.slice(cursor, edit.start), edit.text);
+    cursor = edit.end;
+  }
+  chunks.push(input.slice(cursor));
+  return chunks.join("");
 }
 
 const singleQuotedOpener = /(<<-?)[ \t\n\v\f\r]*'([^']+)'/u;

@@ -138,13 +138,17 @@ export function materializePolicyRow(
   const environment = { ...baseEnvironment };
   for (const [name, value] of Object.entries(row.setup.environment))
     environment[name] = withPaths(value, tokens);
+  // Token paths enter shell text, where native Windows backslashes would be escapes.
+  const commandTokens = tokens.map(
+    ([token, path]) => [token, path.replaceAll("\\", "/")] as const,
+  );
   return {
     cwd: withPaths(row.setup.cwd, tokens),
     environment,
     argv:
       row.input.command === undefined
         ? []
-        : [`--check=${withPaths(row.input.command, tokens)}`],
+        : [`--check=${withPaths(row.input.command, commandTokens)}`],
     stdin: Buffer.from(row.input.payloadBase64 ?? "", "base64"),
     tokens,
     cleanup,

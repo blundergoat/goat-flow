@@ -165,12 +165,21 @@ const secretStorePatterns = [
     /application_default_credentials\.json/u,
     /(^|[ \t\r\n\v\f=:/"'])(credentials\.json|\.npmrc|\.pypirc)([ \t\r\n\v\f]|$|\.|["'])/u,
 ];
-/** Recognize credential stores and filenames; ordinary secrets routes and providers remain readable. */
+/** Remove only proven query arguments before scanning credential paths; file-valued options remain inspectable. */
+function pathInputWithoutQueryData(input, commandVerb) {
+    const words = splitPolicyShellWords(input);
+    const data = queryDataIndices(words, commandVerb);
+    return data.size === 0
+        ? input
+        : joinPolicyShellWords(words.filter((_, index) => !data.has(index)), 0, "argv");
+}
+/** Recognize credential stores and filenames outside proven query data; ordinary secrets routes and providers remain readable. */
 export function isSecretPathTouch(input, commandVerb = "") {
-    let candidate = /['"\\<]/u.test(input)
-        ? stripPolicyShellQuotesForPathScan(input).replace(/\n+$/u, "")
-        : input;
-    const windows = input.includes("\\") ? windowsPathScanView(input) : "";
+    const paths = pathInputWithoutQueryData(input, commandVerb);
+    let candidate = /['"\\<]/u.test(paths)
+        ? stripPolicyShellQuotesForPathScan(paths).replace(/\n+$/u, "")
+        : paths;
+    const windows = paths.includes("\\") ? windowsPathScanView(paths) : "";
     if (windows)
         candidate += " " + windows;
     const envScan = candidate.includes(".env.example")

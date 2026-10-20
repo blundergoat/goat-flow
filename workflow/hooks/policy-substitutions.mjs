@@ -51,6 +51,16 @@ async function inspectNestedCommand(scan, marker) {
     const denial = inner === "" ? null : await scan.evaluate(inner, scan.depth + 1);
     if (denial !== null)
         return denial;
+    scan.outputs.push({
+        start: scan.index,
+        end: close + 1,
+        command: inner,
+        kind: scan.bytes[scan.index] === 0x24
+            ? "command"
+            : scan.bytes[scan.index] === 0x3c
+                ? "input"
+                : "output",
+    });
     appendSubstitutionMarker(scan, marker);
     scan.index = close;
     return null;
@@ -76,9 +86,10 @@ async function inspectSubstitutionOpener(scan, char) {
  * @param depth - the nesting depth of `remaining`; nested interiors are evaluated at depth + 1
  * @param scope - the protection named by this checker's own refusals; nested denials keep their own scope
  * @param evaluate - the complete segment policy used for each nonempty interior
- * @returns the first denial, or null when every interior is allowed and no unresolved substitution remains
+ * @param inspectOutputs - optional policy for output used by the outer command; receives inert markers with outer quoting intact
+ * @returns the first interior, syntax or output-flow denial, or null when every applicable check allows the command
  */
-export async function checkPolicyCommandSubstitutions(remaining, depth, scope, evaluate) {
+export async function checkPolicyCommandSubstitutions(remaining, depth, scope, evaluate, inspectOutputs) {
     const scan = {
         bytes: new TextEncoder().encode(remaining),
         index: 0,
@@ -90,6 +101,7 @@ export async function checkPolicyCommandSubstitutions(remaining, depth, scope, e
         inSingle: false,
         inDouble: false,
         escaped: false,
+        outputs: [],
     };
     for (; scan.index < scan.bytes.length; scan.index++) {
         const char = String.fromCharCode(scan.bytes[scan.index] ?? 0);
@@ -106,7 +118,28 @@ export async function checkPolicyCommandSubstitutions(remaining, depth, scope, e
         }
     }
     const reason = unresolvedSubstitutionReason(scan);
-    return reason === null ? null : { scope, reason };
+    if (reason !== null)
+        return { scope, reason };
+    if (!inspectOutputs || scan.outputs.length === 0)
+        return null;
+    return inspectSubstitutionOutputs(scan, remaining, inspectOutputs);
+}
+/** Preserve outer quoting while replacing inspected command and process expansions with collision-free inert words. */
+function inspectSubstitutionOutputs(scan, original, inspect) {
+    let prefix = "__goat_substitution_";
+    while (original.includes(prefix))
+        prefix += "_";
+    let projection = "";
+    let cursor = 0;
+    const outputs = scan.outputs.map((range, index) => {
+        const marker = `${prefix}${index}__`;
+        projection +=
+            decoder.decode(scan.bytes.subarray(cursor, range.start)) + marker;
+        cursor = range.end;
+        return { marker, command: range.command, kind: range.kind };
+    });
+    projection += decoder.decode(scan.bytes.subarray(cursor));
+    return inspect(projection, outputs);
 }
 /** An opener that never closed cannot be inspected, and a backtick hides its command from review. */
 function unresolvedSubstitutionReason(scan) {

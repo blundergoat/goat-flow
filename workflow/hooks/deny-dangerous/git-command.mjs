@@ -3,6 +3,7 @@
 /** Inspect Git command context and saved aliases, preserving argv and returning write-policy reasons. */
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
+import { isAbsolute } from "node:path";
 import { captureHookProcessUntilDeadline } from "../hook-supervisor.mjs";
 import { gitConfigCommandPayload, gitConfigKeyMayHostCommand, } from "../policy-git.mjs";
 import { policyUnresolvedSplitRefusal, splitPolicyTopLevelPipelineStages, } from "../policy-segments.mjs";
@@ -97,7 +98,7 @@ function attachedGlobalOption(word) {
 /** Preserve Bash's literal directory accumulation and inspect command-bearing config in option order. */
 function selectGitDirectory(paths, value) {
     const dynamic = /[$`]/u.test(value);
-    if (value.startsWith("/") && !dynamic) {
+    if (isAbsolute(value) && !dynamic) {
         paths.selectedDirectory = value;
         paths.selectedDirectoryUnknown = false;
     }

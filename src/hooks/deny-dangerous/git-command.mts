@@ -1,6 +1,7 @@
 /** Inspect Git command context and saved aliases, preserving argv and returning write-policy reasons. */
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
+import { isAbsolute } from "node:path";
 import { captureHookProcessUntilDeadline } from "../hook-supervisor.mjs";
 import {
   gitConfigCommandPayload,
@@ -160,7 +161,7 @@ function attachedGlobalOption(
 /** Preserve Bash's literal directory accumulation and inspect command-bearing config in option order. */
 function selectGitDirectory(paths: GitPathspecContext, value: string): void {
   const dynamic = /[$`]/u.test(value);
-  if (value.startsWith("/") && !dynamic) {
+  if (isAbsolute(value) && !dynamic) {
     paths.selectedDirectory = value;
     paths.selectedDirectoryUnknown = false;
   } else {
