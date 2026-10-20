@@ -1,9 +1,24 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-10-19
+last_reviewed: 2026-10-21
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and the static gates a touched TypeScript file must pass before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
+
+## Lesson: Validate review receipt names and scope labels before saving
+
+**Status:** active | **Created:** 2026-10-21
+**Severity:** INTEGRATION
+**Decision changed:** Use the review validator's exact receipt naming and source-label contract before persisting a report.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** Run draft validation before writing review receipts. An explicit path selection uses `uncommitted=n/a`; its receipt names require the literal `goat-review-bundle.` and `goat-review-refutations.` prefixes. Infer neither rule from the files' working-tree status or a similar-looking example name.
+
+**What happened:** The M03 handoff review's first draft used hyphenated receipt prefixes and `uncommitted=yes` for an explicit-path authority. Draft validation rejected four format/authority checks before any report was saved. Correcting the names and scope label produced a validated report.
+
+**Evidence:** `src/cli/review-validate-common.ts` (search: `REFUTATION_LEDGER_PATH`, `REVIEW_BUNDLE_PATH`) and `src/cli/review-validate-authority.ts` (search: `reviewScopeLabels`).
+
+---
 
 ## Lesson: Formatter verification must preserve repo style flags
 
@@ -46,7 +61,7 @@ last_reviewed: 2026-10-19
 **Decision changed:** After the first focused GREEN on any TypeScript change, run the repository formatter, file-scoped ESLint, the exact Knip command, and targeted Gruff before any suite, preflight, or completion claim; a receipt without their literal output is incomplete.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 81 | **Latest occurrence:** 2026-10-17
+**Incident count:** 82 | **Latest occurrence:** 2026-10-21
 **Merged:** 2026-09-05 - renamed from "New tests need formatter gate before verification claims"; absorbed "Slow installer round-trip catches prompt/test lint debt" (2026-04-26, 5 incidents), "Format touched TypeScript tests before repo-wide preflight" (2026-04-30), "Preflight TypeScript gates include Knip binary policy and touched-test formatting" (2026-06-07, 28 incidents), and "Format patched hook test fixtures before full preflight" (2026-06-02, 2 incidents) from `.goat-flow/learning-loop/lessons/hook-testing.md`, plus five touched-file recurrences previously logged under the attribution lesson above and one 2026-08-09 static-gate recurrence from `.goat-flow/learning-loop/lessons/verification-gruff.md`; the count is the sum of the declared totals.
 
 **Prevention:** After the first focused GREEN that touches TypeScript, and before any later aggregate suite, preflight, or completion claim, run `npm run check:touched` and quote each selected result. It checks touched formatting; for changed `src/*.ts`, it also runs file-scoped ESLint, typecheck, and the repository Gruff ratchet. `test/**` sits outside the lint project. Then run and quote the exact Knip command from `scripts/preflight-checks.sh` (search: `knip_command=(`), never an invented `npm run knip` or a bare `npx knip`, which exhausts the default heap; run targeted Gruff on the touched files too. Keep helpers module-private until a current consumer imports them, and reference child-process fixtures with `fileURLToPath(new URL(...))` so Knip can see them, as in `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`). When a later gate fails, fix it, rerun that gate, then restart the sequence; every earlier proof is stale. A milestone that edits `src/` lists `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` in its Commands table. For goat-clarity, freeze the check and write commands before mutation; anchors `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`) and `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
@@ -58,6 +73,8 @@ last_reviewed: 2026-10-19
 **Root cause:** Typecheck and runtime tests do not exercise formatting, lint complexity, unused-export policy, static fixture reachability, or analyzer size limits; those gates run only in preflight and in the fixture's copied checkout, so a proof sequence that starts with suites pays for them last.
 
 **Incident ledger** (one line per incident: the gate that fired, the repair, the anchor):
+
+**Recurrence 2026-10-21 (Stop context port):** Two malformed-input cases and typecheck passed, but touched checks rejected the translated emitter/parser complexity. Private helpers cleared those checks; a later Symbol sentinel was then rejected by only-throw-error. Full preflight also exposed an obsolete scaffold assertion and nested code-map rows that its direct-member inventory parses incorrectly. Preserve these failures and stop at the contract gate; apply the complete source, fixture and catalogue correction only after review, then rerun preflight. Evidence: `src/hooks/post-turn/context.mts` (search: `emitPostTurnHookResult`, `readStopContext`), `test/integration/hook-policy-node.test.ts` (search: `hookIdentifier`), and `scripts/preflight-checks.sh` (search: `listed_hook_members`).
 
 **Recurrence 2026-10-17 (parenthesis port):** The direct parser translation passed its runtime cases but reached ESLint complexity 15 and added a cognitive-complexity warning in generated JavaScript. A private quote-state transition helper keeps byte-boundary counting separate without changing the cases or policy. Run typed-source lint and the production ratchet before broadening a parser batch. Evidence: `src/hooks/policy-words.mts` (search: `consumeBoundaryQuote`, `findMatchingPolicyShellParen`) and `eslint.config.mjs` (search: `max: 10`).
 

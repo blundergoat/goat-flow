@@ -3690,6 +3690,7 @@ if $HOOKS_ENABLED; then
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.mjs" "$HOOKS_DIR/gruff-code-quality.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.mjs" "$HOOKS_DIR/post-turn-safety.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn/context.mjs" "$HOOKS_DIR/post-turn/context.mjs" "system-owned" "755"
   prune_unlisted_hook_files "$HOOKS_DIR"
   prune_legacy_agent_hook_copies
   echo "Hook policy → .goat-flow/hooks/deny-dangerous/:"

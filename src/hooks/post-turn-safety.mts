@@ -1,14 +1,89 @@
 #!/usr/bin/env node
-/** Writes an unavailable reply while this candidate evaluator is unported; requests are never classified. */
+/** Validate the ported Stop context; scanning remains explicitly unavailable until its batches are implemented. */
+import { readFileSync } from "node:fs";
 import { reportNativeLauncherUnavailable } from "./hook-launch.mjs";
+import type { PostTurnContext } from "./post-turn/context.mjs";
 
-process.exitCode = await reportNativeLauncherUnavailable(
-  "post-turn",
-  null,
-  null,
-  "post-turn-safety",
-  {
-    unavailableReasonCode: "candidate-unported",
-    userFacingReason: "candidate evaluator has not been ported",
-  },
-);
+try {
+  const runtime = await import("./post-turn/context.mjs");
+  const args = process.argv.slice(2);
+  if (args.length > 0 && !(args.length === 1 && args[0] === "--self-test")) {
+    runtime.printPostTurnUsage();
+    process.exitCode = 2;
+  } else if (args.length === 0) {
+    const env = process.env;
+    const context: PostTurnContext = {
+      environment: env,
+      startedAt: performance.now(),
+      hookVersion:
+        readFileSync(new URL(import.meta.url), "utf8").match(
+          /^\/\/ goat-flow-hook-version: ([^\r\n ]+)$/mu,
+        )?.[1] ?? "",
+      managedResultMode:
+        env.GOAT_FLOW_HOOK_RESULT_PROTOCOL === "goat-flow.hook-result.v1" &&
+        [
+          env.GOAT_FLOW_HOOK_PROVIDER,
+          env.GOAT_FLOW_HOOK_EVENT,
+          env.GOAT_FLOW_HOOK_PROVIDER_MODE,
+          env.GOAT_FLOW_HOOK_ADAPTER_VERSION,
+        ].every(Boolean),
+      findings: [],
+      detectedFindings: 0,
+      incomplete: false,
+      coverageGap: false,
+      recordError: false,
+      boundedReentryEnded: false,
+      infrastructureFailure: false,
+      detail: "",
+      reasonOverride: "",
+      stopPayloadPresent: false,
+      sessionFingerprint: "",
+      stopHookActive: false,
+      stopPayloadError: "",
+      statePaths: null,
+    };
+    if (!(await runtime.readStopContext(context))) {
+      context.detail = `The coding agent supplied an invalid Stop payload: ${context.stopPayloadError}`;
+      context.reasonOverride = "input-invalid";
+      process.stderr.write(
+        `post-turn-safety: scan incomplete (invalid Stop payload: ${context.stopPayloadError}).\n`,
+      );
+      process.exitCode = context.managedResultMode
+        ? await runtime.emitPostTurnHookResult(context, 2)
+        : 2;
+    } else {
+      process.exitCode = await reportNativeLauncherUnavailable(
+        "post-turn",
+        null,
+        null,
+        "post-turn-safety",
+        {
+          unavailableReasonCode: "candidate-unported",
+          userFacingReason: "candidate evaluator has not been ported",
+        },
+      );
+    }
+  } else {
+    process.exitCode = await reportNativeLauncherUnavailable(
+      "post-turn",
+      null,
+      null,
+      "post-turn-safety",
+      {
+        unavailableReasonCode: "candidate-unported",
+        userFacingReason: "candidate evaluator has not been ported",
+      },
+    );
+  }
+} catch {
+  process.exitCode = await reportNativeLauncherUnavailable(
+    "post-turn",
+    null,
+    null,
+    "post-turn-safety",
+    {
+      unavailableReasonCode: "hook-unavailable",
+      userFacingReason: "required post-turn runtime is unavailable",
+    },
+  );
+}

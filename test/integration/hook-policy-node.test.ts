@@ -63,34 +63,114 @@ function runEntrypoint(
 }
 
 // Stop failures block; Gruff reports an advisory skip. Neither is a completed evaluation.
-for (const [hookIdentifier, expectedStatus] of [
-  ["post-turn-safety", 2],
-  ["gruff-code-quality", 0],
+for (const [hookIdentifier, expectedStatus, diagnostic] of [
+  ["post-turn-safety", 2, /^Usage: post-turn-safety\.mjs \[--self-test\]\n$/u],
+  ["gruff-code-quality", 0, /hook unavailable/u],
 ] as const) {
-  test(`unported ${hookIdentifier} candidate reports unavailable without a shell fallback`, (testContext) => {
-    const { root, hooks, environment } = candidateFixture(testContext);
-    const entrypoint = selectedHookPath(
-      join(hooks, hookIdentifier + ".sh"),
-      "candidate",
-    );
-    const result = spawnSync(
-      process.execPath,
-      [entrypoint, "--root", root, "--check", "echo harmless"],
-      {
-        cwd: root,
-        env: environment,
-        input: "",
-        encoding: "utf8",
-        timeout: 10000,
-      },
-    );
-    assert.equal(result.error, undefined);
-    assert.equal(result.status, expectedStatus, result.stderr);
-    assert.equal(result.stdout, "");
-    assert.match(result.stderr, /hook unavailable/u);
-    assertNoSpawnDenials(environment);
-  });
+  test(
+    hookIdentifier === "post-turn-safety"
+      ? "post-turn-safety candidate refuses unsupported work without a shell fallback"
+      : `unported ${hookIdentifier} candidate reports unavailable without a shell fallback`,
+    (testContext) => {
+      const { root, hooks, environment } = candidateFixture(testContext);
+      const entrypoint = selectedHookPath(
+        join(hooks, hookIdentifier + ".sh"),
+        "candidate",
+      );
+      const result = spawnSync(
+        process.execPath,
+        [entrypoint, "--root", root, "--check", "echo harmless"],
+        {
+          cwd: root,
+          env: environment,
+          input: "",
+          encoding: "utf8",
+          timeout: 10000,
+        },
+      );
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, expectedStatus, result.stderr);
+      assert.equal(result.stdout, "");
+      assert.match(result.stderr, diagnostic);
+      if (hookIdentifier === "post-turn-safety") {
+        const unported = spawnSync(process.execPath, [entrypoint], {
+          cwd: root,
+          env: environment,
+          input: "",
+          encoding: "utf8",
+          timeout: 10000,
+        });
+        assert.equal(unported.error, undefined);
+        assert.equal(unported.status, 2, unported.stderr);
+        assert.equal(unported.stdout, "");
+        assert.match(unported.stderr, /hook unavailable/u);
+      }
+      assertNoSpawnDenials(environment);
+    },
+  );
 }
+
+// Use the real process boundary to catch permissive decoding or byte-limit regressions.
+test("post-turn-safety candidate rejects invalid Stop fields and bytes without a shell fallback", (testContext) => {
+  const { root, hooks, environment } = candidateFixture(testContext);
+  const entrypoint = selectedHookPath(
+    join(hooks, "post-turn-safety.sh"),
+    "candidate",
+  );
+  const validPayload = JSON.stringify({
+    session_id: "stop-input-boundary",
+    stop_hook_active: false,
+  });
+  const inputs = {
+    "null payload": "null",
+    "missing fields": "{}",
+    "empty session": JSON.stringify({
+      session_id: "",
+      stop_hook_active: false,
+    }),
+    "oversized session": JSON.stringify({
+      session_id: "s".repeat(513),
+      stop_hook_active: false,
+    }),
+    "nonboolean active flag": JSON.stringify({
+      session_id: "s",
+      stop_hook_active: "false",
+    }),
+    "wrong event": JSON.stringify({
+      session_id: "s",
+      stop_hook_active: false,
+      hook_event_name: "PreToolUse",
+    }),
+    "invalid UTF-8": Buffer.concat([
+      Buffer.from('{"session_id":"'),
+      Buffer.from([0xff]),
+      Buffer.from('","stop_hook_active":false}'),
+    ]),
+    "BOM prefix": `\uFEFF${validPayload}`,
+    "multibyte byte limit": JSON.stringify({
+      session_id: "s",
+      stop_hook_active: false,
+      padding: "€".repeat(350000),
+    }),
+  };
+
+  for (const [label, input] of Object.entries(inputs)) {
+    const result = spawnSync(process.execPath, [entrypoint], {
+      cwd: root,
+      env: environment,
+      input,
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    assert.equal(result.error, undefined, label);
+    assert.equal(result.status, 2, `${label}: ${result.stderr}`);
+    assert.equal(result.stdout, "", label);
+    assert.match(result.stderr, /invalid Stop payload/u, label);
+    if (label === "multibyte byte limit")
+      assert.match(result.stderr, /payload exceeds 1048576 bytes/u, label);
+  }
+  assertNoSpawnDenials(environment);
+});
 
 for (const [policy, denied, stderr] of [
   [
