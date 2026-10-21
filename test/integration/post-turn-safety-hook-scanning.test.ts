@@ -7,7 +7,7 @@ import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
  * scanner behaves as asserted, not a reimplementation of it.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -37,6 +37,36 @@ import {
   TEST_PRIVATE_KEY_HEADER,
   TEST_DOCUMENTED_SLACK_PLACEHOLDER,
 } from "./post-turn-safety-hook.helpers.js";
+
+let nonUtf8NameSkipReason: string | false | undefined;
+
+/**
+ * Write and remove one probe file to learn whether this filesystem accepts a name that is not valid UTF-8.
+ *
+ * @returns skip=false when such names work; otherwise the capability reason, such as APFS refusing the name
+ * @throws Unexpected filesystem errors, such as a full temporary drive, rather than hiding them as capability skips
+ */
+function nonUtf8NameTestOptions(): { skip: string | false } {
+  // Undefined means this runner has not probed yet; later cases reuse the result.
+  if (nonUtf8NameSkipReason !== undefined)
+    return { skip: nonUtf8NameSkipReason };
+  const probeRoot = mkdtempSync(join(tmpdir(), "goat-non-utf8-name-"));
+  try {
+    writeFileSync(
+      Buffer.concat([Buffer.from(`${probeRoot}/name`), Buffer.from([0xff])]),
+      "probe\n",
+    );
+    nonUtf8NameSkipReason = false;
+  } catch (error) {
+    // Filesystems that require UTF-8 names refuse with EILSEQ or EINVAL; any other error is a real failure.
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EILSEQ" && code !== "EINVAL") throw error;
+    nonUtf8NameSkipReason = `filesystem refuses non-UTF-8 file names (${code})`;
+  } finally {
+    rmSync(probeRoot, { recursive: true, force: true });
+  }
+  return { skip: nonUtf8NameSkipReason };
+}
 
 describe("post-turn-safety hook: git states and batched scanning", () => {
   /** Confirm both scanner paths tell the user that declared coverage is incomplete.
@@ -712,6 +742,99 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         assertScannerParity(root, 2, /credential assignment/u, {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "64",
         });
+      });
+    });
+
+    // Writes and commits a fixture, then adds a line whose token follows a carriage return the candidate filters must cross.
+    it("blocks a tracked token after a carriage return on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "notes.txt", "base\n");
+        commitAll(root, "add notes");
+        writeFile(
+          root,
+          "notes.txt",
+          `base\nsafe\rkey ${TEST_AWS_ACCESS_KEY}\n`,
+        );
+
+        assertScannerParity(root, 2, /AWS access key in notes\.txt/u);
+      });
+    });
+
+    // Writes and commits a fixture, then adds a private-key header that starts after a carriage return.
+    it("blocks a tracked private-key header after a carriage return on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "notes.txt", "base\n");
+        commitAll(root, "add notes");
+        writeFile(root, "notes.txt", `base\n\r${TEST_PRIVATE_KEY_HEADER}\n`);
+
+        assertScannerParity(root, 2, /private key block in notes\.txt/u);
+      });
+    });
+
+    // Writes an untracked file where only the labelled API-token form can match, because an underscore precedes the token.
+    it("blocks a labelled API token after a carriage return in an untracked file on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "new.txt", `OPENAI_KEY=\rprefix_${TEST_API_TOKEN}\n`);
+
+        assertScannerParity(root, 2, /API token in new\.txt/u);
+      });
+    });
+
+    // Writes an untracked file whose only NUL byte lies beyond the first 32 KiB, so both scanners must still call it binary.
+    it("reports a binary gap when the first NUL byte follows the first 32 KiB on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "bundle.dat",
+          Buffer.concat([
+            Buffer.alloc(35_000, "a"),
+            Buffer.from([0]),
+            Buffer.alloc(4999, "b"),
+          ]),
+        );
+
+        assertScannerParity(
+          root,
+          2,
+          /binary untracked path not scanned in bundle\.dat/u,
+        );
+      });
+    });
+
+    // Writes, commits and then deletes a non-UTF-8 name beside a staged clean edit; staged deduplication must not report it.
+    it(
+      "ignores an unstaged deletion of a non-UTF-8 tracked name on both paths",
+      nonUtf8NameTestOptions(),
+      () => {
+        withTempRepo((root) => {
+          const invalidName = Buffer.concat([
+            Buffer.from(`${root}/old`),
+            Buffer.from([0xff]),
+            Buffer.from(".txt"),
+          ]);
+          writeFileSync(invalidName, "old\n");
+          commitAll(root, "add non-UTF-8 name");
+          writeFile(root, "README.md", "# fixture\nmore\n");
+          runGit(root, ["add", "README.md"]);
+          rmSync(invalidName);
+
+          assertScannerParity(root, 0);
+        });
+      },
+    );
+
+    // Writes three untracked files with findings so a leading-zero limit must still cap direct output at two.
+    it("caps direct-mode findings when MAX_FINDINGS has a leading zero on both paths", () => {
+      withTempRepo((root) => {
+        for (const name of ["a.txt", "b.txt", "c.txt"])
+          writeFile(root, name, `key ${TEST_AWS_ACCESS_KEY}\n`);
+
+        assertScannerParity(
+          root,
+          2,
+          /1 additional finding\(s\) hidden by output cap/u,
+          { GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS: "02" },
+        );
       });
     });
   });

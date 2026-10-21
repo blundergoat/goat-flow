@@ -93,22 +93,112 @@ for (const [hookIdentifier, expectedStatus, diagnostic] of [
       assert.equal(result.stdout, "");
       assert.match(result.stderr, diagnostic);
       if (hookIdentifier === "post-turn-safety") {
-        const unported = spawnSync(process.execPath, [entrypoint], {
+        const initialized = spawnSync("git", ["init", "-q", root], {
+          cwd: root,
+          env: environment,
+          encoding: "utf8",
+          timeout: 10000,
+        });
+        assert.equal(initialized.status, 0, initialized.stderr);
+        const unported = spawnSync(
+          process.execPath,
+          [entrypoint, "--self-test"],
+          {
+            cwd: root,
+            env: environment,
+            input: "",
+            encoding: "utf8",
+            timeout: 10000,
+          },
+        );
+        assert.equal(unported.error, undefined);
+        assert.equal(unported.status, 2, unported.stderr);
+        assert.equal(unported.stdout, "");
+        assert.match(unported.stderr, /hook unavailable/u);
+        // Ignoring every fixture file leaves nothing to scan, so the native scan must finish clean.
+        writeFileSync(join(root, ".gitignore"), "*\n");
+        const scanned = spawnSync(process.execPath, [entrypoint], {
           cwd: root,
           env: environment,
           input: "",
           encoding: "utf8",
           timeout: 10000,
         });
-        assert.equal(unported.error, undefined);
-        assert.equal(unported.status, 2, unported.stderr);
-        assert.equal(unported.stdout, "");
-        assert.match(unported.stderr, /hook unavailable/u);
+        assert.equal(scanned.error, undefined);
+        assert.equal(scanned.status, 0, scanned.stderr);
+        assert.equal(scanned.stdout, "");
+        assert.equal(scanned.stderr, "");
       }
       assertNoSpawnDenials(environment);
     },
   );
 }
+
+// Writes a disposable repository with an untracked token, then sends two Stops through the native launcher, which passes --root first.
+// A refused --root would block once and then release the repeated Stop without scanning.
+test("candidate launcher scans the selected project on a repeated post-turn Stop", (testContext) => {
+  const { root, hooks, environment } = candidateFixture(testContext);
+  const gitOptions = { cwd: root, env: environment, encoding: "utf8" as const };
+  assert.equal(spawnSync("git", ["init", "-q"], gitOptions).status, 0);
+  const identity = [
+    "-c",
+    "user.name=goat-flow-test",
+    "-c",
+    "user.email=goat-flow-test@example.invalid",
+  ];
+  const commit = spawnSync(
+    "git",
+    [...identity, "commit", "-q", "--allow-empty", "-m", "base"],
+    gitOptions,
+  );
+  assert.equal(commit.status, 0, commit.stderr);
+  writeFileSync(join(root, ".gitignore"), ".goat-flow/\n");
+  // Fragments keep a token-shaped literal out of this file.
+  writeFileSync(
+    join(root, "leak.txt"),
+    `key ${["AKIA", "1234567890ABCDEF"].join("")}\n`,
+  );
+  const launcher = selectedHookPath(
+    join(hooks, "run-with-bash.mjs"),
+    "candidate",
+  );
+  const entrypoint = selectedHookPath(
+    join(hooks, "post-turn-safety.sh"),
+    "candidate",
+  );
+  for (const isContinuation of [false, true]) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        launcher,
+        entrypoint,
+        "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000",
+      ],
+      {
+        cwd: root,
+        env: environment,
+        input: JSON.stringify({
+          hook_event_name: "Stop",
+          session_id: "launcher-root",
+          turn_id: "turn-1",
+          stop_hook_active: isContinuation,
+        }),
+        encoding: "utf8",
+        timeout: 20000,
+      },
+    );
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, result.stderr);
+    const reply = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    assert.equal(reply.decision, "block", result.stdout);
+    assert.match(reply.reason ?? "", /post-turn-safety: BLOCK/u);
+    assert.match(reply.reason ?? "", /leak\.txt/u);
+  }
+  assertNoSpawnDenials(environment);
+});
 
 // Use the real process boundary to catch permissive decoding or byte-limit regressions.
 test("post-turn-safety candidate rejects invalid Stop fields and bytes without a shell fallback", (testContext) => {

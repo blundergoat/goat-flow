@@ -241,15 +241,18 @@ array without changing the plan's effort state.
 ## Lesson: Preserve newline matching when porting Bash regular expressions
 
 **Status:** active | **Created:** 2026-10-18
-**Decision changed:** Compare quoted filenames and C-locale character boundaries against the original engine before accepting a regex port.
+**Decision changed:** Compare quoted filenames, carriage-return-bearing lines and C-locale character boundaries against the original engine before accepting a regex port.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-21
 
-**Prevention:** Bash ERE dot matches newlines inside a quoted word. Use JavaScript dotAll only where that original rule requires it; keep ASCII character classes explicit. Compare both engines on newline-bearing operands before broad proof.
+**Prevention:** Bash ERE dot matches newlines inside a quoted word, and `grep -E` dot matches a carriage return because grep splits its input only at LF. JavaScript dot matches neither, nor U+2028 or U+2029. Use dotAll wherever the original engine's dot can reach one of those characters; keep ASCII character classes explicit. Compare both engines on operands containing LF, CR and U+2028 before broad proof.
 
 **What happened:** The first native key-extension matcher copied Bash's pattern into JavaScript without dotAll. All 99 initial helper comparisons agreed, but additional boundary probes found that quoted filenames containing LF or U+2028 were protected by Bash and missed by the candidate. The candidate was isolated and no proposed command ran.
 
 **Evidence:** `src/hooks/deny-dangerous/patterns-paths.mts` (search: `keyMaterialPathTouch`) preserves dotAll for that filename rule. `test/unit/hook-policy-paths.test.ts` (search: `private\nname.key`) retains both reproduced operands beside ordinary key files and query-data controls.
+
+**Recurrence 2026-10-21:** The post-turn scanner port copied three `grep -E` patterns without dotAll. A carriage return before a tracked AWS key or private-key header, or between an untracked credential label and its `_sk-` token, was blocked by Bash and passed by Node. Two code reviews caught the tracked-token case before commit, and differential probes found the other two. All three patterns now carry the `s` flag. Evidence: `src/hooks/post-turn/scanner.mts` (search: `LABELLED_API_TOKEN`) and `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `after a carriage return`).
 
 ---
 
