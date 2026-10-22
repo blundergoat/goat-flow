@@ -8,28 +8,29 @@ const ignoredEnvOptionPrefixes = [
     /^-u[ \t\r\n\v\f]+[^ \t\r\n\v\f]+[ \t\r\n\v\f]*/u,
     /^-u[^ \t\r\n\v\f]+[ \t\r\n\v\f]*/u,
     /^--(?:ignore-environment|null|debug)(?:[ \t\r\n\v\f]+|$)/u,
-    /^--chdir=[^ \t\r\n\v\f]+[ \t\r\n\v\f]*/u,
     /^-[i0v]+(?:[ \t\r\n\v\f]+|$)/u,
     /^--[ \t\r\n\v\f]+/u,
 ];
 /** Skip recognized env settings; null leaves the remaining payload or uncertain option visible. */
-function stripPolicyEnvOption(command) {
+function stripPolicyEnvOption(command, visitDirectory) {
     for (const prefix of ignoredEnvOptionPrefixes) {
         const match = prefix.exec(command);
         if (match)
             return command.slice(match[0].length);
     }
-    const directory = /^(?:--chdir|-[cC])[ \t\r\n\v\f]+/u.exec(command);
-    return directory
-        ? dropFirstPolicyShellWord(command.slice(directory[0].length))
-        : null;
+    const directory = /^(?:--chdir(?:=|[ \t\r\n\v\f]+)|-[cC][ \t\r\n\v\f]+)/u.exec(command);
+    if (!directory)
+        return null;
+    const operand = command.slice(directory[0].length);
+    visitDirectory?.(splitPolicyShellWords(operand)[0] ?? "");
+    return dropFirstPolicyShellWord(operand);
 }
-/** Reveal env's child from text after its executable, refusing unknown option arity. */
-export function normalizePolicyEnvPrefix(command) {
+/** Reveal env's child and report its directory operands; unknown option arity refuses inspection. */
+export function normalizePolicyEnvPrefix(command, visitDirectory) {
     let remaining = command;
     for (;;) {
         remaining = remaining.replace(/^[ \t\r\n\v\f]+/u, "");
-        const afterOption = stripPolicyEnvOption(remaining);
+        const afterOption = stripPolicyEnvOption(remaining, visitDirectory);
         if (afterOption !== null) {
             remaining = afterOption;
             continue;
@@ -37,14 +38,11 @@ export function normalizePolicyEnvPrefix(command) {
         const split = /^(?:-[sS]|--split-string)(?:=|[ \t\r\n\v\f]+)/u.exec(remaining);
         if (split) {
             remaining = remaining.slice(split[0].length);
-            const quote = remaining.charAt(0);
-            // Remove one wrapper layer; the command-word parser still needs any nested executable quotes.
-            if (quote === "'" || quote === '"') {
-                remaining = remaining.slice(1);
-                if (remaining.endsWith(quote))
-                    remaining = remaining.slice(0, -1);
-            }
-            return { kind: "command", command: remaining };
+            // Decode the split-string operand once, preserving its inner shell quotes and later argv.
+            const payload = splitPolicyShellWords(remaining)[0] ?? "";
+            const rest = dropFirstPolicyShellWord(remaining);
+            remaining = rest === "" ? payload : payload + " " + rest;
+            continue;
         }
         const afterAssignment = stripPolicyAssignmentPrefix(remaining);
         if (afterAssignment !== null) {
@@ -100,13 +98,112 @@ export function normalizePolicyGitExecutableWord(word) {
         return word;
     return path.slice(0, slash + 1) + base.slice(0, -4);
 }
+/** An unescaped dollar immediately before this quote opens a Bash ANSI-C string. */
+export function isPolicyAnsiQuoteStart(input, index) {
+    if (input.charAt(index) !== "'" || input.charAt(index - 1) !== "$")
+        return false;
+    let backslashes = 0;
+    for (let before = index - 2; input.charAt(before) === "\\"; before--)
+        backslashes++;
+    return backslashes % 2 === 0;
+}
+/** A comment starts at an unescaped word boundary; escaped whitespace remains part of its word. */
+export function isPolicyShellCommentBoundary(input) {
+    if (input === "")
+        return true;
+    if (!/[ \t\r\n\v\f]$/u.test(input))
+        return false;
+    let slashes = 0;
+    for (let index = input.length - 2; input.charAt(index) === "\\"; index--)
+        slashes++;
+    return slashes % 2 === 0;
+}
+const ansiEscapes = {
+    a: "\x07",
+    b: "\b",
+    e: "\x1b",
+    E: "\x1b",
+    f: "\f",
+    n: "\n",
+    r: "\r",
+    t: "\t",
+    v: "\v",
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "?": "?",
+    "\n": "",
+};
+function decodePolicyAnsiEscape(escape) {
+    if (/^c.$/su.test(escape)) {
+        const char = escape.charCodeAt(1);
+        return String.fromCharCode(char === 63 ? 127 : char & 31);
+    }
+    const numeric = /^(?:u[0-9a-fA-F]{1,4}|U[0-9a-fA-F]{1,8})$/u.test(escape);
+    if (!numeric)
+        return ansiEscapes[escape] ?? "\\" + escape;
+    const code = Number.parseInt(escape.slice(1), 16);
+    return code <= 0x10ffff ? String.fromCodePoint(code) : "\\" + escape;
+}
+/** Consecutive octal and hexadecimal escapes encode bytes of one UTF-8 word. */
+function readPolicyAnsiBytes(input, start) {
+    const encoded = /^(?:\\(?:x[0-9a-fA-F]{1,2}|[0-7]{1,3}))+/u.exec(input.slice(start))?.[0];
+    if (!encoded)
+        return null;
+    const bytes = [...encoded.matchAll(/\\(x[0-9a-fA-F]{1,2}|[0-7]{1,3})/gu)].map((match) => {
+        const word = match[1] ?? "";
+        return word.startsWith("x")
+            ? Number.parseInt(word.slice(1), 16)
+            : Number.parseInt(word, 8);
+    });
+    return {
+        value: Buffer.from(bytes).toString("utf8"),
+        end: start + encoded.length - 1,
+    };
+}
+function readPolicyAnsiString(input, start) {
+    let value = "";
+    for (let index = start + 2; index < input.length; index++) {
+        const char = input.charAt(index);
+        if (char === "'")
+            return { value: value.split("\0", 1)[0] ?? "", end: index };
+        if (char !== "\\") {
+            value += char;
+            continue;
+        }
+        const bytes = readPolicyAnsiBytes(input, index);
+        if (bytes) {
+            value += bytes.value;
+            index = bytes.end;
+            continue;
+        }
+        const escape = /^(?:u[0-9a-fA-F]{1,4}|U[0-9a-fA-F]{1,8}|c.|.)/su.exec(input.slice(index + 1))?.[0];
+        if (escape === undefined)
+            return null;
+        value += decodePolicyAnsiEscape(escape);
+        index += escape.length;
+    }
+    return null;
+}
+function readUnquotedPolicyAnsiString(input, index, state) {
+    return !state.inSingle &&
+        !state.inDouble &&
+        !state.escaped &&
+        input.startsWith("$'", index)
+        ? readPolicyAnsiString(input, index)
+        : null;
+}
 /** Consume quote and escape transitions; true keeps this byte inside the current shell boundary. */
-function consumeBoundaryQuote(state, char) {
+function consumeBoundaryQuote(state, char, ansiStart = false) {
     if (state.escaped) {
         state.escaped = false;
         return true;
     }
     if (state.inSingle) {
+        if (state.ansiQuote && char === "\\") {
+            state.escaped = true;
+            return true;
+        }
         state.inSingle = char !== "'";
         return true;
     }
@@ -117,6 +214,7 @@ function consumeBoundaryQuote(state, char) {
         case "'":
             if (!state.inDouble)
                 state.inSingle = true;
+            state.ansiQuote = ansiStart;
             return true;
         case '"':
             state.inDouble = !state.inDouble;
@@ -173,11 +271,12 @@ export function stripPolicyShellQuotesForPathScan(input) {
 export function findMatchingPolicyShellParen(input, openIndex) {
     let depth = 0;
     const quoteState = { inSingle: false, inDouble: false, escaped: false };
+    const text = Buffer.from(input).toString("latin1");
     for (const [index, byte] of input.entries()) {
         if (index < openIndex)
             continue;
         const char = String.fromCharCode(byte);
-        if (consumeBoundaryQuote(quoteState, char))
+        if (consumeBoundaryQuote(quoteState, char, isPolicyAnsiQuoteStart(text, index)))
             continue;
         if (char === "(")
             depth++;
@@ -186,18 +285,43 @@ export function findMatchingPolicyShellParen(input, openIndex) {
     }
     return null;
 }
+/** Bash reparses two separately closed parentheses as command substitution containing a subshell. */
+export function isPolicySubshellCommandSubstitution(input, start) {
+    const inner = findMatchingPolicyShellParen(input, start + 2);
+    const outer = findMatchingPolicyShellParen(input, start + 1);
+    return (inner !== null &&
+        outer !== null &&
+        outer > inner + 1 &&
+        /^[ \t\r\n\v\f]+$/u.test(Buffer.from(input.subarray(inner + 1, outer)).toString()));
+}
 /** Skip one raw quoted word; empty means no remaining argument was found. */
 export function dropFirstPolicyShellWord(command) {
     const trimmed = command.replace(/^[ \t\r\n\v\f]+/u, "");
     const state = { inSingle: false, inDouble: false, escaped: false };
     for (let index = 0; index < trimmed.length; index++) {
         const char = trimmed.charAt(index);
-        if (consumeBoundaryQuote(state, char))
+        if (consumeBoundaryQuote(state, char, isPolicyAnsiQuoteStart(trimmed, index)))
             continue;
         if (/[ \t\r\n\v\f]/u.test(char))
             return trimmed.slice(index + 1).replace(/^[ \t\r\n\v\f]+/u, "");
     }
     return "";
+}
+/** Detect expansion in one raw word while preserving quoted and escaped literal dollar signs. */
+export function hasPolicyShellWordExpansion(input) {
+    const state = { inSingle: false, inDouble: false, escaped: false };
+    for (let index = 0; index < input.length; index++) {
+        const char = input.charAt(index);
+        if (!state.escaped && !state.inSingle) {
+            if (char === "`" ||
+                (char === "$" && /[A-Za-z0-9_({?#!*$@-]/u.test(input.charAt(index + 1))))
+                return true;
+            if (!state.inDouble && /[ \t\r\n\v\f]/u.test(char))
+                return false;
+        }
+        consumeBoundaryQuote(state, char, isPolicyAnsiQuoteStart(input, index));
+    }
+    return false;
 }
 const doubleQuoteEscapes = new Set(["$", "`", '"', "\\", "\n"]);
 /** Decode quotes and escapes without expansion; true consumes the character for the word reader. */
@@ -250,6 +374,13 @@ export function splitPolicyShellWords(input) {
     };
     for (let index = 0; index < input.length; index++) {
         const char = input.charAt(index);
+        const ansi = readUnquotedPolicyAnsiString(input, index, state);
+        if (ansi) {
+            state.current += ansi.value;
+            state.started = true;
+            index = ansi.end;
+            continue;
+        }
         if (consumeShellWordQuote(state, char, input.charAt(index + 1)))
             continue;
         if (!state.inDouble && /[ \t\r\n\v\f]/u.test(char)) {
@@ -294,6 +425,13 @@ export function normalizeLeadingPolicyWord(command) {
     };
     for (let index = 0; index < input.length; index++) {
         const char = input.charAt(index);
+        const ansi = readUnquotedPolicyAnsiString(input, index, state);
+        if (ansi) {
+            state.current += ansi.value;
+            state.started = true;
+            index = ansi.end;
+            continue;
+        }
         if (consumeShellWordQuote(state, char, input.charAt(index + 1)))
             continue;
         if (!state.inDouble && hasAmbiguousLeadingIfs(input, index, state.current))

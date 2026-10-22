@@ -346,13 +346,14 @@ function configuredRuntimeProbes(
  */
 function registeredDenyRelPath(
   agentFacts: AuditContext["agents"][number],
+  scriptFile = "deny-dangerous.sh",
 ): string | null {
   // Prefer the registered path so a hand-edited installation is checked against its own hook target.
   if (agentFacts.hooks.denyRegisteredPath)
     return agentFacts.hooks.denyRegisteredPath;
   // No hook directory means setup, rather than runtime audit, owns the next action.
   if (!agentFacts.agent.hooksDir) return null;
-  return join(agentFacts.agent.hooksDir, "deny-dangerous.sh");
+  return join(agentFacts.agent.hooksDir, scriptFile);
 }
 
 /**
@@ -361,8 +362,9 @@ function registeredDenyRelPath(
  */
 function normalizedRegisteredDenyRelPath(
   agentFacts: AuditContext["agents"][number],
+  scriptFile = "deny-dangerous.sh",
 ): string | null {
-  const registeredPath = registeredDenyRelPath(agentFacts);
+  const registeredPath = registeredDenyRelPath(agentFacts, scriptFile);
   // Without an expected hook location, audit cannot compare the launcher's target with a registration.
   if (registeredPath === null) return null;
   return posix.normalize(
@@ -726,7 +728,7 @@ function configuredHookCommandPathFailure(
         (agentFacts.agent.hooksDir
           ? `${agentFacts.agent.hooksDir}/${configured.scriptFile}`
           : null))
-      : normalizedRegisteredDenyRelPath(agentFacts);
+      : normalizedRegisteredDenyRelPath(agentFacts, configured.scriptFile);
   // When registration supplies an expected path, a different target requires the user to repair the launcher.
   if (
     expectedScriptPath !== null &&

@@ -695,6 +695,12 @@ describe("native destructive rules and alias state", () => {
   });
 });
 
+const gitContextEnvironment = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+};
+
 describe("Git invocation normalization", () => {
   it("uses the shared normalizer and exposes xargs payloads without hiding uncertainty", () => {
     assert.equal(
@@ -738,7 +744,11 @@ describe("Git invocation normalization", () => {
 
 describe("Git command context", () => {
   it("checks downstream pipeline writes and preserves human-owned worktree removal", async () => {
-    const options = { directory: process.cwd(), deadlineAt: Date.now() + 5000 };
+    const options = {
+      directory: process.cwd(),
+      deadlineAt: Date.now() + 5000,
+      environment: gitContextEnvironment,
+    };
     const context = { verb: "git", hasRedirect: false, hasPipe: false };
     assert.equal(await checkGitSegment("git status", options, context), null);
     assert.equal(
@@ -794,6 +804,7 @@ describe("Git command context", () => {
       const result = await inspectGitCommand(command, {
         directory: process.cwd(),
         deadlineAt: Date.now() + 5000,
+        environment: gitContextEnvironment,
       });
       assert.equal(result.kind, "git", command);
       if (result.kind !== "git") throw new Error(command);
@@ -810,7 +821,11 @@ describe("Git command context", () => {
     }
   });
   it("retains option order, command payloads and uncertainty for the policy owner", async () => {
-    const options = { directory: process.cwd(), deadlineAt: Date.now() + 5000 };
+    const options = {
+      directory: process.cwd(),
+      deadlineAt: Date.now() + 5000,
+      environment: gitContextEnvironment,
+    };
     const result = await inspectGitCommand(
       "git -C '$root' -C /literal -c credential.helper= -c 'core.pager=git push' --config-env=core.editor=EDITOR --unknown status",
       options,

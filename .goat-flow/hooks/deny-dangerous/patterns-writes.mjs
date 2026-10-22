@@ -103,6 +103,7 @@ export function isGitPublicationTarget(candidate, context = {}) {
         [
             "push",
             "send-pack",
+            "send-email",
             "http-push",
             "svn dcommit",
             "p4 submit",

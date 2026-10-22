@@ -364,7 +364,7 @@ test/
 └── fixtures/hooks-bash/                        = immutable M01 Bash trees, dependency hashes and per-ID reference outcomes; never packed
 ```
 
-`.github/workflows/ci.yml` owns native Linux/macOS/Windows floor/LTS controls, a separately identified WSL2 route, Linux reference tests with jq 1.6 and both locales, and Windows Git Bash/WSL divergence reports. Divergence reports do not accept candidates. The original Bash self-tests stay immutable; each port owns its candidate suite conversion.
+`.github/workflows/ci.yml` owns native Linux/macOS/Windows floor/LTS controls, a separately identified WSL2 route, Linux reference tests with jq 1.6 in the C locale, and WSL divergence reports. Divergence reports do not accept candidates. The original Bash self-tests stay immutable; each port owns its candidate suite conversion.
 
 The shipped corpus lives at `workflow/hooks/deny-dangerous/corpus.json`, mirrored to `.goat-flow/hooks/deny-dangerous/corpus.json`. `workflow/manifest.json` declares ownership and required delivery; `workflow/install-goat-flow.sh` copies it as data. The test-only reference outcomes stay under `test/fixtures/hooks-bash/`.
 

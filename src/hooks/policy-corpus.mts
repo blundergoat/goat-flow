@@ -48,13 +48,16 @@ export interface PolicyCorpusRow {
 }
 
 /** Read the corpus shipped beside the policy runtime. */
-export function loadPolicyCorpus(): { rows: PolicyCorpusRow[] } {
+export function loadPolicyCorpus(): {
+  caseCount: number;
+  rows: PolicyCorpusRow[];
+} {
   return JSON.parse(
     readFileSync(
       new URL("./deny-dangerous/corpus.json", import.meta.url),
       "utf8",
     ),
-  ) as { rows: PolicyCorpusRow[] };
+  ) as { caseCount: number; rows: PolicyCorpusRow[] };
 }
 
 /** A row's materialized request: where it runs, its environment and input, and the token for each temporary path. */
@@ -279,12 +282,23 @@ export async function runPolicySelfTest(
     process.stderr.write(`FAIL: unsupported self-test mode: ${mode}\n`);
     return 1;
   }
-  const rows = loadPolicyCorpus().rows.filter((row) =>
-    row.membership.includes(mode),
-  );
+  const corpus = loadPolicyCorpus();
+  if (corpus.caseCount !== corpus.rows.length) {
+    process.stderr.write(
+      "FAIL: policy corpus caseCount differs from the complete row count\n",
+    );
+    return 1;
+  }
+  const rows = corpus.rows.filter((row) => row.membership.includes(mode));
   const runnable = rows.filter(
     (row) => row.policy === guard && !row.availabilityCase,
   );
+  if (runnable.length === 0) {
+    process.stderr.write(
+      `FAIL: ${guard} self-test selected no runnable rows for mode=${mode}\n`,
+    );
+    return 1;
+  }
   const reference = createReferenceStandIn();
   // An inherited repository or root override would point the rows' Git lookups at the consumer's project.
   const inheritedOverrides = new Set([

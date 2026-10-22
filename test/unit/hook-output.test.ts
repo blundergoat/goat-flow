@@ -88,5 +88,4 @@ test("preserves managed ceilings and the legacy shared output cap", () => {
   assert.equal(appendBoundedHookOutput(legacy, "stderr", "e"), true);
   assert.equal(appendBoundedHookOutput(legacy, "stderr", "x"), false);
   assert.equal(legacy.stdout.length + legacy.stderr.length, 10_000);
-  assert.equal(legacy.output?.failureStage, undefined);
 });

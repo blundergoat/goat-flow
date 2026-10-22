@@ -290,6 +290,7 @@ function preflightSchedulerFixture(
       "memory",
       "content",
       "drift",
+      "gruff",
     ].includes(name)
       ? '[[ -f "$PREFLIGHT_BUILD_READY" ]] || exit 9'
       : ":";
@@ -306,7 +307,7 @@ check_${name}() {
   section "${label}"
   ${requireBuild}
   printf 'start ${name}\\n' >> "$PREFLIGHT_TEST_DIRECTORY/events"
-  sleep 0.1
+  sleep ${name === "typescript" ? "0.3" : "0.1"}
   ${buildReady}
   pass "fixture ${name}"
   ${failure}
@@ -345,6 +346,7 @@ describe("preflight parallel scheduler", () => {
     const events = readFileSync(join(fixture.directory, "events"), "utf8")
       .trim()
       .split("\n");
+    assert.ok(events.indexOf("start gruff") > events.indexOf("end typescript"));
     const started = new Set<string>();
     let active = 0;
     let maximumActive = 0;

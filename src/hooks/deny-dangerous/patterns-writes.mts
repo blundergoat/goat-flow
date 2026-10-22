@@ -144,6 +144,7 @@ export function isGitPublicationTarget(
     [
       "push",
       "send-pack",
+      "send-email",
       "http-push",
       "svn dcommit",
       "p4 submit",

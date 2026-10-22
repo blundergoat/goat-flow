@@ -326,6 +326,14 @@ describe("policy word and parenthesis primitives", () => {
 });
 
 describe("policy quoted word reading", () => {
+  it("decodes the UTF-8 byte escapes emitted by argv quoting", () => {
+    const words = ["é", "🦌", "a\tb", "it's literal"];
+    assert.deepEqual(
+      splitPolicyShellWords(joinPolicyShellWords(words, 0, "argv")),
+      words,
+    );
+  });
+
   it("normalizes executable quotes without resolving unquoted IFS or changing raw arguments", () => {
     for (const [input, expected] of [
       ["  'g'i't'  status", "git status"],

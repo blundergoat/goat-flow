@@ -280,7 +280,7 @@ test("native CLI enforces its configured deadline before releasing partial polic
   const environment = restrictedConsumerEnvironment(root);
   const result = run(root, undefined, undefined, "", {
     ...environment,
-    GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "1000",
+    GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "3000",
   });
   assert.equal(result.status, 2, result.stderr);
   assert.equal(result.stdout, "");

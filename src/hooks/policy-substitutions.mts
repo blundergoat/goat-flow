@@ -1,6 +1,10 @@
 /** Inspect commands that substitutions run before the outer command, using UTF-8 byte offsets like the frozen policy. */
 import type { PolicyDenial } from "./policy-input.mjs";
-import { findMatchingPolicyShellParen } from "./policy-words.mjs";
+import {
+  findMatchingPolicyShellParen,
+  isPolicyAnsiQuoteStart,
+  isPolicySubshellCommandSubstitution,
+} from "./policy-words.mjs";
 
 /**
  * Evaluate one nested command with the complete segment policy, e.g. the `rm -rf build` inside `echo $(rm -rf build)`.
@@ -40,24 +44,35 @@ interface SubstitutionScan {
   inSingle: boolean;
   inDouble: boolean;
   escaped: boolean;
+  ansiQuote: boolean;
   outputs: SubstitutionOutputRange[];
 }
 
 const decoder = new TextDecoder();
 
+function substitutionBackslashStarts(
+  scan: SubstitutionScan,
+  char: string,
+): boolean {
+  return (!scan.inSingle || scan.ansiQuote) && char === "\\";
+}
+
 /** Track escapes and quotes; an escaped character separates adjacent opener text unless it is a removed backslash-newline. */
 function consumeSubstitutionQuote(
   scan: SubstitutionScan,
   char: string,
+  ansiStart = false,
 ): boolean {
   if (scan.escaped) {
     if (char !== "\n") appendSubstitutionMarker(scan, "__goat_escaped__");
     scan.escaped = false;
     return true;
   }
-  if (!scan.inSingle && char === "\\") scan.escaped = true;
-  else if (!scan.inDouble && char === "'") scan.inSingle = !scan.inSingle;
-  else if (!scan.inSingle && char === '"') scan.inDouble = !scan.inDouble;
+  if (substitutionBackslashStarts(scan, char)) scan.escaped = true;
+  else if (!scan.inDouble && char === "'") {
+    scan.inSingle = !scan.inSingle;
+    scan.ansiQuote = scan.inSingle && ansiStart;
+  } else if (!scan.inSingle && char === '"') scan.inDouble = !scan.inDouble;
   else return false;
   return true;
 }
@@ -128,7 +143,11 @@ async function inspectSubstitutionOpener(
   char: string,
 ): Promise<PolicyDenial | null | undefined> {
   const pair = char + String.fromCharCode(scan.bytes[scan.index + 1] ?? 0);
-  if (pair === "$(" && scan.bytes[scan.index + 2] === 0x28)
+  if (
+    pair === "$(" &&
+    scan.bytes[scan.index + 2] === 0x28 &&
+    !isPolicySubshellCommandSubstitution(scan.bytes, scan.index)
+  )
     return inspectArithmetic(scan);
   if (pair === "$(") return inspectNestedCommand(scan, "__goat_subst__");
   if (!scan.inDouble && (pair === "<(" || pair === ">("))
@@ -170,11 +189,20 @@ export async function checkPolicyCommandSubstitutions(
     inSingle: false,
     inDouble: false,
     escaped: false,
+    ansiQuote: false,
     outputs: [],
   };
+  const quoteInput = Buffer.from(scan.bytes).toString("latin1");
   for (; scan.index < scan.bytes.length; scan.index++) {
     const char = String.fromCharCode(scan.bytes[scan.index] ?? 0);
-    if (consumeSubstitutionQuote(scan, char)) continue;
+    if (
+      consumeSubstitutionQuote(
+        scan,
+        char,
+        isPolicyAnsiQuoteStart(quoteInput, scan.index),
+      )
+    )
+      continue;
     if (!scan.inSingle) {
       const denial = await inspectSubstitutionOpener(scan, char);
       if (denial !== undefined) {

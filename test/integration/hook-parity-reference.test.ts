@@ -9,6 +9,7 @@ import {
   loadArtifacts,
   materializeReference,
   runFrozen,
+  runFrozenRow,
   validateSnapshot,
 } from "../../scripts/check-hook-parity.mjs";
 
@@ -128,6 +129,44 @@ test("frozen dependency lookup cannot recover a missing installed helper from li
       /Policy hook unavailable/,
     );
     assert.throws(() => assertOutcome(missing, before), /unavailable/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("supplemental reference rows use fixture cwd and relative Git configuration", () => {
+  const project = materializeReference();
+  const row = {
+    id: "relative-alias-fixture",
+    policy: "deny-git-mutations",
+    input: { kind: "check", command: "git pub" },
+    setup: {
+      cwd: "$FIXTURE0",
+      environment: { GIT_CONFIG_GLOBAL: "fixture.gitconfig" },
+      files: [
+        {
+          token: "$FIXTURE0",
+          files: [
+            {
+              path: "fixture.gitconfig",
+              kind: "file",
+              bytesBase64: Buffer.from("[alias]\npub=push\n").toString(
+                "base64",
+              ),
+            },
+          ],
+        },
+      ],
+    },
+  };
+  try {
+    assert.equal(runFrozen(project, row.policy, row.input).status, 0);
+    const actual = runFrozenRow(project, row);
+    assert.equal(actual.status, 2);
+    assert.match(
+      Buffer.from(actual.stderrBase64, "base64").toString(),
+      /BLOCKED: Policy/u,
+    );
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

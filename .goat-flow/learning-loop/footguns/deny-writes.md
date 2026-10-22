@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-10-20
+last_reviewed: 2026-10-22
 ---
 
 Git command-policy traps: publication, remote locks, history changes, aliases and commands hosted by Git.
@@ -12,7 +12,7 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 
 **Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
 **Severity:** SECURITY
-**Incident count:** 7 | **Latest occurrence:** 2026-10-17
+**Incident count:** 8 | **Latest occurrence:** 2026-10-22
 
 **Prevention:**
 1. Normalize to the command word before calling `is_git_push`, and read "command word" as every unquoting layer the target program applies, not only the shell's. Do not add one-off regexes for the latest bypass.
@@ -37,6 +37,8 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 **Recurrence 2026-09-27:** In text mode a stage denial printed its `BLOCKED:` line and exited 2 inside the pipeline subshell; the parent returned that status to the runtime tail, which added `Policy hook unavailable: … could not evaluate the command. Re-run goat-flow setup.` A publication verb after a `cat` pipe printed both lines under `--check` and through the Claude PreToolUse launcher; at top level it printed one. The Git-hosted sites already exited on a child status of 2; the pipeline loop did not. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `wrapper_pipeline_status`) now applies that rule, and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `pipeline-stage publication copy`) pins one-line denials via the forbidden-reason argument of `expect_block_message`; exit-only rows had passed with two lines.
 
 **Recurrence 2026-10-01:** The classifier allowed `cmd //c git pu^sh origin main`, escaped executable letters, a caret-obfuscated PR merge, deletion and secret path. Cmd removes those word escapes outside its double quotes. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Decode cmd word escapes`) now normalizes word characters while retaining syntax escapes for later passes. The full corpus adds block/allow pairs under `cmd caret-obfuscated publication` and `cmd escaped ampersand stays literal after word normalization` in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh`. Probe the installed store: both entrypoints load it, so invoking the workflow entrypoint alone does not exercise an unsynced candidate.
+
+**Recurrence 2026-10-22 (Node review):** Probes exposed comments, ANSI-C strings, case arms, functions, wrapper options and dynamic Git forms. Further checks caught lost nested-variable state, env directory context and duplicate shell-body decoding. Repairs: `src/hooks/policy-segments.mts` (search: `consumeSegmentComment`), `src/hooks/policy-words.mts` (search: `readPolicyAnsiString`, `normalizePolicyEnvPrefix`, `isPolicySubshellCommandSubstitution`), `src/hooks/policy-syntax.mts` (search: `stripPolicyCasePrefix`), `src/hooks/policy-prefixes.mts` (search: `sudoValuePrefix`), `src/hooks/policy-evaluation.mts` (search: `assignedGitExecutables`, `commandStringBody`) and `src/hooks/deny-dangerous/git-command.mts` (search: `projectAssignedGitExpansions`, `gitSubcommandMayComeFromStdin`, `stageOptions`). `src/hooks/deny-dangerous/patterns-writes.mts` (search: `send-email`) guards publication. `test/integration/deny-reviewed-protections.test.ts` keeps controls; `test/fixtures/hooks-bash/policy-reference.json` preserves original outcomes beside `review-gap-` expectations.
 
 ---
 

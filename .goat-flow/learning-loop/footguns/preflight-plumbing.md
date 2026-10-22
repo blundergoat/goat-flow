@@ -1,6 +1,6 @@
 ---
 category: preflight-plumbing
-last_reviewed: 2026-10-18
+last_reviewed: 2026-10-22
 ---
 
 **Scope:** Data crossing the Node-to-shell boundary inside preflight and CI scripts: command substitution, formatting that shell arithmetic cannot parse, and stdout fed into pattern matchers. What the audit checks mean lives in [auditor.md](auditor.md).
@@ -95,6 +95,15 @@ last_reviewed: 2026-10-18
 
 ---
 
+## Footgun: Preflight needs a complete executable build before Gruff
+
+**Status:** active | **Created:** 2026-10-22 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Gate Gruff on the build marker and preserve the package build's executable CLI permission before writing that marker.
+
+**Prevention:** `scripts/preflight-checks.sh` (search: `check_typescript`, `tests|audit|memory|content|drift|gruff`) must complete both compiler output and the CLI permission step before Gruff starts. Test a checkout with no `dist`, not only an existing development build. `test/integration/preflight-test-diagnostics.test.ts` (search: `start gruff`) checks the scheduler order.
+
+**Evidence:** An untouched no-build worktree reported `design.package-bin-missing package.json`; gating Gruff alone changed that to `design.package-bin-not-executable package.json`. `package.json` (search: `chmodSync`) already defines the required build permission step. The main checkout's older executable build had concealed both failures.
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
@@ -106,3 +115,5 @@ last_reviewed: 2026-10-18
 **Resolution:** Node output is piped through `grep -oE '^[0-9]+$' | tail -1` to keep only numeric lines, architecture doc matching switched from `grep -q` to `grep -Fq`, and `setup_count` is initialized before the conditional block to avoid a `set -u` crash: `scripts/preflight-checks.sh` (search: `grep -oE '^[0-9]+$'`).
 
 **Original symptoms:** `npm publish` failed because `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `installs fixture-backed references`) intermittently crashed with `grep: Unmatched [, [^, [:, [., or [=` in the Doc/Code Drift section. `node --input-type=module` commands that compute check counts captured stray diagnostic lines containing `[`, which grep then read as a character class, and the first fix left `setup_count` unset when the sanitized pipeline returned empty in a fixture without a working `dist/`.
+
+---

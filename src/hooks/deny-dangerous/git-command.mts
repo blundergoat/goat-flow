@@ -11,6 +11,7 @@ import type { PolicyDenial } from "../policy-input.mjs";
 import {
   policyUnresolvedSplitRefusal,
   splitPolicyTopLevelPipelineStages,
+  trackPolicyGitShellDirectory,
 } from "../policy-segments.mjs";
 import {
   normalizePolicyCommandCandidate,
@@ -18,6 +19,9 @@ import {
   type PolicyReadOnlyContext,
 } from "../policy-syntax.mjs";
 import {
+  dropFirstPolicyShellWord,
+  isPolicyAnsiQuoteStart,
+  hasPolicyShellWordExpansion,
   joinPolicyShellWords,
   normalizeLeadingPolicyWord,
   normalizePolicyGitExecutableWord,
@@ -42,16 +46,43 @@ export function normalizeGitPushCandidate(command: string): string | null {
   return normalizePolicyCommandCandidate(command);
 }
 
-/** Expose xargs' command after wrapper normalization; unknown option arity remains a refusal. */
-export function normalizeGitPolicyCandidate(command: string): string | null {
-  const normalized = normalizePolicyCommandCandidate(command);
+/** Expose xargs' child and report env directory operands; unknown option arity remains a refusal. */
+export function normalizeGitPolicyCandidate(
+  command: string,
+  visitDirectory?: (directory: string) => void,
+): string | null {
+  const normalized = normalizePolicyCommandCandidate(
+    command,
+    false,
+    visitDirectory,
+  );
   if (normalized === null) return null;
   const candidate = normalized.replace(/\n+$/u, "");
   const payload = stripPolicyXargsPayload(candidate);
   if (payload.kind === "unresolved") return null;
+  if (
+    payload.kind === "command" &&
+    gitSubcommandMayComeFromStdin(payload.command)
+  )
+    return null;
   return (payload.kind === "command" ? payload.command : candidate).replace(
     /\n+$/u,
     "",
+  );
+}
+
+/** xargs may append a Git verb after global options; only a literal verb or a terminating query is inspectable. */
+function gitSubcommandMayComeFromStdin(command: string): boolean {
+  const words = splitPolicyShellWords(command);
+  const executable = normalizePolicyGitExecutableWord(words[0] ?? "");
+  if (executable.slice(executable.lastIndexOf("/") + 1) !== "git") return false;
+  const context = createGitCommandContext({ directory: "", deadlineAt: 0 });
+  consumeGlobalOptions(words, context);
+  return (
+    context.commandWords.length === 0 &&
+    !context.globalWords.some((word) =>
+      ["--help", "--version", "-h", "-v"].includes(word),
+    )
   );
 }
 
@@ -255,6 +286,111 @@ function invokedAliasName(rest: string): string | null {
     : null;
 }
 
+interface GitExpansionQuote {
+  quote: string;
+  ansiQuote: boolean;
+  escaped: boolean;
+}
+
+/** Consume shell quoting before deciding whether a dollar sign expands. */
+function consumeGitExpansionQuote(
+  state: GitExpansionQuote,
+  segment: string,
+  index: number,
+): boolean {
+  const char = segment.charAt(index);
+  if (state.escaped) {
+    state.escaped = false;
+    return true;
+  }
+  if (char === "\\" && (state.quote !== "'" || state.ansiQuote)) {
+    state.escaped = true;
+    return true;
+  }
+  if (char === state.quote) {
+    state.quote = "";
+    return true;
+  }
+  if (state.quote === "" && ["'", '"'].includes(char)) {
+    state.quote = char;
+    state.ansiQuote = isPolicyAnsiQuoteStart(segment, index);
+    return true;
+  }
+  return state.quote === "'";
+}
+
+/** Project known variable expansions before wrappers rebuild argv, while quoted and escaped dollars remain literal. */
+function projectAssignedGitExpansions(
+  segment: string,
+  assigned: ReadonlySet<string>,
+  marker: string,
+): string {
+  const quote: GitExpansionQuote = {
+    quote: "",
+    ansiQuote: false,
+    escaped: false,
+  };
+  let projected = "";
+  for (let index = 0; index < segment.length; index++) {
+    const char = segment.charAt(index);
+    if (!consumeGitExpansionQuote(quote, segment, index) && char === "$") {
+      const variable =
+        /^\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})/u.exec(
+          segment.slice(index),
+        );
+      if (variable && assigned.has(variable[1] ?? variable[2] ?? "")) {
+        projected += marker;
+        index += variable[0].length - 1;
+        continue;
+      }
+    }
+    projected += char;
+  }
+  return projected;
+}
+
+/** Track literal assignment/declaration segments after wrappers; refuse an expanded executable known to name Git. */
+export function usesAssignedGitExecutable(
+  segment: string,
+  assigned: Set<string>,
+): boolean {
+  // An input-free marker prevents a literal executable name from being mistaken for an expansion.
+  let marker = "__goat_assigned_git_executable__";
+  while (segment.includes(marker)) marker += "_";
+  const normalized = normalizePolicyCommandCandidate(
+    projectAssignedGitExpansions(segment, assigned, marker),
+    true,
+  );
+  if (normalized === null) return false;
+  const words = splitPolicyShellWords(normalized);
+  if (words[0] === marker) return true;
+  if (
+    ["export", "declare", "typeset", "local", "readonly"].includes(
+      words[0] ?? "",
+    )
+  ) {
+    words.shift();
+    while (/^[-+]/u.test(words[0] ?? "")) words.shift();
+  }
+  recordAssignedGitExecutables(words, assigned);
+  return false;
+}
+
+function recordAssignedGitExecutables(
+  words: readonly string[],
+  assigned: Set<string>,
+): void {
+  if (!words.every((word) => /^[A-Za-z_][A-Za-z0-9_]*=/u.test(word))) return;
+  for (const word of words) {
+    const equals = word.indexOf("=");
+    const name = word.slice(0, equals);
+    const value = normalizePolicyGitExecutableWord(word.slice(equals + 1));
+    assigned.delete(name);
+    if (/^(?:[^$`]*\/)?git(?:-[A-Za-z0-9_-]+)?$/u.test(value))
+      assigned.add(name);
+  }
+}
+
 /** Read only the invoked alias; never run its expansion or the proposed Git subcommand. */
 async function readGitAlias(
   name: string,
@@ -304,6 +440,12 @@ async function readGitAlias(
       expansion: null,
       reason:
         "Cannot inspect a saved Git alias within the hook's execution and output limits.",
+    };
+  if (result.status !== 0 && result.status !== 1)
+    return {
+      expansion: null,
+      reason:
+        "Cannot read Git aliases. Fix the Git configuration or ask the user to run the command manually.",
     };
   return {
     expansion: result.status === 0 ? result.stdout.replace(/\n+$/u, "") : null,
@@ -365,6 +507,18 @@ function createGitCommandContext(
   };
 }
 
+function hasDynamicGitSubcommand(
+  normalized: string,
+  context: GitCommandContext,
+  base: string,
+): boolean {
+  if (base !== "git") return false;
+  let rawSubcommand = normalized;
+  for (const _word of context.globalWords)
+    rawSubcommand = dropFirstPolicyShellWord(rawSubcommand);
+  return hasPolicyShellWordExpansion(rawSubcommand);
+}
+
 /** Recover repository selection and alias state for all Git rules from one normalized stage. */
 export async function inspectGitCommand(
   command: string,
@@ -385,6 +539,12 @@ export async function inspectGitCommand(
   else if (base !== "git") return { kind: "other" };
   const context = createGitCommandContext(options);
   const lookupOptions = consumeGlobalOptions(words, context);
+  if (hasDynamicGitSubcommand(normalized, context, base))
+    return {
+      kind: "unresolved",
+      reason:
+        "Cannot inspect a dynamic Git subcommand. Use a literal Git subcommand.",
+    };
   if (
     context.paths.selectedDirectoryUnknown &&
     !options.hostedDirectoryUnknown &&
@@ -575,10 +735,26 @@ export async function checkGitSegment(
   if (stages.kind === "unresolved")
     return policyUnresolvedSplitRefusal(stages.reason);
   for (const stage of stages.segments) {
-    const candidate = normalizeGitPolicyCandidate(stage);
+    let stageOptions = { ...options };
+    const candidate = normalizeGitPolicyCandidate(stage, (target) => {
+      const directory = trackPolicyGitShellDirectory(
+        "cd " + joinPolicyShellWords([target], 0, "argv"),
+        {
+          directory: stageOptions.directory,
+          unknown: stageOptions.directoryUnknown ?? false,
+          background: false,
+          cdPath: "",
+        },
+      );
+      stageOptions = {
+        ...stageOptions,
+        directory: directory.directory,
+        directoryUnknown: directory.unknown,
+      };
+    });
     if (candidate === null)
       return "Cannot resolve the repository command. Ask the user to run it manually.";
-    const inspection = await inspectGitCommand(candidate, options);
+    const inspection = await inspectGitCommand(candidate, stageOptions);
     if (inspection.kind === "unresolved") return inspection.reason;
     if (inspection.kind !== "git") continue;
     const reason = gitWriteBlockReason(inspection.context);

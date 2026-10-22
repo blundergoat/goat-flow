@@ -141,6 +141,49 @@ describe("documented shell-lint command", () => {
     }
   });
 
+  it("lints manifest and canonical hook entrypoints and sourced modules", () => {
+    const source = readFileSync(
+      resolve(PROJECT_ROOT, "scripts/preflight-checks.sh"),
+      "utf8",
+    );
+    const start = source.indexOf("\ncheck_shell() {");
+    const end = source.indexOf("\ncheck_contracts() {", start);
+    assert.ok(start >= 0 && end > start, "shell check section exists");
+
+    // Exercise the real lint owner, reporting arguments through a descriptor
+    // that survives its output suppression. The normal preflight runs shellcheck.
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "set -euo pipefail",
+          "exec 3>&1",
+          "section() { :; }; pass() { :; }",
+          "fail() { exit 1; }; warn() { exit 1; }",
+          'manifest_eval() { [[ "$1" == hook-dirs ]] && printf "%s\\n" .goat-flow/hooks; }',
+          'shellcheck() { printf "lint:%s\\n" "$@" >&3; }',
+          source.slice(start, end),
+          "check_shell",
+        ].join("\n"),
+      ],
+      { cwd: PROJECT_ROOT, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const lintedArguments = result.stdout.trim().split("\n");
+    for (const directory of [".goat-flow/hooks", "workflow/hooks"]) {
+      for (const file of [
+        "deny-dangerous.sh",
+        "deny-dangerous/patterns-paths.sh",
+      ]) {
+        assert.ok(
+          lintedArguments.includes(`lint:${directory}/${file}`),
+          `${directory}/${file}: omitted from preflight shellcheck`,
+        );
+      }
+    }
+  });
+
   // A Windows developer reaches this step by running bash scripts/setup-initial.sh in Git Bash without shellcheck installed.
   //
   // Fails when that step stops installing shellcheck for the current user through winget or drops the advice to reopen Git Bash.

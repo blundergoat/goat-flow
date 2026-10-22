@@ -5,7 +5,7 @@
  *
  * Results are PolicyWrapperPayload values: "command" exposes the child to judge, "absent" means the wrapper launches nothing,
  * and "unresolved" means an option the parser does not know, which makes the hook refuse the command instead of guessing.
- * time and sudo return plain text instead: scanning stops at the first unrecognised word, which stays visible to the caller.
+ * time returns plain text; sudo returns null when an option prevents identifying the child.
  */
 import {
   dropFirstPolicyShellWord,
@@ -52,35 +52,44 @@ export function normalizePolicyTimePrefix(command: string): string {
   }
 }
 
-// sudo's option grammar in match order: `-u root` pairs, attached `-uroot`, `--user=root`, bundled short flags, valueless long flags.
+// Attached sudo values and valueless flags; separate option operands are consumed below.
 const sudoOptionPrefixes = [
-  /^-[ugCDRTp][ \t\r\n\v\f]+[^ \t\r\n\v\f]+[ \t\r\n\v\f]*/u,
-  /^-[ugCDRTp][^ \t\r\n\v\f-]+[ \t\r\n\v\f]*/u,
-  /^--(?:user|group|close-from|chdir|role|type|other-user|prompt|command-timeout|preserve-env)=[^ \t\r\n\v\f]*[ \t\r\n\v\f]*/u,
+  /^-[ugCDRTprthU][^ \t\r\n\v\f-]+[ \t\r\n\v\f]*/u,
+  /^--(?:user|group|close-from|chdir|chroot|role|type|other-user|host|prompt|command-timeout|preserve-env)=[^ \t\r\n\v\f]*[ \t\r\n\v\f]*/u,
   /^-[AbeEHhiKknPSsV]+[ \t\r\n\v\f]*/u,
   /^--(?:askpass|background|bell|edit|preserve-env|set-home|help|login|list|remove-timestamp|reset-timestamp|non-interactive|stdin|shell|validate|version)[ \t\r\n\v\f]*/u,
 ];
+const sudoValuePrefix =
+  /^(?:-[ugCDRTprthU]|--(?:user|group|close-from|chdir|chroot|role|type|other-user|host|prompt|command-timeout))[ \t\r\n\v\f]+/u;
 
 /**
  * Skip sudo's identity, environment and privilege options so the real command is judged, e.g. `sudo -u root git status` as `git status`.
- * Scanning stops at the first word sudo would not recognise, which stays visible to the caller together with everything after it.
+ * Unknown options or missing operands return null so the caller refuses uncertain command boundaries.
  *
  * @param command - text after the `sudo` word; empty text yields an empty string
- * @returns the remaining text starting at the privileged command, with an explicit `--` separator removed
+ * @returns the privileged command with `--` removed, or null when an option cannot be inspected
  */
-export function normalizePolicySudoPrefix(command: string): string {
+export function normalizePolicySudoPrefix(command: string): string | null {
   let remaining = command;
   for (;;) {
     remaining = remaining.replace(/^[ \t\r\n\v\f]+/u, "");
+    const terminator = /^--[ \t\r\n\v\f]+/u.exec(remaining);
+    if (terminator) return remaining.slice(terminator[0].length);
+    const value = sudoValuePrefix.exec(remaining);
+    if (value) {
+      const operand = remaining.slice(value[0].length);
+      if (operand === "") return null;
+      remaining = dropFirstPolicyShellWord(operand);
+      continue;
+    }
     const option = sudoOptionPrefixes
       .map((pattern) => pattern.exec(remaining))
       .find((match) => match !== null);
     if (option) {
-      remaining = remaining.slice(option[0].length);
+      remaining = dropFirstPolicyShellWord(remaining);
       continue;
     }
-    // `--` ends sudo's options; drop it so the privileged command is the first remaining word.
-    return remaining.replace(/^--[ \t\r\n\v\f]+/u, "");
+    return remaining.startsWith("-") ? null : remaining;
   }
 }
 

@@ -60,6 +60,11 @@ function listTestFiles(dir = "test") {
 function isSlowTest(path) {
   // A new costly test leaves the fast suite by being listed here or by matching a name pattern below.
   const exactPaths = [
+    "test/integration/hook-native-audit-direct.test.ts",
+    "test/integration/hook-native-audit-configured.test.ts",
+    "test/integration/hook-native-audit-discovery.test.ts",
+    "test/integration/hook-native-audit-mechanism.test.ts",
+    "test/integration/hook-direct-native-probe.test.ts",
     "test/integration/cli-manifest-drift.test.ts",
     "test/integration/main-guard.test.ts",
     "test/integration/audit-quality.test.ts",

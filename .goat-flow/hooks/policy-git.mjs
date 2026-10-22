@@ -171,14 +171,22 @@ const shellDeclarationVerbs = new Set([
     "local",
     "readonly",
 ]);
-/** Skip env's options so its assignments still reach inspection; `-u` and `--unset` consume the next word. */
+/** Expand env split strings and skip option operands so command-hosting assignments reach inspection. */
 function skipEnvOptions(words) {
     let index = 1;
     while (index < words.length) {
         const word = words[index] ?? "";
         if (word === "--")
             return index + 1;
-        if (word === "-u" || word === "--unset")
+        if (["-S", "-s", "--split-string"].includes(word)) {
+            words.splice(index, 2, ...splitPolicyShellWords(words[index + 1] ?? ""));
+            continue;
+        }
+        if (word.startsWith("--split-string=")) {
+            words.splice(index, 1, ...splitPolicyShellWords(word.slice("--split-string=".length)));
+            continue;
+        }
+        if (["-u", "--unset", "-C", "--chdir"].includes(word))
             index += 2;
         else if (word.startsWith("-"))
             index++;

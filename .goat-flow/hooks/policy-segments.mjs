@@ -5,7 +5,7 @@ import { statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { asciiLowerCase } from "./policy-input.mjs";
 import { isGitConfigSourceVariable, isGitConfigSourceAmbientlyExported, } from "./policy-git.mjs";
-import { joinPolicyShellWords, splitPolicyShellWords, } from "./policy-words.mjs";
+import { joinPolicyShellWords, isPolicyAnsiQuoteStart, isPolicyShellCommentBoundary, splitPolicyShellWords, } from "./policy-words.mjs";
 import { findPolicyNativeCommandGroup, } from "./policy-syntax.mjs";
 /** Escaped and quoted braces remain argument data rather than executable block boundaries. */
 function consumeBlockQuote(state, char) {
@@ -164,9 +164,12 @@ const powerShellHost = /^(?:powershell|pwsh)(?:\.exe)?$/u;
 const cmdHost = /^cmd(?:\.exe)?$/u;
 const nativeConditionalStart = /^[ \t\r\n\v\f]*if(?:[ \t\r\n\v\f(]|$)/u;
 function isSegmentEscape(scan, char) {
-    return (scan.quote !== "'" &&
+    return ((scan.quote !== "'" || scan.ansiQuote) &&
         char === scan.escape &&
         !(scan.escape === "^" && scan.quote === '"'));
+}
+function segmentAnsiQuoteStarts(scan) {
+    return scan.escape === "\\" && isPolicyAnsiQuoteStart(scan.input, scan.index);
 }
 function consumeSegmentQuotedCharacter(scan, char) {
     if (scan.escaped) {
@@ -190,6 +193,7 @@ function consumeSegmentQuotedCharacter(scan, char) {
     }
     if (char === '"' || (char === "'" && !cmdHost.test(scan.host))) {
         scan.quote = char;
+        scan.ansiQuote = segmentAnsiQuoteStarts(scan);
         scan.current += char;
         return true;
     }
@@ -262,9 +266,20 @@ function consumeSegmentSeparator(scan, char, splitPipelines) {
     scan.current = "";
     return true;
 }
+function consumeSegmentComment(scan, char) {
+    if (char !== "#" ||
+        cmdHost.test(scan.host) ||
+        !isPolicyShellCommentBoundary(scan.current))
+        return false;
+    const newline = scan.input.indexOf("\n", scan.index);
+    scan.index = newline < 0 ? scan.input.length : newline - 1;
+    return true;
+}
 function scanSegmentCharacter(scan, splitPipelines) {
     const char = scan.input.charAt(scan.index);
     if (consumeSegmentQuotedCharacter(scan, char))
+        return null;
+    if (consumeSegmentComment(scan, char))
         return null;
     const reason = nativeGroupReason(scan, char);
     if (reason) {
@@ -292,6 +307,7 @@ export function splitPolicyCommandSegments(input, host = "", splitPipelines = fa
         current: "",
         segments: [],
         quote: "",
+        ansiQuote: false,
         escaped: false,
         escape: powerShellHost.test(host)
             ? "\x60"

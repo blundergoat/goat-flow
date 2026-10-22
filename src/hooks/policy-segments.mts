@@ -8,6 +8,8 @@ import {
 } from "./policy-git.mjs";
 import {
   joinPolicyShellWords,
+  isPolicyAnsiQuoteStart,
+  isPolicyShellCommentBoundary,
   splitPolicyShellWords,
 } from "./policy-words.mjs";
 import {
@@ -218,6 +220,7 @@ interface SegmentScan {
   current: string;
   segments: string[];
   quote: string;
+  ansiQuote: boolean;
   escaped: boolean;
   escape: string;
   substitutionDepth: number;
@@ -230,10 +233,14 @@ const nativeConditionalStart = /^[ \t\r\n\v\f]*if(?:[ \t\r\n\v\f(]|$)/u;
 
 function isSegmentEscape(scan: SegmentScan, char: string): boolean {
   return (
-    scan.quote !== "'" &&
+    (scan.quote !== "'" || scan.ansiQuote) &&
     char === scan.escape &&
     !(scan.escape === "^" && scan.quote === '"')
   );
+}
+
+function segmentAnsiQuoteStarts(scan: SegmentScan): boolean {
+  return scan.escape === "\\" && isPolicyAnsiQuoteStart(scan.input, scan.index);
 }
 
 function consumeSegmentQuotedCharacter(
@@ -260,6 +267,7 @@ function consumeSegmentQuotedCharacter(
   }
   if (char === '"' || (char === "'" && !cmdHost.test(scan.host))) {
     scan.quote = char;
+    scan.ansiQuote = segmentAnsiQuoteStarts(scan);
     scan.current += char;
     return true;
   }
@@ -352,12 +360,25 @@ function consumeSegmentSeparator(
   return true;
 }
 
+function consumeSegmentComment(scan: SegmentScan, char: string): boolean {
+  if (
+    char !== "#" ||
+    cmdHost.test(scan.host) ||
+    !isPolicyShellCommentBoundary(scan.current)
+  )
+    return false;
+  const newline = scan.input.indexOf("\n", scan.index);
+  scan.index = newline < 0 ? scan.input.length : newline - 1;
+  return true;
+}
+
 function scanSegmentCharacter(
   scan: SegmentScan,
   splitPipelines: boolean,
 ): "script-block" | "native-conditional" | null {
   const char = scan.input.charAt(scan.index);
   if (consumeSegmentQuotedCharacter(scan, char)) return null;
+  if (consumeSegmentComment(scan, char)) return null;
   const reason = nativeGroupReason(scan, char);
   if (reason) {
     const group = findPolicyNativeCommandGroup(
@@ -392,6 +413,7 @@ export function splitPolicyCommandSegments(
     current: "",
     segments: [],
     quote: "",
+    ansiQuote: false,
     escaped: false,
     escape: powerShellHost.test(host)
       ? "\x60"

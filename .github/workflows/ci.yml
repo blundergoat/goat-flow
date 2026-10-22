@@ -37,7 +37,7 @@ permissions:
   contents: read
 
 jobs:
-  # Repository preflight without tests (lint, format, audit, both policy self-tests, cross-file consistency checks), plus the version-stamp check.
+  # Repository preflight without tests (lint, format, audit, cross-file consistency checks), plus the version-stamp check.
   #
   # It runs apart from the test jobs, so a lint or version failure on a PR shows without waiting behind the test suites.
   # Locally, after `npm run build`, run `bash scripts/preflight-checks.sh --skip-tests`, then `npm run check-versions`, which preflight does not run.
@@ -74,7 +74,7 @@ jobs:
       - name: Version consistency (shared script)
         run: npm run check-versions
 
-  # Every file outside the slow set and REFERENCE_JOB_TESTS (scripts/run-tests.mjs), eight at a time; the same `npm run test:fast` a developer runs.
+  # Every file outside the slow set and REFERENCE_JOB_TESTS (scripts/run-tests.mjs), with concurrency bounded by available CPUs up to 16; the same `npm run test:fast` a developer runs.
   test-fast:
     runs-on: ubuntu-latest
     steps:
@@ -435,7 +435,7 @@ jobs:
         shell: bash
         env:
           GOAT_FLOW_HOOK_UNDER_TEST: candidate
-        run: node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts
+        run: node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
 
   # Bash extraction stays on native Linux with pinned jq and explicit locales; macOS runs the Node controls above, never reference extraction.
   #
@@ -477,7 +477,7 @@ jobs:
       - name: Record reference identity
         run: node --version && uname -a && git rev-parse HEAD && jq --version && locale
       - name: Frozen policy invariants
-        run: node --import tsx --test --test-concurrency=1 test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts
+        run: node --import tsx --test --test-concurrency=1 test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
       - name: Frozen scanner and recovery invariants
         run: node --import tsx --test --test-concurrency=1 test/integration/post-turn-safety-hook*.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
       - name: Frozen Gruff and provider invariants
@@ -650,7 +650,7 @@ jobs:
               node --import tsx --test test/unit/hook-launch.test.ts test/unit/run-hook.test.ts test/unit/hook-launcher.test.ts test/unit/hook-result-delivery.test.ts test/unit/hook-stop-delivery.test.ts test/unit/agent-hook-command.test.ts test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-command-native-replay.test.ts test/integration/hook-direct-native-probe.test.ts test/integration/hook-native-audit-configured.test.ts test/integration/hook-native-audit-direct.test.ts test/integration/hook-native-audit-discovery.test.ts test/integration/hook-native-audit-mechanism.test.ts test/integration/hook-policy-node.test.ts
               node --import tsx --test test/integration/hook-parity.test.ts
               (unset LC_ALL; node scripts/check-hook-parity.mjs --stage=candidate --require-complete)
-              GOAT_FLOW_HOOK_UNDER_TEST=candidate node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=candidate node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
             done
       # Copies the checkout into WSL, adds checksum-verified Node 24.21.0 and jq 1.6, and lists where the frozen Bash reference behaves differently.
       #

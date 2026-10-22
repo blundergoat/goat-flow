@@ -1,6 +1,6 @@
 ---
 category: contract-pinned-wording
-last_reviewed: 2026-10-18
+last_reviewed: 2026-10-22
 ---
 
 **Scope:** Changing prose, a path, an adjacent section, or a word budget that tests or semantic anchors already pin, and the full-suite failures that follow when the exact old text was not searched first. Other pinned-contract lessons, such as anchor-preserving compaction and user-visible serialization, are [contract-testing.md](contract-testing.md); instruction and reference word budgets are [instruction-word-budgets.md](instruction-word-budgets.md).
@@ -77,8 +77,8 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
   rationale`).
 
 - **Recurrence 2026-09-08:** Clarity owner delegation missed public-reader assertions and the explicit selector exception in `docs/skills.md`; the
-  optional catalogue rewrite was rewound. `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the skill, reference, manifest, and public
-  documentation aligned`) caught the mismatch. `stats --check` also caught a historical pointer to `workflow/skills/goat-clarity/SKILL.md` (search:
+  optional catalogue rewrite was rewound. `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the reference manifest and public documentation aligned`)
+  caught the mismatch. `stats --check` also caught a historical pointer to `workflow/skills/goat-clarity/SKILL.md` (search:
   `Added-test dispositions`); retain semantic anchors beside delegated owners and inspect every consumer before deleting its text.
 
 - **Recurrence 2026-09-09:** The clarity dependency case passed a path to a helper that requires Markdown text and a source label. The missing-heading
@@ -101,4 +101,4 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 **Recurrence 2026-10-11:** Removing the runner's performance mode also rewrote the adjacent concurrency ternary; the first fast suite failed one source-regex pin that the grep for the removed mode's names could not find. Restoring the pinned line fixed it: search each adjacent edited line for its exact text. `scripts/run-tests.mjs` (search: `testConcurrencyForMode`), `test/integration/preflight-progress.test.ts` (search: `keeps fast concurrency bounded`).
 
-- **Recurrence 2026-10-18:** Moving quality version/rubric cases from CLI processes to the shared parser modes renamed a test title still cited by a lesson. All 151 focused tests passed, but preflight reported a stale reference. Restore the stable test title when changing execution level, or migrate its durable consumers in the same packet; assertion equivalence alone does not preserve retrieval. Evidence: `test/unit/quality-subcommands.test.ts` (search: `legacy-compatible and rejects saving the same bytes`) and `.goat-flow/learning-loop/lessons/audit-contracts.md` (search: `Recurrence 2026-09-30`).
+- **Recurrence 2026-10-18:** Moving quality version/rubric cases from CLI processes to the shared parser modes renamed a test title still cited by a lesson. All 151 focused tests passed, but preflight reported a stale reference. Restore the stable test title when changing execution level, or migrate its durable consumers in the same packet; assertion equivalence alone does not preserve retrieval. Evidence: `test/unit/quality-subcommands.test.ts` (search: `parses ${name} as legacy and rejects it under current schema rules`) and `.goat-flow/learning-loop/lessons/audit-contracts.md` (search: `Recurrence 2026-09-30`).

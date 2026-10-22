@@ -9,6 +9,9 @@
  */
 import {
   dropFirstPolicyShellWord,
+  isPolicyAnsiQuoteStart,
+  isPolicyShellCommentBoundary,
+  isPolicySubshellCommandSubstitution,
   joinPolicyShellWords,
   splitPolicyShellWords,
   normalizeLeadingPolicyWord,
@@ -71,6 +74,7 @@ export function stripLeadingPolicyShellRedirections(
 interface RedirectQuoteState {
   quote: string;
   escaped: boolean;
+  ansiQuote?: boolean;
 }
 
 /**
@@ -78,17 +82,19 @@ interface RedirectQuoteState {
  *
  * @param state - quote and escape state carried across characters; updated in place
  * @param char - the current character
+ * @param ansiStart - whether this quote follows an unescaped dollar
  * @returns true when the character was quote or escape bookkeeping that the caller must not interpret
  */
 function consumeRedirectQuote(
   state: RedirectQuoteState,
   char: string,
+  ansiStart = false,
 ): boolean {
   if (state.escaped) {
     state.escaped = false;
     return true;
   }
-  if (state.quote !== "'" && char === "\\") {
+  if ((state.quote !== "'" || state.ansiQuote) && char === "\\") {
     state.escaped = true;
     return true;
   }
@@ -98,6 +104,7 @@ function consumeRedirectQuote(
   }
   if (char === "'" || char === '"') {
     state.quote = char;
+    state.ansiQuote = ansiStart;
     return true;
   }
   return false;
@@ -153,7 +160,8 @@ export function stripPolicyShellRedirections(command: string): string | null {
   const state: RedirectQuoteState = { quote: "", escaped: false };
   while (index < input.length) {
     const char = input.charAt(index);
-    if (consumeRedirectQuote(state, char)) output += char;
+    if (consumeRedirectQuote(state, char, isPolicyAnsiQuoteStart(input, index)))
+      output += char;
     else if (isPolicyRedirectStart(input, index)) {
       // A word made only of digits right before the operator is its descriptor (`2>`), not an argument, so it goes too.
       if (/^[0-9]+$/u.test(output.slice(wordStart)))
@@ -258,6 +266,7 @@ interface SubstitutionQuoteState {
   single: boolean;
   double: boolean;
   escaped: boolean;
+  ansiQuote?: boolean;
 }
 
 /**
@@ -267,20 +276,29 @@ interface SubstitutionQuoteState {
  * @param char - the current character
  * @returns true when the character must not be counted, either as bookkeeping or because it sits inside single quotes
  */
+function substitutionBackslashStarts(
+  state: SubstitutionQuoteState,
+  char: string,
+): boolean {
+  return (!state.single || state.ansiQuote === true) && char === "\\";
+}
+
 function consumeSubstitutionQuote(
   state: SubstitutionQuoteState,
   char: string,
+  ansiStart = false,
 ): boolean {
   if (state.escaped) {
     state.escaped = false;
     return true;
   }
-  if (!state.single && char === "\\") {
+  if (substitutionBackslashStarts(state, char)) {
     state.escaped = true;
     return true;
   }
   if (!state.double && char === "'") {
     state.single = !state.single;
+    state.ansiQuote = state.single && ansiStart;
     return true;
   }
   if (!state.single && char === '"') {
@@ -292,7 +310,8 @@ function consumeSubstitutionQuote(
 
 /**
  * Count the `$(`, `<(` and `>(` openers that can run nested commands, so the hook can cap how many it inspects recursively.
- * Arithmetic `$((` runs no command and is skipped; an opener inside single quotes or after a backslash is literal text.
+ * Arithmetic is skipped; separately closed subshell parentheses count as executable substitution.
+ * An opener inside single quotes or after a backslash is literal text.
  *
  * @param input - one command text
  * @returns the number of executable substitution openers; zero for plain text
@@ -305,9 +324,24 @@ export function countPolicySubstitutionOpeners(input: string): number {
   };
   let count = 0;
   for (let index = 0; index < input.length; index++) {
-    if (consumeSubstitutionQuote(state, input.charAt(index))) continue;
+    if (
+      consumeSubstitutionQuote(
+        state,
+        input.charAt(index),
+        isPolicyAnsiQuoteStart(input, index),
+      )
+    )
+      continue;
     const pair = input.slice(index, index + 2);
-    if (pair === "$(" && input.charAt(index + 2) !== "(") count++;
+    if (
+      pair === "$(" &&
+      (input.charAt(index + 2) !== "(" ||
+        isPolicySubshellCommandSubstitution(
+          Buffer.from(input),
+          Buffer.byteLength(input.slice(0, index)),
+        ))
+    )
+      count++;
     else if (pair === "<(" || pair === ">(") count++;
   }
   return count;
@@ -315,7 +349,7 @@ export function countPolicySubstitutionOpeners(input: string): number {
 
 /**
  * Cut a trailing shell comment so `git status # later` is judged as `git status`, while `echo '#'` and `safe#word` keep their hashes.
- * A `#` starts a comment only at the beginning or after whitespace, outside quotes and not escaped.
+ * A `#` starts a comment only at an unescaped word boundary, outside quotes.
  *
  * @param input - one command text
  * @returns the text before the comment with trailing ASCII whitespace removed; empty when the whole line was a comment
@@ -323,10 +357,17 @@ export function countPolicySubstitutionOpeners(input: string): number {
 export function stripUnquotedPolicyShellComments(input: string): string {
   const state: RedirectQuoteState = { quote: "", escaped: false };
   let output = "";
-  for (const char of input) {
-    if (!consumeRedirectQuote(state, char) && char === "#") {
-      const previous = output.at(-1) ?? "";
-      if (previous === "" || /[ \t\r\n\v\f]/u.test(previous)) break;
+  for (let index = 0; index < input.length; index++) {
+    const char = input.charAt(index);
+    if (
+      !consumeRedirectQuote(
+        state,
+        char,
+        isPolicyAnsiQuoteStart(input, index),
+      ) &&
+      char === "#"
+    ) {
+      if (isPolicyShellCommentBoundary(output)) break;
     }
     output += char;
   }
@@ -342,12 +383,20 @@ export function stripUnquotedPolicyShellComments(input: string): string {
  */
 export function findUnmatchedPolicyClosingParen(input: string): number {
   const bytes = Buffer.from(input, "utf8");
+  const quoteInput = bytes.toString("latin1");
   const state: RedirectQuoteState = { quote: "", escaped: false };
   let depth = 0;
   for (let byteIndex = 0; byteIndex < bytes.length; byteIndex++) {
     // Multi-byte UTF-8 continuation bytes never equal a quote, backslash or parenthesis, so byte-wise scanning is safe.
     const char = String.fromCharCode(bytes[byteIndex] ?? 0);
-    if (consumeRedirectQuote(state, char)) continue;
+    if (
+      consumeRedirectQuote(
+        state,
+        char,
+        isPolicyAnsiQuoteStart(quoteInput, byteIndex),
+      )
+    )
+      continue;
     if (char === "(") depth++;
     else if (char === ")") {
       depth--;
@@ -832,15 +881,39 @@ export function findPolicyNativeConditionalCommands(
   );
 }
 
+/** Peel a case header and arm without letting quoted parentheses become shell grammar. */
+export function stripPolicyCasePrefix(input: string): string {
+  let arm = input;
+  if (/^case[ \t\r\n\v\f]/u.test(arm)) {
+    arm = dropFirstPolicyShellWord(dropFirstPolicyShellWord(arm));
+    if (!/^in(?:[ \t\r\n\v\f]|$)/u.test(arm)) return input;
+    arm = dropFirstPolicyShellWord(arm);
+    if (arm === "") return "";
+  }
+  const pattern = arm.startsWith("(") ? arm.slice(1) : arm;
+  const offset = findUnmatchedPolicyClosingParen(pattern);
+  if (offset < 0) return input;
+  const bytes = Buffer.from(pattern);
+  const alternatives = bytes.subarray(0, offset).toString("utf8");
+  if (
+    splitPolicyShellWords(alternatives.replace(/[ \t]*\|[ \t]*/gu, "|"))
+      .length !== 1
+  )
+    return input;
+  return bytes
+    .subarray(offset + 1)
+    .toString("utf8")
+    .replace(/^[ \t\r\n\v\f]+/u, "");
+}
+
 // Shell grammar that can sit in front of the real command: negation, group openers, case arms, coproc, keywords and function headers.
 const commandSyntaxPrefixes = [
   /^![ \t\r\n\v\f]+/u,
   /^[({]/u,
-  /^case[ \t\r\n\v\f][^)]*\)[ \t\r\n\v\f]*/u,
   /^coproc[ \t\r\n\v\f]+[A-Za-z_][A-Za-z0-9_]*[ \t\r\n\v\f]+\{[ \t\r\n\v\f]*/u,
   /^coproc[ \t\r\n\v\f]+/u,
   /^(?:then|do|else|if|elif|while|until|in)[ \t\r\n\v\f]+/u,
-  /^[A-Za-z_][A-Za-z0-9_]*[ \t\r\n\v\f]*\(\)[ \t\r\n\v\f]*\{[ \t\r\n\v\f]*/u,
+  /^[A-Za-z_][A-Za-z0-9_]*[ \t\r\n\v\f]*\(\)[ \t\r\n\v\f]*[({][ \t\r\n\v\f]*/u,
   /^function[ \t\r\n\v\f]+[A-Za-z_][A-Za-z0-9_]*(?:[ \t\r\n\v\f]*\(\))?[ \t\r\n\v\f]*\{[ \t\r\n\v\f]*/u,
 ];
 
@@ -870,6 +943,8 @@ function stripPolicyCommandSyntax(command: string): string | null {
       .slice(builtinLookup[0].length)
       .replace(/^[ \t\r\n\v\f]+/u, "")
       .replace(/^--(?:[ \t\r\n\v\f]+|$)/u, "");
+  const caseBody = stripPolicyCasePrefix(command);
+  if (caseBody !== command) return caseBody;
   for (const prefix of commandSyntaxPrefixes) {
     const match = prefix.exec(command);
     if (match) return command.slice(match[0].length);
@@ -940,11 +1015,13 @@ const repeatedCommandWrappers = new Map<
   ["parallel", stripPolicyParallelPayload],
 ]);
 // Wrappers whose parser returns plain text rather than a payload; nohup changes nothing about the command it runs.
-const textCommandWrappers = new Map<string, (command: string) => string>([
-  ["time", normalizePolicyTimePrefix],
-  ["sudo", normalizePolicySudoPrefix],
-  ["nohup", (command) => command],
-]);
+const textCommandWrappers = new Map<string, (command: string) => string | null>(
+  [
+    ["time", normalizePolicyTimePrefix],
+    ["sudo", normalizePolicySudoPrefix],
+    ["nohup", (command) => command],
+  ],
+);
 
 /**
  * Remove a leading `KEY=value` assignment or an `env` prefix, e.g. `KEY=1 env -i git status` is judged as `git status`.
@@ -953,14 +1030,24 @@ const textCommandWrappers = new Map<string, (command: string) => string>([
  * @param command - the full segment text
  * @returns "command" with the remaining text, "absent" when neither prefix is present, or env's own "unresolved" for an unknown option
  */
-function readPolicyAssignmentOrEnv(command: string): PolicyWrapperPayload {
+function readPolicyAssignmentOrEnv(
+  command: string,
+  preserveAssignments: boolean | undefined,
+  visitDirectory: ((directory: string) => void) | undefined,
+): PolicyWrapperPayload {
   const assignment = stripPolicyAssignmentPrefix(command);
-  if (assignment !== null) return { kind: "command", command: assignment };
+  if (assignment !== null)
+    return preserveAssignments
+      ? { kind: "absent" }
+      : { kind: "command", command: assignment };
   const envPrefix = /^(?:env|(?:\/usr)?\/bin\/env)(?:[ \t\r\n\v\f]|$)/u.exec(
     command,
   );
   return envPrefix
-    ? normalizePolicyEnvPrefix(command.slice(envPrefix[0].length))
+    ? normalizePolicyEnvPrefix(
+        command.slice(envPrefix[0].length),
+        visitDirectory,
+      )
     : { kind: "absent" };
 }
 
@@ -970,22 +1057,31 @@ function readPolicyAssignmentOrEnv(command: string): PolicyWrapperPayload {
  * @param base - the executable basename, e.g. `sudo` for `/usr/bin/sudo`
  * @param command - the full segment text, needed by wrappers that read their own word
  * @param rest - text after the executable word with leading whitespace removed; empty when the wrapper was given nothing
- * @returns the wrapper's payload; "absent" means the word is not a wrapper, so this is the command to judge
+ * @param visitDirectory - report env directory operands to the caller before unwrapping its child
+ * @param preserveAssignments - stop at assignment words so callers can track shell variables
+ * @returns the wrapper's payload; "absent" ends normalization at this word
  */
 function readPolicyNormalizationPayload(
   base: string,
   command: string,
   rest: string,
+  preserveAssignments: boolean | undefined,
+  visitDirectory: ((directory: string) => void) | undefined,
 ): PolicyNormalizationPayload {
   const textWrapper = textCommandWrappers.get(base);
-  if (textWrapper) return { kind: "command", command: textWrapper(rest) };
+  if (textWrapper) {
+    const payload = textWrapper(rest);
+    return payload === null
+      ? { kind: "unresolved" }
+      : { kind: "command", command: payload };
+  }
   if (base === "nice") return normalizePolicyNicePayload(rest);
   const optionWrapper = normalizedOptionWrappers.get(base);
   if (optionWrapper) return optionWrapper(rest);
   const repeatedWrapper = repeatedCommandWrappers.get(base);
   return repeatedWrapper
     ? repeatedWrapper(command)
-    : readPolicyAssignmentOrEnv(command);
+    : readPolicyAssignmentOrEnv(command, preserveAssignments, visitDirectory);
 }
 
 /**
@@ -1036,9 +1132,15 @@ function normalizePolicyExecutableCandidate(command: string): string | null {
  * An xargs launch keeps its own options in front of the normalized child, so `xargs -0 sudo git status` becomes `xargs -0 git status`.
  *
  * @param input - one command segment as the agent typed it; empty text comes back empty
+ * @param preserveAssignments - leave leading assignments visible for shell-variable tracking; omitted means peel them
+ * @param visitDirectory - report each env directory operand in wrapper order
  * @returns the normalized command text, or null when a wrapper option, quoting or IFS expansion cannot be resolved and the hook must refuse
  */
-export function normalizePolicyCommandCandidate(input: string): string | null {
+export function normalizePolicyCommandCandidate(
+  input: string,
+  preserveAssignments?: boolean,
+  visitDirectory?: (directory: string) => void,
+): string | null {
   let command = input;
   let xargsPrefix = "";
   for (;;) {
@@ -1065,7 +1167,13 @@ export function normalizePolicyCommandCandidate(input: string): string | null {
     const rest = command
       .slice(executable.length)
       .replace(/^[ \t\r\n\v\f]+/u, "");
-    const payload = readPolicyNormalizationPayload(base, command, rest);
+    const payload = readPolicyNormalizationPayload(
+      base,
+      command,
+      rest,
+      preserveAssignments,
+      visitDirectory,
+    );
     // An option the wrapper parser does not know could hide the real command, so the hook refuses rather than guesses.
     if (payload.kind === "unresolved") return null;
     if (payload.kind === "terminal") return xargsPrefix + payload.command;

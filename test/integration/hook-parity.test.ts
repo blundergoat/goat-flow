@@ -104,6 +104,37 @@ for (const kind of [
   });
 }
 
+test("reviewed protections require a named gap and a bounded denial message", () => {
+  const withException = (exceptionId: string, message = "BLOCKED: Policy") => {
+    const pair = structuredClone(validatedArtifacts);
+    const row = pair.corpus.rows.find(
+      (item) => item.exceptionId === "review-gap-11",
+    );
+    assert.ok(row);
+    const original = pair.reference.rows.find((item) => item.id === row.id);
+    assert.ok(original);
+    row.exceptionId = exceptionId;
+    original.exceptionId = exceptionId;
+    row.expected.stderrIncludes = message;
+    original.expected.stderrIncludes = message;
+    pair.reference.approvedDifferences = pair.reference.rows
+      .filter((item) => item.exceptionId)
+      .map(({ id, exceptionId: namedGap, original: outcomes, expected }) => ({
+        id,
+        exceptionId: namedGap,
+        original: outcomes,
+        expected,
+      }));
+    return () => validateCorpora(pair.corpus, pair.reference, pair.snapshot);
+  };
+  assert.doesNotThrow(withException("review-gap-11"));
+  assert.throws(withException("review-gap-22"), /unknown exception/u);
+  assert.throws(
+    withException("review-gap-11", "anything"),
+    /unapproved message predicate/u,
+  );
+});
+
 test("ordinary allow and block cases reject unavailable instead of agreeing", () => {
   const unavailable = {
     status: 2,

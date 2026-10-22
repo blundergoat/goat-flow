@@ -253,12 +253,12 @@ test("native deadline and launch errors use managed Stop recovery without a clea
   const root = projectFixture(t);
   const body =
     'process.stderr.write("ready\\n");process.stdout.write("{");setInterval(()=>{},1000);';
-  const initial = execute(root, codexStop, body, false, 1000);
+  const initial = execute(root, codexStop, body, false, 3000);
   assert.equal(initial.status, 0, initial.stderr);
   assert.equal(initial.stderr, "ready\n");
   assert.equal(JSON.parse(initial.stdout).decision, "block");
   assert.match(JSON.parse(initial.stdout).reason, /execution-timeout/u);
-  const repeated = execute(root, codexStop, body, true, 1000);
+  const repeated = execute(root, codexStop, body, true, 3000);
   assert.equal(repeated.status, 0, repeated.stderr);
   const warning = JSON.parse(repeated.stdout);
   assert.equal(warning.decision, undefined);

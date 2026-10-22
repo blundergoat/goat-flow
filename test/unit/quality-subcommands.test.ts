@@ -625,7 +625,7 @@ describe("quality validate", () => {
       { rubric_version: getQualityRubricId("harness") },
     ],
   ] as const) {
-    it(`labels ${name} legacy-compatible and rejects saving the same bytes`, () => {
+    it(`parses ${name} as legacy and rejects it under current schema rules`, () => {
       const error = Object.keys(override)[0]!;
       const report = {
         ...currentQualityReport(resolve("quality-legacy-schema")),

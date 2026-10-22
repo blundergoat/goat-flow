@@ -840,6 +840,24 @@ if command -v shellcheck >/dev/null 2>&1; then
         fail "Shellcheck (scripts) - run shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh for details"
     fi
 
+    # Lint hook entrypoints and sourced modules with the same exclusion as project scripts.
+    while IFS= read -r hookdir; do
+        hook_shell_files=()
+        for hook_shell_file in "$hookdir"/*.sh "$hookdir"/deny-dangerous/*.sh; do
+            [[ ! -f "$hook_shell_file" ]] || hook_shell_files+=("$hook_shell_file")
+        done
+        if [[ "${#hook_shell_files[@]}" -gt 0 ]]; then
+            if shellcheck --exclude=SC2001 "${hook_shell_files[@]}" >/dev/null 2>&1; then
+                pass "Shellcheck ($hookdir/)"
+            else
+                fail "Shellcheck ($hookdir/) - run the instruction file's shellcheck command for details"
+            fi
+        fi
+    done < <(
+        manifest_eval hook-dirs
+        # Framework development also checks canonical copies; consumer projects need only their installed hooks.
+        if [[ -d workflow/hooks ]]; then printf '%s\n' workflow/hooks; fi
+    )
 else
     warn "Shellcheck not installed - run: bash scripts/setup-initial.sh"
 fi
@@ -1620,8 +1638,8 @@ check_typescript() {
 if [[ -f tsconfig.json ]]; then
     section "TypeScript"
 
-    # A successful compiler run validates CLI types and produces the build used by later checks.
-    if npx tsc 2>/dev/null; then
+    # Match the CLI permission step in npm run build before releasing build-dependent checks.
+    if npx tsc 2>/dev/null && { [[ ! -f dist/cli/cli.js ]] || chmod +x dist/cli/cli.js; }; then
         pass "Typecheck + build (dist/ produced)"
     else
         fail "Typecheck/build - run npx tsc for details"
@@ -2673,7 +2691,7 @@ run_preflight_workers() {
             [[ "${started[$index]:-0}" -eq 0 && "$active" -lt 4 ]] || continue
             name="${names[$index]}"
             case "$name" in
-                tests|audit|memory|content|drift)
+                tests|audit|memory|content|drift|gruff)
                     [[ -f "$LEDGER_DIR/build.ready" || "${finished[0]:-0}" -eq 1 ]] || continue ;;
             esac
             local -a runner=(scripts/preflight-command-runner.mjs --timeout-seconds 0 --heartbeat-seconds "$preflight_heartbeat_seconds" --label "Preflight $name")

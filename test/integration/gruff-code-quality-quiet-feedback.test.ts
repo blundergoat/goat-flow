@@ -85,7 +85,7 @@ function makeGruffWorkspace(analyzerEnvelope: string): GruffWorkspace {
  */
 function registerClaudeGruffHandler(projectRoot: string): string[] {
   if (hookSelection() === "candidate")
-    throw new Error("candidate registration seam unavailable until M02");
+    throw new Error("native Gruff hook has not been ported");
   copyHookTree(join(projectRoot, ".goat-flow", "hooks"));
   mkdirSync(join(projectRoot, ".claude"));
   const settingsPath = join(projectRoot, ".claude", "settings.json");

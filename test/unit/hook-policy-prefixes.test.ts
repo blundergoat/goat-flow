@@ -57,10 +57,10 @@ describe("policy timing and privilege prefixes", () => {
       assert.equal(normalizePolicySudoPrefix(input), "git 'status'", input);
   });
 
-  it("retains sudo's raw operands and stops at the first unrecognized prefix", () => {
+  it("retains sudo's raw operands and refuses unknown or incomplete options", () => {
     for (const [input, expected] of [
-      ["--unknown value git push", "--unknown value git push"],
-      ["-u", "-u"],
+      ["--unknown value git push", null],
+      ["-u", null],
       ["-- -n git status", "-n git status"],
       ["git '--user=root' status", "git '--user=root' status"],
       ["", ""],

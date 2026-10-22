@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { isatty } from "node:tty";
 import { homedir } from "node:os";
-import { checkGitHostedCommands, checkGitSegment, } from "./deny-dangerous/git-command.mjs";
+import { checkGitHostedCommands, checkGitSegment, usesAssignedGitExecutable, } from "./deny-dangerous/git-command.mjs";
 import { checkRepositorySegment } from "./deny-dangerous/github-command.mjs";
 import { checkSecretSegment } from "./deny-dangerous/patterns-paths.mjs";
 import { checkCommandChainPolicy, checkDestructiveSegment, findHasDestructiveAction, isDownloaderPipeSource, isShellCommand, checkPipelineShellConsumers, } from "./deny-dangerous/patterns-shell.mjs";
@@ -13,7 +13,7 @@ import { largeQualitySaveHeredocIsBoundedData, maskSafeQuotedHeredocBodies, join
 import { asciiLowerCase, detectPolicyOutputMode, extractPolicyCommandText, extractPolicyToolName, isPolicySecretFileTool, isPolicyShellTool, parsePolicyPayload, policyCommandSizeRefusal, policySegmentCountRefusal, readPolicyPayload, } from "./policy-input.mjs";
 import { findPolicyNativeLaunchedCommands, findPolicyNativeScriptBlockCommands, policyUnresolvedSplitRefusal, splitPolicyCommandSegments, splitPolicyTopLevelPipelineStages, trackPolicyGitConfigEnvironment, trackPolicyGitShellDirectory, } from "./policy-segments.mjs";
 import { checkPolicyCommandSubstitutions, } from "./policy-substitutions.mjs";
-import { countPolicySubstitutionOpeners, findPolicyNativeConditionalCommands, findPolicyNativeShellCommand, findUnmatchedPolicyClosingParen, normalizePolicyCommandCandidate, stripPolicySubshellParentheses, stripUnquotedPolicyShellComments, } from "./policy-syntax.mjs";
+import { countPolicySubstitutionOpeners, findPolicyNativeConditionalCommands, findPolicyNativeShellCommand, stripPolicyCasePrefix, findUnmatchedPolicyClosingParen, normalizePolicyCommandCandidate, stripPolicySubshellParentheses, stripUnquotedPolicyShellComments, } from "./policy-syntax.mjs";
 import { dropFirstPolicyShellWord, joinPolicyShellWords, splitPolicyShellWords, stripPolicyXargsPayload, } from "./policy-words.mjs";
 const leadingSpace = /^[ \t\n\v\f\r]+/u;
 const trailingSpace = /[ \t\n\v\f\r]+$/u;
@@ -90,38 +90,18 @@ async function checkPipelineStages(policy, context, evaluate) {
     }
     return null;
 }
-/** Read the `-c` operand; the word parser keeps an ANSI-C quote marker, and escape decoding needs ordinary quoting the hook can read. */
-function rawCommandString(source, words, index) {
-    const body = words[index + 1] ?? "";
-    let raw = source;
-    for (let dropped = 0; dropped <= index; dropped++)
-        raw = dropFirstPolicyShellWord(raw);
-    if (!raw.startsWith("$'"))
-        return { kind: "body", body };
-    const decoded = body.replace(/^\$/u, "");
-    return decoded.includes("\\")
-        ? {
-            kind: "refused",
-            reason: "Cannot inspect ANSI-C escapes in shell code; use ordinary shell quoting.",
-        }
-        : { kind: "body", body: decoded };
-}
-/** Decode a POSIX shell's `-c` string, forwarding `exec "$@"` argv and refusing bodies whose commands come from positional parameters. */
+/** Inspect the decoded `-c` body, preserving raw forwarded argv and refusing unsupported executable positional expansion. */
 function commandStringBody(source, words, index) {
-    const read = rawCommandString(source, words, index);
-    if (read.kind === "refused")
-        return read;
-    const { body } = read;
+    const body = words[index + 1] ?? "";
     const candidate = (normalizePolicyCommandCandidate(body) ?? "").replace(/\n+$/u, "");
     const innerWords = splitPolicyShellWords(candidate);
     if (innerWords.length === 1 &&
-        (innerWords[0] === "$@" || innerWords[0] === "${@}"))
-        return {
-            kind: "body",
-            body: index + 3 < words.length
-                ? joinPolicyShellWords(words.slice(index + 3), 0, "argv") + " "
-                : "",
-        };
+        (innerWords[0] === "$@" || innerWords[0] === "${@}")) {
+        let forwarded = source;
+        for (let dropped = 0; dropped < index + 3; dropped++)
+            forwarded = dropFirstPolicyShellWord(forwarded);
+        return { kind: "body", body: forwarded };
+    }
     if (/\$\{?[@*0-9]/u.test(body) &&
         (!/^(?:echo|printf)[ \t\n\v\f\r]/u.test(candidate) || /[;|&\n]/u.test(body)))
         return {
@@ -130,16 +110,26 @@ function commandStringBody(source, words, index) {
         };
     return { kind: "body", body };
 }
-/** Find a POSIX shell's `-c` body, skipping its options and `-o`/`+o` values; no command string means no body. */
+const shellValueOptions = new Set([
+    "-o",
+    "+o",
+    "-O",
+    "+O",
+    "--rcfile",
+    "--init-file",
+]);
+/** Find a POSIX shell's `-c` body after options and their operands; no command string means no body. */
 function posixShellBody(source) {
     const words = splitPolicyShellWords(source);
     for (let index = 1; index < words.length; index++) {
         const word = words[index] ?? "";
-        if (word === "-o" || word === "+o")
+        if (word === "--")
+            return { kind: "body", body: "", script: words[index + 1] ?? "" };
+        if (shellValueOptions.has(word))
             index++;
         else if (word === "-c" || /^-[a-zA-Z].*c/su.test(word))
             return commandStringBody(source, words, index);
-        else if (!word.startsWith("-"))
+        else if (!/^[-+]/u.test(word))
             return { kind: "body", body: "", script: word };
     }
     return { kind: "body", body: "" };
@@ -272,16 +262,17 @@ function firstDeferredShellDenial(process, continued) {
     return process ?? continued;
 }
 /**
- * Prepare one segment as the reference does: strip comments and subshell parentheses, inspect substitutions, normalize wrappers,
+ * Prepare one segment: strip comments, case arms and subshell parentheses, inspect substitutions, normalize wrappers,
  * derive operator facts, then check every pipeline stage and inline shell body with the complete policy.
  */
 async function preparePolicySegment(segment, depth, run, state, scope) {
     let policy = segment.includes("#")
         ? stripUnquotedPolicyShellComments(segment)
         : segment.replace(trailingSpace, "");
+    policy = stripPolicyCasePrefix(policy);
     if (/[()]/u.test(policy))
         policy = stripPolicySubshellParentheses(policy);
-    const evaluate = nestedEvaluator(run, state, scope);
+    const evaluate = nestedEvaluator(run, { ...state }, scope);
     const substitution = await checkPolicyCommandSubstitutions(policy, depth, scope, evaluate, run.guard === "deny-dangerous"
         ? (projection, outputs) => {
             state.processSubstitution.denial ??= checkProcessSubstitutionFlows(projection, outputs, depth);
@@ -290,7 +281,16 @@ async function preparePolicySegment(segment, depth, run, state, scope) {
         : undefined);
     if (substitution !== null)
         return { kind: "denied", denial: substitution };
-    const normalized = normalizePolicyCommandCandidate(policy.replace(leadingSpace, ""))?.replace(/\n+$/u, "");
+    const normalized = normalizePolicyCommandCandidate(policy.replace(leadingSpace, ""), false, (target) => {
+        const directory = trackPolicyGitShellDirectory("cd " + joinPolicyShellWords([target], 0, "argv"), {
+            directory: state.directory,
+            unknown: state.directoryUnknown,
+            background: false,
+            cdPath: "",
+        });
+        state.directory = directory.directory;
+        state.directoryUnknown = directory.unknown;
+    })?.replace(/\n+$/u, "");
     if (normalized === undefined)
         return { kind: "denied", denial: { scope, reason: syntaxRefusal } };
     const context = segmentFacts(policy, normalized, depth, state.inlineCommandHost);
@@ -305,12 +305,13 @@ async function checkDangerousRules(context, run, state) {
     return ((await checkDestructiveSegment(context, nestedEvaluator(run, state, "destructive"))) ?? (await checkSecretSegment(context, gitOptions(run, state))));
 }
 /** deny-git-mutations evaluates find payloads under repository policy, then Git and GitHub writes. */
-async function checkRepositoryRules(context, run, state) {
+async function checkRepositoryRules(context, run, state, parentState) {
     // The find walker checks executable payloads; its deletion verdict belongs to the sibling shell policy.
     const find = await findHasDestructiveAction(context.normalized, context.depth, nestedEvaluator(run, state, "repository"));
     if (find.kind === "denied")
         return find.denial;
-    const reason = (await checkGitSegment(context.trimmed, gitOptions(run, state), context, context.inlineCommandHost)) ??
+    // Each stage applies its env directory operands from the enclosing shell directory.
+    const reason = (await checkGitSegment(context.trimmed, gitOptions(run, parentState), context, context.inlineCommandHost)) ??
         checkRepositorySegment(context.trimmed, context, context.inlineCommandHost);
     return reason === null ? null : { scope: "repository", reason };
 }
@@ -332,7 +333,8 @@ async function checkGitHostedRules(context, run, state, scope) {
     return checkGitCommandEnvironment(context.trimmed, context.verb, context.depth, nestedEvaluator(run, state, laterScope));
 }
 /** Judge one segment with the selected guard's rules; the first denial ends inspection. */
-async function checkPolicySegment(segment, depth, run, state) {
+async function checkPolicySegment(segment, depth, run, inherited) {
+    const state = { ...inherited };
     const scope = run.guard === "deny-git-mutations" ? "repository" : "destructive";
     const prepared = await preparePolicySegment(segment, depth, run, state, scope);
     if (prepared.kind === "denied")
@@ -344,7 +346,7 @@ async function checkPolicySegment(segment, depth, run, state) {
             reason: "Visible Git configuration environment can change aliases or executable commands without hook inspection; use literal git -c values or ask the user to run it manually.",
         };
     const rules = run.guard === "deny-git-mutations"
-        ? await checkRepositoryRules(context, run, state)
+        ? await checkRepositoryRules(context, run, state, inherited)
         : await checkDangerousRules(context, run, state);
     return rules ?? (await checkGitHostedRules(context, run, state, scope));
 }
@@ -418,6 +420,7 @@ async function checkChainedSegment(segment, depth, run, state, chain) {
     let directorySegment = segment;
     while (directorySegment.startsWith("(")) {
         chain.stack.push({
+            assignedGitExecutables: new Set(state.assignedGitExecutables),
             directory: state.directory,
             directoryUnknown: state.directoryUnknown,
             configEnvUnresolved: state.configEnvUnresolved,
@@ -427,6 +430,11 @@ async function checkChainedSegment(segment, depth, run, state, chain) {
     const closing = directorySegment;
     if (directorySegment.includes(")"))
         directorySegment = stripPolicySubshellParentheses(segment);
+    if (usesAssignedGitExecutable(directorySegment, state.assignedGitExecutables))
+        return {
+            scope: state.activeScope,
+            reason: "Cannot inspect a Git executable supplied through a shell variable. Use a literal Git executable.",
+        };
     const denial = await checkPolicySegment(segment, depth, run, state);
     if (denial !== null)
         return denial;
@@ -473,7 +481,10 @@ function splitInspectedChain(input, depth, run, state) {
  * @returns the first denial, or null when every segment is allowed
  */
 async function checkPolicyCommandSegments(input, depth, run, inherited) {
-    const state = { ...inherited };
+    const state = {
+        ...inherited,
+        assignedGitExecutables: new Set(inherited.assignedGitExecutables),
+    };
     const split = splitInspectedChain(input, depth, run, state);
     if ("reason" in split)
         return split;
@@ -656,6 +667,7 @@ async function evaluatePolicyCommand(run, command) {
             directoryUnknown: false,
             hostedDirectoryUnknown: false,
             configEnvUnresolved: false,
+            assignedGitExecutables: new Set(),
             inlineCommandHost: "",
             activeScope: run.guard,
             processSubstitution,

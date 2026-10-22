@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import {
   bashPath,
   spawnReferenceCommand,
+  replayFrozenRow,
 } from "./hook-parity-reference-command.mjs";
 
 export { bashPath };
@@ -165,14 +166,16 @@ export function runFrozen(
   locale = "C",
   env = {},
   id,
-  timeoutMs = 30_000,
+  options = 30_000,
 ) {
+  const { timeoutMs = 30_000, cwd = project } =
+    typeof options === "number" ? { timeoutMs: options } : options;
   assert(policies.includes(policy), "known policy");
   const command = join(project, ".goat-flow/hooks", `${policy}.sh`);
   const args = input.command === undefined ? [] : [`--check=${input.command}`];
   const started = Date.now();
   const result = spawnReferenceCommand("bash", [bashPath(command), ...args], {
-    cwd: project,
+    cwd,
     env: { ...referenceEnvironment(project, locale), ...env },
     input: input.payloadBase64
       ? Buffer.from(input.payloadBase64, "base64")
@@ -191,6 +194,10 @@ export function runFrozen(
     stderrBase64: result.stderr.toString("base64"),
   };
 }
+
+// Replay through the existing reference transport with this driver's pinned environment and runner.
+export const runFrozenRow = (project, row, locale = "C") =>
+  replayFrozenRow(project, row, locale, referenceEnvironment, runFrozen);
 
 // This program observes a disposable self-test's real subprocesses. It forwards
 // their original output and exit so the original assertions still decide success.
@@ -656,7 +663,7 @@ function isApprovedException(row) {
   return row.exceptionId === "native-startup"
     ? row.availabilityCase
     : !row.exceptionId ||
-        /^(historical-gap-(?:[1-6]|8|9|10)|full-json-decoding|locale-C|invalid-request-encoding|obsolete-advice|recovery-message)$/.test(
+        /^(historical-gap-(?:[1-6]|8|9|10)|review-gap-(?:1[1-9]|2[01])|full-json-decoding|locale-C|invalid-request-encoding|obsolete-advice|recovery-message)$/.test(
           row.exceptionId,
         );
 }
@@ -708,7 +715,7 @@ export function validateCorpora(
     assert(isApprovedException(row), `unknown exception: ${row.id}`);
     assert(
       !row.expected.stderrIncludes ||
-        (row.exceptionId?.startsWith("historical-gap-") &&
+        (/^(?:historical|review)-gap-/.test(row.exceptionId ?? "") &&
           row.expected.status === 2 &&
           row.expected.stderrIncludes === "BLOCKED: Policy"),
       `unapproved message predicate: ${row.id}`,
@@ -908,14 +915,7 @@ function compareExtraRows(project, rows, comparison, seen, locale) {
   for (const row of rows.filter(
     (row) => row.origin.kind !== "self-test" && selected.has(row.id),
   )) {
-    const actual = runFrozen(
-      project,
-      row.policy,
-      row.input,
-      locale,
-      row.setup.environment,
-      row.id,
-    );
+    const actual = runFrozenRow(project, row, locale);
     if (row.origin.kind === "locale-sentinel")
       assert.equal(
         actual.status,

@@ -1,6 +1,6 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-10-18
+last_reviewed: 2026-10-22
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
@@ -157,4 +157,4 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `captureHookProcessUntil
 
 A separate Windows Stop-prefix probe lost quotes from inline `node -e` source through PowerShell. Passing an owned script file verified the actual environment prefix without that extra quoting boundary. Use literal files for native Node diagnostic programs.
 
-**Evidence:** `scripts/check-hook-parity.mjs` (search: `observeNode`, `spawnReferenceCommand`, `policyEnvironment`, `allowAssertionFailures`); `test/integration/hook-parity.test.ts` (search: `divergence captures failed original assertions`, `frozen launches preserve long and UNC literal inputs`); `.codex/hooks.json` (search: `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES`). No frozen Bash source was changed.
+**Evidence:** `scripts/check-hook-parity.mjs` (search: `observeNode`, `spawnReferenceCommand`, `policyEnvironment`, `allowAssertionFailures`); `test/integration/hook-parity-reference.test.ts` (search: `divergence captures failed original assertions`, `frozen launches preserve long and UNC literal inputs`); `.codex/hooks.json` (search: `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES`). No frozen Bash source was changed.
