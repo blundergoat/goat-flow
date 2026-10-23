@@ -131,6 +131,8 @@ jobs:
     name: test-slow (${{ matrix.shard }}/5)
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Fetch pinned upgrade fixture
+        run: git fetch --no-tags --depth=1 origin bd800f792968b0243eecd6983bc6f0ad9f84af3c
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
@@ -185,7 +187,7 @@ jobs:
            */
           import { spawn, spawnSync } from "node:child_process";
           import { constants } from "node:os";
-          
+
           const record = (event) =>
             process.stderr.write(
               "m07-windows-process-trace " + JSON.stringify(event) + "\n",
@@ -199,7 +201,7 @@ jobs:
             node: process.version,
             platform: process.platform,
           });
-          
+
           function sample() {
             if (!Number.isInteger(child.pid)) return;
             const result = spawnSync(
@@ -260,7 +262,7 @@ jobs:
                 })),
             });
           }
-          
+
           const interval = setInterval(sample, 15_000);
           for (const signal of ["SIGINT", "SIGTERM"]) {
             process.on(signal, () => child.kill(signal));
@@ -322,7 +324,7 @@ jobs:
       # Prints the Node version, platform, CPU architecture and commit, so a failing log names exactly what it checked.
       - name: Record consumer identity
         run: node -e "console.log(JSON.stringify({node:process.version,platform:process.platform,arch:process.arch,commit:process.env.GITHUB_SHA}))"
-      - name: Record policy artifact identity
+      - name: Record hook artifact identity
         shell: bash
         run: |
           node --input-type=module <<'JS'
@@ -342,6 +344,7 @@ jobs:
             ["generated", "workflow/hooks"],
             ["installed", ".goat-flow/hooks"],
             ["oracle", "test/fixtures/hooks-bash"],
+            ["fixtures", "test"],
           ]) {
             const rows = files(directory);
             console.log("m14-policy-artifact " + JSON.stringify({
@@ -421,7 +424,7 @@ jobs:
         run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
       # M02 owns these implemented launch/replay/audit suites; later port stages add their implemented owning cases here.
       - name: Native launcher and audit controls
-        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/unit/hook-launch.test.ts test/unit/run-hook.test.ts test/unit/hook-launcher.test.ts test/unit/hook-result-delivery.test.ts test/unit/hook-stop-delivery.test.ts test/unit/agent-hook-command.test.ts test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-command-native-replay.test.ts test/integration/hook-direct-native-probe.test.ts test/integration/hook-native-audit-configured.test.ts test/integration/hook-native-audit-direct.test.ts test/integration/hook-native-audit-discovery.test.ts test/integration/hook-native-audit-mechanism.test.ts test/integration/hook-policy-node.test.ts
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/unit/hook-launch.test.ts test/unit/run-hook.test.ts test/unit/hook-launcher.test.ts test/unit/hook-result-delivery.test.ts test/unit/hook-stop-delivery.test.ts test/unit/agent-hook-command.test.ts test/integration/hook-command-native-replay.test.ts test/integration/hook-direct-native-probe.test.ts test/integration/hook-native-audit-configured.test.ts test/integration/hook-native-audit-direct.test.ts test/integration/hook-native-audit-discovery.test.ts test/integration/hook-native-audit-mechanism.test.ts test/integration/hook-policy-node.test.ts
       # npm pack invokes the platform npm shim outside the restricted child.
       - name: Corpus and package controls
         run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/integration/hook-parity.test.ts
@@ -437,24 +440,74 @@ jobs:
           GOAT_FLOW_HOOK_UNDER_TEST: installed
         run: node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
 
-      - name: Native Gruff integration suites
+      - name: Native scanner and recovery suites
+        id: native-scanner
         env:
           GOAT_FLOW_HOOK_UNDER_TEST: installed
-        run: node --import tsx --test test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts
+          GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-scanner-spawn.jsonl
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
+
+      - name: Native Gruff integration suites
+        id: native-gruff
+        env:
+          GOAT_FLOW_HOOK_UNDER_TEST: installed
+          GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-gruff-spawn.jsonl
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts
+
+      - name: Native registered replay
+        id: native-replay
+        env:
+          GOAT_FLOW_HOOK_UNDER_TEST: installed
+          GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-replay-spawn.jsonl
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts
+
+      - name: Check native hook spawn journals
+        if: always()
+        shell: bash
+        env:
+          SCANNER_OUTCOME: ${{ steps.native-scanner.outcome }}
+          GRUFF_OUTCOME: ${{ steps.native-gruff.outcome }}
+          REPLAY_OUTCOME: ${{ steps.native-replay.outcome }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import { existsSync, readFileSync } from "node:fs";
+          import { join } from "node:path";
+          const outcomes = { scanner: process.env.SCANNER_OUTCOME, gruff: process.env.GRUFF_OUTCOME, replay: process.env.REPLAY_OUTCOME };
+          for (const family of ["scanner", "gruff", "replay"]) {
+            try {
+              const path = join(process.env.RUNNER_TEMP, `m16-${family}-spawn.jsonl`);
+              if (!existsSync(path) && outcomes[family] === "skipped") {
+                console.log("m16-spawn-proof " + JSON.stringify({ family, outcome: "skipped" }));
+                continue;
+              }
+              const events = readFileSync(path, "utf8").trim().split("\n").map(JSON.parse);
+              const loaded = events.filter((event) => event.event === "loaded").length;
+              const denied = events.filter((event) => event.event === "denied").length;
+              const unavailable = events.filter((event) => event.event === "unavailable").length;
+              console.log("m16-spawn-proof " + JSON.stringify({ family, loaded, denied, unavailable, node: process.version, platform: process.platform }));
+              assert(loaded > 0, `${family}: guard did not load`);
+              assert.equal(denied, 0, `${family}: prohibited child launch`);
+            } catch (error) {
+              console.error(`${family}: ${error.message}`);
+              process.exitCode = 1;
+            }
+          }
+          JS
 
   # Bash extraction stays on native Linux with pinned jq and explicit locales; macOS runs the Node controls above, never reference extraction.
   #
-  # Only the C locale runs here; the fast and slow suites already run its hook test files under the runner's UTF-8 locale against the installed hooks.
-  # hook-parity-reference.test.ts runs only here and checks its launch rows in both locales itself; the WSL divergence report covers both too.
+  # Frozen scanner and Gruff expectations run on both consumer runtimes and both promised locales.
   hook-reference-linux:
     # Skipped on pull requests and pushes, so a frozen-reference regression first shows on the weekly run unless someone starts a manual run.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # Each listed locale gets its own runner and becomes LC_ALL below; only C is listed, for the reason above.
+      # Each runtime and locale pair gets its own runner. Build before switching to the consumer runtime.
       matrix:
-        locale: [C]
+        node: ["20.12.0", "24.21.0"]
+        locale: [C, C.UTF-8]
     # GOAT_FLOW_HOOK_UNDER_TEST=reference points the hook tests at the frozen copy in test/fixtures/hooks-bash; LC_ALL sets every step's locale.
     env:
       GOAT_FLOW_HOOK_UNDER_TEST: reference
@@ -467,6 +520,9 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run build
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
       # Puts checksum-verified jq 1.6 first on PATH and in GOAT_FLOW_JQ16_BIN, so `jq` in every later step is 1.6, not the runner's version.
       - name: Provision reference jq 1.6
         run: |
@@ -484,9 +540,9 @@ jobs:
       - name: Frozen policy invariants
         run: node --import tsx --test --test-concurrency=1 test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
       - name: Frozen scanner and recovery invariants
-        run: node --import tsx --test --test-concurrency=1 test/integration/post-turn-safety-hook*.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
+        run: node --import tsx --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
       - name: Frozen Gruff and provider invariants
-        run: node --import tsx --test --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts test/integration/hook-provider-contracts.test.ts
+        run: node --import tsx --test --test-reporter=tap --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts test/integration/hook-provider-contracts.test.ts
       # Writes the same process wrapper as the macOS controls above; only the frozen extraction step below runs through it.
       # A `ps` sample that errors or takes over two seconds is logged as `sample-unavailable` and never fails the run.
       - name: Prepare Linux process observer
@@ -641,6 +697,7 @@ jobs:
               ["generated", "workflow/hooks"],
               ["installed", ".goat-flow/hooks"],
               ["oracle", "test/fixtures/hooks-bash"],
+              ["fixtures", "test"],
             ]) {
               const rows = files(directory);
               console.log("m14-policy-artifact " + JSON.stringify({
@@ -652,10 +709,26 @@ jobs:
               export PATH="$work_path/node-v$version-linux-x64/bin:$PATH"
               node --version
               node --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
-              node --import tsx --test test/unit/hook-launch.test.ts test/unit/run-hook.test.ts test/unit/hook-launcher.test.ts test/unit/hook-result-delivery.test.ts test/unit/hook-stop-delivery.test.ts test/unit/agent-hook-command.test.ts test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-command-native-replay.test.ts test/integration/hook-direct-native-probe.test.ts test/integration/hook-native-audit-configured.test.ts test/integration/hook-native-audit-direct.test.ts test/integration/hook-native-audit-discovery.test.ts test/integration/hook-native-audit-mechanism.test.ts test/integration/hook-policy-node.test.ts
+              node --import tsx --test test/unit/hook-launch.test.ts test/unit/run-hook.test.ts test/unit/hook-launcher.test.ts test/unit/hook-result-delivery.test.ts test/unit/hook-stop-delivery.test.ts test/unit/agent-hook-command.test.ts test/integration/hook-command-native-replay.test.ts test/integration/hook-direct-native-probe.test.ts test/integration/hook-native-audit-configured.test.ts test/integration/hook-native-audit-direct.test.ts test/integration/hook-native-audit-discovery.test.ts test/integration/hook-native-audit-mechanism.test.ts test/integration/hook-policy-node.test.ts
               node --import tsx --test test/integration/hook-parity.test.ts
               (unset LC_ALL; node scripts/check-hook-parity.mjs --stage=candidate --require-complete)
               GOAT_FLOW_HOOK_UNDER_TEST=installed node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-scanner-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-gruff-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-replay-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts
+              node --input-type=module - "$work_path/m16-scanner-$version.jsonl" "$work_path/m16-gruff-$version.jsonl" "$work_path/m16-replay-$version.jsonl" <<'JS'
+            import assert from "node:assert/strict";
+            import { readFileSync } from "node:fs";
+            for (const [index, family] of ["scanner", "gruff", "replay"].entries()) {
+              const events = readFileSync(process.argv[index + 2], "utf8").trim().split("\n").map(JSON.parse);
+              const loaded = events.filter((event) => event.event === "loaded").length;
+              const denied = events.filter((event) => event.event === "denied").length;
+              const unavailable = events.filter((event) => event.event === "unavailable").length;
+              console.log("m16-spawn-proof " + JSON.stringify({ family, loaded, denied, unavailable, node: process.version, platform: process.platform }));
+              assert(loaded > 0, `${family}: guard did not load`);
+              assert.equal(denied, 0, `${family}: prohibited child launch`);
+            }
+            JS
             done
       # Copies the checkout into WSL, adds checksum-verified Node 24.21.0 and jq 1.6, and lists where the frozen Bash reference behaves differently.
       #

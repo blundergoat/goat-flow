@@ -1,7 +1,7 @@
 /** Test preload: journal Node launches and retain instrumentation in child environments. */
 import childProcess from "node:child_process";
 import { appendFileSync, realpathSync } from "node:fs";
-import { delimiter, isAbsolute, resolve } from "node:path";
+import { basename, delimiter, isAbsolute, resolve } from "node:path";
 import { syncBuiltinESMExports } from "node:module";
 
 const journal = process.env.GOAT_TEST_SPAWN_LOG;
@@ -10,6 +10,8 @@ const encodedAllowlist = process.env.GOAT_TEST_SPAWN_ALLOWED;
 if (!journal || !preload || !encodedAllowlist) throw new Error("spawn guard configuration missing");
 const normalize = (path) => process.platform === "win32" ? path.toLowerCase() : path;
 const allowed = new Set(JSON.parse(encodedAllowlist).map(normalize));
+const commandName = (path) => normalize(basename(path)).replace(/\.exe$/u, "");
+const allowedNames = new Set([...allowed].map(commandName));
 const settings = {
   GOAT_TEST_SPAWN_LOG: journal,
   GOAT_TEST_SPAWN_PRELOAD: preload,
@@ -30,11 +32,14 @@ function propagate(environment = process.env) {
 }
 
 // Missing candidates recover to null; only the first real path can reach the allowlist.
-function resolveGuardExecutable(executable, environment) {
-  const pathValue = Object.entries(environment).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "";
+function resolveGuardExecutable(executable, environment, cwd) {
+  const pathValue = Object.entries(environment).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? (process.platform === "win32" ? process.env.PATH ?? "" : "/usr/bin:/bin");
   const suffixes = process.platform === "win32" && !/\.[a-z]+$/iu.test(executable)
     ? [".exe", ".com", ".cmd", ".bat"] : [""];
-  for (const directory of isAbsolute(executable) ? [""] : pathValue.split(delimiter).filter(Boolean)) {
+  const directories = isAbsolute(executable) ? [""]
+    : /[\\/]/u.test(executable) ? [cwd]
+    : pathValue.split(delimiter).map((directory) => resolve(cwd, directory || "."));
+  for (const directory of directories) {
     for (const suffix of suffixes) {
       try { return normalize(realpathSync(resolve(directory, executable + suffix))); }
       catch { /* A missing candidate cannot be admitted. */ }
@@ -45,9 +50,11 @@ function resolveGuardExecutable(executable, environment) {
 
 function inspect(api, executable, options = {}) {
   const environment = options.env ?? process.env;
-  const resolved = resolveGuardExecutable(executable, environment);
-  const denied = options.shell || api === "exec" || api === "execSync" || !allowed.has(resolved);
-  record({ event: denied ? "denied" : "allowed", api, executable: resolved ?? executable });
+  const resolved = resolveGuardExecutable(executable, environment, options.cwd ?? process.cwd());
+  // A missing declared dependency cannot launch; retain the native ENOENT result for recovery fixtures.
+  const unavailable = resolved === null && executable === basename(executable) && allowedNames.has(commandName(executable));
+  const denied = options.shell || api === "exec" || api === "execSync" || (!allowed.has(resolved) && !unavailable);
+  record({ event: denied ? "denied" : unavailable ? "unavailable" : "allowed", api, executable: resolved ?? executable });
   if (denied) {
     const error = new Error(`restricted consumer denied ${api}: ${executable}`);
     error.code = "GOAT_TEST_SPAWN_DENIED";

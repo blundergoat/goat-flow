@@ -61,6 +61,9 @@ function nonUtf8NameTestOptions(): { skip: string | false } {
   // Undefined means this runner has not probed yet; later cases reuse the result.
   if (nonUtf8NameSkipReason !== undefined)
     return { skip: nonUtf8NameSkipReason };
+  // Native Windows paths are Unicode; byte names cannot represent this POSIX-only input.
+  if (process.platform === "win32")
+    return { skip: "Windows cannot represent non-UTF-8 byte file names" };
   const probeRoot = mkdtempSync(join(tmpdir(), "goat-non-utf8-name-"));
   try {
     writeFileSync(

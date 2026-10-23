@@ -6,7 +6,8 @@
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -21,6 +22,8 @@ import {
 import { readPolicyChoices } from "../../workflow/hooks/hook-policy-state.cjs";
 import {
   acquirePathWriteClaims,
+  inspectPathWriteClaim,
+  removeConfirmedAbandonedPathWriteClaim,
   releasePathWriteClaims,
 } from "../../src/cli/path-write-claim.js";
 import { HookManagedInstallationError } from "../../src/cli/server/hook-managed-installation.js";
@@ -708,6 +711,181 @@ describe("hook sync migration and claim recovery", () => {
     });
   }
 });
+
+testRealSyncRecovery();
+
+/** A terminated Sync owner must leave real claims that require explicit abandonment confirmation before retry. */
+function testRealSyncRecovery(): void {
+  // Kill after real publication so surviving claims, explicit recovery and receipt honesty are observable.
+  it("recovers a killed Sync owner through confirmed claims and the same pinned CLI", async (t) => {
+    const root = fs.mkdtempSync(join(tmpdir(), "hook-sync-killed-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const project = join(root, "project");
+    fs.mkdirSync(join(project, ".codex"), { recursive: true });
+    fs.writeFileSync(join(project, ".codex/config.toml"), "\n");
+    const cli = join(REPOSITORY_ROOT, "src/cli/cli.ts");
+    const pinned = createHash("sha256")
+      .update(fs.readFileSync(cli))
+      .digest("hex");
+    const preload = join(root, "pause.cjs");
+    const output = join(root, "stdout");
+    const errors = join(root, "stderr");
+    fs.writeFileSync(
+      preload,
+      `const fs = require("node:fs");
+const rename = fs.renameSync; let paused = false;
+fs.renameSync = (...args) => {
+  const result = rename(...args);
+  if (!paused && String(args[1]).replaceAll("\\\\", "/").includes("/.goat-flow/hooks/")) {
+    paused = true; process.stdout.write("READY\\n");
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
+  }
+  return result;
+};
+require("node:module").syncBuiltinESMExports();
+`,
+    );
+    const descriptors = [output, errors].map((path) =>
+      fs.openSync(path, "wx", 0o600),
+    );
+    let owner;
+    try {
+      owner = spawn(
+        process.execPath,
+        ["--import", "tsx", cli, "hooks", "sync", project],
+        {
+          cwd: REPOSITORY_ROOT,
+          env: {
+            ...process.env,
+            NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(preload)}`,
+          },
+          stdio: ["ignore", ...descriptors],
+        },
+      );
+    } finally {
+      descriptors.forEach((descriptor) => fs.closeSync(descriptor));
+    }
+    // Replay the same source CLI with private streams; all writes remain inside this disposable project.
+    const runPinnedCli = (...cliArguments: string[]) =>
+      runWithFileStreams(
+        process.execPath,
+        ["--import", "tsx", cli, ...cliArguments],
+        {
+          cwd: REPOSITORY_ROOT,
+          encoding: "utf8",
+        },
+      );
+    try {
+      await new Promise<void>((ready, fail) => {
+        const deadline = setTimeout(() => {
+          clearInterval(poll);
+          fail(
+            new Error(
+              fs.readFileSync(errors, "utf8") ||
+                "Sync never reached its claimed publication",
+            ),
+          );
+        }, 15_000);
+        const poll = setInterval(() => {
+          if (!fs.readFileSync(output, "utf8").includes("READY\n")) return;
+          clearInterval(poll);
+          clearTimeout(deadline);
+          ready();
+        }, 10);
+      });
+      const exited = once(owner, "exit");
+      assert.equal(owner.kill("SIGKILL"), true);
+      await exited;
+      assert.doesNotMatch(
+        fs.readFileSync(output, "utf8"),
+        /"command": "hooks"/u,
+      );
+      const retry = runPinnedCli("hooks", "sync", project);
+      assert.equal(retry.status, 1);
+      assert.match(retry.stderr, /busy|cooperating writer/u);
+      const locks = join(project, ".goat-flow/state/locks");
+      const targets = fs
+        .readdirSync(locks)
+        .filter((name) => name.endsWith(".claim"))
+        .map(
+          (name) =>
+            (
+              JSON.parse(fs.readFileSync(join(locks, name), "utf8")) as {
+                targetPath: string;
+              }
+            ).targetPath,
+        );
+      assert.ok(targets.length > 1);
+      const first = targets[0];
+      assert.ok(first);
+      const inspect = runPinnedCli(
+        "claims",
+        "inspect",
+        project,
+        "--target",
+        first,
+        "--format",
+        "json",
+      );
+      assert.equal(inspect.status, 0, inspect.stderr);
+      const { markerSha256 } = JSON.parse(inspect.stdout) as {
+        markerSha256: string;
+      };
+      const recovery = [
+        "claims",
+        "recover",
+        project,
+        "--target",
+        first,
+        "--marker-sha256",
+        markerSha256,
+      ];
+      const unconfirmed = runPinnedCli(...recovery);
+      assert.equal(unconfirmed.status, 2);
+      assert.ok(inspectPathWriteClaim(project, first));
+      const confirmed = runPinnedCli(...recovery, "--confirm-abandoned");
+      assert.equal(confirmed.status, 0, confirmed.stderr);
+      // The fixture observed the owner's exit before confirming abandonment for every remaining real marker.
+      for (const target of targets.slice(1)) {
+        const claim = inspectPathWriteClaim(project, target);
+        assert.ok(claim);
+        assert.equal(removeConfirmedAbandonedPathWriteClaim(claim), "removed");
+      }
+      const reapplied = runPinnedCli("hooks", "sync", project);
+      assert.equal(reapplied.status, 0, reapplied.stderr || reapplied.stdout);
+      assert.equal(
+        createHash("sha256").update(fs.readFileSync(cli)).digest("hex"),
+        pinned,
+      );
+      assert.equal(
+        replaySavedCodexCommand(
+          project,
+          savedCodexPolicyCommand(project, "deny-dangerous"),
+          "rm -rf /",
+        ).status,
+        2,
+      );
+      const state = JSON.parse(
+        fs.readFileSync(
+          join(project, ".goat-flow/state/install/managed.json"),
+          "utf8",
+        ),
+      );
+      assert.equal(state.schemaVersion, "goat-flow.install-state.v2");
+      assert.deepEqual(
+        state.receipts,
+        [],
+        "Hook-only recovery must not invent a full-install receipt",
+      );
+    } finally {
+      if (owner.exitCode === null && owner.signalCode === null) {
+        const exited = once(owner, "exit");
+        owner.kill("SIGKILL");
+        await exited;
+      }
+    }
+  });
+}
 
 describe("saved Gruff choices across the supported upgrade", () => {
   /**

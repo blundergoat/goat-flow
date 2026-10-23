@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { accessSync, closeSync, constants, existsSync, openSync, readFileSync, readSync, realpathSync, statSync, } from "node:fs";
 import { delimiter, dirname, extname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { captureHookProcessUntilDeadline } from "../hook-supervisor.mjs";
 import { beneath, object, ownerSettings } from "./scope.mjs";
 function executableFile(path) {
@@ -47,7 +48,7 @@ function packagedGruffCommand(entry, path) {
     const loader = createRequire(manifest).resolve("tsx");
     return {
         executable: process.execPath,
-        args: ["--import", loader, cli],
+        args: ["--import", pathToFileURL(loader).href, realpathSync(cli)],
         path,
     };
 }

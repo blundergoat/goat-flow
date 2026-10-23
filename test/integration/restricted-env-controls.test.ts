@@ -100,6 +100,9 @@ test("clean restricted consumer journals allowed Node and Git with zero denials"
         const result = spawnSync(file, args, { encoding: "utf8" });
         assert.equal(result.status, 0, result.stderr);
       }
+      const missing = spawnSync("git", ["--version"], { env: { PATH: "" }, cwd: ${JSON.stringify(directory)}, encoding: "utf8" });
+      assert.equal(missing.status, null);
+      assert.equal(missing.error?.code, "ENOENT");
       const analyzer = ${JSON.stringify(analyzer)};
       const result = spawnSync(analyzer.executable, [...analyzer.args, "analyse", "--format", "json", "src/new-file.ts"], { encoding: "utf8", cwd: ${JSON.stringify(directory)} });
       assert.equal(result.status, 1, result.stderr);
@@ -118,6 +121,10 @@ test("clean restricted consumer journals allowed Node and Git with zero denials"
     assert(events.some((event) => event.event === "loaded"));
     assert.equal(events.filter((event) => event.event === "allowed").length, 3);
     assert.equal(events.filter((event) => event.event === "denied").length, 0);
+    assert.equal(
+      events.filter((event) => event.event === "unavailable").length,
+      1,
+    );
     process.stderr.write(
       `restricted-proof ${JSON.stringify({ node: process.version, platform: process.platform, allowed: 3, denied: 0, events })}\n`,
     );

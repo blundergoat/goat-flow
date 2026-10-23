@@ -436,7 +436,7 @@ process.exit(fault.status ?? 2);
 /**
  * Inject a declared command fault into a disposable reference PATH adapter.
  * The Node driver owns predicates/output; its POSIX adapter only invokes Node.
- * Candidate ports consume declared command dependencies in their owning milestone.
+ * Node fixtures redirect the declared command through a child-only preload on every native host.
  * The absolute target is resolved by the caller, without shell lookup.
  */
 export function withCommandShim(
@@ -447,9 +447,27 @@ export function withCommandShim(
   assert(isAbsolute(executable), "fault target must be an absolute executable");
   const shimRoot = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-shim-"));
   const driver = join(shimRoot, "fault.mjs");
+  const preload = join(shimRoot, "fault-preload.cjs");
   const declaration = { executable, ...fault };
   try {
     writeFileSync(driver, commandFaultSource(declaration));
+    const native = hookSelection() !== "reference";
+    const command = basename(executable).replace(/\.exe$/iu, "");
+    if (native) {
+      // Redirect only this declared command; the driver delegates by absolute path without recursion.
+      writeFileSync(
+        preload,
+        `const cp = require("node:child_process");
+const original = cp.spawnSync;
+cp.spawnSync = function(command, args = [], options = {}) {
+  return command === ${JSON.stringify(command)}
+    ? original.call(this, process.execPath, [${JSON.stringify(driver)}, ...args], options)
+    : original.call(this, command, args, options);
+};
+require("node:module").syncBuiltinESMExports();
+`,
+      );
+    }
     const quote = (path: string) =>
       "'" + bashPath(path).replaceAll("'", "'\\''") + "'";
     const adapter = join(
@@ -462,7 +480,12 @@ export function withCommandShim(
     );
     chmodSync(adapter, 0o755);
     scenario({
-      PATH: `${shimRoot}${delimiter}${process.env.PATH ?? ""}`,
+      ...(native
+        ? {
+            NODE_OPTIONS:
+              `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(preload)}`.trim(),
+          }
+        : { PATH: `${shimRoot}${delimiter}${process.env.PATH ?? ""}` }),
       GOAT_TEST_COMMAND_FAULT: JSON.stringify(declaration),
     });
   } finally {

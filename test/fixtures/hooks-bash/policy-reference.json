@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "freezeCommit": "5205eefad9e5630f3dbd6b50f88db22fb94ec02f",
-  "caseCount": 2324,
+  "caseCount": 2356,
   "snapshotSha256": "dfd351b977ec9e328813ccdfc45e751ce4fb38fef9cd0f83c4995e1bf17b328b",
   "historicalSha256": "9041f7bd765cdb72b9c2316beb3dbdc4329c54720eb2d7d5b96a9b69da01a903",
   "executionCounts": {
@@ -858,6 +858,1054 @@
       "exceptionId": null
     },
     {
+      "id": "history-caret-boundary-delete-space-control-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "17524a8d584ac5e23a972af810fd8f7f0044d942bca476594494dd1c4d33a965",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c echo^ /s /q C:/goat-probe-target"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c echo^ /s /q C:/goat-probe-target"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-delete-space-control-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "17524a8d584ac5e23a972af810fd8f7f0044d942bca476594494dd1c4d33a965",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c echo^ /s /q C:/goat-probe-target"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c echo^ /s /q C:/goat-probe-target"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-delete-space-protection-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "fed2311b5f1721a775f0e443912a8e0677b4faaabb39279b145a8104922e11f2",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c rd^ /s /q C:/goat-probe-target"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c rd^ /s /q C:/goat-probe-target"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      },
+      "exceptionId": "historical-gap-7"
+    },
+    {
+      "id": "history-caret-boundary-delete-space-protection-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "fed2311b5f1721a775f0e443912a8e0677b4faaabb39279b145a8104922e11f2",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c rd^ /s /q C:/goat-probe-target"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c rd^ /s /q C:/goat-probe-target"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-delete-tab-control-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "8dd5300eb11b320eff65ccc64a8df6665138adca6e2a3596e41a2a7b211808b8",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c echo^\t/s /q C:/goat-probe-target"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c echo^\t/s /q C:/goat-probe-target"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-delete-tab-control-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "8dd5300eb11b320eff65ccc64a8df6665138adca6e2a3596e41a2a7b211808b8",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c echo^\t/s /q C:/goat-probe-target"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c echo^\t/s /q C:/goat-probe-target"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-delete-tab-protection-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "20c7aa05f3177188161664c921f1a71aa5a5c729bff42358d58e0a7c37ce844f",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c rd^\t/s /q C:/goat-probe-target"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c rd^\t/s /q C:/goat-probe-target"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      },
+      "exceptionId": "historical-gap-7"
+    },
+    {
+      "id": "history-caret-boundary-delete-tab-protection-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "20c7aa05f3177188161664c921f1a71aa5a5c729bff42358d58e0a7c37ce844f",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c rd^\t/s /q C:/goat-probe-target"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c rd^\t/s /q C:/goat-probe-target"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-executable-space-control-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "465225ec202aad0ba6b686dd9f028edd243461cc12ad91a65c38359505288588",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git^ status --short"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git^ status --short"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-executable-space-control-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "465225ec202aad0ba6b686dd9f028edd243461cc12ad91a65c38359505288588",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git^ status --short"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git^ status --short"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-executable-space-protection-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "3be5bb34a60c3875b62b6811ae68b061e7581eb19aed2eabfda0dbde47974558",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git^ push origin main"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git^ push origin main"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-executable-space-protection-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "3be5bb34a60c3875b62b6811ae68b061e7581eb19aed2eabfda0dbde47974558",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git^ push origin main"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git^ push origin main"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      },
+      "exceptionId": "historical-gap-7"
+    },
+    {
+      "id": "history-caret-boundary-executable-tab-control-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "5d79c11c3c78e4d4106846776c63b266a40627622ca0514f0ff20233c61e8329",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git^\tstatus --short"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git^\tstatus --short"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-executable-tab-control-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "5d79c11c3c78e4d4106846776c63b266a40627622ca0514f0ff20233c61e8329",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git^\tstatus --short"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git^\tstatus --short"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-executable-tab-protection-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "b350793351e2f4c7d95e3f6f05ff8e4c66e7ae44c55269ed650c14cea19669e0",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git^\tpush origin main"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git^\tpush origin main"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-executable-tab-protection-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "b350793351e2f4c7d95e3f6f05ff8e4c66e7ae44c55269ed650c14cea19669e0",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git^\tpush origin main"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git^\tpush origin main"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      },
+      "exceptionId": "historical-gap-7"
+    },
+    {
+      "id": "history-caret-boundary-github-space-control-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "c005720085b116df027d50ca169731fbb764e754ef8b74f965b3c4be0f595dfd",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c gh pr view^ 12"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c gh pr view^ 12"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-github-space-control-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "c005720085b116df027d50ca169731fbb764e754ef8b74f965b3c4be0f595dfd",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c gh pr view^ 12"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c gh pr view^ 12"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-github-space-protection-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "b48f03f384ca27573cd25f2173216291162d7b8a71f8e1ffb84ae8b019ce7b2f",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c gh pr merge^ 12"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c gh pr merge^ 12"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-github-space-protection-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "b48f03f384ca27573cd25f2173216291162d7b8a71f8e1ffb84ae8b019ce7b2f",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c gh pr merge^ 12"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c gh pr merge^ 12"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      },
+      "exceptionId": "historical-gap-7"
+    },
+    {
+      "id": "history-caret-boundary-github-tab-control-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "e7aebbe9055c933d99448c593b27ef9c78dc3c0c4e6990e1d73a60f0d0f45a3e",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c gh pr view^\t12"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c gh pr view^\t12"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-github-tab-control-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "e7aebbe9055c933d99448c593b27ef9c78dc3c0c4e6990e1d73a60f0d0f45a3e",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c gh pr view^\t12"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c gh pr view^\t12"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-github-tab-protection-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "d27f798529f31f6b7b054fbc689c624f0835528f3c86d665cffcb7625d8665c5",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c gh pr merge^\t12"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c gh pr merge^\t12"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-github-tab-protection-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "d27f798529f31f6b7b054fbc689c624f0835528f3c86d665cffcb7625d8665c5",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c gh pr merge^\t12"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c gh pr merge^\t12"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      },
+      "exceptionId": "historical-gap-7"
+    },
+    {
+      "id": "history-caret-boundary-verb-space-control-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "157348a3b0205f4b86708d051e97b20276c0bdcc5caf74c4df4695cff8820a22",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git status^ --short"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git status^ --short"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-verb-space-control-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "157348a3b0205f4b86708d051e97b20276c0bdcc5caf74c4df4695cff8820a22",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git status^ --short"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git status^ --short"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-verb-space-protection-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "7c9b54dc2b91062985e97b0819191a95af04d2b34db5ce5fc3bf56b3317c6ad6",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git push^ origin main"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git push^ origin main"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-verb-space-protection-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "7c9b54dc2b91062985e97b0819191a95af04d2b34db5ce5fc3bf56b3317c6ad6",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git push^ origin main"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git push^ origin main"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      },
+      "exceptionId": "historical-gap-7"
+    },
+    {
+      "id": "history-caret-boundary-verb-tab-control-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "da6c636d908d84a063948b500baf3f2dd84874be730dbae7e920c502013fc064",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git status^\t--short"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git status^\t--short"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-verb-tab-control-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "da6c636d908d84a063948b500baf3f2dd84874be730dbae7e920c502013fc064",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git status^\t--short"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git status^\t--short"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-verb-tab-protection-deny-dangerous",
+      "policy": "deny-dangerous",
+      "inputSha256": "9fa4f9b454c0efff9c016d86229657ae2b76aa79873f1739503c12b8ba3adce0",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git push^\torigin main"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git push^\torigin main"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 0,
+        "stdoutBase64": "",
+        "stderrBase64": ""
+      },
+      "exceptionId": null
+    },
+    {
+      "id": "history-caret-boundary-verb-tab-protection-deny-git-mutations",
+      "policy": "deny-git-mutations",
+      "inputSha256": "9fa4f9b454c0efff9c016d86229657ae2b76aa79873f1739503c12b8ba3adce0",
+      "inputs": {
+        "C": {
+          "kind": "check",
+          "command": "cmd //c git push^\torigin main"
+        },
+        "C.UTF-8": {
+          "kind": "check",
+          "command": "cmd //c git push^\torigin main"
+        }
+      },
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      },
+      "exceptionId": "historical-gap-7"
+    },
+    {
       "id": "history-caret-control-deny-dangerous",
       "policy": "deny-dangerous",
       "inputSha256": "1349da6479100e9ea6b258faef1ade5d5d6fd3fc385dd37d2b42d2072b0ad855",
@@ -983,11 +2031,10 @@
         }
       },
       "expected": {
-        "status": 0,
-        "stdoutBase64": "",
-        "stderrBase64": ""
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
       },
-      "exceptionId": null
+      "exceptionId": "historical-gap-7"
     },
     {
       "id": "history-caret-tab-deny-dangerous",
@@ -1049,11 +2096,10 @@
         }
       },
       "expected": {
-        "status": 0,
-        "stdoutBase64": "",
-        "stderrBase64": ""
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
       },
-      "exceptionId": null
+      "exceptionId": "historical-gap-7"
     },
     {
       "id": "history-caret-word-deny-dangerous",
@@ -1115,11 +2161,10 @@
         }
       },
       "expected": {
-        "status": 0,
-        "stdoutBase64": "",
-        "stderrBase64": ""
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
       },
-      "exceptionId": null
+      "exceptionId": "historical-gap-7"
     },
     {
       "id": "history-copilot-create-deny-dangerous",
@@ -76809,6 +77854,226 @@
         "status": 0,
         "stdoutBase64": "eyJkZWNpc2lvbiI6ImRlbnkiLCJyZWFzb24iOiJQb2xpY3kgc2VjcmV0OiBTZWNyZXQtZmlsZSBhY2Nlc3MgKC5lbnYpLiBSZWFkaW5nIG9yIGVkaXRpbmcgLmVudiAvIFNTSC9BV1MvR0NQIGtleXMgLyBjcmVkZW50aWFscyB0aHJvdWdoIHRoZSBhZ2VudCBpcyBhbiBleGZpbCByaXNrLiBVc2UgYSBjaGVja2VkLWluIGV4YW1wbGUgb3IgYXNrIHRoZSB1c2VyIGZvciBzYW5pdGl6ZWQgZmllbGRzLiJ9Cg==",
         "stderrBase64": ""
+      }
+    },
+    {
+      "id": "history-caret-boundary-delete-space-protection-deny-dangerous",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-boundary-delete-tab-protection-deny-dangerous",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-boundary-executable-space-protection-deny-git-mutations",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-boundary-executable-tab-protection-deny-git-mutations",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-boundary-github-space-protection-deny-git-mutations",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-boundary-github-tab-protection-deny-git-mutations",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-boundary-verb-space-protection-deny-git-mutations",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-boundary-verb-tab-protection-deny-git-mutations",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-space-deny-git-mutations",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-tab-deny-git-mutations",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
+      }
+    },
+    {
+      "id": "history-caret-word-deny-git-mutations",
+      "exceptionId": "historical-gap-7",
+      "original": {
+        "C": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        },
+        "C.UTF-8": {
+          "status": 0,
+          "stdoutBase64": "",
+          "stderrBase64": ""
+        }
+      },
+      "expected": {
+        "status": 2,
+        "stderrIncludes": "BLOCKED: Policy"
       }
     },
     {

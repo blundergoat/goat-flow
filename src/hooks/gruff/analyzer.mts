@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { delimiter, dirname, extname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { captureHookProcessUntilDeadline } from "../hook-supervisor.mjs";
 import { beneath, object, ownerSettings } from "./scope.mjs";
 
@@ -80,7 +81,7 @@ function packagedGruffCommand(
   const loader = createRequire(manifest).resolve("tsx");
   return {
     executable: process.execPath,
-    args: ["--import", loader, cli],
+    args: ["--import", pathToFileURL(loader).href, realpathSync(cli)],
     path,
   };
 }

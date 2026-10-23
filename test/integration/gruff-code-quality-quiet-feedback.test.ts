@@ -295,7 +295,7 @@ describe("gruff-code-quality hook quiets edits outside the analysed scope", () =
       "hooks: {gruff-code-quality: {enabled: maybe}}\n",
     );
     const result = readMigratedGruffResult(
-      runMigratedHook(root, sampleGruffEditPayload()),
+      runMigratedHook(root, sampleGruffEditPayload(), "/usr/bin:/bin"),
     );
     assert.equal(result.outcome, "unavailable");
     const finding = (

@@ -179,8 +179,9 @@ function consumeSegmentQuotedCharacter(scan, char) {
     }
     if (isSegmentEscape(scan, char)) {
         const next = scan.input.charAt(scan.index + 1);
-        // cmd removes word escapes, but escaped operators must survive later parser passes.
-        if (scan.escape !== "^" || !/[A-Za-z0-9_./:-]/u.test(next))
+        // Retain cmd syntax escapes for later passes; spaces and tabs lose the caret too.
+        // Keep line breaks unchanged: inline /c stops there, unlike batch-file continuation.
+        if (scan.escape !== "^" || '&|<>()^"\r\n'.includes(next))
             scan.current += char;
         scan.escaped = true;
         return true;

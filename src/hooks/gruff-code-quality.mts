@@ -278,7 +278,7 @@ async function evaluate(): Promise<void> {
         code: "edited-path-outside-project",
         message:
           "The edited source file is outside the selected project, so Gruff did not analyse it",
-        target,
+        target: target.replaceAll("\\", "/"),
       })),
     );
     return;

@@ -1,6 +1,6 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-10-17
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** Platform and runtime differences that break tests - CI Node versions older than local, Windows path/URL shapes and symlink privileges, filesystem-clock skew, and npm scripts that assume a POSIX shell. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); shell and process behaviour under a test is [test-shell-environment.md](test-shell-environment.md).
@@ -36,12 +36,14 @@ last_reviewed: 2026-10-17
 
 ## Lesson: `node --import <abs-path>` on Windows needs a file:// URL
 
-**Status:** active | **Created:** 2026-05-11
+**Status:** active | **Created:** 2026-05-11 | **Evidence:** ACTUAL_MEASURED
+**Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-23
 
 **Prevention:**
-1. Any test that spawns Node with `--import`, `--loader`, or `--experimental-loader` and passes an absolute path must convert it via `pathToFileURL` first.
+1. Any caller that spawns Node with `--import`, `--loader`, or `--experimental-loader` and passes an absolute path must convert it via `pathToFileURL` first.
 2. Same rule applies to dynamic `import()` of absolute paths in production code on Windows. `import("D:\\...\\foo.js")` will throw; `import(pathToFileURL("D:\\...\\foo.js").href)` works.
-3. Treat `ERR_UNSUPPORTED_ESM_URL_SCHEME` as a likely Windows path-shape issue, not an actual code bug, until the file:// conversion is verified.
+3. On `ERR_UNSUPPORTED_ESM_URL_SCHEME`, check the loader argument before changing analyzer or CLI behavior.
 
 **What happened:** Two `runCLI` test helpers (`test/unit/quality-command.test.ts`, `test/integration/quality-history-diff.test.ts`) passed `join(PROJECT_ROOT, "node_modules", "tsx", "dist", "loader.mjs")` to `spawnSync(process.execPath, ["--import", TSX_LOADER_PATH, ...])`. On Windows the path is `D:\dev-lab\...\loader.mjs`. Node's ESM loader rejected it with `ERR_UNSUPPORTED_ESM_URL_SCHEME: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. On Windows, absolute paths must be valid file:// URLs. Received protocol 'd:'.` Every test that shelled out via the helper failed with exit 1 - the failures looked like CLI bugs but came from the spawn shape. The 25-test full-suite failure baseline on 2026-05-11 included these as 7-8 of the original count.
 
@@ -55,6 +57,9 @@ const TSX_LOADER_URL = pathToFileURL(
 ).href;
 spawnSync(process.execPath, ["--import", TSX_LOADER_URL, CLI_PATH, ...args], ...);
 ```
+
+
+**Recurrence 2026-10-23:** Native Windows Node 20.12.0 rejected the npm analyzer loader with protocol `c:` during M16 proof. `src/hooks/gruff/analyzer.mts` (search: `packagedGruffCommand`) passed an absolute `tsx` filename to `--import`; the existing case in `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `launches the installed Gruff npm package through Node without its shell wrapper`) exposed the failure. Convert the loader with `pathToFileURL(loader).href` and repeat the native package launch.
 
 ---
 

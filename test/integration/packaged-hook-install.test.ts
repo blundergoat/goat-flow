@@ -27,6 +27,8 @@ import {
   removeConfirmedAbandonedPathWriteClaim,
 } from "../../src/cli/path-write-claim.js";
 import { pathToFileURL } from "node:url";
+import { readPolicyChoices } from "../../workflow/hooks/hook-policy-state.cjs";
+import { loadConfig } from "../../src/cli/config/index.js";
 import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -677,7 +679,7 @@ describe("packaged hook installation canary", () => {
     );
   });
 
-  // The release gate combines a fresh archived install with the exact direct-predecessor sync users will run.
+  // Retain exact 1.16.0 launcher migration and user-owned rows alongside a fresh archived install.
   it(
     "runs fresh install and 1.16.0 sync through the archived CLI bin",
     { skip: V1_16_0_PACKAGE_MIGRATION_UNAVAILABLE },
@@ -1007,5 +1009,126 @@ require("node:module").syncBuiltinESMExports();
         await exited;
       }
     }
+  });
+
+  // Complete released state proves the archived upgrade keeps saved opt-outs and user files.
+  it("upgrades a complete pinned 1.18.0 install while preserving disabled choices and user files", (t) => {
+    const predecessor = "bd800f792968b0243eecd6983bc6f0ad9f84af3c";
+    if (
+      spawnSync("git", ["cat-file", "-e", `${predecessor}^{commit}`], {
+        cwd: PROJECT_ROOT,
+      }).status !== 0
+    ) {
+      assert.ok(
+        !process.env.CI,
+        `CI must fetch pinned v1.18.0 commit ${predecessor} before running upgrade coverage`,
+      );
+      t.skip("Pinned v1.18.0 commit is absent from local Git history");
+      return;
+    }
+    const priorRoot = makeDisposablePackageWorkspace("release-1-18-0");
+    const archive = join(priorRoot, "release.tar");
+    for (const [command, args] of [
+      ["git", ["archive", predecessor, "--output", archive]],
+      ["tar", ["-xf", archive, "-C", priorRoot]],
+    ] as const) {
+      const seeded = spawnSync(command, [...args], {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+      });
+      assert.equal(seeded.status, 0, seeded.stderr);
+    }
+    assert.equal(
+      JSON.parse(readFileSync(join(priorRoot, "package.json"), "utf8")).version,
+      "1.18.0",
+    );
+    symlinkSync(
+      join(PROJECT_ROOT, "node_modules"),
+      join(priorRoot, "node_modules"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const project = makeDisposablePackageWorkspace("upgrade-1-18-0");
+    mkdirSync(join(project, ".goat-flow"));
+    writeFileSync(
+      join(project, ".goat-flow/config.yaml"),
+      'version: "1.18.0"\nhooks:\n  deny-dangerous: {enabled: false}\n  deny-git-mutations: {enabled: false}\n  gruff-code-quality: {enabled: false}\n',
+    );
+    const userPath = join(project, "user-notes.txt");
+    writeFileSync(userPath, "User notes survive the supported upgrade.\n");
+    const oldInstall = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        join(priorRoot, "src/cli/cli.ts"),
+        "install",
+        project,
+        "--agent",
+        "codex",
+      ],
+      { cwd: priorRoot, encoding: "utf8", timeout: 120_000 },
+    );
+    assert.equal(oldInstall.status, 0, oldInstall.stderr || oldInstall.stdout);
+    const statePath = join(project, ".goat-flow/state/install/managed.json");
+    const priorState = JSON.parse(readFileSync(statePath, "utf8"));
+    assert.equal(priorState.schemaVersion, "goat-flow.install-state.v2");
+    const { packedPackageRoot, packedCliLaunchPath } = preparePackedCliLaunch();
+    const pinnedCli = readFileSync(packedCliLaunchPath);
+    const restricted = restrictedConsumerEnvironment(
+      makeDisposablePackageWorkspace("upgrade-spawn-proof"),
+    );
+    const upgraded = runPackedCli(
+      packedCliLaunchPath,
+      ["install", project, "--agent", "codex"],
+      project,
+      restricted,
+    );
+    assert.equal(upgraded.status, 0, upgraded.stderr || upgraded.stdout);
+    assert.match(upgraded.stdout, /Install verified for codex/u);
+    assert.equal(
+      readFileSync(userPath, "utf8"),
+      "User notes survive the supported upgrade.\n",
+    );
+    const choices = readPolicyChoices(project);
+    for (const id of ["deny-dangerous", "deny-git-mutations"])
+      assert.equal(choices[id], false);
+    const config = loadConfig(project);
+    assert.equal(config.valid, true);
+    assert.equal(config.config.hooks["gruff-code-quality"]?.enabled, false);
+    const currentState = JSON.parse(readFileSync(statePath, "utf8"));
+    assert.equal(currentState.schemaVersion, priorState.schemaVersion);
+    assert.ok(currentState.receipts.length >= priorState.receipts.length);
+    assert.ok(
+      currentState.files.some(
+        (row: { path: string }) =>
+          row.path === ".goat-flow/hooks/deny-dangerous.mjs",
+      ),
+    );
+    const handler = readInstalledCodexDenyHandler(project);
+    const launch = agentHookSpawnDescriptor({ form: "shell", ...handler });
+    const disabled = spawnSync(launch.command, launch.args, {
+      cwd: project,
+      env: restricted,
+      encoding: "utf8",
+      input: JSON.stringify({
+        tool_name: "Bash",
+        tool_input: { command: "rm -rf /" },
+      }),
+      timeout: 30_000,
+    });
+    assert.equal(disabled.status, 0, disabled.stderr || disabled.stdout);
+    assert.equal(disabled.stdout, "");
+    assert.equal(disabled.stderr, "");
+    assert.deepEqual(readFileSync(packedCliLaunchPath), pinnedCli);
+    assert.deepEqual(
+      readFileSync(join(project, ".goat-flow/hooks/run-hook.mjs")),
+      readFileSync(join(packedPackageRoot, "workflow/hooks/run-hook.mjs")),
+    );
+    const journal = readFileSync(restricted.GOAT_TEST_SPAWN_LOG ?? "", "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.ok(journal.some((row) => row.event === "loaded"));
+    assert.equal(journal.filter((row) => row.event === "denied").length, 0);
   });
 });

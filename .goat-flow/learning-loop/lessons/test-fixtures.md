@@ -243,3 +243,46 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 **Recurrence 2026-10-23 (native cutover review):** The fast suite passed, but the focused packaged-install and agent-matrix run reported seven failures. Current-version assertions still expected 1.18.0, and current registrations still expected Bash paths. Candidate-only selectors also excluded the now-installed Node cases or selected Bash failure fixtures. Derive the archive version from package metadata and classify native fixture behavior as every selection except the frozen reference. Preserve exact tagged inputs for upgrade tests: the 1.15.0 fixture has no shared native launcher to overwrite, while the 1.16.0 fixture exercises explicit replacement consent. Evidence: `test/integration/packaged-hook-install.test.ts` (search: `PACKAGE_VERSION`, `reviewAndSyncPackedHooks`), `test/integration/deny-dangerous-policy.test.ts` (search: `split policy partial installation`), and `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `native Gruff analyzer launch`).
 
 ---
+
+## Lesson: Fixture assertions must use the reader that owns each setting
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check a reader's returned keys before using it to verify settings from another subsystem.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Keep a narrow reader's contract intact. Verify general hook settings through the canonical configuration reader instead of broadening a policy reader or weakening the assertion.
+
+**What happened:** The 1.18.0 package-upgrade fixture used `readPolicyChoices` to assert Gruff's opt-out. That reader returns only the two policy choices, so the test received `undefined` after a successful upgrade. The fixture now checks the policy choices through that reader and Gruff through the validated `loadConfig` result. The archived package suite then reported six passes and no failures.
+
+**Evidence:** `test/integration/packaged-hook-install.test.ts` (search: `upgrades a complete pinned 1.18.0 install`); `workflow/hooks/hook-policy-state.cjs` (search: `readPolicyChoices`); `src/cli/config/reader.ts` (search: `loadConfig`).
+
+---
+
+## Lesson: Prove paired controls against the unchanged policy
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check that a proposed harmless control is already permitted before using it to judge a policy repair.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Run new protection/control pairs on the unchanged policy first. A control already denied by another rule cannot establish a new false positive; replace the fixture without weakening that rule.
+
+**What happened:** M31 initially used a printed secret filename as a caret-whitespace control. The unchanged secret policy already denied it. The corrected fixture uses PR inspection beside PR merge; RED then failed only eight new protections, and GREEN passed all 156 native-host cases.
+
+**Evidence:** `test/integration/deny-native-shells.test.ts` (search: `cmd caret whitespace`, `gh pr view`).
+
+---
+
+## Lesson: Corpus fixtures must retain canonical row order
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Preserve the corpus builder's row ordering when adding saved classifier cases.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Sort new and retained rows with the canonical comparator, regenerate the named-difference inventory in that order, and compare every case by its stable ID. Preserve escaped controls as required by the existing CLI-contract lesson. Run the integrity suite before presenting the artifact patch.
+
+**What happened:** M31 appended generated caret rows after the sorted corpus. Classifier comparisons passed, but the coverage-integrity test removed the new final supplemental row instead of an original self-test row and no longer detected missing original coverage. Rebuilding the canonical order restored that control without changing any case value or weakening an assertion.
+
+**Evidence:** `scripts/check-hook-parity.mjs` (search: `buildCorpora`, `localeCompare`); `test/integration/hook-parity.test.ts` (search: `rejects`, `incomplete coverage`); [escaped-control incident](cli-contracts.md#lesson-preserve-escaped-controls-when-rewriting-saved-policy-evidence).

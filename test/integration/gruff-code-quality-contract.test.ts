@@ -598,34 +598,33 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
   // Fixture covers failed Git scope; writes a shim and edit, then runs both processes.
   it("reports Git diff failure as incomplete", () => {
-    const failedGitProjectRoot = makeEditedGruffContractProject(
-      CLEAN_GRUFF_CONTRACT_ENVELOPE,
-    );
-    initGit(failedGitProjectRoot);
-    git(failedGitProjectRoot, ["add", ".gruff-ts.yaml", "src/sample.ts"]);
-    const failingGitBin = join(failedGitProjectRoot, "failing-git-bin");
-    mkdirSync(failingGitBin);
-    writeFileSync(
-      join(failingGitBin, "git"),
-      '#!/usr/bin/env bash\n# The user may have a failing Git hook or corrupt index while Gruff resolves scope.\nif [[ "$1" == "-C" && "$3" == "diff" ]]; then\n  printf "fixture git diff failed\\n" >&2\n  exit 7\nfi\nexec /usr/bin/git "$@"\n',
-    );
-    chmodSync(join(failingGitBin, "git"), 0o755);
-    writeFileSync(
-      join(failedGitProjectRoot, "src", "sample.ts"),
-      "a\nb\nchanged\nd\n",
-    );
-    const failedGitResult = readMigratedGruffResult(
-      runMigratedHook(
-        failedGitProjectRoot,
-        { tool_name: "Edit", tool_input: { file_path: "src/sample.ts" } },
-        `${failingGitBin}:/usr/bin:/bin`,
-      ),
-    );
-    assert.equal(failedGitResult.outcome, "incomplete");
-    assert.equal(failedGitResult.reasonCode, "coverage-incomplete");
-    assert.equal(
-      (failedGitResult.findings as Array<{ code: string }>)[0]?.code,
-      "git-scope-failed",
+    const root = makeEditedGruffContractProject(CLEAN_GRUFF_CONTRACT_ENVELOPE);
+    initGit(root);
+    git(root, ["add", ".gruff-ts.yaml", "src/sample.ts"]);
+    writeFileSync(join(root, "src", "sample.ts"), "a\nb\nchanged\nd\n");
+    withCommandShim(
+      resolveExecutable("git"),
+      {
+        when: { includes: ["diff"] },
+        status: 7,
+        stderr: "fixture git diff failed\n",
+      },
+      (environment) => {
+        const failedGitResult = readMigratedGruffResult(
+          runMigratedHook(
+            root,
+            { tool_name: "Edit", tool_input: { file_path: "src/sample.ts" } },
+            environment.PATH ?? "/usr/bin:/bin",
+            environment,
+          ),
+        );
+        assert.equal(failedGitResult.outcome, "incomplete");
+        assert.equal(failedGitResult.reasonCode, "coverage-incomplete");
+        assert.equal(
+          (failedGitResult.findings as Array<{ code: string }>)[0]?.code,
+          "git-scope-failed",
+        );
+      },
     );
   });
 
@@ -826,8 +825,8 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
           runMigratedHook(
             projectRoot,
             sampleGruffEditPayload("relative-health-session"),
-            environment.PATH,
-            { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-10-01" },
+            environment.PATH ?? "/usr/bin:/bin",
+            { ...environment, GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-10-01" },
           );
         const first = runHealthCheck();
         assert.equal(readMigratedGruffResult(first).outcome, "pass");

@@ -22,6 +22,10 @@
 
 ## v1.19.0 - 2026-10-23
 
+### Security
+
+- **Cmd caret escapes no longer hide blocked commands** - Node policies recognize caret-space and caret-tab spellings of publication, PR merge and recursive deletion commands while keeping ordinary inspection available.
+
 ### Changed
 
 - **Hooks run on Node** - New installations and `goat-flow hooks sync` register Node handlers; reload your agent after syncing an existing installation.

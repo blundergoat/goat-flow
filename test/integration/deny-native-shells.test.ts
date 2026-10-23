@@ -540,3 +540,66 @@ describe("Unqualified native PowerShell tool", () => {
     });
   }
 });
+
+// Space/tab after a command word must not hide it; the sibling policy and read controls stay available.
+describe(
+  "cmd caret whitespace",
+  { skip: hookSelection() === "reference" },
+  () => {
+    const forms = [
+      [
+        "executable",
+        "git",
+        "push origin main",
+        "git",
+        "status --short",
+        "deny-git-mutations",
+      ],
+      [
+        "verb",
+        "git push",
+        "origin main",
+        "git status",
+        "--short",
+        "deny-git-mutations",
+      ],
+      [
+        "delete",
+        "rd",
+        "/s /q C:/goat-probe-target",
+        "echo",
+        "/s /q C:/goat-probe-target",
+        "deny-dangerous",
+      ],
+      ["github", "gh pr merge", "12", "gh pr view", "12", "deny-git-mutations"],
+    ];
+    for (const [
+      shape,
+      blockedWord,
+      blockedTail,
+      readWord,
+      readTail,
+      owner,
+    ] of forms) {
+      for (const [boundary, whitespace] of [
+        ["space", " "],
+        ["tab", "\t"],
+      ]) {
+        for (const control of [false, true]) {
+          const command = `cmd //c ${control ? readWord : blockedWord}^${whitespace}${control ? readTail : blockedTail}`;
+          for (const policy of ["deny-dangerous", "deny-git-mutations"]) {
+            it(`${shape}/${boundary}/${control ? "control" : "protection"}/${policy}`, () => {
+              const result = checkProposedCommand(policy, command);
+              const expected = !control && policy === owner ? 2 : 0;
+              assert.equal(result.status, expected, result.stderr);
+              assert.equal(result.stdout, "");
+              if (expected === 2)
+                assert.match(result.stderr, /BLOCKED: Policy/u);
+              else assert.equal(result.stderr, "");
+            });
+          }
+        }
+      }
+    }
+  },
+);
