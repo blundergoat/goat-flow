@@ -45,6 +45,10 @@ import {
   FINDING_GRUFF_CONTRACT_ENVELOPE,
   writeContractGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
+import {
+  recordWindowsReplayStage,
+  runWindowsDiagnosticControls,
+} from "./hook-command-spawn-matrix.helpers.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const WORKFLOW_HOOKS = join(PROJECT_ROOT, "workflow", "hooks");
@@ -444,6 +448,12 @@ describe("hook command spawn matrix", () => {
       ];
       const blockedPayload = denyPayload("cat .env");
       const blockedReplays = replayVariants.map((variant) => {
+        recordWindowsReplayStage({
+          phase: "start",
+          probe: "registered-hook",
+          environment: variant.environment,
+          stdin: variant.stdin,
+        });
         const startedAt = performance.now();
         const result = runRegisteredCodexHandler(
           projectRoot,
@@ -457,11 +467,29 @@ describe("hook command spawn matrix", () => {
         );
         const errorCode =
           (result.error as NodeJS.ErrnoException | undefined)?.code ?? "none";
+        recordWindowsReplayStage({
+          phase: "end",
+          probe: "registered-hook",
+          environment: variant.environment,
+          stdin: variant.stdin,
+          duration_ms: durationMs,
+          status: result.status,
+          error: errorCode,
+        });
         testContext.diagnostic(
           `codex-windows-replay environment=${variant.environment} stdin=${variant.stdin} duration_ms=${durationMs} status=${String(result.status)} error=${errorCode}`,
         );
         return result;
       });
+
+      // Run controls after the original replays so they cannot warm the failing path.
+      runWindowsDiagnosticControls(
+        projectRoot,
+        denyHandler.command,
+        blockedPayload,
+        replayVariants,
+        runWithFileStreams,
+      );
 
       // Each blocked replay must retain the user's sensitive-file protection and actionable denial.
       for (const blocked of blockedReplays) {
