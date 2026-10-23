@@ -132,7 +132,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Fetch pinned upgrade fixture
-        run: git fetch --no-tags --depth=1 origin bd800f792968b0243eecd6983bc6f0ad9f84af3c
+        run: git fetch --no-tags --depth=1 origin bd800f792968b0243eecd6983bc6f0ad9f84af3c refs/tags/v1.18.0:refs/tags/v1.18.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
