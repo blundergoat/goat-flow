@@ -287,7 +287,7 @@ function deliveredContext(
 }
 
 describe("gruff-code-quality hook quiets edits outside the analysed scope", () => {
-  it("reports the project-relative path for an invalid root Gruff choice", () => {
+  it("reports the config path for an invalid root Gruff choice", () => {
     const root = makeEditedGruffContractProject(CLEAN_GRUFF_CONTRACT_ENVELOPE);
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
     writeFileSync(
@@ -302,8 +302,12 @@ describe("gruff-code-quality hook quiets edits outside the analysed scope", () =
       result.findings as Array<{ code: string; message: string }>
     )[0];
     assert.equal(finding?.code, "owner-config-invalid");
+    const configPath =
+      hookSelection() === "reference"
+        ? join(root, ".goat-flow/config.yaml")
+        : ".goat-flow/config.yaml";
     assert.ok(
-      finding?.message.includes("in .goat-flow/config.yaml "),
+      finding?.message.includes(`in ${configPath} `),
       JSON.stringify(finding),
     );
   });
@@ -440,43 +444,52 @@ describe("gruff-code-quality hook quiets edits outside the analysed scope", () =
   });
 });
 
-describe("gruff-code-quality hook delivers source results through Claude's registered handler", () => {
-  it("shows the model an analyzer finding on the edited line", () => {
-    const projectRoot = makeEditedGruffContractProject(
-      FINDING_GRUFF_CONTRACT_ENVELOPE,
-    );
-    const context = deliveredContext(
-      projectRoot,
-      projectRoot,
-      sampleGruffEditPayload(),
-    );
-    assert.match(context, /gruff-code-quality: ADVISORY/u);
-    assert.match(context, /naming\.short/u);
-  });
-
-  it("shows the model that a broken analyzer left the edit unchecked", () => {
-    const projectRoot = makeEditedGruffContractProject("not json");
-    const context = deliveredContext(
-      projectRoot,
-      projectRoot,
-      sampleGruffEditPayload(),
-    );
-    assert.match(context, /gruff-code-quality: INCOMPLETE/u);
-    assert.match(context, /analyzer-response-invalid/u);
-  });
-
-  it("shows the model that project source outside the selected install was not analysed", () => {
-    const { workspaceRoot, projectRoot, siblingSourcePath } =
-      makeGruffWorkspace(CLEAN_GRUFF_CONTRACT_ENVELOPE);
-    const context = deliveredContext(projectRoot, workspaceRoot, {
-      tool_name: "Write",
-      tool_input: { file_path: siblingSourcePath },
+describe(
+  "gruff-code-quality hook delivers source results through Claude's registered handler",
+  {
+    skip:
+      hookSelection() === "reference"
+        ? "Current registered handlers use the native runtime; frozen provider delivery is covered by runProviderLauncher"
+        : false,
+  },
+  () => {
+    it("shows the model an analyzer finding on the edited line", () => {
+      const projectRoot = makeEditedGruffContractProject(
+        FINDING_GRUFF_CONTRACT_ENVELOPE,
+      );
+      const context = deliveredContext(
+        projectRoot,
+        projectRoot,
+        sampleGruffEditPayload(),
+      );
+      assert.match(context, /gruff-code-quality: ADVISORY/u);
+      assert.match(context, /naming\.short/u);
     });
-    assert.match(context, /gruff-code-quality: INCOMPLETE/u);
-    assert.match(context, /edited-path-outside-project/u);
-    assert.ok(
-      context.includes(siblingSourcePath.replaceAll("\\", "/")),
-      context,
-    );
-  });
-});
+
+    it("shows the model that a broken analyzer left the edit unchecked", () => {
+      const projectRoot = makeEditedGruffContractProject("not json");
+      const context = deliveredContext(
+        projectRoot,
+        projectRoot,
+        sampleGruffEditPayload(),
+      );
+      assert.match(context, /gruff-code-quality: INCOMPLETE/u);
+      assert.match(context, /analyzer-response-invalid/u);
+    });
+
+    it("shows the model that project source outside the selected install was not analysed", () => {
+      const { workspaceRoot, projectRoot, siblingSourcePath } =
+        makeGruffWorkspace(CLEAN_GRUFF_CONTRACT_ENVELOPE);
+      const context = deliveredContext(projectRoot, workspaceRoot, {
+        tool_name: "Write",
+        tool_input: { file_path: siblingSourcePath },
+      });
+      assert.match(context, /gruff-code-quality: INCOMPLETE/u);
+      assert.match(context, /edited-path-outside-project/u);
+      assert.ok(
+        context.includes(siblingSourcePath.replaceAll("\\", "/")),
+        context,
+      );
+    });
+  },
+);

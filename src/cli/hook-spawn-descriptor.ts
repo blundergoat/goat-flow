@@ -24,9 +24,6 @@ export function agentHookSpawnDescriptor(
     // Shell-routing fields belong to host config identity, never Claude's direct exec replay.
     return { command: descriptor.command, args: [...descriptor.args] };
   }
-  const nativeReplay = descriptor.command.includes("run-hook.mjs")
-    ? nativeShellReplay(descriptor.command)
-    : null;
   // A registered Windows override keeps precedence for native and legacy replays.
   if (platform === "win32" && descriptor.commandWindows !== undefined) {
     return {
@@ -39,6 +36,9 @@ export function agentHookSpawnDescriptor(
       ],
     };
   }
+  const nativeReplay = descriptor.command.includes("run-hook.mjs")
+    ? nativeShellReplay(descriptor.command)
+    : null;
   if (nativeReplay !== null) return nativeReplay;
   // Windows argv conversion can strip nested quotes; environment transport preserves source and leaves stdin for the event.
   if (platform === "win32") {

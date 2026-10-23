@@ -242,6 +242,42 @@ describe("managed Node replay descriptors", () => {
     });
   });
 
+  it("selects the Windows override before parsing the default native command", () => {
+    const spec = getHookSpec("deny-dangerous");
+    assert.ok(spec);
+    const native = buildAgentHookDescriptor("codex", ".goat-flow/hooks", spec);
+    assert.ok(native.form === "shell");
+    assert.equal(typeof native.commandWindows, "string");
+    const command = `${native.command}; printf "default command selected\\n" >&2; exit 99`;
+    assert.deepEqual(
+      agentHookSpawnDescriptor({ ...native, command }, "win32"),
+      {
+        command: "powershell.exe",
+        args: [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          native.commandWindows,
+        ],
+      },
+    );
+    assert.throws(
+      () => agentHookSpawnDescriptor({ ...native, command }, "linux"),
+      /canonical Node command/u,
+    );
+    assert.throws(
+      () => agentHookSpawnDescriptor({ form: "shell", command }, "win32"),
+      /canonical Node command/u,
+    );
+    assert.equal(
+      agentHookSpawnDescriptor(
+        { ...native, command, commandWindows: "" },
+        "win32",
+      ).args.at(-1),
+      "",
+    );
+  });
+
   it("rejects mixed-runtime operands and malformed native commands", () => {
     const spec = getHookSpec("deny-dangerous");
     assert.ok(spec);
@@ -260,7 +296,8 @@ describe("managed Node replay descriptors", () => {
               ),
             }
           : {
-              ...installed,
+              // Both platforms must select the malformed default; no Windows override is supplied.
+              form: "shell" as const,
               command: installed.command.replace(
                 "deny-dangerous.mjs",
                 "deny-dangerous.sh",

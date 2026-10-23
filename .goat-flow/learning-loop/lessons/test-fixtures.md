@@ -233,7 +233,7 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 **Decision changed:** Derive current fixture versions from package metadata.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-10-23
+**Incident count:** 5 | **Latest occurrence:** 2026-10-23
 
 **Prevention:** Import current versions; reserve literals for historical or mismatched installs. Anchors: `test/unit/skill-doctor.test.ts` (search: `skillMarkdown`), `src/cli/constants.ts` (search: `export const AUDIT_VERSION`).
 
@@ -247,6 +247,8 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 **Recurrence 2026-10-23 (native cutover review):** The fast suite passed, but the focused packaged-install and agent-matrix run reported seven failures. Current-version assertions still expected 1.18.0, and current registrations still expected Bash paths. Candidate-only selectors also excluded the now-installed Node cases or selected Bash failure fixtures. Derive the archive version from package metadata and classify native fixture behavior as every selection except the frozen reference. Preserve exact tagged inputs for upgrade tests: the 1.15.0 fixture has no shared native launcher to overwrite, while the 1.16.0 fixture exercises explicit replacement consent. Evidence: `test/integration/packaged-hook-install.test.ts` (search: `PACKAGE_VERSION`, `reviewAndSyncPackedHooks`), `test/integration/deny-dangerous-policy.test.ts` (search: `split policy partial installation`), and `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `native Gruff analyzer launch`).
 
 **Recurrence 2026-10-23 (reference CI):** The mirror assertion compared frozen 1.18.0 source with the live 1.19.0 installation. Resolve both sides through the selected fixture tree. Evidence: `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `the installed mirror matches`); `test/helpers/hook-entrypoint.ts` (search: `hookTreeRoot`).
+
+**Recurrence 2026-10-23 (Gruff reference):** Four cases mixed current registration and diagnostics with frozen Bash. Keep current-registration replays native-only and assert the frozen config-path format. Evidence: `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `Current registered handlers`).
 
 ---
 
