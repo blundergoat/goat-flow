@@ -1,9 +1,28 @@
 ---
 category: hook-performance
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-24
 ---
 
-**Scope:** Hook execution cost: process creation on Windows Git Bash, shared policy parsing work, and the context cost of policy denials. Runtime delivery, provider adapters, Stop recovery, and policy-module correctness live in [hooks.md](hooks.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md).
+**Scope:** Hook execution cost: Windows process creation and PowerShell launch environments, shared policy parsing work, and the context cost of policy denials. Runtime delivery, provider adapters, Stop recovery, and policy-module correctness live in [hooks.md](hooks.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md).
+
+## Footgun: Managed Windows replay can stall when PSModulePath is omitted
+
+**Status:** active | **Created:** 2026-10-24 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
+**Decision changed:** Preserve the host's nonempty `PSModulePath` when building the managed Windows hook environment, and verify the registered handler after changing its environment.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+**hallucination-risk:** high
+
+**Prevention:** Treat the selected shell's environment as part of the registered-command contract. Compare full and managed environments without changing the handler, payload, stdin transport or denial assertions. After adding a variable to an allowlist, restoring it against the updated baseline is a no-op. Build present/absent/restored controls from separate copies of one managed environment so removal cannot mutate later controls. Read the timings as single-run diagnostics, not a stable performance bound.
+
+**Symptoms:** When the managed filter omitted `PSModulePath` on the affected hosted Windows runner, the registered Codex handler returned the expected denial under the full environment but took tens of seconds or timed out under the managed environment. The current allowlist preserves it. Native local Windows remained fast in both cases, so its pass did not clear the hosted failure.
+
+**Why it happens:** `managedHookEnvironment` filters host variables before `agentHookSpawnDescriptor` launches the registered `powershell.exe` override. That override restores the literal location before invoking Node. The hosted location-only control reproduced the delay without a hook payload or Node child: removing only `PSModulePath` timed out after a successful present arm, and restoration was fast again. This weakens a simple first-run warm-up explanation; the internal PowerShell mechanism was not traced.
+
+**Evidence:** Before the fix, [job 120600539285](https://github.com/blundergoat/goat-flow/actions/runs/40007932927/job/120600539285) at `4525587` recorded managed pipe/file replays of 38,087/26,375 ms. After commit `6e2d28df` added only this environment key, [job 120620704758](https://github.com/blundergoat/goat-flow/actions/runs/40013834271/job/120620704758) recorded 541/532 ms with denial status 2 and the existing canary assertions intact. Its later location controls recorded present 313 ms, absent 10,021 ms with `ETIMEDOUT`, and restored 311 ms. The owning suites reported `# pass 54`, `# fail 0`, `# skipped 0`. These observations support the environment fix on that runner without proving a universal timing bound or live provider delivery.
+
+Source anchors: `src/cli/hooks-configured-runtime-evidence.ts` (search: `WINDOWS_MANAGED_ENVIRONMENT_KEYS`), `src/cli/server/agent-hook-command.ts` (search: `codexWindowsHookCommand`), `test/integration/hook-command-spawn-matrix.helpers.ts` (search: `modulePathState`), and `test/integration/hook-command-spawn-matrix.test.ts` (search: `the canary secret must never appear in a Codex handler stream`).
 
 ## Footgun: Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash
 
