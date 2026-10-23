@@ -37,7 +37,7 @@ export function recordWindowsReplayStage(
 
 /**
  * Compare shell startup and direct Node replay without replacing the registered-command assertions.
- * Restore one host locator at a time to isolate discovery costs without forwarding the whole host environment.
+ * Compare the managed module path present, absent, then restored to distinguish its effect from probe order.
  * @param command - Registered non-Windows command, decoded into native Node argv for the control.
  */
 export function runWindowsDiagnosticControls(
@@ -86,31 +86,33 @@ export function runWindowsDiagnosticControls(
         payload,
       },
       ...(variant.environment === "managed"
-        ? ["USERPROFILE", "APPDATA", "PSModulePath"].map((variable) => ({
-            name: `powershell-location-with-${variable}`,
-            command: "powershell.exe",
-            args: locationArguments,
-            payload: undefined,
-            restoreVariable: variable,
-          }))
+        ? (["present", "absent", "restored"] as const).map(
+            (modulePathState) => ({
+              name: `powershell-location-PSModulePath-${modulePathState}`,
+              command: "powershell.exe",
+              args: locationArguments,
+              payload: undefined,
+              modulePathState,
+            }),
+          )
         : []),
     ]) {
       let environment = variant.values;
-      if ("restoreVariable" in control) {
-        const hostValue = process.env[control.restoreVariable];
-        if (!hostValue) {
+      if ("modulePathState" in control) {
+        // An absent managed value cannot establish the present and restored comparison arms.
+        if (!variant.values.PSModulePath) {
           recordWindowsReplayStage({
             phase: "skip",
             probe: control.name,
             environment: variant.environment,
-            reason: "host-variable-unavailable",
+            reason: "managed-module-path-unavailable",
           });
           continue;
         }
-        environment = {
-          ...variant.values,
-          [control.restoreVariable]: hostValue,
-        };
+        // Each arm starts from the same managed environment; removal never changes later replays.
+        environment = { ...variant.values };
+        if (control.modulePathState === "absent")
+          delete environment.PSModulePath;
       }
       const stdin = control.payload === undefined ? "ignore" : "file";
       recordWindowsReplayStage({

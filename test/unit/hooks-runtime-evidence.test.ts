@@ -111,17 +111,23 @@ function configuredReport(dependencies: HookRuntimeDependencies) {
 
 describe("hooks runtime evidence", () => {
   it("preserves only Windows host paths needed by the managed launcher", () => {
+    const modulePath =
+      "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules;C:\\Program Files\\WindowsPowerShell\\Modules";
+    const hostEnvironment = {
+      PATH: "C:\\Windows\\System32",
+      SystemRoot: "C:\\Windows",
+      ProgramFiles: "C:\\Program Files",
+      LOCALAPPDATA: "C:\\Users\\fixture\\AppData\\Local",
+      TEMP: "C:\\Users\\fixture\\AppData\\Local\\Temp",
+      TMP: "C:\\Users\\fixture\\AppData\\Local\\Temp",
+      PSModulePath: modulePath,
+      USERPROFILE: "C:\\Users\\fixture",
+      APPDATA: "C:\\Users\\fixture\\AppData\\Roaming",
+      SECRET_TOKEN: "must-not-leak",
+    };
     const environment = managedHookEnvironment(
       "C:\\fixture",
-      {
-        PATH: "C:\\Windows\\System32",
-        SystemRoot: "C:\\Windows",
-        ProgramFiles: "C:\\Program Files",
-        LOCALAPPDATA: "C:\\Users\\fixture\\AppData\\Local",
-        TEMP: "C:\\Users\\fixture\\AppData\\Local\\Temp",
-        TMP: "C:\\Users\\fixture\\AppData\\Local\\Temp",
-        SECRET_TOKEN: "must-not-leak",
-      },
+      hostEnvironment,
       "win32",
     );
 
@@ -132,7 +138,25 @@ describe("hooks runtime evidence", () => {
       "C:\\Users\\fixture\\AppData\\Local",
     );
     assert.equal(environment.TMPDIR, environment.TEMP);
+    assert.equal(environment.PSModulePath, modulePath);
+    assert.equal(environment.USERPROFILE, undefined);
+    assert.equal(environment.APPDATA, undefined);
     assert.equal(environment.SECRET_TOKEN, undefined);
+
+    const blankModulePath = managedHookEnvironment(
+      "C:\\fixture",
+      { ...hostEnvironment, PSModulePath: "" },
+      "win32",
+    );
+    assert.equal(blankModulePath.PSModulePath, undefined);
+
+    const posixEnvironment = managedHookEnvironment(
+      "/fixture",
+      hostEnvironment,
+      "linux",
+    );
+    assert.equal(posixEnvironment.PSModulePath, undefined);
+    assert.equal(posixEnvironment.SECRET_TOKEN, undefined);
   });
 
   it("selects file-backed Windows input while preserving the registered handler", () => {

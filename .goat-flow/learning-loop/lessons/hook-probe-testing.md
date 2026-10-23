@@ -1,6 +1,6 @@
 ---
 category: hook-probe-testing
-last_reviewed: 2026-10-23
+last_reviewed: 2026-10-24
 ---
 
 **Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md).
@@ -48,7 +48,7 @@ Evidence: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh`
 
 ## Lesson: Codex sandbox hook probes must distinguish direct Bash from Node child-process
 
-**Status:** active | **Created:** 2026-06-05 | **Incident count:** 6 | **Latest occurrence:** 2026-09-29
+**Status:** active | **Created:** 2026-06-05 | **Incident count:** 6 | **Latest occurrence:** 2026-10-23
 **Severity:** INTEGRATION
 
 **Decision changed:** Reproduce hook failures through the exact parent/child process boundary. For hosted-only timeouts, vary the child environment and stdin transport independently before changing launcher policy or deadlines.
@@ -79,6 +79,9 @@ The approved server follow-up restored all 17 managed-divergence cases with priv
 
 
 **Recurrence 2026-10-23:** During the Node cutover, a Stop fixture injected `readSync` failure, which exercises file classification and cannot prove bounded recovery from a failed content scan. The existing recovery cases now inject `readFileSync` failure. Keep the failed boundary aligned with the asserted recovery outcome. Evidence: `test/integration/hook-provider-contracts.test.ts` (search: `withUnreadableScannerFile`) and `src/hooks/post-turn/scanner.mts` (search: `content candidate grep failed`).
+
+**Hosted follow-up 2026-10-24 (OBSERVED):** [Job 120600539285](https://github.com/blundergoat/goat-flow/actions/runs/40007932927/job/120600539285) restored only `PSModulePath`: location replay fell from a 10s timeout to 275ms. That control ran last; hosted registered-hook proof remains pending. After allowlisting, use present/absent/restored controls (`test/integration/hook-command-spawn-matrix.helpers.ts`, search: `modulePathState`).
+
 ---
 
 ## Lesson: Configured hook smoke must verify the registered guard path

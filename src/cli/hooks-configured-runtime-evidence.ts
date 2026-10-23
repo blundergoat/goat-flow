@@ -161,7 +161,7 @@ function configuredRegistrationReasonCode(
   return null;
 }
 
-/** Host-owned Windows paths the managed launcher consumes for discovery and cleanup. */
+/** Host paths used by the Windows launcher and PowerShell's module discovery. */
 const WINDOWS_MANAGED_ENVIRONMENT_KEYS = [
   "SystemRoot",
   "WINDIR",
@@ -169,6 +169,7 @@ const WINDOWS_MANAGED_ENVIRONMENT_KEYS = [
   "ProgramW6432",
   "ProgramFiles(x86)",
   "LOCALAPPDATA",
+  "PSModulePath",
   "TEMP",
   "TMP",
 ] as const;
@@ -253,7 +254,7 @@ export function managedHookEnvironment(
     LANG: "C",
     LC_ALL: "C",
   };
-  // Windows launcher discovery and timeout cleanup need only these host-owned path variables.
+  // Preserve Windows launcher paths and the registered PowerShell command's module search path.
   if (platform === "win32") {
     Object.assign(
       managedEnvironment,
