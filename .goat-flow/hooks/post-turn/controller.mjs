@@ -127,6 +127,26 @@ function staysInside(relativePath) {
         relativePath.startsWith(`..${sep}`) ||
         isAbsolute(relativePath));
 }
+/** Recognize Windows short-path aliases only when both resolved paths identify one directory. */
+function samePhysicalDirectory(left, right) {
+    if (left === null)
+        return false;
+    if (relative(left, right) === "" && relative(right, left) === "")
+        return true;
+    try {
+        const leftIdentity = statSync(left, { bigint: true });
+        const rightIdentity = statSync(right, { bigint: true });
+        return (leftIdentity.isDirectory() &&
+            rightIdentity.isDirectory() &&
+            leftIdentity.ino !== 0n &&
+            leftIdentity.dev === rightIdentity.dev &&
+            leftIdentity.ino === rightIdentity.ino);
+    }
+    catch {
+        // Missing or unreadable identities cannot establish that two aliases name the same directory.
+        return false;
+    }
+}
 // Each root must name a whole Git repository rather than part of a different checkout.
 function gitTopLevel(directory, maximumMilliseconds) {
     const rootLookup = spawnSync("git", ["-C", directory, "rev-parse", "--show-toplevel"], {
@@ -173,7 +193,7 @@ function resolveScanUnit(controllerRoot, configuredRoot, maximumMilliseconds) {
     // Linked paths must also remain physically inside the selected workspace.
     if (!staysInside(physicalRelative))
         return null;
-    if (gitTopLevel(childRealPath, maximumMilliseconds) !== childRealPath)
+    if (!samePhysicalDirectory(gitTopLevel(childRealPath, maximumMilliseconds), childRealPath))
         return null;
     return { name: physicalRelative.split(sep).join("/"), root: childRealPath };
 }
@@ -475,7 +495,7 @@ export function isGitTopLevel(root) {
     if (root === "")
         return false;
     try {
-        return realpathSync(process.cwd()) === realpathSync(root);
+        return samePhysicalDirectory(realpathSync(process.cwd()), realpathSync(root));
     }
     catch {
         return false;

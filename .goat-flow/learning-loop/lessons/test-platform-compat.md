@@ -7,7 +7,7 @@ last_reviewed: 2026-10-23
 
 ## Lesson: Test runners need CI-runtime reproduction when local Node is newer
 
-**Status:** active | **Created:** 2026-06-07 | **Incident count:** 8 | **Latest occurrence:** 2026-10-17
+**Status:** active | **Created:** 2026-06-07 | **Incident count:** 9 | **Latest occurrence:** 2026-10-23
 **Severity:** INTEGRATION
 
 **Prevention:** When changing test infrastructure or platform-sensitive runtime code, reproduce the package's minimum supported Node path or the exact CI runner before treating local output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. For shell-wrapped binaries, put the alternate Node on `PATH`; do not pass the wrapper to Node. Timing overrides must define zero explicitly and include a future-timestamp fixture instead of assuming the filesystem clock never leads `Date.now()`. A Windows path comparison that decides ownership or containment must handle aliases by proven filesystem identity, not case and separators alone. Evidence anchors: `scripts/run-tests.mjs` (search: `--import`), `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`), and `test/unit/hook-registrar-surfaces.test.ts` (search: `uses directory identity when Windows aliases have different spellings`).
@@ -15,6 +15,8 @@ last_reviewed: 2026-10-23
 **What happened:** PR #48 local verification ran on Node 22 and passed the programmatic `node:test` runner path. GitHub Actions ran Node 20.20.2 and failed every `.ts` test with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts"` because the programmatic runner's `execArgv: ["--import", "tsx"]` path did not behave like the CLI preload path on the supported minimum Node version.
 
 **Incident ledger:**
+
+- **Recurrence 2026-10-23 (native controller):** The manual Windows matrix rejected configured scan roots while Linux passed. The native port compared path strings even though the CLI already recognized aliases by directory identity. A controlled alias fixture reproduced that rejection and verified acceptance only for matching directory IDs; other directories, files, missing paths and zero IDs remain rejected. Carry the identity contract into runtime ports and rerun the actual Windows job before claiming host coverage. Evidence: `src/hooks/post-turn/controller.mts` (search: `samePhysicalDirectory`); `test/integration/post-turn-safety-controller.test.ts` (search: `uses directory identity when an alias`).
 
 - **Recurrence 2026-10-17:** Node 20.12.0 CI exposed two fixture assumptions: WSL reached a 250 ms hook deadline before the descendant-start marker, and Windows raised initial-directory EBUSY despite configured rmSync retries. Reproductions confirmed both. Keep the marker and prompt-return assertion with enough startup time; explicitly retry only transient Windows EBUSY and propagate persistent errors. Inspect the floor runtime's failing filesystem path instead of assuming an option covers it. Evidence: `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`) and `test/unit/hook-registrar.helpers.ts` (search: `withTempProject`).
 

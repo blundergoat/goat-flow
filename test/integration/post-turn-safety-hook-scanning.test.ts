@@ -15,14 +15,13 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { hookSelection } from "../helpers/hook-entrypoint.js";
+import { hookSelection, hookTreeRoot } from "../helpers/hook-entrypoint.js";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
-  PROJECT_ROOT,
   HOOK_PATH,
   FORCE_BASH3_ENV_KEY,
   TEST_AWS_ACCESS_KEY,
@@ -987,11 +986,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
   it("the installed mirror matches the workflow hook source", () => {
     assert.equal(
       readFileSync(
-        resolve(
-          PROJECT_ROOT,
-          ".goat-flow/hooks",
-          HOOK_PATH.split(/[\\/]/u).at(-1)!,
-        ),
+        join(hookTreeRoot("installed"), basename(HOOK_PATH)),
         "utf8",
       ),
       readFileSync(HOOK_PATH, "utf8"),
