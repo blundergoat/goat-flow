@@ -58,6 +58,9 @@ function runProviderLauncher(payload: string, responseMode: string) {
   const selectedRunner = selectedHookPath(
     join(captureDirectory, "workflow/hooks/run-with-bash.mjs"),
   );
+  const selectedScript = selectedHookPath(
+    join(captureDirectory, "workflow/hooks/gruff-code-quality.sh"),
+  );
   const payloadPath = join(captureDirectory, "stdin");
   const stdoutPath = join(captureDirectory, "stdout");
   const stderrPath = join(captureDirectory, "stderr");
@@ -71,7 +74,7 @@ function runProviderLauncher(payload: string, responseMode: string) {
     }
     const result = spawnSync(
       process.execPath,
-      [selectedRunner, "workflow/hooks/gruff-code-quality.sh", responseMode],
+      [selectedRunner, selectedScript, responseMode],
       {
         cwd: captureDirectory,
         encoding: "utf8",

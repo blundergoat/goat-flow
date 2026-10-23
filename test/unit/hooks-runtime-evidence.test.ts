@@ -57,7 +57,7 @@ const CONFIGURED_HOOK_STATE: ManagedDenyHookState = {
   isSupported: true,
   enabled: true,
   installed: true,
-  scriptPath: ".goat-flow/hooks/deny-dangerous.sh",
+  scriptPath: ".goat-flow/hooks/deny-dangerous.mjs",
   configuredHandler: null,
   reasonCode: null,
 };
@@ -231,12 +231,12 @@ describe("hooks runtime evidence", () => {
         });
         symlinkSync(
           outsideScript,
-          join(projectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),
+          join(projectPath, ".goat-flow", "hooks", "deny-dangerous.mjs"),
         );
 
         const execution = executeManagedHookProbe(
           projectPath,
-          ".goat-flow/hooks/deny-dangerous.sh",
+          ".goat-flow/hooks/deny-dangerous.mjs",
           PROBE_SCENARIO,
         );
 
@@ -261,14 +261,14 @@ describe("hooks runtime evidence", () => {
     try {
       mkdirSync(join(projectPath, ".goat-flow", "hooks"), { recursive: true });
       writeFileSync(
-        join(projectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),
-        '#!/usr/bin/env bash\necho "BLOCKED: Policy fixture: blocked by test policy" >&2\nexit 2\n',
+        join(projectPath, ".goat-flow", "hooks", "deny-dangerous.mjs"),
+        'console.error("BLOCKED: Policy fixture: blocked by test policy"); process.exit(2);\n',
         { mode: 0o755 },
       );
 
       const execution = executeManagedHookProbe(
         projectPath,
-        ".goat-flow/hooks/deny-dangerous.sh",
+        ".goat-flow/hooks/deny-dangerous.mjs",
         PROBE_SCENARIO,
       );
 
@@ -664,20 +664,18 @@ describe("hooks runtime evidence", () => {
     }
   });
 
-  // Fixture side effects: writes a disposable Codex project and a Bash wrapper folder, prefixes PATH while replaying, then removes both.
-  // The real launcher reports the overflow with inexact "at least" byte counts, which must never read as a safety finding.
+  // The wrapper preserves installed bytes while making only the scanner child overflow its result envelope.
   it(
     "fails a Codex Stop hook that never delivers a scan, before and after its one retry",
-    // The wrapper is a POSIX shell script; hook-effective-state.test.ts replays Codex Stop through the Windows override.
     { skip: process.platform === "win32" },
     () => {
       const projectRoot = mkdtempSync(
         join(tmpdir(), "goat-flow-codex-stop-proof-"),
       );
       const wrapperDirectory = mkdtempSync(
-        join(tmpdir(), "goat-flow-overflow-bash-"),
+        join(tmpdir(), "goat-flow-overflow-node-"),
       );
-      const suitePath = process.env.PATH;
+      const previousPath = process.env.PATH;
       try {
         mkdirSync(join(projectRoot, ".goat-flow"), { recursive: true });
         mkdirSync(join(projectRoot, ".codex"), { recursive: true });
@@ -692,17 +690,17 @@ describe("hooks runtime evidence", () => {
         });
         assert.equal(gitInit.status, 0, gitInit.stderr);
         syncHookStates(projectRoot);
-        const realBash = spawnSync("bash", ["-c", "command -v bash"], {
-          encoding: "utf-8",
-        }).stdout.trim();
-        // The probe's own `bash -c` passes through, while the launcher's scanner run overflows the 65,536-byte result envelope instead of scanning.
+        const preloadSource =
+          'if (!process.execArgv.includes("-e") && process.argv[1]?.endsWith("post-turn-safety.mjs")) { process.stdout.write("x".repeat(70000), () => process.exit(0)); await new Promise(() => {}); }';
+        const preload = Buffer.from(preloadSource).toString("base64");
+        const quotedNode =
+          "'" + process.execPath.replaceAll("'", "'\\''") + "'";
         writeFileSync(
-          join(wrapperDirectory, "bash"),
-          `#!/bin/sh\nif [ "$1" = "-c" ]; then exec '${realBash}' "$@"; fi\nprintf '%070000d' 0\n`,
+          join(wrapperDirectory, "node"),
+          `#!/bin/sh\nNODE_OPTIONS='--import=data:text/javascript;base64,${preload}' exec ${quotedNode} "$@"\n`,
           { mode: 0o755 },
         );
-        process.env.PATH = [wrapperDirectory, suitePath].join(delimiter);
-        // Both runs share the probe's fixed turn, so the second ends the launcher's one retry with a recovery warning instead of a block.
+        process.env.PATH = [wrapperDirectory, previousPath].join(delimiter);
         for (const verificationRun of ["first failure", "ended retry"]) {
           const report = verifyManagedConfiguredHook({
             projectPath: projectRoot,
@@ -714,18 +712,14 @@ describe("hooks runtime evidence", () => {
           assert.deepEqual(
             report.scenarios.map((scenario) => scenario.observed),
             ["unavailable", "incomplete"],
-            verificationRun,
+            JSON.stringify(report),
           );
         }
       } finally {
-        // A suite without PATH returns to that state instead of a PATH holding the text "undefined".
-        if (suitePath === undefined) {
-          delete process.env.PATH;
-        } else {
-          process.env.PATH = suitePath;
-        }
-        rmSync(projectRoot, { recursive: true, force: true });
+        if (previousPath === undefined) delete process.env.PATH;
+        else process.env.PATH = previousPath;
         rmSync(wrapperDirectory, { recursive: true, force: true });
+        rmSync(projectRoot, { recursive: true, force: true });
       }
     },
   );

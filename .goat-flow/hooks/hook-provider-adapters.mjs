@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.18.0
+// goat-flow-hook-version: 1.19.0
 /**
  * Decodes bounded provider-neutral hook results and renders one host response.
  *

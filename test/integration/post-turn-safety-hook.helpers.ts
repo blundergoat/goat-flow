@@ -3,13 +3,15 @@
  * The hook scans a turn's changed content for secrets and conflict markers, so every case
  * needs the same scaffolding: a disposable git repo in a precise state, obviously fake
  * tokens shaped like real ones, and a runner that captures the hook's verdict on both the
- * modern and the bash-3 fallback scanner.
+ * selected Node scanner or the frozen Bash scanner and its Bash-3 fallback.
  *
  * The tokens are assembled from fragments so this file never contains a string a secret
  * scanner - including the hook under test - would rightly flag.
  */
 import assert from "node:assert/strict";
 import {
+  copyHookTree,
+  hookSelection,
   hookTreeRoot,
   selectedHookPath,
   spawnSelectedHook,
@@ -36,6 +38,41 @@ export const HOOK_PATH = selectedHookPath(
 );
 export const FORCE_BASH3_ENV_KEY =
   "GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK";
+
+/** Install and optionally instrument the scanner inside a disposable test project.
+ * Side effects: writes the selected hook tree and may replace its scanner entrypoint.
+ * @param root - Disposable project whose hook directory is replaced.
+ * @param nodeChildCode - Node code to run only in a controller child.
+ * @param bashChildCode - Equivalent code for the frozen Bash reference.
+ */
+export function installPostTurnHook(
+  root: string,
+  nodeChildCode = "",
+  bashChildCode = "",
+): void {
+  const hooks = join(root, ".goat-flow/hooks");
+  copyHookTree(hooks);
+  if (nodeChildCode === "" && bashChildCode === "") return;
+  const path = join(hooks, basename(HOOK_PATH));
+  const source = readFileSync(path, "utf8");
+  const nodeChildGuard =
+    'if (process.env.GOAT_FLOW_POST_TURN_CONTROLLER_CHILD === "1") {\n';
+  const instrumented =
+    hookSelection() !== "reference"
+      ? source.replace(
+          /^(#![^\n]*\n)?/u,
+          (opening) => opening + `${nodeChildGuard}${nodeChildCode}\n}\n`,
+        )
+      : source.replace(
+          "SECONDS=0\n",
+          () =>
+            'SECONDS=0\nif [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then\n' +
+            bashChildCode +
+            "\nfi\n",
+        );
+  assert.notEqual(instrumented, source, "scanner instrumentation must apply");
+  writeFileSync(path, instrumented);
+}
 export const TEST_AWS_ACCESS_KEY = `AKIA${"1234567890ABCDEF"}`;
 export const TEST_GITHUB_TOKEN = `ghp_${"abcdefghijklmnopqrsttestuvwxyzABCD"}`;
 export const TEST_FINE_GRAINED_GITHUB_TOKEN = `github_pat_${"a".repeat(20)}`;
@@ -430,6 +467,55 @@ export function withCommandShim(
     });
   } finally {
     rmSync(shimRoot, { recursive: true, force: true });
+  }
+}
+
+/** Inject a file-operation failure into a Node scanner child, without production test switches.
+ * @param operation - Existing filesystem boundary to fail for settings.env only.
+ * @param scenario - Assertions run with the disposable preload; the helper removes it afterward.
+ */
+export function withScannerFileFault(
+  operation: "readFileSync" | "readSync" | "lstatSync" | "vanish",
+  scenario: (environment: Record<string, string>) => void,
+): void {
+  const root = mkdtempSync(join(tmpdir(), "goat-scanner-fault-"));
+  const preload = join(root, "fault.cjs");
+  // Preload before ESM imports so the real scanner encounters the chosen filesystem failure.
+  try {
+    writeFileSync(
+      preload,
+      `
+const fs = require('node:fs');
+const { syncBuiltinESMExports } = require('node:module');
+const operation = ${JSON.stringify(operation)};
+const matches = (path) => typeof path === 'string' && /(?:^|[\\\\/])settings\\.env$/.test(path);
+const handles = new Set();
+const fail = () => { throw Object.assign(new Error('injected scanner file failure'), { code: 'EACCES' }); };
+for (const name of ['openSync', 'readFileSync', 'lstatSync']) {
+  const original = fs[name];
+  fs[name] = function(path, ...args) {
+    if (matches(path) && name === operation) fail();
+    const result = original.call(fs, path, ...args);
+    if (matches(path) && name === 'openSync') handles.add(result);
+    if (matches(path) && name === 'lstatSync' && operation === 'vanish') fs.unlinkSync(path);
+    return result;
+  };
+}
+const close = fs.closeSync;
+fs.closeSync = function(fd) { handles.delete(fd); return close.call(fs, fd); };
+const read = fs.readSync;
+fs.readSync = function(fd, ...args) {
+  if (operation === 'readSync' && handles.has(fd)) fail();
+  return read.call(fs, fd, ...args);
+};
+syncBuiltinESMExports();
+`,
+    );
+    scenario({
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(preload)}`,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 

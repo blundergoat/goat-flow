@@ -1,4 +1,3 @@
-import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 /**
  * How the hook decides what to scan: dirty and staged states, ignored files, binary and
  * oversized content, renames - and the batched scanner's obligation to preserve per-line
@@ -6,8 +5,18 @@ import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
  * Every case runs the real hook against a real git repository, so a pass means the shipped
  * scanner behaves as asserted, not a reimplementation of it.
  */
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { hookSelection } from "../helpers/hook-entrypoint.js";
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
@@ -23,12 +32,14 @@ import {
   TEST_SLACK_TOKEN,
   TEST_API_TOKEN,
   withTempRepo,
+  buildStopPayload,
   writeFile,
   runGit,
   commitAll,
   runHook,
   hookFindingSignatures,
   withCommandShim,
+  withScannerFileFault,
   assertHookIncomplete,
   assertHookAllows,
   assertHookBlocks,
@@ -69,6 +80,43 @@ function nonUtf8NameTestOptions(): { skip: string | false } {
 }
 
 describe("post-turn-safety hook: git states and batched scanning", () => {
+  if (hookSelection() !== "reference") {
+    it("scans raw added content when a textconv driver hides the secret", () => {
+      for (const staged of [false, true]) {
+        withTempRepo((root) => {
+          writeFile(root, ".gitattributes", "settings.env diff=hidden\n");
+          writeFile(root, "settings.env", "safe=1\n");
+          runGit(root, [
+            "config",
+            "diff.hidden.textconv",
+            `${JSON.stringify(process.execPath)} -e "process.stdout.write('safe')"`,
+          ]);
+          commitAll(root, "textconv fixture");
+          writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+          if (staged) runGit(root, ["add", "settings.env"]);
+          assertHookBlocks(root, /API token in settings\.env/u);
+        });
+      }
+    });
+
+    it(
+      "scans a regular file replacing a tracked symlink",
+      symlinkTestOptions(),
+      () => {
+        for (const staged of [false, true]) {
+          withTempRepo((root) => {
+            writeFile(root, "target.txt", "safe\n");
+            symlinkSync("target.txt", join(root, "settings.env"));
+            commitAll(root, "symlink fixture");
+            unlinkSync(join(root, "settings.env"));
+            writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+            if (staged) runGit(root, ["add", "settings.env"]);
+            assertHookBlocks(root, /API token in settings\.env/u);
+          });
+        }
+      },
+    );
+  }
   /** Confirm both scanner paths tell the user that declared coverage is incomplete.
    *
    * @param root - fixture repository with a path the hook cannot fully scan
@@ -117,18 +165,19 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       });
     });
 
-    it("blocks when the scan workspace cannot be created", () => {
-      withTempRepo((root) => {
-        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
-        withCommandShim(
-          resolveExecutable("mktemp"),
-          { status: 2 },
-          (shimEnv) => {
-            assertIncompleteOnBothScanners(root, shimEnv);
-          },
-        );
+    if (hookSelection() === "reference")
+      it("blocks when the scan workspace cannot be created", () => {
+        withTempRepo((root) => {
+          writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+          withCommandShim(
+            resolveExecutable("mktemp"),
+            { status: 2 },
+            (shimEnv) => {
+              assertIncompleteOnBothScanners(root, shimEnv);
+            },
+          );
+        });
       });
-    });
 
     it("blocks when Git cannot inventory untracked files", () => {
       withTempRepo((root) => {
@@ -166,6 +215,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when a native candidate grep fails", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
+        if (hookSelection() !== "reference") {
+          withScannerFileFault("readFileSync", (environment) =>
+            assertIncompleteOnBothScanners(root, environment),
+          );
+          return;
+        }
         withCommandShim(
           resolveExecutable("grep"),
           { when: { any: ["-aUHnZE", "-iaUHnZE"] }, status: 2 },
@@ -182,6 +237,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when the binary-content gate fails on both paths", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
+        if (hookSelection() !== "reference") {
+          withScannerFileFault("readSync", (environment) =>
+            assertIncompleteOnBothScanners(root, environment),
+          );
+          return;
+        }
         withCommandShim(
           resolveExecutable("grep"),
           { when: { any: ["-IlZ", "-Iq"] }, status: 2 },
@@ -195,6 +256,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when byte counting fails on both paths", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
+        if (hookSelection() !== "reference") {
+          withScannerFileFault("lstatSync", (environment) =>
+            assertIncompleteOnBothScanners(root, environment),
+          );
+          return;
+        }
         withCommandShim(resolveExecutable("wc"), { status: 2 }, (shimEnv) => {
           assertIncompleteOnBothScanners(root, shimEnv);
         });
@@ -203,6 +270,18 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
 
     it("blocks when selected content disappears after byte counting", () => {
       withTempRepo((root) => {
+        if (hookSelection() !== "reference") {
+          withScannerFileFault("vanish", (environment) => {
+            for (const variant of ["0", "1"]) {
+              writeFile(root, "settings.env", "safe=1\n");
+              assertHookIncomplete(root, {
+                ...environment,
+                [FORCE_BASH3_ENV_KEY]: variant,
+              });
+            }
+          });
+          return;
+        }
         withCommandShim(
           resolveExecutable("wc"),
           { delegateThenRemoveEnvironment: "GOAT_FLOW_TEST_VANISH_PATH" },
@@ -221,17 +300,18 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       });
     });
 
-    it("blocks when fallback text normalization fails", () => {
-      withTempRepo((root) => {
-        writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
-        withCommandShim(resolveExecutable("tr"), { status: 2 }, (shimEnv) => {
-          assertHookIncomplete(root, {
-            ...shimEnv,
-            [FORCE_BASH3_ENV_KEY]: "1",
+    if (hookSelection() === "reference")
+      it("blocks when fallback text normalization fails", () => {
+        withTempRepo((root) => {
+          writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+          withCommandShim(resolveExecutable("tr"), { status: 2 }, (shimEnv) => {
+            assertHookIncomplete(root, {
+              ...shimEnv,
+              [FORCE_BASH3_ENV_KEY]: "1",
+            });
           });
         });
       });
-    });
 
     it("blocks when changed-content coverage inventory fails on both paths", () => {
       withTempRepo((root) => {
@@ -304,6 +384,30 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       withTempRepo((root) => {
         writeFile(root, fixture.path, fixture.content);
         assertIncompleteOnBothScanners(root);
+        if (hookSelection() !== "reference" && fixture.path === "large.txt") {
+          const first = runHook(
+            root,
+            {},
+            buildStopPayload("large-file", false),
+          );
+          const repeated = runHook(
+            root,
+            {},
+            buildStopPayload("large-file", true),
+          );
+          for (const result of [first, repeated]) {
+            assert.equal(result.status, 2, result.stderr);
+            assert.match(
+              result.stderr,
+              /large\.txt \(\d+ bytes; limit 1048576;/u,
+            );
+            assert.match(
+              result.stderr,
+              /review the file and raise GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES if appropriate/u,
+            );
+            assert.doesNotMatch(result.stderr, /ending repeated Stop/u);
+          }
+        }
       });
     }
   });
@@ -880,7 +984,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
   it("the installed mirror matches the workflow hook source", () => {
     assert.equal(
       readFileSync(
-        resolve(PROJECT_ROOT, ".goat-flow/hooks/post-turn-safety.sh"),
+        resolve(
+          PROJECT_ROOT,
+          ".goat-flow/hooks",
+          HOOK_PATH.split(/[\\/]/u).at(-1)!,
+        ),
         "utf8",
       ),
       readFileSync(HOOK_PATH, "utf8"),

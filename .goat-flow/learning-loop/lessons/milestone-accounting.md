@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-10-19
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
@@ -194,7 +194,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Severity:** INTEGRATION
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient.
 **Trigger phase:** VERIFY
-**Incident count:** 18 | **Latest occurrence:** 2026-10-15
+**Incident count:** 19 | **Latest occurrence:** 2026-10-23
 
 **Prevention:** After the final write, run `goat-flow plans check <plan-directory> --strict`, require warning-free exporter records, and check cited paths/anchors. Keep one live metadata value; fence history. Current strict plans require a numeric effort split even when runtime is unknown; label the forecast provisional and name the measurement/reforecast checkpoint rather than omitting required fields. Exercise compact/expanded fixtures through `parseMilestoneMarkdown` and plan commands against prepared disposable paths. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Preserve Status, Scope, Tasks, Proof, Exit/Exit criteria and Stop/rescope; compact Stop/rescope belongs inside Exit. Anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`; `readStopMarkdown`), `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
@@ -226,6 +226,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-10-15 (ACTUAL_MEASURED):** A plan-reconciliation edit expanded a problem summary to 188 characters and two sentences. Strict validation exited 1 with length and shape errors; one short sentence restored exit 0 without changing implementation code. Check the owned problem/benefit sentence contract before expanding prose, and keep inventory detail in Context or Scope. The incident plan is local workflow state; the durable validator anchor is `src/cli/plans-check-structure.ts` (search: `collectPlainLanguageSectionFindings`).
 
 **Recurrence 2026-10-15 (ACTUAL_MEASURED):** Explanatory paragraphs inserted between the final task and Commands made five tasks lose their parsed estimates; strict validation exited 1 with missing-estimate and work-unit errors. Moving those paragraphs into Scope restored exit 0. Keep shared notes in Context or Scope and rerun the shipped consumer after formatting changes. Durable owners: `src/cli/plans-effort.ts` (search: `readTaskEstimate`) and `src/cli/plans-check.ts` (search: `task(s) missing an (est: ...)`).
+
+**Recurrence 2026-10-23 (ACTUAL_MEASURED):** A bulk editor duplicated sections and lost a merged stop condition. Check one replacement first, then validate transferred tasks and stops. Strict checking caught both: `src/cli/plans-export.ts` (search: `addRepresentationConflict`; `readStopMarkdown`).
 
 ---
 

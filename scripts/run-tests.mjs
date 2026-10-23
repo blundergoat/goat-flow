@@ -96,30 +96,9 @@ function isSlowTest(path) {
 // That job runs only on weekly and manual runs, so start a manual run before merging such a change, for example `gh workflow run ci.yml --ref dev`.
 const REFERENCE_JOB_TESTS = ["test/integration/hook-parity-reference.test.ts"];
 
-// These suites execute the legacy Bash hooks or their compatibility launcher.
-// They remain in the normal fast/slow selections; only preflight omits them.
-const LEGACY_BASH_HOOK_TESTS = new Set([
-  "test/integration/deny-large-report-transport.test.ts",
-  "test/integration/gruff-code-quality-contract.test.ts",
-  "test/integration/gruff-code-quality-quiet-feedback.test.ts",
-  "test/integration/gruff-code-quality-smoke.test.ts",
-  "test/integration/hook-command-spawn-matrix.test.ts",
-  "test/integration/hook-consumer-canary.test.ts",
-  "test/integration/hook-provider-contracts.test.ts",
-  "test/integration/hook-sync-recovery.test.ts",
-  "test/integration/post-turn-launcher-recovery.test.ts",
-  "test/integration/post-turn-safety-controller.test.ts",
-  "test/integration/post-turn-safety-hook-scanning.test.ts",
-  "test/integration/post-turn-safety-hook.test.ts",
-  "test/integration/preflight-deny-policy.test.ts",
-  "test/unit/audit-command/agent-deny-hooks-drift.test.ts",
-  "test/unit/audit-command/agent-deny-hooks.test.ts",
-  "test/unit/hook-launcher.test.ts",
-  "test/unit/hook-registrar-surfaces.test.ts",
-  "test/unit/hook-registrar.test.ts",
-  "test/unit/hooks-runtime-evidence.test.ts",
-  "test/unit/quality-report-contract.test.ts",
-]);
+// Only the compatibility-launcher suite still executes Bash directly.
+// Native hook suites participate in the normal preflight selection.
+const LEGACY_BASH_HOOK_TESTS = new Set(["test/unit/hook-launcher.test.ts"]);
 
 /**
  * Keep only the tests the developer's chosen mode runs, before any --shard split; files in REFERENCE_JOB_TESTS are never kept.

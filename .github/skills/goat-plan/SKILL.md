@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "Use when creating, updating, reconciling, or resuming milestone plans."
-goat-flow-skill-version: "1.18.0"
+goat-flow-skill-version: "1.19.0"
 ---
 # /goat-plan
 

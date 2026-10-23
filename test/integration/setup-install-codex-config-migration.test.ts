@@ -5,6 +5,7 @@
  * User settings and unrelated permission tables remain intact throughout.
  */
 import { describe, it } from "node:test";
+import { migrateCodexPermissions } from "../../src/cli/installer/codex-permissions.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,12 +22,12 @@ import {
 } from "./setup-install.helpers.js";
 
 /**
- * Spawns a read-only Git process to load exact v1.15.0 bytes for a user upgrade fixture.
+ * Spawns a read-only Git process to load exact v1.16.0 bytes for a user upgrade fixture.
  * @param relativePath - non-empty tagged path; empty cannot identify a release file
- * @returns file bytes, or null when the user's checkout lacks the v1.15.0 tag
+ * @returns file bytes, or null when the user's checkout lacks the v1.16.0 tag
  */
 function readReleaseFile(relativePath: string): string | null {
-  const gitShowResult = spawnSync("git", ["show", `v1.15.0:${relativePath}`], {
+  const gitShowResult = spawnSync("git", ["show", `v1.16.0:${relativePath}`], {
     cwd: PROJECT_ROOT,
     encoding: "utf-8",
   });
@@ -35,69 +36,53 @@ function readReleaseFile(relativePath: string): string | null {
 }
 
 /**
- * Spawns the installer's exact permission migration to rewrite one disposable config when needed.
+ * Runs the Node writer's permission migration in process to rewrite one disposable config when needed.
  * Full-install cases below retain staging, validation, hook registration and repeat-install coverage.
  */
 function runCodexPermissionMigration(root: string) {
-  const source = readFileSync(
-    join(PROJECT_ROOT, "workflow/install-goat-flow.sh"),
-    "utf8",
+  const path = join(root, ".codex/config.toml");
+  const before = readFileSync(path, "utf8");
+  const messages: string[] = [];
+  const after = migrateCodexPermissions(before, (message) =>
+    messages.push(message),
   );
-  const start = source.indexOf("\nmigrate_codex_filesystem_permissions() {");
-  const end = source.indexOf("\nmigrate_claude_permission_deny() {", start);
-  assert.ok(
-    start >= 0 && end > start,
-    "Codex permission migration boundaries must exist",
-  );
-  const blocks = [
-    ...source
-      .slice(start, end)
-      .matchAll(/<<'NODE'\r?\n([\s\S]*?)\r?\nNODE\r?\n/gu),
-  ];
-  assert.equal(
-    blocks.length,
-    1,
-    "Codex permission owner must contain one Node migration",
-  );
-  const block = blocks[0]?.[1];
-  assert.ok(block, "the shipped permission migration must not be empty");
-  return spawnSync(process.execPath, ["-", join(root, ".codex/config.toml")], {
-    cwd: PROJECT_ROOT,
-    encoding: "utf-8",
-    input: block,
-    timeout: process.platform === "win32" ? 120_000 : 30_000,
-  });
+  if (after !== before) writeFileSync(path, after);
+  return {
+    status: 0,
+    stdout: after === before ? "unchanged\n" : "migrated\n",
+    stderr: messages.join("\n"),
+  };
 }
 
-const V1_15_0_CODEX_HOOKS = readReleaseFile(
+const V1_16_0_CODEX_HOOKS = readReleaseFile(
   "workflow/hooks/agent-config/codex-hooks.json",
 );
-const V1_15_0_BASH_RUNNER = readReleaseFile("workflow/hooks/run-with-bash.mjs");
+const V1_16_0_BASH_RUNNER = readReleaseFile("workflow/hooks/run-with-bash.mjs");
 // Shallow archives have no release bytes, so users' upgrade proof is explicitly unavailable.
-const V1_15_0_UPGRADE_FIXTURE_UNAVAILABLE =
-  V1_15_0_CODEX_HOOKS === null || V1_15_0_BASH_RUNNER === null;
+const V1_16_0_UPGRADE_FIXTURE_UNAVAILABLE =
+  V1_16_0_CODEX_HOOKS === null || V1_16_0_BASH_RUNNER === null;
 
 describe("codex config migration", () => {
   it(
-    "migrates the literal 1.15.0 launcher and runner without creating Git state",
-    { skip: V1_15_0_UPGRADE_FIXTURE_UNAVAILABLE },
+    "migrates the literal 1.16.0 launcher and runner without creating Git state",
+    { skip: V1_16_0_UPGRADE_FIXTURE_UNAVAILABLE },
     () => {
       // The skip above handles shallow archives; these checks narrow the real tagged bytes.
-      assert.ok(V1_15_0_CODEX_HOOKS);
-      assert.ok(V1_15_0_BASH_RUNNER);
+      assert.ok(V1_16_0_CODEX_HOOKS);
+      assert.ok(V1_16_0_BASH_RUNNER);
       const targetProjectPath = makeTempProject();
       mkdirSync(join(targetProjectPath, ".codex"), { recursive: true });
       mkdirSync(join(targetProjectPath, ".goat-flow", "hooks"), {
         recursive: true,
       });
-      // This is the exact non-Git project a Codex user would have after installing v1.15.0.
+      // This is the exact non-Git project a Codex user would have after installing v1.16.0.
       writeFileSync(
         join(targetProjectPath, ".codex", "hooks.json"),
-        V1_15_0_CODEX_HOOKS,
+        V1_16_0_CODEX_HOOKS,
       );
       writeFileSync(
         join(targetProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
-        V1_15_0_BASH_RUNNER,
+        V1_16_0_BASH_RUNNER,
       );
 
       const installResult = runInstaller(targetProjectPath, "--agent", "codex");
@@ -140,7 +125,7 @@ describe("codex config migration", () => {
         ),
         true,
       );
-      assert.notEqual(installedBashRunner, V1_15_0_BASH_RUNNER);
+      assert.notEqual(installedBashRunner, V1_16_0_BASH_RUNNER);
       assert.equal(
         installedBashRunner,
         readFileSync(
@@ -650,7 +635,7 @@ describe("codex hook and permission upgrade migrations", () => {
     writeFileSync(
       join(root, ".goat-flow", "config.yaml"),
       [
-        'version: "1.9.0"',
+        'version: "1.16.0"',
         "hooks:",
         "  deny-dangerous:",
         "    enabled: true",
@@ -665,11 +650,12 @@ describe("codex hook and permission upgrade migrations", () => {
 
     assert.equal(
       existsSync(join(root, ".codex", "hooks", "gruff-code-quality.sh")),
-      false,
+      true,
+      "unclassified legacy bytes require stored-baseline evidence before retirement",
     );
     const hooksJson = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
     assert.doesNotMatch(hooksJson, /\.codex\/hooks\/gruff-code-quality\.sh/);
-    assert.match(hooksJson, /\.goat-flow\/hooks\/gruff-code-quality\.sh/);
+    assert.match(hooksJson, /\.goat-flow\/hooks\/gruff-code-quality\.mjs/);
     assert.match(hooksJson, /"PostToolUse"/u);
     assert.match(hooksJson, /"matcher": "\^apply_patch\$"/u);
     assert.match(hooksJson, /"timeout": 90/u);
@@ -678,7 +664,7 @@ describe("codex hook and permission upgrade migrations", () => {
       /codex:gruff:goat-flow\.hook-result\.v1:post-tool:1:75000/u,
     );
     assert.match(hooksJson, /custom-user-hook\.mjs/u);
-    assert.match(hooksJson, /\.goat-flow\/hooks\/deny-dangerous\.sh/);
+    assert.match(hooksJson, /\.goat-flow\/hooks\/deny-dangerous\.mjs/);
     assert.doesNotMatch(hooksJson, /"matcher": "MultiEdit"/);
   });
 

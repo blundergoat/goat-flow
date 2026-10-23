@@ -1,6 +1,6 @@
 ---
 category: verification-gate-runs
-last_reviewed: 2026-10-17
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** Running gates during a change - stopping each edit batch at its declared proof, checking every target after a failed multi-file patch, invoking tools with the repository's own flags, and telling a transient gate failure from a task regression. Adding or trusting a repo-wide gate is [verification-preflight.md](verification-preflight.md); what a test must establish is [verification-testing.md](verification-testing.md).
@@ -63,7 +63,7 @@ last_reviewed: 2026-10-17
 
 - **Recurrence 2026-08-09:** A malformed Markdown-list hunk in a rollback patch failed after earlier file hunks in the same request; this time a target-by-target diff found no retained edits. The patch surface has shown both partial and atomic-looking failures, so inspection stays the recovery contract.
 
-- **Recurrence 2026-10-17:** Two native-replay prototype patches failed: one returned to an earlier file region, and one guessed a suite heading. Hashes found the prior successful source edit retained while both test files were unchanged. After the second failure, the three-file prototype was rewound to its main-workspace baseline and reapplied in smaller, file-ordered edits. A later note-only patch also targeted a sentence inside a longer paragraph and failed before writing; the retry used the complete current line. Read exact anchors and inspect every target before retrying. Dependent checks stopped at each failure. Evidence: `src/cli/server/agent-hook-command.ts` (search: `candidateTransport`) and `test/integration/hook-command-native-replay.test.ts` (search: `native candidate registered policy replay`).
+- **Recurrence 2026-10-17:** Two native-replay prototype patches failed: one returned to an earlier file region, and one guessed a suite heading. Hashes found the prior successful source edit retained while both test files were unchanged. After the second failure, the three-file prototype was rewound to its main-workspace baseline and reapplied in smaller, file-ordered edits. A later note-only patch also targeted a sentence inside a longer paragraph and failed before writing; the retry used the complete current line. Read exact anchors and inspect every target before retrying. Dependent checks stopped at each failure. Current successor evidence: `src/cli/server/agent-hook-command.ts` (search: `buildAgentHookDescriptor`) and `test/integration/hook-command-native-replay.test.ts` (search: `managed Node registered policy replay`).
 
 - **Recurrence 2026-10-17:** Audit correction: A combined comment/test correction assumed a numeric assertion occupied several lines. The formatted test kept one assertion on a single line, so patch admission failed. Target inspection found both files unchanged; smaller file-specific patches used the exact current lines. Dependent formatting and tests stopped at the failed patch. Evidence: `test/integration/hook-native-audit-direct.test.ts` (search: `PROVIDERS.length`) and `src/cli/audit/check-agent-deny-runtime.ts` (search: `Spawns one blocked request`).
 
@@ -88,7 +88,7 @@ last_reviewed: 2026-10-17
 ## Lesson: Configured hook replay does not prove managed registration consistency
 
 **Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 2 | **Latest occurrence:** 2026-10-12
+**Incident count:** 3 | **Latest occurrence:** 2026-10-23
 **Decision changed:** Read the canonical descriptor writer and generated contract before changing a managed command, then verify both execution and exact registration identity.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -100,3 +100,5 @@ last_reviewed: 2026-10-17
 **Recurrence 2026-10-12:** Claude's local Stop registration and canonical template still used the scanner's one-MiB default after Codex received four MiB. Three untracked JSON artifacts measured 2,885,754 to 2,944,548 bytes each, so every Claude Stop reported incomplete coverage. The first diagnostic ran only `node`, omitting its registered arguments; its zero exit was discarded. Complete argv replay reproduced all three gaps with exit two. Setting the per-file limit inside Claude's Node bootstrap, in both the descriptor writer and template, then regenerating the installer contract changed that same replay to exit zero with no coverage gaps. Four MiB provides bounded headroom over these files and matches Codex; it is not a model context budget or the smallest possible limit. Automatic Claude delivery remains unverified.
 
 **Evidence:** `src/cli/server/agent-hook-command.ts` (search: `buildAgentHookDescriptor`, `entryCarriesHandlerDescriptor`); `scripts/generate-managed-hook-desired-state.mjs` (search: `renderManagedHookContract`); `scripts/preflight-checks.sh` (search: `agent_config_output`); `workflow/hooks/agent-config/codex-hooks.json` and `workflow/hooks/agent-config/claude.json` (search: `Stop`); `.goat-flow/hooks/post-turn-safety.sh` (search: `MAX_FILE_BYTES`, `oversized untracked text not scanned`); `test/unit/agent-hook-command.test.ts` (search: `keeps the per-file scan limit in the managed argv identity`).
+
+**Recurrence 2026-10-23:** The native registration cutover passed focused replay, but the full fast run failed 122 tests. Several fixtures treated only the explicit candidate as Node while the default installed runtime was already Node, selecting Bash filenames and ineffective shell fault injectors. Keep runtime selection, emitted fixture language, saved descriptors and fault injection aligned. Preserve legacy fixtures for explicit reference runs. Evidence: `test/helpers/hook-entrypoint.ts` (search: `selectedHookPath`), `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `assertIncompleteOnBothScanners`) and `test/unit/hook-registrar.helpers.ts` (search: `GENERATED_AGENT_SURFACES`).

@@ -233,8 +233,8 @@ const LEGACY_SPAWN_TAIL_FRAGMENTS = [
 const STRUCTURED_IMPORT_TAIL_FRAGMENTS = [
   "import(require('node:url').pathToFileURL(bashLauncherPath).href).then((launcherModule)=>{",
   "/* Downstream code without the launcher API cannot be trusted to guard the user's command. */",
-  "if(typeof launcherModule.runHookWithBash!=='function')reportUnavailable('managed launcher API mismatch');",
-  "return launcherModule.runHookWithBash(hookScriptPath,responseMode,{root:projectRoot});",
+  "if(typeof launcherModule.runHookNative!=='function')reportUnavailable('managed launcher API mismatch');",
+  "return launcherModule.runHookNative(hookScriptPath,responseMode,{root:projectRoot});",
   "}).then((hookStatus)=>{",
   "/* A non-numeric result means the user's hook never produced a trustworthy decision. */",
   "if(!Number.isInteger(hookStatus))reportUnavailable('managed launcher returned no result');",
@@ -265,13 +265,9 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
  * Use for approved argv handlers to preserve root selection while loading the shipped launcher in-process.
  *
  * @param hookResponseMode - host response selected for this hook; empty uses fail-closed policy behavior
- * @param candidateTransport - test-only native transport; omitted retains the installed bootstrap
  * @returns structured bootstrap source; never empty because it becomes args[1] of the handler
  */
-function structuredHookLaunchBootstrap(
-  hookResponseMode: string,
-  candidateTransport?: "node",
-): string {
+function structuredHookLaunchBootstrap(hookResponseMode: string): string {
   const unavailableResponseProgram =
     unavailableHookResponseProgram(hookResponseMode);
   // Only the Gruff edit hook resolves its entry from the provider project (ADR-066); policy and Stop handlers keep the shared contract.
@@ -282,18 +278,11 @@ function structuredHookLaunchBootstrap(
       : hookResponseMode;
   const rootRule =
     responseKind === "gruff" ? "provider-project-first" : "shared";
-  // M21 owns production renames; disposable candidates retain the existing launcher operand slot.
-  const importTail =
-    candidateTransport === "node"
-      ? STRUCTURED_IMPORT_TAIL_FRAGMENTS.map((fragment) =>
-          fragment.replaceAll("runHookWithBash", "runHookNative"),
-        )
-      : STRUCTURED_IMPORT_TAIL_FRAGMENTS;
   const fragments = [
     ...bootstrapPreludeFragments(unavailableResponseProgram),
     ...STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS,
     ...rootDiscoveryFragments(rootRule),
-    ...importTail,
+    ...STRUCTURED_IMPORT_TAIL_FRAGMENTS,
   ];
   // A Claude startup refusal waits for bounded Stop input; return from the bootstrap instead of continuing root discovery.
   if (hookResponseMode === "post-turn") {
@@ -469,7 +458,6 @@ export { agentHookSpawnDescriptor } from "../hook-spawn-descriptor.js";
  * @param agentId - agent receiving the handler; empty is impossible after setup validation
  * @param hooksDirectory - project hook folder; empty would produce an invalid managed path
  * @param spec - hook behavior and script; missing metadata is rejected before config generation
- * @param candidateTransport - test-only native registration; omitted leaves installed descriptors unchanged
  * @returns complete provider handler descriptor; never empty because enabled hooks must be runnable
  * @throws when the selected provider has no hook config path
  */
@@ -477,18 +465,9 @@ export function buildAgentHookDescriptor(
   agentId: AgentId,
   hooksDirectory: string,
   spec: HookSpec,
-  candidateTransport?: "node",
 ): AgentHookHandlerDescriptor {
-  const hookScriptPath = commandPath(
-    hooksDirectory,
-    candidateTransport === "node"
-      ? spec.primaryScript.replace(/\.sh$/u, ".mjs")
-      : spec.primaryScript,
-  );
-  const bashLauncherPath = commandPath(
-    hooksDirectory,
-    candidateTransport === "node" ? "run-hook.mjs" : "run-with-bash.mjs",
-  );
+  const hookScriptPath = commandPath(hooksDirectory, spec.primaryScript);
+  const bashLauncherPath = commandPath(hooksDirectory, "run-hook.mjs");
   const hookResponseMode = hookLaunchMode(agentId, spec);
   const registrationPath = PROFILES[agentId].hookConfigFile;
   // A provider without a config surface cannot receive the handler the user enabled.
@@ -507,8 +486,7 @@ export function buildAgentHookDescriptor(
       command: "node",
       args: [
         "-e",
-        scanBudget +
-          structuredHookLaunchBootstrap(hookResponseMode, candidateTransport),
+        scanBudget + structuredHookLaunchBootstrap(hookResponseMode),
         hookScriptPath,
         hookResponseMode,
         rootEnvironmentName,
@@ -680,6 +658,15 @@ export function commandEntryReferencesSpec(
   const commands = entryCommandSearchText(entry);
   // Shared runtime files are dependencies, never ownership of a sibling registration.
   if (commandsReferenceScriptToken(commands, spec.primaryScript)) return true;
+  // A pre-cutover registration remains owned while its Node replacement is installed.
+  if (
+    spec.primaryScript.endsWith(".mjs") &&
+    commandsReferenceScriptToken(
+      commands,
+      spec.primaryScript.replace(/\.mjs$/u, ".sh"),
+    )
+  )
+    return true;
   // Historical deny script names remain managed so upgrades can remove them.
   if (
     spec.id === "deny-dangerous" &&
@@ -872,17 +859,12 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
   // Stop events are matcherless because they follow the completed user turn rather than a tool.
   if (spec.event === "Stop") return "";
   // Native PowerShell must reach the explicit unsupported-tool denial instead of bypassing both policies.
-  if (
-    agent.id === "claude" &&
-    ["deny-dangerous", "deny-git-mutations"].includes(spec.id)
-  ) {
-    return "Bash|PowerShell";
-  }
+  const policyMatcher = policyToolMatcher(agent.id, spec.id);
+  if (policyMatcher !== null) return policyMatcher;
   // Codex reports source edits through the canonical apply_patch tool observed in live delivery.
   if (agent.id === "codex" && spec.id === "gruff-code-quality") {
     return "^apply_patch$";
   }
-  // Other provider matchers retain their shared registry vocabulary.
   if (agent.id !== "antigravity") return spec.matcher;
   // Antigravity uses its file-edit tool names for the same user action.
   if (spec.id === "gruff-code-quality") {
@@ -899,10 +881,23 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
     return [
       "run_command",
       "view_file",
+      "grep_search",
       "write_to_file",
       "replace_file_content",
       "multi_replace_file_content",
     ].join("|");
   }
   return spec.matcher;
+}
+
+/** Include the reviewed command and content tools without widening discovery-only tool coverage. */
+function policyToolMatcher(agentId: AgentId, hookId: string): string | null {
+  if (
+    agentId === "claude" &&
+    ["deny-dangerous", "deny-git-mutations"].includes(hookId)
+  )
+    return "Bash|PowerShell|Monitor";
+  if (agentId === "copilot" && hookId === "deny-dangerous")
+    return "bash|powershell|view|edit|create|grep|rg|str_replace_editor";
+  return null;
 }

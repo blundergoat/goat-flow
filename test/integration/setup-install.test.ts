@@ -22,6 +22,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { load } from "js-yaml";
+import { migrateClaudePermissions } from "../../src/cli/installer/claude-permissions.js";
 
 import { setHookEnabled } from "../../src/cli/config/writer.js";
 import { emitCommitGuidanceInstallResult } from "../../src/cli/prompt/commit-guidance.js";
@@ -41,7 +42,6 @@ import {
 } from "./setup-install.helpers.js";
 import {
   readInvocations,
-  resolveTool,
   writeMockGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
 
@@ -135,49 +135,19 @@ function withGruffBinaryOverride(config: string, binaryPath: string): string {
   return next;
 }
 
-/**
- * Spawns one installer function's exact Node block, which reads and writes one disposable file without a full install.
- * Full installs elsewhere still prove setup calls these owners: `removes an existing agents allowlist from config.yaml`
- * here, and the Claude settings scopes in setup-install-permission-convergence.test.ts.
- *
- * @param ownerFunction - installer function whose single heredoc Node block performs the migration
- * @param nextFunction - installer function defined after the owner, which bounds the search
- * @param targetPath - disposable file the block rewrites in place
- * @returns the Node process result; stdout is the block's one-word status
- */
-function runInstallerNodeBlock(
-  ownerFunction: string,
-  nextFunction: string,
-  targetPath: string,
-) {
-  const source = readFileSync(
-    join(PROJECT_ROOT, "workflow/install-goat-flow.sh"),
-    "utf8",
+/** Run the actual permission transform without spawning an otherwise unrelated install. */
+function runClaudePermissionMigration(targetPath: string) {
+  const before = readFileSync(targetPath, "utf8");
+  const messages: string[] = [];
+  const after = migrateClaudePermissions(before, (message) =>
+    messages.push(message),
   );
-  const start = source.indexOf(`\n${ownerFunction}() {`);
-  const end = source.indexOf(`\n${nextFunction}() {`, start);
-  assert.ok(
-    start >= 0 && end > start,
-    `${ownerFunction} boundaries must exist`,
-  );
-  const blocks = [
-    ...source
-      .slice(start, end)
-      .matchAll(/<<'NODE'\r?\n([\s\S]*?)\r?\nNODE\r?\n/gu),
-  ];
-  assert.equal(
-    blocks.length,
-    1,
-    `${ownerFunction} must contain one Node block`,
-  );
-  const block = blocks[0]?.[1];
-  assert.ok(block, `the shipped ${ownerFunction} block must not be empty`);
-  return spawnSync(process.execPath, ["-", targetPath], {
-    cwd: PROJECT_ROOT,
-    encoding: "utf-8",
-    input: block,
-    timeout: process.platform === "win32" ? 120_000 : 30_000,
-  });
+  if (before !== after) writeFileSync(targetPath, after);
+  return {
+    status: 0,
+    stdout: after === before ? "unchanged\n" : "migrated\n",
+    stderr: messages.join("\n"),
+  };
 }
 
 describe("setup --apply installer", () => {
@@ -226,12 +196,12 @@ describe("setup --apply installer", () => {
       "utf-8",
     );
     assert.match(codexHooks, /PreToolUse/u);
-    assert.match(codexHooks, /deny-dangerous\.sh/u);
+    assert.match(codexHooks, /deny-dangerous\.mjs/u);
     assert.doesNotMatch(codexHooks, /PostToolUse/u);
     // Fresh Codex users receive the live-proven Stop feedback path without enabling Gruff.
     assert.match(codexHooks, /"Stop"/u);
-    assert.doesNotMatch(codexHooks, /gruff-code-quality\.sh/u);
-    assert.match(codexHooks, /post-turn-safety\.sh/u);
+    assert.doesNotMatch(codexHooks, /gruff-code-quality\.mjs/u);
+    assert.match(codexHooks, /post-turn-safety\.mjs/u);
     assert.match(codexHooks, /"timeout": 90/u);
     assert.match(
       codexHooks,
@@ -332,10 +302,10 @@ describe("setup --apply installer", () => {
         );
         const payloadHandle = openSync(payloadPath, "r");
         try {
-          // Argv contains only the test runner's resolved Bash and the hook installed below this disposable fixture root.
+          // Replay the installed Node hook against the disposable project and its saved analyzer override.
           return spawnSync(
-            resolveTool("bash"),
-            [join(root, ".goat-flow", "hooks", "gruff-code-quality.sh")],
+            process.execPath,
+            [join(root, ".goat-flow", "hooks", "gruff-code-quality.mjs")],
             {
               cwd: root,
               encoding: "utf-8",
@@ -453,89 +423,26 @@ describe("setup --apply installer", () => {
       "utf-8",
     );
     assert.match(hooksJson, /deny-dangerous/u);
-    assert.doesNotMatch(hooksJson, /post-turn-safety\.sh/u);
+    assert.doesNotMatch(hooksJson, /post-turn-safety\.mjs/u);
     assert.doesNotMatch(hooksJson, /plan-checkbox-guard\.sh/u);
     assert.doesNotMatch(hooksJson, /"Stop"/u);
   });
 
-  it("removes an existing agents allowlist from config.yaml", () => {
+  it("refuses pre-1.16 upgrades with an intermediate-release instruction and unchanged config", () => {
     const root = makeTempProject();
     const configDir = join(root, ".goat-flow");
     mkdirSync(configDir, { recursive: true });
-    writeFileSync(
-      join(configDir, "config.yaml"),
-      'version: "1.6.0"\n\nagents:\n  - claude\n\nskills:\n  install: all\n\ncustom_key: preserve_me\n',
-    );
-
+    const original =
+      'version: "1.6.0"\n\nagents:\n  - claude\n\nskills:\n  install: all\n';
+    writeFileSync(join(configDir, "config.yaml"), original);
     const result = runInstaller(root, "--agent", "codex");
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
-    assert.doesNotMatch(config, /^agents:/m);
-    assert.match(config, /custom_key: preserve_me/);
-  });
-
-  it("removes multi-agent allowlists without touching other config", () => {
-    const root = makeTempProject();
-    const configDir = join(root, ".goat-flow");
-    mkdirSync(configDir, { recursive: true });
-    writeFileSync(
-      join(configDir, "config.yaml"),
-      'version: "1.6.0"\n\nagents:\n  - claude\n  - codex\n\nskills:\n  install: all\n',
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Install goat-flow 1\.18\.0 first/u);
+    assert.equal(
+      readFileSync(join(configDir, "config.yaml"), "utf8"),
+      original,
     );
-
-    const result = runInstallerNodeBlock(
-      "remove_config_agents_entry",
-      "migrate_config_tasks_entry",
-      join(configDir, "config.yaml"),
-    );
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
-    assert.doesNotMatch(config, /^agents:/m);
-    assert.match(config, /skills:\n  install: all\n/);
-  });
-
-  it("keeps agents absent when existing config.yaml has none", () => {
-    const root = makeTempProject();
-    const configDir = join(root, ".goat-flow");
-    mkdirSync(configDir, { recursive: true });
-    writeFileSync(
-      join(configDir, "config.yaml"),
-      'version: "1.6.0"\n\nskills:\n  install: all\n',
-    );
-
-    const result = runInstallerNodeBlock(
-      "remove_config_agents_entry",
-      "migrate_config_tasks_entry",
-      join(configDir, "config.yaml"),
-    );
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
-    assert.doesNotMatch(config, /^agents:/m);
-    assert.match(config, /skills:\n  install: all\n/);
-  });
-
-  it("removes agents null from config.yaml", () => {
-    const root = makeTempProject();
-    const configDir = join(root, ".goat-flow");
-    mkdirSync(configDir, { recursive: true });
-    writeFileSync(
-      join(configDir, "config.yaml"),
-      'version: "1.6.0"\n\nagents: null\n\nskills:\n  install: all\n',
-    );
-
-    const result = runInstallerNodeBlock(
-      "remove_config_agents_entry",
-      "migrate_config_tasks_entry",
-      join(configDir, "config.yaml"),
-    );
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    const config = readFileSync(join(configDir, "config.yaml"), "utf-8");
-    assert.doesNotMatch(config, /agents: null/);
-    assert.match(config, /skills:\n  install: all\n/);
+    assert.equal(existsSync(join(root, ".codex")), false);
   });
 
   it("does not duplicate an existing node_modules gitignore entry", () => {
@@ -910,9 +817,7 @@ describe("setup --apply permission upgrade migrations", () => {
       ) + "\n",
     );
 
-    const result = runInstallerNodeBlock(
-      "migrate_claude_permission_deny",
-      "validate_codex_settings_after_install",
+    const result = runClaudePermissionMigration(
       join(root, ".claude", "settings.json"),
     );
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -1007,9 +912,7 @@ describe("setup --apply permission upgrade migrations", () => {
       ) + "\n",
     );
 
-    const result = runInstallerNodeBlock(
-      "migrate_claude_permission_deny",
-      "validate_codex_settings_after_install",
+    const result = runClaudePermissionMigration(
       join(root, ".claude", "settings.json"),
     );
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -1055,9 +958,7 @@ describe("setup --apply permission upgrade migrations", () => {
     );
 
     // Idempotent: a second migration run finds nothing left to change.
-    const second = runInstallerNodeBlock(
-      "migrate_claude_permission_deny",
-      "validate_codex_settings_after_install",
+    const second = runClaudePermissionMigration(
       join(root, ".claude", "settings.json"),
     );
     assert.equal(second.status, 0, second.stderr || second.stdout);

@@ -1,0 +1,332 @@
+/** Resolve approved analyzer locations and supervise native processes without a shell fallback. */
+import { spawn } from "node:child_process";
+import {
+  accessSync,
+  closeSync,
+  constants,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
+import { delimiter, dirname, extname, join, resolve } from "node:path";
+import { createRequire } from "node:module";
+import { captureHookProcessUntilDeadline } from "../hook-supervisor.mjs";
+import { beneath, object, ownerSettings } from "./scope.mjs";
+
+export interface AnalyzerCommand {
+  executable: string;
+  args: string[];
+  path: string;
+}
+export interface AnalyzerDiscovery {
+  command: AnalyzerCommand | null;
+  reason: string;
+  outside: boolean;
+}
+export interface AnalyzerReply {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  invalid: boolean;
+}
+export interface Capabilities {
+  version: string;
+  unsupported: string;
+}
+
+function executableFile(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK);
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** Inspect only the interpreter line; native analyzer binaries may be large. */
+function interpreterPrefix(path: string): string {
+  const descriptor = openSync(path, "r");
+  try {
+    const bytes = Buffer.alloc(512);
+    const length = readSync(descriptor, bytes, 0, bytes.length, 0);
+    return bytes.subarray(0, length).toString("utf8");
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+/** Gruff's npm package publishes a shell shim around its TypeScript CLI; call that CLI directly. */
+function packagedGruffCommand(
+  entry: string,
+  path: string,
+): AnalyzerCommand | null {
+  const packageRoot = dirname(dirname(entry));
+  const manifest = join(packageRoot, "package.json");
+  if (!existsSync(manifest)) return null;
+  const metadata = object(JSON.parse(readFileSync(manifest, "utf8")));
+  if (metadata.name !== "@blundergoat/gruff-ts") return null;
+  const declared = object(metadata.bin)["gruff-ts"];
+  if (
+    typeof declared !== "string" ||
+    realpathSync(resolve(packageRoot, declared)) !== realpathSync(entry)
+  )
+    return null;
+  const cli = join(packageRoot, "src/cli.ts");
+  if (!existsSync(cli) || !statSync(cli).isFile()) return null;
+  const loader = createRequire(manifest).resolve("tsx");
+  return {
+    executable: process.execPath,
+    args: ["--import", loader, cli],
+    path,
+  };
+}
+
+/** Recognize the generated npm command form without evaluating batch source. */
+function npmCommand(path: string): AnalyzerCommand | null {
+  const directory = dirname(path);
+  const localBin =
+    directory.replaceAll("\\", "/").split("/").slice(-2).join("/") ===
+    "node_modules/.bin";
+  const packages = localBin
+    ? dirname(directory)
+    : join(directory, "node_modules");
+  const script = readFileSync(path, "utf8");
+  if (!script.includes("%*")) return null;
+  const matches = [...script.matchAll(/"%dp0%[\\/]([^"\r\n]+)"/giu)];
+  for (const match of matches) {
+    const entry = resolve(
+      dirname(path),
+      (match[1] ?? "").replaceAll("\\", "/"),
+    );
+    if (!beneath(entry, packages) || !existsSync(entry)) continue;
+    const packaged = packagedGruffCommand(entry, path);
+    if (packaged) return packaged;
+    if (
+      script.includes("node.exe") &&
+      [".js", ".mjs", ".cjs"].includes(extname(entry))
+    )
+      return { executable: process.execPath, args: [entry], path };
+  }
+  return null;
+}
+
+function nodeProgram(path: string): boolean {
+  return (
+    [".js", ".mjs", ".cjs"].includes(extname(path)) ||
+    /^#![^\r\n]*\bnode(?:[ \t]|$)/u.test(
+      interpreterPrefix(path).split("\n")[0] ?? "",
+    )
+  );
+}
+
+/** Standard npm shims identify one script; other Windows batch wrappers stay unsupported. */
+export function analyzerCommand(
+  path: string,
+  platform: NodeJS.Platform = process.platform,
+): AnalyzerCommand | null {
+  try {
+    const physical = realpathSync(path);
+    const extension = extname(path).toLowerCase();
+    if (platform === "win32" && [".cmd", ".bat", ".ps1"].includes(extension))
+      return npmCommand(path);
+    const packaged = packagedGruffCommand(physical, path);
+    if (packaged) return packaged;
+    if ([".exe", ".com"].includes(extension))
+      return { executable: physical, args: [], path };
+    if (nodeProgram(physical))
+      return { executable: process.execPath, args: [physical], path };
+    return platform === "win32"
+      ? null
+      : { executable: physical, args: [], path };
+  } catch {
+    return null;
+  }
+}
+
+function configPath(owner: string, value: string): string | null {
+  const path = value.replaceAll("\\", "/").replace(/^\.\//u, "");
+  if (
+    !path ||
+    /^(?:\/|~|[A-Za-z]:)/u.test(path) ||
+    path.split("/").some((part) => part === "." || part === "..")
+  )
+    return null;
+  return resolve(owner, path);
+}
+
+function discoveryAt(path: string, outside = false): AnalyzerDiscovery {
+  if (!executableFile(path))
+    return { command: null, reason: "missing", outside };
+  const command = analyzerCommand(path);
+  return { command, reason: command ? "" : "unsupported-wrapper", outside };
+}
+
+function configuredAnalyzer(
+  owner: string,
+  configured: string,
+): AnalyzerDiscovery {
+  const path = configPath(owner, configured);
+  if (!path)
+    return { command: null, reason: "invalid-config-path", outside: false };
+  if (existsSync(path)) {
+    try {
+      if (!beneath(realpathSync(path), realpathSync(owner)))
+        return { command: null, reason: "outside", outside: true };
+    } catch {
+      return { command: null, reason: "missing", outside: false };
+    }
+  }
+  return discoveryAt(path);
+}
+
+function userHome(): string {
+  return process.env.HOME || process.env.USERPROFILE || "";
+}
+
+/** An explicit but unusable override ends discovery; it never silently selects another binary. */
+export function discoverAnalyzer(
+  root: string,
+  owner: string,
+  target: string,
+  binary: string,
+): AnalyzerDiscovery {
+  const language = binary.slice("gruff-".length);
+  const override = process.env[`GRUFF_${language.toUpperCase()}_BIN`];
+  if (override) return discoveryAt(override);
+  const configured = ownerSettings(owner).binaries[language];
+  if (typeof configured === "string" && configured)
+    return configuredAnalyzer(owner, configured);
+  const suffixes =
+    process.platform === "win32" ? ["", ".exe", ".cmd", ".bat", ".com"] : [""];
+  const directories = [
+    ...[target, owner, root].flatMap((base) =>
+      ["vendor/bin", "node_modules/.bin", "bin", ".venv/bin"].map((part) =>
+        join(base, part),
+      ),
+    ),
+    join(userHome(), ".local/bin"),
+    ...(process.env.PATH ?? "").split(delimiter).filter(Boolean),
+  ];
+  for (const directory of [...new Set(directories)]) {
+    for (const suffix of suffixes) {
+      const path = join(directory, binary + suffix);
+      if (executableFile(path)) return discoveryAt(path);
+    }
+  }
+  return { command: null, reason: "missing", outside: false };
+}
+
+export function timeoutSeconds(binary: string): number {
+  const value =
+    process.env[`GRUFF_${binary.slice(6).toUpperCase()}_TIMEOUT_SECONDS`] ||
+    process.env.GRUFF_CODE_QUALITY_TIMEOUT_SECONDS ||
+    "60";
+  return /^[0-9]+$/u.test(value) && Number(value) >= 1 ? Number(value) : 60;
+}
+
+/** Capture output and stop the analyzer's owned process tree at the feedback deadline. */
+export async function invokeAnalyzer(
+  command: AnalyzerCommand,
+  args: string[],
+  root: string,
+  binary: string,
+): Promise<AnalyzerReply> {
+  const environment = {
+    ...process.env,
+    GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+  };
+  const child = spawn(command.executable, [...command.args, ...args], {
+    cwd: root,
+    env: environment,
+    detached: process.platform !== "win32",
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const result = await captureHookProcessUntilDeadline(
+    child,
+    environment,
+    timeoutSeconds(binary) * 1000,
+    process.platform,
+    true,
+    16_777_216, // Analyzer JSON includes full findings; the provider envelope is bounded separately.
+  );
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.hasExceededOutputLimit
+      ? "Analyzer output exceeded its capture limit"
+      : result.stderr || result.launchError?.message || "",
+    timedOut: result.timedOut,
+    invalid: result.hasExceededOutputLimit || result.hasInvalidUtf8Output,
+  };
+}
+
+export function parseReply(text: string): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(text);
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? object(value)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function supportsContract(
+  version: string,
+  parsed: Record<string, unknown>,
+): boolean {
+  return (
+    version === "gruff.hook.v2" ||
+    (version === "gruff.hook.v1" &&
+      object(parsed.supports).changedRanges === true)
+  );
+}
+
+function parseCapabilities(
+  parsed: Record<string, unknown> | null,
+): Capabilities {
+  if (!parsed) return { version: "", unsupported: "" };
+  const version =
+    typeof parsed.contractVersion === "string" ? parsed.contractVersion : "";
+  const flags = parsed.flags;
+  const recognized = supportsContract(version, parsed);
+  if (
+    flags !== null &&
+    typeof flags === "object" &&
+    !Array.isArray(flags) &&
+    recognized
+  )
+    return { version, unsupported: "" };
+  return {
+    version: "",
+    unsupported:
+      version.startsWith("gruff.hook.") && version !== "gruff.hook.v1"
+        ? version
+        : "",
+  };
+}
+
+/** Capability results are scoped to this invocation and exact analyzer path. */
+export async function capabilities(
+  command: AnalyzerCommand,
+  root: string,
+  binary: string,
+  cache: Map<string, Capabilities>,
+): Promise<Capabilities> {
+  const known = cache.get(command.path);
+  if (known) return known;
+  const reply = await invokeAnalyzer(
+    command,
+    ["hook", "--capabilities", "--format", "json"],
+    root,
+    binary,
+  );
+  const value = parseCapabilities(parseReply(reply.stdout));
+  cache.set(command.path, value);
+  return value;
+}

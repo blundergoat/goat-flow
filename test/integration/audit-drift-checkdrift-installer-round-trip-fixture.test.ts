@@ -42,6 +42,8 @@ const REQUIRED_EFFECTIVE_HOOK_PROOFS = [
   { agentId: "claude", scenario: "post-turn-hook" },
 ] as const;
 
+import { spawnSync } from "node:child_process";
+
 // Writes and copies a small temporary checkout, then removes both trees after checking the exclusions.
 it("copies maintained inputs without local plan or scratchpad contents", () => {
   const source = mkdtempSync(join(tmpdir(), "goat-flow-roundtrip-source-"));
@@ -69,6 +71,13 @@ it("copies maintained inputs without local plan or scratchpad contents", () => {
       writeFileSync(join(source, path), "local working content");
     }
     mkdirSync(join(source, "node_modules"));
+    assert.equal(spawnSync("git", ["init", "-q"], { cwd: source }).status, 0);
+    assert.equal(
+      spawnSync("git", ["add", "-f", "--", ...Object.keys(retained)], {
+        cwd: source,
+      }).status,
+      0,
+    );
     const copiedRoot = setupInstallRoundTripFixture(source);
     fixture = copiedRoot;
     assert.deepEqual(

@@ -264,21 +264,19 @@ function rejectedProbeExecution(): HookProbeExecution {
 }
 
 /**
- * Spawns one inert classifier operand through installed Bash or an explicit native candidate, without shell interpolation.
+ * Spawns one inert classifier operand through the installed native hook, without shell interpolation.
  * Exported so containment tests can prove redirected script paths never run; it reports containment and startup failures as a rejected result.
  *
  * @param projectPath - selected project checkout; empty or unresolved paths return a rejected probe result
  * @param scriptPath - managed hook path inside the checkout; missing or escaped paths are never executed
  *
  * @param scenario - fixed classifier operand and expected outcome; absent input is not a valid probe
- * @param candidateTransport - test-only native execution; omitted keeps installed Bash, while native requires a contained .mjs file
  * @returns bounded command evidence; a rejected result means containment or process startup failed safely
  */
 export function executeManagedHookProbe(
   projectPath: string,
   scriptPath: string,
   scenario: HookProbeScenario,
-  candidateTransport?: "node",
 ): HookProbeExecution {
   const resolvedScriptPath = resolve(projectPath, scriptPath);
   // A registered hook must never execute code outside the user's selected checkout.
@@ -296,22 +294,20 @@ export function executeManagedHookProbe(
   if (!isInsideProject(physicalProjectPath, physicalScriptPath)) {
     return rejectedProbeExecution();
   }
-  // Native proof must never pass by silently running an installed Bash script.
-  if (candidateTransport === "node" && !physicalScriptPath.endsWith(".mjs")) {
+  // A legacy shell script cannot supply evidence for the installed native runtime.
+  if (!physicalScriptPath.endsWith(".mjs")) {
     return rejectedProbeExecution();
   }
   const startedAt = performance.now();
   const execution = spawnSync(
-    candidateTransport === "node" ? process.execPath : "bash",
-    candidateTransport === "node"
-      ? [
-          physicalScriptPath,
-          "--root",
-          physicalProjectPath,
-          "--check",
-          scenario.command,
-        ]
-      : [physicalScriptPath, "--check", scenario.command],
+    process.execPath,
+    [
+      physicalScriptPath,
+      "--root",
+      physicalProjectPath,
+      "--check",
+      scenario.command,
+    ],
     {
       cwd: projectPath,
       encoding: "utf-8",

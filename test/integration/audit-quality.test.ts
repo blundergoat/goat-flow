@@ -447,7 +447,7 @@ describe("deny-hook-registered harness check", () => {
             ...stubAgentFacts().hooks,
             denyExists: true,
             denyIsRegistered: true,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
           },
         }),
       ],
@@ -475,7 +475,7 @@ describe("deny-hook-registered harness check", () => {
     const finding = result.findings.find((f) => f.includes("must match"));
     assert.ok(finding, "should report path mismatch");
     assert.ok(finding.includes(".claude/hooks/deny-dangerous.sh"));
-    assert.ok(finding.includes(".goat-flow/hooks/deny-dangerous.sh"));
+    assert.ok(finding.includes(".goat-flow/hooks/deny-dangerous.mjs"));
   });
 });
 

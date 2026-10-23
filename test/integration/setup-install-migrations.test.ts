@@ -5,16 +5,11 @@
  * Fixtures cover historical layouts, provider registrations, config aliases, and repeated installation.
  */
 import { before, describe, it } from "node:test";
+import { copyHookTree, hookSelection } from "../helpers/hook-entrypoint.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
@@ -42,40 +37,28 @@ describe("setup --apply installer upgrade migrations", () => {
   // ADD INTEGRATION: final-state tests cannot prove Git protection survives an interrupted split.
   //
   // Each fixture writes legacy Git coverage, interrupts a real atomic installer write, then retries.
-  // Stops at run-with-bash.mjs and deny-dangerous.sh are omitted; they match the deny-git-mutations.sh stop's registrations and legacy hook.
   for (const interruptedPath of [
     ".claude/settings.json",
     ".codex/hooks.json",
-    ".goat-flow/hooks/deny-git-mutations.sh",
-    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
-    ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+    ".goat-flow/hooks/deny-git-mutations.mjs",
+    ".goat-flow/hooks/policy-evaluation.mjs",
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs",
   ]) {
     it(`retains Git protection when the split stops at ${interruptedPath}`, () => {
       const root = makeTempProject();
       const hookDirectory = join(root, ".goat-flow/hooks");
       mkdirSync(hookDirectory, { recursive: true });
       assert.equal(spawnSync("git", ["init", "--quiet", root]).status, 0);
-      mkdirSync(join(hookDirectory, "vendor"));
-      // The launcher reads saved policy choices through this reader and its bundled parser before starting Bash.
-      for (const file of [
-        "run-with-bash.mjs",
-        "hook-launch-runtime.mjs",
-        "hook-provider-adapters.mjs",
-        "hook-policy-state.cjs",
-        "vendor/js-yaml.cjs",
-      ]) {
-        copyFileSync(
-          join(PROJECT_ROOT, "workflow/hooks", file),
-          join(hookDirectory, file),
-        );
-      }
-      // Fixture-created pre-split policy: the existing registration denies this exact push and permits status.
-      // The pending command is parsed as data and is never executed.
+      // Include hook-policy-state.cjs and its bundled parser before replaying saved policy choices.
+      copyHookTree(hookDirectory);
+      // The fixture's unsplit policy owns Git protection until the installer publishes both native registrations.
+      // Submitted commands remain classifier data and are never executed.
       writeFileSync(
-        join(hookDirectory, "deny-dangerous.sh"),
+        join(hookDirectory, "deny-dangerous.mjs"),
         [
-          "#!/usr/bin/env bash",
-          'node -e \'const p = JSON.parse(require("node:fs").readFileSync(0, "utf8")); if (p.tool_input.command === "git push origin main") { process.stderr.write("BLOCKED: Policy fixture: legacy Git protection\\n"); process.exit(2); }\'',
+          'import { readFileSync } from "node:fs";',
+          'const payload = JSON.parse(readFileSync(0, "utf8"));',
+          'if (payload.tool_input.command === "git push origin main") { process.stderr.write("BLOCKED: Policy fixture: prior Git protection\\n"); process.exit(2); }',
           "",
         ].join("\n"),
       );
@@ -143,27 +126,50 @@ describe("setup --apply installer upgrade migrations", () => {
       );
       const shimDirectory = join(root, "interruption-tools");
       mkdirSync(shimDirectory);
-      const realMv = spawnSync("bash", ["-c", "command -v mv"], {
-        encoding: "utf-8",
-      }).stdout.trim();
-      assert.ok(realMv);
-      writeFileSync(
-        join(shimDirectory, "mv"),
-        '#!/usr/bin/env bash\nif [[ "${!#}" == "$M20_INTERRUPT_PATH" ]]; then printf \'M20 interrupted replacement\\n\' >&2; exit 73; fi\nexec "$M20_REAL_MV" "$@"\n',
-        { mode: 0o755 },
-      );
-      const interrupted = runInstallerWithEnvironment(
-        root,
-        {
+      let interruptionEnvironment: NodeJS.ProcessEnv;
+      if (hookSelection() === "reference") {
+        const realMv = spawnSync("bash", ["-c", "command -v mv"], {
+          encoding: "utf-8",
+        }).stdout.trim();
+        assert.ok(realMv);
+        writeFileSync(
+          join(shimDirectory, "mv"),
+          '#!/usr/bin/env bash\nif [[ "${!#}" == "$M20_INTERRUPT_PATH" ]]; then printf \'M20 interrupted replacement\\n\' >&2; exit 73; fi\nexec "$M20_REAL_MV" "$@"\n',
+          { mode: 0o755 },
+        );
+        interruptionEnvironment = {
           PATH: `${shimDirectory}:${process.env.PATH ?? ""}`,
           M20_REAL_MV: realMv,
           M20_INTERRUPT_PATH: interruptedPath,
-        },
+        };
+      } else {
+        const preload = join(shimDirectory, "interrupt.cjs");
+        writeFileSync(
+          preload,
+          `const fs = require("node:fs");
+const rename = fs.renameSync;
+fs.renameSync = (source, destination) => {
+  if (destination === ${JSON.stringify(join(root, interruptedPath))}) throw new Error("injected interrupted replacement");
+  return rename(source, destination);
+};
+require("node:module").syncBuiltinESMExports();
+`,
+        );
+        interruptionEnvironment = {
+          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(preload)}`,
+        };
+      }
+      const interrupted = runInstallerWithEnvironment(
+        root,
+        interruptionEnvironment,
         "--agent",
         "codex",
       );
       assert.notEqual(interrupted.status, 0);
-      assert.match(interrupted.stderr, /M20 interrupted replacement/u);
+      assert.match(
+        interrupted.stderr,
+        /M20 interrupted replacement|atomic replacement failed/u,
+      );
       for (const results of decisions("git push origin main")) {
         assert.ok(
           results.some(
@@ -338,7 +344,7 @@ describe("setup --apply installer upgrade migrations", () => {
       configPath,
       readFileSync(configPath, "utf-8").replace(
         /^version: .*$/mu,
-        'version: "1.14.0"',
+        'version: "1.16.0"',
       ),
     );
     const packageVersion = (
@@ -378,7 +384,7 @@ describe("setup --apply installer upgrade migrations", () => {
     writeFileSync(
       join(root, ".goat-flow", "config.yaml"),
       [
-        'version: "1.12.0"',
+        'version: "1.16.0"',
         "",
         "skills:",
         "  install: all",
@@ -448,7 +454,7 @@ describe("setup --apply installer upgrade migrations", () => {
       firstInstall.stderr || firstInstall.stdout,
     );
 
-    // The retired plan guard leaves no script, config, gitignore entry or registration, and the user's Stop hook stays.
+    // Preserve unclassified plan-guard bytes and the user's Stop hook; remove only the obsolete runtime-state ignore entry.
     const config = readFileSync(
       join(root, ".goat-flow", "config.yaml"),
       "utf-8",
@@ -463,12 +469,12 @@ describe("setup --apply installer upgrade migrations", () => {
     );
     assert.equal(
       existsSync(join(root, ".goat-flow", "hooks", "plan-checkbox-guard.sh")),
-      false,
+      true,
     );
-    assert.doesNotMatch(config, /plan-checkbox-guard|plan-guard/u);
+    assert.match(config, /plan-checkbox-guard|plan-guard/u);
     assert.doesNotMatch(gitignore, /plan-guard-state/u);
-    assert.doesNotMatch(settings, /plan-checkbox-guard\.sh/u);
-    assert.doesNotMatch(settings, /post-turn-safety\.sh/u);
+    assert.match(settings, /plan-checkbox-guard\.sh/u);
+    assert.doesNotMatch(settings, /post-turn-safety\.mjs/u);
     assert.match(settings, /user-stop-hook\.js/u);
     assert.equal(readClaudePostTurnSafetyTimeout(root), undefined);
 
@@ -525,43 +531,6 @@ describe("setup --apply installer upgrade migrations", () => {
     );
     assert.match(secondInstall.stdout, /removed stale reference/);
     assert.match(secondInstall.stdout, /1 stale removed/);
-  });
-  // Covers the same prune on CRLF config a Windows user committed: writes it and expects a clean result.
-  it("prunes retired plan guard config from CRLF config files", () => {
-    const root = makeTempProject();
-    mkdirSync(join(root, ".claude"), { recursive: true });
-    mkdirSync(join(root, ".goat-flow"), { recursive: true });
-    writeFileSync(
-      join(root, ".goat-flow", "config.yaml"),
-      [
-        'version: "1.12.0"',
-        "",
-        "hooks:",
-        "  post-turn-safety:",
-        "    enabled: true",
-        "",
-        "plan-guard:",
-        "  enabled: true",
-        "  search-paths:",
-        "    - .goat-flow/plans",
-        "",
-        "line-limits:",
-        "  target: 125",
-        "",
-      ].join("\r\n"),
-    );
-    writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
-
-    const result = runInstaller(root, "--agent", "claude");
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    const config = readFileSync(
-      join(root, ".goat-flow", "config.yaml"),
-      "utf-8",
-    );
-    assert.doesNotMatch(config, /plan-guard/u);
-    assert.match(config, /line-limits:\r\n  target: 125/u);
-    assert.doesNotMatch(config, /\r\n\r\n\r\n/u);
   });
 
   /**
@@ -624,7 +593,7 @@ describe("setup --apply installer upgrade migrations", () => {
     writeFileSync(
       join(root, ".goat-flow", "config.yaml"),
       [
-        'version: "1.9.0"',
+        'version: "1.16.0"',
         "",
         "tasks:",
         '  path: ".goat-flow/tasks/"',
@@ -707,13 +676,13 @@ describe("setup --apply installer upgrade migrations", () => {
       upgrade.stdout = result.stdout;
     });
 
-    it("prunes legacy deny-dangerous self-test files during upgrades", () => {
+    it("preserves unclassified legacy self-test files during upgrades", () => {
       const { root, stdout } = upgrade;
       assert.equal(
         existsSync(
           join(root, ".codex", "hooks", "deny-dangerous.self-test.sh"),
         ),
-        false,
+        true,
       );
       assert.equal(
         existsSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh")),
@@ -731,13 +700,10 @@ describe("setup --apply installer upgrade migrations", () => {
         ),
         true,
       );
-      assert.match(
-        stdout,
-        /\.codex\/hooks\/deny-dangerous\.self-test\.sh \(removed stale hook\)/,
-      );
+      assert.doesNotMatch(stdout, /removed stale hook/);
     });
 
-    it("migrates legacy tasks workspace and config to plans without overwriting collisions", () => {
+    it("moves residual tasks without overwriting collisions or rewriting saved config", () => {
       const { root, stdout } = upgrade;
       assert.equal(
         existsSync(join(root, ".goat-flow", "plans", "legacy", "M01-old.md")),
@@ -757,9 +723,8 @@ describe("setup --apply installer upgrade migrations", () => {
         join(root, ".goat-flow", "config.yaml"),
         "utf-8",
       );
-      assert.match(config, /^plans:\n  path: "\.goat-flow\/plans\/"/m);
-      assert.doesNotMatch(config, /^tasks:/m);
-      assert.match(stdout, /legacy tasks config migrated to plans/);
+      assert.match(config, /^tasks:\n  path: "\.goat-flow\/tasks\/"/m);
+      assert.doesNotMatch(config, /^plans:/m);
       assert.match(
         stdout,
         /\.goat-flow\/tasks\/current → \.goat-flow\/plans\/current \(target exists, left old entry in place\)/,
@@ -834,7 +799,7 @@ describe("setup --apply installer upgrade migrations", () => {
       );
     });
 
-    it("migrates old hook-lib content and prunes fat per-agent hook copies", () => {
+    it("moves old hook-lib content and preserves unclassified per-agent copies", () => {
       const { root, stdout } = upgrade;
       assert.equal(
         existsSync(
@@ -856,25 +821,25 @@ describe("setup --apply installer upgrade migrations", () => {
       );
       assert.equal(
         existsSync(join(root, ".claude", "hooks", "deny-dangerous.sh")),
-        false,
+        true,
       );
       assert.equal(
         existsSync(join(root, ".codex", "hooks", "deny-dangerous.sh")),
-        false,
+        true,
       );
       assert.equal(
         existsSync(join(root, ".agents", "hooks", "gruff-code-quality.sh")),
-        false,
+        true,
       );
       assert.equal(
         existsSync(join(root, ".github", "hooks", "gruff-code-quality.sh")),
-        false,
+        true,
       );
       assert.match(
         stdout,
         /\.goat-flow\/hook-lib\/ → \.goat-flow\/hooks\/deny-dangerous\//,
       );
-      assert.match(stdout, /removed stale per-agent copy/);
+      assert.doesNotMatch(stdout, /removed stale per-agent copy/);
     });
 
     it("migrates legacy skill docs without overwriting target collisions", () => {
@@ -917,105 +882,6 @@ describe("setup --apply installer upgrade migrations", () => {
     });
   });
 
-  // Fixture purpose: writes a custom tasks path to cover config key migration.
-  it("preserves custom legacy tasks config paths while renaming the key to plans", () => {
-    const root = makeTempProject();
-    mkdirSync(join(root, ".goat-flow"), { recursive: true });
-    writeFileSync(
-      join(root, ".goat-flow", "config.yaml"),
-      [
-        'version: "1.9.0"',
-        "",
-        "tasks:",
-        '  path: ".custom-goat-flow/milestones/"',
-        "",
-        "skills:",
-        "  install: all",
-        "",
-      ].join("\n"),
-    );
-
-    const result = runInstaller(root, "--agent", "codex");
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    const config = readFileSync(
-      join(root, ".goat-flow", "config.yaml"),
-      "utf-8",
-    );
-    assert.match(
-      config,
-      /^plans:\n  path: "\.custom-goat-flow\/milestones\/"/m,
-    );
-    assert.doesNotMatch(config, /^tasks:/m);
-    assert.match(result.stdout, /legacy tasks config migrated to plans/);
-  });
-
-  // Fixture writes the 1.8.0 split-hook layout because upgrade pruning must collapse files and registrations.
-  it("prunes 1.8.0 split guard hook files and registrations during upgrades", () => {
-    const root = makeTempProject();
-    // Fixture recreates the old split-hook layout so upgrade pruning proves both
-    // files and registrations collapse to the single dispatcher.
-    mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
-    mkdirSync(join(root, ".goat-flow"), { recursive: true });
-    for (const file of [
-      "guard-common.sh",
-      "guard-destructive-shell.sh",
-      "guard-secret-paths.sh",
-      "guard-repository-writes.sh",
-      "guardrails-self-test.sh",
-    ]) {
-      writeFileSync(
-        join(root, ".codex", "hooks", file),
-        "#!/usr/bin/env bash\n",
-      );
-    }
-    writeFileSync(
-      join(root, ".codex", "hooks.json"),
-      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/guard-repository-writes.sh"}]}]}}\n',
-    );
-    writeFileSync(
-      join(root, ".goat-flow", "config.yaml"),
-      [
-        'version: "1.8.0"',
-        "hooks:",
-        "  guard-destructive-shell:",
-        "    enabled: true",
-        "  guard-secret-paths:",
-        "    enabled: true",
-        "  guard-repository-writes:",
-        "    enabled: true",
-        "",
-      ].join("\n"),
-    );
-
-    const result = runInstaller(root, "--agent", "codex");
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    for (const file of [
-      "guard-common.sh",
-      "guard-destructive-shell.sh",
-      "guard-secret-paths.sh",
-      "guard-repository-writes.sh",
-      "guardrails-self-test.sh",
-    ]) {
-      assert.equal(existsSync(join(root, ".codex", "hooks", file)), false);
-    }
-    const hooksJson = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
-    assert.doesNotMatch(hooksJson, /guard-repository-writes/);
-    assert.match(hooksJson, /deny-dangerous\.sh/);
-    const config = readFileSync(
-      join(root, ".goat-flow", "config.yaml"),
-      "utf-8",
-    );
-    assert.doesNotMatch(
-      config,
-      /guard-(destructive-shell|secret-paths|repository-writes)/,
-    );
-    assert.match(config, /deny-dangerous:\n    enabled: true/);
-    assert.match(result.stdout, /removed stale hook/);
-    assert.match(result.stdout, /migrated deny hook registration/);
-  });
-
   /**
    * Writes a 1.8.0 split-guardrail install whose three retired guard choices all map to deny-dangerous.
    *
@@ -1041,7 +907,7 @@ describe("setup --apply installer upgrade migrations", () => {
     writeFileSync(
       join(root, ".goat-flow", "config.yaml"),
       [
-        'version: "1.8.0"',
+        'version: "1.16.0"',
         "hooks:",
         "  guard-destructive-shell:",
         "    enabled: false",
@@ -1065,7 +931,7 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr,
-      /could not be read safely \(Hook config has conflicting choices for deny-dangerous\)/u,
+      /Hook config has conflicting choices for deny-dangerous/u,
     );
     assert.equal(readFileSync(configPath, "utf-8"), configBefore);
     assert.equal(

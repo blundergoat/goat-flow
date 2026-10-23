@@ -4,7 +4,11 @@
  * These cases use real independent Git repositories beneath one non-Git directory.
  * Use them to verify that a controller reports every configured project's findings without scanning unlisted workspaces.
  */
-import { hookTreeRoot } from "../helpers/hook-entrypoint.js";
+import {
+  hookSelection,
+  selectedHookPath,
+  hookTreeRoot,
+} from "../helpers/hook-entrypoint.js";
 import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
@@ -14,6 +18,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  installPostTurnHook,
   buildStopPayload,
   createCommittedRepo,
   FORCE_BASH3_ENV_KEY,
@@ -54,37 +59,20 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
         "changed.php",
         "<<<<<<< HEAD\nfirst\n=======\nsecond\n>>>>>>> branch\n",
       );
-      const scanner = readFileSync(
-        join(hookTreeRoot(), "post-turn-safety.sh"),
-        "utf8",
-      ).replace(
-        "SECONDS=0\n",
-        'SECONDS=0\nif [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then\nnode -e \'process.stdout.write("x".repeat(70000))\'\nfi\n',
-      );
-      for (const dependency of [
-        "run-with-bash.mjs",
-        "hook-launch-runtime.mjs",
-        "hook-provider-adapters.mjs",
-        "vendor/js-yaml.cjs",
-      ]) {
-        writeFile(
-          controllerRoot,
-          `.goat-flow/hooks/${dependency}`,
-          readFileSync(join(hookTreeRoot(), dependency)),
-        );
-      }
-      writeFile(
+      installPostTurnHook(
         controllerRoot,
-        ".goat-flow/hooks/post-turn-safety.sh",
-        scanner,
+        'process.stdout.write("x".repeat(70000));',
+        "node -e 'process.stdout.write(\"x\".repeat(70000))'",
       );
       // Launch only this disposable controller; its children and retry state remain inside the fixture tree.
       const launchController = (turnId: string) =>
         spawnSync(
           process.execPath,
           [
-            join(controllerRoot, ".goat-flow/hooks/run-with-bash.mjs"),
-            ".goat-flow/hooks/post-turn-safety.sh",
+            selectedHookPath(
+              join(controllerRoot, ".goat-flow/hooks/run-with-bash.mjs"),
+            ),
+            `.goat-flow/hooks/post-turn-safety.${hookSelection() !== "reference" ? "mjs" : "sh"}`,
             "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000",
           ],
           {

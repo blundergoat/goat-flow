@@ -1,7 +1,30 @@
 ---
 category: setup
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-23
 ---
+
+## Footgun: Raw JSON matching misses quoted runtime dependencies
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Decode provider JSON before checking commands for retired runtime dependencies.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+**Severity:** SECURITY
+
+**Prevention:** Inspect parsed command strings. Preserve dependencies when provider configuration cannot be read safely; malformed JSON is not evidence that a dependency is unused.
+
+**Evidence:** `src/cli/installer/retired-runtime.ts` (`hasRetiredRegistration`, `containsRetiredRuntime`) previously searched serialized JSON. A command with a quoted script path was missed because JSON inserted a backslash before its closing quote. `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `keeps registrations and dependencies while a runtime customization awaits migration consent`) now retains the quoted command and its dependencies until review.
+
+## Footgun: Non-exclusive staging copies follow a raced payload symlink
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Create staged copy payloads exclusively and validate their file type before publication.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+**Severity:** SECURITY
+
+**Prevention:** Use `COPYFILE_EXCL` when copying into a new staging payload, reject non-regular or multiply linked payloads before publication, and check the staging directory identity before cleanup. A random private staging directory does not make a later non-exclusive copy safe.
+
+**Evidence:** A controlled M05 fixture inserted a payload symlink immediately before `copyFileSync`; the default copy overwrote the separate target file. `src/cli/installer/atomic-files.ts` (search: `constants.COPYFILE_EXCL`, `stagingIdentity`) now refuses that copy. `test/integration/setup-install-atomic-staging.test.ts` (search: `refuses a raced payload symlink without overwriting its target`) verifies both the destination and the symlink target retain their original bytes, with no staging residue.
+
 
 ## Footgun: A preview-layer classification change is inert until apply consumes the decision
 
@@ -13,7 +36,7 @@ last_reviewed: 2026-10-11
 
 **Why it happens:** Preview classification, admission, and authority live in TypeScript; the writes live in the installer script. Nothing in the type system, the linter, or a classifier unit test crosses that boundary.
 
-**Evidence:** While implementing the 1.16.0 `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` changed and `install` exited 0, but `workflow/install-goat-flow.sh` (search: `copy_file()`) still replaced every system-owned destination. The fix was a decision channel: `src/cli/install-command.ts` (search: `Each row's own decision travels to Bash`) turns preview rows into `--preserve-path` and `--replace-user-path` flags, and `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) consults them inside `copy_file`.
+**Evidence:** While implementing the 1.16.0 `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` changed and `install` exited 0, but `workflow/install-goat-flow.sh` (search: `copy_file()`) still replaced every system-owned destination. The fix was a decision channel: `src/cli/install-command.ts` (search: `preservePaths: installPreview.files`) now passes those per-row decisions to `applyInstaller`; `src/cli/installer/apply.ts` (search: `preserved.has(destination)`) honors them at the write. The predecessor `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) used the same decision channel as flags.
 
 **Reporting recurrence 2026-10-09 (ACTUAL_MEASURED):** Closing output must distinguish requested state from completed writes across the same boundary. The summary fixture initially inferred registration removal from a disabled deny choice, but the installer retained its neutral registration. `workflow/install-goat-flow.sh` (search: `shouldRegisterManagedHook`) uses the generated `retainRegistrationWhenDisabled` contract; Stop registration does not have that retention. A non-Git fixture also lacked a Stop registration before apply, so absence afterward could not prove removal. `test/integration/setup-install-upgrade-summary.test.ts` (search: `names replaced local content and disabled registration removals after verification`) now establishes the initial registration in a Git fixture, verifies actual Stop removal and deny retention, and couples the closing output to target bytes. `src/cli/install-summary.ts` (search: `completedHookChanges`) compares registry readings before and after apply rather than treating preview edit phrases or flags as results. For failure injection, ensure a changed baseline or missing selected receipt reaches the required write: preservable local edits and identical state bytes legitimately skip those failure boundaries.
 

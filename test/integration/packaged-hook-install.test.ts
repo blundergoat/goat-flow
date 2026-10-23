@@ -18,11 +18,23 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import fs from "node:fs";
+import { restrictedConsumerEnvironment } from "../helpers/restricted-consumer-env.js";
+import {
+  inspectPathWriteClaim,
+  removeConfirmedAbandonedPathWriteClaim,
+} from "../../src/cli/path-write-claim.js";
 import { pathToFileURL } from "node:url";
 import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
+const PACKAGE_VERSION = (
+  JSON.parse(readFileSync(join(PROJECT_ROOT, "package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
 const CODEX_GRUFF_LAUNCHER_DEADLINE_MS = 75_000;
 const CODEX_GRUFF_HOST_TIMEOUT_SECONDS = 90;
 const CODEX_GRUFF_LAUNCH_CONTRACT = `codex:gruff:goat-flow.hook-result.v1:post-tool:1:${CODEX_GRUFF_LAUNCHER_DEADLINE_MS}`;
@@ -197,10 +209,12 @@ function runPackedCli(
   packedCliLaunchPath: string,
   cliArguments: string[],
   workingDirectoryPath: string,
+  environment: NodeJS.ProcessEnv = process.env,
 ) {
   return spawnSync(process.execPath, [packedCliLaunchPath, ...cliArguments], {
     cwd: workingDirectoryPath,
     encoding: "utf8",
+    env: environment,
     timeout: 120_000,
   });
 }
@@ -224,7 +238,7 @@ function reviewAndSyncPackedHooks(
 ) {
   const priorFiles = [
     ".codex/hooks.json",
-    ".goat-flow/hooks/run-with-bash.mjs",
+    ".goat-flow/hooks/hook-launch-runtime.mjs",
   ];
   const priorBytes = priorFiles.map((file) =>
     readFileSync(join(projectPath, file)),
@@ -256,7 +270,7 @@ function reviewAndSyncPackedHooks(
     // An old launcher without recorded install history requires the user's replacement review.
     try { syncHookStates(projectPath); } catch (error) { review = error.details; }
     assert.equal(review?.code, "hook-replacement-required");
-    assert.deepEqual(review.paths, [".goat-flow/hooks/run-with-bash.mjs"]);
+    assert.deepEqual(review.paths, [".goat-flow/hooks/hook-launch-runtime.mjs"]);
     assert.equal(review.replacementAvailable, true);
     syncHookStates(projectPath, { replace: true, confirmationIdentity: review.confirmationIdentity });
   `,
@@ -317,8 +331,14 @@ const V1_16_0_BASH_RUNNER = readTaggedReleaseFile(
   "1.16.0",
   "workflow/hooks/run-with-bash.mjs",
 );
+const V1_16_0_LAUNCH_RUNTIME = readTaggedReleaseFile(
+  "1.16.0",
+  "workflow/hooks/hook-launch-runtime.mjs",
+);
 const V1_16_0_PACKAGE_MIGRATION_UNAVAILABLE =
-  V1_16_0_CODEX_HOOKS === null || V1_16_0_BASH_RUNNER === null;
+  V1_16_0_CODEX_HOOKS === null ||
+  V1_16_0_BASH_RUNNER === null ||
+  V1_16_0_LAUNCH_RUNTIME === null;
 
 /**
  * Read the exact deny command a Codex user receives after install or sync.
@@ -338,7 +358,7 @@ function readInstalledCodexDenyHandler(targetProjectPath: string): {
   const installedDenyHandler =
     installedHookConfiguration.hooks?.PreToolUse?.flatMap(
       (entry) => entry.hooks ?? [],
-    ).find((handler) => handler.command?.includes("deny-dangerous.sh"));
+    ).find((handler) => handler.command?.includes("deny-dangerous.mjs"));
   assert.equal(typeof installedDenyHandler?.command, "string");
   return {
     command: installedDenyHandler.command,
@@ -577,13 +597,20 @@ describe("packaged hook installation canary", () => {
       0,
       packedVersionResult.stderr || packedVersionResult.stdout,
     );
-    assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.18.0");
+    assert.equal(
+      packedVersionResult.stdout.trim(),
+      `goat-flow v${PACKAGE_VERSION}`,
+    );
 
     const freshProjectPath = makeDisposablePackageWorkspace("fresh-non-git");
+    const restricted = restrictedConsumerEnvironment(
+      makeDisposablePackageWorkspace("install-process-proof"),
+    );
     const freshInstallResult = runPackedCli(
       packedCliLaunchPath,
       ["install", freshProjectPath, "--agent", "codex"],
       freshProjectPath,
+      restricted,
     );
     assert.equal(
       freshInstallResult.status,
@@ -593,11 +620,11 @@ describe("packaged hook installation canary", () => {
     assert.equal(existsSync(join(freshProjectPath, ".git")), false);
     assert.equal(
       readFileSync(
-        join(freshProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        join(freshProjectPath, ".goat-flow", "hooks", "run-hook.mjs"),
         "utf8",
       ),
       readFileSync(
-        join(packedPackageRoot, "workflow", "hooks", "run-with-bash.mjs"),
+        join(packedPackageRoot, "workflow", "hooks", "run-hook.mjs"),
         "utf8",
       ),
     );
@@ -614,6 +641,40 @@ describe("packaged hook installation canary", () => {
       false,
     );
     assertInstalledCodexPolicy(freshProjectPath);
+    for (const [command, status] of [
+      ["echo safe", 0],
+      ["rm -rf /", 2],
+    ] as const) {
+      const candidate = spawnSync(
+        process.execPath,
+        [
+          join(freshProjectPath, ".goat-flow/hooks/deny-dangerous.mjs"),
+          "--root",
+          freshProjectPath,
+        ],
+        {
+          cwd: freshProjectPath,
+          env: restricted,
+          encoding: "utf8",
+          input: JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
+        },
+      );
+      assert.equal(
+        candidate.status,
+        status,
+        candidate.stderr || candidate.stdout,
+      );
+    }
+    const journal = readFileSync(restricted.GOAT_TEST_SPAWN_LOG ?? "", "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { event: string });
+    assert.ok(journal.some((entry) => entry.event === "loaded"));
+    assert.equal(
+      journal.filter((entry) => entry.event === "denied").length,
+      0,
+      "archived installer and candidate policy must launch no shell tools",
+    );
   });
 
   // The release gate combines a fresh archived install with the exact direct-predecessor sync users will run.
@@ -624,6 +685,7 @@ describe("packaged hook installation canary", () => {
       // The skip above handles shallow clones; release proof preflights both tagged objects before selecting this case.
       assert.ok(V1_16_0_CODEX_HOOKS);
       assert.ok(V1_16_0_BASH_RUNNER);
+      assert.ok(V1_16_0_LAUNCH_RUNTIME);
       const { packedPackageRoot, packedCliLaunchPath } =
         preparePackedCliLaunch();
       const packedVersionResult = runPackedCli(
@@ -636,7 +698,10 @@ describe("packaged hook installation canary", () => {
         0,
         packedVersionResult.stderr || packedVersionResult.stdout,
       );
-      assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.18.0");
+      assert.equal(
+        packedVersionResult.stdout.trim(),
+        `goat-flow v${PACKAGE_VERSION}`,
+      );
 
       const freshProjectPath = makeDisposablePackageWorkspace(
         "fresh-direct-predecessor",
@@ -674,6 +739,10 @@ describe("packaged hook installation canary", () => {
         join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
         V1_16_0_BASH_RUNNER,
       );
+      writeFileSync(
+        join(upgradedProjectPath, ".goat-flow/hooks/hook-launch-runtime.mjs"),
+        V1_16_0_LAUNCH_RUNTIME,
+      );
 
       const migrationResult = reviewAndSyncPackedHooks(
         packedPackageRoot,
@@ -697,17 +766,23 @@ describe("packaged hook installation canary", () => {
         installedHookConfiguration.hooks?.CustomEvent,
         userOwnedSibling,
       );
-      const packedBashRunner = readFileSync(
-        join(packedPackageRoot, "workflow", "hooks", "run-with-bash.mjs"),
-        "utf8",
-      );
-      assert.notEqual(packedBashRunner, V1_16_0_BASH_RUNNER);
       assert.equal(
         readFileSync(
-          join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+          join(upgradedProjectPath, ".goat-flow/hooks/run-with-bash.mjs"),
           "utf8",
         ),
-        packedBashRunner,
+        V1_16_0_BASH_RUNNER,
+        "Sync preserves unclassified legacy bytes",
+      );
+      assert.equal(
+        readFileSync(
+          join(upgradedProjectPath, ".goat-flow/hooks/hook-launch-runtime.mjs"),
+          "utf8",
+        ),
+        readFileSync(
+          join(packedPackageRoot, "workflow/hooks/hook-launch-runtime.mjs"),
+          "utf8",
+        ),
       );
       assert.equal(
         typeof readInstalledCodexDenyHandler(upgradedProjectPath)
@@ -742,9 +817,10 @@ describe("packaged hook installation canary", () => {
         join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
         V1_15_0_BASH_RUNNER,
       );
-      const migrationResult = reviewAndSyncPackedHooks(
-        packedPackageRoot,
+      // This release has no shared native launcher to replace: adding Node files needs no overwrite consent.
+      const migrationResult = runPackedCli(
         packedCliLaunchPath,
+        ["hooks", "sync", upgradedProjectPath],
         upgradedProjectPath,
       );
       assert.equal(
@@ -759,15 +835,177 @@ describe("packaged hook installation canary", () => {
       );
       assert.equal(
         readFileSync(
-          join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+          join(upgradedProjectPath, ".goat-flow/hooks/run-with-bash.mjs"),
+          "utf8",
+        ),
+        V1_15_0_BASH_RUNNER,
+      );
+      assert.equal(
+        readFileSync(
+          join(upgradedProjectPath, ".goat-flow/hooks/hook-launch-runtime.mjs"),
           "utf8",
         ),
         readFileSync(
-          join(packedPackageRoot, "workflow", "hooks", "run-with-bash.mjs"),
+          join(packedPackageRoot, "workflow/hooks/hook-launch-runtime.mjs"),
           "utf8",
         ),
       );
       assertInstalledCodexPolicy(upgradedProjectPath);
     },
   );
+  it("recovers an interrupted archived installer only after confirmed claim recovery", async () => {
+    const { packedCliLaunchPath } = preparePackedCliLaunch();
+    const project = makeDisposablePackageWorkspace("interrupted-install");
+    const output = makeDisposablePackageWorkspace("installer-owner");
+    const preload = join(output, "pause.cjs");
+    writeFileSync(
+      preload,
+      `const fs = require("node:fs");
+const allocate = fs.mkdtempSync; let stages = 0;
+fs.mkdtempSync = (prefix, ...args) => {
+  if (String(prefix).includes(".goat-flow-stage.") && ++stages === 2) {
+    process.stdout.write("READY\\n");
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
+  }
+  return allocate(prefix, ...args);
+};
+require("node:module").syncBuiltinESMExports();
+`,
+    );
+    const spawnClaimOwner = () => {
+      const streams = ["stdout", "stderr"].map((name) =>
+        fs.openSync(join(output, name), "wx", 0o600),
+      );
+      try {
+        return spawn(
+          process.execPath,
+          [packedCliLaunchPath, "install", project, "--agent", "codex"],
+          {
+            cwd: project,
+            env: {
+              ...process.env,
+              NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(preload)}`,
+            },
+            stdio: ["ignore", ...streams],
+          },
+        );
+      } finally {
+        streams.forEach((descriptor) => fs.closeSync(descriptor));
+      }
+    };
+    const owner = spawnClaimOwner();
+    try {
+      await new Promise<void>((resolveReady, rejectReady) => {
+        const deadline = setTimeout(() => {
+          clearInterval(poll);
+          rejectReady(
+            new Error(
+              readFileSync(join(output, "stderr"), "utf8") ||
+                "installer did not reach its claimed write",
+            ),
+          );
+        }, 15000);
+        const poll = setInterval(() => {
+          if (!readFileSync(join(output, "stdout"), "utf8").includes("READY\n"))
+            return;
+          clearInterval(poll);
+          clearTimeout(deadline);
+          resolveReady();
+        }, 10);
+      });
+      const exited = once(owner, "exit");
+      assert.equal(owner.kill("SIGKILL"), true);
+      await exited;
+      const state = join(project, ".goat-flow/state/install/managed.json");
+      assert.deepEqual(
+        (JSON.parse(readFileSync(state, "utf8")) as { receipts: unknown[] })
+          .receipts,
+        [],
+      );
+      assert.ok(
+        existsSync(join(project, ".goat-flow/.gitignore")),
+        "one real file was published before process death",
+      );
+      const retry = runPackedCli(
+        packedCliLaunchPath,
+        ["install", project, "--agent", "codex"],
+        project,
+      );
+      assert.equal(retry.status, 1);
+      assert.match(retry.stderr, /busy|cooperating writer/u);
+
+      const locks = join(project, ".goat-flow/state/locks");
+      const targets = fs
+        .readdirSync(locks)
+        .filter((name) => name.endsWith(".claim"))
+        .map(
+          (name) =>
+            (
+              JSON.parse(readFileSync(join(locks, name), "utf8")) as {
+                targetPath: string;
+              }
+            ).targetPath,
+        );
+      assert.ok(targets.length > 1);
+      const first = targets[0];
+      assert.ok(first);
+      const inspection = runPackedCli(
+        packedCliLaunchPath,
+        ["claims", "inspect", project, "--target", first, "--format", "json"],
+        project,
+      );
+      assert.equal(inspection.status, 0, inspection.stderr);
+      const evidence = JSON.parse(inspection.stdout) as {
+        markerSha256: string;
+      };
+      const unconfirmed = runPackedCli(
+        packedCliLaunchPath,
+        [
+          "claims",
+          "recover",
+          project,
+          "--target",
+          first,
+          "--marker-sha256",
+          evidence.markerSha256,
+        ],
+        project,
+      );
+      assert.equal(unconfirmed.status, 2);
+      const confirmed = runPackedCli(
+        packedCliLaunchPath,
+        [
+          "claims",
+          "recover",
+          project,
+          "--target",
+          first,
+          "--marker-sha256",
+          evidence.markerSha256,
+          "--confirm-abandoned",
+        ],
+        project,
+      );
+      assert.equal(confirmed.status, 0, confirmed.stderr);
+      // The terminated owner is now explicitly confirmed absent; use the same recovery primitive for the remaining inspected markers.
+      for (const target of targets.slice(1)) {
+        const claim = inspectPathWriteClaim(project, target);
+        assert.ok(claim);
+        assert.equal(removeConfirmedAbandonedPathWriteClaim(claim), "removed");
+      }
+      const reapplied = runPackedCli(
+        packedCliLaunchPath,
+        ["install", project, "--agent", "codex"],
+        project,
+      );
+      assert.equal(reapplied.status, 0, reapplied.stderr || reapplied.stdout);
+      assert.match(reapplied.stdout, /Install verified for codex/u);
+    } finally {
+      if (owner.exitCode === null && owner.signalCode === null) {
+        const exited = once(owner, "exit");
+        owner.kill("SIGKILL");
+        await exited;
+      }
+    }
+  });
 });

@@ -146,12 +146,7 @@ function createNativePolicyFixture(agent: NativeFixtureAgent) {
   assert.ok(spec);
   writeAgentHookState(projectRoot, PROFILES[agent], spec, true);
   const installed = buildAgentHookDescriptor(agent, ".goat-flow/hooks", spec);
-  const candidate = buildAgentHookDescriptor(
-    agent,
-    ".goat-flow/hooks",
-    spec,
-    "node",
-  );
+  const candidate = installed;
   const configRelativePath = PROFILES[agent].hookConfigFile;
   assert.ok(configRelativePath);
   const configPath = join(projectRoot, configRelativePath);
@@ -161,27 +156,13 @@ function createNativePolicyFixture(agent: NativeFixtureAgent) {
     row,
     "public writer must create the canonical row before fixture conversion",
   );
-  if (agent === "copilot") {
-    row.bash = candidate.command;
-    row.powershell = candidate.command;
-  } else {
-    row.command = candidate.command;
-    if (candidate.form === "argv") {
-      row.args = candidate.args;
-      row.bash = candidate.bash;
-      row.powershell = candidate.powershell;
-    } else if (candidate.commandWindows !== undefined) {
-      row.commandWindows = candidate.commandWindows;
-    }
-  }
-  writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
   const saved = nativeFixtureEntry(
     JSON.parse(readFileSync(configPath, "utf8")),
     agent,
     candidate,
   );
   assert.ok(saved);
-  assert.equal(entryCarriesHandlerDescriptor(saved, agent, installed), false);
+  assert.equal(entryCarriesHandlerDescriptor(saved, agent, installed), true);
   const descriptor = { ...candidate };
   descriptor.command = (
     agent === "copilot" ? saved.bash : saved.command
@@ -220,7 +201,6 @@ function runNativePolicyFixture(
   const selected = agentHookSpawnDescriptor(
     fixture.descriptor,
     process.platform,
-    "node",
   );
   const result = runWithFileStreams(
     selected.command,
@@ -242,7 +222,7 @@ function runNativePolicyFixture(
   return { ...result, events };
 }
 
-describe("native candidate registered policy replay", () => {
+describe("managed Node registered policy replay", () => {
   // Writes real registrations and evaluator fixtures; literal stdin and Node journals expose quoting, root or extra-process regressions.
   it("preserves hostile roots, literal input and the two/three-process descriptor families without Bash", () => {
     for (const agent of NATIVE_FIXTURE_AGENTS) {

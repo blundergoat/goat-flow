@@ -10,6 +10,8 @@ required_directories=(
     scripts
     scripts/maintenance
     scripts/installers
+)
+legacy_hook_directories=(
     workflow/hooks
     workflow/hooks/deny-dangerous
     .goat-flow/hooks
@@ -26,6 +28,12 @@ for directory in "${required_directories[@]}"; do
         printf 'FAIL required shell group: %s/*.sh (missing or empty)\n' "$directory"
         failures=$((failures + 1))
     fi
+    scripts+=("${matches[@]}")
+done
+
+# Legacy hooks remain lintable while bundled, but no longer define the Node installation contract.
+for directory in "${legacy_hook_directories[@]}"; do
+    matches=("$directory"/*.sh)
     scripts+=("${matches[@]}")
 done
 

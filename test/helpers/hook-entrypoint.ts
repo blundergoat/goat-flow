@@ -61,7 +61,7 @@ export function copyHookTree(
 }
 
 /**
- * Preserve installed paths and translate only explicit candidates.
+ * Select Node entrypoints for installed and candidate runs; retain the frozen Bash reference.
  * Throws for a missing selection without falling back to another runtime.
  */
 export function selectedHookPath(
@@ -72,7 +72,7 @@ export function selectedHookPath(
   const nodePath = absolute
     .replace(/\.sh$/u, ".mjs")
     .replace(/run-with-bash\.mjs$/u, "run-hook.mjs");
-  const selected = selection === "candidate" ? nodePath : absolute;
+  const selected = selection === "reference" ? absolute : nodePath;
   if (!existsSync(selected))
     throw new Error(`${selection} hook unavailable: ${selected}`);
   if (!reported.has(selected)) {

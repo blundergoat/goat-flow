@@ -23,6 +23,11 @@ import { join } from "node:path";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import { buildAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
+import {
+  analyzerCommand,
+  invokeAnalyzer,
+} from "../../workflow/hooks/gruff/analyzer.mjs";
 import {
   CLEAN_GRUFF_CONTRACT_ENVELOPE,
   FINDING_GRUFF_CONTRACT_ENVELOPE,
@@ -39,6 +44,122 @@ import {
 const PROJECT_ROOT = join(import.meta.dirname, "..", "..");
 
 after(cleanupHookTestDirs);
+
+if (hookSelection() !== "reference") {
+  describe("native Gruff analyzer launch", () => {
+    it("captures analyzer JSON above the provider envelope limit and bounds runaway output", async () => {
+      for (const bytes of [200_000, 16_777_217]) {
+        const reply = await invokeAnalyzer(
+          {
+            executable: process.execPath,
+            args: [
+              "-e",
+              `process.stdout.write(JSON.stringify({findings: [], padding: "x".repeat(${bytes})}))`,
+            ],
+            path: process.execPath,
+          },
+          [],
+          process.cwd(),
+          "gruff-ts",
+        );
+        if (bytes === 200_000) {
+          assert.equal(reply.status, 0, reply.stderr);
+          assert.equal(reply.invalid, false);
+          assert.equal(JSON.parse(reply.stdout).padding.length, bytes);
+        } else {
+          assert.equal(reply.invalid, true);
+          assert.match(
+            reply.stderr,
+            /Analyzer output exceeded its capture limit/u,
+          );
+          assert.ok(Buffer.byteLength(reply.stdout) <= 16_777_216);
+        }
+      }
+    });
+
+    it("launches the installed Gruff npm package through Node without its shell wrapper", () => {
+      const shim = join(
+        PROJECT_ROOT,
+        "node_modules",
+        ".bin",
+        process.platform === "win32" ? "gruff-ts.cmd" : "gruff-ts",
+      );
+      const command = analyzerCommand(shim);
+      assert.ok(command);
+      assert.equal(command.executable, process.execPath);
+      assert.equal(command.args[0], "--import");
+      const reply = spawnSync(
+        command.executable,
+        [...command.args, "--version"],
+        { encoding: "utf8", timeout: 10000 },
+      );
+      assert.equal(reply.status, 0, reply.stderr);
+      assert.match(reply.stdout, /gruff-ts/u);
+    });
+
+    // Both npm install layouts must preserve literal file arguments when their shim is replaced by Node argv.
+    it("resolves local and global Windows npm shims to Node with literal arguments", () => {
+      const root = makeRoot();
+      const bin = join(root, "node_modules", ".bin");
+      const entry = join(root, "node_modules", "fixture", "cli.mjs");
+      mkdirSync(bin, { recursive: true });
+      mkdirSync(join(root, "node_modules", "fixture"));
+      writeFileSync(
+        entry,
+        "console.log(JSON.stringify(process.argv.slice(2)));\n",
+      );
+      const shim = join(bin, "gruff-ts.cmd");
+      writeFileSync(
+        shim,
+        '@ECHO off\r\nSET dp0=%~dp0\r\nSET _prog=node.exe\r\n"%_prog%" "%dp0%\\..\\fixture\\cli.mjs" %*\r\n',
+      );
+      const command = analyzerCommand(shim, "win32");
+      assert.ok(command);
+      assert.equal(command.executable, process.execPath);
+      const argumentsWithMetacharacters = [
+        "file with spaces & (brackets).ts",
+        "--format",
+        "json",
+      ];
+      const reply = spawnSync(
+        command.executable,
+        [...command.args, ...argumentsWithMetacharacters],
+        { encoding: "utf8" },
+      );
+      assert.equal(reply.status, 0, reply.stderr);
+      assert.deepEqual(JSON.parse(reply.stdout), argumentsWithMetacharacters);
+      const globalShim = join(root, "gruff-ts.cmd");
+      writeFileSync(
+        globalShim,
+        '@ECHO off\r\nSET dp0=%~dp0\r\nSET _prog=node.exe\r\n"%_prog%" "%dp0%\\node_modules\\fixture\\cli.mjs" %*\r\n',
+      );
+      assert.deepEqual(
+        analyzerCommand(globalShim, "win32")?.args,
+        command.args,
+      );
+    });
+
+    it("launches a directly named Node analyzer without interpreting its path", () => {
+      const root = makeRoot();
+      const entry = join(root, "analyzer & name.mjs");
+      writeFileSync(entry, "console.log('direct analyzer');\n");
+      const command = analyzerCommand(entry, "win32");
+      assert.ok(command);
+      const reply = spawnSync(command.executable, command.args, {
+        encoding: "utf8",
+      });
+      assert.equal(reply.status, 0, reply.stderr);
+      assert.equal(reply.stdout, "direct analyzer\n");
+    });
+
+    it("rejects a custom Windows batch wrapper without running it", () => {
+      const root = makeRoot();
+      const wrapper = join(root, "custom.cmd");
+      writeFileSync(wrapper, "@echo custom wrapper\r\n");
+      assert.equal(analyzerCommand(wrapper, "win32"), null);
+    });
+  });
+}
 
 /** A disposable workspace: one Git project with a Gruff analyzer, and a plain sibling directory beside it. */
 interface GruffWorkspace {
@@ -84,8 +205,6 @@ function makeGruffWorkspace(analyzerEnvelope: string): GruffWorkspace {
  * @returns the registered `node` arguments, unchanged
  */
 function registerClaudeGruffHandler(projectRoot: string): string[] {
-  if (hookSelection() === "candidate")
-    throw new Error("native Gruff hook has not been ported");
   copyHookTree(join(projectRoot, ".goat-flow", "hooks"));
   mkdirSync(join(projectRoot, ".claude"));
   const settingsPath = join(projectRoot, ".claude", "settings.json");
@@ -99,6 +218,16 @@ function registerClaudeGruffHandler(projectRoot: string): string[] {
     };
   };
   const handler = settings.hooks.PostToolUse[0]!.hooks[0]!;
+  if (hookSelection() !== "reference") {
+    const descriptor = buildAgentHookDescriptor(
+      "claude",
+      ".goat-flow/hooks",
+      gruffSpec,
+    );
+    assert.equal(descriptor.form, "argv");
+    Object.assign(handler, descriptor);
+    writeFileSync(settingsPath, JSON.stringify(settings));
+  }
   // The registration names `node`; the replay uses this process's own Node with the registered arguments.
   assert.equal(handler.command, "node");
   return handler.args;
@@ -158,6 +287,44 @@ function deliveredContext(
 }
 
 describe("gruff-code-quality hook quiets edits outside the analysed scope", () => {
+  it("reports the project-relative path for an invalid root Gruff choice", () => {
+    const root = makeEditedGruffContractProject(CLEAN_GRUFF_CONTRACT_ENVELOPE);
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(root, ".goat-flow/config.yaml"),
+      "hooks: {gruff-code-quality: {enabled: maybe}}\n",
+    );
+    const result = readMigratedGruffResult(
+      runMigratedHook(root, sampleGruffEditPayload()),
+    );
+    assert.equal(result.outcome, "unavailable");
+    const finding = (
+      result.findings as Array<{ code: string; message: string }>
+    )[0];
+    assert.equal(finding?.code, "owner-config-invalid");
+    assert.ok(
+      finding?.message.includes("in .goat-flow/config.yaml "),
+      JSON.stringify(finding),
+    );
+  });
+
+  it("does not count null contract containers as completed analysis", () => {
+    const root = makeEditedGruffContractProject(
+      JSON.stringify({
+        contractVersion: "gruff.hook.v1",
+        config: null,
+        ignored: null,
+      }),
+    );
+    const reply = runMigratedHook(
+      root,
+      sampleGruffEditPayload(),
+      "/usr/bin:/bin",
+    );
+    const result = readMigratedGruffResult(reply);
+    assert.equal(result.outcome, "incomplete");
+    assert.equal(result.reasonCode, "output-invalid");
+  });
   /**
    * Runs one named edit from the workspace's project, whose dirty source file would show a fallback to dirty files.
    * It writes a fresh workspace, and a symlink to the sibling directory from outside the workspace.

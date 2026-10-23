@@ -51,20 +51,6 @@ function runNativeMechanism(kind: "syntax" | "self-test") {
       `,
       );
     }
-    const selfTest = join(hooks, "deny-dangerous/deny-dangerous-self-test.mjs");
-    writeFileSync(
-      selfTest,
-      String.raw`
-      import assert from "node:assert/strict";
-      import { spawnSync } from "node:child_process";
-      import { argv, env, execPath } from "node:process";
-      assert.deepEqual(argv.slice(2),["--self-test=smoke"]);
-      assert.ok(env.GOAT_DENY_DANGEROUS_HOOK.endsWith(".mjs"));
-      const result=spawnSync(execPath,[env.GOAT_DENY_DANGEROUS_HOOK,"--self-test=smoke"],{env,encoding:"utf8",timeout:5000});
-      assert.equal(result.signal,null);
-      process.exitCode=result.status??1;
-    `,
-    );
     const runner = join(parent, "runner.mjs");
     writeFileSync(
       runner,
@@ -77,29 +63,27 @@ function runNativeMechanism(kind: "syntax" | "self-test") {
       const root=${JSON.stringify(root)}, hooks=${JSON.stringify(hooks)};
       const ctx={projectPath:root,agents:["claude","codex","copilot","antigravity"].map(id=>({agent:{id,hooksDir:".goat-flow/hooks"}})),fs:{readFile:(path)=>{try{return readFileSync(join(root,path),"utf8");}catch{return null;}}}};
       if(${JSON.stringify(kind)}==="syntax") {
-        assert.deepEqual(checkHookFileSyntax(ctx,".goat-flow/hooks","parse.mjs","node"),{status:"ok"});
-        assert.deepEqual(checkHookFileSyntax(ctx,".goat-flow/hooks","invalid.mjs","node"),{status:"syntax-error",path:".goat-flow/hooks/invalid.mjs"});
+        assert.deepEqual(checkHookFileSyntax(ctx,".goat-flow/hooks","parse.mjs"),{status:"ok"});
+        assert.deepEqual(checkHookFileSyntax(ctx,".goat-flow/hooks","invalid.mjs"),{status:"syntax-error",path:".goat-flow/hooks/invalid.mjs"});
         for(const filename of ["missing.mjs","parse.sh"]) {
-          const unavailable=checkHookFileSyntax(ctx,".goat-flow/hooks",filename,"node");
+          const unavailable=checkHookFileSyntax(ctx,".goat-flow/hooks",filename);
           assert.equal(unavailable.status,"spawn-failure");
           assert.match(unavailable.failure.message,/existing \.mjs hook/u);
         }
         assert.equal(existsSync(${JSON.stringify(marker)}),false,"syntax checks must not execute the module");
       } else {
-        assert.equal(checkHookSelfTest(ctx,"node"),null);
+        assert.equal(checkHookSelfTest(ctx),null);
         const observations=readFileSync(${JSON.stringify(observed)},"utf8").trim().split("\n").map(JSON.parse);
         assert.deepEqual(observations,["deny-dangerous","deny-git-mutations"].map(policy=>({path:join(hooks,policy+".mjs"),args:["--self-test=smoke"]})),"shared dispatchers run once across all four agents");
         env.GOAT_MECHANISM_FIXTURE_FAIL="1";
-        const failed=checkHookSelfTest(ctx,"node");
+        const failed=checkHookSelfTest(ctx);
         assert.match(failed.message,/self-test.*failed for claude/u);
         assert.match(failed.howToFix,/Run node .*\.mjs/u);
         delete env.GOAT_MECHANISM_FIXTURE_FAIL;
         const dispatcher=join(hooks,"deny-dangerous.mjs"), saved=readFileSync(dispatcher,"utf8");
         rmSync(dispatcher);
-        assert.match(checkHookSelfTest(ctx,"node").message,/dispatcher is unavailable/u);
+        assert.match(checkHookSelfTest(ctx).message,/dispatcher is unavailable/u);
         writeFileSync(dispatcher,saved);
-        rmSync(${JSON.stringify(selfTest)});
-        assert.match(checkHookSelfTest(ctx,"node").message,/self-test is unavailable/u);
       }
     `,
     );

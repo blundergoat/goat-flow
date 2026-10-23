@@ -1,10 +1,11 @@
-/** Scan only the explicit Git roots a managed non-Git controller lists; each child still runs the Bash scanner until it is ported. */
+/** Scan only the explicit Git roots a managed non-Git controller lists, using native Node children. */
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PostTurnContext } from "./context.mjs";
+import type * as NativeHookSupervisor from "../hook-supervisor.mjs";
 import { clearStopReentryState } from "./recovery.mjs";
 
 const resultSchema = "goat-flow.hook-result.v1";
@@ -65,15 +66,11 @@ interface ChildExecution {
   timedOut?: boolean;
   hasExceededOutputLimit?: boolean;
   hasInvalidUtf8Output?: boolean;
-  output?: OutputMeasurement;
+  output?: OutputMeasurement | undefined;
 }
 
 interface ManagedRuntime {
-  captureHookProcessUntilDeadline(
-    ...values: unknown[]
-  ): Promise<ChildExecution>;
   compactHookResultEnvelope(result: unknown): unknown;
-  appendBoundedHookOutput: unknown;
   HOOK_RESULT_ENVELOPE_LIMIT_BYTES: number;
   HOOK_STDERR_RETENTION_LIMIT_BYTES: number;
   HOOK_STDERR_FLOOD_LIMIT_BYTES: number;
@@ -89,7 +86,7 @@ interface ControllerSettings {
   childPayload: string;
   managed: {
     runtime: ManagedRuntime;
-    launcher: { stopHookProcessTree: unknown };
+    supervisor: typeof NativeHookSupervisor;
   } | null;
 }
 
@@ -329,9 +326,7 @@ async function controllerSettings(
         runtime: (await import(
           new URL("../hook-launch-runtime.mjs", import.meta.url).href
         )) as ManagedRuntime,
-        launcher: (await import(
-          new URL("../run-with-bash.mjs", import.meta.url).href
-        )) as { stopHookProcessTree: unknown },
+        supervisor: await import("../hook-supervisor.mjs"),
       }
     : null;
   return {
@@ -341,10 +336,10 @@ async function controllerSettings(
       adapterVersion: environment.GOAT_FLOW_HOOK_ADAPTER_VERSION || "1",
     },
     environment,
-    // Bash accepts forward slashes on every host, and each child derives its sibling runtime path from this argument.
+    // Each Node child derives its installed sibling modules from this entrypoint.
     scannerScript: fileURLToPath(
-      new URL("../post-turn-safety.sh", import.meta.url),
-    ).replace(/\\/gu, "/"),
+      new URL("../post-turn-safety.mjs", import.meta.url),
+    ),
     startedAt,
     maximumMilliseconds:
       Number.isInteger(configuredSeconds) && configuredSeconds > 0
@@ -381,24 +376,27 @@ async function runControllerChild(
   };
   // Managed controller children use the same independent byte and tree-cleanup contracts as the outer launcher.
   if (settings.managed !== null) {
-    const child = spawn("bash", [settings.scannerScript], {
-      cwd: scanUnit.root,
-      env: childEnvironment,
-      detached: process.platform !== "win32",
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
+    const child = spawn(
+      process.execPath,
+      [settings.scannerScript, "--root", scanUnit.root],
+      {
+        cwd: scanUnit.root,
+        env: childEnvironment,
+        detached: process.platform !== "win32",
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+      },
+    );
     // A scanner may close stdin before reading the event; its completed status and result still decide the outcome.
     child.stdin.on("error", () => undefined);
     child.stdin.end(settings.childPayload);
     const execution =
-      await settings.managed.runtime.captureHookProcessUntilDeadline(
+      await settings.managed.supervisor.captureHookProcessUntilDeadline(
         child,
         { ...childEnvironment, GOAT_FLOW_HOOK_PROVIDER_MODE: "managed" },
         remainingMilliseconds,
         process.platform,
-        settings.managed.runtime.appendBoundedHookOutput,
-        settings.managed.launcher.stopHookProcessTree,
+        true,
       );
     // Retained child diagnostics stay visible without allowing their excess to discard a completed finding.
     if (execution.stderr) process.stderr.write(execution.stderr);
@@ -406,8 +404,8 @@ async function runControllerChild(
   }
   // Direct callers have no aggregate byte report, so only status, streams and launch errors are kept.
   const { status, stdout, stderr, error } = spawnSync(
-    "bash",
-    [settings.scannerScript],
+    process.execPath,
+    [settings.scannerScript, "--root", scanUnit.root],
     {
       cwd: scanUnit.root,
       encoding: "utf8",

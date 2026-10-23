@@ -190,8 +190,8 @@ describe("Claude host failure policy", () => {
   });
 });
 
-describe("native candidate replay descriptors", () => {
-  it("retains provider forms, inert routes and the Codex Stop budget while installed defaults remain on Bash", () => {
+describe("managed Node replay descriptors", () => {
+  it("retains provider forms, inert routes and the Codex Stop budget in shipped Node descriptors", () => {
     const spec = getHookSpec("deny-dangerous");
     assert.ok(spec);
     for (const agent of [
@@ -209,24 +209,23 @@ describe("native candidate replay descriptors", () => {
         agent,
         ".goat-flow/hooks",
         spec,
-        "node",
       );
       assert.equal(candidate.form, installed.form);
-      const replay = agentHookSpawnDescriptor(candidate, "linux", "node");
+      const replay = agentHookSpawnDescriptor(candidate, "linux");
       assert.equal(replay.command, "node");
       assert.equal(replay.args[2], ".goat-flow/hooks/deny-dangerous.mjs");
       assert.equal(replay.args[6], ".goat-flow/hooks/run-hook.mjs");
       if (installed.form === "argv") {
-        assert.equal(installed.args[6], ".goat-flow/hooks/run-with-bash.mjs");
+        assert.equal(installed.args[6], ".goat-flow/hooks/run-hook.mjs");
         assert.ok(candidate.form === "argv");
         assert.equal(candidate.bash, "exit 0");
         assert.equal(candidate.powershell, "exit 0");
       } else {
-        assert.match(installed.command, /run-with-bash\.mjs/u);
+        assert.match(installed.command, /run-hook\.mjs/u);
       }
       if (agent === "codex") {
         assert.equal(
-          agentHookSpawnDescriptor(candidate, "win32", "node").command,
+          agentHookSpawnDescriptor(candidate, "win32").command,
           "powershell.exe",
         );
       }
@@ -237,14 +236,13 @@ describe("native candidate replay descriptors", () => {
       "codex",
       ".goat-flow/hooks",
       stopSpec,
-      "node",
     );
-    assert.deepEqual(agentHookSpawnDescriptor(stop, "linux", "node").env, {
+    assert.deepEqual(agentHookSpawnDescriptor(stop, "linux").env, {
       GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "4194304",
     });
   });
 
-  it("refuses installed and custom commands when native replay was explicitly requested", () => {
+  it("rejects mixed-runtime operands and malformed native commands", () => {
     const spec = getHookSpec("deny-dangerous");
     assert.ok(spec);
     for (const agent of ["claude", "codex"] as const) {
@@ -253,37 +251,41 @@ describe("native candidate replay descriptors", () => {
         ".goat-flow/hooks",
         spec,
       );
+      const mixed =
+        installed.form === "argv"
+          ? {
+              ...installed,
+              args: installed.args.map((value) =>
+                value.replace("deny-dangerous.mjs", "deny-dangerous.sh"),
+              ),
+            }
+          : {
+              ...installed,
+              command: installed.command.replace(
+                "deny-dangerous.mjs",
+                "deny-dangerous.sh",
+              ),
+            };
       assert.throws(
-        () => agentHookSpawnDescriptor(installed, "linux", "node"),
+        () => agentHookSpawnDescriptor(mixed, "linux"),
         /native candidate replay/u,
       );
       assert.throws(
-        () => agentHookSpawnDescriptor(installed, "win32", "node"),
+        () => agentHookSpawnDescriptor(mixed, "win32"),
         /native candidate replay/u,
       );
     }
     assert.throws(
       () =>
         agentHookSpawnDescriptor(
-          { form: "shell", command: "exit 0" },
+          { form: "shell", command: "node run-hook.mjs" },
           "linux",
-          "node",
         ),
       /canonical Node command/u,
     );
-    const native = buildAgentHookDescriptor(
-      "claude",
-      ".goat-flow/hooks",
-      spec,
-      "node",
-    );
+    const native = buildAgentHookDescriptor("claude", ".goat-flow/hooks", spec);
     assert.throws(
-      () =>
-        agentHookSpawnDescriptor(
-          { ...native, command: "bash" },
-          "linux",
-          "node",
-        ),
+      () => agentHookSpawnDescriptor({ ...native, command: "bash" }, "linux"),
       /native candidate replay/u,
     );
   });

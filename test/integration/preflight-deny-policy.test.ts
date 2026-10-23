@@ -53,13 +53,18 @@ function createFixture() {
     for (const policy of policies) {
       writeFixture(
         directory,
-        `${root}/${policy}.sh`,
-        '#!/usr/bin/env bash\n[[ "$1" == --self-test=full ]] || exit 64\nprintf "%s\\n" "$0 $1" >> full-suite-runs\nprintf "%s\\n" "PASS: fixture full policy corpus"\n',
+        `${root}/${policy}.mjs`,
+        `import { appendFileSync } from "node:fs";
+import { relative } from "node:path";
+if (process.argv[2] !== "--self-test=full") process.exit(64);
+appendFileSync("full-suite-runs", relative(process.cwd(), process.argv[1]) + " --self-test=full\\n");
+console.log("PASS: fixture full policy corpus");
+`,
       );
     }
     for (const path of [
-      "deny-dangerous/guard-runtime.sh",
-      "deny-dangerous/deny-dangerous-self-test.sh",
+      "policy-evaluation.mjs",
+      "policy-corpus.mjs",
       "gh-graphql-read.cjs",
       "vendor/graphql.cjs",
     ]) {
@@ -97,7 +102,7 @@ describe("preflight policy retirement", () => {
     for (const state of ["complete", "missing-entrypoint", "consumer"]) {
       const directory = createFixture();
       if (state === "missing-entrypoint") {
-        rmSync(join(directory, "workflow/hooks/deny-dangerous.sh"));
+        rmSync(join(directory, "workflow/hooks/deny-dangerous.mjs"));
       } else if (state === "consumer") {
         rmSync(join(directory, "workflow/hooks"), { recursive: true });
       }
@@ -115,7 +120,7 @@ describe("preflight policy retirement", () => {
       if (state === "missing-entrypoint") {
         assert.match(
           result.stderr,
-          /workflow\/hooks\/deny-dangerous\.sh/u,
+          /workflow\/hooks\/deny-dangerous\.mjs/u,
           `fixture ${state}`,
         );
         assert.equal(existsSync(runs), false, `fixture ${state}`);
@@ -124,7 +129,8 @@ describe("preflight policy retirement", () => {
           readFileSync(runs, "utf8").trim().split("\n").sort(),
           policies
             .map(
-              (policy) => `${installedDirectory}/${policy}.sh --self-test=full`,
+              (policy) =>
+                `${installedDirectory}/${policy}.mjs --self-test=full`,
             )
             .sort(),
           `fixture ${state}`,
@@ -146,18 +152,18 @@ import {
   stubFS,
 } from "../unit/audit-command/helpers.js";
 
-// Writes and runs an installed Bash control so extracting native invocation cannot silently change the default audit route.
-test("installed direct audit keeps the default Bash transport", () => {
+// Writes and runs an installed Node control so extracting native invocation cannot silently change the default audit route.
+test("installed direct audit keeps the default Node transport", () => {
   const parent = realpathSync(
     mkdtempSync(join(tmpdir(), "goat-audit-default-")),
   );
   const project = join(parent, "goat's installed & (default) [fixture]");
   try {
-    const script = ".goat-flow/hooks/deny-dangerous.sh";
+    const script = ".goat-flow/hooks/deny-dangerous.mjs";
     mkdirSync(join(project, ".goat-flow/hooks"), { recursive: true });
     writeFileSync(
       join(project, script),
-      "#!/usr/bin/env bash\nprintf 'BLOCKED: Policy destructive: installed fixture\\n' >&2\nexit 2\n",
+      'process.stderr.write("BLOCKED: Policy destructive: installed fixture\\n"); process.exitCode = 2;\n',
     );
     const facts = stubAgentFacts({ agent: PROFILES.claude });
     const result = verifyDirectHookRuntime(
@@ -171,19 +177,19 @@ test("installed direct audit keeps the default Bash transport", () => {
   }
 });
 
-// Writes failing installed controls so audit reports Bash parse and self-test failures when native selection is omitted.
-test("mechanism checks retain installed Bash parsing and self-test defaults", () => {
+// Writes failing installed controls so audit reports Node parse and self-test failures using the installed default runtime.
+test("mechanism checks retain installed Node parsing and self-test defaults", () => {
   const parent = realpathSync(
     mkdtempSync(join(tmpdir(), "goat-audit-installed-mechanism-")),
   );
   try {
     const hooks = join(parent, ".goat-flow/hooks");
     mkdirSync(join(hooks, "deny-dangerous"), { recursive: true });
-    writeFileSync(join(hooks, "invalid.sh"), "if then\n");
-    writeFileSync(join(hooks, "deny-dangerous.sh"), "exit 0\n");
+    writeFileSync(join(hooks, "invalid.mjs"), "const = ;\n");
+    writeFileSync(join(hooks, "deny-dangerous.mjs"), "process.exitCode = 7;\n");
     writeFileSync(
-      join(hooks, "deny-dangerous/deny-dangerous-self-test.sh"),
-      "exit 7\n",
+      join(hooks, "deny-git-mutations.mjs"),
+      "process.exitCode = 0;\n",
     );
     const ctx = makeCtx({
       projectPath: parent,
@@ -199,13 +205,13 @@ test("mechanism checks retain installed Bash parsing and self-test defaults", ()
       }),
     });
     assert.equal(
-      checkHookFileSyntax(ctx, ".goat-flow/hooks", "invalid.sh").status,
+      checkHookFileSyntax(ctx, ".goat-flow/hooks", "invalid.mjs").status,
       "syntax-error",
     );
     const result = checkHookSelfTest(ctx);
     assert.ok(result);
     assert.match(result.message, /self-test.*failed for claude/u);
-    assert.match(result.howToFix ?? "", /Run bash .*\.sh/u);
+    assert.match(result.howToFix ?? "", /Run node .*\.mjs/u);
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }

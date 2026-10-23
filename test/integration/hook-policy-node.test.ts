@@ -1,4 +1,4 @@
-/** Real candidate entrypoints decide policy natively, report unported hooks unavailable and honor launcher choices. */
+/** Real candidate entrypoints decide policy, scan edits and honor saved launcher choices without a shell fallback. */
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -65,12 +65,16 @@ function runEntrypoint(
 // Stop failures block; Gruff reports an advisory skip. Neither is a completed evaluation.
 for (const [hookIdentifier, expectedStatus, diagnostic] of [
   ["post-turn-safety", 2, /^Usage: post-turn-safety\.mjs \[--self-test\]\n$/u],
-  ["gruff-code-quality", 0, /hook unavailable/u],
+  [
+    "gruff-code-quality",
+    2,
+    /^Usage: gruff-code-quality\.mjs \[--self-test\|--self-test=smoke\]\n$/u,
+  ],
 ] as const) {
   test(
     hookIdentifier === "post-turn-safety"
       ? "post-turn-safety candidate refuses unsupported work without a shell fallback"
-      : `unported ${hookIdentifier} candidate reports unavailable without a shell fallback`,
+      : `${hookIdentifier} candidate refuses unsupported work without a shell fallback`,
     (testContext) => {
       const { root, hooks, environment } = candidateFixture(testContext);
       const entrypoint = selectedHookPath(
@@ -100,7 +104,7 @@ for (const [hookIdentifier, expectedStatus, diagnostic] of [
           timeout: 10000,
         });
         assert.equal(initialized.status, 0, initialized.stderr);
-        const unported = spawnSync(
+        const selfTest = spawnSync(
           process.execPath,
           [entrypoint, "--self-test"],
           {
@@ -111,10 +115,10 @@ for (const [hookIdentifier, expectedStatus, diagnostic] of [
             timeout: 10000,
           },
         );
-        assert.equal(unported.error, undefined);
-        assert.equal(unported.status, 2, unported.stderr);
-        assert.equal(unported.stdout, "");
-        assert.match(unported.stderr, /hook unavailable/u);
+        assert.equal(selfTest.error, undefined);
+        assert.equal(selfTest.status, 0, selfTest.stderr);
+        assert.match(selfTest.stdout, /post-turn-safety self-test: ok/u);
+        assert.equal(selfTest.stderr, "");
         // Ignoring every fixture file leaves nothing to scan, so the native scan must finish clean.
         writeFileSync(join(root, ".gitignore"), "*\n");
         const scanned = spawnSync(process.execPath, [entrypoint], {

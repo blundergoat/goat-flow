@@ -40,11 +40,14 @@ const capturedStreamStates = new WeakMap<
 >();
 
 /** Start one capture; managed empty output retains zero-byte measurements before any chunk arrives. */
-export function createCapturedHookOutput(managed: boolean): CapturedHookOutput {
+export function createCapturedHookOutput(
+  managed: boolean,
+  stdoutLimitBytes = HOOK_RESULT_ENVELOPE_LIMIT_BYTES,
+): CapturedHookOutput {
   const captured: CapturedHookOutput = { stdout: "", stderr: "", managed };
   if (managed)
     captured.output = {
-      envelopeLimitBytes: HOOK_RESULT_ENVELOPE_LIMIT_BYTES,
+      envelopeLimitBytes: stdoutLimitBytes,
       stderrRetentionLimitBytes: HOOK_STDERR_RETENTION_LIMIT_BYTES,
       stderrFloodLimitBytes: HOOK_STDERR_FLOOD_LIMIT_BYTES,
       providerLimitBytes: HOOK_RESULT_OUTPUT_LIMIT_BYTES,
@@ -70,7 +73,8 @@ function recordHookOutputBytes(
   )
     return false;
   captured.output = {
-    envelopeLimitBytes: HOOK_RESULT_ENVELOPE_LIMIT_BYTES,
+    envelopeLimitBytes:
+      captured.output?.envelopeLimitBytes ?? HOOK_RESULT_ENVELOPE_LIMIT_BYTES,
     stderrRetentionLimitBytes: HOOK_STDERR_RETENTION_LIMIT_BYTES,
     stderrFloodLimitBytes: HOOK_STDERR_FLOOD_LIMIT_BYTES,
     providerLimitBytes: HOOK_RESULT_OUTPUT_LIMIT_BYTES,
@@ -82,7 +86,7 @@ function recordHookOutputBytes(
   };
   if (
     managed &&
-    (state.stdoutBytes > HOOK_RESULT_ENVELOPE_LIMIT_BYTES ||
+    (state.stdoutBytes > captured.output.envelopeLimitBytes ||
       state.stderrBytes > HOOK_STDERR_FLOOD_LIMIT_BYTES)
   ) {
     captured.output.failureStage =

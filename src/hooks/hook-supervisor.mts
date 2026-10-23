@@ -23,6 +23,7 @@ export interface CapturedHookProcessResult {
  * Capture a started hook until its first exit, launch error, output flood or deadline.
  * The POSIX child must own a detached process group; false leaves feedback relay to the caller.
  * Resolves launch errors in the result and stops owned processes on forced endings without awaiting close.
+ * An optional stdout budget supports analyzer reports; hook callers retain the default provider envelope.
  */
 export function captureHookProcessUntilDeadline(
   hookProcess: ChildProcess,
@@ -30,6 +31,7 @@ export function captureHookProcessUntilDeadline(
   launchTimeout: number,
   hostPlatform: NodeJS.Platform,
   shouldCaptureResult: boolean,
+  stdoutLimitBytes?: number,
 ): Promise<CapturedHookProcessResult> {
   return new Promise((resolveHookResult) => {
     let hasDeliveredHookResult = false;
@@ -37,6 +39,7 @@ export function captureHookProcessUntilDeadline(
     let hasExceededOutputLimit = false;
     const captured = createCapturedHookOutput(
       hookEnvironment.GOAT_FLOW_HOOK_PROVIDER_MODE === "managed",
+      stdoutLimitBytes,
     );
 
     /** Release owned pipes so surviving descendants cannot keep the launcher open. */

@@ -690,7 +690,7 @@ describe("preflight Tests-phase progress", () => {
     assert.doesNotMatch(preflightSource, /run npx knip for details/u);
   });
 
-  it("excludes legacy hook execution only from the preflight selection", () => {
+  it("includes native hook execution in the preflight selection", () => {
     const source = readFileSync(TEST_RUNNER_PATH, "utf8");
     const start = source.indexOf("function isSlowTest(");
     const end = source.indexOf("// Measured seconds per slow test file", start);
@@ -713,7 +713,7 @@ describe("preflight Tests-phase progress", () => {
           files,
         }) as string[],
       );
-    assert.deepEqual(select("preflight"), files.slice(6, 8));
+    assert.deepEqual(select("preflight"), files.slice(0, 8));
     assert.deepEqual(select("fast"), files.slice(0, 8));
     assert.deepEqual(select("coverage"), files.slice(0, 8));
     assert.deepEqual(select("slow"), files.slice(8));

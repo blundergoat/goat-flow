@@ -73,6 +73,7 @@ interface ScanState {
   coverageGapReported: Set<string>;
   diffFilesDone: number;
   fileClasses: Map<string, FileClass>;
+  fileSizes: Map<string, number>;
 }
 
 function numericSetting(value: string | undefined, fallback: number) {
@@ -102,8 +103,16 @@ function markCoverageGap(state: ScanState, path: string, message: string) {
   // Staged and worktree views of one path should give the user one gap message.
   if (state.coverageGapReported.has(key)) return;
   state.coverageGapReported.add(key);
-  state.coverageGapMessages.push(`${message} in ${path}`);
-  recordPostTurnResultFinding(state.context, "coverage-gap", message, path);
+  const detail = message.startsWith("oversized")
+    ? `${message} in ${path} (${state.fileSizes.get(path)} bytes; limit ${state.maxFileBytes}; review the file and raise GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES if appropriate)`
+    : `${message} in ${path}`;
+  state.coverageGapMessages.push(detail);
+  recordPostTurnResultFinding(
+    state.context,
+    "coverage-gap",
+    message.startsWith("oversized") ? detail : message,
+    path,
+  );
 }
 
 // Stop scanning when the user's time limit or a prior failure makes the result incomplete.
@@ -202,6 +211,7 @@ function classifyFile(state: ScanState, path: string): FileClass {
     // A path that vanished after Git inventory cannot count as scanned.
     if (!entry.isFile()) return "unavailable";
     size = entry.size;
+    state.fileSizes.set(path, size);
   } catch {
     return "unavailable";
   }
@@ -471,8 +481,14 @@ function runDiffBatch(
     const inventory = runGit(
       state,
       ["-c", "core.quotepath=off", "diff", ...cachedFlag]
-        .concat(["--no-ext-diff", "--no-color", "--numstat", "--no-renames"])
-        .concat(["--diff-filter=ACMR", "-z", ...headRevision, "--", ...chunk]),
+        .concat([
+          "--no-ext-diff",
+          "--no-textconv",
+          "--no-color",
+          "--numstat",
+          "--no-renames",
+        ])
+        .concat(["--diff-filter=ACMRT", "-z", ...headRevision, "--", ...chunk]),
       "Git binary inventory failed",
     );
     if (inventory === null) return;
@@ -480,7 +496,7 @@ function runDiffBatch(
     const stream = runGit(
       state,
       [...pinnedOutput, "diff", ...cachedFlag]
-        .concat(["--no-ext-diff", "--no-color", "--unified=0"])
+        .concat(["--no-ext-diff", "--no-textconv", "--no-color", "--unified=0"])
         .concat([...headRevision, "--", ...chunk]),
       "Git diff command failed",
     );
@@ -562,6 +578,7 @@ function createScanState(context: PostTurnContext): ScanState {
     coverageGapReported: new Set(),
     diffFilesDone: 0,
     fileClasses: new Map(),
+    fileSizes: new Map(),
   };
 }
 
@@ -687,7 +704,7 @@ function collectInventories(state: ScanState, hasHead: boolean) {
   // Worktree inventory runs first so later staged deduplication knows what was scanned.
   const worktreePaths = collect(
     hasHead
-      ? ["diff", "--name-only", "-z", "--diff-filter=ACMR", "HEAD", "--"]
+      ? ["diff", "--name-only", "-z", "--diff-filter=ACMRT", "HEAD", "--"]
       : ["ls-files", "-z"],
   );
   const cachedPaths = collect([
@@ -695,7 +712,7 @@ function collectInventories(state: ScanState, hasHead: boolean) {
     "--cached",
     "--name-only",
     "-z",
-    "--diff-filter=ACMR",
+    "--diff-filter=ACMRT",
     "--",
   ]);
   // Ignored local state never blocks; non-ignored untracked files are content the user could commit.

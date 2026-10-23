@@ -294,7 +294,7 @@ jobs:
 
   # Hook port controls on Linux, macOS and Windows: build with Node 24.21.0, then switch each runner to the Node version it checks.
   #
-  # Every host checks both pinned consumer runtimes; native fixtures use explicit test-only transports.
+  # Every host checks both pinned consumer runtimes; native fixtures use the installed Node runtime.
   # Complete policy parity and owning suites run here; live provider delivery retains its separate milestone gate.
   hook-port-controls:
     # Skipped on pull requests and pushes, so a PR never waits on the macOS and Windows runners.
@@ -434,8 +434,13 @@ jobs:
       - name: Native policy integration suites
         shell: bash
         env:
-          GOAT_FLOW_HOOK_UNDER_TEST: candidate
+          GOAT_FLOW_HOOK_UNDER_TEST: installed
         run: node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
+
+      - name: Native Gruff integration suites
+        env:
+          GOAT_FLOW_HOOK_UNDER_TEST: installed
+        run: node --import tsx --test test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts
 
   # Bash extraction stays on native Linux with pinned jq and explicit locales; macOS runs the Node controls above, never reference extraction.
   #
@@ -650,7 +655,7 @@ jobs:
               node --import tsx --test test/unit/hook-launch.test.ts test/unit/run-hook.test.ts test/unit/hook-launcher.test.ts test/unit/hook-result-delivery.test.ts test/unit/hook-stop-delivery.test.ts test/unit/agent-hook-command.test.ts test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-command-native-replay.test.ts test/integration/hook-direct-native-probe.test.ts test/integration/hook-native-audit-configured.test.ts test/integration/hook-native-audit-direct.test.ts test/integration/hook-native-audit-discovery.test.ts test/integration/hook-native-audit-mechanism.test.ts test/integration/hook-policy-node.test.ts
               node --import tsx --test test/integration/hook-parity.test.ts
               (unset LC_ALL; node scripts/check-hook-parity.mjs --stage=candidate --require-complete)
-              GOAT_FLOW_HOOK_UNDER_TEST=candidate node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=installed node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
             done
       # Copies the checkout into WSL, adds checksum-verified Node 24.21.0 and jq 1.6, and lists where the frozen Bash reference behaves differently.
       #

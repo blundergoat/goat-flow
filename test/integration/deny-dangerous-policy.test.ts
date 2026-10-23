@@ -161,7 +161,7 @@ describe("split policy partial installation", () => {
   // Exercise startup failures for both policy switches so missing setup cannot silently permit a request.
   for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
     // Break each declared dependency to verify the provider receives a useful denial rather than a partial guard.
-    const native = hookSelection() === "candidate";
+    const native = hookSelection() !== "reference";
     const extension = native ? "mjs" : "sh";
     const core = native ? "policy-evaluation" : "deny-dangerous/guard-runtime";
     for (const brokenDependency of [

@@ -8,7 +8,6 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  chmodSync,
   cpSync,
   symlinkSync,
   existsSync,
@@ -19,7 +18,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
@@ -642,9 +641,7 @@ describe("one baseline per managed path", () => {
 
   it(
     "lets one concurrent public install mutate and rejects the contender",
-    {
-      skip: process.platform === "win32" ? "POSIX Bash barrier fixture" : false,
-    },
+    {},
     async () => {
       const projectPath = makeTempProject();
       const fixtureDirectory = join(projectPath, ".public-install-barrier");
@@ -654,34 +651,26 @@ describe("one baseline per managed path", () => {
       const releasePath = join(fixtureDirectory, "release");
       mkdirSync(binaryDirectory, { recursive: true });
 
-      const bashLookup = spawnSync("bash", ["-c", "command -v bash"], {
-        encoding: "utf-8",
-      });
-      assert.equal(bashLookup.status, 0, bashLookup.stderr);
-      const realBash = bashLookup.stdout.trim();
-      assert.ok(realBash, "fixture requires the Bash executable path");
-      const wrapperPath = join(binaryDirectory, "bash");
+      const preload = join(binaryDirectory, "barrier.cjs");
       writeFileSync(
-        wrapperPath,
-        [
-          `#!${realBash}`,
-          "set -euo pipefail",
-          'if [[ "${1:-}" == */workflow/install-goat-flow.sh ]]; then',
-          '  if (set -o noclobber; : > "$GOAT_FLOW_TEST_OWNER") 2>/dev/null; then',
-          '    : > "$GOAT_FLOW_TEST_ENTERED"',
-          '    while [[ ! -e "$GOAT_FLOW_TEST_RELEASE" ]]; do',
-          "      sleep 0.02",
-          "    done",
-          "  fi",
-          "fi",
-          'exec "$GOAT_FLOW_TEST_REAL_BASH" "$@"',
-          "",
-        ].join("\n"),
+        preload,
+        `const fs = require("node:fs");
+const allocate = fs.mkdtempSync;
+fs.mkdtempSync = (prefix, ...args) => {
+  if (String(prefix).includes(".goat-flow-stage.")) {
+    try {
+      fs.writeFileSync(process.env.GOAT_FLOW_TEST_OWNER, "", { flag: "wx" });
+      fs.writeFileSync(process.env.GOAT_FLOW_TEST_ENTERED, "");
+      while (!fs.existsSync(process.env.GOAT_FLOW_TEST_RELEASE)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+    } catch (error) { if (error.code !== "EEXIST") throw error; }
+  }
+  return allocate(prefix, ...args);
+};
+require("node:module").syncBuiltinESMExports();
+`,
       );
-      chmodSync(wrapperPath, 0o755);
       const environment = {
-        PATH: `${binaryDirectory}${delimiter}${process.env.PATH ?? ""}`,
-        GOAT_FLOW_TEST_REAL_BASH: realBash,
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(preload)}`,
         GOAT_FLOW_TEST_OWNER: ownerPath,
         GOAT_FLOW_TEST_ENTERED: enteredPath,
         GOAT_FLOW_TEST_RELEASE: releasePath,
@@ -735,9 +724,7 @@ describe("one baseline per managed path", () => {
 
   it(
     "retains old state and prints exact recovery after verified target writes",
-    {
-      skip: process.platform === "win32" ? "POSIX Bash PID fixture" : false,
-    },
+    {},
     async () => {
       const projectPath = makeTempProject();
       const initialInstall = runCliInstaller(projectPath, "--agent", "codex");
@@ -775,36 +762,24 @@ describe("one baseline per managed path", () => {
       const fixtureDirectory = join(projectPath, ".state-write-failure");
       const binaryDirectory = join(fixtureDirectory, "bin");
       mkdirSync(binaryDirectory, { recursive: true });
-      const bashLookup = spawnSync("bash", ["-c", "command -v bash"], {
-        encoding: "utf-8",
-      });
-      assert.equal(bashLookup.status, 0, bashLookup.stderr);
-      const realBash = bashLookup.stdout.trim();
-      assert.ok(realBash, "fixture requires the Bash executable path");
-
-      const wrapperPath = join(binaryDirectory, "bash");
+      const preload = join(binaryDirectory, "state-failure.cjs");
       writeFileSync(
-        wrapperPath,
-        [
-          `#!${realBash}`,
-          "set -uo pipefail",
-          '"$GOAT_FLOW_TEST_REAL_BASH" "$@"',
-          "status=$?",
-          'if [[ "$status" -eq 0 && "${1:-}" == */workflow/install-goat-flow.sh ]]; then',
-          '  mkdir "$2/.goat-flow/state/install/managed.json.tmp-$PPID"',
-          "fi",
-          'exit "$status"',
-          "",
-        ].join("\n"),
+        preload,
+        `const fs = require("node:fs");
+const rename = fs.renameSync;
+fs.renameSync = (source, destination) => {
+  if (destination === ${JSON.stringify(managedStatePath)}) throw new Error("injected state publication failure");
+  return rename(source, destination);
+};
+require("node:module").syncBuiltinESMExports();
+`,
       );
-      chmodSync(wrapperPath, 0o755);
 
       const failedInstall = await runCliInstallerAsync(
         projectPath,
         "codex",
         {
-          PATH: `${binaryDirectory}${delimiter}${process.env.PATH ?? ""}`,
-          GOAT_FLOW_TEST_REAL_BASH: realBash,
+          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(preload)}`,
         },
         ["--force-managed"],
       );
@@ -826,6 +801,7 @@ describe("one baseline per managed path", () => {
 
 describe("hook-only shared history upgrades", () => {
   it("advances successive bundled hook versions while preserving full-install receipts and unrelated rows", () => {
+    const sharedHookPath = ".goat-flow/hooks/run-hook.mjs";
     const projectPath = makeTempProject();
     const packagePath = makeTempProject();
     const installed = runCliInstaller(projectPath, "--agent", "claude");
@@ -854,14 +830,20 @@ describe("hook-only shared history upgrades", () => {
     const packageJson = JSON.parse(
       readFileSync(packageJsonPath, "utf-8"),
     ) as Record<string, unknown>;
-    const bundledPath = join(packagePath, "workflow/hooks/run-with-bash.mjs");
+    const bundledPath = join(packagePath, "workflow/hooks/run-hook.mjs");
     const originalBundle = readFileSync(bundledPath, "utf-8");
     let previousGeneration = initial.files.find(
-      (row) => row.path === SHARED_HOOK_PATH,
+      (row) => row.path === sharedHookPath,
     )?.generation;
 
+    const [major, minor, patch] = String(packageJson.version)
+      .split(".")
+      .map(Number);
+    const versions = [1, 2].map(
+      (offset) => `${major}.${minor}.${Number(patch) + offset}`,
+    );
     // Each CLI process resolves its own package version, just as successive user-installed releases do.
-    for (const version of ["1.18.0", "1.19.0"]) {
+    for (const version of versions) {
       packageJson.version = version;
       writeFileSync(packageJsonPath, JSON.stringify(packageJson));
       const incomingBytes = `${originalBundle}\n// Fixture bundle version ${version}.\n`;
@@ -888,14 +870,12 @@ describe("hook-only shared history upgrades", () => {
         `${version}: ${synced.stderr || synced.stdout}`,
       );
       assert.equal(
-        readFileSync(join(projectPath, SHARED_HOOK_PATH), "utf-8"),
+        readFileSync(join(projectPath, sharedHookPath), "utf-8"),
         incomingBytes,
         version,
       );
       const current = readManagedState(projectPath).state;
-      const hookRow = current.files.find(
-        (row) => row.path === SHARED_HOOK_PATH,
-      );
+      const hookRow = current.files.find((row) => row.path === sharedHookPath);
       assert.ok(hookRow, version);
       assert.equal(
         hookRow.expectedSha256,
@@ -915,7 +895,7 @@ describe("hook-only shared history upgrades", () => {
       assert.deepEqual(current.receipts, initial.receipts, version);
       const priorReference = current.receipts
         .flatMap((receipt) => receipt.files)
-        .find((row) => row.path === SHARED_HOOK_PATH);
+        .find((row) => row.path === sharedHookPath);
       assert.ok(priorReference, version);
       assert.notEqual(
         priorReference.generation,

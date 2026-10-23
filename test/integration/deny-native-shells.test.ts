@@ -533,7 +533,7 @@ describe("Unqualified native PowerShell tool", () => {
       assert.equal(result.status, 2, result.stderr);
       assert.match(
         result.stderr,
-        hookSelection() === "candidate"
+        hookSelection() !== "reference"
           ? /PowerShell.*supported shell tool/u
           : /PowerShell.*Bash/u,
       );

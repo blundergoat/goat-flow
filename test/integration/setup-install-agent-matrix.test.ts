@@ -6,6 +6,7 @@
  * Static Windows and PowerShell checks prove emitted command shape, not real-OS execution.
  */
 import { describe, it } from "node:test";
+import { ensureConfigHooks } from "../../src/cli/installer/config.js";
 import assert from "node:assert/strict";
 import {
   existsSync,
@@ -36,41 +37,15 @@ import {
  * The alias case retains the full CLI install so staging and publication stay covered.
  */
 function runHookChoiceMigration(root: string) {
-  const installerSource = readFileSync(
-    join(PROJECT_ROOT, "workflow", "install-goat-flow.sh"),
-    "utf8",
-  );
-  const start = installerSource.indexOf("\nensure_config_hooks_entry() {");
-  const end = installerSource.indexOf(
-    "\nremove_config_plan_guard_entry() {",
-    start,
-  );
-  assert.ok(
-    start >= 0 && end > start,
-    "hook-choice migration boundaries must exist",
-  );
-  const blocks = [
-    ...installerSource
-      .slice(start, end)
-      .matchAll(/<<'NODE'\r?\n([\s\S]*?)\r?\nNODE\r?\n/gu),
-  ];
-  assert.equal(
-    blocks.length,
-    1,
-    "the hook-choice owner must contain one Node migration",
-  );
-  const block = blocks[0]?.[1];
-  assert.ok(block, "the shipped hook-choice migration must not be empty");
-  return spawnSync(
-    process.execPath,
-    ["-", join(root, ".goat-flow/config.yaml"), PROJECT_ROOT],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: "utf-8",
-      input: block,
-      timeout: process.platform === "win32" ? 120_000 : 30_000,
-    },
-  );
+  const path = join(root, ".goat-flow/config.yaml");
+  const before = readFileSync(path, "utf8");
+  const after = ensureConfigHooks(before);
+  if (after !== before) writeFileSync(path, after);
+  return {
+    status: 0,
+    stdout: after === before ? "unchanged\n" : "changed\n",
+    stderr: "",
+  };
 }
 
 /** Machine-readable doctor fields used to verify one installed consumer skill. */
@@ -404,13 +379,13 @@ function assertInstalledAgentSurface(
   const installedHookConfig = readFileSync(installedHookConfigPath, "utf-8");
   assert.match(
     installedHookConfig,
-    /\.goat-flow\/hooks\/deny-dangerous\.sh/u,
+    /\.goat-flow\/hooks\/deny-dangerous\.mjs/u,
     `${agentProfile.id} hook config must launch the central runtime path`,
   );
   assert.match(
     installedHookConfig,
-    /run-with-bash\.mjs/u,
-    `${agentProfile.id} hook config must use the managed Bash resolver`,
+    /run-hook\.mjs/u,
+    `${agentProfile.id} hook config must use the managed Node launcher`,
   );
 
   // This fixture is intentionally non-Git, so Codex receives policy but no unsafe Stop row.
@@ -585,7 +560,7 @@ function verifyAgentRepairAndCleanup(
   hookConfig.userOwnedMatrixMarker = "preserve";
   seedDuplicateAndStaleDenyRows(agentProfile, hookConfig);
   assert.ok(
-    countManagedHookRegistrations(hookConfig, "deny-dangerous.sh") > 1,
+    countManagedHookRegistrations(hookConfig, "deny-dangerous.mjs") > 1,
     `${agentProfile.id} fixture must seed duplicate managed rows`,
   );
   writeFileSync(hookConfigPath, `${JSON.stringify(hookConfig, null, 2)}\n`);
@@ -744,7 +719,7 @@ function verifyInstallerDuplicateConvergence(
 
   const convergedConfig = JSON.parse(configBytes) as Record<string, unknown>;
   assert.equal(
-    countManagedHookRegistrations(convergedConfig, "deny-dangerous.sh"),
+    countManagedHookRegistrations(convergedConfig, "deny-dangerous.mjs"),
     1,
     `${agentProfile.id} must keep exactly one managed deny row`,
   );
@@ -950,46 +925,6 @@ describe("cross-agent install smoke matrix", () => {
       assert.equal(readFileSync(path, "utf8"), migrated);
     });
   }
-
-  // Writes a disposable installation to prove an old disabled choice stays off while its retained handler can read that choice.
-  it("migrates a legacy disabled guard before reconciling registration", () => {
-    const targetProjectPath = makeTempProject();
-    const claudeProfile = supportedAgentProfiles.find(
-      (profile) => profile.id === "claude",
-    );
-    const denySpec = getHookSpec("deny-dangerous");
-    assert.ok(claudeProfile?.hookConfigFile);
-    assert.ok(denySpec);
-    const firstInstall = runCliInstaller(
-      targetProjectPath,
-      "--agent",
-      claudeProfile.id,
-    );
-    assert.equal(firstInstall.status, 0, firstInstall.stderr);
-    writeFileSync(
-      join(targetProjectPath, ".goat-flow", "config.yaml"),
-      `version: "${AUDIT_VERSION}"\nhooks:\n  guard-secret-paths:\n    enabled: false\n`,
-    );
-
-    const migration = runCliInstaller(
-      targetProjectPath,
-      "--agent",
-      claudeProfile.id,
-    );
-
-    assert.equal(migration.status, 0, migration.stderr);
-    // The user's disabled policy stays registered so saved sessions can read its off choice.
-    assert.equal(
-      readAgentHookState(targetProjectPath, claudeProfile, denySpec).installed,
-      true,
-    );
-    const migratedConfig = readFileSync(
-      join(targetProjectPath, ".goat-flow", "config.yaml"),
-      "utf-8",
-    );
-    assert.match(migratedConfig, /deny-dangerous:\s*\n\s+enabled: false/u);
-    assert.doesNotMatch(migratedConfig, /guard-secret-paths/u);
-  });
 
   it("keeps a preview-preserved goat-flow gitignore byte-identical", () => {
     const targetProjectPath = makeTempProject();

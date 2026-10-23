@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-10-17
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-size-gates.md](verification-size-gates.md).
@@ -125,7 +125,7 @@ last_reviewed: 2026-10-17
 **Severity:** INTEGRATION
 **Incident count:** 5 | **Latest occurrence:** 2026-09-12
 
-**Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, name the side effect in plain maintainer language (`Writes`, `Spawns`, `filesystem`) instead of a generic purpose sentence, and do not swap that verb for a synonym later. If the finding remains, read the installed rule before another rewrite. After a large docs batch, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
+**Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, name the side effect in plain maintainer language (`Writes`, `Spawns`, `filesystem`) instead of a generic purpose sentence, and do not swap that verb for a synonym later. If the finding remains, read the installed rule before another rewrite. After a large docs batch, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the selected writer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
 
 **What happened:** The first internal-helper comment batch cleared `docs.missing-internal-function-doc` but reduced the full snapshot by only 175 findings, because Gruff then reported `docs.missing-side-effect-doc` on helpers that write fixture files or spawn tools. Saying `Writes` or `Spawns` explicitly moved the snapshot to `summary error=0 warning=121 advisory=598 total=719` and both doc clusters to zero.
 

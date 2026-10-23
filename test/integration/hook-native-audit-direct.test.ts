@@ -73,16 +73,16 @@ function runNativeAuditScenario(caseKind: "responses" | "failures") {
         const facts={agent:{id:provider}};
         if(${JSON.stringify(caseKind)}==="responses") {
           for (const hook of ["deny-dangerous","deny-git-mutations"]) {
-            const result=verifyDirectHookRuntime(ctx,facts,".goat-flow/hooks/"+hook+".mjs","node");
+            const result=verifyDirectHookRuntime(ctx,facts,".goat-flow/hooks/"+hook+".mjs");
             assert.equal(result.ok,true,provider+":"+hook+":"+JSON.stringify(result));
           }
         } else {
-          const legacy=verifyDirectHookRuntime(ctx,facts,".goat-flow/hooks/deny-dangerous.sh","node");
+          const legacy=verifyDirectHookRuntime(ctx,facts,".goat-flow/hooks/deny-dangerous.sh");
           assert.equal(legacy.ok,false,provider);
           assert.match(legacy.message,/requires a \\.mjs hook/u);
-          const missing=verifyDirectHookRuntime(ctx,facts,".goat-flow/hooks/missing.mjs","node");
+          const missing=verifyDirectHookRuntime(ctx,facts,".goat-flow/hooks/missing.mjs");
           assert.equal(missing.ok,false,provider);
-          const failed=verifyDirectHookRuntime(ctx,facts,".goat-flow/hooks/deny-dangerous.mjs","node");
+          const failed=verifyDirectHookRuntime(ctx,facts,".goat-flow/hooks/deny-dangerous.mjs");
           assert.equal(failed.ok,false,provider);
         }
       }

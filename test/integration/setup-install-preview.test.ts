@@ -294,11 +294,7 @@ describe("managed setup preview", () => {
     const result = runCliInstaller(projectPath, "--agent", "codex");
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    // The helper announces the remaining CLI work before this public path records the user's verified baseline.
-    assert.match(
-      result.stdout,
-      /The public goat-flow CLI verifies managed files and records install state after this helper exits\./u,
-    );
+    assert.match(result.stdout, /Install verified for codex/u);
     const statePath = join(projectPath, MANAGED_INSTALL_STATE_PATH);
     assert.equal(existsSync(statePath), true);
     const state = readFileSync(statePath, "utf-8");
@@ -631,8 +627,8 @@ describe("managed setup preview", () => {
     assert.match(installedHookConfig, /node user-hook\.js/u);
     assert.match(installedHookConfig, /keep my status/u);
     // The disabled policy keeps its registration; the saved off choice asserted above keeps it neutral.
-    assert.match(installedHookConfig, /deny-dangerous\.sh/u);
-    assert.doesNotMatch(installedHookConfig, /post-turn-safety\.sh/u);
+    assert.match(installedHookConfig, /deny-dangerous\.mjs/u);
+    assert.doesNotMatch(installedHookConfig, /post-turn-safety\.mjs/u);
   });
 
   it("keeps dry-run state unchanged after a local managed edit", () => {
@@ -777,7 +773,7 @@ describe("managed setup preview", () => {
     const apply = runCliInstaller(projectPath, "--agent", "codex");
     assert.equal(apply.status, 0, apply.stderr || apply.stdout);
     const reconciledHooks = readFileSync(hooksPath, "utf-8");
-    assert.match(reconciledHooks, /deny-dangerous\.sh/u);
+    assert.match(reconciledHooks, /deny-dangerous\.mjs/u);
     assert.match(reconciledHooks, /keep this user field/u);
     assert.equal(hooksRow?.state, "user-migrated");
     assert.equal(hooksRow?.action, "migrate");

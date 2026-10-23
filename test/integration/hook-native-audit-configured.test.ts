@@ -76,12 +76,7 @@ function createFixture(parent: string, provider: Provider) {
     ".goat-flow/hooks",
     spec,
   );
-  const native = buildAgentHookDescriptor(
-    provider,
-    ".goat-flow/hooks",
-    spec,
-    "node",
-  );
+  const native = buildAgentHookDescriptor(provider, ".goat-flow/hooks", spec);
   const configRelativePath = PROFILES[provider].hookConfigFile;
   assert.ok(configRelativePath);
   const configPath = join(root, configRelativePath);
@@ -107,10 +102,7 @@ function createFixture(parent: string, provider: Provider) {
     native,
   );
   assert.ok(saved, "complete native identity must survive save/reload");
-  assert.equal(
-    entryCarriesHandlerDescriptor(saved, provider, installed),
-    false,
-  );
+  assert.equal(entryCarriesHandlerDescriptor(saved, provider, installed), true);
   const configured = {
     command: (provider === "copilot" ? saved.bash : saved.command) as string,
     commandWindows:
@@ -178,7 +170,7 @@ function runScenario(kind: "responses" | "failures") {
           const expected=[];
           for(const cwd of [root,nested])for(const command of ["native fixture allow '$&| (literal) 🐐","native fixture deny"]) {
             const input=payload(command), blocked=command==="native fixture deny";
-            const result=spawnConfiguredHookProbe(configured,probe(input),cwd,"node");
+            const result=spawnConfiguredHookProbe(configured,probe(input),cwd);
             assert.equal(
               result.status,
               blocked&&(provider==="claude"||provider==="codex")?2:0,
@@ -202,10 +194,10 @@ function runScenario(kind: "responses" | "failures") {
           }
           assert.deepEqual(readFileSync(fixture.observedPath,"utf8").trim().split("\n").map(JSON.parse),expected);
         } else {
-          const legacy={...configured,command:installed.command,args:installed.form==="argv"?installed.args:null,commandWindows:installed.commandWindows??null};
-          assert.throws(()=>spawnConfiguredHookProbe(legacy,probe(payload("native fixture deny")),root,"node"),/native candidate replay requires/u);
+          const legacy={...configured,scriptFile:"deny-dangerous.sh",scriptPath:".goat-flow/hooks/deny-dangerous.sh"};
+          assert.throws(()=>spawnConfiguredHookProbe(legacy,probe(payload("native fixture deny")),root),/native replay requires/u);
           rmSync(fixture.evaluator);
-          const missing=spawnConfiguredHookProbe(configured,probe(payload("native fixture deny")),root,"node");
+          const missing=spawnConfiguredHookProbe(configured,probe(payload("native fixture deny")),root);
           assert.match(missing.stdout+missing.stderr,/hook unavailable/u);
           assert.equal(missing.signal,null);
         }
@@ -242,7 +234,7 @@ test("native configured audit refuses installed operands and exposes unavailable
 });
 
 // Spawns an inert argv control to protect the omitted-flag route and keep the exported owner visible to static dependency checks.
-test("configured audit keeps default exec argv and stdin without native admission", () => {
+test("configured audit preserves literal exec argv and stdin", () => {
   const hookInput = "literal '$&| 🐐\n";
   const result = spawnConfiguredHookProbe(
     {
@@ -252,8 +244,8 @@ test("configured audit keeps default exec argv and stdin without native admissio
         "-e",
         "process.stdout.write(require('node:fs').readFileSync(0,'utf8'))",
       ],
-      scriptFile: "fixture.sh",
-      scriptPath: "fixture.sh",
+      scriptFile: "fixture.mjs",
+      scriptPath: "fixture.mjs",
       configPath: "fixture.json",
     },
     {

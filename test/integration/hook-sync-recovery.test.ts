@@ -162,6 +162,15 @@ function replaySavedCodexCommand(
   );
 }
 
+function assertCachedLegacyHandlerRequiresReload(
+  projectPath: string,
+  command: string,
+): void {
+  const reply = replaySavedCodexCommand(projectPath, command, "git status");
+  assert.equal(reply.status, 2);
+  assert.match(reply.stderr, /Policy hook unavailable.*managed root/u);
+}
+
 /**
  * Capture the configured policy command before a user changes settings or upgrades the selected project.
  *
@@ -176,8 +185,10 @@ function savedCodexPolicyCommand(projectPath: string, hookId: string): string {
   );
   const handler = config.hooks.PreToolUse.flatMap(
     (group: { hooks: { command: string }[] }) => group.hooks,
-  ).find((entry: { command: string }) =>
-    entry.command.includes(`${hookId}.sh`),
+  ).find(
+    (entry: { command: string }) =>
+      entry.command.includes(`${hookId}.mjs`) ||
+      entry.command.includes(`${hookId}.sh`),
   );
   assert.ok(handler, `The installed version must register ${hookId}`);
   assert.equal(typeof handler.command, "string");
@@ -197,7 +208,7 @@ function mixedPolicyProject(isPristine: boolean): string {
     join(projectPath, ".goat-flow/config.yaml"),
     "hooks: {deny-dangerous: {enabled: true}, deny-git-mutations: {enabled: false}}\n",
   );
-  const ownershipPath = ".goat-flow/hooks/deny-dangerous/guard-runtime.sh";
+  const ownershipPath = ".goat-flow/hooks/policy-evaluation.mjs";
   const oldBytes = "# previous package ownership fixture\n";
   fs.writeFileSync(join(projectPath, ownershipPath), oldBytes);
   // A prior package install can be pristine while still needing policy review; local edits retain their separate replacement conflict.
@@ -398,14 +409,24 @@ describe("hook sync migration and claim recovery", () => {
     assert.deepEqual(projectFiles(projectPath), before);
     const review = policyRefusal(() => syncHookStates(projectPath));
     assert.equal(review.code, "hook-replacement-required");
-    assert.ok(review.paths.includes(".goat-flow/hooks/run-with-bash.mjs"));
+    assert.ok(
+      review.paths.includes(".goat-flow/hooks/hook-launch-runtime.mjs"),
+      JSON.stringify(review.paths),
+    );
     assert.deepEqual(projectFiles(projectPath), before);
     syncHookStates(projectPath, {
       replace: true,
       confirmationIdentity: review.confirmationIdentity,
     });
+    assertCachedLegacyHandlerRequiresReload(
+      projectPath,
+      archivedGeneralCommand,
+    );
     const savedHandlers = new Map([
-      ["deny-dangerous", archivedGeneralCommand],
+      [
+        "deny-dangerous",
+        savedCodexPolicyCommand(projectPath, "deny-dangerous"),
+      ],
       [
         "deny-git-mutations",
         savedCodexPolicyCommand(projectPath, "deny-git-mutations"),
@@ -550,7 +571,10 @@ describe("hook sync migration and claim recovery", () => {
 
         syncHookStates(projectPath);
 
-        assert.equal(fs.existsSync(join(projectPath, legacyScript)), false);
+        assert.equal(
+          fs.readFileSync(join(projectPath, legacyScript), "utf8"),
+          officialScript,
+        );
         assert.deepEqual(
           // A profile without a hook config cannot appear as an installed hook provider.
           Object.values(PROFILES)
@@ -564,10 +588,13 @@ describe("hook sync migration and claim recovery", () => {
         );
         assert.deepEqual(
           fs.readFileSync(
-            join(projectPath, ".goat-flow/hooks/deny-dangerous.sh"),
+            join(projectPath, ".goat-flow/hooks/deny-dangerous.mjs"),
             "utf8",
           ),
-          officialScript,
+          fs.readFileSync(
+            join(REPOSITORY_ROOT, "workflow/hooks/deny-dangerous.mjs"),
+            "utf8",
+          ),
         );
       } finally {
         fs.rmSync(projectPath, { recursive: true, force: true });
@@ -736,7 +763,7 @@ describe("saved Gruff choices across the supported upgrade", () => {
     const gruffRegistrationCount = (): number =>
       fs
         .readFileSync(join(projectPath, ".claude/settings.json"), "utf8")
-        .split("gruff-code-quality.sh").length - 1;
+        .split("gruff-code-quality.mjs").length - 1;
 
     runPublicCli(["install", projectPath, "--agent", "claude"]);
     runPublicCli(["hooks", "sync", projectPath]);

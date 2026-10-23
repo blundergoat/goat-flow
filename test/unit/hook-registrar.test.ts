@@ -93,9 +93,8 @@ describe("hook registrar: launchers and installation", () => {
   it("refuses to overwrite a hook stamped newer than the running CLI", () => {
     withTempProject((root) => {
       const hookDir = join(root, ".goat-flow", "hooks");
-      const hookPath = join(hookDir, "deny-dangerous.sh");
-      const futureHook =
-        "#!/usr/bin/env bash\n# goat-flow-hook-version: 999.0.0\n";
+      const hookPath = join(hookDir, "deny-dangerous.mjs");
+      const futureHook = "// goat-flow-hook-version: 999.0.0\n";
       mkdirSync(join(root, ".codex"), { recursive: true });
       mkdirSync(hookDir, { recursive: true });
       writeFileSync(join(root, ".codex", "config.toml"), "\n");
@@ -547,20 +546,15 @@ describe("hook registrar: launchers and installation", () => {
 
       applyHookState(HOOK_IDENTIFIER, false, root);
 
-      const managedHookPath = join(
-        root,
-        ".goat-flow",
-        "hooks",
-        "deny-dangerous.sh",
-      );
+      const managedHookPath = join(root, ".goat-flow/hooks/deny-dangerous.mjs");
       assert.equal(existsSync(managedHookPath), true);
       // Git retains its default-on choice while the selected hook stays disabled.
       const initialConfig = readFileSync(
         join(root, ".codex", "hooks.json"),
         "utf-8",
       );
-      assert.equal(initialConfig.includes("deny-dangerous.sh"), true);
-      assert.equal(initialConfig.includes("deny-git-mutations.sh"), true);
+      assert.equal(initialConfig.includes("deny-dangerous.mjs"), true);
+      assert.equal(initialConfig.includes("deny-git-mutations.mjs"), true);
 
       // Dashboard switches retain the reviewed Codex definitions, including their order and exact file bytes.
       for (const [policyId, enabled] of [
@@ -593,8 +587,8 @@ describe("hook registrar: launchers and installation", () => {
       assert.equal(disabledState.installed, true);
       // Git retains its independent choice while the selected hook stays disabled.
       const config = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
-      assert.equal(config.includes("deny-dangerous.sh"), true);
-      assert.equal(config.includes("deny-git-mutations.sh"), true);
+      assert.equal(config.includes("deny-dangerous.mjs"), true);
+      assert.equal(config.includes("deny-git-mutations.mjs"), true);
       assert.equal(
         config,
         initialConfig,
@@ -743,7 +737,7 @@ describe("hook registrar: launchers and installation", () => {
         assert.fail("Claude must register the approved argv handler");
       }
       assert.deepEqual(managedRows[0], {
-        matcher: "Bash|PowerShell",
+        matcher: "Bash|PowerShell|Monitor",
         hooks: [
           {
             type: "command",
@@ -782,7 +776,7 @@ describe("hook registrar: launchers and installation", () => {
         };
         const dangerRow = config.hooks.PreToolUse.flatMap(
           (group) => group.hooks,
-        ).find((row) => JSON.stringify(row).includes("deny-dangerous.sh"));
+        ).find((row) => JSON.stringify(row).includes("deny-dangerous.mjs"));
         assert.ok(dangerRow);
         assert.ok(
           droppedField in dangerRow,
@@ -819,7 +813,7 @@ describe("hook registrar: launchers and installation", () => {
       };
       const dangerRow = config.hooks.PreToolUse.flatMap(
         (group) => group.hooks,
-      ).find((row) => JSON.stringify(row).includes("deny-dangerous.sh"));
+      ).find((row) => JSON.stringify(row).includes("deny-dangerous.mjs"));
       assert.ok(dangerRow);
       dangerRow.commandWindows += " stale";
       writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
@@ -852,7 +846,7 @@ describe("hook registrar: launchers and installation", () => {
         mainLauncher.command,
         ...mainLauncher.args,
       ].join("\n");
-      assert.match(mainLauncherText, /run-with-bash\.mjs/u);
+      assert.match(mainLauncherText, /run-hook\.mjs/u);
       assert.match(mainLauncherText, /--show-toplevel/u);
       assert.doesNotMatch(mainLauncherText, /git-common-dir/u);
       runGit(main, [
@@ -865,7 +859,7 @@ describe("hook registrar: launchers and installation", () => {
       ]);
 
       assert.equal(
-        existsSync(join(worktree, ".goat-flow", "hooks", "deny-dangerous.sh")),
+        existsSync(join(worktree, ".goat-flow", "hooks", "deny-dangerous.mjs")),
         true,
         "worktree fixture should prove central hooks exist in the active checkout",
       );
@@ -885,7 +879,7 @@ describe("hook registrar: launchers and installation", () => {
         sourceLauncher.command,
         ...sourceLauncher.args,
       ].join("\n");
-      assert.match(sourceLauncherText, /run-with-bash\.mjs/u);
+      assert.match(sourceLauncherText, /run-hook\.mjs/u);
       assert.match(sourceLauncherText, /--show-toplevel/u);
       assert.doesNotMatch(sourceLauncherText, /git-common-dir/u);
       commitAll(subSource, "initial submodule with central hooks");
@@ -960,7 +954,7 @@ describe("hook registrar: launchers and installation", () => {
       applyHookState(HOOK_IDENTIFIER, true, root);
 
       const launcher = readCodexDenyLauncher(root);
-      assert.match(launcher.command, /run-with-bash\.mjs/u);
+      assert.match(launcher.command, /run-hook\.mjs/u);
       assert.match(launcher.command, /--show-toplevel/u);
       assert.doesNotMatch(launcher.command, /CLAUDE_PROJECT_DIR/u);
       assert.doesNotMatch(launcher.command, /^\.goat-flow\/hooks/u);
@@ -1022,8 +1016,8 @@ describe("hook registrar: launchers and installation", () => {
       const innerLauncher = installCodexDenyHook(inner);
       assert.equal(typeof innerLauncher.commandWindows, "string");
       writeFileSync(
-        join(inner, ".goat-flow", "hooks", "deny-dangerous.sh"),
-        "#!/usr/bin/env bash\nprintf 'INNER_MANAGED_ROOT\\n'\n",
+        join(inner, ".goat-flow", "hooks", "deny-dangerous.mjs"),
+        "console.log('INNER_MANAGED_ROOT');\n",
       );
       const innerCwd = join(inner, "src");
       mkdirSync(innerCwd, { recursive: true });
@@ -1053,7 +1047,7 @@ describe("hook registrar: launchers and installation", () => {
       );
       mkdirSync(join(unrelated, ".goat-flow", "hooks"), { recursive: true });
       writeFileSync(
-        join(unrelated, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        join(unrelated, ".goat-flow", "hooks", "run-hook.mjs"),
         "// launcher for a different managed hook\n",
       );
       const unrelatedResult = runCodexLauncher(launcher, unrelated);
@@ -1066,8 +1060,8 @@ describe("hook registrar: launchers and installation", () => {
       const partial = join(root, "partial");
       mkdirSync(join(partial, ".goat-flow", "hooks"), { recursive: true });
       writeFileSync(
-        join(partial, ".goat-flow", "hooks", "deny-dangerous.sh"),
-        "#!/usr/bin/env bash\nexit 0\n",
+        join(partial, ".goat-flow", "hooks", "deny-dangerous.mjs"),
+        "process.exit(0);\n",
       );
       const partialResult = runCodexLauncher(launcher, partial);
       assert.equal(
@@ -1091,13 +1085,15 @@ describe("hook registrar: launchers and installation", () => {
       const cwdPath = join(root, "captured-cwd.txt");
       // Fixture purpose: capture the exact user payload and working directory seen by the hook.
       writeFileSync(
-        join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
-        [
-          "#!/usr/bin/env bash",
-          'cat > "$GOAT_FLOW_TEST_PAYLOAD_PATH"',
-          'if pwd -W >/dev/null 2>&1; then pwd -W; else pwd; fi > "$GOAT_FLOW_TEST_CWD_PATH"',
-          "",
-        ].join("\n"),
+        join(root, ".goat-flow", "hooks", "deny-dangerous.mjs"),
+        `import { writeFileSync } from "node:fs";
+const chunks = [];
+process.stdin.on("data", chunk => chunks.push(chunk));
+process.stdin.on("end", () => {
+  writeFileSync(process.env.GOAT_FLOW_TEST_PAYLOAD_PATH, Buffer.concat(chunks));
+  writeFileSync(process.env.GOAT_FLOW_TEST_CWD_PATH, process.cwd());
+});
+`,
       );
       const nested = join(root, "deep", "cwd");
       mkdirSync(nested, { recursive: true });

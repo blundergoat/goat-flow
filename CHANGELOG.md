@@ -20,6 +20,16 @@
 
 - **Node hook verification** - Native registration audits use the configured hook filename, and policy self-tests fail when no cases run or the declared case count is wrong.
 
+## v1.19.0 - 2026-10-23
+
+### Changed
+
+- **Hooks run on Node** - New installations and `goat-flow hooks sync` register Node handlers; reload your agent after syncing an existing installation.
+
+### Fixed
+
+- **Native hook checks** - Audit and hook verification recognize the installed Node handlers and report missing dependencies.
+
 ## v1.18.0 - 2026-10-11
 
 ### Added

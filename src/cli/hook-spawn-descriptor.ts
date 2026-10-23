@@ -6,31 +6,28 @@ import type {
 
 /**
  * Choose the process that replays a registered hook when the user runs `goat-flow hooks verify` on this platform.
- * A Windows override such as Codex's `commandWindows` wins; other shell handlers run their Bash source unchanged.
+ * A Windows override such as Codex's `commandWindows` wins; native commands become Node argv and legacy shell commands retain their source.
  *
  * @param descriptor - Registered handler whose current-platform command is selected.
  * @param platform - Host platform used for selection; defaults to the running Node process.
- * @param candidateTransport - test-only native replay; omitted retains the installed transport.
  * @returns Executable, arguments and optional environment additions; absent env means ordinary platform quoting is sufficient.
  * @throws when native replay names installed Bash operands or a noncanonical command.
  */
 export function agentHookSpawnDescriptor(
   descriptor: AgentHookHandlerDescriptor,
   platform: NodeJS.Platform = process.platform,
-  candidateTransport?: "node",
 ): AgentHookSpawnDescriptor {
   // Claude's exec registration is already literal argv and needs no intermediate shell.
   if (descriptor.form === "argv") {
-    if (candidateTransport === "node")
-      assertNativeCandidateOperands(descriptor.args, descriptor.command);
+    if (descriptor.args[6]?.endsWith("/run-hook.mjs"))
+      assertNativeOperands(descriptor.args, descriptor.command);
     // Shell-routing fields belong to host config identity, never Claude's direct exec replay.
     return { command: descriptor.command, args: [...descriptor.args] };
   }
-  const nativeReplay =
-    candidateTransport === "node"
-      ? nativeCandidateShellReplay(descriptor.command)
-      : null;
-  // A registered Windows override keeps precedence for installed and candidate replays.
+  const nativeReplay = descriptor.command.includes("run-hook.mjs")
+    ? nativeShellReplay(descriptor.command)
+    : null;
+  // A registered Windows override keeps precedence for native and legacy replays.
   if (platform === "win32" && descriptor.commandWindows !== undefined) {
     return {
       command: "powershell.exe",
@@ -61,11 +58,8 @@ export function agentHookSpawnDescriptor(
   return { command: "bash", args: ["-c", descriptor.command] };
 }
 
-/** Validate native candidate operands; throws instead of replaying a Bash entrypoint. */
-function assertNativeCandidateOperands(
-  args: string[],
-  executable: string,
-): void {
+/** Validate native registration operands; throws instead of replaying a Bash entrypoint. */
+function assertNativeOperands(args: string[], executable: string): void {
   if (
     executable !== "node" ||
     args.length !== 7 ||
@@ -79,9 +73,7 @@ function assertNativeCandidateOperands(
 }
 
 /** Decode the writer's JSON-quoted Node command into literal argv; throws on other shapes or non-native operands. */
-function nativeCandidateShellReplay(
-  commandText: string,
-): AgentHookSpawnDescriptor {
+function nativeShellReplay(commandText: string): AgentHookSpawnDescriptor {
   const scanBudgetPrefix = "GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304 ";
   const hasScanBudget = commandText.startsWith(scanBudgetPrefix);
   const command = hasScanBudget
@@ -100,7 +92,7 @@ function nativeCandidateShellReplay(
     "-e",
     ...operands.map((operand) => JSON.parse(operand) as string),
   ];
-  assertNativeCandidateOperands(args, "node");
+  assertNativeOperands(args, "node");
   return hasScanBudget
     ? {
         command: "node",

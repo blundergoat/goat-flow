@@ -1,6 +1,6 @@
 {
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.18.0",
+  "version": "1.19.0",
 
   "required_files": [
     ".goat-flow/.gitignore",
@@ -50,6 +50,10 @@
     ".goat-flow/hooks/deny-dangerous/corpus.json",
     ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/gruff-code-quality.mjs",
+    ".goat-flow/hooks/gruff/scope.mjs",
+    ".goat-flow/hooks/gruff/ranges.mjs",
+    ".goat-flow/hooks/gruff/analyzer.mjs",
+    ".goat-flow/hooks/gruff/feedback.mjs",
     ".goat-flow/hooks/hook-provider-adapters.mjs",
     ".goat-flow/hooks/hook-launch-runtime.mjs",
     ".goat-flow/hooks/hook-launch.mjs",
@@ -283,6 +287,22 @@
       "ownership": "system-owned",
       "source": "workflow/hooks/gruff-code-quality.mjs"
     },
+    ".goat-flow/hooks/gruff/scope.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff/scope.mjs"
+    },
+    ".goat-flow/hooks/gruff/ranges.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff/ranges.mjs"
+    },
+    ".goat-flow/hooks/gruff/analyzer.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff/analyzer.mjs"
+    },
+    ".goat-flow/hooks/gruff/feedback.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff/feedback.mjs"
+    },
     ".goat-flow/hooks/hook-provider-adapters.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/hook-provider-adapters.mjs"
@@ -476,11 +496,13 @@
     ".goat-flow/skill-docs/skill-quality-testing/",
     ".goat-flow/hooks/",
     ".goat-flow/hooks/post-turn/",
+    ".goat-flow/hooks/gruff/",
     ".goat-flow/hooks/deny-dangerous/",
     ".goat-flow/plans/"
   ],
 
   "directory_purposes": {
+    ".goat-flow/hooks/gruff/": "Generated native Gruff payload ownership, changed ranges, analyzer execution and feedback modules, kept in lockstep with workflow/hooks/gruff/.",
     ".goat-flow/learning-loop/decisions/": "Committed ADR history. Durable architectural, product-surface, and tooling decisions with context and rationale; part of the project's persistent knowledge, not session-scoped WIP.",
     ".goat-flow/learning-loop/footguns/": "Committed architectural trap records. Use for codebase or system footguns that exist independent of one agent mistake; entries should carry grep-friendly file evidence and remain part of durable project knowledge.",
     ".goat-flow/learning-loop/lessons/": "Committed behavioural mistake records. Use for real agent or workflow mistakes learned from incidents; these entries are durable project knowledge, not local session notes.",
@@ -590,11 +612,11 @@
       "hooks_dir": ".goat-flow/hooks/",
       "settings": ".claude/settings.json",
       "hook_config_file": ".claude/settings.json",
-      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.mjs",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".claude/settings.json",
-        "script_path": ".goat-flow/hooks/deny-dangerous.sh"
+        "script_path": ".goat-flow/hooks/deny-dangerous.mjs"
       },
       "local_pattern": "*/CLAUDE.md",
       "hook_events": {
@@ -602,9 +624,9 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "deny-dangerous.sh",
-        "gruff-code-quality.sh",
-        "post-turn-safety.sh"
+        "deny-dangerous.mjs",
+        "gruff-code-quality.mjs",
+        "post-turn-safety.mjs"
       ]
     },
     "codex": {
@@ -624,11 +646,11 @@
       "hooks_dir": ".goat-flow/hooks/",
       "settings": ".codex/config.toml",
       "hook_config_file": ".codex/hooks.json",
-      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.mjs",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".codex/config.toml",
-        "script_path": ".goat-flow/hooks/deny-dangerous.sh"
+        "script_path": ".goat-flow/hooks/deny-dangerous.mjs"
       },
       "local_pattern": "**/{AGENTS.override.md,AGENTS.md}",
       "hook_events": {
@@ -636,9 +658,9 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "deny-dangerous.sh",
-        "gruff-code-quality.sh",
-        "post-turn-safety.sh"
+        "deny-dangerous.mjs",
+        "gruff-code-quality.mjs",
+        "post-turn-safety.mjs"
       ]
     },
     "antigravity": {
@@ -658,17 +680,17 @@
       },
       "hooks_dir": ".goat-flow/hooks/",
       "hook_config_file": ".agents/hooks.json",
-      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.mjs",
       "deny_mechanism": {
         "type": "deny-script",
-        "path": ".goat-flow/hooks/deny-dangerous.sh"
+        "path": ".goat-flow/hooks/deny-dangerous.mjs"
       },
       "local_pattern": "*/AGENTS.md",
       "hook_events": {
         "pre_tool": "PreToolUse",
         "post_turn": null
       },
-      "hooks": ["deny-dangerous.sh"]
+      "hooks": ["deny-dangerous.mjs", "deny-git-mutations.mjs"]
     },
     "copilot": {
       "name": "Copilot CLI",
@@ -686,17 +708,17 @@
       },
       "hooks_dir": ".goat-flow/hooks/",
       "hook_config_file": ".github/hooks/hooks.json",
-      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.mjs",
       "deny_mechanism": {
         "type": "deny-script",
-        "path": ".goat-flow/hooks/deny-dangerous.sh"
+        "path": ".goat-flow/hooks/deny-dangerous.mjs"
       },
       "local_pattern": ".github/instructions/**/*.instructions.md",
       "hook_events": {
         "pre_tool": "preToolUse",
         "post_turn": null
       },
-      "hooks": ["deny-dangerous.sh", "gruff-code-quality.sh"]
+      "hooks": ["deny-dangerous.mjs", "deny-git-mutations.mjs", "gruff-code-quality.mjs"]
     }
   },
 

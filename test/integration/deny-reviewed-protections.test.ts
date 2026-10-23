@@ -796,7 +796,7 @@ const cases = [
 
 describe(
   "reviewed Node policy protections",
-  { skip: hookSelection() !== "candidate" },
+  { skip: hookSelection() === "reference" },
   () => {
     const project = mkdtempSync(join(tmpdir(), "goat-reviewed-policy-"));
     const hooks = join(project, ".goat-flow/hooks");

@@ -1,6 +1,6 @@
 ---
 category: evidence-attribution
-last_reviewed: 2026-10-19
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** Attributing guarantees to the implementation that supplies them, attributing readiness and run details to the host row or command output that recorded them, and checking whether reused evidence still describes current bytes. General guidance remains in [agent-evidence-claims.md](agent-evidence-claims.md).
@@ -41,13 +41,16 @@ last_reviewed: 2026-10-19
 **Decision changed:** Match readiness updates by host name and inspect unavailable-host rows before saving.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-23
 
-**Prevention:** Update each named host row from its own evidence. Keep executable discovery, user-reported authentication and observed live delivery separate. Check unavailable hosts explicitly after replacing repeated status text; a structural plan check cannot establish factual readiness.
+**Prevention:** Update each named host row from its own evidence. Keep executable discovery, user-reported authentication and observed live delivery separate. Check unavailable hosts explicitly after replacing repeated status text; a structural plan check cannot establish factual readiness. Resolve the approved CI route before treating missing personal hardware as a blocker.
 
 **What happened:** While preparing a local runtime plan, a global replacement changed every repeated unverified cell. It copied the user's Windows/WSL sign-in confirmation into native Linux/macOS rows even though the user had no access to either host. Reading the saved table caught the false attribution; host-specific corrections restored both unavailable rows to unverified.
 
 **Root cause:** Identical cell text was treated as identical evidence ownership. This was a local planning error, not an observed provider failure; no provider was launched and no implementation was credited.
 
+
+**Recurrence 2026-10-23:** M03 local checks ran on WSL2, but their checklist still named native Linux. I then asked for a host-proof decision even though Linux/macOS CI was already approved. The user reaffirmed Windows/WSL local testing and CI for the other platforms. Keep runner identity explicit and route unavailable personal machines through the existing CI owner. Evidence: `.github/workflows/ci.yml` (search: `hook-port-controls`) defines separate Ubuntu, macOS and Windows runners; `hook-reference-linux` owns the Linux reference job.
 
 ---
 

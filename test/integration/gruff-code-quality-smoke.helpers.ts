@@ -19,7 +19,12 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { hookInvocation, hookTreeRoot } from "../helpers/hook-entrypoint.js";
+import {
+  hookInvocation,
+  hookTreeRoot,
+  hookSelection,
+} from "../helpers/hook-entrypoint.js";
+import { pathToFileURL } from "node:url";
 import { bashPath } from "../../scripts/check-hook-parity.mjs";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -107,6 +112,15 @@ function convertToGitBashPathList(nativePathList: string): string {
  * @returns Host-compatible PATH passed to the user's simulated hook process.
  */
 function buildHookSearchPath(pathPrefix: string): string {
+  if (hookSelection() !== "reference" && process.platform === "win32") {
+    const paths = pathPrefix.match(/(?:[A-Za-z]:[\\/])?[^:]+/gu) ?? [];
+    const nativePaths = paths.flatMap((path) =>
+      ["/usr/bin", "/bin"].includes(path)
+        ? [dirname(resolveTool("git")), dirname(process.execPath)]
+        : [path],
+    );
+    return [...new Set(nativePaths)].join(delimiter);
+  }
   const normalizedPathPrefix = convertToGitBashPathList(pathPrefix);
   // Only Windows needs native Git and jq folders added to the fixture's POSIX system-path sentinel.
   if (
@@ -176,6 +190,14 @@ function writeNodeAnalyzer(binary: string, program: string): void {
   const programPath = join(directory, "analyzer.mjs");
   analyzerPrograms.set(binary, programPath);
   writeFileSync(programPath, nodeAnalyzerSource(program));
+  if (hookSelection() !== "reference") {
+    writeFileSync(
+      binary,
+      `#!/usr/bin/env node\nimport(${JSON.stringify(pathToFileURL(programPath).href)});\n`,
+    );
+    chmodSync(binary, 0o755);
+    return;
+  }
   const quote = (path: string) =>
     "'" + bashPath(path).replaceAll("'", "'\\''") + "'";
   writeFileSync(

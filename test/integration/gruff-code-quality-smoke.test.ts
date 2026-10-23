@@ -1,4 +1,3 @@
-import { hookTreeRoot, spawnSelectedHook } from "../helpers/hook-entrypoint.js";
 /**
  * Integration smoke tests for the gruff-code-quality hook's changed-line filtering
  * behavior on the legacy analyse path: payload/git range resolution, extension
@@ -6,6 +5,11 @@ import { hookTreeRoot, spawnSelectedHook } from "../helpers/hook-entrypoint.js";
  * gruff.hook.v1 contract rendering lives in gruff-code-quality-contract.test.ts;
  * shared fixtures live in gruff-code-quality-smoke.helpers.ts.
  */
+import {
+  hookTreeRoot,
+  spawnSelectedHook,
+  hookSelection,
+} from "../helpers/hook-entrypoint.js";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -183,29 +187,31 @@ describe("gruff-code-quality hook", () => {
     });
   }
 
-  const jq16 = resolveJq16Binary();
-  it(
-    "passes the smoke self-test for both hook copies with pinned jq 1.6",
-    jq16.path === null ? { skip: jq16.skipReason } : {},
-    () => {
-      assert.ok(jq16.path, jq16.skipReason);
+  if (hookSelection() === "reference") {
+    const jq16 = resolveJq16Binary();
+    it(
+      "passes the smoke self-test for both hook copies with pinned jq 1.6",
+      jq16.path === null ? { skip: jq16.skipReason } : {},
+      () => {
+        assert.ok(jq16.path, jq16.skipReason);
 
-      // Fixed `--version` argv with no shell, against a path this test already proved
-      // executable; developer test configuration, never end-user input.
-      const version = spawnSync(jq16.path, ["--version"], {
-        encoding: "utf-8",
-      });
-      assert.equal(version.stdout.trim(), "jq-1.6");
+        // Fixed `--version` argv with no shell, against a path this test already proved
+        // executable; developer test configuration, never end-user input.
+        const version = spawnSync(jq16.path, ["--version"], {
+          encoding: "utf-8",
+        });
+        assert.equal(version.stdout.trim(), "jq-1.6");
 
-      const pinnedBin = makeRoot();
-      symlinkSync(jq16.path, join(pinnedBin, "jq"));
-      const pathPrefix = `${pinnedBin}:${process.env.PATH ?? "/usr/bin:/bin"}`;
+        const pinnedBin = makeRoot();
+        symlinkSync(jq16.path, join(pinnedBin, "jq"));
+        const pathPrefix = `${pinnedBin}:${process.env.PATH ?? "/usr/bin:/bin"}`;
 
-      for (const hook of GRUFF_HOOK_COPY_ENTRIES) {
-        assertSelfTestOk(hook.label, runHookSelfTest(hook.path, pathPrefix));
-      }
-    },
-  );
+        for (const hook of GRUFF_HOOK_COPY_ENTRIES) {
+          assertSelfTestOk(hook.label, runHookSelfTest(hook.path, pathPrefix));
+        }
+      },
+    );
+  }
 
   // Fixture purpose: writes temp source/git state to cover changed-line filtering and the triage footer.
   it("prints changed-line findings, suppressed count, and footer", () => {
@@ -819,31 +825,44 @@ describe("gruff-code-quality hook", () => {
   });
 
   // Fixture purpose: writes a PATH sandbox to cover fail-soft behavior when jq is absent.
-  it("fails soft when jq is unavailable", symlinkTestOptions(), () => {
-    const root = makeRoot();
-    const gruffBinDir = writeMockGruff(root);
-    const noJqBin = join(root, "no-jq-bin");
-    mkdirSync(noJqBin, { recursive: true });
-    symlinkSync(resolveTool("bash"), join(noJqBin, "bash"));
-    symlinkSync(resolveTool("cat"), join(noJqBin, "cat"));
-    symlinkSync(resolveTool("awk"), join(noJqBin, "awk"));
-    writeFileSync(join(root, ".gruff-ts.yaml"), "rules: {}\n");
-    mkdirSync(join(root, "src"), { recursive: true });
-    writeFileSync(join(root, "src", "example.ts"), "one\ntwo\nthree\n");
+  it(
+    hookSelection() !== "reference"
+      ? "analyses without jq on the native candidate"
+      : "fails soft when jq is unavailable",
+    symlinkTestOptions(),
+    () => {
+      const root = makeRoot();
+      const gruffBinDir = writeMockGruff(root);
+      const noJqBin = join(root, "no-jq-bin");
+      mkdirSync(noJqBin, { recursive: true });
+      symlinkSync(resolveTool("bash"), join(noJqBin, "bash"));
+      symlinkSync(resolveTool("cat"), join(noJqBin, "cat"));
+      symlinkSync(resolveTool("awk"), join(noJqBin, "awk"));
+      if (hookSelection() !== "reference")
+        symlinkSync(resolveTool("git"), join(noJqBin, "git"));
+      writeFileSync(join(root, ".gruff-ts.yaml"), "rules: {}\n");
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", "example.ts"), "one\ntwo\nthree\n");
 
-    const result = runHook(
-      root,
-      { tool_name: "Edit", tool_input: { file_path: "src/example.ts" } },
-      `${gruffBinDir}:${noJqBin}`,
-    );
+      const result = runHook(
+        root,
+        { tool_name: "Edit", tool_input: { file_path: "src/example.ts" } },
+        `${gruffBinDir}:${noJqBin}`,
+      );
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "");
-    assert.match(
-      result.stderr,
-      /gruff-code-quality: jq unavailable; changed-line filtering skipped/,
-    );
-  });
+      assert.equal(result.status, 0, result.stderr);
+      if (hookSelection() !== "reference") {
+        assert.match(result.stdout, /changed.rule/u);
+        assert.doesNotMatch(result.stderr, /jq unavailable/u);
+        return;
+      }
+      assert.equal(result.stdout, "");
+      assert.match(
+        result.stderr,
+        /gruff-code-quality: jq unavailable; changed-line filtering skipped/,
+      );
+    },
+  );
 
   it("fails soft when a supported payload path does not exist", () => {
     const root = makeRoot();

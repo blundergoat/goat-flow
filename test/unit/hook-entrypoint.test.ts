@@ -1,4 +1,4 @@
-/** Selection controls protect routing; they require no unimplemented production port. */
+/** Keep installed and candidate Node routing separate from the frozen Bash reference. */
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,17 +26,20 @@ test("missing candidate never falls back to an existing Bash entrypoint", () => 
       () => selectedHookPath(bash, "candidate"),
       /candidate hook unavailable/u,
     );
-    assert.equal(selectedHookPath(bash, "installed"), bash);
+    assert.throws(
+      () => selectedHookPath(bash, "installed"),
+      /installed hook unavailable/u,
+    );
     const node = join(project, "deny-dangerous.mjs");
     writeFileSync(node, "process.exit(0);\n");
     assert.equal(selectedHookPath(bash, "candidate"), node);
-    assert.equal(selectedHookPath(bash, "installed"), bash);
+    assert.equal(selectedHookPath(bash, "installed"), node);
     assert.equal(selectedHookPath(node, "installed"), node);
     const launcher = join(project, "run-with-bash.mjs");
     const nativeLauncher = join(project, "run-hook.mjs");
     writeFileSync(launcher, "process.exit(0);\n");
     writeFileSync(nativeLauncher, "process.exit(0);\n");
-    assert.equal(selectedHookPath(launcher, "installed"), launcher);
+    assert.equal(selectedHookPath(launcher, "installed"), nativeLauncher);
     assert.equal(selectedHookPath(launcher, "candidate"), nativeLauncher);
   } finally {
     rmSync(project, { recursive: true, force: true });

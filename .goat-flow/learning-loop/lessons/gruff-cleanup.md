@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-10-17
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
@@ -174,7 +174,7 @@ Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `1638
 **Status:** active | **Created:** 2026-10-03
 **Severity:** INTEGRATION
 
-**Incident count:** 7 | **Latest occurrence:** 2026-10-20
+**Incident count:** 9 | **Latest occurrence:** 2026-10-23
 **Decision changed:** Before adding tests, assertions or validation branches to a large file, compare its substantive line count with Gruff's 1,000-line `size.file-length` limit and leave room for Prettier wrapping.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -193,11 +193,15 @@ The same batch put the controller YAML bundle in every temporary project, which 
 
 - **Recurrence 2026-10-10 (installer fixtures):** Adding version prerequisites to `test/integration/setup-install-agent-matrix.test.ts` expanded a constants import and pushed the file to 1,004 substantive lines. Reusing the existing test facade for `AUDIT_VERSION` and keeping the serialized version/header together retained the fixture behavior; the formatted targeted scan cleared `size.file-length`. Check formatted headroom before launching the full ratchet, even when the change adds no test cases. Anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `legacyHookChoices`).
 
-- **Recurrence 2026-10-17:** Three native-replay integration cases made `test/integration/hook-command-spawn-matrix.test.ts` reach 1,199 substantive lines. All 39 runnable cases passed, but the production ratchet rejected `size.file-length`. The draft now places the native cases and their disposable fixtures in `test/integration/hook-command-native-replay.test.ts` (search: `native candidate registered policy replay`), preserving the original suite byte for byte. Check the formatted file's headroom before adding a test family; a passing behavioral suite does not clear the size gate.
+- **Recurrence 2026-10-17:** Three native-replay integration cases made `test/integration/hook-command-spawn-matrix.test.ts` reach 1,199 substantive lines. All 39 runnable cases passed, but the production ratchet rejected `size.file-length`. The draft now places the native cases and their disposable fixtures in `test/integration/hook-command-native-replay.test.ts` (search: `managed Node registered policy replay`), preserving the original suite byte for byte. Check the formatted file's headroom before adding a test family; a passing behavioral suite does not clear the size gate.
 
 - **Recurrence 2026-10-17 (policy transport):** Adding thirty large-report cases to `test/integration/deny-dangerous-policy.test.ts` passed behavioral checks but reached 1,101 substantive lines. Gruff and preflight rejected `size.file-length`. The isolated correction places that family in `test/integration/deny-large-report-transport.test.ts` (search: `bounded large-report heredoc transport`) and restores the existing suite byte for byte. Measure formatted headroom before choosing an existing test owner.
 
 - **Recurrence 2026-10-20 (M13 startup integration):** The prepared startup patch passed its behavioral suites, but whole-tree verification found 1,004 substantive lines in `scripts/check-hook-parity.mjs` and 1,008 in `test/integration/deny-dangerous-policy.test.ts`. Consolidating identity checks and fixture runtime selection cleared file size; a separate exception predicate then cleared the validator's cognitive-complexity warning. The full ratchet returned zero warning/error identities. Check all touched scripts and test owners before presenting a patch, not only the small runtime entrypoints. Anchors: `validateCorpora`, `isApprovedException`, and `split policy partial installation`.
+
+- **Recurrence 2026-10-23 (M03 scanner fixtures):** Converting launcher fixtures to Node pushed the recovery suite over the file-length limit. Removing dependency-copy loops already covered by `installPostTurnHook` preserved its assertions and brought it below the limit. Anchors: `test/integration/post-turn-launcher-recovery.test.ts` (search: `writeScanner`) and `test/integration/post-turn-safety-hook.helpers.ts` (search: `installPostTurnHook`). Run touched-file checks before the full runtime matrix.
+
+- **Recurrence 2026-10-23 (M04 native Gruff):** Adding the runtime selector pushed `test/integration/gruff-code-quality-contract.test.ts` to 1,004 substantive lines. Reusing `selectedHookPath` for the scanner path removed the extra import and long inline conditional while retaining every assertion. Check formatted headroom before adding selection logic, even when no test case is added. Anchor: `runProviderLauncher`.
 
 ## Lesson: Check each Gruff-driven comment against the code it describes
 

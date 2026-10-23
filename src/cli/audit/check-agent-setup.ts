@@ -36,12 +36,15 @@ function agentArtifactsExist(
   // Guardrail scripts prove goat-flow touched this agent, even if the instruction file is gone.
   if (
     hooksDir !== undefined &&
-    (fs.exists(`${hooksDir}/deny-dangerous.sh`) ||
-      fs.exists(`${hooksDir}/deny-git-mutations.sh`) ||
-      fs.exists(`${hooksDir}/guard-repository-writes.sh`))
-  ) {
+    [
+      "deny-dangerous.mjs",
+      "deny-git-mutations.mjs",
+      "deny-dangerous.sh",
+      "deny-git-mutations.sh",
+      "guard-repository-writes.sh",
+    ].some((file) => fs.exists(`${hooksDir}/${file}`))
+  )
     return true;
-  }
   const skillsDir = profile.skills_dir.replace(/\/$/, "");
   try {
     const entries = fs.listDir(skillsDir);

@@ -38,7 +38,7 @@ import {
 } from "./setup-install.helpers.js";
 
 /** Managed script whose registration count proves enable and disable converged. */
-const MANAGED_DENY_SCRIPT = "deny-dangerous.sh";
+const MANAGED_DENY_SCRIPT = "deny-dangerous.mjs";
 
 /**
  * Command for the planted row. It names no goat-flow path, because a row that reuses the

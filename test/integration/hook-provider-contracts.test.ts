@@ -1,3 +1,4 @@
+import { hookSelection } from "../helpers/hook-entrypoint.js";
 import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 /**
  * Locks provider documentation, live capture, trust, effective-state, and result contracts.
@@ -55,9 +56,19 @@ import {
   buildStopPayload,
   runHook,
   withCommandShim,
+  withScannerFileFault,
   withTempRepo,
   writeFile,
 } from "./post-turn-safety-hook.helpers.js";
+
+/** Fail the selected scanner's file read, keeping the Bash reference seam outside native proof. */
+function withUnreadableScannerFile(
+  scenario: (environment: Record<string, string>) => void,
+): void {
+  if (hookSelection() === "reference")
+    withCommandShim(resolveExecutable("wc"), { status: 2 }, scenario);
+  else withScannerFileFault("readFileSync", scenario);
+}
 
 const SUPPORT_CHECK_DATE = new Date("2026-08-09T12:00:00.000Z");
 const TURN_STOP_EVENT: HookLifecycleEvent = "turn-stop";
@@ -68,10 +79,17 @@ const DELIVERED_RESPONSE_CHANNELS: HookProviderResponseChannel[] = [
   "stdout-json",
   "model-context",
 ];
-const STOP_SCANNER_VARIANTS = [
-  { displayName: "native scanner", forceBash3Fallback: "0" },
-  { displayName: "Bash 3 compatibility scanner", forceBash3Fallback: "1" },
-] as const;
+const STOP_SCANNER_VARIANTS = (
+  hookSelection() === "reference"
+    ? [
+        { displayName: "native scanner", forceBash3Fallback: "0" },
+        {
+          displayName: "Bash 3 compatibility scanner",
+          forceBash3Fallback: "1",
+        },
+      ]
+    : [{ displayName: "Node scanner", forceBash3Fallback: "0" }]
+) as readonly { displayName: string; forceBash3Fallback: string }[];
 const GRUFF_RESULT_FIXTURES = [
   {
     label: "clean analysis",
@@ -667,7 +685,7 @@ describe("hook provider contracts", () => {
 
         writeFile(
           projectRoot,
-          ".goat-flow/hooks/post-turn-safety.sh",
+          `.goat-flow/hooks/post-turn-safety.${hookSelection() === "reference" ? "sh" : "mjs"}`,
           readFileSync(HOOK_PATH, "utf8"),
         );
 
@@ -715,57 +733,66 @@ describe("hook provider contracts", () => {
     //
     // A state directory created by absolute path therefore never stores the record that ends the repeated Stop.
     // This case writes a managed hook copy and re-entry state while hook subprocesses run behind a mkdir shim.
-    it("bounds a managed non-Git Stop root when mkdir refuses absolute paths", () => {
-      const projectRoot = makeRoot();
-      const sessionIdentifier = "absolute-mkdir-refused-session";
-      const managedEnvironment = {
-        GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
-        GOAT_FLOW_HOOK_PROVIDER: "codex",
-        GOAT_FLOW_HOOK_EVENT: "turn-stop",
-        GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
-        GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
-      };
+    it(
+      "bounds a managed non-Git Stop root when mkdir refuses absolute paths",
+      {
+        skip:
+          hookSelection() !== "reference"
+            ? "The native runtime does not invoke mkdir; this retains the frozen Bash transport regression."
+            : false,
+      },
+      () => {
+        const projectRoot = makeRoot();
+        const sessionIdentifier = "absolute-mkdir-refused-session";
+        const managedEnvironment = {
+          GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
+          GOAT_FLOW_HOOK_PROVIDER: "codex",
+          GOAT_FLOW_HOOK_EVENT: "turn-stop",
+          GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+          GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
+        };
 
-      writeFile(
-        projectRoot,
-        ".goat-flow/hooks/post-turn-safety.sh",
-        readFileSync(HOOK_PATH, "utf8"),
-      );
+        writeFile(
+          projectRoot,
+          `.goat-flow/hooks/post-turn-safety.${hookSelection() === "reference" ? "sh" : "mjs"}`,
+          readFileSync(HOOK_PATH, "utf8"),
+        );
 
-      withCommandShim(
-        resolveExecutable("mkdir"),
-        {
-          when: { absoluteOperand: true },
-          stderr:
-            "mkdir: cannot create directory '{{absolute}}': Read-only file system\n",
-          status: 1,
-        },
-        (commandShimEnvironment) => {
-          const firstResult = runHook(
-            projectRoot,
-            { ...managedEnvironment, ...commandShimEnvironment },
-            buildStopPayload(sessionIdentifier, false),
-          );
-          assert.equal(firstResult.status, 0, firstResult.stderr);
-          assert.equal(
-            JSON.parse(firstResult.stdout).reasonCode,
-            "coverage-incomplete",
-          );
+        withCommandShim(
+          resolveExecutable("mkdir"),
+          {
+            when: { absoluteOperand: true },
+            stderr:
+              "mkdir: cannot create directory '{{absolute}}': Read-only file system\n",
+            status: 1,
+          },
+          (commandShimEnvironment) => {
+            const firstResult = runHook(
+              projectRoot,
+              { ...managedEnvironment, ...commandShimEnvironment },
+              buildStopPayload(sessionIdentifier, false),
+            );
+            assert.equal(firstResult.status, 0, firstResult.stderr);
+            assert.equal(
+              JSON.parse(firstResult.stdout).reasonCode,
+              "coverage-incomplete",
+            );
 
-          const reentryResult = runHook(
-            projectRoot,
-            { ...managedEnvironment, ...commandShimEnvironment },
-            buildStopPayload(sessionIdentifier, true),
-          );
-          assert.equal(reentryResult.status, 0, reentryResult.stderr);
-          assert.equal(
-            JSON.parse(reentryResult.stdout).reasonCode,
-            "bounded-reentry-ended",
-            reentryResult.stderr,
-          );
-        },
-      );
-    });
+            const reentryResult = runHook(
+              projectRoot,
+              { ...managedEnvironment, ...commandShimEnvironment },
+              buildStopPayload(sessionIdentifier, true),
+            );
+            assert.equal(reentryResult.status, 0, reentryResult.stderr);
+            assert.equal(
+              JSON.parse(reentryResult.stdout).reasonCode,
+              "bounded-reentry-ended",
+              reentryResult.stderr,
+            );
+          },
+        );
+      },
+    );
 
     // Git refuses a checkout owned by another account, which Git for Windows reports for a \\wsl.localhost checkout by default.
     //
@@ -787,7 +814,7 @@ describe("hook provider contracts", () => {
 
         writeFile(
           projectRoot,
-          ".goat-flow/hooks/post-turn-safety.sh",
+          `.goat-flow/hooks/post-turn-safety.${hookSelection() === "reference" ? "sh" : "mjs"}`,
           readFileSync(HOOK_PATH, "utf8"),
         );
 
@@ -849,93 +876,89 @@ describe("hook provider contracts", () => {
               : [];
           writeFile(projectRoot, "settings.env", "API_KEY=your_api_key_here\n");
 
-          withCommandShim(
-            resolveExecutable("wc"),
-            { status: 2 },
-            (commandShimEnvironment) => {
-              const firstFailure = runHook(
-                projectRoot,
-                {
-                  ...commandShimEnvironment,
-                  [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
-                },
-                buildStopPayload(sessionIdentifier, false),
-              );
-              assert.equal(firstFailure.status, 2, firstFailure.stderr);
-              const writtenStatePaths = reentryStatePaths();
-              assert.equal(writtenStatePaths.length, 1);
-              const reentryStatePath = writtenStatePaths[0] as string;
-              if (process.platform !== "win32") {
-                assert.equal(statSync(reentryStatePath).mode & 0o777, 0o600);
-              }
-              assert.equal(
-                readFileSync(reentryStatePath, "utf8").includes(
-                  sessionIdentifier,
-                ),
-                false,
-              );
-              // The per-session filename must carry the hash, never the raw session identifier.
-              assert.equal(reentryStatePath.includes(sessionIdentifier), false);
+          withUnreadableScannerFile((commandShimEnvironment) => {
+            const firstFailure = runHook(
+              projectRoot,
+              {
+                ...commandShimEnvironment,
+                [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+              },
+              buildStopPayload(sessionIdentifier, false),
+            );
+            assert.equal(firstFailure.status, 2, firstFailure.stderr);
+            const writtenStatePaths = reentryStatePaths();
+            assert.equal(writtenStatePaths.length, 1);
+            const reentryStatePath = writtenStatePaths[0] as string;
+            if (process.platform !== "win32") {
+              assert.equal(statSync(reentryStatePath).mode & 0o777, 0o600);
+            }
+            assert.equal(
+              readFileSync(reentryStatePath, "utf8").includes(
+                sessionIdentifier,
+              ),
+              false,
+            );
+            // The per-session filename must carry the hash, never the raw session identifier.
+            assert.equal(reentryStatePath.includes(sessionIdentifier), false);
 
-              // Example: the user edits the file after a failed scan and introduces a real token.
-              writeFile(
-                projectRoot,
-                "settings.env",
-                `API_KEY=${TEST_API_TOKEN}\n`,
-              );
-              const changedFinding = runHook(
-                projectRoot,
-                { [FORCE_BASH3_ENV_KEY]: forceBash3Fallback },
-                buildStopPayload(sessionIdentifier, true),
-              );
-              assert.equal(changedFinding.status, 2, changedFinding.stderr);
-              assert.match(changedFinding.stderr, /API token/u);
+            // Example: the user edits the file after a failed scan and introduces a real token.
+            writeFile(
+              projectRoot,
+              "settings.env",
+              `API_KEY=${TEST_API_TOKEN}\n`,
+            );
+            const changedFinding = runHook(
+              projectRoot,
+              { [FORCE_BASH3_ENV_KEY]: forceBash3Fallback },
+              buildStopPayload(sessionIdentifier, true),
+            );
+            assert.equal(changedFinding.status, 2, changedFinding.stderr);
+            assert.match(changedFinding.stderr, /API token/u);
 
-              writeFile(
-                projectRoot,
-                "settings.env",
-                "API_KEY=your_api_key_here\n",
-              );
-              const fixedResult = runHook(
-                projectRoot,
-                { [FORCE_BASH3_ENV_KEY]: forceBash3Fallback },
-                buildStopPayload(sessionIdentifier, true),
-              );
-              assert.equal(fixedResult.status, 0, fixedResult.stderr);
+            writeFile(
+              projectRoot,
+              "settings.env",
+              "API_KEY=your_api_key_here\n",
+            );
+            const fixedResult = runHook(
+              projectRoot,
+              { [FORCE_BASH3_ENV_KEY]: forceBash3Fallback },
+              buildStopPayload(sessionIdentifier, true),
+            );
+            assert.equal(fixedResult.status, 0, fixedResult.stderr);
 
-              const repeatedFirstFailure = runHook(
-                projectRoot,
-                {
-                  ...commandShimEnvironment,
-                  [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
-                },
-                buildStopPayload(sessionIdentifier, false),
-              );
-              assert.equal(
-                repeatedFirstFailure.status,
-                2,
-                repeatedFirstFailure.stderr,
-              );
-              const repeatedActiveFailure = runHook(
-                projectRoot,
-                {
-                  ...commandShimEnvironment,
-                  [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
-                },
-                buildStopPayload(sessionIdentifier, true),
-              );
-              assert.equal(
-                repeatedActiveFailure.status,
-                0,
-                repeatedActiveFailure.stderr,
-              );
-              assert.match(
-                repeatedActiveFailure.stderr,
-                /ending repeated Stop.*infrastructure failure/iu,
-              );
-              assert.deepEqual(reentryStatePaths(), []);
-            },
-          );
+            const repeatedFirstFailure = runHook(
+              projectRoot,
+              {
+                ...commandShimEnvironment,
+                [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+              },
+              buildStopPayload(sessionIdentifier, false),
+            );
+            assert.equal(
+              repeatedFirstFailure.status,
+              2,
+              repeatedFirstFailure.stderr,
+            );
+            const repeatedActiveFailure = runHook(
+              projectRoot,
+              {
+                ...commandShimEnvironment,
+                [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+              },
+              buildStopPayload(sessionIdentifier, true),
+            );
+            assert.equal(
+              repeatedActiveFailure.status,
+              0,
+              repeatedActiveFailure.stderr,
+            );
+            assert.match(
+              repeatedActiveFailure.stderr,
+              /ending repeated Stop.*infrastructure failure/iu,
+            );
+            assert.deepEqual(reentryStatePaths(), []);
+          });
         });
       });
     }
@@ -975,58 +998,54 @@ describe("hook provider contracts", () => {
           assert.equal(findingEnvelope.findings[0]?.target, "settings.env");
 
           writeFile(projectRoot, "settings.env", "API_KEY=your_api_key_here\n");
-          withCommandShim(
-            resolveExecutable("wc"),
-            { status: 2 },
-            (commandShimEnvironment) => {
-              const incompleteEnvironment = {
-                ...commandShimEnvironment,
-                ...managedCodexResultEnvironment,
-                [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
-              };
-              const firstIncompleteResult = runHook(
-                projectRoot,
-                incompleteEnvironment,
-                buildStopPayload(sessionIdentifier, false),
-              );
-              assert.equal(
-                firstIncompleteResult.status,
-                0,
-                firstIncompleteResult.stderr,
-              );
-              const firstIncompleteEnvelope = JSON.parse(
-                firstIncompleteResult.stdout,
-              );
-              assert.equal(firstIncompleteEnvelope.outcome, "incomplete");
-              assert.equal(
-                firstIncompleteEnvelope.reasonCode,
-                "coverage-incomplete",
-              );
+          withUnreadableScannerFile((commandShimEnvironment) => {
+            const incompleteEnvironment = {
+              ...commandShimEnvironment,
+              ...managedCodexResultEnvironment,
+              [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+            };
+            const firstIncompleteResult = runHook(
+              projectRoot,
+              incompleteEnvironment,
+              buildStopPayload(sessionIdentifier, false),
+            );
+            assert.equal(
+              firstIncompleteResult.status,
+              0,
+              firstIncompleteResult.stderr,
+            );
+            const firstIncompleteEnvelope = JSON.parse(
+              firstIncompleteResult.stdout,
+            );
+            assert.equal(firstIncompleteEnvelope.outcome, "incomplete");
+            assert.equal(
+              firstIncompleteEnvelope.reasonCode,
+              "coverage-incomplete",
+            );
 
-              const boundedReentryResult = runHook(
-                projectRoot,
-                incompleteEnvironment,
-                buildStopPayload(sessionIdentifier, true),
-              );
-              assert.equal(
-                boundedReentryResult.status,
-                0,
-                boundedReentryResult.stderr,
-              );
-              const boundedReentryEnvelope = JSON.parse(
-                boundedReentryResult.stdout,
-              );
-              assert.equal(boundedReentryEnvelope.outcome, "incomplete");
-              assert.equal(
-                boundedReentryEnvelope.reasonCode,
-                "bounded-reentry-ended",
-              );
-              assert.match(
-                boundedReentryResult.stderr,
-                /no clean scan was recorded/iu,
-              );
-            },
-          );
+            const boundedReentryResult = runHook(
+              projectRoot,
+              incompleteEnvironment,
+              buildStopPayload(sessionIdentifier, true),
+            );
+            assert.equal(
+              boundedReentryResult.status,
+              0,
+              boundedReentryResult.stderr,
+            );
+            const boundedReentryEnvelope = JSON.parse(
+              boundedReentryResult.stdout,
+            );
+            assert.equal(boundedReentryEnvelope.outcome, "incomplete");
+            assert.equal(
+              boundedReentryEnvelope.reasonCode,
+              "bounded-reentry-ended",
+            );
+            assert.match(
+              boundedReentryResult.stderr,
+              /no clean scan was recorded/iu,
+            );
+          });
         });
       });
     }

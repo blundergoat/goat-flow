@@ -91,7 +91,7 @@ test("native direct probes preserve inert operands, selected root, status and di
   const events = runRestrictedProbe(`
     for (const [command, expectedExit] of [[deniedOperand,2],[allowedOperand,0]]) {
       const scenario={id:"transport-only",label:"native fixture",expected:expectedExit===2?"blocked":"allowed",command};
-      const result=executeManagedHookProbe(project,nativePath,scenario,"node");
+      const result=executeManagedHookProbe(project,nativePath,scenario);
       assert.equal(result.exitCode,expectedExit,command);
       assert.equal(result.hasSpawnError,false,command);
       assert.equal(result.timedOut,false,command);
@@ -113,7 +113,7 @@ test("native direct probes reject Bash, missing and escaped files instead of fal
   const events = runRestrictedProbe(`
     const scenario={id:"admission-only",label:"native fixture",expected:"allowed",command:allowedOperand};
     for (const path of [legacyPath,nativePath+".missing.mjs",outsidePath]) {
-      const result=executeManagedHookProbe(project,path,scenario,"node");
+      const result=executeManagedHookProbe(project,path,scenario);
       assert.deepEqual(result,{exitCode:null,stdout:"",stderr:"",durationMs:0,timedOut:false,hasSpawnError:true},path);
     }
     assert.equal(existsSync(marker),false);

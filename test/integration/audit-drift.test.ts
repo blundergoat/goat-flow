@@ -3,6 +3,7 @@
  * Use these tests when setup or upgrade coverage changes a canonical skill or installed destination.
  * Clean, missing, and stale copies prove both the comparison count and exact repair path shown to users.
  */
+import { listHookSpecs } from "../../src/cli/server/hooks-registry.js";
 import { loadManifest } from "../../src/cli/manifest/manifest.js";
 import { SHARED_ARTIFACT_MIRRORS } from "../../src/cli/audit/artifact-templates.js";
 import { unlinkSync } from "node:fs";
@@ -150,11 +151,23 @@ describe("checkDrift: clean fixture", () => {
       ) * installedSkillRoots.length;
     const expectedSharedComparisons = SHARED_ARTIFACT_MIRRORS.length;
     const expectedDeprecatedHookComparisons = manifest.hooks.stale_names.length;
+    const declaredHooks = Object.values(manifest.agents).flatMap(
+      (agent) => agent.hooks ?? [],
+    );
+    const registryOnlyHooks = new Set(
+      listHookSpecs()
+        .flatMap((spec) => spec.scriptFiles)
+        .filter((file) => !file.includes("/") && !declaredHooks.includes(file)),
+    );
+    // Each provider declares its script comparisons; the shared Copilot registry adds one config comparison.
+    const expectedHookComparisons =
+      declaredHooks.length + 1 + registryOnlyHooks.size;
     assert.equal(
       driftReport.checked,
       expectedSkillComparisons +
         expectedSharedComparisons +
-        expectedDeprecatedHookComparisons,
+        expectedDeprecatedHookComparisons +
+        expectedHookComparisons,
     );
   });
 

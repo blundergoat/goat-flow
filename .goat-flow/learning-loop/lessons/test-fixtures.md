@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-10-18
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Parser-specific coverage and producer shapes are [test-fixtures-parsers.md](test-fixtures-parsers.md). Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -79,7 +79,7 @@ last_reviewed: 2026-10-18
 **Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-07-14
 
-**Prevention:** Command-wrapper fixtures scan all arguments, or parse options when operand order matters, and match a unique semantic path. Keep the failure assertion beside source and destination byte assertions so a wrapper that never activates cannot pass silently. Evidence anchor: `test/integration/setup-install-atomic-staging.test.ts` (search: `Migration helpers add safety flags`).
+**Prevention:** Command-wrapper fixtures scan all arguments, or parse options when operand order matters, and match a unique semantic path. Keep the failure assertion beside source and destination byte assertions so a wrapper that never activates cannot pass silently. For the Node writer, inject failures at the real filesystem operation instead of wrapping an unused shell command. Evidence anchor: `test/integration/setup-install-atomic-staging.test.ts` (search: `keeps a legacy source intact when atomic migration rename is unavailable`).
 
 **What happened:** The migration-failure fixture wrapped `mv` and matched the legacy source only at argument one. The hardened installer invoked `mv -n -- <source> <destination>`, so the wrapper delegated to the real command, installation exited 0, and the suite reported one failure although the migration helper was correct.
 
@@ -229,7 +229,7 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 **Decision changed:** Derive current fixture versions from package metadata.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-10-09
+**Incident count:** 3 | **Latest occurrence:** 2026-10-23
 
 **Prevention:** Import current versions; reserve literals for historical or mismatched installs. Anchors: `test/unit/skill-doctor.test.ts` (search: `skillMarkdown`), `src/cli/constants.ts` (search: `export const AUDIT_VERSION`).
 
@@ -238,5 +238,8 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 **Recurrence 2026-10-09:** Seven interruption fixtures omitted `version`, so version admission rejected them before the injected replacements. Added `AUDIT_VERSION` without changing protection assertions. Anchor: `test/integration/setup-install-migrations.test.ts` (search: `retains Git protection when the split stops`).
 
 **Recurrence 2026-10-10:** PR #67 failed slow shards 1, 3, and 5 because installer fixtures omitted `version` or wrote `version: "local"`. The non-Git reporting case reproduced the admission rejection before its hook diagnostic. Deriving the version from `AUDIT_VERSION` lets the existing assertions reach registration, YAML migration, policy review, and preservation behavior. Anchors: `test/integration/setup-install-nongit-hooks.test.ts` (search: `names the blocked post-turn registration and its fix`), `test/integration/setup-install-agent-matrix.test.ts` (search: `legacyHookChoices`), and `test/integration/setup-install-preview.test.ts` (search: `User-selected setup remains authoritative`).
+
+
+**Recurrence 2026-10-23 (native cutover review):** The fast suite passed, but the focused packaged-install and agent-matrix run reported seven failures. Current-version assertions still expected 1.18.0, and current registrations still expected Bash paths. Candidate-only selectors also excluded the now-installed Node cases or selected Bash failure fixtures. Derive the archive version from package metadata and classify native fixture behavior as every selection except the frozen reference. Preserve exact tagged inputs for upgrade tests: the 1.15.0 fixture has no shared native launcher to overwrite, while the 1.16.0 fixture exercises explicit replacement consent. Evidence: `test/integration/packaged-hook-install.test.ts` (search: `PACKAGE_VERSION`, `reviewAndSyncPackedHooks`), `test/integration/deny-dangerous-policy.test.ts` (search: `split policy partial installation`), and `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `native Gruff analyzer launch`).
 
 ---

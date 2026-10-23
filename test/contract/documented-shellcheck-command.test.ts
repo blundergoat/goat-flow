@@ -73,7 +73,7 @@ describe("documented shell-lint command", () => {
     }
     const [first, ...rest] = publishedCommands;
     // Parity alone cannot catch a broken command copied to every instruction surface.
-    // For example, deleting workflow/hooks/*.sh from every instruction file keeps them identical, but agents would stop linting those hooks.
+    // Keep the repository installer covered even after bundled legacy hooks are retired.
     assert.equal(
       first.command,
       [
@@ -82,10 +82,6 @@ describe("documented shell-lint command", () => {
         "scripts/maintenance/*.sh",
         "scripts/installers/*.sh",
         WORKFLOW_INSTALLER,
-        "workflow/hooks/*.sh",
-        "workflow/hooks/deny-dangerous/*.sh",
-        ".goat-flow/hooks/*.sh",
-        ".goat-flow/hooks/deny-dangerous/*.sh",
       ].join(" "),
       `${first.surface}: published shell-lint command has invalid syntax or scope`,
     );
