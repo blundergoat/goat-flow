@@ -56,6 +56,28 @@ export function runWindowsDiagnosticControls(
         payload: undefined,
       },
       {
+        name: "powershell-location",
+        command: "powershell.exe",
+        args: [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "Set-Location -LiteralPath ([Environment]::CurrentDirectory); exit 0",
+        ],
+        payload: undefined,
+      },
+      {
+        name: "powershell-node-startup",
+        command: "powershell.exe",
+        args: [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "$global:LASTEXITCODE = $null; & node.exe -e 'process.exit(0)'; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+        ],
+        payload: undefined,
+      },
+      {
         name: "native-node-hook",
         command: nativeHandler.command,
         args: nativeHandler.args,
