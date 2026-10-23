@@ -37,6 +37,7 @@ export function recordWindowsReplayStage(
 
 /**
  * Compare shell startup and direct Node replay without replacing the registered-command assertions.
+ * Restore one host locator at a time to isolate discovery costs without forwarding the whole host environment.
  * @param command - Registered non-Windows command, decoded into native Node argv for the control.
  */
 export function runWindowsDiagnosticControls(
@@ -47,6 +48,12 @@ export function runWindowsDiagnosticControls(
   runWithFileStreams: FileStreamRunner,
 ): void {
   const nativeHandler = agentHookSpawnDescriptor({ form: "shell", command });
+  const locationArguments = [
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    "Set-Location -LiteralPath ([Environment]::CurrentDirectory); exit 0",
+  ];
   for (const variant of variants.filter((row) => row.stdin === "file")) {
     for (const control of [
       {
@@ -58,12 +65,7 @@ export function runWindowsDiagnosticControls(
       {
         name: "powershell-location",
         command: "powershell.exe",
-        args: [
-          "-NoProfile",
-          "-NonInteractive",
-          "-Command",
-          "Set-Location -LiteralPath ([Environment]::CurrentDirectory); exit 0",
-        ],
+        args: locationArguments,
         payload: undefined,
       },
       {
@@ -83,7 +85,33 @@ export function runWindowsDiagnosticControls(
         args: nativeHandler.args,
         payload,
       },
+      ...(variant.environment === "managed"
+        ? ["USERPROFILE", "APPDATA", "PSModulePath"].map((variable) => ({
+            name: `powershell-location-with-${variable}`,
+            command: "powershell.exe",
+            args: locationArguments,
+            payload: undefined,
+            restoreVariable: variable,
+          }))
+        : []),
     ]) {
+      let environment = variant.values;
+      if ("restoreVariable" in control) {
+        const hostValue = process.env[control.restoreVariable];
+        if (!hostValue) {
+          recordWindowsReplayStage({
+            phase: "skip",
+            probe: control.name,
+            environment: variant.environment,
+            reason: "host-variable-unavailable",
+          });
+          continue;
+        }
+        environment = {
+          ...variant.values,
+          [control.restoreVariable]: hostValue,
+        };
+      }
       const stdin = control.payload === undefined ? "ignore" : "file";
       recordWindowsReplayStage({
         phase: "start",
@@ -98,7 +126,7 @@ export function runWindowsDiagnosticControls(
         {
           cwd: projectRoot,
           encoding: "utf8",
-          env: variant.values,
+          env: environment,
           timeout: 10_000,
         },
         control.payload,
