@@ -161,6 +161,7 @@ function runScenario(kind: "responses" | "failures") {
       String.raw`
       import assert from "node:assert/strict";
       import { readFileSync, rmSync } from "node:fs";
+      import { spawnSync } from "node:child_process";
       import { spawnConfiguredHookProbe } from ${JSON.stringify(AUDIT_MODULE)};
       for(const fixture of ${JSON.stringify(fixtures)}) {
         const {provider,root,nested,configured,installed}=fixture;
@@ -170,13 +171,34 @@ function runScenario(kind: "responses" | "failures") {
           const expected=[];
           for(const cwd of [root,nested])for(const command of ["native fixture allow '$&| (literal) 🐐","native fixture deny"]) {
             const input=payload(command), blocked=command==="native fixture deny";
+            const probeStarted=Date.now();
             const result=spawnConfiguredHookProbe(configured,probe(input),cwd);
+            const durationMs=Date.now()-probeStarted;
+            const modulePathPresent=Object.entries(process.env).some(([key,value])=>key.toLowerCase()==="psmodulepath"&&Boolean(value));
+            if(process.platform==="win32"&&provider==="codex"&&result.error?.code==="ETIMEDOUT") {
+              const controls=[
+                ["powershell-startup","powershell.exe",["-NoProfile","-NonInteractive","-Command","exit 0"]],
+                ["powershell-location","powershell.exe",["-NoProfile","-NonInteractive","-Command","Set-Location -LiteralPath ([Environment]::CurrentDirectory); exit 0"]],
+                ["node-startup",process.execPath,["-e","process.exit(0)"]],
+              ];
+              for(const [control,executable,args] of controls) {
+                const started=Date.now();
+                let status=null,signal=null,errorCode=null;
+                try {
+                  const observed=spawnSync(executable,args,{cwd,timeout:2000,stdio:"ignore"});
+                  status=observed.status;signal=observed.signal;errorCode=observed.error?.code??null;
+                } catch(error) { errorCode=error?.code??"diagnostic-error"; }
+                process.stderr.write("configured-audit-windows-control "+JSON.stringify({control,duration_ms:Date.now()-started,status,signal,errorCode,modulePathPresent})+"\n");
+              }
+            }
             assert.equal(
               result.status,
               blocked&&(provider==="claude"||provider==="codex")?2:0,
               JSON.stringify({
                 provider,
                 cwd:cwd===root?"root":"nested",
+                duration_ms:durationMs,
+                modulePathPresent,
                 command,
                 status:result.status,
                 signal:result.signal,

@@ -1,6 +1,6 @@
 ---
 category: verification-gate-runs
-last_reviewed: 2026-10-23
+last_reviewed: 2026-10-24
 ---
 
 **Scope:** Running gates during a change - stopping each edit batch at its declared proof, checking every target after a failed multi-file patch, invoking tools with the repository's own flags, and telling a transient gate failure from a task regression. Adding or trusting a repo-wide gate is [verification-preflight.md](verification-preflight.md); what a test must establish is [verification-testing.md](verification-testing.md).
@@ -50,7 +50,7 @@ last_reviewed: 2026-10-23
 **Severity:** CORRECTNESS
 **Decision changed:** Stop dependent tool calls at the first failed admission or patch, then inspect every target; neither a patch nor an orchestrated batch is atomic.
 **Trigger phase:** ACT
-**Incident count:** 6 | **Latest occurrence:** 2026-10-17
+**Incident count:** 7 | **Latest occurrence:** 2026-10-24
 **Merged:** 2026-10-11 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split to recover its headroom.
 
 **Prevention:** For dependent tool calls, check each exit status and throw or exit before the next mutation; awaiting a call does not make a nonzero result fatal. Prefer one file, or one independently recoverable hunk group, per patch when source is changing concurrently. After any patch failure, inspect timestamps and exact semantic anchors across every target before retrying, then build the retry from current bytes. The affected artifacts were gitignored milestone files, so they are not cited as durable anchors; the evidence was the failed patch result and the same-session target-by-target read.
@@ -70,6 +70,8 @@ last_reviewed: 2026-10-23
 - **Recurrence 2026-10-12:** M01 combined config admission, timing, patch application and bookkeeping in one tool batch. Admission rejected an unexpected Stop config hash, but the batch continued: the full config patch refused, the approved source patch landed, and bookkeeping failed on absent approval metadata. Target-by-target hashes showed that the config already contained the approved POSIX prefix, while the runner and test exactly matched the approved patch. Recovery preserved that external prefix and applied only the missing Windows prefix. The evidence was the failed admission, per-call exits and same-session hash comparisons; affected surfaces are `.codex/hooks.json` (search: `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES`) and `scripts/check-hook-parity.mjs` (search: `spawnReferenceCommand`).
 
 - **Recurrence 2026-10-17:** During the Node-floor amendment, a combined plan patch returned to an earlier section and failed; a second hunk used only part of a paragraph line. Target inspection found the plan files unchanged and preserved the already applied package/CI edits. Ordered hunk groups and complete current lines resolved the mismatch. Read every target after failure, then rebuild the remaining patch from current bytes. Evidence: `package.json` (search: `"engines"`) and `test/integration/gruff-warning-ratchet.test.ts` (search: `minimumNodeJob`); local plan hunks are not durable evidence anchors.
+- **Recurrence 2026-10-24:** Plan admission counted a live checklist item and its historical copy, then returned nonzero before saving. The orchestration still applied the approved configured-audit diagnostic patch while timing was paused; its task tick then failed because the plan task had never been added. Target-by-target reads found only the exact approved test change. Recovery limited plan matching to the live body, made each nonzero command stop dependent mutations, and resumed timing prospectively. The source-edit interval remains unmeasured. Evidence: `test/integration/hook-native-audit-configured.test.ts` (search: `configured-audit-windows-control`) identifies the retained change; the failed admission and same-session status/diff checks establish the partial batch.
+
 
 ## Lesson: Preserve repository-owned verification flags
 

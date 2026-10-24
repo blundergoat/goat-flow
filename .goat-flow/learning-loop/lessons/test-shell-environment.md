@@ -21,12 +21,12 @@ last_reviewed: 2026-10-24
 ## Lesson: Verify timeout cleanup through the real package-manager process tree
 
 **Status:** active | **Created:** 2026-09-12 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Verify timeout cleanup through the installed package manager before accepting a direct-child fixture as proof that all descendants exit.
-**Incident count:** 2 | **Latest occurrence:** 2026-10-24
+**Decision changed:** Verify cleanup through the installed package manager and budget the whole fixture before accepting timeout evidence.
+**Incident count:** 3 | **Latest occurrence:** 2026-10-24
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Run an isolated package script through the production runner and assert that both its script process and worker exit after timeout. Keep the timeout status and diagnostic assertions, but do not treat them as proof of descendant cleanup. Preserve a failing run before changing the implementation. For shell-backed fixtures, also test a missing coordination signal and bound the wait inside the worker.
+**Prevention:** Run an isolated package script through the production runner and assert that both its script process and worker exit after timeout. Keep the timeout status and diagnostic assertions, but do not treat them as proof of descendant cleanup. Preserve a failing run before changing the implementation. For shell-backed fixtures, also test a missing coordination signal and bound the wait inside the worker. Budget the outer guard for process startup, worker execution and report rendering; verify it under the original aggregate workload.
 
 **What happened:** During verification, I accepted a passing direct-Node timeout fixture as evidence that Windows cleanup removed the verification tree. The follow-up replaced that fixture with an actual `npm run` script. The runner returned timeout status 124, but the script-process exit assertion failed because the script remained alive.
 
@@ -35,6 +35,8 @@ last_reviewed: 2026-10-24
 **Correction:** Windows cleanup now invokes bounded `taskkill /T /F` while npm's root process still exists. The replacement test failed before the fix and passed afterward on Windows; the same focused suite passed on Linux. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: "stopChildProcessGroup") and `test/integration/preflight-progress.test.ts` (search: "times out installed npm with exit 124 and removes its script and worker").
 
 **Recurrence 2026-10-24:** During M16, I accepted healthy scheduler overlap without checking a missing readiness signal. A native Windows fault probe made the shell worker exit before signaling; the outer spawn timed out after 15 seconds while its TypeScript peer remained alive. Bounding the fixture's wait made the same probe finish with the intended failure diagnostic and no surviving peer. The existing startup-failure test now enables the overlap barrier and requires a completed failure rather than a timeout. Owner: `test/integration/preflight-test-diagnostics.test.ts` (search: `overlap_deadline`, `reports a worker that exits before opening a report section`).
+
+**Recurrence 2026-10-24:** I retained the scheduler fixture's 15-second outer guard after bounding its readiness wait. Native aggregate verification still timed out. Captured output showed the healthy case had printed all twelve passing sections; the startup-failure case had reported the expected readiness timeout and reached report rendering. In `scripts/preflight-checks.sh`, `merge_preflight_workers` emits these sections after `run_preflight_workers` returns. The outer guard had to cover this reporting phase too. The fixture now allows 30 seconds while retaining the five-second readiness limit and result assertions. Owner: `test/integration/preflight-test-diagnostics.test.ts` (search: `fixtureTimeoutMs`, `scheduler elapsed_ms=`). Individual Windows subprocess costs were not measured in this investigation.
 
 ---
 

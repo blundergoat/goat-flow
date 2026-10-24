@@ -348,6 +348,9 @@ merge_preflight_workers
 }
 
 describe("preflight parallel scheduler", () => {
+  // Include all twelve worker launches and Windows report rendering in the outer guard.
+  const fixtureTimeoutMs = 30_000;
+
   it("runs every check once with bounded overlap and renders the established order", () => {
     const fixture = preflightSchedulerFixture({ requireOverlap: true });
     const result = spawnSync(
@@ -356,7 +359,7 @@ describe("preflight parallel scheduler", () => {
       {
         cwd: PROJECT_ROOT,
         encoding: "utf8",
-        timeout: 15000,
+        timeout: fixtureTimeoutMs,
         env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
       },
     );
@@ -424,7 +427,7 @@ describe("preflight parallel scheduler", () => {
       {
         cwd: PROJECT_ROOT,
         encoding: "utf8",
-        timeout: 15000,
+        timeout: fixtureTimeoutMs,
         env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
       },
     );
@@ -444,17 +447,28 @@ describe("preflight parallel scheduler", () => {
       '\ncheck_shell() { printf "fixture startup failure\\n"; exit 7; }\nrun_preflight_workers\n',
     );
     writeFileSync(fixture.script, script);
+    const startedAt = Date.now();
     const result = spawnSync(
       "bash",
       [fixture.script, "--no-color", "--ascii", "--verbose"],
       {
         cwd: PROJECT_ROOT,
         encoding: "utf8",
-        timeout: 15000,
+        timeout: fixtureTimeoutMs,
         env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
       },
     );
-    assert.equal(result.error, undefined);
+    const eventsPath = join(fixture.directory, "events");
+    const failureDetails = result.error
+      ? [
+          `scheduler elapsed_ms=${Date.now() - startedAt} status=${result.status} signal=${result.signal}`,
+          `readiness typescript=${existsSync(join(fixture.directory, "started-typescript"))} shell=${existsSync(join(fixture.directory, "started-shell"))}`,
+          `events:\n${existsSync(eventsPath) ? readFileSync(eventsPath, "utf8") : "(none)"}`,
+          `stdout:\n${result.stdout}`,
+          `stderr:\n${result.stderr}`,
+        ].join("\n")
+      : undefined;
+    assert.equal(result.error, undefined, failureDetails);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stdout, /shell worker failed \(exit 7\)/u);
     assert.match(result.stdout, /fixture startup failure/u);
