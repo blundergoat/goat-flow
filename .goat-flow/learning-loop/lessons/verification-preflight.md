@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-24
 ---
 
 **Scope:** Adding, tuning, and trusting a repo-wide gate - dependency-audit baselines, count locks and provenance dates, what a PASS line does and does not prove, and the shell mechanics of the commands a gate runs. Formatter and lint debt is [verification-formatting.md](verification-formatting.md); an ad-hoc search that corrupts a file is [verification-scanners.md](verification-scanners.md); ordering edits and gate runs during a change, including a transient failure inside preflight, is [verification-gate-runs.md](verification-gate-runs.md).
@@ -55,6 +55,24 @@ last_reviewed: 2026-10-11
 
 **Recurrence 2026-09-04:** The installer fixture reached its embedded preflight after the release candidate passed focused checks, but new advisories made the existing `typed-rest-client` override of `qs@6.15.3` fail; raising only that transitive override to `qs@6.16.0` and syncing the lockfile kept the repair inside the existing dependency boundary. `package.json` (search: `"qs": "6.16.0"`).
 **Recurrence 2026-09-04 (timeout):** A release suite spent more than 21 minutes before its installer round-trip child returned null status at a 400-second limit, because the embedded preflight called `npm audit` without its own deadline; two later 120-second probes also expired while ordinary registry ping stayed responsive. The repair routes the audit through the process-group runner with a blocking timeout; since 2026-10-14 the round-trip test no longer runs an embedded preflight at all. `scripts/preflight-checks.sh` (search: `GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS`), `test/integration/preflight-progress.test.ts` (search: `bounds dependency audit without exposing a release-gate bypass`).
+
+---
+
+## Lesson: Disabling the lockfile to install one package changes unrelated dependencies
+
+**Status:** active | **Created:** 2026-10-24 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
+**Decision changed:** Rebuild from the approved lockfile and compare installed versions before accepting dependency-change proof.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Keep lockfile resolution enabled during installation. After an intentional lock entry change, use the repository's locked install path for each platform and check installed package versions against the lock before running proof.
+
+**What happened:** During the 2026-10-24 Zod patch, I used `npm install --ignore-scripts --no-save --package-lock=false` to preserve the tracked lockfile. npm advanced unrelated local dependencies, including ESLint 10.12.0 to 10.13.0, Knip 6.41.0 to 6.42.1 and unbash 5.0.0 to 6.0.1. The version check caught the drift, and a passing focused run was discarded. A locked WSL reinstall restored matching versions; the Windows reinstall then stopped at an in-use esbuild executable and required separate recovery.
+
+**Root cause:** Preserving the lockfile's bytes does not constrain resolution when the install command explicitly ignores that file.
+
+**Evidence:** `package-lock.json` (search: `node_modules/zod`, `node_modules/unbash`) owns the approved versions. `scripts/dependency-install.sh` (search: `Installing from lockfile (npm ci)`) provides the locked installation path. Installed package metadata was compared directly with the lock; no mismatching environment was accepted as final proof.
 
 ---
 

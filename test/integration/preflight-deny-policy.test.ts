@@ -55,9 +55,9 @@ function createFixture() {
         directory,
         `${root}/${policy}.mjs`,
         `import { appendFileSync } from "node:fs";
-import { relative } from "node:path";
+import { relative, sep } from "node:path";
 if (process.argv[2] !== "--self-test=full") process.exit(64);
-appendFileSync("full-suite-runs", relative(process.cwd(), process.argv[1]) + " --self-test=full\\n");
+appendFileSync("full-suite-runs", relative(process.cwd(), process.argv[1]).split(sep).join("/") + " --self-test=full\\n");
 console.log("PASS: fixture full policy corpus");
 `,
       );

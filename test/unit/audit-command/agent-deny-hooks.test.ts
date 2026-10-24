@@ -30,6 +30,7 @@ import {
 } from "./helpers.js";
 import { afterEach } from "node:test";
 import { createRequire, syncBuiltinESMExports } from "node:module";
+import type { SpawnSyncOptions } from "node:child_process";
 
 const require = createRequire(import.meta.url);
 const childProcess =
@@ -91,6 +92,15 @@ function codexRuntimeProbeResult(
     stdout: "",
     stderr: isSafeUserCommand ? "" : blockedPolicyMessage,
   } as ReturnType<typeof childProcess.spawnSync>;
+}
+
+/** Read the stdin actually supplied to a mock, including finite PowerShell input on Windows. */
+function readHookProbeInput(options: SpawnSyncOptions): string {
+  if (typeof options.input === "string") return options.input;
+  const descriptor = Array.isArray(options.stdio)
+    ? options.stdio[0]
+    : undefined;
+  return typeof descriptor === "number" ? readFileSync(descriptor, "utf8") : "";
 }
 
 /**
@@ -546,10 +556,10 @@ describe("agent deny hook template comparison", () => {
     childProcess.spawnSync = ((
       _command: string,
       _args: readonly string[],
-      options: { input?: string },
+      options: SpawnSyncOptions,
     ) =>
       codexRuntimeProbeResult(
-        options.input ?? "",
+        readHookProbeInput(options),
       )) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();
 
@@ -674,10 +684,10 @@ describe("agent deny hook template comparison", () => {
     childProcess.spawnSync = ((
       _command: string,
       _args: readonly string[],
-      options: { input?: string },
+      options: SpawnSyncOptions,
     ) => {
       // A missing payload means no user command reached the mock and cannot prove policy.
-      const hookInput = options.input ?? "";
+      const hookInput = readHookProbeInput(options);
       return codexRuntimeProbeResult(hookInput, spawnEperm());
     }) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();
@@ -742,12 +752,13 @@ describe("agent deny hook template comparison", () => {
     childProcess.spawnSync = ((
       _command: string,
       args: readonly string[],
-      options: { env?: NodeJS.ProcessEnv; input?: string },
+      options: SpawnSyncOptions,
     ) => {
+      const hookInput = readHookProbeInput(options);
       // The later provider must still be replayed after the first provider succeeds.
       if (args.includes(".claude/settings.json")) {
         assert.ok(
-          options.input,
+          hookInput,
           "later provider replay must receive its payload on stdin",
         );
         directRuntimeProbeCalls += 1;
@@ -755,7 +766,6 @@ describe("agent deny hook template comparison", () => {
       }
       configuredRuntimeProbeCalls += 1;
       // A missing payload means no user command reached the configured launcher.
-      const hookInput = options.input ?? "";
       return codexRuntimeProbeResult(hookInput);
     }) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();

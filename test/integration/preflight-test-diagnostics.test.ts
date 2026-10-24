@@ -257,10 +257,15 @@ async function waitForFixtureProcessExit(processId: number): Promise<boolean> {
 }
 
 /** Build a harmless workload around the production scheduler, keeping its process and ledger boundaries real. */
-function preflightSchedulerFixture(
+function preflightSchedulerFixture({
   failingWorker = false,
   lingeringWorker = false,
-) {
+  requireOverlap = false,
+}: {
+  failingWorker?: boolean;
+  lingeringWorker?: boolean;
+  requireOverlap?: boolean;
+} = {}) {
   const directory = mkdtempSync(join(tmpdir(), "goat-preflight-scheduler-"));
   fixtureTemporaryDirectories.add(directory);
   const source = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf8");
@@ -302,11 +307,25 @@ function preflightSchedulerFixture(
       lingeringWorker && name === "tests"
         ? 'sleep 20 & printf "%s\\n" "$!" > "$PREFLIGHT_TEST_DIRECTORY/descendant"; wait'
         : ":";
+    // Keep the first two workers alive until both start, even when native startup exceeds the fixture sleep.
+    const overlapBarrier =
+      requireOverlap && ["typescript", "shell"].includes(name)
+        ? `: > "$PREFLIGHT_TEST_DIRECTORY/started-${name}"
+  local overlap_deadline=$((SECONDS + 5))
+  while [[ ! -f "$PREFLIGHT_TEST_DIRECTORY/started-typescript" || ! -f "$PREFLIGHT_TEST_DIRECTORY/started-shell" ]]; do
+    if (( SECONDS >= overlap_deadline )); then
+      printf 'fixture overlap barrier timed out\\n' >&2
+      exit 8
+    fi
+    sleep 0.01
+  done`
+        : ":";
     overrides += `
 check_${name}() {
   section "${label}"
   ${requireBuild}
   printf 'start ${name}\\n' >> "$PREFLIGHT_TEST_DIRECTORY/events"
+  ${overlapBarrier}
   sleep ${name === "typescript" ? "0.3" : "0.1"}
   ${buildReady}
   pass "fixture ${name}"
@@ -330,7 +349,7 @@ merge_preflight_workers
 
 describe("preflight parallel scheduler", () => {
   it("runs every check once with bounded overlap and renders the established order", () => {
-    const fixture = preflightSchedulerFixture();
+    const fixture = preflightSchedulerFixture({ requireOverlap: true });
     const result = spawnSync(
       "bash",
       [fixture.script, "--no-color", "--ascii", "--verbose"],
@@ -341,7 +360,16 @@ describe("preflight parallel scheduler", () => {
         env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
       },
     );
-    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(
+      result.status,
+      0,
+      JSON.stringify({
+        stdout: result.stdout,
+        stderr: result.stderr,
+        error: result.error?.message,
+        signal: result.signal,
+      }),
+    );
     assert.match(result.stdout, /PASS\s+12 checks \+ 0 warnings/u);
     const events = readFileSync(join(fixture.directory, "events"), "utf8")
       .trim()
@@ -362,7 +390,10 @@ describe("preflight parallel scheduler", () => {
     }
     assert.equal(started.size, 12);
     assert.equal(active, 0);
-    assert.ok(maximumActive > 1 && maximumActive <= 4);
+    assert.ok(
+      maximumActive > 1 && maximumActive <= 4,
+      JSON.stringify({ maximumActive, events }),
+    );
     const reportOrder = [
       "fixture shell",
       "fixture contracts",
@@ -386,7 +417,7 @@ describe("preflight parallel scheduler", () => {
   });
 
   it("retains a worker's partial results and diagnostic while failing the complete run", () => {
-    const fixture = preflightSchedulerFixture(true);
+    const fixture = preflightSchedulerFixture({ failingWorker: true });
     const result = spawnSync(
       "bash",
       [fixture.script, "--no-color", "--ascii", "--verbose"],
@@ -406,7 +437,8 @@ describe("preflight parallel scheduler", () => {
   });
 
   it("reports a worker that exits before opening a report section", () => {
-    const fixture = preflightSchedulerFixture();
+    // The failed shell never signals readiness; its overlap partner must exit before the outer timeout.
+    const fixture = preflightSchedulerFixture({ requireOverlap: true });
     const script = readFileSync(fixture.script, "utf8").replace(
       "\nrun_preflight_workers\n",
       '\ncheck_shell() { printf "fixture startup failure\\n"; exit 7; }\nrun_preflight_workers\n',
@@ -422,9 +454,11 @@ describe("preflight parallel scheduler", () => {
         env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
       },
     );
+    assert.equal(result.error, undefined);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stdout, /shell worker failed \(exit 7\)/u);
     assert.match(result.stdout, /fixture startup failure/u);
+    assert.match(result.stdout, /fixture overlap barrier timed out/u);
     assert.match(result.stdout, /FAIL\s+12 checks/u);
   });
 
@@ -432,7 +466,7 @@ describe("preflight parallel scheduler", () => {
     "terminates running worker descendants when the complete preflight is interrupted",
     { skip: process.platform === "win32" },
     async () => {
-      const fixture = preflightSchedulerFixture(false, true);
+      const fixture = preflightSchedulerFixture({ lingeringWorker: true });
       const child = spawn("bash", [fixture.script, "--no-color", "--ascii"], {
         cwd: PROJECT_ROOT,
         stdio: "ignore",

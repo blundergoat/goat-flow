@@ -394,14 +394,18 @@ section() {
 # Use before writing verdict messages to the temporary report ledger.
 _one_line() { printf '%s' "${1//$'\n'/ | }"; }
 # Record one successful check for the current report section and final tally.
+# shellcheck disable=SC2329 # -- Invoked by check_* functions in the generated worker.
 pass()  { checks=$((checks + 1)); printf 'ROW\tPASS\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
 # Record one failed check so the report explains the failure and the command exits unsuccessfully.
 fail()  { checks=$((checks + 1)); errors=$((errors + 1)); printf 'ROW\tFAIL\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
 # Record one successful check with a warning so maintenance work stays visible without failing preflight.
+# shellcheck disable=SC2329 # -- Invoked by check_* functions in the generated worker.
 warn()  { checks=$((checks + 1)); warnings=$((warnings + 1)); printf 'ROW\tWARN\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
 # Record an unexecuted check without counting it as successful verification.
+# shellcheck disable=SC2329 # -- Invoked by check_* functions in the generated worker.
 skip()  { printf 'ROW\tSKIP\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
 # Record a warning-only note without increasing the number of executed checks.
+# shellcheck disable=SC2329 # -- Invoked by check_* functions in the generated worker.
 note()  { warnings=$((warnings + 1)); printf 'ROW\tWARN\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
 
 # Detail lines belong to the current section.
@@ -416,6 +420,7 @@ details_pipe() {
 }
 
 # Run one long command while retaining final diagnostics and showing bounded TTY liveness.
+# shellcheck disable=SC2329 # -- Invoked by check_* functions in the generated worker.
 run_command_capture_with_timeout() {
     local __output_var="$1"
     local __status_var="$2"
@@ -820,6 +825,7 @@ _emit_footer() {
     printf '%s%s%s\n' "$DIM" "$RULE_MID_LINE" "$RST"
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_shell() {
 # ── Shell Scripts ────────────────────────────────────────────────────
 section "Shell Scripts"
@@ -866,6 +872,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_contracts() {
 # ── Agent Config Parity ──────────────────────────────────────────────
 section "Agent Config Parity"
@@ -1633,6 +1640,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_typescript() {
 # ── TypeScript ───────────────────────────────────────────────────────
 if [[ -f tsconfig.json ]]; then
@@ -1755,6 +1763,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_tests() {
 # ── Tests ────────────────────────────────────────────────────────────
 if [[ "$skip_tests" -ne 1 ]] && [[ -f package.json ]] && grep -q '"test"' package.json; then
@@ -1884,6 +1893,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_dependency() {
 # ── Dependency Audit ─────────────────────────────────────────────────
 if [[ -f package.json ]]; then
@@ -1927,6 +1937,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_gruff() {
 # ── Removed Patterns (ADR Enforcement) ───────────────────────────────
 section "ADR Enforcement"
@@ -1997,6 +2008,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_audit() {
 # ── GOAT Flow Audit ────────────────────────────────────────────────────
 if [[ -f dist/cli/cli.js ]]; then
@@ -2017,6 +2029,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_memory() {
 # ── Learning-Loop Schema ────────────────────────────────────────────── Gates footgun schema rules: machine-simple status (active|resolved),
 # file:line or (search:) evidence on active entries, resolved-below-section.
@@ -2056,6 +2069,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_content() {
 # ── Content Drift ──────────────────────────────────────────────────── Sibling auditor: surface `audit --check-content` (cold-path content lint +
 #
@@ -2087,6 +2101,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_drift() {
 # ── Doc/Code Drift ───────────────────────────────────────────────────
 if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
@@ -2278,6 +2293,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_sync() {
 # ── Skill Docs Sync ─────────────────────────────────────────────────
 section "Skill Docs Sync"
@@ -2567,6 +2583,7 @@ fi
 return 0
 }
 
+# shellcheck disable=SC2329 # -- Invoked through check_$1 in the generated worker.
 check_links() {
 # ── Path Integrity ───────────────────────────────────────────────────
 section "Path Integrity"
@@ -2619,6 +2636,7 @@ return 0
 
 # Each worker owns its counters, ledger and captured diagnostics. The parent only
 # combines completed results, so parallel checks cannot overwrite another verdict.
+# shellcheck disable=SC2329 # -- Invoked by the generated worker EXIT trap.
 finish_preflight_worker() {
     local status=$?
     trap - EXIT
@@ -2630,6 +2648,7 @@ finish_preflight_worker() {
 
 # The command runner handles the worker's complete process group, including test
 # grandchildren. Wait for it before removing any worker files.
+# shellcheck disable=SC2329 # -- Invoked by _on_exit during EXIT handling.
 stop_preflight_workers() {
     local pid
     for pid in "${preflight_pids[@]:-}"; do

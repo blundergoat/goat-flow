@@ -10,6 +10,7 @@ import {
   extractHookFacts,
   extractHookFactsForDenyContent,
   it,
+  posixifyPath,
   readFileSync,
   resolve,
   stubFS,
@@ -29,6 +30,7 @@ function extractPackagedDenyHookFacts(
   const files = new Map(
     readdirSync(resolve(PROJECT_ROOT, "workflow/hooks"), { recursive: true })
       .map(String)
+      .map(posixifyPath)
       .filter(
         (file) =>
           /\.(?:mjs|cjs|json)$/u.test(file) &&

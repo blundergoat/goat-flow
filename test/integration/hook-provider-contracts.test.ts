@@ -7,7 +7,6 @@ import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
  */
 import assert from "node:assert/strict";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -522,14 +521,9 @@ describe("hook provider contracts", () => {
         label: "unsupported capability",
         /** Writes an older analyzer and config so users see why JSON feedback is unavailable. */
         prepareProject(projectRoot: string) {
-          const analyzerDirectoryPath = join(projectRoot, "bin");
-          mkdirSync(analyzerDirectoryPath, { recursive: true });
-          const analyzerPath = join(analyzerDirectoryPath, "gruff-ts");
-          writeFileSync(
-            analyzerPath,
-            '#!/usr/bin/env bash\n# A user may still have a pre-JSON analyzer on PATH after enabling Gruff.\nif [[ "$1" == "analyse" && "$2" == "--help" ]]; then printf "Usage: gruff analyse FILE\\n"; fi\nexit 0\n',
-          );
-          chmodSync(analyzerPath, 0o755);
+          writeContractGruffBinary(projectRoot, CLEAN_GRUFF_CONTRACT_ENVELOPE, {
+            capabilities: "",
+          });
           writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
         },
         findingCode: "analyzer-capability-unsupported",

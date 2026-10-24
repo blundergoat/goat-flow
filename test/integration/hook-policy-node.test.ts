@@ -104,6 +104,8 @@ for (const [hookIdentifier, expectedStatus, diagnostic] of [
           timeout: 10000,
         });
         assert.equal(initialized.status, 0, initialized.stderr);
+        // runSelfTest allows three 5s Git calls and twelve 10s scanner children, plus outer startup/cleanup.
+        const selfTestTimeout = 3 * 5000 + 12 * 10000 + 10000;
         const selfTest = spawnSync(
           process.execPath,
           [entrypoint, "--self-test"],
@@ -112,7 +114,7 @@ for (const [hookIdentifier, expectedStatus, diagnostic] of [
             env: environment,
             input: "",
             encoding: "utf8",
-            timeout: 10000,
+            timeout: selfTestTimeout,
           },
         );
         assert.equal(selfTest.error, undefined);
