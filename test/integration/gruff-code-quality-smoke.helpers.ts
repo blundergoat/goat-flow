@@ -6,6 +6,8 @@
  */
 import {
   chmodSync,
+  closeSync,
+  openSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -17,13 +19,21 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
+import {
+  hookInvocation,
+  hookTreeRoot,
+  hookSelection,
+} from "../helpers/hook-entrypoint.js";
+import { pathToFileURL } from "node:url";
+import { bashPath } from "../../scripts/check-hook-parity.mjs";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
 /** Absolute path of the canonical PostToolUse hook under test. */
-const HOOK = join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh");
+const HOOK = join(hookTreeRoot(), "gruff-code-quality.sh");
 
 const disposables: string[] = [];
+const analyzerPrograms = new Map<string, string>();
 let payloadCounter = 0;
 
 /**
@@ -102,6 +112,15 @@ function convertToGitBashPathList(nativePathList: string): string {
  * @returns Host-compatible PATH passed to the user's simulated hook process.
  */
 function buildHookSearchPath(pathPrefix: string): string {
+  if (hookSelection() !== "reference" && process.platform === "win32") {
+    const paths = pathPrefix.match(/(?:[A-Za-z]:[\\/])?[^:]+/gu) ?? [];
+    const nativePaths = paths.flatMap((path) =>
+      ["/usr/bin", "/bin"].includes(path)
+        ? [dirname(resolveTool("git")), dirname(process.execPath)]
+        : [path],
+    );
+    return [...new Set(nativePaths)].join(delimiter);
+  }
   const normalizedPathPrefix = convertToGitBashPathList(pathPrefix);
   // Only Windows needs native Git and jq folders added to the fixture's POSIX system-path sentinel.
   if (
@@ -146,6 +165,55 @@ export function writeMockGruff(root: string): string {
   return writeMockGruffBinary(root, "bin", "gruff-ts", "changed.rule");
 }
 
+// Generated source mentions child argv; it never supplies the parent fixture's write path.
+function nodeAnalyzerSource(program: string): string {
+  return [
+    'import { appendFileSync } from "node:fs";',
+    'import { join } from "node:path";',
+    "const args = process.argv.slice(2);",
+    'const print = (text) => process.stdout.write(text + "\\n");',
+    'const log = (file, text) => appendFileSync(join(process.cwd(), file), text + "\\n");',
+    program,
+  ].join("\n");
+}
+
+/**
+ * Write a Node analyzer plus a reference-only POSIX executable adapter.
+ * Programs live outside analyzed projects, so installing a mock creates no source edits.
+ * Native fixtures use Node with its absolute program path; restricted proof
+ * never admits the adapter. Payload logic and timeouts live entirely in Node.
+ */
+function writeNodeAnalyzer(binary: string, program: string): void {
+  mkdirSync(dirname(binary), { recursive: true });
+  const directory = mkdtempSync(join(tmpdir(), "goat-node-analyzer-"));
+  disposables.push(directory);
+  const programPath = join(directory, "analyzer.mjs");
+  analyzerPrograms.set(binary, programPath);
+  writeFileSync(programPath, nodeAnalyzerSource(program));
+  if (hookSelection() !== "reference") {
+    writeFileSync(
+      binary,
+      `#!/usr/bin/env node\nimport(${JSON.stringify(pathToFileURL(programPath).href)});\n`,
+    );
+    chmodSync(binary, 0o755);
+    return;
+  }
+  const quote = (path: string) =>
+    "'" + bashPath(path).replaceAll("'", "'\\''") + "'";
+  writeFileSync(
+    binary,
+    `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(programPath)} "$@"\n`,
+  );
+  chmodSync(binary, 0o755);
+}
+
+/** Resolve a declared analyzer for native Node fixtures without its POSIX adapter. */
+export function fixtureAnalyzerInvocation(binary: string) {
+  const program = analyzerPrograms.get(binary);
+  if (!program) throw new Error(`fixture analyzer not declared: ${binary}`);
+  return { executable: process.execPath, args: [program] };
+}
+
 /**
  * Writes an executable legacy-analyse mock gruff binary into the test root.
  *
@@ -166,42 +234,24 @@ export function writeMockGruffBinary(
   changedRuleId: string,
 ): string {
   const binDir = join(root, relativeBinDir);
-  mkdirSync(binDir, { recursive: true });
-  const bin = join(binDir, binaryName);
-  writeFileSync(
-    bin,
-    `#!/usr/bin/env bash
-if [[ "$1" == "analyse" && "$2" == "--help" ]]; then
-  cat <<'HELP'
-Usage: mock-gruff analyse [options] [paths...]
-Options:
-  --format <format>
-  --fail-on <severity>
-HELP
-  exit 0
-fi
-
-if [[ "$1" == "hook" ]]; then
-  echo "unknown command: hook" >&2
-  exit 2
-fi
-
-file="\${@: -1}"
-printf '%s\\n' "$file" >> "$PWD/gruff-invocations.log"
-if [[ "$file" == "src/new-file.ts" ]]; then
-  cat <<JSON
-{"findings":[{"ruleId":"new.rule","message":"new file finding","filePath":"$file","line":2,"severity":"warning"}]}
-JSON
-  exit 1
-fi
-
-cat <<JSON
-{"findings":[{"ruleId":"old.rule","message":"pre-existing finding","filePath":"$file","line":1,"severity":"advisory"},{"ruleId":"${changedRuleId}","message":"changed line finding","filePath":"$file","line":3,"severity":"warning"}]}
-JSON
-exit 1
+  writeNodeAnalyzer(
+    join(binDir, binaryName),
+    `
+if (args[0] === "analyse" && args[1] === "--help") {
+  print("Usage: mock-gruff analyse [options] [paths...]\\nOptions:\\n  --format <format>\\n  --fail-on <severity>");
+  process.exit(0);
+}
+if (args[0] === "hook") { process.stderr.write("unknown command: hook\\n"); process.exit(2); }
+const file = args.at(-1);
+log("gruff-invocations.log", file);
+const findings = file === "src/new-file.ts"
+  ? [{ruleId:"new.rule", message:"new file finding", filePath:file, line:2, severity:"warning"}]
+  : [{ruleId:"old.rule", message:"pre-existing finding", filePath:file, line:1, severity:"advisory"},
+     {ruleId:${JSON.stringify(changedRuleId)}, message:"changed line finding", filePath:file, line:3, severity:"warning"}];
+print(JSON.stringify({findings}));
+process.exit(1);
 `,
   );
-  chmodSync(bin, 0o755);
   return binDir;
 }
 
@@ -259,12 +309,14 @@ export function runHook(
   payloadCounter += 1;
   const payloadPath = `${root}.payload.${process.pid}.${payloadCounter}.json`;
   writeFileSync(payloadPath, JSON.stringify(payload));
+  const descriptor = openSync(payloadPath, "r");
   try {
-    // File-backed stdin keeps Bash `cat` readers from waiting forever for EOF
-    // under Codex's sandboxed child-process plumbing.
+    const invocation = hookInvocation(HOOK);
     return spawnSync(
-      resolveTool("bash"),
-      ["-c", 'bash "$1" < "$2"', "gruff-code-quality-test", HOOK, payloadPath],
+      invocation.executable === "bash"
+        ? resolveTool("bash")
+        : invocation.executable,
+      invocation.args,
       {
         cwd: root,
         encoding: "utf-8",
@@ -273,10 +325,11 @@ export function runHook(
           ...extraEnv,
           PATH: buildHookSearchPath(pathPrefix),
         },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: [descriptor, "pipe", "pipe"],
       },
     );
   } finally {
+    closeSync(descriptor);
     rmSync(payloadPath, { force: true });
   }
 }
@@ -430,32 +483,19 @@ export function assertFailSoftSkipPayloadsSilent(
  */
 export function writeSchemaErrorMockGruff(root: string): string {
   const binDir = join(root, "bin");
-  mkdirSync(binDir, { recursive: true });
-  const bin = join(binDir, "gruff-ts");
-  writeFileSync(
-    bin,
-    `#!/usr/bin/env bash
-if [[ "$1" == "analyse" && "$2" == "--help" ]]; then
-  cat <<'HELP'
-Usage: mock-gruff analyse [options] [paths...]
-Options:
-  --format <format>
-  --fail-on <severity>
-HELP
-  exit 0
-fi
-
-cat >&2 <<'ERR'
-gruff-ts: config error
-  Config must include \`schemaVersion: gruff-ts.config.v0.1\` at the top.
-
-Suggested fix:
-  Run \`gruff-ts init --force\` to regenerate the config from current defaults.
-ERR
-exit 1
+  const diagnostic =
+    "gruff-ts: config error\n  Config must include `schemaVersion: gruff-ts.config.v0.1` at the top.\n\nSuggested fix:\n  Run `gruff-ts init --force` to regenerate the config from current defaults.\n";
+  writeNodeAnalyzer(
+    join(binDir, "gruff-ts"),
+    `
+if (args[0] === "analyse" && args[1] === "--help") {
+  print("Usage: mock-gruff analyse [options] [paths...]\\nOptions:\\n  --format <format>\\n  --fail-on <severity>");
+  process.exit(0);
+}
+process.stderr.write(${JSON.stringify(diagnostic)});
+process.exit(1);
 `,
   );
-  chmodSync(bin, 0o755);
   return binDir;
 }
 
@@ -469,28 +509,17 @@ exit 1
  */
 export function writeJsonConfigErrorMockGruffPy(root: string): string {
   const binDir = join(root, ".venv", "bin");
-  mkdirSync(binDir, { recursive: true });
-  const bin = join(binDir, "gruff-py");
-  writeFileSync(
-    bin,
-    `#!/usr/bin/env bash
-if [[ "$1" == "analyse" && "$2" == "--help" ]]; then
-  cat <<'HELP'
-Usage: mock-gruff-py analyse [options] [paths...]
-Options:
-  --format <format>
-  --fail-on <severity>
-HELP
-  exit 0
-fi
-
-cat <<'JSON'
-{"findings":[],"diagnostics":[{"type":"config-error","message":"Unknown threshold size.file-length"}],"filesDiscovered":0}
-JSON
-exit 2
+  writeNodeAnalyzer(
+    join(binDir, "gruff-py"),
+    `
+if (args[0] === "analyse" && args[1] === "--help") {
+  print("Usage: mock-gruff-py analyse [options] [paths...]\\nOptions:\\n  --format <format>\\n  --fail-on <severity>");
+  process.exit(0);
+}
+print('{"findings":[],"diagnostics":[{"type":"config-error","message":"Unknown threshold size.file-length"}],"filesDiscovered":0}');
+process.exit(2);
 `,
   );
-  chmodSync(bin, 0o755);
   return binDir;
 }
 
@@ -507,44 +536,23 @@ exit 2
  */
 export function writeNativeChangedRegionGruffPy(root: string): string {
   const binDir = join(root, ".venv", "bin");
-  mkdirSync(binDir, { recursive: true });
-  const bin = join(binDir, "gruff-py");
-  writeFileSync(
-    bin,
-    `#!/usr/bin/env bash
-if [[ "$1" == "analyse" && "$2" == "--help" ]]; then
-  cat <<'HELP'
-Usage: mock-gruff-py analyse [options] [paths...]
-Options:
-  --format <format>
-  --fail-on <severity>
-  --changed-ranges <ranges>
-  --changed-scope <scope>
-  --no-baseline
-HELP
-  exit 0
-fi
-
-if [[ "$1" == "hook" ]]; then
-  echo "unknown command: hook" >&2
-  exit 2
-fi
-
-printf '%s\\n' "$*" >> "$PWD/gruff-args.log"
-if [[ " $* " == *" --no-baseline "* && " $* " == *" --changed-ranges 9-9 "* && " $* " == *" --changed-scope symbol "* ]]; then
-  cat <<JSON
-{"findings":[{"ruleId":"security.shell-injection","message":"symbol-scoped finding","filePath":"src/sample.py","line":8,"severity":"error"}],"suppressedCount":2,"diff":{"suppressedCount":2}}
-JSON
-  exit 1
-fi
-
-cat <<JSON
-{"findings":[{"ruleId":"security.shell-injection","message":"unscoped finding","filePath":"src/sample.py","line":8,"severity":"error"}]}
-JSON
-exit 1
+  writeNodeAnalyzer(
+    join(binDir, "gruff-py"),
+    `
+if (args[0] === "analyse" && args[1] === "--help") {
+  print("Usage: mock-gruff-py analyse [options] [paths...]\\nOptions:\\n  --format <format>\\n  --fail-on <severity>\\n  --changed-ranges <ranges>\\n  --changed-scope <scope>\\n  --no-baseline");
+  process.exit(0);
+}
+if (args[0] === "hook") { process.stderr.write("unknown command: hook\\n"); process.exit(2); }
+log("gruff-args.log", args.join(" "));
+const scoped = args.includes("--no-baseline") && args[args.indexOf("--changed-ranges") + 1] === "9-9"
+  && args[args.indexOf("--changed-scope") + 1] === "symbol";
+const response = {findings:[{ruleId:"security.shell-injection",message:scoped ? "symbol-scoped finding" : "unscoped finding",filePath:"src/sample.py",line:8,severity:"error"}]};
+if (scoped) Object.assign(response, {suppressedCount:2,diff:{suppressedCount:2}});
+print(JSON.stringify(response));
+process.exit(1);
 `,
   );
-  chmodSync(bin, 0o755);
   return binDir;
 }
 
@@ -641,33 +649,24 @@ export function v2GruffFinding(
  */
 export function writeLegacyScopeGruff(root: string, scopeHelp: string): string {
   const binDir = join(root, "bin");
-  mkdirSync(binDir, { recursive: true });
   const acceptsFileScope = /\bfile\b/u.test(scopeHelp);
-  writeFileSync(
+  writeNodeAnalyzer(
     join(binDir, "gruff-ts"),
-    `#!/usr/bin/env bash
-if [[ "$1" == "hook" ]]; then exit 2; fi
-if [[ "$1" == "analyse" && "$2" == "--help" ]]; then
-  cat <<'HELP'
-Usage: gruff-ts analyse [options] [paths...]
-  --format <format>
-  --fail-on <severity>
-  --no-baseline
-  --changed-ranges <ranges>
-${scopeHelp}
-HELP
-  exit 0
-fi
-printf '%s\\n' "$*" >> "$PWD/gruff-args.log"
-if [[ "${acceptsFileScope}" == "false" && " $* " == *" --changed-scope file "* ]]; then
-  printf 'unsupported --changed-scope "file" (want symbol or hunk)\\n' >&2
-  exit 2
-fi
-printf 'gruff-ts: note: using default rules\\n' >&2
-printf '{"findings":[]}\\n'
+    `
+if (args[0] === "hook") process.exit(2);
+if (args[0] === "analyse" && args[1] === "--help") {
+  print(${JSON.stringify("Usage: gruff-ts analyse [options] [paths...]\n  --format <format>\n  --fail-on <severity>\n  --no-baseline\n  --changed-ranges <ranges>\n" + scopeHelp)});
+  process.exit(0);
+}
+log("gruff-args.log", args.join(" "));
+if (!${acceptsFileScope} && args[args.indexOf("--changed-scope") + 1] === "file") {
+  process.stderr.write('unsupported --changed-scope "file" (want symbol or hunk)\\n');
+  process.exit(2);
+}
+process.stderr.write("gruff-ts: note: using default rules\\n");
+print('{"findings":[]}');
 `,
   );
-  chmodSync(join(binDir, "gruff-ts"), 0o755);
   return binDir;
 }
 
@@ -896,37 +895,24 @@ export function writeContractGruffBinary(
   } = {},
 ): string {
   const binDir = join(root, "node_modules", ".bin");
-  mkdirSync(binDir, { recursive: true });
-  const bin = join(binDir, "gruff-ts");
-  const analyzerOutputProgram =
-    envelope.length === 0 ? ":" : ["cat <<'JSON'", envelope, "JSON"].join("\n");
-  const analyzerErrorProgram =
-    (behavior.standardError ?? "").length === 0
-      ? ":"
-      : ["cat >&2 <<'ERROR'", behavior.standardError ?? "", "ERROR"].join("\n");
-  const analyzerDelayProgram =
-    (behavior.delaySeconds ?? 0) > 0 ? `sleep ${behavior.delaySeconds}` : ":";
-  writeFileSync(
-    bin,
-    `#!/usr/bin/env bash
-if [[ "$1" == "hook" && " $* " == *" --capabilities "* ]]; then
-  printf 'capabilities\n' >> "$PWD/gruff-capabilities.log"
-  cat <<'JSON'
-${behavior.capabilities ?? V1_GRUFF_CAPABILITIES}
-JSON
-  exit 0
-fi
-if [[ "$1" == "hook" ]]; then
-  printf '%s\\n' "$*" >> "$PWD/gruff-hook-args.log"
-  ${analyzerDelayProgram}
-  ${analyzerErrorProgram}
-  ${analyzerOutputProgram}
-  exit ${behavior.exitStatus ?? 0}
-fi
-exit 2
+  writeNodeAnalyzer(
+    join(binDir, "gruff-ts"),
+    `
+if (args[0] === "hook" && args.includes("--capabilities")) {
+  log("gruff-capabilities.log", "capabilities");
+  print(${JSON.stringify(behavior.capabilities ?? V1_GRUFF_CAPABILITIES)});
+  process.exit(0);
+}
+if (args[0] !== "hook") process.exit(2);
+log("gruff-hook-args.log", args.join(" "));
+await new Promise((finish) => setTimeout(finish, ${(behavior.delaySeconds ?? 0) * 1000}));
+const diagnostic = ${JSON.stringify(behavior.standardError ?? "")};
+if (diagnostic) process.stderr.write(diagnostic + "\\n");
+const envelope = ${JSON.stringify(envelope)};
+if (envelope) print(envelope);
+process.exit(${behavior.exitStatus ?? 0});
 `,
   );
-  chmodSync(bin, 0o755);
   return binDir;
 }
 

@@ -25,6 +25,7 @@ const MAX_DIAGNOSTICS = 20;
 const TYPE_INPUTS = new Set([
   "tsconfig.json",
   "tsconfig.dashboard.json",
+  "tsconfig.hooks.json",
   "package.json",
   "package-lock.json",
   "pnpm-lock.yaml",
@@ -151,7 +152,7 @@ function isRegularFile(root, path) {
 
 /** Match the repository's format:check globs, not every Prettier-supported file. */
 function isFormattedPath(path) {
-  return /^(?:src\/.*\.(?:ts|js|html)|test\/.*\.ts|scripts\/.*\.mjs)$/u.test(
+  return /^(?:src\/.*\.(?:ts|mts|js|html)|test\/.*\.ts|scripts\/.*\.mjs)$/u.test(
     path,
   );
 }
@@ -179,7 +180,9 @@ function excludesUnicode(path) {
 export function selectChecks(root, changes) {
   const paths = [...new Set(changes.flatMap((change) => change.paths))].sort();
   const files = paths.filter((path) => isRegularFile(root, path));
-  const hasSourceChanges = paths.some((path) => /^src\/.*\.ts$/u.test(path));
+  const hasSourceChanges = paths.some((path) =>
+    /^src\/.*\.(?:ts|mts)$/u.test(path),
+  );
   const hasGuidanceChanges = paths.some(
     (path) =>
       INSTRUCTIONS.has(path) ||
@@ -190,7 +193,7 @@ export function selectChecks(root, changes) {
     paths,
     prettier: files.filter(isFormattedPath),
     eslint: files.filter((path) =>
-      /^src\/(?:cli|dashboard)\/.*\.ts$/u.test(path),
+      /^src\/(?:cli|dashboard|hooks)\/.*\.(?:ts|mts)$/u.test(path),
     ),
     typecheck: hasSourceChanges || paths.some((path) => TYPE_INPUTS.has(path)),
     gruff: hasSourceChanges,

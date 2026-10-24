@@ -41,7 +41,7 @@ function agentScope(status: "pass" | "fail" | "skipped"): AuditScope {
           ? {
               failure: {
                 check: "Agent deny mechanism",
-                message: "deny-dangerous.sh --self-test=smoke failed",
+                message: "deny-dangerous.mjs --self-test=smoke failed",
               },
             }
           : {}),
@@ -109,7 +109,7 @@ function facts(
       denyRegisteredPath: agent.denyHookFile,
       gitDenyExists: true,
       gitDenyIsRegistered: true,
-      gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.sh",
+      gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
       postTurnExists: false,
       postTurnRegistered: false,
       postTurnRegisteredPath: null,

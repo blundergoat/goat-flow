@@ -67,16 +67,16 @@ const NAMED_PATHS = new Set([
   ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
   ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
   ".goat-flow/hooks/",
-  ".goat-flow/hooks/deny-dangerous.sh",
-  ".goat-flow/hooks/deny-git-mutations.sh",
-  ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
-  ".goat-flow/hooks/gruff-code-quality.sh",
-  ".goat-flow/hooks/post-turn-safety.sh",
+  ".goat-flow/hooks/deny-dangerous.mjs",
+  ".goat-flow/hooks/deny-git-mutations.mjs",
+  ".goat-flow/hooks/policy-evaluation.mjs",
+  ".goat-flow/hooks/gruff-code-quality.mjs",
+  ".goat-flow/hooks/post-turn-safety.mjs",
   ".goat-flow/hooks/deny-dangerous/",
-  ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
-  ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
-  ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
-  ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs",
+  ".goat-flow/hooks/deny-dangerous/patterns-paths.mjs",
+  ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs",
+  ".goat-flow/hooks/policy-corpus.mjs",
   ".goat-flow/config.yaml",
 ]);
 
@@ -678,24 +678,24 @@ const hookVersionCurrent: BuildCheck = {
   name: "Hook version",
   scope: "setup",
   provenance: setupSpecProvenance([
-    ".goat-flow/hooks/deny-dangerous.sh",
-    "workflow/hooks/deny-git-mutations.sh",
-    "workflow/hooks/deny-dangerous/guard-runtime.sh",
-    ".goat-flow/hooks/gruff-code-quality.sh",
-    ".goat-flow/hooks/post-turn-safety.sh",
+    ".goat-flow/hooks/deny-dangerous.mjs",
+    "workflow/hooks/deny-git-mutations.mjs",
+    "workflow/hooks/policy-evaluation.mjs",
+    ".goat-flow/hooks/gruff-code-quality.mjs",
+    ".goat-flow/hooks/post-turn-safety.mjs",
     "src/cli/constants.ts",
   ]),
   /** Run the Hook version check. */
   run: (ctx) => {
-    // Central hook dispatchers carry a `# goat-flow-hook-version: X.Y.Z` stamp.
+    // Central hook dispatchers carry a `goat-flow-hook-version: X.Y.Z` stamp.
     // Missing required dispatchers are a partial install; optional gruff may be
     // absent until enabled.
     const hookFiles = [
-      { file: "deny-dangerous.sh", required: true },
-      { file: "deny-git-mutations.sh", required: true },
-      { file: "deny-dangerous/guard-runtime.sh", required: true },
-      { file: "gruff-code-quality.sh", required: false },
-      { file: "post-turn-safety.sh", required: true },
+      { file: "deny-dangerous.mjs", required: true },
+      { file: "deny-git-mutations.mjs", required: true },
+      { file: "policy-evaluation.mjs", required: true },
+      { file: "gruff-code-quality.mjs", required: false },
+      { file: "post-turn-safety.mjs", required: true },
     ];
     for (const { file: hookFile, required } of hookFiles) {
       const relPath = `.goat-flow/hooks/${hookFile}`;

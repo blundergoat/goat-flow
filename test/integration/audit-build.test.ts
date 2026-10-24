@@ -484,12 +484,12 @@ describe("audit build: version skew direction", () => {
 const hookVersionCheck = SETUP_CHECKS.find((c) => c.id === "hook-version");
 assertExists(hookVersionCheck);
 
-const CURRENT_HOOK_STAMP = `#!/usr/bin/env bash\n# goat-flow-hook-version: ${AUDIT_VERSION}\n`;
+const CURRENT_HOOK_STAMP = `// goat-flow-hook-version: ${AUDIT_VERSION}\n`;
 const REQUIRED_HOOKS = new Map([
-  [".goat-flow/hooks/deny-dangerous.sh", CURRENT_HOOK_STAMP],
-  [".goat-flow/hooks/deny-git-mutations.sh", CURRENT_HOOK_STAMP],
-  [".goat-flow/hooks/deny-dangerous/guard-runtime.sh", CURRENT_HOOK_STAMP],
-  [".goat-flow/hooks/post-turn-safety.sh", CURRENT_HOOK_STAMP],
+  [".goat-flow/hooks/deny-dangerous.mjs", CURRENT_HOOK_STAMP],
+  [".goat-flow/hooks/deny-git-mutations.mjs", CURRENT_HOOK_STAMP],
+  [".goat-flow/hooks/policy-evaluation.mjs", CURRENT_HOOK_STAMP],
+  [".goat-flow/hooks/post-turn-safety.mjs", CURRENT_HOOK_STAMP],
 ]);
 
 /** Build an audit context whose optional gruff hook content varies. */
@@ -497,7 +497,7 @@ function hookVersionCtx(gruffHook: string | null) {
   return makeCtx({
     fs: stubFS({
       readFile: (path) =>
-        path === ".goat-flow/hooks/gruff-code-quality.sh"
+        path === ".goat-flow/hooks/gruff-code-quality.mjs"
           ? gruffHook
           : (REQUIRED_HOOKS.get(path) ?? null),
     }),
@@ -516,9 +516,7 @@ function requiredHookVersionCtx(path: string, content: string | null) {
 
 describe("audit build: hook version currency", () => {
   it("passes when the installed dispatcher carries the current stamp", () => {
-    const ctx = hookVersionCtx(
-      `#!/usr/bin/env bash\n# goat-flow-hook-version: ${AUDIT_VERSION}\n`,
-    );
+    const ctx = hookVersionCtx(`// goat-flow-hook-version: ${AUDIT_VERSION}\n`);
     assert.equal(hookVersionCheck.run(ctx), null);
   });
 
@@ -528,12 +526,12 @@ describe("audit build: hook version currency", () => {
 
   it("fails when the installed dispatcher stamp is behind the release", () => {
     const result = hookVersionCheck.run(
-      hookVersionCtx("#!/usr/bin/env bash\n# goat-flow-hook-version: 0.0.1\n"),
+      hookVersionCtx("// goat-flow-hook-version: 0.0.1\n"),
     );
     assertExists(result);
     assert.match(
       result.message,
-      /gruff-code-quality\.sh is goat-flow-hook-version 0\.0\.1/,
+      /gruff-code-quality\.mjs is goat-flow-hook-version 0\.0\.1/,
     );
     assert.match(result.howToFix ?? "", /hooks sync/);
   });
@@ -541,7 +539,7 @@ describe("audit build: hook version currency", () => {
   it("identifies a newer dispatcher without prescribing an older hooks sync", () => {
     const result = hookVersionCheck.run(
       hookVersionCtx(
-        `#!/usr/bin/env bash\n# goat-flow-hook-version: ${FUTURE_GOAT_FLOW_VERSION}\n`,
+        `// goat-flow-hook-version: ${FUTURE_GOAT_FLOW_VERSION}\n`,
       ),
     );
 
@@ -552,9 +550,7 @@ describe("audit build: hook version currency", () => {
   });
 
   it("fails when the installed dispatcher has no version stamp", () => {
-    const result = hookVersionCheck.run(
-      hookVersionCtx("#!/usr/bin/env bash\n# (no stamp)\n"),
-    );
+    const result = hookVersionCheck.run(hookVersionCtx("// (no stamp)\n"));
     assertExists(result);
     assert.match(result.message, /no goat-flow-hook-version stamp/);
   });
@@ -562,14 +558,14 @@ describe("audit build: hook version currency", () => {
   it("fails when the mandatory deny-dangerous dispatcher stamp is behind the release", () => {
     const result = hookVersionCheck.run(
       requiredHookVersionCtx(
-        ".goat-flow/hooks/deny-dangerous.sh",
-        "#!/usr/bin/env bash\n# goat-flow-hook-version: 0.0.1\n",
+        ".goat-flow/hooks/deny-dangerous.mjs",
+        "// goat-flow-hook-version: 0.0.1\n",
       ),
     );
     assertExists(result);
     assert.match(
       result.message,
-      /deny-dangerous\.sh is goat-flow-hook-version 0\.0\.1/,
+      /deny-dangerous\.mjs is goat-flow-hook-version 0\.0\.1/,
     );
     assert.match(result.howToFix ?? "", /hooks sync/);
   });
@@ -577,29 +573,29 @@ describe("audit build: hook version currency", () => {
   it("fails when the mandatory deny-dangerous dispatcher has no version stamp", () => {
     const result = hookVersionCheck.run(
       requiredHookVersionCtx(
-        ".goat-flow/hooks/deny-dangerous.sh",
-        "#!/usr/bin/env bash\n# (no stamp)\n",
+        ".goat-flow/hooks/deny-dangerous.mjs",
+        "// (no stamp)\n",
       ),
     );
     assertExists(result);
     assert.match(
       result.message,
-      /deny-dangerous\.sh has no goat-flow-hook-version stamp/,
+      /deny-dangerous\.mjs has no goat-flow-hook-version stamp/,
     );
   });
 
   it("fails when a required Stop hook dispatcher is missing", () => {
     const result = hookVersionCheck.run(
-      requiredHookVersionCtx(".goat-flow/hooks/post-turn-safety.sh", null),
+      requiredHookVersionCtx(".goat-flow/hooks/post-turn-safety.mjs", null),
     );
     assertExists(result);
-    assert.match(result.message, /post-turn-safety\.sh is missing/u);
+    assert.match(result.message, /post-turn-safety\.mjs is missing/u);
     assert.match(result.howToFix ?? "", /hooks sync/u);
   });
 
   for (const path of [
-    ".goat-flow/hooks/deny-git-mutations.sh",
-    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+    ".goat-flow/hooks/deny-git-mutations.mjs",
+    ".goat-flow/hooks/policy-evaluation.mjs",
   ]) {
     it(`fails when the required policy file ${path} is missing`, () => {
       const result = hookVersionCheck.run(requiredHookVersionCtx(path, null));
@@ -610,10 +606,7 @@ describe("audit build: hook version currency", () => {
 
     it(`fails when the required policy file ${path} is stale`, () => {
       const result = hookVersionCheck.run(
-        requiredHookVersionCtx(
-          path,
-          "#!/usr/bin/env bash\n# goat-flow-hook-version: 0.0.1\n",
-        ),
+        requiredHookVersionCtx(path, "// goat-flow-hook-version: 0.0.1\n"),
       );
       assertExists(result);
       assert.ok(

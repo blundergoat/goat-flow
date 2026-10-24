@@ -4,14 +4,22 @@
  * These cases use real independent Git repositories beneath one non-Git directory.
  * Use them to verify that a controller reports every configured project's findings without scanning unlisted workspaces.
  */
+import {
+  hookSelection,
+  selectedHookPath,
+  hookTreeRoot,
+} from "../helpers/hook-entrypoint.js";
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { pathToFileURL } from "node:url";
 
 import {
+  installPostTurnHook,
   buildStopPayload,
   createCommittedRepo,
   FORCE_BASH3_ENV_KEY,
@@ -45,6 +53,108 @@ function assertManagedEnvelope(result: ReturnType<typeof runHook>) {
 }
 
 describe("post-turn-safety hook: explicit non-Git controller roots", () => {
+  it(
+    "uses directory identity when an alias keeps a different physical spelling",
+    { skip: hookSelection() === "reference" },
+    () => {
+      withTempController(["child"], (controllerRoot, childRoots) => {
+        const alias = join(controllerRoot, "child-alias");
+        symlinkSync(
+          childRoots.child,
+          alias,
+          process.platform === "win32" ? "junction" : "dir",
+        );
+        const preloadPath = join(controllerRoot, "preserve-alias.mjs");
+        // Windows short paths can survive realpath while Git returns the long spelling.
+        // Preserve a real alias here so both lookups still use the directory's actual file ID.
+        writeFile(
+          controllerRoot,
+          "preserve-alias.mjs",
+          `
+import fs from "node:fs";
+import { resolve } from "node:path";
+import { syncBuiltinESMExports } from "node:module";
+const alias = ${JSON.stringify(alias)};
+const originalRealpath = fs.realpathSync;
+const originalStat = fs.statSync;
+const withoutIdentity = new URL(import.meta.url).searchParams.has("without-identity");
+fs.realpathSync = (path, options) => {
+  const physical = originalRealpath(path, options);
+  return resolve(String(path)) === alias ? alias : physical;
+};
+fs.statSync = (path, options) => {
+  const stat = originalStat(path, options);
+  if (resolve(String(path)) === alias && options?.bigint && withoutIdentity) {
+    return { ...stat, ino: 0n, isDirectory: () => stat.isDirectory() };
+  }
+  return stat;
+};
+syncBuiltinESMExports();
+`,
+        );
+        const nodeOptions = [
+          process.env.NODE_OPTIONS,
+          `--import=${pathToFileURL(preloadPath).href}`,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        const controllerUrl = pathToFileURL(
+          join(hookTreeRoot(), "post-turn/controller.mjs"),
+        ).href;
+        const probe = `
+import { isGitTopLevel } from ${JSON.stringify(controllerUrl)};
+console.log(JSON.stringify({
+  alias: isGitTopLevel(${JSON.stringify(alias)}),
+  different: isGitTopLevel(${JSON.stringify(controllerRoot)}),
+  missing: isGitTopLevel(${JSON.stringify(join(controllerRoot, "missing"))}),
+  file: isGitTopLevel(${JSON.stringify(join(childRoots.child, "README.md"))}),
+}));
+`;
+        for (const [withoutIdentity, expectedAlias] of [
+          ["0", true],
+          ["1", false],
+        ] as const) {
+          const result = spawnSync(
+            process.execPath,
+            ["--input-type=module", "-e", probe],
+            {
+              cwd: childRoots.child,
+              encoding: "utf8",
+              timeout: 5000,
+              env: {
+                ...process.env,
+                NODE_OPTIONS:
+                  nodeOptions +
+                  (withoutIdentity === "1" ? "?without-identity" : ""),
+              },
+            },
+          );
+          assert.equal(result.status, 0, result.stderr);
+          assert.deepEqual(JSON.parse(result.stdout), {
+            alias: expectedAlias,
+            different: false,
+            missing: false,
+            file: false,
+          });
+        }
+        writePostTurnScanRoots(controllerRoot, ["child-alias"]);
+        const result = runHook(
+          controllerRoot,
+          { ...MANAGED_STOP_ENV, NODE_OPTIONS: nodeOptions },
+          buildStopPayload("controller-alias", false),
+        );
+        const envelope = assertManagedEnvelope(result);
+        assert.equal(envelope.outcome, "pass");
+        assert.deepEqual(envelope.coverage, {
+          status: "complete",
+          attemptedUnits: 1,
+          completedUnits: 1,
+          skippedUnits: 0,
+        });
+      });
+    },
+  );
+
   it("identifies a started controller child result overflow without claiming startup failure", () => {
     withTempController(["child"], (controllerRoot, childRoots) => {
       writeFile(
@@ -52,37 +162,20 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
         "changed.php",
         "<<<<<<< HEAD\nfirst\n=======\nsecond\n>>>>>>> branch\n",
       );
-      const scanner = readFileSync(
-        resolve("workflow/hooks/post-turn-safety.sh"),
-        "utf8",
-      ).replace(
-        "SECONDS=0\n",
-        'SECONDS=0\nif [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then\nnode -e \'process.stdout.write("x".repeat(70000))\'\nfi\n',
-      );
-      for (const dependency of [
-        "run-with-bash.mjs",
-        "hook-launch-runtime.mjs",
-        "hook-provider-adapters.mjs",
-        "vendor/js-yaml.cjs",
-      ]) {
-        writeFile(
-          controllerRoot,
-          `.goat-flow/hooks/${dependency}`,
-          readFileSync(resolve("workflow/hooks", dependency)),
-        );
-      }
-      writeFile(
+      installPostTurnHook(
         controllerRoot,
-        ".goat-flow/hooks/post-turn-safety.sh",
-        scanner,
+        'process.stdout.write("x".repeat(70000));',
+        "node -e 'process.stdout.write(\"x\".repeat(70000))'",
       );
       // Launch only this disposable controller; its children and retry state remain inside the fixture tree.
       const launchController = (turnId: string) =>
         spawnSync(
           process.execPath,
           [
-            join(controllerRoot, ".goat-flow/hooks/run-with-bash.mjs"),
-            ".goat-flow/hooks/post-turn-safety.sh",
+            selectedHookPath(
+              join(controllerRoot, ".goat-flow/hooks/run-with-bash.mjs"),
+            ),
+            `.goat-flow/hooks/post-turn-safety.${hookSelection() !== "reference" ? "mjs" : "sh"}`,
             "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000",
           ],
           {
@@ -219,8 +312,8 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
   it("ends one unchanged child command failure only on its active re-entry", () => {
     withTempController(["gruff-go"], (controllerRoot) => {
       withCommandShim(
-        "git",
-        'if [ "${1:-}" = diff ]; then exit 70; fi',
+        resolveExecutable("git"),
+        { when: { first: "diff" }, status: 70 },
         (shimEnvironment) => {
           const sessionIdentifier = "controller-command-failure";
           const firstResult = assertManagedEnvelope(
@@ -258,8 +351,8 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
   it("ends an exhausted child re-entry on a legacy host with no provider adapter", () => {
     withTempController(["gruff-go"], (controllerRoot) => {
       withCommandShim(
-        "git",
-        'if [ "${1:-}" = diff ]; then exit 70; fi',
+        resolveExecutable("git"),
+        { when: { first: "diff" }, status: 70 },
         (shimEnvironment) => {
           const sessionIdentifier = "controller-legacy-reentry";
           const firstResult = runHook(

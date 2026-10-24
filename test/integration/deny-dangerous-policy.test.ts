@@ -8,25 +8,26 @@
  */
 import assert from "node:assert/strict";
 import {
+  copyHookTree,
+  hookSelection,
+  spawnSelectedHook,
+} from "../helpers/hook-entrypoint.js";
+import {
   checkInstalledPolicy,
   runHookWithPayload,
 } from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { after, describe, it } from "node:test";
-
-const projectRoot = resolve(import.meta.dirname, "..", "..");
 
 // Canonical entrypoints resolve the target's installed policy store. Keep candidate
 // bytes in their own Git root so this suite never repairs the active installation.
 const policyFixture = mkdtempSync(resolve(tmpdir(), "goat-policy-split-"));
 const fixtureHooks = resolve(policyFixture, ".goat-flow/hooks");
 mkdirSync(fixtureHooks, { recursive: true });
-cpSync(resolve(projectRoot, "workflow/hooks"), fixtureHooks, {
-  recursive: true,
-});
+copyHookTree(fixtureHooks);
 assert.equal(spawnSync("git", ["init", "-q", policyFixture]).status, 0);
 after(() => rmSync(policyFixture, { recursive: true, force: true }));
 type PolicyHook = "deny-dangerous" | "deny-git-mutations";
@@ -59,15 +60,11 @@ function runSplitPolicyCheck(
   command: string,
   env: NodeJS.ProcessEnv = process.env,
 ) {
-  return spawnSync(
-    "bash",
-    [resolve(fixtureHooks, `${hook}.sh`), "--check", command],
-    {
-      cwd: policyFixture,
-      encoding: "utf8",
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
+  return checkInstalledPolicy(
+    resolve(fixtureHooks, `${hook}.sh`),
+    policyFixture,
+    command,
+    env,
   );
 }
 
@@ -159,34 +156,42 @@ describe("persistent Git aliases", () => {
 });
 
 // Partial installs occur between individual atomic file replacements. Exercise
-// real entrypoints with absent helpers and the pre-split module API in each transport.
+// real entrypoints with absent helpers and a stale module API in each transport.
 describe("split policy partial installation", () => {
   // Exercise startup failures for both policy switches so missing setup cannot silently permit a request.
   for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
     // Break each declared dependency to verify the provider receives a useful denial rather than a partial guard.
+    const native = hookSelection() !== "reference";
+    const extension = native ? "mjs" : "sh";
+    const core = native ? "policy-evaluation" : "deny-dangerous/guard-runtime";
     for (const brokenDependency of [
-      "guard-runtime.sh",
-      "patterns-shell.sh",
-      "patterns-paths.sh",
-      "patterns-writes.sh",
+      `${core}.${extension}`,
+      `deny-dangerous/patterns-shell.${extension}`,
+      `deny-dangerous/patterns-paths.${extension}`,
+      `deny-dangerous/patterns-writes.${extension}`,
       "pre-split-api",
     ]) {
       it(`${hook} fails closed with ${brokenDependency}`, () => {
         const root = mkdtempSync(resolve(tmpdir(), "goat-policy-partial-"));
         const hooks = resolve(root, ".goat-flow/hooks");
         try {
-          cpSync(resolve(projectRoot, "workflow/hooks"), hooks, {
-            recursive: true,
-          });
+          copyHookTree(hooks);
           assert.equal(spawnSync("git", ["init", "-q", root]).status, 0);
           // An earlier unsplit API reproduces a stale installed runtime that needs a setup refresh.
           if (brokenDependency === "pre-split-api") {
             writeFileSync(
-              resolve(hooks, "deny-dangerous/patterns-writes.sh"),
-              "check_repository_segment() { return 0; }\n",
+              resolve(
+                hooks,
+                native
+                  ? "policy-evaluation.mjs"
+                  : "deny-dangerous/patterns-writes.sh",
+              ),
+              native
+                ? "export {};\n"
+                : "check_repository_segment() { return 0; }\n",
             );
           } else {
-            rmSync(resolve(hooks, "deny-dangerous", brokenDependency));
+            rmSync(resolve(hooks, brokenDependency));
           }
           // Replay each provider payload shape so startup failure preserves that provider's required denial response.
           for (const [payload, decision] of [
@@ -219,11 +224,8 @@ describe("split policy partial installation", () => {
               root,
               JSON.stringify(payload),
             );
-            assert.equal(
-              result.status,
-              decision === null ? 2 : 0,
-              result.stderr,
-            );
+            const expectedStatus = decision === null ? 2 : 0;
+            assert.equal(result.status, expectedStatus, result.stderr);
             // JSON-based providers need their explicit deny field; the shell provider uses its failure status.
             if (decision !== null)
               assert.equal(JSON.parse(result.stdout)[decision], "deny");
@@ -233,7 +235,7 @@ describe("split policy partial installation", () => {
             );
             assert.ok(
               (result.stdout + result.stderr).includes(
-                `${hook}.sh cannot start`,
+                `${hook}.${extension} cannot start`,
               ),
             );
           }
@@ -267,12 +269,12 @@ type ParserBoundaryCase = {
 
 /**
  * Run one proposed user command through the hook's inert classifier.
- * This starts Bash for the hook only; the proposed command never runs and project files stay unchanged.
+ * This starts only the selected hook; the proposed command never runs and project files stay unchanged.
  *
  * Use it to compare the block or allow result shown before a user executes a command.
  * @param userCommand - exact shell text the user would otherwise run; empty means no command was submitted
  *
- * @returns the completed hook process; a null status means Bash never started
+ * @returns the completed hook process; a null status means the hook process did not start
  */
 function runInertPolicyCheck(
   userCommand: string,
@@ -291,7 +293,7 @@ function runInertPolicyCheck(
  * @param stdinCommand - shell text carried by the provider payload; empty remains a valid fixture value
  *
  * @param positionalCommand - optional legacy positional command; absence proves pure stdin dispatch
- * @returns the completed policy process; a null status means Bash never started
+ * @returns the completed policy process; a null status means the hook process did not start
  */
 function runStdinPolicyCheck(
   stdinCommand: string,
@@ -1011,7 +1013,7 @@ describe("deny-dangerous existing policy boundaries", () => {
           hook,
         );
 
-        // A missing status means Bash failed before the user received a policy decision.
+        // A missing status means the hook failed before the user received a policy decision.
         assert.notEqual(policyResult.status, null, policyResult.error?.message);
         assert.equal(policyResult.status, 0, policyResult.stderr);
         // Empty stderr means the user sees no misleading block for this safe command shape.
@@ -1040,9 +1042,9 @@ describe("deny-dangerous existing policy boundaries", () => {
   });
 
   it("rejects an unsupported deny self-test value", () => {
-    const policyResult = spawnSync(
-      "bash",
-      [resolve(fixtureHooks, "deny-dangerous.sh"), "--self-test=bogus"],
+    const policyResult = spawnSelectedHook(
+      resolve(fixtureHooks, "deny-dangerous.sh"),
+      ["--self-test=bogus"],
       {
         cwd: policyFixture,
         encoding: "utf8",

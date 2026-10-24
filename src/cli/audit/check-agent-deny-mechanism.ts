@@ -1,20 +1,15 @@
 /**
  * Check the selected agent's deny mechanism at the evidence level requested by the caller.
  *
- * Static checks inspect installed files, settings, and Bash syntax without running the target's hook policy.
+ * Static checks inspect installed files, settings, and JavaScript syntax without running the target's hook policy.
  * Explicit full evidence also executes the target's self-test and configured hook path; passing proves local behavior, not external agent delivery.
  */
 import * as childProcess from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { AUDIT_VERSION } from "../constants.js";
-import {
-  buildInstallerSpawnSpec,
-  discoverWindowsBashCandidates,
-  pickWindowsBashPath,
-  toBashPath,
-} from "../install-invocation.js";
 import { getTemplatePath } from "../paths.js";
+import { listHookSpecs } from "../server/hooks-registry.js";
 import type { AuditContext, AuditFailure, BuildCheck } from "./types.js";
 import {
   checkSelectedInstructionAvailable,
@@ -30,7 +25,7 @@ import {
 
 // === 4. Agent Deny Mechanism ===
 
-// Native Git Bash pays a launch cost per smoke case; keep audit bounded above the measured Windows corpus duration.
+// Retain the existing per-host smoke budget while switching the policy runtime.
 const DENY_POLICY_SMOKE_TIMEOUT_MS =
   process.platform === "win32" ? 120_000 : 30_000;
 
@@ -44,13 +39,14 @@ const LEGACY_DENY_HOOK_FILES = [
 ];
 
 const DENY_HOOK_TEMPLATE_FILES = [
-  "deny-dangerous.sh",
-  "deny-git-mutations.sh",
-  "deny-dangerous/guard-runtime.sh",
-  "deny-dangerous/patterns-shell.sh",
-  "deny-dangerous/patterns-paths.sh",
-  "deny-dangerous/patterns-writes.sh",
-  "deny-dangerous/deny-dangerous-self-test.sh",
+  ...new Set(
+    listHookSpecs()
+      .filter(
+        (hook) =>
+          hook.id === "deny-dangerous" || hook.id === "deny-git-mutations",
+      )
+      .flatMap((hook) => hook.scriptFiles),
+  ),
 ];
 
 // Check deny-hook presence because unsupported agents and config-based agents need different handling.
@@ -89,17 +85,17 @@ type HookSyntaxCheckResult =
   | { status: "spawn-failure"; failure: AuditFailure };
 
 /**
- * List the agent's shell hooks for syntax checks; unreadable directories recover as an empty list.
+ * List the agent's native hooks for syntax checks; unreadable directories recover as an empty list.
  *
  * @param ctx - read-only target filesystem supplying the installed hook names
  * @param hooksDir - agent hook directory; a missing or unreadable directory supplies no syntax-check candidates
- * @returns - shell filenames to check, or an empty list when no readable shell hooks were found
+ * @returns - native filenames to check, or an empty list when no readable native hooks were found
  */
-function listShellHookFiles(ctx: AuditContext, hooksDir: string): string[] {
+function listNativeHookFiles(ctx: AuditContext, hooksDir: string): string[] {
   try {
     return ctx.fs
       .listDir(hooksDir)
-      .filter((hookFilename) => hookFilename.endsWith(".sh"));
+      .filter((hookFilename) => hookFilename.endsWith(".mjs"));
   } catch {
     // A caller's filesystem adapter may reject an unreadable hook directory; return no candidates and leave setup gaps to presence checks.
     return [];
@@ -107,73 +103,55 @@ function listShellHookFiles(ctx: AuditContext, hooksDir: string): string[] {
 }
 
 /**
- * Spawns Bash to parse one installed hook so users learn about syntax errors before relying on its protection.
- * Reports launch restrictions separately because a shell that never started provides no syntax verdict.
+ * Spawns the selected runtime to parse one hook without executing its policy.
+ * Reports launch restrictions separately because a runtime that never started provides no syntax verdict.
  *
  * @param ctx - target project root used to locate the installed hook on disk
  * @param hooksDir - project-relative directory containing the selected agent's hook
- * @param hookFilename - shell filename found in that directory
- * @returns - syntax result or launch failure; unavailable Bash receives environment repair guidance
+ * @param hookFilename - installed native .mjs filename
+ * @returns - syntax result or launch failure; an unavailable runtime receives repair guidance
  */
-function checkHookFileSyntax(
+export function checkHookFileSyntax(
   ctx: AuditContext,
   hooksDir: string,
   hookFilename: string,
 ): HookSyntaxCheckResult {
   const hookPath = `${hooksDir}/${hookFilename}`;
-  // Bash reads the actual project file; an in-memory audit adapter alone cannot supply the shell's syntax evidence.
+  // Syntax checks read the actual project file; an in-memory adapter alone cannot supply parser evidence.
   const hookAbsolutePath = join(ctx.projectPath, hooksDir, hookFilename);
+  if (!hookFilename.endsWith(".mjs") || !existsSync(hookAbsolutePath)) {
+    return {
+      status: "spawn-failure",
+      failure: {
+        check: "Agent deny mechanism",
+        message: `Native syntax check requires an existing .mjs hook: ${hookPath}`,
+        evidence: evidencePath(hookPath),
+        howToFix: "Install the native hook before checking its syntax.",
+      },
+    };
+  }
   try {
-    runHookBash(["-n", hookAbsolutePath], 5000);
+    runHookNode(["--check", hookAbsolutePath], 5000);
     return { status: "ok" };
   } catch (error) {
     return classifyHookSyntaxFailure(error, hookPath);
   }
 }
 
-/**
- * Run syntax checks or self-tests with native Bash and paths its children can read.
- * Side effects: spawns Bash and, for self-tests, executes the installed policy.
- * Throws launch, timeout, or nonzero-exit errors for the caller to classify as audit evidence.
- */
-function runHookBash(
+/** Spawns Node with literal native-check arguments; throws launch, timeout and nonzero-exit failures for audit classification. */
+function runHookNode(
   args: string[],
   timeout: number,
   env: NodeJS.ProcessEnv = process.env,
 ): void {
-  const bashCommand =
-    process.platform === "win32"
-      ? pickWindowsBashPath(discoverWindowsBashCandidates())
-      : "bash";
-  if (bashCommand === null) {
-    throw Object.assign(
-      new Error("No native Windows Bash found; install Git for Windows."),
-      { code: "ENOENT" },
-    );
-  }
-  // The self-test launches the selected dispatcher itself; its environment path must use Bash separators too.
-  if (process.platform === "win32" && env.GOAT_DENY_DANGEROUS_HOOK) {
-    env = {
-      ...env,
-      GOAT_DENY_DANGEROUS_HOOK: toBashPath(env.GOAT_DENY_DANGEROUS_HOOK),
-    };
-  }
-  const invocation = buildInstallerSpawnSpec(
-    {
-      ok: true,
-      bashCommand,
-      args: process.platform === "win32" ? args.map(toBashPath) : args,
-    },
+  childProcess.execFileSync(process.execPath, args, {
     env,
-  );
-  childProcess.execFileSync(invocation.command, invocation.args, {
-    env: invocation.env,
     stdio: "pipe",
     timeout,
   });
 }
 
-/** Distinguish a rejected hook from a shell that could not inspect it. */
+/** Distinguish a rejected hook from a Node process that could not inspect it. */
 function classifyHookSyntaxFailure(
   error: unknown,
   hookPath: string,
@@ -182,9 +160,10 @@ function classifyHookSyntaxFailure(
   if (commandCompletedSuccessfully(error)) return { status: "ok" };
   const spawnFailure = spawnFailureFor(
     error,
-    `bash syntax check for ${hookPath}`,
+    `node syntax check for ${hookPath}`,
+    "node",
   );
-  // Launch restrictions need environment repair rather than edits to a hook that Bash could not inspect.
+  // Launch restrictions need environment repair rather than edits to a hook that Node could not inspect.
   if (spawnFailure !== null) {
     return {
       status: "spawn-failure",
@@ -196,44 +175,27 @@ function classifyHookSyntaxFailure(
       },
     };
   }
-  // Bash reports an unreadable input as 126/127, not a parse error in that input.
-  const status =
-    typeof error === "object" && error !== null && "status" in error
-      ? error.status
-      : undefined;
-  if (status === 126 || status === 127) {
-    return {
-      status: "spawn-failure",
-      failure: {
-        check: "Agent deny mechanism",
-        message: `bash -n could not inspect ${hookPath} (exit ${status}).`,
-        evidence: evidencePath(hookPath),
-        howToFix:
-          "Check that the hook path is readable by the selected Bash. On native Windows, use Git Bash rather than the WSL launcher.",
-      },
-    };
-  }
   return { status: "syntax-error", path: hookPath };
 }
 
 /**
- * Spawns syntax checks for installed shell hooks and reports the files the user must repair.
+ * Spawns syntax checks for installed native hooks and reports the files the user must repair.
  * Unreadable directories recover as no candidates; a launch failure stops the scan with environment guidance.
  *
- * @param ctx - included agents and target filesystem used to find shell hooks
+ * @param ctx - included agents and target filesystem used to find native hooks
  * @returns - launch or syntax failure, or null when scanned hooks parse successfully or none were available
  */
 function checkHookSyntax(ctx: AuditContext): AuditFailure | null {
   const failures: string[] = [];
-  // Inspect each included agent's shell hooks so its syntax failures identify the installation that needs repair.
+  // Inspect each included agent's native hooks so its syntax failures identify the installation that needs repair.
   for (const agentFacts of ctx.agents) {
-    // Agents without a hook directory have no shell files for this syntax check.
+    // Agents without a hook directory have no native files for this syntax check.
     if (!agentFacts.agent.hooksDir) continue;
     const hooksDir = agentFacts.agent.hooksDir;
-    // A custom shell hook can break independently of the deny dispatcher, so inspect every listed shell file.
-    for (const hookFilename of listShellHookFiles(ctx, hooksDir)) {
+    // A custom native hook can break independently of the deny dispatcher, so inspect every listed native file.
+    for (const hookFilename of listNativeHookFiles(ctx, hooksDir)) {
       const result = checkHookFileSyntax(ctx, hooksDir, hookFilename);
-      // A blocked shell leaves later syntax checks unproven, so return the environment issue immediately.
+      // A blocked Node process leaves later syntax checks unproven, so return the environment issue immediately.
       if (result.status === "spawn-failure") return result.failure;
       // Collect parse failures so one audit message can name all hook files that need editing.
       if (result.status === "syntax-error") failures.push(result.path);
@@ -243,9 +205,9 @@ function checkHookSyntax(ctx: AuditContext): AuditFailure | null {
   if (failures.length === 0) return null;
   return {
     check: "Agent deny mechanism",
-    message: `bash -n failed: ${failures.join(", ")}`,
+    message: `node --check failed: ${failures.join(", ")}`,
     evidence: failures[0],
-    howToFix: `Fix the bash syntax errors in ${failures.join(", ")}. Run \`bash -n <file>\` to see details.`,
+    howToFix: `Fix the JavaScript syntax errors in ${failures.join(", ")}. Run \`node --check <file>\` to see details.`,
   };
 }
 
@@ -390,7 +352,7 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
   // Compare each included agent's hook layout with the files shipped by this CLI release.
   for (const agentFacts of ctx.agents) {
     const hooksDir = agentFacts.agent.hooksDir;
-    // Agents without hook files have no versioned shell installation to compare.
+    // Agents without hook files have no versioned hook installation to compare.
     if (!hooksDir) continue;
     const legacyFailure = checkLegacyHookDrift(
       ctx,
@@ -400,7 +362,7 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
     // Retired hook files take priority because the user must migrate that layout before checking current template parity.
     if (legacyFailure) return legacyFailure;
 
-    const denyRelPath = join(hooksDir, "deny-dangerous.sh");
+    const denyRelPath = join(hooksDir, "deny-dangerous.mjs");
     // Without a readable dispatcher, this agent has no current hook installation to compare; presence checks report that gap.
     if (ctx.fs.readFile(denyRelPath) === null) continue;
 
@@ -416,71 +378,100 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
 }
 
 /**
- * Spawns the installed deny self-test only after the caller requested full target-hook evidence.
- *
- * Shared dispatchers run once because repeating the same self-test adds time without new evidence.
- * It reports policy or launch failures without claiming provider delivery.
- *
- * @param ctx - target project and included agents whose installed dispatcher can be supplied to the self-test
- * @returns - self-test or environment failure, or null when runnable tests pass or no self-test file was readable
+ * Spawns one deny self-test and classifies its result for the selected dispatcher.
+ * Reports an explicit failure when an installed native dispatcher is unavailable.
  */
-function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
-  // Test each included agent against its dispatcher so a shared policy test checks the installed entry point users invoke.
+function checkDispatcherSelfTest(
+  ctx: AuditContext,
+  agentId: string,
+  dispatcherRelPath: string,
+): AuditFailure | null {
+  const hookId = basename(dispatcherRelPath, ".mjs");
+  if (ctx.fs.readFile(dispatcherRelPath) === null) {
+    return {
+      check: "Agent deny mechanism",
+      message: `Native self-test dispatcher is unavailable: ${dispatcherRelPath}`,
+      evidence: evidencePath(dispatcherRelPath),
+      howToFix: "Run goat-flow hooks sync to install the native policy hook.",
+    };
+  }
+  try {
+    runHookNode(
+      [join(ctx.projectPath, dispatcherRelPath), "--self-test=smoke"],
+      DENY_POLICY_SMOKE_TIMEOUT_MS,
+    );
+    return null;
+  } catch (error) {
+    return classifyHookSelfTestFailure(error, {
+      agentId,
+      hookId,
+      denyRelPath: dispatcherRelPath,
+      runtime: "node",
+      suffix: ".mjs",
+    });
+  }
+}
+
+/** Preserve completed exits and separate launcher failures from failed policy self-tests. */
+function classifyHookSelfTestFailure(
+  error: unknown,
+  invocation: {
+    agentId: string;
+    hookId: string;
+    denyRelPath: string;
+    runtime: "bash" | "node";
+    suffix: string;
+  },
+): AuditFailure | null {
+  if (commandCompletedSuccessfully(error)) return null;
+  const { agentId, hookId, denyRelPath, runtime, suffix } = invocation;
+  const spawnFailure = spawnFailureFor(
+    error,
+    `${hookId} self-test for ${agentId}`,
+    runtime,
+  );
+  if (spawnFailure !== null) {
+    return {
+      check: "Agent deny mechanism",
+      message: spawnFailure.message,
+      evidence: evidencePath(denyRelPath),
+      howToFix: spawnFailure.howToFix,
+    };
+  }
+  return {
+    check: "Agent deny mechanism",
+    message: `${hookId} self-test --self-test=smoke failed for ${agentId}`,
+    evidence: evidencePath(denyRelPath),
+    howToFix: `Run ${runtime} .goat-flow/hooks/${hookId}${suffix} --self-test=smoke to see which cases fail.`,
+  };
+}
+
+/**
+ * Spawns deny self-tests after the caller authorizes target execution; shared dispatchers run once.
+ * Each installed policy dispatcher runs its own native smoke corpus.
+ *
+ * @param ctx - selected project and included agents whose dispatchers the self-test must exercise
+ * @returns first self-test or environment failure, or null when every selected dispatcher passes
+ */
+export function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
+  const suffix = ".mjs";
   const testedDispatchers = new Set<string>();
   for (const agentFacts of ctx.agents) {
     for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
-      // An agent without a shell hook directory cannot supply a dispatcher for this test.
       if (!agentFacts.agent.hooksDir) continue;
-      const denyRelPath = join(
-        ".goat-flow",
-        "hooks",
-        "deny-dangerous",
-        "deny-dangerous-self-test.sh",
+      const dispatcherRelPath = join(
+        agentFacts.agent.hooksDir,
+        `${hookId}${suffix}`,
       );
-      const content = ctx.fs.readFile(denyRelPath);
-      // A missing or unreadable self-test provides no runtime verdict; only an installed shell test can be executed.
-      if (content === null) continue;
-      const denyPath = join(ctx.projectPath, denyRelPath);
-      const dispatcherRelPath = join(agentFacts.agent.hooksDir, `${hookId}.sh`);
       const dispatcherPath = join(ctx.projectPath, dispatcherRelPath);
-      // Several agents can share this hook directory; one completed replay covers the same installed bytes.
       if (testedDispatchers.has(dispatcherPath)) continue;
       testedDispatchers.add(dispatcherPath);
-      // When a dispatcher exists, the shared self-test must exercise that agent's installed entry point instead of its default.
-      const env =
-        ctx.fs.readFile(dispatcherRelPath) === null
-          ? process.env
-          : { ...process.env, GOAT_DENY_DANGEROUS_HOOK: dispatcherPath };
-      try {
-        runHookBash(
-          [denyPath, "--self-test=smoke"],
-          DENY_POLICY_SMOKE_TIMEOUT_MS,
-          env,
-        );
-      } catch (error) {
-        // A user-edited deny policy can fail its self-test; a missing shell or sandbox restriction may stop the test before it runs.
-        // A recorded zero exit means the self-test completed successfully despite the process API's error object.
-        if (commandCompletedSuccessfully(error)) continue;
-        const spawnFailure = spawnFailureFor(
-          error,
-          `${hookId} self-test for ${agentFacts.agent.id}`,
-        );
-        // Launch failures point the user at their environment instead of claiming that the hook policy itself failed.
-        if (spawnFailure !== null) {
-          return {
-            check: "Agent deny mechanism",
-            message: spawnFailure.message,
-            evidence: evidencePath(denyRelPath),
-            howToFix: spawnFailure.howToFix,
-          };
-        }
-        return {
-          check: "Agent deny mechanism",
-          message: `${hookId} self-test --self-test=smoke failed for ${agentFacts.agent.id}`,
-          evidence: evidencePath(denyRelPath),
-          howToFix: `Run bash .goat-flow/hooks/${hookId}.sh --self-test=smoke to see which cases fail.`,
-        };
-      }
+      const failure = checkDispatcherSelfTest(
+        ctx,
+        agentFacts.agent.id,
+        dispatcherRelPath,
+      );
+      if (failure !== null) return failure;
     }
   }
   return null;
@@ -510,7 +501,7 @@ export const agentDenyMechanism: BuildCheck = {
     if (ctx.denyMechanismEvidenceLevel === "present-only") {
       return checkDenyHookPresent(ctx);
     }
-    // Return the first static repair before considering target policy execution; Bash syntax checks parse without running the hook.
+    // Return the first static repair before considering target policy execution; Node syntax checks parse without running the hook.
     const staticFailure =
       checkDenyHookPresent(ctx) ??
       checkHookSyntax(ctx) ??

@@ -1,6 +1,6 @@
 ---
 category: refactor-fallout
-last_reviewed: 2026-09-21
+last_reviewed: 2026-10-15
 ---
 
 **Scope:** What breaks downstream when code is split, renamed, or extracted - browser script load graphs, source-shape tests that pinned the old layout, and shared scope a split test no longer imports. Using the Gruff analyzer is [gruff-cleanup.md](gruff-cleanup.md); stale built dashboard assets are [dashboard-testing.md](dashboard-testing.md).
@@ -86,3 +86,13 @@ last_reviewed: 2026-09-21
 **Recurrence 2026-08-09 (playbook mirrors):** Three hook-registration tests each looped over the two shipped playbook copies; one named mirror runner moved iteration out of the tests while assertion callbacks kept path-labelled failures. `test/unit/playbook-contract.test.ts` (search: `assertRegistrationCommandForEachPlaybook`).
 **Recurrence 2026-08-09 (launcher settings):** The hook launcher suite checked six invalid settings and two feedback ceilings inside one loop; named cases gave every value a direct assertion and a distinct TAP result. `test/unit/hook-launcher.test.ts` (search: `Separate names show exactly which mistyped user setting`).
 **Recurrence 2026-08-17:** A Gruff discovery contract checked twelve ordered candidates inside one loop; explicit relationship assertions kept the compact case while identifying the exact missing or misordered candidate. `test/contract/comment-playbook-doctrine.test.ts` (search: `discovers declared, wrapped, checkout, and installed tools in order`).
+
+## Lesson: A new test category falsifies comments that define one mode as everything outside another
+
+**Status:** active | **Created:** 2026-10-15
+
+**Prevention:** When a change adds a third category to a two-way split, search every surface that describes the split for complement wording, such as "every test file outside the slow set" or "the fast and slow suites already run these files", and qualify each one in the same change. Evidence anchors: `scripts/run-tests.mjs` (search: `REFERENCE_JOB_TESTS`), `.github/workflows/ci.yml` (search: `outside the slow set and the reference-job list`).
+
+**What happened:** M49 took `hook-parity-reference.test.ts` out of every test mode into a weekly-only list and commented the weekly step that now runs it. The `ci.yml` header and the `test-fast` comment still said that job runs every file outside the slow set, and the `hook-reference-linux` header still said the fast and slow suites run that job's files. A read-only review found all three after the change was committed; a follow-up commit qualified them.
+
+**Root cause:** The search before editing looked for the moved file's name, not for wording that defined one mode as the complement of another, so comments that never named the file were missed.

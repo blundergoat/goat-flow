@@ -1,9 +1,24 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-10-03
+last_reviewed: 2026-10-22
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
+
+## Lesson: Typed hook boundaries must distinguish absent fields from explicit undefined
+
+**Status:** active | **Created:** 2026-10-16
+**Severity:** INTEGRATION
+**Decision changed:** Compare each typed boundary with its producer's absence contract before wiring callers.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** With exact optional property types, an optional field does not accept an explicit undefined value unless its type includes undefined. Match the producer and shared runtime: permit explicit undefined when supported, or omit the property when absent. Run the hooks typecheck after connecting the caller.
+
+**What happened:** The native result renderer forwarded CapturedHookProcessResult.output into NativeLauncherFailure.outputMeasurement. Three call sites failed with TS2379 because the producer permits undefined but the optional destination field did not. Adding undefined to the destination's type preserved runtime behavior and cleared the same typecheck.
+
+**Evidence:** src/hooks/hook-supervisor.mts (search: `output: HookOutputMeasurement | undefined`), src/hooks/hook-launch.mts (search: `outputMeasurement?: HookOutputMeasurement | undefined`) and tsconfig.json (search: `exactOptionalPropertyTypes`).
+
+---
 
 ## Lesson: Bash case patterns need syntax proof for template delimiters
 
@@ -77,7 +92,7 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `captureHookProcessUntil
 **Decision changed:** Trace SC2329 callers before suppression and run the exact published lint command with the analyzer version under test.
 **Incident count:** 4 | **Latest occurrence:** 2026-09-21
 
-**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. For SC2329, trace traps and sourced callers before adding a function-scoped directive naming the call path. Verify the workflow and installed mirrors with the same no-`-x` ShellCheck command used by preflight. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
+**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. For SC2329, trace traps and sourced callers before adding a function-scoped directive naming the call path. When editing those hooks, verify the workflow and installed mirrors with the published no-`-x` ShellCheck command. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
 
 **What happened:** After extracting `deny-dangerous.sh`, I expected `# shellcheck source=deny-dangerous.sh` above the runtime-computed source line to satisfy linting. The repo's hook lint command does not run ShellCheck with `-x`, so ShellCheck failed or warned with SC1091/SC1090 on every mirrored policy hook before any behavior checks could matter.
 
@@ -111,3 +126,35 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `captureHookProcessUntil
 **What happened:** The gruff-code-quality self-test isolates binary discovery with `PATH="$tmp/empty-bin"` so a system-installed `gruff-py` cannot leak into assertions. The new repo-owned config override (`hooks.gruff-code-quality.binaries.<lang>`) parses `.goat-flow/config.yaml` with `awk`. Under the restricted PATH, `awk` was not found; the command substitution's `2>/dev/null || true` swallowed the failure, the parser returned empty, and the config-override self-test failed with an empty value while the production code path was actually correct.
 
 **Root cause:** Restricted-PATH fixtures constrain every external command in the function under test, not just the binary the fixture means to hide. A helper that shells out (`awk`, `sed`, `git`) silently degrades when the fixture PATH omits it, and fail-soft error handling converts the missing tool into a wrong answer instead of a visible error.
+
+---
+
+## Lesson: Generated Bash needs proof through each enclosing parser
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check both outer JavaScript and emitted Bash before running a generated extraction adapter.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Preserve Bash expansion literally across the outer language boundary. Run `node --check` on the generator, check the emitted script with `bash -n`, then execute one real smoke extraction before a full matrix.
+
+**What happened:** M01 embedded Bash parameter expansion in a JavaScript template. The initial Node syntax check failed with `Missing } in template expression`. Encoding the injected Bash as string-array elements corrected the outer syntax; the parser checks and the original 49-assertion smoke extraction then succeeded.
+
+**Evidence:** `scripts/check-hook-parity.mjs` (search: `instrumentSelfTest`); `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `SELF_TEST_MODE`). The frozen Bash source stayed unchanged.
+
+---
+
+## Lesson: Prove literal inputs at the MSYS observer boundary
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check exact input bytes on both sides of the Windows observer before comparing frozen policy outcomes.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Prove literal bytes at both the Bash-to-Node observer and Node-to-Bash policy launch. Include a long command, an UNC path and the locale sentinel before the full matrix. Restore the frozen policy environment after observer-only MSYS overrides. Reporting may retain completed failed assertions as observations; acceptance must still reject them and every incomplete run.
+
+**What happened:** M01 used `MSYS_ARG_CONV_EXCL`, which did not stop Git Bash from changing literal `</dev/null rm -rf /etc` text to a Windows path inside the Node observer. A native probe preserved it with `MSYS2_ARG_CONV_EXCL`, matching the [MSYS2 documentation](https://www.msys2.org/docs/filesystem-paths/). The adapter confines that override to observer ingress and restores the frozen environment before policy launch. Its 49-assertion native smoke passed, but a later launch probe found a 17,014-byte command shortened to 8,186 bytes and a 37-byte UNC operand to 36. The C sentinel also allowed incorrectly. The run was stopped; its captures and apparent policy differences were invalidated. After approval, a shared NUL-delimited file transport replaced that launch path. Fresh native proof preserves all five boundary cases in both locales and all 49 producer assertions; full Windows comparison remains open. The earlier ten-minute timeout is diagnostic history; extraction now has a bounded twenty-minute deadline.
+
+A separate Windows Stop-prefix probe lost quotes from inline `node -e` source through PowerShell. Passing an owned script file verified the actual environment prefix without that extra quoting boundary. Use literal files for native Node diagnostic programs.
+
+**Evidence:** `scripts/check-hook-parity.mjs` (search: `observeNode`, `spawnReferenceCommand`, `policyEnvironment`, `allowAssertionFailures`); `test/integration/hook-parity-reference.test.ts` (search: `divergence captures failed original assertions`, `frozen launches preserve long and UNC literal inputs`); `.codex/hooks.json` (search: `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES`). No frozen Bash source was changed.

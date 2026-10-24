@@ -30,6 +30,9 @@ paths:
     # Reproducible third-party bundles; the handwritten classifier and policy reader remain analysed.
     - "workflow/hooks/vendor/graphql.cjs"
     - "workflow/hooks/vendor/js-yaml.cjs"
+    # Hash-bound frozen originals and generated parity data; the runner remains analysed.
+    - "test/fixtures/hooks-bash/**"
+    - "workflow/hooks/deny-dangerous/corpus.json"
 
 allowlists:
   # Abbreviations listed here are accepted in identifiers without a naming finding.

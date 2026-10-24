@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-19
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -86,9 +86,9 @@ Related evidence moved intact to [evidence-attribution.md](evidence-attribution.
 
 **Status:** active | **Created:** 2026-07-03 | **Evidence:** OBSERVED
 **Severity:** CORRECTNESS
-**Incident count:** 9 | **Latest occurrence:** 2026-10-10
+**Incident count:** 10 | **Latest occurrence:** 2026-10-19
 
-**Prevention:** Before claiming a pattern is absent, rerun the exact single pattern with no `head` or `tail` truncation, or count with `grep -c`. For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Derive an exact-count claim from the widest search it implies, `git grep` over the tracked tree, before pinning it into a stop condition. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
+**Prevention:** Before claiming a pattern is absent, rerun the exact single pattern with no `head` or `tail` truncation, or count with `grep -c`. For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Derive an exact-count claim from the widest search it implies, `git grep` over the tracked tree, before pinning it into a stop condition. When the target text may be assembled at runtime from a template, format string or concatenation, search a stable literal fragment and read the producer before treating zero hits as absence. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
 
 Capture large source or JSON inventories in bounded parts and reconcile their full lengths before parsing or crediting them as a baseline. Budget both the individual tool capture and combined orchestration output; retain complete results in memory before displaying selected fields.
 
@@ -96,7 +96,7 @@ Capture large source or JSON inventories in bounded parts and reconcile their fu
 
 **Root cause:** A multi-pattern grep piped through `head` answers "what appears early", not "does X appear at all".
 
-The recurring failure is crediting a sampled or truncated capture as complete. This ledger preserves the distinct evidence:
+The recurring failure is crediting a sampled, truncated or wrongly shaped search as complete. This ledger preserves the distinct evidence:
 
 - **Recurrence 2026-08-12:** A six-directory census found seven five-call paths; the tracked-tree search found eight. The missed path was `.goat-flow/learning-loop/decisions/ADR-042-cross-harness-invocation-ask-first.md` (search: `5-call`).
 - **Recurrence 2026-08-16:** A contiguous-name filter missed `src/cli/hooks-configured-runtime-evidence.ts` (search: `readManagedConfiguredHookState`); an exact existence check disproved the absence claim.
@@ -105,6 +105,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 - **Recurrence 2026-09-11:** Combined source reads, context JSON and a full plan export exceeded capture budgets; increasing the export budget still failed. Parsing the complete export inside the command process and emitting scalar assertions recovered its 72-record graph. Filename guesses also missed existing inputs. An oversized preparation command was rejected by the 16 KB hook before execution. Discover exact paths, keep commands inspectable, reconcile capture lengths and retain rejected attempts separately. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`, `## Proof Gate`); export owner: `src/cli/plans-export.ts` (search: `loadPlanExportRecords`).
 - **Recurrence 2026-10-02:** Recall closeout notes stated 650 test lines before final measurement; `wc -l` measured 653. A learning draft then emitted its full 34 KB bucket and exceeded the tool capture budget; bounded patch-only output recovered the proposal. Measure final bytes before exact-count claims, and keep full draft state in memory while emitting only the reviewed patch. `test/unit/learning-loop-recall.test.ts` (search: `recall citation freshness`); capture contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
 - **Recurrence 2026-10-10:** During learning-loop cleanup and its subsequent review, a recursive search across ignored logs and plans, whole-draft previews and combined file reads exceeded tool output limits. A growing inline helper then hit the enforced command-inspection limit before execution. Review persistence also rejected a pipe into the source CLI; the version-matched executable and direct stdin supplied allowed input without a raw draft on disk. Restrict discovery to the relevant files, display bounded changed spans, and use a reviewed file helper for large transformations. Complete patch captures and source hashes were checked before writes; truncated captures were not credited as complete evidence. Capture contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
+- **Recurrence 2026-10-19:** Qualifying a test change, an exact search for `retired Claude deny rule removed` found nothing in the installer's Claude migration block, suggesting the asserted message came from elsewhere. The block builds it as `${label} deny rule removed`, with `label` set to `retired Claude` at runtime; searching the fragment `deny rule removed` found the producer before any assertion changed. `workflow/install-goat-flow.sh` (search: `deny rule removed`).
 
 ---
 
@@ -134,9 +135,11 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **Severity:** CORRECTNESS
 **Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove.
 **Trigger phase:** VERIFY
-**Incident count:** 31 | **Latest occurrence:** 2026-10-11
+**Incident count:** 34 | **Latest occurrence:** 2026-10-18
 
-**Prevention:** Run `npm run check:touched` for its supported format, source lint, typecheck, Gruff, and guidance scopes; capture every selected check's result line. Run the repository-owned Knip and owning test gates separately with captured output. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`).
+**Prevention:** Run `npm run check:touched` for its supported format, source lint, typecheck, Gruff, and guidance scopes; capture every selected check's result line. Run the repository-owned Knip and owning test gates separately with captured output. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Retained exact-registration evidence: `test/unit/hook-registrar.test.ts` (search: `the reported duplicate Stop state must converge to one row`).
+
+**Recurrence 2026-10-17 (manifest gate):** Scaffold validation guessed a manifest-check script name and failed because that command does not exist. Reading the preflight owner and actual test paths led to the manifest and ownership suites; the combined manifest/candidate run reported 42 passes. Discover a gate before invoking it. `scripts/preflight-checks.sh` (search: `manifest_eval`) and `test/unit/manifest.test.ts` (search: `checkManifest (real repo)`).
 
 **What happened:** Several closeouts sent ignored tests or workflow `.mjs` files to TypeScript-only ESLint, and one ran `npm test` beside expensive checks and lost the failing block; a captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
 
@@ -174,7 +177,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 
 **Recurrence 2026-09-08 (comment contracts):** Rewording two private test helpers introduced `docs.missing-invariant-doc` advisories despite the scoped baseline having none. Reading the installed rule showed that it recognizes specific contract words. State the actual must-hold rule in plain English, preserve useful parameter and return context, then repeat the same scoped formatter and analyzer commands. The repaired check reported no findings across the three selected files. **Evidence:** OBSERVED; `test/contract/skill-hardening-security-1.test.ts` (search: `posturesInReadingOrder`, `tokensInReadingOrder`); `scripts/gruff-ts.sh` (search: `exec "$GRUFF_BIN" "$@"`).
 
-**Recurrence 2026-09-18 (ignored test lint):** Installer closeout again treated ESLint's ignored-file exit zero as proof, then `--no-ignore` failed because tests are outside the parser projects. Read the supported target set before issuing a check; keep the ignored result and parser failure visible, and use Prettier plus runtime tests for this test source. Owners: `eslint.config.mjs` (search: `"test/**"`), `scripts/preflight-checks.sh` (search: `lint_targets=(src/cli src/dashboard)`), and `test/integration/hook-sync-recovery.test.ts` (search: `recovers a full v1.16.0 installation`).
+**Recurrence 2026-09-18 (ignored test lint):** Installer closeout again treated ESLint's ignored-file exit zero as proof, then `--no-ignore` failed because tests are outside the parser projects. Read the supported target set before issuing a check; keep the ignored result and parser failure visible, and use Prettier plus runtime tests for this test source. Owners: `eslint.config.mjs` (search: `"test/**"`), `scripts/preflight-checks.sh` (search: `lint_targets=(`), and `test/integration/hook-sync-recovery.test.ts` (search: `recovers a full v1.16.0 installation`).
 
 **Recurrence 2026-09-18 (policy selector):** The broad installer suite failed two archived-package migrations because its helper replayed the first PreToolUse row as the general guard. The migrated first row belonged to Git policy, which correctly allowed the destructive-shell payload. An isolated candidate selecting `deny-dangerous.sh` passed both failures without changing the payload or expected deny result. Bind policy proof to its owned script, preserve user-reviewed row order, and run the packaged cases after registration changes. Owners: `test/integration/packaged-hook-install.test.ts` (search: `readInstalledCodexDenyHandler`) and `src/cli/server/hook-registrar.ts` (search: `prepareGitProtection`). The candidate remained unapplied at the scope gate.
 
@@ -193,6 +196,12 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
   Check both forms before claiming full layout coverage; `src/cli/cli-parser.ts` (search: `Trusted audit needs full runtime deny proof`).
 
 **Evidence:** OBSERVED. Write-accounting owner: `AGENTS.md` (search: `record the write allowlist`, `literal pass/fail line copied verbatim`).
+
+
+**Recurrence 2026-10-18 (notes gate):** A bespoke check rejected valid progress text containing "earlier". Check facts and unchanged history, using literal source anchors. Owner: `.goat-flow/skill-docs/skill-preamble.md` (search: `not an adjacent one`).
+
+
+**Recurrence 2026-10-18 (CLI repair baseline):** Fresh CLI receipts made all four repair cases refuse a fixture-deleted skill. Authorize only that skill with `--force-path`, preserve the refusal and rerun. Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `The CLI baseline records this removal`).
 
 ---
 
@@ -227,22 +236,3 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **What happened:** A milestone drafted ADR-066 and asked the user to approve a wider allowlist. Both said the Gruff launcher change would alter every provider's registration, four agent-config templates and three installed agent configs. The user approved. Implementation then reached the generator, whose recognizer preserves the Codex, Copilot and Antigravity registration bytes under ADR-053. The change was narrowed to Claude's structured bootstrap, ADR-066 was corrected after acceptance, and the generated contract diff showed three changed rows, all Claude's Gruff handlers. The template named in the request holds no Gruff row at all.
 
 **Root cause:** The request was written from the measured incident and the file names that mention the bootstrap, without reading the generator that owns those bytes. The accepted decisions that constrain it were found only while editing.
-
----
-
-## Lesson: A run record is read from the session's command outputs, not recalled
-
-**Status:** active | **Created:** 2026-09-19
-**Severity:** CORRECTNESS
-**Decision changed:** Before writing which harness, model and effort ran a piece of work, search the session for the requester's model and effort commands and copy what their outputs say.
-**Trigger phase:** VERIFY
-**Caught at:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-09-19
-
-**Prevention:** Model and effort commands leave output lines in the conversation. Find them, quote their values, and tie each change to its timing segment. A harness notice naming a new model is the effect of such a command: look for the command just before it. Write "not observable" only for a setting no output mentions; never say a command was not seen without searching.
-
-**What happened:** One closeout recorded effort xhigh and an unseen model switch; the requester had set effort max and switched models in visible commands. The next closeout corrected it, then missed a second model switch and a new effort command in one turn. A requested second check caught it.
-
-**Recurrence 2026-09-19:** The next milestone, written after this lesson, again claimed no command for a switch to Opus 5; its "Set model to Opus 5" output sat just before the notice the record cited. A second check caught it.
-
-**Root cause:** The record came from settings remembered at the start. Mid-turn commands arrive between tool results, and the closeout never searched for them.

@@ -28,7 +28,10 @@ import {
   getSkillFiles,
 } from "../../src/cli/manifest/manifest.js";
 import { buildAgentHookCommand } from "../../src/cli/server/agent-hook-writer.js";
-import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import {
+  getHookSpec,
+  listHookSpecs,
+} from "../../src/cli/server/hooks-registry.js";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 export const INSTALL_FIXTURE_SKILL = "skill-with-references";
@@ -241,6 +244,7 @@ export function setupFixture(): string {
       SHARED_STUB,
     );
   }
+  writeHookFixtures(root);
   return root;
 }
 
@@ -333,6 +337,20 @@ export function writeHookFixtures(root: string): void {
     join(root, ".goat-flow", "hooks", "hook-launch-runtime.mjs"),
     HOOK_LAUNCHER_STUB,
   );
+  // Drift fixtures compare bytes without executing hooks; every native dependency needs a paired source and installed file.
+  for (const directory of ["workflow/hooks", ".goat-flow/hooks"]) {
+    for (const file of new Set(
+      listHookSpecs().flatMap((spec) => spec.scriptFiles),
+    )) {
+      const destination = join(root, directory, file);
+      mkdirSync(dirname(destination), { recursive: true });
+      writeFileSync(
+        destination,
+        file.endsWith(".json") ? "{}\n" : HOOK_LAUNCHER_STUB,
+      );
+    }
+  }
+
   writeFileSync(
     join(root, "workflow", "hooks", "agent-config", "copilot-hooks.json"),
     COPILOT_HOOK_CONFIG_STUB,
@@ -347,35 +365,69 @@ export function writeHookFixtures(root: string): void {
 /**
  * Clone this repo into a temp fixture and git-init it, so install-then-drift round trips run
  * against a real tree. Writes the copied tree to the filesystem without repository metadata,
- * dependencies, session logs, or local install receipts; symlinks node_modules back to the source
+ * dependencies, local working contents, session logs, or install receipts; symlinks node_modules back to the source
  * to avoid a slow copy; and spawns git init. Asserts git init succeeds.
  *
+ * @param sourceRoot - Git checkout whose maintained working-tree files and current dist outputs become fixture inputs
  * @returns the cloned repo root inside the temp fixture; the caller cleans up its parent dir
  */
-export function setupInstallRoundTripFixture(): string {
+export function setupInstallRoundTripFixture(
+  sourceRoot = PROJECT_ROOT,
+): string {
   const parent = mkdtempSync(join(tmpdir(), "goat-flow-install-roundtrip-"));
   const root = join(parent, "repo");
-  const localInstallStateDirectory = join(".goat-flow", "state", "install");
-  cpSync(PROJECT_ROOT, root, {
+  const tracked = spawnSync("git", ["ls-files", "--cached", "-z"], {
+    cwd: sourceRoot,
+    encoding: "utf8",
+  });
+  assert.equal(
+    tracked.status,
+    0,
+    `fixture inputs require a Git checkout: ${tracked.stderr}`,
+  );
+  const retained = new Set(tracked.stdout.split("\0").filter(Boolean));
+  const maintainedAdditions = spawnSync(
+    "git",
+    [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      "src",
+      "test",
+      "workflow",
+      "scripts",
+      "docs",
+    ],
+    { cwd: sourceRoot, encoding: "utf8" },
+  );
+  assert.equal(maintainedAdditions.status, 0, maintainedAdditions.stderr);
+  for (const path of maintainedAdditions.stdout.split("\0").filter(Boolean))
+    retained.add(path);
+  const directories = new Set<string>();
+  for (const path of retained) {
+    for (
+      let parentPath = dirname(path);
+      parentPath !== ".";
+      parentPath = dirname(parentPath)
+    )
+      directories.add(parentPath);
+  }
+  cpSync(sourceRoot, root, {
     recursive: true,
     filter: (src) => {
-      const rel = relative(PROJECT_ROOT, src);
+      const rel = relative(sourceRoot, src);
       // The root itself must remain so the user's fixture directory is created.
       if (rel === "") return true;
-      const [topLevel] = rel.split(sep);
-      // Repository metadata and dependencies are supplied separately to keep setup fast.
-      if (topLevel === ".git" || topLevel === "node_modules") return false;
-      // Local receipts would make this clean-install fixture depend on the caller's ignored state.
-      if (
-        rel === localInstallStateDirectory ||
-        rel.startsWith(`${localInstallStateDirectory}${sep}`)
-      ) {
-        return false;
-      }
-      return rel !== join(".goat-flow", "logs", "sessions");
+      const path = rel.split(sep).join("/");
+      if (path === ".git" || path === "node_modules") return false;
+      // Generated CLI modules are required even though the build directory is ignored.
+      if (path === "dist" || path.startsWith("dist/")) return true;
+      return retained.has(path) || directories.has(path);
     },
   });
-  symlinkSync(join(PROJECT_ROOT, "node_modules"), join(root, "node_modules"));
+  symlinkSync(join(sourceRoot, "node_modules"), join(root, "node_modules"));
   const git = spawnSync("git", ["init", "-q"], {
     cwd: root,
     encoding: "utf-8",

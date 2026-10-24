@@ -1,3 +1,5 @@
+import { hookSelection } from "../helpers/hook-entrypoint.js";
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 /**
  * Locks provider documentation, live capture, trust, effective-state, and result contracts.
  * Use these fixtures before dashboard or setup claims change, and when a hook result
@@ -5,7 +7,6 @@
  */
 import assert from "node:assert/strict";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -54,9 +55,19 @@ import {
   buildStopPayload,
   runHook,
   withCommandShim,
+  withScannerFileFault,
   withTempRepo,
   writeFile,
 } from "./post-turn-safety-hook.helpers.js";
+
+/** Fail the selected scanner's file read, keeping the Bash reference seam outside native proof. */
+function withUnreadableScannerFile(
+  scenario: (environment: Record<string, string>) => void,
+): void {
+  if (hookSelection() === "reference")
+    withCommandShim(resolveExecutable("wc"), { status: 2 }, scenario);
+  else withScannerFileFault("readFileSync", scenario);
+}
 
 const SUPPORT_CHECK_DATE = new Date("2026-08-09T12:00:00.000Z");
 const TURN_STOP_EVENT: HookLifecycleEvent = "turn-stop";
@@ -67,10 +78,17 @@ const DELIVERED_RESPONSE_CHANNELS: HookProviderResponseChannel[] = [
   "stdout-json",
   "model-context",
 ];
-const STOP_SCANNER_VARIANTS = [
-  { displayName: "native scanner", forceBash3Fallback: "0" },
-  { displayName: "Bash 3 compatibility scanner", forceBash3Fallback: "1" },
-] as const;
+const STOP_SCANNER_VARIANTS = (
+  hookSelection() === "reference"
+    ? [
+        { displayName: "native scanner", forceBash3Fallback: "0" },
+        {
+          displayName: "Bash 3 compatibility scanner",
+          forceBash3Fallback: "1",
+        },
+      ]
+    : [{ displayName: "Node scanner", forceBash3Fallback: "0" }]
+) as readonly { displayName: string; forceBash3Fallback: string }[];
 const GRUFF_RESULT_FIXTURES = [
   {
     label: "clean analysis",
@@ -503,14 +521,9 @@ describe("hook provider contracts", () => {
         label: "unsupported capability",
         /** Writes an older analyzer and config so users see why JSON feedback is unavailable. */
         prepareProject(projectRoot: string) {
-          const analyzerDirectoryPath = join(projectRoot, "bin");
-          mkdirSync(analyzerDirectoryPath, { recursive: true });
-          const analyzerPath = join(analyzerDirectoryPath, "gruff-ts");
-          writeFileSync(
-            analyzerPath,
-            '#!/usr/bin/env bash\n# A user may still have a pre-JSON analyzer on PATH after enabling Gruff.\nif [[ "$1" == "analyse" && "$2" == "--help" ]]; then printf "Usage: gruff analyse FILE\\n"; fi\nexit 0\n',
-          );
-          chmodSync(analyzerPath, 0o755);
+          writeContractGruffBinary(projectRoot, CLEAN_GRUFF_CONTRACT_ENVELOPE, {
+            capabilities: "",
+          });
           writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
         },
         findingCode: "analyzer-capability-unsupported",
@@ -666,7 +679,7 @@ describe("hook provider contracts", () => {
 
         writeFile(
           projectRoot,
-          ".goat-flow/hooks/post-turn-safety.sh",
+          `.goat-flow/hooks/post-turn-safety.${hookSelection() === "reference" ? "sh" : "mjs"}`,
           readFileSync(HOOK_PATH, "utf8"),
         );
 
@@ -714,61 +727,66 @@ describe("hook provider contracts", () => {
     //
     // A state directory created by absolute path therefore never stores the record that ends the repeated Stop.
     // This case writes a managed hook copy and re-entry state while hook subprocesses run behind a mkdir shim.
-    it("bounds a managed non-Git Stop root when mkdir refuses absolute paths", () => {
-      const projectRoot = makeRoot();
-      const sessionIdentifier = "absolute-mkdir-refused-session";
-      const managedEnvironment = {
-        GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
-        GOAT_FLOW_HOOK_PROVIDER: "codex",
-        GOAT_FLOW_HOOK_EVENT: "turn-stop",
-        GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
-        GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
-      };
+    it(
+      "bounds a managed non-Git Stop root when mkdir refuses absolute paths",
+      {
+        skip:
+          hookSelection() !== "reference"
+            ? "The native runtime does not invoke mkdir; this retains the frozen Bash transport regression."
+            : false,
+      },
+      () => {
+        const projectRoot = makeRoot();
+        const sessionIdentifier = "absolute-mkdir-refused-session";
+        const managedEnvironment = {
+          GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
+          GOAT_FLOW_HOOK_PROVIDER: "codex",
+          GOAT_FLOW_HOOK_EVENT: "turn-stop",
+          GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+          GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
+        };
 
-      writeFile(
-        projectRoot,
-        ".goat-flow/hooks/post-turn-safety.sh",
-        readFileSync(HOOK_PATH, "utf8"),
-      );
+        writeFile(
+          projectRoot,
+          `.goat-flow/hooks/post-turn-safety.${hookSelection() === "reference" ? "sh" : "mjs"}`,
+          readFileSync(HOOK_PATH, "utf8"),
+        );
 
-      withCommandShim(
-        "mkdir",
-        [
-          'for argument in "$@"; do',
-          '  case "$argument" in',
-          "    /*)",
-          '      printf "mkdir: cannot create directory \'%s\': Read-only file system\\n" "$argument" >&2',
-          "      exit 1",
-          "      ;;",
-          "  esac",
-          "done",
-        ].join("\n"),
-        (commandShimEnvironment) => {
-          const firstResult = runHook(
-            projectRoot,
-            { ...managedEnvironment, ...commandShimEnvironment },
-            buildStopPayload(sessionIdentifier, false),
-          );
-          assert.equal(firstResult.status, 0, firstResult.stderr);
-          assert.equal(
-            JSON.parse(firstResult.stdout).reasonCode,
-            "coverage-incomplete",
-          );
+        withCommandShim(
+          resolveExecutable("mkdir"),
+          {
+            when: { absoluteOperand: true },
+            stderr:
+              "mkdir: cannot create directory '{{absolute}}': Read-only file system\n",
+            status: 1,
+          },
+          (commandShimEnvironment) => {
+            const firstResult = runHook(
+              projectRoot,
+              { ...managedEnvironment, ...commandShimEnvironment },
+              buildStopPayload(sessionIdentifier, false),
+            );
+            assert.equal(firstResult.status, 0, firstResult.stderr);
+            assert.equal(
+              JSON.parse(firstResult.stdout).reasonCode,
+              "coverage-incomplete",
+            );
 
-          const reentryResult = runHook(
-            projectRoot,
-            { ...managedEnvironment, ...commandShimEnvironment },
-            buildStopPayload(sessionIdentifier, true),
-          );
-          assert.equal(reentryResult.status, 0, reentryResult.stderr);
-          assert.equal(
-            JSON.parse(reentryResult.stdout).reasonCode,
-            "bounded-reentry-ended",
-            reentryResult.stderr,
-          );
-        },
-      );
-    });
+            const reentryResult = runHook(
+              projectRoot,
+              { ...managedEnvironment, ...commandShimEnvironment },
+              buildStopPayload(sessionIdentifier, true),
+            );
+            assert.equal(reentryResult.status, 0, reentryResult.stderr);
+            assert.equal(
+              JSON.parse(reentryResult.stdout).reasonCode,
+              "bounded-reentry-ended",
+              reentryResult.stderr,
+            );
+          },
+        );
+      },
+    );
 
     // Git refuses a checkout owned by another account, which Git for Windows reports for a \\wsl.localhost checkout by default.
     //
@@ -790,20 +808,18 @@ describe("hook provider contracts", () => {
 
         writeFile(
           projectRoot,
-          ".goat-flow/hooks/post-turn-safety.sh",
+          `.goat-flow/hooks/post-turn-safety.${hookSelection() === "reference" ? "sh" : "mjs"}`,
           readFileSync(HOOK_PATH, "utf8"),
         );
 
         withCommandShim(
-          "git",
-          [
-            'for argument in "$@"; do',
-            '  if [ "$argument" = rev-parse ]; then',
-            '    printf "fatal: detected dubious ownership in repository at \'%s\'\\n" "$PWD" >&2',
-            "    exit 128",
-            "  fi",
-            "done",
-          ].join("\n"),
+          resolveExecutable("git"),
+          {
+            when: { includes: ["rev-parse"] },
+            stderr:
+              "fatal: detected dubious ownership in repository at '{{cwd}}'\n",
+            status: 128,
+          },
           (commandShimEnvironment) => {
             const refusedResult = runHook(
               projectRoot,
@@ -854,7 +870,7 @@ describe("hook provider contracts", () => {
               : [];
           writeFile(projectRoot, "settings.env", "API_KEY=your_api_key_here\n");
 
-          withCommandShim("wc", "exit 2", (commandShimEnvironment) => {
+          withUnreadableScannerFile((commandShimEnvironment) => {
             const firstFailure = runHook(
               projectRoot,
               {
@@ -976,7 +992,7 @@ describe("hook provider contracts", () => {
           assert.equal(findingEnvelope.findings[0]?.target, "settings.env");
 
           writeFile(projectRoot, "settings.env", "API_KEY=your_api_key_here\n");
-          withCommandShim("wc", "exit 2", (commandShimEnvironment) => {
+          withUnreadableScannerFile((commandShimEnvironment) => {
             const incompleteEnvironment = {
               ...commandShimEnvironment,
               ...managedCodexResultEnvironment,

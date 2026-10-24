@@ -1,9 +1,67 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-20
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
+
+## Lesson: Preserve escaped controls when rewriting saved policy evidence
+
+**Status:** active | **Created:** 2026-10-20
+**Decision changed:** Check serialized bytes as well as parsed equality when editing a saved policy oracle; preserve escaped control characters.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Keep intentional Unicode test inputs escaped in JSON source. After rebuilding expectations, compare every original input and outcome, then run the repository's touched-file checks before presenting the patch. JSON parse equality alone does not prove the serialized artifact meets its text contract.
+
+**What happened:** M13 recovery-message reconciliation used JSON serialization that turned two existing escape sequences into literal U+200B and U+202E. The candidate comparison and parsed-value checks passed, but live verification reported `FAIL Unicode` for `test/fixtures/hooks-bash/policy-reference.json`. Restoring the escaped spellings preserved all parsed values and yielded `PASS Unicode (0.12s) - 16 changed text file(s); 0 invisible control(s)`. The retained cases are `selftest-deny-git-mutations-4fa00485f47710e2-1` and `selftest-deny-git-mutations-bb2b605927dfbe1b-1`; the checker is `scripts/check-touched.mjs` (search: `runUnicodeCheck`).
+
+---
+
+## Lesson: Keep installer templates stable while verification runs
+
+**Status:** active | **Created:** 2026-10-20
+**Decision changed:** Finish template and generated-mirror writes before starting tests that copy or verify those templates; keep the live source tree stable until the run ends.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Parallelize read-only checks, but do not regenerate workflow hooks while installer or recovery tests are using them. If a run overlaps a source edit, retain its failure and rerun the owning test and required preflight against stable bytes before drawing a conclusion.
+
+**What happened:** During M13, a hook-comment correction regenerated the live runtime mirrors while preflight was running. The recovery test in `test/integration/managed-divergence-messaging.test.ts` (search: `leaves a receipt-free checkpoint after interrupted cutover`) failed with the installer's managed-template mismatch error. With no further template writes, all 17 tests in that file passed, and the failing case also passed in isolation. The overlap suggests a template-copy race; a controlled interleaving has not reproduced that cause. The verification guard is in `src/cli/install-command.ts` (search: `Installer exited successfully, but`). The subsequent stable-tree preflight reported `PASS (with warnings)   74 checks · 4 warnings · 38.1s`.
+
+---
+
+## Lesson: Pipeline continuation changes must preserve heredoc and comment boundaries
+
+**Status:** active | **Created:** 2026-10-20
+**Decision changed:** Run the full retained corpus after changing pipeline boundaries; focused executable-pipeline cases do not prove that comment and heredoc text stay inert.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Before joining physical lines, distinguish an executable trailing pipe from pipe text inside a comment or heredoc body. Retain the corpus's ordinary-data controls alongside the executable cases. When those contexts are unresolved, keep the working parser and narrow the patch rather than introducing a new boundary rule.
+
+**What happened:** A draft Node pipeline fix joined newlines after trailing pipes. Its focused tests passed, but full comparison changed two retained controls: an unquoted heredoc body containing `step one |` was refused, and a trailing comment ending in a pipe hid the following download-to-shell command. The newline change was rewound, both controls were rerun successfully, and newline-pipeline gaps remain open. The committed inputs and expectations are in `workflow/hooks/deny-dangerous/corpus.json` (search: `history-matrix-34-deny-dangerous`, `history-matrix-38-deny-dangerous`); executable boundaries are owned by `src/hooks/policy-segments.mts` (search: `consumeSegmentSeparator`).
+
+**Recurrence (2026-10-20, substitution pipelines):** A combined output-flow draft passed its focused policy tests but exceeded the ESLint complexity limit and changed the existing denial text for `selftest-deny-dangerous-e5133c4c859034ae-1` without changing its denied status. The draft was withdrawn. Keep command-string and process-stream changes in separate batches, run lint before broad comparison, and compare diagnostic bytes as well as decisions. Evidence: `workflow/hooks/deny-dangerous/corpus.json` (search: `selftest-deny-dangerous-e5133c4c859034ae-1`) and `src/hooks/policy-evaluation.mts` (search: `preparePolicySegment`). The replacement command-string rule was kept isolated for review and applied after approval.
+
+**Recurrence 2026-10-20, scanner integration:** The context-aware continuation draft hit the complexity limit in `scanHeredocCharacter`, then in `evaluatePolicyCommand`. The integration step was rewound before retrying. A typed command-frame predicate and a separate deferred-refusal ordering helper kept both dispatchers within their limits. Check an owning dispatcher's lint headroom before adding scan modes or another refusal branch. Evidence: `src/hooks/policy-heredoc.mts` (search: `scanHeredocCharacter`) and `src/hooks/policy-evaluation.mts` (search: `evaluatePolicyCommand`). The replacement remains an isolated candidate; its full comparisons retain the heredoc/comment controls and report 28 differences without new difference IDs.
+
+
+
+---
+
+## Lesson: Exercise the CLI after extracting a dynamically imported module
+
+**Status:** active | **Created:** 2026-10-20
+**Decision changed:** After extracting a dynamically imported module, test the real CLI as well as its imported API, and check whether the new module imports its entrypoint.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Do not await a dynamic import at module top level when the imported module needs exports from that same entrypoint. Start the asynchronous CLI dispatch after defining the module, and preserve a process-level success case alongside the direct API test.
+
+**What happened:** The candidate runner was extracted from `scripts/check-hook-parity.mjs` into `scripts/check-hook-parity-candidate.mjs`, which imports shared reference helpers from the original module. The direct parity suite passed, but the CLI's top-level `await import()` stalled module initialization and Node exited 13 with an unsettled-top-level-await warning. `scripts/check-hook-parity.mjs` (search: `async function runCli`) now starts the dispatch without a top-level wait. `test/integration/hook-parity.test.ts` (search: `assert.equal(cli.status, 0, cli.stderr)`) exercises the actual CLI before the direct API checks.
+
+---
 
 ## Lesson: Validator fixtures must exercise documented input alternatives
 
@@ -43,7 +101,7 @@ last_reviewed: 2026-10-11
 **Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 7 | **Latest occurrence:** 2026-09-19
+**Incident count:** 10 | **Latest occurrence:** 2026-10-18
 
 **Prevention:**
 1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
@@ -65,6 +123,14 @@ last_reviewed: 2026-10-11
 - **Recurrence 2026-09-01:** Playbook inventory tests passed before preflight rejected `driftSkillPlaybookInventory` at complexity 11. Extracting `describePlaybookInventoryProblems` preserved the exact-set cases and restored ESLint.
 - **Recurrence 2026-09-05:** Adding `--max-active` produced 1,015 substantive lines against the configured 1,000-line gate. Folding flag checks together still left 1,008 lines after formatting. Moving plan argument handling into `src/cli/cli-parser-plans.ts` (search: `validatePlansFlags`) cleared the size error without importing plan runtime into the parser.
 - **Recurrence 2026-09-19:** A test file hit the same gate twice in one milestone. Seven new hook cases took `test/integration/gruff-code-quality-contract.test.ts` to 1,002 substantive lines; shortening the case labels bought 14 lines, and two more tests then took it to 1,038. The cases moved to `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `quiets edits outside the analysed scope`), which needed a second allowlist approval mid-milestone. Measure a test file's Gruff headroom before the first case is added, and plan the new file when the headroom is smaller than the planned cases.
+
+
+- **Recurrence 2026-10-18:** The M09 native segment port hit the same verification limits: quote, separator and tracking helpers exceeded ESLint complexity 10, and the directory fixture table exceeded the test-function length limit. Focused behavior tests alone did not establish acceptance. In `src/hooks/policy-segments.mts` (search: `segmentSeparatorWidth`, `directoryCommandStart`, `configCommandStart`), separate parsing decisions restored typed lint. In `test/unit/hook-policy-segments.test.ts` (search: `directoryContextCases`), keeping the unchanged table outside the test function restored the warning ratchet. Measure both source and test headroom before extending either; preserve every assertion when relocating fixture data.
+
+- **Recurrence 2026-10-18 (write rules):** The M10 direct port passed five focused tests before ESLint rejected `cobraBooleanFlagEnabled` at complexity 17 and `isGitLfsWriteTarget` at 30. The first extraction still left the LFS classifier at 12. In `src/hooks/deny-dangerous/patterns-writes.mts` (search: `scanCobraArguments`, `isLfsWriteCommand`), sharing option scanning and separating mutation-family matching brought every function below the unchanged limit. Read lint complexity before broad proof; a first helper extraction alone is not evidence that the whole file passes. The broader checks also rejected a test non-null assertion and a nested code-map row; both were corrected without dropping cases. The continuation hit complexity limits in Git option/pathspec loops and exact optional-property typing in fetch parsing. Split option recognition from traversal, omit absent fields instead of assigning undefined, and run typed lint immediately after each batch. A frozen comparison exposed lost command-substitution newline trimming in `isGitPublicationAliasConfig`; its quoted trailing-newline assertion now retains the publication decision. The invocation continuation also exceeded complexity limits in global-option and saved-alias helpers. Separating option retention, directory selection and supervised lookup restored the same limit; the first split still exceeded it and required another inspection. In `src/hooks/deny-dangerous/git-command.mts` (search: `consumeGlobalOption`, `readGitAlias`), the caller supplies the remaining deadline and the existing supervisor owns bounded output and cleanup. The new direct test initially expected a bare `stash` alias to omit the conservative history flag; 281 frozen invocation comparisons established the retained result, and `test/unit/hook-policy-writes.test.ts` (search: `preserves direct and inline-alias write decisions`) now asserts it.
+
+
+- **Recurrence 2026-10-18 (path rules):** The M12 port passed its first frozen comparisons but still exceeded ESLint complexity 10 in quote, search and credential handlers. Shared option-state traversal also triggered TypeScript's circular inference until its local result had an explicit type. In `src/hooks/deny-dangerous/patterns-paths.mts` (search: `searchOptionAt`, `searchWordsTouchSecret`, `ghAuthShowsToken`), keeping option recognition separate from traversal restored typed lint without changing the reference outcomes. Run the actual ESLint limit and compiler after each bounded source batch; Gruff's separate complexity threshold is not a substitute.
 
 ---
 
@@ -169,3 +235,51 @@ array without changing the plan's effort state.
 **What happened:** Applying "an unreadable field means wait" to a milestone's own Status gave every such milestone a `waiting:` line that also listed the others as possible cap holders. Focused tests passed. A before-and-after snapshot of local plans, measured 2026-10-11, changed 141 plan-and-mode blocks, mostly archived plans written with older Status wording such as `done (date)`. Printing no line for a milestone whose own Status is unreadable, while still counting it as possibly active for others, kept the guarantee and cut the change to 22 blocks, each from a plan that really contained an unreadable field.
 
 **Root cause:** The fixtures placed one invalid milestone among valid ones, so they could not show how the rule scaled when most milestones in a plan used legacy vocabulary.
+
+---
+
+## Lesson: Preserve newline matching when porting Bash regular expressions
+
+**Status:** active | **Created:** 2026-10-18
+**Decision changed:** Compare quoted filenames, carriage-return-bearing lines and C-locale character boundaries against the original engine before accepting a regex port.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-21
+
+**Prevention:** Bash ERE dot matches newlines inside a quoted word, and `grep -E` dot matches a carriage return because grep splits its input only at LF. JavaScript dot matches neither, nor U+2028 or U+2029. Use dotAll wherever the original engine's dot can reach one of those characters; keep ASCII character classes explicit. Compare both engines on operands containing LF, CR and U+2028 before broad proof.
+
+**What happened:** The first native key-extension matcher copied Bash's pattern into JavaScript without dotAll. All 99 initial helper comparisons agreed, but additional boundary probes found that quoted filenames containing LF or U+2028 were protected by Bash and missed by the candidate. The candidate was isolated and no proposed command ran.
+
+**Evidence:** `src/hooks/deny-dangerous/patterns-paths.mts` (search: `keyMaterialPathTouch`) preserves dotAll for that filename rule. `test/unit/hook-policy-paths.test.ts` (search: `private\nname.key`) retains both reproduced operands beside ordinary key files and query-data controls.
+
+**Recurrence 2026-10-21:** The post-turn scanner port copied three `grep -E` patterns without dotAll. A carriage return before a tracked AWS key or private-key header, or between an untracked credential label and its `_sk-` token, was blocked by Bash and passed by Node. Two code reviews caught the tracked-token case before commit, and differential probes found the other two. All three patterns now carry the `s` flag. Evidence: `src/hooks/post-turn/scanner.mts` (search: `LABELLED_API_TOKEN`) and `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `after a carriage return`).
+
+---
+
+## Lesson: Type an injected policy evaluator from its whole callee chain
+
+**Status:** active | **Created:** 2026-10-19
+**Decision changed:** Before fixing the callback type of an evaluator that is not ported yet, trace the callees it will reach; if any of them waits on a process, the callback returns a promise.
+**Trigger phase:** ACT
+**Caught at:** ACT
+
+**Prevention:** A helper ported ahead of its evaluator must still compose with the real one. Saved Git alias lookup spawns `git` under the hook deadline, so any evaluator that can reach Git rules is asynchronous.
+
+**What happened:** M13 batch 2 typed the substitution checker's evaluator as synchronous, and that batch was approved and applied with matching comparisons. Designing batch 3 showed the shared evaluator reaches saved-alias lookup, so batch 3 changed the checker to await an asynchronous evaluator before any real caller existed.
+
+**Evidence:** `src/hooks/policy-substitutions.mts` (search: `export type PolicySegmentEvaluator`) and `src/hooks/deny-dangerous/git-command.mts` (search: `async function readGitAlias`).
+
+---
+
+## Lesson: Preserve longest-match semantics when porting command parsers
+
+**Status:** active | **Created:** 2026-10-18 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
+**Decision changed:** Compare ambiguous command grammar against the original parser before accepting a regex port.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** A POSIX expression can select a longer alternative than JavaScript's first successful alternative. For command conditions, compare every valid form and optional-prefix interpretation, then retain the longest consumed span. Test an ambiguous keyword operand alongside the ordinary forms.
+
+**What happened:** The M09 Node parser exposed `equ git push origin main` from `if defined equ equ git push origin main`; the frozen Bash parser exposed `git push origin main`. Treating the leading `equ` as an executable could hide the protected Git command. The existing ordinary-condition cases had passed.
+
+**Fix and evidence:** `src/hooks/policy-syntax.mts` (search: `longestPolicyCmdCondition`) compares unary and comparison forms with their valid optional prefixes. `test/unit/hook-policy-syntax.test.ts` (search: `if defined equ equ git push origin main`) retains the reproduction and its prefixed form. The reference remains `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `native_cmd_condition_re`); its bytes were unchanged. Direct comparisons now expose the same command. Complete policy verdicts remain a separate integration requirement.

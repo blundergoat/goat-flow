@@ -67,6 +67,8 @@ last_reviewed: 2026-10-08
 
 **Evidence:** `.goat-flow/learning-loop/lessons/skill-trial-evidence.md` (search: `rewrote both decodeFixtureResult diagnostic descriptions`) states the seeded answer, names the rule under test and cites the exact test anchor; it reached an evaluator through the fixture's overlay set while uncommitted, then became committed. `test/unit/hook-provider-adapters.test.ts` (search: `HK-NA`) carries identifiers whose only referents are gitignored plan records, and an evaluator removed them as dangling provenance. `.goat-flow/skill-docs/skill-preamble.md` (search: `The host runs an exact zero-result search`) already rejects subagent negatives and is what refuted the claim.
 
+**Recurrence 2026-10-20, shipped policy corpus:** the corpus capture drops state the same way. `captureProgram` in `scripts/check-hook-parity.mjs` (search: `name.includes('.git/objects')`) skips every `.git/objects` and `.git/logs` tree, and stores a token that named one temporary file as a root `file` entry. Materialized as recorded, six saved-alias rows in a selected repository were allowed instead of blocked, because Git does not treat a `.git` directory without an object store as a repository; the file tokens crashed the self-test. `writeFixtureFiles` in `src/hooks/policy-corpus.mts` (search: `gets an empty store`) now recreates the store, `materializePolicyRow` gives each file token a file path, and `test/integration/hook-parity.test.ts` (search: `omits its object store`) covers both.
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.

@@ -822,7 +822,7 @@ export function compareManagedHookRegistrations(
 }
 
 /**
- * Include optional scripts when installed or explicitly enabled, so users are not warned about hooks they never chose.
+ * Include scripts when installed or enabled by their saved choice or registry default, so users are not warned about hooks they never chose.
  *
  * @param fs - ReadonlyFS rooted at the audited project.
  * @param spec - Registry hook spec whose script is a comparison candidate.
@@ -836,7 +836,7 @@ function shouldCompareRegistryHookScript(
 ): boolean {
   // An installed optional hook can become outdated even when the user has no saved toggle.
   if (fs.exists(installedRel)) return true;
-  return explicitHookEnabled(fs, spec.id) === true;
+  return explicitHookEnabled(fs, spec.id) ?? spec.defaultEnabled;
 }
 
 /**

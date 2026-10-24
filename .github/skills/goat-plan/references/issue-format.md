@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.18.0"
+goat-flow-reference-version: "1.19.0"
 ---
 # ISSUE.md Format
 
@@ -8,19 +8,19 @@ Write `ISSUE.md` beside milestones for requesters, reviewers and implementers; m
 ## When to emit it
 
 - Standard and high-risk plans always include `ISSUE.md`.
-- Small plans include it only for a requested GitHub brief, multiple milestones, or shared requirements and budget.
-- Standard output targets at most 800 words and 60 nonblank lines.
-- High-risk output above 1,200 words names the safety reason requiring extra detail.
+- Small plans include it only for a requested GitHub brief, multiple milestones, or shared requirements and budget; when they do, they use every section below, including the per-task benefit list and the before-and-after table.
+- Standard output targets about 800 words of prose outside tables and headings, about 1,500 words and 70 nonblank lines in all.
+- High-risk prose above 1,200 words names the safety reason requiring extra detail.
 
 ## Writing rules
 
-Write for GitHub readers across technical levels. Make Outcome, At a glance, problem, benefit and Out of scope prose actionable without coding knowledge.
+Write for GitHub readers across technical levels. Make Outcome, At a glance, problem, benefit, task benefits, before-and-after and Out of scope prose actionable without coding knowledge.
 
 - Cut words, never facts: reference each fact's named owner (milestone, test, table row) instead of repeating it.
 - Use plain professional sentences: neutral tone, everyday words, no compressed noun chains.
-- Prose bullets contain 6-25 visible words on one physical line; count after checkbox and Markdown markers but before ` = <agent-time range>`; punctuation adds no words.
+- Prose bullets contain 6-25 visible words on one physical line; count after checkbox and Markdown markers but before ` = <likely> min`; punctuation adds no words.
 - Problem and task lines lean to the short end, and a task line still names each distinct deliverable; mechanism belongs in milestone files.
-- Table answers use plain words around real numbers and never drop a condition to get shorter.
+- At a glance answers use plain words around real numbers, stay within 25 words, and never drop a condition to get shorter. Before and After cells carry the words users hear or see and have no word cap.
 - Second person is welcome: "You can archive old projects."
 - Name no milestone ID, ADR number, version number, flag, internal file path, or bare command in prose sections; a surface the reader types or sees is not internal.
 - The problem section names who is hit; the benefit section names what someone can now do, never what ships.
@@ -62,7 +62,7 @@ Worked rewrites (illustrative placeholders, never repository evidence):
 Apply these rules when copying milestone content into an issue, PR or handoff. Public readers must understand the result without private plan files. The owner's links are useful inside a local plan; for publication, inline the necessary facts or link an accessible repository artifact instead. Verify that a linked artifact is available to the intended reader.
 
 - Replace milestone, requirement and proof labels with plain descriptions. Strip risk/proof tags and `(est: ...)` control fields from copied checkboxes. Preserve real public issue numbers and technical names when they identify the work.
-- Keep the explicitly labelled coding-agent delivery bands required by this ISSUE format; never translate a milestone's control field into an unlabelled developer estimate such as “about three minutes”.
+- Keep the labelled coding-agent likely minutes this ISSUE format requires; never translate a milestone's control field into an unlabelled developer estimate such as “about three minutes”.
 - Give each checkbox one independently checkable outcome. Start with the operation and name the affected behavior; “finalize the contract” alone supplies neither a concrete change nor a completion check.
 - Aim for short task lines; put necessary file paths or symbols beneath technical handoff tasks, one path per bullet. The plain-language ISSUE sections retain their audience rules above.
 - State observable evidence: the request appears, the saved value survives reload, the query returns the expected row, or the command exits successfully. “Verify it works” is insufficient. One relevant check may cover several changes.
@@ -76,7 +76,7 @@ Before delivery, read every ISSUE without the milestone open. Replace private ta
 
 Compare saved first/final drafts and claim only visible corrections; an unchanged valid draft is a valid second pass. Run commands on the saved artifact, separating structural acceptance, task coverage, and forecast evidence.
 
-For one milestone with several deliverables, allocate shares of its recorded low, likely and high totals across the required delivery phases. Sum the shares back to the original forecast and label them delivery allocations, not independently calibrated forecasts. Avoid counting the milestone twice or collapsing distinct deliverables merely to avoid allocating its total.
+For one milestone with several deliverables, allocate shares of its recorded likely total across the required delivery phases. Sum the shares back to the milestone's likely figure and label them allocations, not independently calibrated forecasts. Avoid counting the milestone twice or collapsing distinct deliverables merely to avoid allocating its total.
 
 Before export, inspect every prose section, table and checklist for unexplained IDs, private pointers and stale alternatives. Check task coverage separately from length: a compact sentence can still hide several deliverables. Use verified technical anchors; the other project's examples describe its incident, not facts about this repository.
 
@@ -106,14 +106,14 @@ The headings below are the default ISSUE output order. The snippets are illustra
 
 ## Outcome
 
-State the smallest complete result in one or two plain-language sentences.
+Write two to five plain sentences: what is true after the work, who can now do what, then the source issue and PR when they exist. No scaffolding sentences, no compressed noun chains, one canonical noun per thing; second person is welcome.
 
 ```markdown
 # <Outcome-focused issue title>
 
 ## Outcome
 
-<What becomes true, who benefits, and the boundary of the useful result.>
+<What becomes true after the work.> <Who can now do what.> Source: #<issue> and PR #<number>.
 ```
 
 ## At a glance
@@ -125,7 +125,7 @@ Lead with delivery decisions; use these seven concise rows.
 
 | Question | Answer |
 |---|---|
-| How long will it take? | <coding-agent range; waiting on people excluded> |
+| How long will it take? | About <N> hours of agent work: <M> minutes of likely estimates, waiting on people excluded |
 | What must ship? | <smallest complete result> |
 | What is left out? | <bare list of the biggest exclusions> |
 | Biggest risk? | <dominant uncertainty or failure mode> |
@@ -133,6 +133,8 @@ Lead with delivery decisions; use these seven concise rows.
 | How is it proven? | <claims and evidence strategy, without repeated commands> |
 | What happens first? | <first concrete action or current milestone> |
 ```
+
+M is the sum of the Tasks minutes; N is M rounded to the nearest half hour, so 214 minutes shows as 3.5.
 
 ## What problem are we solving
 
@@ -172,35 +174,53 @@ State testable requirements without file-level detail. During authoring and clos
 
 ## Tasks
 
-Show three to six delivery phases without duplicating milestone tasks. End lines with the ` = ` estimate; put human actions in At a glance. Tasks remain open at authoring and close only after verified delivery.
+Show three to six delivery phases without duplicating milestone tasks. Directly below the heading, one plain line totals the open tasks: their count, the summed likely minutes and the same About-N-hours figure as the headline; name completed tasks as excluded with their issued minutes. End task lines with ` = <likely> min`; put human actions in At a glance. Tasks remain open at authoring and close only after verified delivery.
 
 ```markdown
 ## Tasks
 
-*Times are the coding agent's working time, not calendar time; waiting on people is excluded.*
+<Count> tasks totalling <M> minutes of likely estimates, about <N> hours of agent work.
 
-- [ ] <One delivery phase stated in plain language for issue readers.> = <agent-time range>
-- [ ] <Next delivery phase with one outcome and no executor-only detail.> = <agent-time range>
+- [ ] <One delivery phase stated in plain language for issue readers.> = <likely> min
+- [ ] <Next delivery phase with one outcome and no executor-only detail.> = <likely> min
 ```
 
-Every ISSUE delivery band is derived from milestone forecasts; reconcile Tasks with the "How long will it take?" answer separately: `plans check` ignores ISSUE content. ISSUE bands never input a milestone estimate. Exclude prerequisites from the subtotal.
-
-For active work, show recorded effort plus the latest remaining forecast at its named cutoff; keep issued whole forecasts separate. Missing timing means the combined total is unavailable. Label unsupported fast cases provisional and name the investigation checkpoint; never add elapsed work to a whole-work forecast.
+Each task's minutes are the likely figure from the milestones it covers, the headline number in their Effort estimate lines; milestone files keep their ranges and `Forecast range:` lines. Reconcile Tasks with the "How long will it take?" answer separately: `plans check` ignores ISSUE content. ISSUE minutes never input a milestone estimate. Exclude prerequisites from the sum.
 
 ### Forecast presentation
 
-Read `milestone-examples.md` → Effort Estimates before deriving delivery bands. Summarize its recorded forecasts in language readers can act on; keep forecast schemas, hashes and registration commands in the milestone and its evidence.
+Read `milestone-examples.md` → Effort Estimates before taking likely figures. Keep forecast schemas, ranges, hashes and registration commands in the milestone and its evidence; ISSUE shows likely minutes only.
 
-- For work that has not started, derive each delivery phase's low, likely and high from the milestones it covers. Count each milestone once and keep separately labelled prerequisites outside the subtotal.
-- For active work, distinguish effort already recorded at a named cutoff, the latest estimate for work remaining at that cutoff, and their combined completion estimate. Explain that these are coding-agent working minutes; waiting for people is excluded.
-- For completed work, use recorded Actual with its provenance. A retrospective estimate, incomplete timer or missing receipt cannot become measured time through summary wording. When any required timing is missing, show the known amounts and say the combined total is unavailable.
-- Keep the originally issued whole-work forecast available for comparison. A revision changes what remains; it must not erase the original commitment or add elapsed time to work already included in a whole-work estimate.
-- Make the "How long will it take?" answer agree with the current Tasks bands. State the cutoff when showing an older snapshot. Summed milestone bounds are a planning window, not a probability guarantee or a calendar schedule.
-- When the plan already has measured milestones, state the checker's `plan total:` ratio beside the summed estimate; it reports how this plan's past totals compared with their forecasts and claims no direction for the work ahead.
+- For work that has not started, a task's minutes are the sum of its milestones' likely figures; count each milestone once and keep labelled prerequisites outside the sum.
+- For active work, tick finished tasks, keep their issued minutes, and state the cutoff for the remaining sum.
+- For completed work, keep the issued minutes; recorded Actual and calibration stay in the milestones and the plan's forecast history.
+- The "How long will it take?" answer equals the Tasks sum; summed likely figures are a planning estimate, not a calendar schedule or a probability guarantee.
 
-Explain the main uncertainty beside the range: what evidence supports the fast case, what could make work take longer, and what the next investigation will resolve. When relevant history is sparse or poorly matched, disclose that limitation. Do not present a broad prior or historical percentile span as confidence established by prospective results.
+Name the main uncertainty in "Biggest risk?" or one sentence beside the headline: what makes the likely figure fragile and what the next investigation resolves. When scope or required proof changes, revise the affected milestone first, then refresh its task minutes and the headline together. Never shorten a figure by omitting mandatory checks or changing stable Requirements to disguise scope changes.
 
-When evidence does not support a feasible fast case, call the lower bound provisional and name the bounded investigation and reforecast checkpoint. If scope or required proof changes, revise the affected milestone first, then refresh the delivery phase and headline together. Never shorten a range by omitting mandatory checks, reusing an old whole-work estimate as a remaining estimate, or changing stable Requirements to disguise scope changes.
+## What each task gives the user
+
+One bullet per task, in task order, 6-25 words, written from the point of view of whoever gets the benefit: the patient, the practice, the staff member, the person deploying. Each bullet says what they can now do or no longer suffer, never what ships. No milestone IDs, file paths or commands.
+
+```markdown
+## What each task gives the user
+
+- <Who gets it, and what they can now do or no longer suffer once this task ships.>
+```
+
+## Before and After Goals
+
+One lead sentence saying how to read the table, then a three-column table: Change, Before, After, one row per task in task order. Change is a short label for the task. Before is what the user gets today; After is what they get once that task ships, both in the user's own terms, with the concrete words they hear or see where known. Use bracketed placeholders such as [clinic] or [patient] rather than invented names, and label any illustrative example as illustrative. No sentence announces the section.
+
+```markdown
+## Before and After Goals
+
+Before is what <the reader group> gets today; after is what they get once that task ships. Rows follow the task order.
+
+| Change | Before | After |
+|---|---|---|
+| <Short task label> | <What they get today, with the words they hear or see.> | <What they get once it ships.> |
+```
 
 ## Out of scope
 
@@ -214,55 +234,6 @@ List one to three tempting, ambiguous or costly exclusions and explain why reade
 
 ## Worked sample
 
-Illustrative placeholder for shape only, never repository evidence; every name and number below is invented.
-
-```markdown
-# Dashboard search returns results in under one second
-
-## Outcome
-
-Anyone searching the dashboard gets results in under one second, without changes to how results are ranked.
-
-## At a glance
-
-| Question | Answer |
-|---|---|
-| How long will it take? | 4-8 hours of agent work |
-| What must ship? | Common searches answer in under one second |
-| What is left out? | Ranking changes, mobile layout work |
-| Biggest risk? | Stored results going stale after edits |
-| When do we stop? | If stored results cannot stay current, a human decides |
-| How is it proven? | Timed searches before and after the change |
-| What happens first? | Measure where search time goes today |
-
-## What problem are we solving
-
-- Dashboard search takes about 8 seconds, so most people give up before results appear.
-- Slow search is the top support complaint: 14 reports last month.
-
-## Who benefits and how
-
-- **Requesters** (whoever asked for this) get search answers in under a second instead of eight.
-- **Reviewers** (whoever approves it) can approve from two numbers: search time before and after.
-- **Implementers** (whoever builds it) get one measurable target and a timed test to prove it.
-
-## Requirements
-
-- Common dashboard searches return results in under one second.
-- Existing saved searches keep working unchanged.
-- Search results stay current after records are edited.
-
-## Tasks
-
-*Times are the coding agent's working time, not calendar time; waiting on people is excluded.*
-
-- [ ] Measure where search time goes today. = 1-2h
-- [ ] Reuse stored results for common searches. = 2-4h
-- [ ] Prove search speed, saved searches and fresh results after edits. = 1-2h
-
-## Out of scope
-
-- Ranking changes: this work is about speed, and reordering results would hide whether speed improved.
-```
+Read `issue-sample.md` beside this file: an illustrative brief for a made-up home-services product, never repository evidence. Check a draft against it for section order, bullet length, one benefit bullet and one table row per task, and the headline arithmetic.
 
 Before finishing, check that a reader outside engineering could act on every prose sentence.

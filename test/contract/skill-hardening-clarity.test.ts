@@ -8,8 +8,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertForEachTarget,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readMarkdownSubsection,
   readProjectFile,
@@ -107,7 +107,7 @@ function assertRulePrecedence(sourcePath: string, guidance: string): void {
 
 describe("skill hardening contracts: goat-clarity", () => {
   it("runs visible learning-loop retrieval before freezing write authority", () => {
-    assertForEachTarget(installedSkillPaths("goat-clarity"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-clarity"), (skillPath) => {
       const stepZero = readMarkdownSection(
         skillPath,
         "Step 0 - Resolve Authority and Target",
@@ -143,31 +143,28 @@ describe("skill hardening contracts: goat-clarity", () => {
   });
 
   it("resolves documentation write authority by first match, intent before keyword", () => {
-    assertForEachTarget(
-      [SKILL_PATH, ...installedSkillPaths("goat-clarity")],
-      (skillPath) => {
-        const guidance = readProjectFile(skillPath)
-          .replace(/\s+/gu, " ")
-          .toLowerCase();
-        assertRulePrecedence(skillPath, guidance);
-        // Selecting only source code must not prompt the user to authorize unrelated documentation edits.
-        assert.match(
-          guidance,
-          /otherwise, for eligible inventoried human-documentation units, ask once before the snapshot/u,
-          skillPath,
-        );
-        assert.ok(
-          guidance.includes("write authority resolves by first match"),
-          `${skillPath}: authority resolution does not declare first-match precedence`,
-        );
-        // The keyword sharing the write-granting clause is what let documentation wording outrank explicit report intent.
-        assert.equal(
-          guidance.includes("keyword before the target, or an explicit"),
-          false,
-          `${skillPath}: the documentation keyword still shares the first grant clause`,
-        );
-      },
-    );
+    assertForEachTarget(canonicalSkillPaths("goat-clarity"), (skillPath) => {
+      const guidance = readProjectFile(skillPath)
+        .replace(/\s+/gu, " ")
+        .toLowerCase();
+      assertRulePrecedence(skillPath, guidance);
+      // Selecting only source code must not prompt the user to authorize unrelated documentation edits.
+      assert.match(
+        guidance,
+        /otherwise, for eligible inventoried human-documentation units, ask once before the snapshot/u,
+        skillPath,
+      );
+      assert.ok(
+        guidance.includes("write authority resolves by first match"),
+        `${skillPath}: authority resolution does not declare first-match precedence`,
+      );
+      // The keyword sharing the write-granting clause is what let documentation wording outrank explicit report intent.
+      assert.equal(
+        guidance.includes("keyword before the target, or an explicit"),
+        false,
+        `${skillPath}: the documentation keyword still shares the first grant clause`,
+      );
+    });
   });
 
   it("classifies every selected unit before freezing write authority", () => {
@@ -187,22 +184,19 @@ describe("skill hardening contracts: goat-clarity", () => {
 
   it("loads the prose owner for selected documentation whether read-only or writable", () => {
     // Owner loading decides what the agent reads; write authority is resolved earlier and must not gate the diagnosis.
-    assertForEachTarget(
-      [SKILL_PATH, ...installedSkillPaths("goat-clarity")],
-      (skillPath) => {
-        const guidance = readProjectFile(skillPath);
-        assert.match(
-          guidance,
-          /An eligible selected human-documentation unit needs prose diagnosis, whether read-only or writable/u,
-          skillPath,
-        );
-        assert.doesNotMatch(
-          guidance,
-          /Documentation write authority selects writable human prose/u,
-          `${skillPath}: owner loading must not depend on write authority`,
-        );
-      },
-    );
+    assertForEachTarget(canonicalSkillPaths("goat-clarity"), (skillPath) => {
+      const guidance = readProjectFile(skillPath);
+      assert.match(
+        guidance,
+        /An eligible selected human-documentation unit needs prose diagnosis, whether read-only or writable/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        guidance,
+        /Documentation write authority selects writable human prose/u,
+        `${skillPath}: owner loading must not depend on write authority`,
+      );
+    });
   });
 
   it("protects test meaning while allowing bounded clarity edits", () => {
@@ -275,7 +269,7 @@ describe("skill hardening contracts: goat-clarity", () => {
   });
 
   it("routes proven comment or private-name-only selectors around case rows", () => {
-    assertForEachTarget(installedSkillPaths("goat-clarity"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-clarity"), (skillPath) => {
       const clarityPass = readMarkdownSection(skillPath, "Clarity Pass");
       const testValuePass = readMarkdownSubsection(
         clarityPass,
@@ -297,7 +291,7 @@ describe("skill hardening contracts: goat-clarity", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-clarity",
         "references/target-scope-and-evidence.md",
       ),
@@ -841,7 +835,7 @@ describe("skill hardening contracts: goat-clarity", () => {
     );
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-clarity",
         "references/target-scope-and-evidence.md",
       ),
@@ -961,26 +955,7 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
-  it("keeps the skill, reference, manifest, and public documentation aligned", () => {
-    assertForEachTarget(installedSkillPaths("goat-clarity"), (skillPath) => {
-      assert.equal(readProjectFile(skillPath), clarityGuidance, skillPath);
-    });
-
-    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
-    assertForEachTarget(
-      installedSkillReferencePaths(
-        "goat-clarity",
-        "references/target-scope-and-evidence.md",
-      ),
-      (referencePath) => {
-        assert.equal(
-          readProjectFile(referencePath),
-          targetEvidence,
-          referencePath,
-        );
-      },
-    );
-
+  it("keeps the reference manifest and public documentation aligned", () => {
     const manifest = JSON.parse(readProjectFile("workflow/manifest.json")) as {
       skills: { references: Record<string, string[]> };
     };

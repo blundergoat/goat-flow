@@ -69,13 +69,13 @@ interface ClaudeHookSettingsFixture {
  * Find the managed deny-dangerous row; the Git policy shares its Bash matcher, so position cannot identify it.
  *
  * @param settings - parsed Claude fixture settings after Sync
- * @returns the PreToolUse row whose handler runs deny-dangerous.sh, or undefined when none is registered
+ * @returns the PreToolUse row whose handler runs deny-dangerous.mjs, or undefined when none is registered
  */
 function denyDangerousEntry(settings: ClaudeHookSettingsFixture) {
   return settings.hooks.PreToolUse?.find((eventEntry) =>
     eventEntry.hooks?.some((hook) =>
       hook.args?.some((argumentValue) =>
-        argumentValue.endsWith("deny-dangerous.sh"),
+        argumentValue.endsWith("deny-dangerous.mjs"),
       ),
     ),
   );
@@ -371,7 +371,7 @@ describe("effective hook state", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     recordCanonicalManagedHookBaseline(projectPath, [
-      ".goat-flow/hooks/deny-dangerous.sh",
+      ".goat-flow/hooks/deny-dangerous.mjs",
     ]);
     const denyHookState = claudeHookState(projectPath, "deny-dangerous");
 
@@ -412,11 +412,11 @@ describe("effective hook state", () => {
       projectPath,
       ".goat-flow",
       "hooks",
-      "post-turn-safety.sh",
+      "post-turn-safety.mjs",
     );
     writeFileSync(
       hookScriptPath,
-      `${readFileSync(hookScriptPath, "utf-8")}\n# user edit\n`,
+      `${readFileSync(hookScriptPath, "utf-8")}\n// user edit\n`,
     );
     const postTurnState = claudeHookState(projectPath, "post-turn-safety");
 
@@ -446,7 +446,7 @@ describe("effective hook state", () => {
   it("uses the canonical row for shared hook bytes despite retained agent evidence", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
-    const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
+    const managedPath = ".goat-flow/hooks/deny-dangerous.mjs";
     const hookScriptPath = join(projectPath, managedPath);
     recordManagedHookBaseline(projectPath, "codex", [managedPath]);
     writeFileSync(
@@ -517,10 +517,10 @@ describe("effective hook state", () => {
   it("disables a diverged hook without refreshing its managed files", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
-    const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
+    const managedPath = ".goat-flow/hooks/deny-dangerous.mjs";
     recordCanonicalManagedHookBaseline(projectPath, [managedPath]);
     const hookPath = join(projectPath, managedPath);
-    const localBytes = `${readFileSync(hookPath, "utf-8")}\n# local disabled copy\n`;
+    const localBytes = `${readFileSync(hookPath, "utf-8")}\n// local disabled copy\n`;
     writeFileSync(hookPath, localBytes);
 
     const disabled = applyHookState("deny-dangerous", false, projectPath);
@@ -529,7 +529,7 @@ describe("effective hook state", () => {
     assert.equal(readFileSync(hookPath, "utf-8"), localBytes);
     assert.match(
       readFileSync(join(projectPath, ".claude", "settings.json"), "utf-8"),
-      /deny-dangerous\.sh/u,
+      /deny-dangerous\.mjs/u,
     );
     assert.equal(disabled.agents.claude.effectiveState.status, "disabled");
     assert.equal(disabled.agents.claude.drift, undefined);
@@ -544,7 +544,7 @@ describe("effective hook state", () => {
   it("checks enabled divergence before pruning any other hook state", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
-    const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
+    const managedPath = ".goat-flow/hooks/deny-dangerous.mjs";
     const hookPath = join(projectPath, managedPath);
     const previousPackageBytes =
       "#!/usr/bin/env bash\n# previous package baseline\n";
@@ -916,11 +916,11 @@ describe("effective hook state", () => {
     }
     const sharedPath = join(
       projectPath,
-      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+      ".goat-flow/hooks/policy-evaluation.mjs",
     );
     writeFileSync(
       sharedPath,
-      `${readFileSync(sharedPath, "utf-8")}\n# repair fixture\n`,
+      `${readFileSync(sharedPath, "utf-8")}\n// repair fixture\n`,
     );
     // Editing their shared runtime must mark both displayed policy rows stale.
     for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
@@ -1112,7 +1112,7 @@ describe("effective hook state", () => {
 it("refuses off before changing an incompatible launcher and preserves all config bytes", () => {
   const root = createClaudeProject();
   syncHookStates(root);
-  const launcher = join(root, ".goat-flow/hooks/run-with-bash.mjs");
+  const launcher = join(root, ".goat-flow/hooks/run-hook.mjs");
   writeFileSync(
     launcher,
     readFileSync(launcher, "utf8") + "\n// locally edited launcher\n",

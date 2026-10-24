@@ -185,12 +185,35 @@ function readPolicyChoices(projectRoot) {
 }
 
 const POLICY_OWNERSHIP_FILES = [
+  "policy-evaluation.mjs",
+  "deny-dangerous/github-command.mjs",
+];
+const LEGACY_POLICY_OWNERSHIP_FILES = [
   "deny-dangerous/guard-runtime.sh",
   "deny-dangerous/patterns-writes.sh",
 ];
 const POLICY_INSTALL_DIRECTORIES = [
-  ".goat-flow/hooks", ".claude/hooks", ".codex/hooks", ".agents/hooks", ".github/hooks",
+  ".goat-flow/hooks",
+  ".claude/hooks",
+  ".codex/hooks",
+  ".agents/hooks",
+  ".github/hooks",
 ];
+
+/** Include legacy ownership only while that runtime remains in the incoming package. */
+function policyOwnershipFiles(bundledHooksRoot, installedHooksRoot) {
+  const isLegacyInstall =
+    installedHooksRoot &&
+    POLICY_OWNERSHIP_FILES.every(
+      (name) => statIfPresent(path.join(installedHooksRoot, name)) === null,
+    );
+  const hasLegacyReference = LEGACY_POLICY_OWNERSHIP_FILES.every(
+    (name) => statIfPresent(path.join(bundledHooksRoot, name)) !== null,
+  );
+  return isLegacyInstall && hasLegacyReference
+    ? LEGACY_POLICY_OWNERSHIP_FILES
+    : POLICY_OWNERSHIP_FILES;
+}
 
 /**
  * Resolve both switches as launchers enforce them before the user reviews an upgrade.
@@ -216,17 +239,32 @@ function effectivePolicyChoices(choices) {
  *
  * @returns {object|null} Before/after choices and affected paths, or null when no policy decision is pending.
  */
-function policyUpgradeReview(originalChoices, requestedChoices, hasPolicyInstallation, files) {
+function policyUpgradeReview(
+  originalChoices,
+  requestedChoices,
+  hasPolicyInstallation,
+  files,
+) {
   const original = effectivePolicyChoices(originalChoices);
   const requested = effectivePolicyChoices(requestedChoices);
   // GitHub protection can change during migration only when the two switches disagree.
-  const hasMixedPolicyChoices = (choices) => choices["deny-dangerous"] !== choices["deny-git-mutations"];
+  const hasMixedPolicyChoices = (choices) =>
+    choices["deny-dangerous"] !== choices["deny-git-mutations"];
   // Missing or different ownership bytes cannot establish that the user already has the incoming GitHub policy.
   const paths = files
-    .filter((file) => file.originalIdentity === null || file.originalIdentity !== file.incomingIdentity)
+    .filter(
+      (file) =>
+        file.originalIdentity === null ||
+        file.originalIdentity !== file.incomingIdentity,
+    )
     .map((file) => file.path);
   // Fresh installs, matching switch pairs and unchanged ownership do not change the user's GitHub protection through migration.
-  if (!hasPolicyInstallation || (!hasMixedPolicyChoices(original) && !hasMixedPolicyChoices(requested)) || paths.length === 0) return null;
+  if (
+    !hasPolicyInstallation ||
+    (!hasMixedPolicyChoices(original) && !hasMixedPolicyChoices(requested)) ||
+    paths.length === 0
+  )
+    return null;
   return { original, requested, paths };
 }
 
@@ -241,7 +279,8 @@ function policyFileIdentity(file) {
   // A missing ownership file leaves the prior GitHub policy unknown and may require review.
   if (!before) return null;
   // A linked or non-file destination cannot establish which protection the selected project currently uses.
-  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) throw new Error("Policy ownership file is unsafe");
+  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1)
+    throw new Error("Policy ownership file is unsafe");
   const bytes = fs.readFileSync(file);
   requireIdentity(before, fs.lstatSync(file));
   return createHash("sha256").update(bytes).digest("hex");
@@ -260,21 +299,47 @@ function inspectPolicyUpgrade(projectRoot, bundledHooksRoot) {
   const root = fs.realpathSync(projectRoot);
   const original = readPolicyChoices(root);
   // An older config may omit the Git switch; installation carries forward the general safeguard's saved choice.
-  const requested = { ...original, "deny-git-mutations": original["deny-git-mutations"] ?? original["deny-dangerous"] ?? true };
+  const requested = {
+    ...original,
+    "deny-git-mutations":
+      original["deny-git-mutations"] ?? original["deny-dangerous"] ?? true,
+  };
   const files = [];
   let hasPolicyInstallation = false;
   // Existing users may still have provider-specific hooks, so each supported location participates in the review.
   for (const directory of POLICY_INSTALL_DIRECTORIES) {
-    const installed = ["deny-dangerous.sh", "deny-git-mutations.sh", "guard-repository-writes.sh"].some((name) => statIfPresent(path.join(root, directory, name)) !== null);
+    const installed = [
+      "deny-dangerous.mjs",
+      "deny-git-mutations.mjs",
+      "deny-dangerous.sh",
+      "deny-git-mutations.sh",
+      "guard-repository-writes.sh",
+    ].some((name) => statIfPresent(path.join(root, directory, name)) !== null);
     // An unused hook location has no installed policy for the user to migrate.
     if (!installed) continue;
     hasPolicyInstallation = true;
     // Capture both ownership files even when one switch is disabled; enabling it later must not bypass migration review.
-    for (const name of POLICY_OWNERSHIP_FILES) {
-      files.push({ path: `${directory}/${name}`, originalIdentity: policyFileIdentity(path.join(root, directory, name)), incomingIdentity: policyFileIdentity(path.join(bundledHooksRoot, name)) });
+    for (const name of policyOwnershipFiles(
+      bundledHooksRoot,
+      path.join(root, directory),
+    )) {
+      files.push({
+        path: `${directory}/${name}`,
+        originalIdentity: policyFileIdentity(path.join(root, directory, name)),
+        incomingIdentity: policyFileIdentity(path.join(bundledHooksRoot, name)),
+      });
     }
   }
   return policyUpgradeReview(original, requested, hasPolicyInstallation, files);
 }
 
-module.exports = { isPolicyHook, parsePolicyChoices, readPolicyChoices, effectivePolicyChoices, policyUpgradeReview, inspectPolicyUpgrade, POLICY_OWNERSHIP_FILES };
+module.exports = {
+  isPolicyHook,
+  parsePolicyChoices,
+  readPolicyChoices,
+  effectivePolicyChoices,
+  policyUpgradeReview,
+  inspectPolicyUpgrade,
+  POLICY_OWNERSHIP_FILES,
+  policyOwnershipFiles,
+};

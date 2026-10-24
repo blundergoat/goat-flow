@@ -86,6 +86,9 @@ function hookCleanupContract(hookSpec) {
     ],
     commandScriptNames: [
       hookSpec.primaryScript,
+      ...(hookSpec.primaryScript.endsWith(".mjs")
+        ? [hookSpec.primaryScript.replace(/\.mjs$/u, ".sh")]
+        : []),
       ...(hookSpec.id === "deny-dangerous"
         ? LEGACY_DENY_DANGEROUS_SCRIPT_NAMES
         : []),
@@ -186,7 +189,16 @@ function buildManagedHookContract() {
  * Use after registry changes so reviewers can see the exact standalone state users will receive.
  */
 function renderManagedHookContract() {
-  return `${JSON.stringify(buildManagedHookContract(), null, 2)}\n`;
+  const formatted = JSON.stringify(buildManagedHookContract(), null, 2);
+  // Keep short primitive lists together without hiding nested provider configuration.
+  const compact = formatted.replace(
+    /\[\n(?:[ \t]+(?:"(?:\\.|[^"\\])*"|true|false|null|-?\d+(?:\.\d+)?),?\n)+[ \t]*\]/gu,
+    (arrayText) => {
+      const inline = JSON.stringify(JSON.parse(arrayText));
+      return inline.length <= 200 ? inline : arrayText;
+    },
+  );
+  return `${compact}\n`;
 }
 
 /**

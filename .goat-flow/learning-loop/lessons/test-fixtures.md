@@ -1,9 +1,29 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Parser-specific coverage and producer shapes are [test-fixtures-parsers.md](test-fixtures-parsers.md). Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
+
+## Lesson: Generated child-program fixtures need proof of the emitted syntax
+
+**Status:** active | **Created:** 2026-10-17
+**Incident count:** 5 | **Latest occurrence:** 2026-10-18
+**Decision changed:** Preserve child-source escapes explicitly and execute the emitted fixture before aggregate proof.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Use String.raw when a fixture template must retain JavaScript escape sequences. Run the emitted program; typecheck of its TypeScript container cannot validate the generated syntax. Compare parser fixtures at the runtime string boundary; encoded source spelling can conceal a second backslash.
+
+**What happened:** Both configured audit fixture cases failed while parsing their generated runner. Ordinary template interpolation turned the child source's newline escapes into literal newlines inside quoted strings. String.raw preserves those escapes; rerunning both cases reached and verified their saved handlers. Evidence: `test/integration/hook-native-audit-configured.test.ts` (search: `String.raw`).
+
+**Recurrence 2026-10-18:** A generated shell-parser fixture supplied two backslashes but expected both after decoding. The first focused run correctly collapsed them to one. Checking against frozen Bash confirmed the expected value; a separate dangling-backslash control preserves the distinct case. Evidence: `test/unit/hook-policy-shell.test.ts` (search: `stripPolicyShellQuotesForPathScanCases`). A later inline-program fixture omitted the existing space before a masked string: both native code and frozen Bash produced two spaces. Keep exact decoded whitespace when writing expected parser output. Evidence: the same file (search: `inlineProgramVisibleCodeCases`).
+
+**Recurrence 2026-10-18 (path prefixes):** Generated M12 expectations omitted the extra trailing space emitted when Bash prints an empty redirect array. Both native and frozen `literal_output_prefix_candidate` returned the same two-space suffix after a wrapper; only the fixture expected one. Compare raw classifier output before normalizing whitespace. Evidence: `test/unit/hook-policy-paths.test.ts` (search: `keeps wrapper files and redirects outside literal-output exemptions`) retains the measured wrapper prefixes.
+
+**Recurrence 2026-10-18 (temporary path spelling):** The directory parser fixture inserted an unquoted temporary root into a `cd` command. A run with spaces in TMPDIR failed because the parser correctly saw extra operands. Keep absolute-path controls independent of temporary names, and exercise space-containing fixture roots in the existing case. Evidence: `test/unit/hook-policy-segments.test.ts` (search: `directoryContextCases`, `goat-git-segment with spaces-`) uses `cd /` for the absolute controls.
+
+---
 
 ## Lesson: Replacement fixtures must preallocate a distinct file identity
 
@@ -59,7 +79,7 @@ last_reviewed: 2026-10-10
 **Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-07-14
 
-**Prevention:** Command-wrapper fixtures scan all arguments, or parse options when operand order matters, and match a unique semantic path. Keep the failure assertion beside source and destination byte assertions so a wrapper that never activates cannot pass silently. Evidence anchor: `test/integration/setup-install-atomic-staging.test.ts` (search: `Migration helpers add safety flags`).
+**Prevention:** Command-wrapper fixtures scan all arguments, or parse options when operand order matters, and match a unique semantic path. Keep the failure assertion beside source and destination byte assertions so a wrapper that never activates cannot pass silently. For the Node writer, inject failures at the real filesystem operation instead of wrapping an unused shell command. Evidence anchor: `test/integration/setup-install-atomic-staging.test.ts` (search: `keeps a legacy source intact when atomic migration rename is unavailable`).
 
 **What happened:** The migration-failure fixture wrapped `mv` and matched the legacy source only at argument one. The hardened installer invoked `mv -n -- <source> <destination>`, so the wrapper delegated to the real command, installation exited 0, and the suite reported one failure although the migration helper was correct.
 
@@ -135,9 +155,25 @@ last_reviewed: 2026-10-10
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 24 | **Latest occurrence:** 2026-10-09
+**Incident count:** 32 | **Latest occurrence:** 2026-10-23
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the system under test or the assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behaviour, run the fixture through the unchanged strict baseline so unrelated errors are absent, and keep every non-target value inside its passing bounds. Assert that every text substitution changed its fixture before using the result as simulated input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. For an invalid-state case, name and trigger the exact production predicate; arbitrary content is not invalid when the implementation treats its bytes as opaque. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+
+**Recurrence 2026-10-23 (shallow CI history):** PR #69's slow shard failed four retirement cases because the fixture read `v1.18.0`, while CI fetched only its commit with `--no-tags`. The same fetch reproduced the missing tag in a disposable shallow clone. Enumerate both object and named-ref consumers, fetch the required tag explicitly, and verify with shallow history. Evidence: `.github/workflows/ci.yml` (search: `Fetch pinned upgrade fixture`); `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `released`); `test/integration/packaged-hook-install.test.ts` (search: `upgrades a complete pinned 1.18.0 install`).
+
+**Recurrence 2026-10-23 (shallow package canary):** The diagnostic clone linked dependencies but omitted CI's build step. Three packaged-canary cases then failed because their archive lacked the declared CLI entry. Run the documented build before archive tests; a dependency link supplies neither ignored `dist/` output nor a complete CI setup. Evidence: `test/integration/packaged-hook-install.test.ts` (search: `preparePackedCliLaunch`, `declaredCliEntryPath`); `.github/workflows/ci.yml` (search: `npm run build`).
+
+**Recurrence 2026-10-18 (compiler-fixture control):** After replacing repository clones with a tiny project, a mutation using an invalid module suffix made the complete deletion test pass even though its compiler already failed before deletion. The expected TS2307 was present in both states. Compile the intact fixture successfully before applying the deletion; the same mutation must then fail at that healthy-control assertion. Keep the control inside the existing case rather than adding another suite. Evidence: `test/unit/check-touched.test.ts` (search: `healthy.status`).
+
+**Recurrence 2026-10-18 (installer convergence):** A CI runtime prototype removed the first repeat install because the next invocation was a no-op. A before-first-call snapshot showed that the removed invocation still changed `.claude/settings.json` after user content was planted. Retain the convergence call; shorten only Sync after the existing install pair has converged. Before removing setup, compare its input and output rather than inferring redundancy from a later no-op. Evidence: `test/integration/setup-install-write-set.test.ts` (search: `plantUserHookContent`, `assertRepeatIsNoOp`, `beforeSync`).
+
+**Recurrence 2026-10-17 (fresh worktree):** Native wrapper tests and hook typecheck passed in an isolated checkout, but Gruff rejected the absent package binary with `design.package-bin-missing`. Build the checkout before the production ratchet; a dependency link does not create ignored output. The lesson's first draft then cited warning text absent from its named producer; read each citation before indexing. Evidence: `package.json` (search: `dist/cli/cli.js`) and `scripts/check-gruff-warning-ratchet.mjs` (search: `compareScanAgainstAcceptedDebt`).
+
+**Recurrence 2026-10-17 (learning-patch validation):** An isolated stats check copied the learning buckets but omitted their repository citations. Adding tracked source still omitted cited installed Gruff source. After both failures, validation was rewound to a complete source-context copy with the existing dependencies available read-only. Enumerate reference dependencies before claiming an isolated learning patch passes. `src/cli/stats/stats.ts` (search: `stale-ref`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
+
+**Recurrence 2026-10-17 (CI recipe validation):** A comparison used raw YAML indentation to remove a command from an already parsed shell block, so the validation failed on its own normalization. Extracted-shell lint also lacked its known Bash dialect. Compare the parsed representation and select the declared shell before judging a workflow edit; baseline diagnostics from GitHub expression syntax remain separate. `.github/workflows/ci.yml` (search: `WSL floor and LTS controls`).
+
+**Recurrence 2026-10-17 (packaged candidates):** Adding native entrypoints made a missing-policy fixture valid; its saved opt-out correctly returned zero, breaking the expected missing-path refusal. Remove the candidate only inside that fixture before asserting the refusal, preserving production opt-out behavior. A reused CI verifier also expected an ignored workspace receipt absent from the copy; explicit command/suite inputs removed that dependency. `test/unit/run-hook.test.ts` (search: `native CLI rejects missing, escaped and non-file scripts before an opt-out`).
 
 **What happened:** The first ADR-024 enforcement test for `stats --check` used `package.json` with a line suffix to trigger an `invalid-line-ref` finding, but the temp fixture repo had no `package.json`, so the checker correctly reported a stale ref and the test failed with "expected an invalid-line-ref finding".
 
@@ -197,7 +233,7 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 **Decision changed:** Derive current fixture versions from package metadata.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-10-09
+**Incident count:** 5 | **Latest occurrence:** 2026-10-23
 
 **Prevention:** Import current versions; reserve literals for historical or mismatched installs. Anchors: `test/unit/skill-doctor.test.ts` (search: `skillMarkdown`), `src/cli/constants.ts` (search: `export const AUDIT_VERSION`).
 
@@ -207,4 +243,54 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 
 **Recurrence 2026-10-10:** PR #67 failed slow shards 1, 3, and 5 because installer fixtures omitted `version` or wrote `version: "local"`. The non-Git reporting case reproduced the admission rejection before its hook diagnostic. Deriving the version from `AUDIT_VERSION` lets the existing assertions reach registration, YAML migration, policy review, and preservation behavior. Anchors: `test/integration/setup-install-nongit-hooks.test.ts` (search: `names the blocked post-turn registration and its fix`), `test/integration/setup-install-agent-matrix.test.ts` (search: `legacyHookChoices`), and `test/integration/setup-install-preview.test.ts` (search: `User-selected setup remains authoritative`).
 
+
+**Recurrence 2026-10-23 (native cutover review):** The fast suite passed, but the focused packaged-install and agent-matrix run reported seven failures. Current-version assertions still expected 1.18.0, and current registrations still expected Bash paths. Candidate-only selectors also excluded the now-installed Node cases or selected Bash failure fixtures. Derive the archive version from package metadata and classify native fixture behavior as every selection except the frozen reference. Preserve exact tagged inputs for upgrade tests: the 1.15.0 fixture has no shared native launcher to overwrite, while the 1.16.0 fixture exercises explicit replacement consent. Evidence: `test/integration/packaged-hook-install.test.ts` (search: `PACKAGE_VERSION`, `reviewAndSyncPackedHooks`), `test/integration/deny-dangerous-policy.test.ts` (search: `split policy partial installation`), and `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `native Gruff analyzer launch`).
+
+**Recurrence 2026-10-23 (reference CI):** The mirror assertion compared frozen 1.18.0 source with the live 1.19.0 installation. Resolve both sides through the selected fixture tree. Evidence: `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `the installed mirror matches`); `test/helpers/hook-entrypoint.ts` (search: `hookTreeRoot`).
+
+**Recurrence 2026-10-23 (Gruff reference):** Four cases mixed current registration and diagnostics with frozen Bash. Keep current-registration replays native-only and assert the frozen config-path format. Evidence: `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `Current registered handlers`).
+
 ---
+
+## Lesson: Fixture assertions must use the reader that owns each setting
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check a reader's returned keys before using it to verify settings from another subsystem.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Keep a narrow reader's contract intact. Verify general hook settings through the canonical configuration reader instead of broadening a policy reader or weakening the assertion.
+
+**What happened:** The 1.18.0 package-upgrade fixture used `readPolicyChoices` to assert Gruff's opt-out. That reader returns only the two policy choices, so the test received `undefined` after a successful upgrade. The fixture now checks the policy choices through that reader and Gruff through the validated `loadConfig` result. The archived package suite then reported six passes and no failures.
+
+**Evidence:** `test/integration/packaged-hook-install.test.ts` (search: `upgrades a complete pinned 1.18.0 install`); `workflow/hooks/hook-policy-state.cjs` (search: `readPolicyChoices`); `src/cli/config/reader.ts` (search: `loadConfig`).
+
+---
+
+## Lesson: Prove paired controls against the unchanged policy
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check that a proposed harmless control is already permitted before using it to judge a policy repair.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Run new protection/control pairs on the unchanged policy first. A control already denied by another rule cannot establish a new false positive; replace the fixture without weakening that rule.
+
+**What happened:** M31 initially used a printed secret filename as a caret-whitespace control. The unchanged secret policy already denied it. The corrected fixture uses PR inspection beside PR merge; RED then failed only eight new protections, and GREEN passed all 156 native-host cases.
+
+**Evidence:** `test/integration/deny-native-shells.test.ts` (search: `cmd caret whitespace`, `gh pr view`).
+
+---
+
+## Lesson: Corpus fixtures must retain canonical row order
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Preserve the corpus builder's row ordering when adding saved classifier cases.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Sort new and retained rows with the canonical comparator, regenerate the named-difference inventory in that order, and compare every case by its stable ID. Preserve escaped controls as required by the existing CLI-contract lesson. Run the integrity suite before presenting the artifact patch.
+
+**What happened:** M31 appended generated caret rows after the sorted corpus. Classifier comparisons passed, but the coverage-integrity test removed the new final supplemental row instead of an original self-test row and no longer detected missing original coverage. Rebuilding the canonical order restored that control without changing any case value or weakening an assertion.
+
+**Evidence:** `scripts/check-hook-parity.mjs` (search: `buildCorpora`, `localeCompare`); `test/integration/hook-parity.test.ts` (search: `rejects`, `incomplete coverage`); [escaped-control incident](cli-contracts.md#lesson-preserve-escaped-controls-when-rewriting-saved-policy-evidence).

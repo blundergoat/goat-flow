@@ -1,0 +1,802 @@
+/** Inspect shell word and parenthesis boundaries without executing proposed command text. */
+import { asciiLowerCase } from "./policy-input.mjs";
+
+const ignoredEnvOptionPrefixes = [
+  /^--unset=[^ \t\r\n\v\f]+[ \t\r\n\v\f]*/u,
+  /^--unset[ \t\r\n\v\f]+[^ \t\r\n\v\f]+[ \t\r\n\v\f]*/u,
+  /^-u[ \t\r\n\v\f]+[^ \t\r\n\v\f]+[ \t\r\n\v\f]*/u,
+  /^-u[^ \t\r\n\v\f]+[ \t\r\n\v\f]*/u,
+  /^--(?:ignore-environment|null|debug)(?:[ \t\r\n\v\f]+|$)/u,
+  /^-[i0v]+(?:[ \t\r\n\v\f]+|$)/u,
+  /^--[ \t\r\n\v\f]+/u,
+];
+
+/** Skip recognized env settings; null leaves the remaining payload or uncertain option visible. */
+function stripPolicyEnvOption(
+  command: string,
+  visitDirectory: ((directory: string) => void) | undefined,
+): string | null {
+  for (const prefix of ignoredEnvOptionPrefixes) {
+    const match = prefix.exec(command);
+    if (match) return command.slice(match[0].length);
+  }
+  const directory =
+    /^(?:--chdir(?:=|[ \t\r\n\v\f]+)|-[cC][ \t\r\n\v\f]+)/u.exec(command);
+  if (!directory) return null;
+  const operand = command.slice(directory[0].length);
+  visitDirectory?.(splitPolicyShellWords(operand)[0] ?? "");
+  return dropFirstPolicyShellWord(operand);
+}
+
+/** Reveal env's child and report its directory operands; unknown option arity refuses inspection. */
+export function normalizePolicyEnvPrefix(
+  command: string,
+  visitDirectory?: (directory: string) => void,
+): PolicyWrapperPayload {
+  let remaining = command;
+  for (;;) {
+    remaining = remaining.replace(/^[ \t\r\n\v\f]+/u, "");
+    const afterOption = stripPolicyEnvOption(remaining, visitDirectory);
+    if (afterOption !== null) {
+      remaining = afterOption;
+      continue;
+    }
+    const split = /^(?:-[sS]|--split-string)(?:=|[ \t\r\n\v\f]+)/u.exec(
+      remaining,
+    );
+    if (split) {
+      remaining = remaining.slice(split[0].length);
+      // Decode the split-string operand once, preserving its inner shell quotes and later argv.
+      const payload = splitPolicyShellWords(remaining)[0] ?? "";
+      const rest = dropFirstPolicyShellWord(remaining);
+      remaining = rest === "" ? payload : payload + " " + rest;
+      continue;
+    }
+    const afterAssignment = stripPolicyAssignmentPrefix(remaining);
+    if (afterAssignment !== null) {
+      remaining = afterAssignment;
+      continue;
+    }
+    if (
+      remaining.startsWith("-") &&
+      !/^--(?:help|version)(?:[ \t\r\n\v\f]|$)/u.test(remaining)
+    )
+      return { kind: "unresolved" };
+    return { kind: "command", command: remaining };
+  }
+}
+
+/** Remove one leading assignment word; null means the command has no assignment prefix. */
+export function stripPolicyAssignmentPrefix(command: string): string | null {
+  return /^[A-Za-z_][A-Za-z0-9_]*\+?=/u.test(command)
+    ? dropFirstPolicyShellWord(command)
+    : null;
+}
+
+/** Match read -ra with the non-whitespace ASCII separators used by policy rules. */
+export function splitIfs(input: string, separators: string): string[] {
+  const line = input.split("\n", 1)[0] ?? "";
+  if (!line) return [];
+  const fields: string[] = [];
+  let field = "";
+  for (const char of line) {
+    if (separators.includes(char)) {
+      fields.push(field);
+      field = "";
+    } else field += char;
+  }
+  if (field) fields.push(field);
+  return fields;
+}
+
+/** Read the first basename using C-locale whitespace; callers own quote and wrapper normalization. */
+export function firstPolicyWordBase(command: string): string {
+  const trimmed = command.replace(/^[ \t\r\n\v\f]+/u, "");
+  const separator = trimmed.search(/[ \t\r\n\v\f]/u);
+  const word = separator < 0 ? trimmed : trimmed.slice(0, separator);
+  return word.slice(word.lastIndexOf("/") + 1);
+}
+
+/** Normalize explicit Windows Git executable names while preserving assignments and other programs. */
+export function normalizePolicyGitExecutableWord(word: string): string {
+  if (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(word)) return word;
+  const path = word.replaceAll("\\", "/");
+  const slash = path.lastIndexOf("/");
+  const base = asciiLowerCase(path.slice(slash + 1));
+  if (base !== "git.exe" && !(base.startsWith("git-") && base.endsWith(".exe")))
+    return word;
+  return path.slice(0, slash + 1) + base.slice(0, -4);
+}
+
+interface BoundaryQuoteState {
+  inSingle: boolean;
+  inDouble: boolean;
+  escaped: boolean;
+  ansiQuote?: boolean;
+}
+
+/** An unescaped dollar immediately before this quote opens a Bash ANSI-C string. */
+export function isPolicyAnsiQuoteStart(input: string, index: number): boolean {
+  if (input.charAt(index) !== "'" || input.charAt(index - 1) !== "$")
+    return false;
+  let backslashes = 0;
+  for (let before = index - 2; input.charAt(before) === "\\"; before--)
+    backslashes++;
+  return backslashes % 2 === 0;
+}
+
+/** A comment starts at an unescaped word boundary; escaped whitespace remains part of its word. */
+export function isPolicyShellCommentBoundary(input: string): boolean {
+  if (input === "") return true;
+  if (!/[ \t\r\n\v\f]$/u.test(input)) return false;
+  let slashes = 0;
+  for (let index = input.length - 2; input.charAt(index) === "\\"; index--)
+    slashes++;
+  return slashes % 2 === 0;
+}
+
+const ansiEscapes: Record<string, string> = {
+  a: "\x07",
+  b: "\b",
+  e: "\x1b",
+  E: "\x1b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  v: "\v",
+  "\\": "\\",
+  "'": "'",
+  '"': '"',
+  "?": "?",
+  "\n": "",
+};
+
+function decodePolicyAnsiEscape(escape: string): string {
+  if (/^c.$/su.test(escape)) {
+    const char = escape.charCodeAt(1);
+    return String.fromCharCode(char === 63 ? 127 : char & 31);
+  }
+  const numeric = /^(?:u[0-9a-fA-F]{1,4}|U[0-9a-fA-F]{1,8})$/u.test(escape);
+  if (!numeric) return ansiEscapes[escape] ?? "\\" + escape;
+  const code = Number.parseInt(escape.slice(1), 16);
+  return code <= 0x10ffff ? String.fromCodePoint(code) : "\\" + escape;
+}
+
+/** Consecutive octal and hexadecimal escapes encode bytes of one UTF-8 word. */
+function readPolicyAnsiBytes(
+  input: string,
+  start: number,
+): { value: string; end: number } | null {
+  const encoded = /^(?:\\(?:x[0-9a-fA-F]{1,2}|[0-7]{1,3}))+/u.exec(
+    input.slice(start),
+  )?.[0];
+  if (!encoded) return null;
+  const bytes = [...encoded.matchAll(/\\(x[0-9a-fA-F]{1,2}|[0-7]{1,3})/gu)].map(
+    (match) => {
+      const word = match[1] ?? "";
+      return word.startsWith("x")
+        ? Number.parseInt(word.slice(1), 16)
+        : Number.parseInt(word, 8);
+    },
+  );
+  return {
+    value: Buffer.from(bytes).toString("utf8"),
+    end: start + encoded.length - 1,
+  };
+}
+
+function readPolicyAnsiString(
+  input: string,
+  start: number,
+): { value: string; end: number } | null {
+  let value = "";
+  for (let index = start + 2; index < input.length; index++) {
+    const char = input.charAt(index);
+    if (char === "'")
+      return { value: value.split("\0", 1)[0] ?? "", end: index };
+    if (char !== "\\") {
+      value += char;
+      continue;
+    }
+    const bytes = readPolicyAnsiBytes(input, index);
+    if (bytes) {
+      value += bytes.value;
+      index = bytes.end;
+      continue;
+    }
+    const escape = /^(?:u[0-9a-fA-F]{1,4}|U[0-9a-fA-F]{1,8}|c.|.)/su.exec(
+      input.slice(index + 1),
+    )?.[0];
+    if (escape === undefined) return null;
+    value += decodePolicyAnsiEscape(escape);
+    index += escape.length;
+  }
+  return null;
+}
+
+function readUnquotedPolicyAnsiString(
+  input: string,
+  index: number,
+  state: BoundaryQuoteState,
+) {
+  return !state.inSingle &&
+    !state.inDouble &&
+    !state.escaped &&
+    input.startsWith("$'", index)
+    ? readPolicyAnsiString(input, index)
+    : null;
+}
+
+/** Consume quote and escape transitions; true keeps this byte inside the current shell boundary. */
+function consumeBoundaryQuote(
+  state: BoundaryQuoteState,
+  char: string,
+  ansiStart = false,
+): boolean {
+  if (state.escaped) {
+    state.escaped = false;
+    return true;
+  }
+  if (state.inSingle) {
+    if (state.ansiQuote && char === "\\") {
+      state.escaped = true;
+      return true;
+    }
+    state.inSingle = char !== "'";
+    return true;
+  }
+  switch (char) {
+    case "\\":
+      state.escaped = true;
+      return true;
+    case "'":
+      if (!state.inDouble) state.inSingle = true;
+      state.ansiQuote = ansiStart;
+      return true;
+    case '"':
+      state.inDouble = !state.inDouble;
+      return true;
+    default:
+      return state.inDouble;
+  }
+}
+
+/** Consume only path-scan quote delimiters; their contents remain visible to path matching. */
+function consumePathScanQuote(
+  state: BoundaryQuoteState,
+  char: string,
+): boolean {
+  if (!state.inSingle && char === "\\") {
+    state.escaped = true;
+    return true;
+  }
+  if (!state.inDouble && char === "'") {
+    state.inSingle = !state.inSingle;
+    return true;
+  }
+  if (!state.inSingle && char === '"') {
+    state.inDouble = !state.inDouble;
+    return true;
+  }
+  return false;
+}
+
+function isPathScanInputRedirect(
+  input: string,
+  index: number,
+  state: BoundaryQuoteState,
+): boolean {
+  return (
+    !state.inSingle &&
+    !state.inDouble &&
+    input.charAt(index) === "<" &&
+    !/[<&(]/u.test(input.charAt(index + 1)) &&
+    input.charAt(index - 1) !== "<"
+  );
+}
+
+/** Reveal path text while retaining the reference's distinction between input redirects and quoted data. */
+export function stripPolicyShellQuotesForPathScan(input: string): string {
+  const state: BoundaryQuoteState = {
+    inSingle: false,
+    inDouble: false,
+    escaped: false,
+  };
+  let output = "";
+  for (let index = 0; index < input.length; index++) {
+    const char = input.charAt(index);
+    if (state.escaped) {
+      output += char;
+      state.escaped = false;
+      continue;
+    }
+    if (consumePathScanQuote(state, char)) continue;
+    output += isPathScanInputRedirect(input, index, state) ? "< " : char;
+  }
+  return output + (state.escaped ? "\\" : "");
+}
+
+/** Return the matching UTF-8 byte offset, or null when quoting or nesting leaves no complete close. */
+export function findMatchingPolicyShellParen(
+  input: Uint8Array,
+  openIndex: number,
+): number | null {
+  let depth = 0;
+  const quoteState = { inSingle: false, inDouble: false, escaped: false };
+  const text = Buffer.from(input).toString("latin1");
+  for (const [index, byte] of input.entries()) {
+    if (index < openIndex) continue;
+    const char = String.fromCharCode(byte);
+    if (
+      consumeBoundaryQuote(
+        quoteState,
+        char,
+        isPolicyAnsiQuoteStart(text, index),
+      )
+    )
+      continue;
+    if (char === "(") depth++;
+    else if (char === ")" && --depth === 0) return index;
+  }
+  return null;
+}
+
+/** Bash reparses two separately closed parentheses as command substitution containing a subshell. */
+export function isPolicySubshellCommandSubstitution(
+  input: Uint8Array,
+  start: number,
+): boolean {
+  const inner = findMatchingPolicyShellParen(input, start + 2);
+  const outer = findMatchingPolicyShellParen(input, start + 1);
+  return (
+    inner !== null &&
+    outer !== null &&
+    outer > inner + 1 &&
+    /^[ \t\r\n\v\f]+$/u.test(
+      Buffer.from(input.subarray(inner + 1, outer)).toString(),
+    )
+  );
+}
+
+/** Skip one raw quoted word; empty means no remaining argument was found. */
+export function dropFirstPolicyShellWord(command: string): string {
+  const trimmed = command.replace(/^[ \t\r\n\v\f]+/u, "");
+  const state = { inSingle: false, inDouble: false, escaped: false };
+  for (let index = 0; index < trimmed.length; index++) {
+    const char = trimmed.charAt(index);
+    if (
+      consumeBoundaryQuote(state, char, isPolicyAnsiQuoteStart(trimmed, index))
+    )
+      continue;
+    if (/[ \t\r\n\v\f]/u.test(char))
+      return trimmed.slice(index + 1).replace(/^[ \t\r\n\v\f]+/u, "");
+  }
+  return "";
+}
+
+/** Detect expansion in one raw word while preserving quoted and escaped literal dollar signs. */
+export function hasPolicyShellWordExpansion(input: string): boolean {
+  const state = { inSingle: false, inDouble: false, escaped: false };
+  for (let index = 0; index < input.length; index++) {
+    const char = input.charAt(index);
+    if (!state.escaped && !state.inSingle) {
+      if (
+        char === "`" ||
+        (char === "$" && /[A-Za-z0-9_({?#!*$@-]/u.test(input.charAt(index + 1)))
+      )
+        return true;
+      if (!state.inDouble && /[ \t\r\n\v\f]/u.test(char)) return false;
+    }
+    consumeBoundaryQuote(state, char, isPolicyAnsiQuoteStart(input, index));
+  }
+  return false;
+}
+
+interface ShellWordState extends BoundaryQuoteState {
+  current: string;
+  started: boolean;
+}
+
+const doubleQuoteEscapes = new Set(["$", "`", '"', "\\", "\n"]);
+
+/** Decode quotes and escapes without expansion; true consumes the character for the word reader. */
+function consumeShellWordQuote(
+  state: ShellWordState,
+  char: string,
+  next: string,
+): boolean {
+  if (state.escaped) {
+    state.current += char;
+    state.started = true;
+    state.escaped = false;
+    return true;
+  }
+  if (state.inSingle) {
+    if (char === "'") state.inSingle = false;
+    else state.current += char;
+    state.started = true;
+    return true;
+  }
+  switch (char) {
+    case "\\":
+      if (state.inDouble && !doubleQuoteEscapes.has(next)) {
+        state.current += char;
+        state.started = true;
+      } else state.escaped = true;
+      return true;
+    case "'":
+      state.current += state.inDouble ? char : "";
+      state.inSingle = !state.inDouble;
+      state.started = true;
+      return true;
+    case '"':
+      state.inDouble = !state.inDouble;
+      state.started = true;
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Decode raw shell words, retaining quoted empty operands and the existing trailing-escape semantics. */
+export function splitPolicyShellWords(input: string): string[] {
+  const words: string[] = [];
+  const state: ShellWordState = {
+    inSingle: false,
+    inDouble: false,
+    escaped: false,
+    current: "",
+    started: false,
+  };
+  for (let index = 0; index < input.length; index++) {
+    const char = input.charAt(index);
+    const ansi = readUnquotedPolicyAnsiString(input, index, state);
+    if (ansi) {
+      state.current += ansi.value;
+      state.started = true;
+      index = ansi.end;
+      continue;
+    }
+    if (consumeShellWordQuote(state, char, input.charAt(index + 1))) continue;
+    if (!state.inDouble && /[ \t\r\n\v\f]/u.test(char)) {
+      if (state.started) {
+        words.push(state.current);
+        state.current = "";
+        state.started = false;
+      }
+      continue;
+    }
+    state.current += char;
+    state.started = true;
+  }
+  if (state.escaped) state.current += "\\";
+  if (state.started) words.push(state.current);
+  return words;
+}
+
+/** Detect only unresolved unquoted IFS in the executable, preserving assignment-value handling. */
+function hasAmbiguousLeadingIfs(
+  input: string,
+  index: number,
+  word: string,
+): boolean {
+  if (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(word)) return false;
+  const tail = input.slice(index);
+  return tail.startsWith("${IFS}") || /^\$IFS([^A-Za-z0-9_]|$)/u.test(tail);
+}
+
+/** Keep decoded executable spaces inside their word before reattaching untouched arguments. */
+function finishNormalizedLeadingWord(word: string, rest: string): string {
+  const normalized = word.replace(/[ \t\r\n\v\f]/gu, "__goat_word_space__");
+  const args = rest.replace(/^[ \t\r\n\v\f]+/u, "");
+  return args ? normalized + " " + args : normalized;
+}
+
+/** Normalize the executable word; null requires refusing unresolved unquoted IFS expansion. */
+export function normalizeLeadingPolicyWord(command: string): string | null {
+  const input = command.replace(/^[ \t\r\n\v\f]+/u, "");
+  const state: ShellWordState = {
+    inSingle: false,
+    inDouble: false,
+    escaped: false,
+    current: "",
+    started: false,
+  };
+  for (let index = 0; index < input.length; index++) {
+    const char = input.charAt(index);
+    const ansi = readUnquotedPolicyAnsiString(input, index, state);
+    if (ansi) {
+      state.current += ansi.value;
+      state.started = true;
+      index = ansi.end;
+      continue;
+    }
+    if (consumeShellWordQuote(state, char, input.charAt(index + 1))) continue;
+    if (!state.inDouble && hasAmbiguousLeadingIfs(input, index, state.current))
+      return null;
+    if (!state.inDouble && /[ \t\r\n\v\f]/u.test(char))
+      return finishNormalizedLeadingWord(state.current, input.slice(index + 1));
+    state.current += char;
+    state.started = true;
+  }
+  if (state.escaped) state.current += "\\";
+  return finishNormalizedLeadingWord(state.current, "");
+}
+
+export type PolicyWrapperPayload =
+  { kind: "command"; command: string } | { kind: "absent" | "unresolved" };
+
+export type PolicyWordJoinMode = "text" | "argv" | "wsl-shell";
+
+const shellControlEscapes = new Map([
+  [7, "\\a"],
+  [8, "\\b"],
+  [9, "\\t"],
+  [10, "\\n"],
+  [11, "\\v"],
+  [12, "\\f"],
+  [13, "\\r"],
+  [27, "\\E"],
+]);
+
+/** Escape nonprinting bytes using Bash's C-locale ANSI-C word spelling. */
+function quotePolicyAnsiByte(byte: number): string {
+  const named = shellControlEscapes.get(byte);
+  if (named !== undefined) return named;
+  if (byte < 32 || byte >= 127) return "\\" + byte.toString(8).padStart(3, "0");
+  const char = String.fromCharCode(byte);
+  return char === "\\" || char === "'" ? "\\" + char : char;
+}
+
+/** Preserve argument boundaries with the reference's C-locale printf %q spelling. */
+function quotePolicyArgvWord(word: string): string {
+  if (word === "") return "''";
+  const bytes = Buffer.from(word, "utf8");
+  if (bytes.some((byte) => byte < 32 || byte >= 127))
+    return "$'" + [...bytes].map(quotePolicyAnsiByte).join("") + "'";
+  return [...bytes]
+    .map((byte, index) => {
+      const char = String.fromCharCode(byte);
+      if (/[A-Za-z0-9_@%+=:./-]/u.test(char)) return char;
+      if (char === "#" && index > 0) return char;
+      if (char === "~" && index > 0 && !/[:=]/u.test(word.charAt(index - 1)))
+        return char;
+      return "\\" + char;
+    })
+    .join("");
+}
+
+/** Rebuild wrapper payloads; only argv mode protects every operand from shell interpretation. */
+export function joinPolicyShellWords(
+  words: readonly string[],
+  start: number,
+  mode: PolicyWordJoinMode = "text",
+): string {
+  return words
+    .slice(start)
+    .map((word) => {
+      if (mode === "argv") return quotePolicyArgvWord(word);
+      if (mode === "wsl-shell" && /[ \t\r\n\v\f]/u.test(word))
+        return '"' + word.replaceAll('"', '\\"') + '"';
+      return word;
+    })
+    .join(" ");
+}
+
+/** Match a decoded executable basename without splitting a quoted path that contains spaces. */
+function isPolicyWrapperExecutable(
+  words: readonly string[],
+  name: string,
+): boolean {
+  const executable = words[0] ?? "";
+  return executable.slice(executable.lastIndexOf("/") + 1) === name;
+}
+
+const xargsFlagOptions = new Set([
+  "-0",
+  "--null",
+  "-r",
+  "--no-run-if-empty",
+  "-t",
+  "--verbose",
+  "-p",
+  "--interactive",
+  "-x",
+  "--exit",
+  "--show-limits",
+  "-e",
+  "-i",
+  "-l",
+  "--eof",
+  "--replace",
+  "--max-lines",
+]);
+const xargsValueOptions = new Set([
+  "-a",
+  "--arg-file",
+  "-I",
+  "-L",
+  "-n",
+  "-P",
+  "-s",
+  "-E",
+  "-d",
+  "--max-args",
+  "--max-procs",
+  "--max-chars",
+  "--delimiter",
+  "--process-slot-var",
+]);
+const xargsAttachedOption =
+  /^(?:-(?:a|I|i|L|l|n|P|s|E|e|d).+|--(?:arg-file|replace|max-lines|max-args|max-procs|max-chars|eof|delimiter|process-slot-var)=.*)$/su;
+const xargsTerminalOptions = new Set(["--help", "--version"]);
+
+/** Find xargs' first operand; uncertain option arity must remain a refusal for policy callers. */
+function xargsPayloadIndex(words: readonly string[]): number | "unresolved" {
+  let index = 1;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "--") return index + 1;
+    if (xargsFlagOptions.has(word) || xargsAttachedOption.test(word)) index++;
+    else if (xargsValueOptions.has(word)) {
+      if (index + 1 >= words.length) return "unresolved";
+      index += 2;
+    } else if (xargsTerminalOptions.has(word)) return words.length;
+    else return word.startsWith("-") ? "unresolved" : index;
+  }
+  return index;
+}
+
+/** Recover xargs' raw payload, preserving its quotes and distinguishing absent from unresolved commands. */
+export function stripPolicyXargsPayload(command: string): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  if (!isPolicyWrapperExecutable(words, "xargs")) return { kind: "absent" };
+  const index = xargsPayloadIndex(words);
+  if (index === "unresolved") return { kind: "unresolved" };
+  if (index >= words.length) return { kind: "absent" };
+  let payload = command;
+  for (let dropped = 0; dropped < index; dropped++)
+    payload = dropFirstPolicyShellWord(payload);
+  return { kind: "command", command: payload };
+}
+
+const watchValueOptions = new Set([
+  "-n",
+  "--interval",
+  "-q",
+  "--equexit",
+  "-s",
+  "--shotsdir",
+]);
+const watchFlags = new Set([
+  "-b",
+  "--beep",
+  "-c",
+  "--color",
+  "-C",
+  "--no-color",
+  "-d",
+  "--differences",
+  "-e",
+  "--errexit",
+  "-g",
+  "--chgexit",
+  "-p",
+  "--precise",
+  "-r",
+  "--no-rerun",
+  "-t",
+  "--no-title",
+  "-w",
+  "--no-wrap",
+]);
+const watchTerminalOptions = new Set(["-h", "--help", "-v", "--version"]);
+const watchExecOptions = new Set(["-x", "--exec"]);
+const watchAttachedOption =
+  /^(?:-(?:n|q|s).+|--(?:interval|equexit|shotsdir|differences)=.*)$/su;
+
+/** Return a repeated command only when its operand index exists, including quoted empty payloads. */
+function finishPolicyWrapperPayload(
+  words: readonly string[],
+  index: number,
+  mode: PolicyWordJoinMode,
+): PolicyWrapperPayload {
+  return index < words.length
+    ? { kind: "command", command: joinPolicyShellWords(words, index, mode) }
+    : { kind: "absent" };
+}
+
+/** Watch display flags and attached values consume exactly one argument. */
+function isWatchSingleOption(word: string): boolean {
+  return watchFlags.has(word) || watchAttachedOption.test(word);
+}
+
+/** Keep watch's explicit exec mode separate from its default shell-text interpretation. */
+function readPolicyWatchPayload(
+  words: readonly string[],
+): PolicyWrapperPayload {
+  let index = 1;
+  let mode: PolicyWordJoinMode = "text";
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "--")
+      return finishPolicyWrapperPayload(words, index + 1, mode);
+    if (watchValueOptions.has(word)) {
+      if (index + 1 >= words.length) return { kind: "unresolved" };
+      index += 2;
+    } else if (isWatchSingleOption(word)) index++;
+    else if (watchExecOptions.has(word)) {
+      mode = "argv";
+      index++;
+    } else if (watchTerminalOptions.has(word)) return { kind: "absent" };
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    else return finishPolicyWrapperPayload(words, index, mode);
+  }
+  return { kind: "absent" };
+}
+
+/** Extract watch's repeated action; unresolved options must retain their policy refusal. */
+export function stripPolicyWatchPayload(command: string): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  const executable = words[0] ?? "";
+  if (executable.slice(executable.lastIndexOf("/") + 1) !== "watch")
+    return { kind: "absent" };
+  return readPolicyWatchPayload(words);
+}
+
+const parallelValueOptions = new Set([
+  "-j",
+  "--jobs",
+  "-S",
+  "--sshlogin",
+  "--sshloginfile",
+  "--results",
+  "--joblog",
+  "--timeout",
+  "--delay",
+  "--retries",
+  "--workdir",
+  "--halt",
+  "--tagstring",
+]);
+const parallelFlags = new Set([
+  "--bar",
+  "--eta",
+  "--keep-order",
+  "-k",
+  "--line-buffer",
+  "--ungroup",
+  "--dry-run",
+  "--tag",
+  "--will-cite",
+]);
+const parallelAttachedOption =
+  /^(?:-(?:j|S).+|--(?:jobs|sshlogin|sshloginfile|results|joblog|timeout|delay|retries|workdir|halt|tagstring)=.*)$/su;
+
+/** Parallel flags and attached values consume one argument without hiding the executable action. */
+function isParallelSingleOption(word: string): boolean {
+  return parallelFlags.has(word) || parallelAttachedOption.test(word);
+}
+
+/** Extract GNU parallel's shell-text payload while refusing uncertain option arity. */
+export function stripPolicyParallelPayload(
+  command: string,
+): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  if (!isPolicyWrapperExecutable(words, "parallel")) return { kind: "absent" };
+  let index = 1;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "--")
+      return finishPolicyWrapperPayload(words, index + 1, "text");
+    if (parallelValueOptions.has(word)) {
+      if (index + 1 >= words.length) return { kind: "unresolved" };
+      index += 2;
+    } else if (isParallelSingleOption(word)) index++;
+    else if (xargsTerminalOptions.has(word)) return { kind: "absent" };
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    else return finishPolicyWrapperPayload(words, index, "text");
+  }
+  return { kind: "absent" };
+}

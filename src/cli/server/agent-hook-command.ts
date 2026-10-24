@@ -233,8 +233,8 @@ const LEGACY_SPAWN_TAIL_FRAGMENTS = [
 const STRUCTURED_IMPORT_TAIL_FRAGMENTS = [
   "import(require('node:url').pathToFileURL(bashLauncherPath).href).then((launcherModule)=>{",
   "/* Downstream code without the launcher API cannot be trusted to guard the user's command. */",
-  "if(typeof launcherModule.runHookWithBash!=='function')reportUnavailable('managed launcher API mismatch');",
-  "return launcherModule.runHookWithBash(hookScriptPath,responseMode,{root:projectRoot});",
+  "if(typeof launcherModule.runHookNative!=='function')reportUnavailable('managed launcher API mismatch');",
+  "return launcherModule.runHookNative(hookScriptPath,responseMode,{root:projectRoot});",
   "}).then((hookStatus)=>{",
   "/* A non-numeric result means the user's hook never produced a trustworthy decision. */",
   "if(!Number.isInteger(hookStatus))reportUnavailable('managed launcher returned no result');",
@@ -388,8 +388,9 @@ export function agentRegistersHostTimeout(
 /**
  * Complete handler shape one provider registers for a managed hook.
  *
- * Shell handlers carry a command and optional Windows override; Claude argv handlers carry an executable, ordered arguments, and inert shell routes.
- * Compare the complete descriptor when reporting installation drift; reconstructing a command string loses provider-specific identity.
+ * Shell handlers carry a command and optional Windows override; Claude argv handlers carry an executable, ordered arguments, inert shell routes,
+ * and a host failure policy on policy rows. Compare the complete descriptor when reporting installation drift; reconstructing a command string
+ * loses provider-specific identity.
  */
 export type AgentHookHandlerDescriptor =
   | { form: "shell"; command: string; commandWindows?: string }
@@ -399,6 +400,8 @@ export type AgentHookHandlerDescriptor =
       args: string[];
       bash: string;
       powershell: string;
+      /** Claude Code 2.1.295+ refuses the tool call when this handler cannot start, times out, or exits outside 0/2; absent on feedback and Stop rows. */
+      onFailure?: "block";
     };
 
 /**
@@ -444,52 +447,7 @@ function codexWindowsHookCommand(
   return `Set-Location -LiteralPath ([Environment]::CurrentDirectory); $global:LASTEXITCODE = $null; & ${nodeCommand}; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE`;
 }
 
-/**
- * Choose the process that replays a registered hook when the user runs `goat-flow hooks verify` on this platform.
- * A Windows override such as Codex's `commandWindows` wins; other shell handlers run their Bash source unchanged.
- *
- * @param descriptor - Registered handler whose current-platform command is selected.
- * @param platform - Host platform used for selection; defaults to the running Node process.
- * @returns Executable, arguments and optional environment additions; absent env means ordinary platform quoting is sufficient.
- */
-export function agentHookSpawnDescriptor(
-  descriptor: AgentHookHandlerDescriptor,
-  platform: NodeJS.Platform = process.platform,
-): AgentHookSpawnDescriptor {
-  // Claude's exec registration is already literal argv and needs no intermediate shell.
-  if (descriptor.form === "argv") {
-    // Shell-routing fields belong to host config identity, never Claude's direct exec replay.
-    return { command: descriptor.command, args: [...descriptor.args] };
-  }
-  // A registered Windows override takes precedence; without one, the original Bash contract remains authoritative.
-  if (platform === "win32" && descriptor.commandWindows !== undefined) {
-    return {
-      command: "powershell.exe",
-      args: [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        descriptor.commandWindows,
-      ],
-    };
-  }
-  // Windows argv conversion can strip nested quotes; environment transport preserves source and leaves stdin for the event.
-  if (platform === "win32") {
-    // This executes the selected trusted handler for local verification; provider delivery still needs its own capture.
-    // If a caller drops env, the replay fails with a named error instead of running nothing and reporting a passing hook.
-    return {
-      command: "bash",
-      args: [
-        "--noprofile",
-        "--norc",
-        "-c",
-        'eval "${GOAT_FLOW_HOOK_REPLAY_COMMAND:?hook replay command missing}"',
-      ],
-      env: { GOAT_FLOW_HOOK_REPLAY_COMMAND: descriptor.command },
-    };
-  }
-  return { command: "bash", args: ["-c", descriptor.command] };
-}
+export { agentHookSpawnDescriptor } from "../hook-spawn-descriptor.js";
 
 /**
  * Build the handler descriptor written into the selected agent's configuration.
@@ -509,7 +467,7 @@ export function buildAgentHookDescriptor(
   spec: HookSpec,
 ): AgentHookHandlerDescriptor {
   const hookScriptPath = commandPath(hooksDirectory, spec.primaryScript);
-  const bashLauncherPath = commandPath(hooksDirectory, "run-with-bash.mjs");
+  const bashLauncherPath = commandPath(hooksDirectory, "run-hook.mjs");
   const hookResponseMode = hookLaunchMode(agentId, spec);
   const registrationPath = PROFILES[agentId].hookConfigFile;
   // A provider without a config surface cannot receive the handler the user enabled.
@@ -518,12 +476,17 @@ export function buildAgentHookDescriptor(
   const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
   // Claude's live capture approves exec form, while cross-loading shell hosts receive inert routes.
   if (agentId === "claude") {
+    // Set the per-file scan limit in Node so literal argv works on POSIX and Windows.
+    const scanBudget =
+      spec.id === "post-turn-safety"
+        ? "process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304';"
+        : "";
     return {
       form: "argv",
       command: "node",
       args: [
         "-e",
-        structuredHookLaunchBootstrap(hookResponseMode),
+        scanBudget + structuredHookLaunchBootstrap(hookResponseMode),
         hookScriptPath,
         hookResponseMode,
         rootEnvironmentName,
@@ -532,6 +495,10 @@ export function buildAgentHookDescriptor(
       ],
       bash: "exit 0",
       powershell: "exit 0",
+      // A policy handler that never answers must not let the command through; Gruff stays a visible skip and Stop ignores the field.
+      ...(hookResponseKind(spec) === "policy"
+        ? { onFailure: "block" as const }
+        : {}),
     };
   }
   const bootstrapSource = hookLaunchBootstrap(hookResponseMode);
@@ -557,6 +524,11 @@ export function buildAgentHookDescriptor(
       registrationPath,
       bashLauncherPath,
     ]);
+    // The shipped policy corpus exceeds Stop's default one-MiB file limit.
+    if (spec.id === "post-turn-safety") {
+      shellDescriptor.command = `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304 ${shellDescriptor.command}`;
+      shellDescriptor.commandWindows = `$env:GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304'; ${shellDescriptor.commandWindows}`;
+    }
   }
   return shellDescriptor;
 }
@@ -686,6 +658,15 @@ export function commandEntryReferencesSpec(
   const commands = entryCommandSearchText(entry);
   // Shared runtime files are dependencies, never ownership of a sibling registration.
   if (commandsReferenceScriptToken(commands, spec.primaryScript)) return true;
+  // A pre-cutover registration remains owned while its Node replacement is installed.
+  if (
+    spec.primaryScript.endsWith(".mjs") &&
+    commandsReferenceScriptToken(
+      commands,
+      spec.primaryScript.replace(/\.mjs$/u, ".sh"),
+    )
+  )
+    return true;
   // Historical deny script names remain managed so upgrades can remove them.
   if (
     spec.id === "deny-dangerous" &&
@@ -739,7 +720,7 @@ export function entryCarriesHandlerDescriptor(
       entry.powershell === descriptor.command
     );
   }
-  // Argv handlers must match the executable, every ordered argument, and both inert shell routes exactly.
+  // Argv handlers must match the executable, every ordered argument, both inert shell routes, and the failure policy exactly.
   if (descriptor.form === "argv") {
     // Missing argv cannot reproduce the structured handler the user enabled.
     if (!Array.isArray(entry.args)) return false;
@@ -747,13 +728,15 @@ export function entryCarriesHandlerDescriptor(
       entry.command,
       entry.bash,
       entry.powershell,
+      entry.onFailure,
     ];
     const expectedIdentityFields = [
       descriptor.command,
       descriptor.bash,
       descriptor.powershell,
+      descriptor.onFailure,
     ];
-    // A changed executable or shell route is registration drift even when the argument list still matches.
+    // A changed executable, shell route, or failure policy is registration drift even when the argument list still matches.
     if (
       !registeredIdentityFields.every(
         (fieldValue, fieldIndex) =>
@@ -876,17 +859,12 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
   // Stop events are matcherless because they follow the completed user turn rather than a tool.
   if (spec.event === "Stop") return "";
   // Native PowerShell must reach the explicit unsupported-tool denial instead of bypassing both policies.
-  if (
-    agent.id === "claude" &&
-    ["deny-dangerous", "deny-git-mutations"].includes(spec.id)
-  ) {
-    return "Bash|PowerShell";
-  }
+  const policyMatcher = policyToolMatcher(agent.id, spec.id);
+  if (policyMatcher !== null) return policyMatcher;
   // Codex reports source edits through the canonical apply_patch tool observed in live delivery.
   if (agent.id === "codex" && spec.id === "gruff-code-quality") {
     return "^apply_patch$";
   }
-  // Other provider matchers retain their shared registry vocabulary.
   if (agent.id !== "antigravity") return spec.matcher;
   // Antigravity uses its file-edit tool names for the same user action.
   if (spec.id === "gruff-code-quality") {
@@ -903,10 +881,23 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
     return [
       "run_command",
       "view_file",
+      "grep_search",
       "write_to_file",
       "replace_file_content",
       "multi_replace_file_content",
     ].join("|");
   }
   return spec.matcher;
+}
+
+/** Include the reviewed command and content tools without widening discovery-only tool coverage. */
+function policyToolMatcher(agentId: AgentId, hookId: string): string | null {
+  if (
+    agentId === "claude" &&
+    ["deny-dangerous", "deny-git-mutations"].includes(hookId)
+  )
+    return "Bash|PowerShell|Monitor";
+  if (agentId === "copilot" && hookId === "deny-dangerous")
+    return "bash|powershell|view|edit|create|grep|rg|str_replace_editor";
+  return null;
 }

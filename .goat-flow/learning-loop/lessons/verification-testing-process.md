@@ -1,6 +1,6 @@
 ---
 category: verification-testing-process
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** Process-lifecycle tests - timeout deadlines independent of child close, observable readiness before termination signals, and delegated multi-turn runs that must keep recoverable session state. What a test must establish in general is [verification-testing.md](verification-testing.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -61,7 +61,7 @@ Evidence: `scripts/capture-command.mjs` (search: `process.kill(-child.pid, "SIGK
 **Severity:** CORRECTNESS
 **Decision changed:** Process-lifecycle tests wait for an observable ready state before sending termination signals; elapsed time alone is never readiness.
 **Trigger phase:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-09-19
+**Incident count:** 7 | **Latest occurrence:** 2026-10-23
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/browser-evidence.md`, which owns proving browser-visible behaviour; every incident here is process readiness in the preflight runner, and the sibling entry above owns the completion bound for the same runner.
 **Merged:** 2026-09-15 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split along the process-lifecycle seam to recover its headroom.
 
@@ -78,6 +78,8 @@ Evidence: `scripts/capture-command.mjs` (search: `process.kill(-child.pid, "SIGK
 **Recurrence 2026-09-19:** A local `publish:check` release run failed the same escaped-pipe test: `runner returned after 2063ms instead of its bounded cleanup window`, against a 2,000 ms bound. The fast suite stopped the gate, so the slow suite never ran. The agent had started four `hooks verify` runs alongside it, and they overlapped the fast suite. Run alone, the test passed in 1,149 ms. A rerun with nothing else running passed the fast suite, 3010 of 3015 with 5 skipped. The runner defect in the entry above was not the cause.
 
 **Recurrence 2026-09-19:** A second failure the same day. The same test failed a plain `npm test` with nothing started alongside it: `runner returned after 2136ms instead of its bounded cleanup window`. The load average was 5.94 just after the run, from the fast suite's own eight-way concurrency and other sessions on the machine. The file alone passed 24 of 24, and an immediate full rerun passed 3049 of 3054 with 5 skipped. Keeping other work off the machine is therefore not enough: alone the test takes about 1,150 ms, but on a loaded host it overran the 2,000 ms bound by 136 ms. A first failure of this one test is rerun once, alone and then in the full suite, and recorded; a failure that repeats alone is investigated as a product regression.
+
+**Recurrence 2026-10-23:** A review ran `npm test` and preflight concurrently. The fast suite reported `owned controller work survived its deadline`, while preflight passed. The named cleanup case then passed alone. That result does not establish the cause or justify changing cleanup behavior. Run the broad gates sequentially and retain the original failure until it is explained. Evidence: `test/integration/post-turn-launcher-recovery.test.ts` (search: `terminates detached controller children at the outer deadline without stopping unrelated work`).
 
 **Root cause:** Real-timer tests treated scheduler time as proof that an asynchronous process or terminal had reached the state their assertions required. Heavy concurrent work can delay that state independently of the timer, and buffered output cannot serve as a live readiness signal.
 

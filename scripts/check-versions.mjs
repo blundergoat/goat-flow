@@ -9,7 +9,8 @@
  * Each mismatch prints one line and the script exits 1; otherwise it prints a single success line.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { generateHookRuntime } from "./generate-hook-runtime.mjs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const version = pkg.version;
@@ -78,6 +79,13 @@ const nestedStampedHookTemplates = readdirSync("workflow/hooks", {
   );
 
 let isVersionSetConsistent = true;
+// A correct stamp cannot certify stale generated code or a stale installed mirror.
+try {
+  generateHookRuntime(resolve("."), "--check");
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  isVersionSetConsistent = false;
+}
 // Each skill entry point must advertise the package version users requested.
 for (const skillTemplate of skillTemplates) {
   const content = readFileSync(skillTemplate, "utf8");

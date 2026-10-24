@@ -5,12 +5,13 @@
  * Harmless controls preserve investigation workflows that need to display those same words.
  */
 import assert from "node:assert/strict";
+import { copyHookTree, hookSelection } from "../helpers/hook-entrypoint.js";
 import {
   checkInstalledPolicy,
   runHookWithPayload,
 } from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { after, describe, it } from "node:test";
@@ -18,9 +19,7 @@ import { after, describe, it } from "node:test";
 const fixture = mkdtempSync(resolve(tmpdir(), "goat-native-shell-policy-"));
 const hooks = resolve(fixture, ".goat-flow/hooks");
 mkdirSync(hooks, { recursive: true });
-cpSync(resolve(import.meta.dirname, "../../workflow/hooks"), hooks, {
-  recursive: true,
-});
+copyHookTree(hooks);
 assert.equal(spawnSync("git", ["init", "-q", fixture]).status, 0);
 after(() => rmSync(fixture, { recursive: true, force: true }));
 
@@ -524,15 +523,83 @@ describe("Windows LFS executable lookup", () => {
 });
 
 describe("Unqualified native PowerShell tool", () => {
-  // Unsupported native-tool input needs a visible Bash recovery route from either enabled policy.
+  // Each runtime must reject unsupported native-tool input with its own supported recovery route.
   for (const [policy, command] of [
     ["deny-git-mutations", "git push origin HEAD"],
     ["deny-dangerous", "Remove-Item -Recurse -Force C:\\goat-probe-target"],
   ]) {
-    it(`rejects ${policy} PowerShell events with a Bash recovery route`, () => {
+    it(`rejects ${policy} PowerShell events with a supported recovery route`, () => {
       const result = checkProposedCommand(policy, command, "PowerShell");
       assert.equal(result.status, 2, result.stderr);
-      assert.match(result.stderr, /PowerShell.*Bash/u);
+      assert.match(
+        result.stderr,
+        hookSelection() !== "reference"
+          ? /PowerShell.*supported shell tool/u
+          : /PowerShell.*Bash/u,
+      );
     });
   }
 });
+
+// Space/tab after a command word must not hide it; the sibling policy and read controls stay available.
+describe(
+  "cmd caret whitespace",
+  { skip: hookSelection() === "reference" },
+  () => {
+    const forms = [
+      [
+        "executable",
+        "git",
+        "push origin main",
+        "git",
+        "status --short",
+        "deny-git-mutations",
+      ],
+      [
+        "verb",
+        "git push",
+        "origin main",
+        "git status",
+        "--short",
+        "deny-git-mutations",
+      ],
+      [
+        "delete",
+        "rd",
+        "/s /q C:/goat-probe-target",
+        "echo",
+        "/s /q C:/goat-probe-target",
+        "deny-dangerous",
+      ],
+      ["github", "gh pr merge", "12", "gh pr view", "12", "deny-git-mutations"],
+    ];
+    for (const [
+      shape,
+      blockedWord,
+      blockedTail,
+      readWord,
+      readTail,
+      owner,
+    ] of forms) {
+      for (const [boundary, whitespace] of [
+        ["space", " "],
+        ["tab", "\t"],
+      ]) {
+        for (const control of [false, true]) {
+          const command = `cmd //c ${control ? readWord : blockedWord}^${whitespace}${control ? readTail : blockedTail}`;
+          for (const policy of ["deny-dangerous", "deny-git-mutations"]) {
+            it(`${shape}/${boundary}/${control ? "control" : "protection"}/${policy}`, () => {
+              const result = checkProposedCommand(policy, command);
+              const expected = !control && policy === owner ? 2 : 0;
+              assert.equal(result.status, expected, result.stderr);
+              assert.equal(result.stdout, "");
+              if (expected === 2)
+                assert.match(result.stderr, /BLOCKED: Policy/u);
+              else assert.equal(result.stderr, "");
+            });
+          }
+        }
+      }
+    }
+  },
+);

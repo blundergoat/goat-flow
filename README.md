@@ -83,7 +83,7 @@ Use an instruction file for rules the agent should remember. Use GOAT Flow when 
 
 ## Getting started
 
-Requires Node.js 20.11+.
+Requires Node.js 20.12+.
 
 ### 1. Start with the menu
 

@@ -1,17 +1,19 @@
 /**
  * Run public installs in disposable targets to check the verified closing summary.
- * Local edits and disabled hooks exercise actual writes; child-only Bash wrappers reproduce incomplete apply without changing production code.
+ * Local edits and disabled hooks exercise actual writes; child-only Node filesystem failures reproduce incomplete apply without changing production code.
  */
 import assert from "node:assert/strict";
 import {
   chmodSync,
+  cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { delimiter, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import {
@@ -25,6 +27,35 @@ import {
 
 const LOCAL_PATH = ".goat-flow/hooks/run-with-bash.mjs";
 const SUMMARY = "Install verified for";
+
+let codexFixturePath: string | undefined;
+
+/** Build one real Codex install, then copy files and permissions into independent temporary targets. */
+function installedCodexProject(): string {
+  if (codexFixturePath === undefined) {
+    const fixturePath = makeTempProject();
+    const initial = runCliInstaller(fixturePath, "--agent", "codex");
+    assert.equal(initial.status, 0, initial.stderr || initial.stdout);
+    codexFixturePath = fixturePath;
+  }
+  const projectPath = makeTempProject();
+  const directories: Array<{ path: string; mode: number }> = [];
+  cpSync(codexFixturePath, projectPath, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+    // Reads directory modes so copied fixtures retain private permissions.
+    filter(source, destination) {
+      const stats = lstatSync(source);
+      if (stats.isDirectory()) {
+        directories.push({ path: destination, mode: stats.mode & 0o777 });
+      }
+      return true;
+    },
+  });
+  for (const { path, mode } of directories) chmodSync(path, mode);
+  return projectPath;
+}
 
 describe("verified install summary", () => {
   // A retained legacy baseline puts both renamed paths in the admitted preview before installer cleanup removes them.
@@ -92,7 +123,7 @@ describe("verified install summary", () => {
     );
     const settingsPath = join(projectPath, ".claude/settings.json");
     const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-    assert.match(JSON.stringify(settings.hooks), /post-turn-safety\.sh/u);
+    assert.match(JSON.stringify(settings.hooks), /post-turn-safety\.mjs/u);
     settings.userMarker = "keep";
     writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
 
@@ -113,8 +144,8 @@ describe("verified install summary", () => {
     );
     const finalSettings = readFileSync(settingsPath, "utf-8");
     assert.equal(JSON.parse(finalSettings).userMarker, "keep");
-    assert.doesNotMatch(finalSettings, /post-turn-safety\.sh/u);
-    assert.match(finalSettings, /deny-dangerous\.sh/u);
+    assert.doesNotMatch(finalSettings, /post-turn-safety\.mjs/u);
+    assert.match(finalSettings, /deny-dangerous\.mjs/u);
     assert.match(install.stdout, /Install verified for claude/u);
     const closing = install.stdout.slice(install.stdout.indexOf(SUMMARY));
     assert.ok(
@@ -147,9 +178,7 @@ describe("verified install summary", () => {
   });
 
   it("preserves local content and does not report force authority as a replacement", () => {
-    const projectPath = makeTempProject();
-    const initial = runCliInstaller(projectPath, "--agent", "codex");
-    assert.equal(initial.status, 0, initial.stderr || initial.stdout);
+    const projectPath = installedCodexProject();
     const localBytes = `${readFileSync(join(projectPath, LOCAL_PATH), "utf-8")}\n// preserved local edit\n`;
     writeFileSync(join(projectPath, LOCAL_PATH), localBytes);
     const install = runCliInstaller(
@@ -174,14 +203,9 @@ describe("verified install summary", () => {
   for (const failure of ["exit", "signal", "mismatch", "receipt"] as const) {
     it(
       `does not print verified completion after ${failure} failure`,
-      {
-        skip:
-          process.platform === "win32" ? "POSIX Bash wrapper fixture" : false,
-      },
+      {},
       () => {
-        const projectPath = makeTempProject();
-        const initial = runCliInstaller(projectPath, "--agent", "codex");
-        assert.equal(initial.status, 0, initial.stderr || initial.stdout);
+        const projectPath = installedCodexProject();
         const statePath = join(
           projectPath,
           ".goat-flow/state/install/managed.json",
@@ -200,35 +224,26 @@ describe("verified install summary", () => {
         const oldState = readFileSync(statePath, "utf-8");
         const binaryDirectory = join(makeTempProject(), "bin");
         mkdirSync(binaryDirectory);
-        const bashLookup = spawnSync("bash", ["-c", "command -v bash"], {
-          encoding: "utf-8",
-        });
-        assert.equal(bashLookup.status, 0, bashLookup.stderr);
-        const realBash = bashLookup.stdout.trim();
-        const boundary = {
-          exit: "exit 71",
-          signal: 'kill -TERM "$$"',
-          mismatch: `printf '\\n// interrupted bytes\\n' >> "$2/${LOCAL_PATH}"`,
-          receipt: 'mkdir "$2/.goat-flow/state/install/managed.json.tmp-$PPID"',
-        }[failure];
-        const wrapperPath = join(binaryDirectory, "bash");
+        const preload = join(binaryDirectory, "failure.cjs");
         writeFileSync(
-          wrapperPath,
-          [
-            `#!${realBash}`,
-            "set -uo pipefail",
-            'if [[ "${1:-}" == */workflow/install-goat-flow.sh ]]; then',
-            ...(failure === "exit" || failure === "signal"
-              ? []
-              : ['  "$GOAT_FLOW_TEST_REAL_BASH" "$@" || exit $?']),
-            `  ${boundary}`,
-            "  exit 0",
-            "fi",
-            'exec "$GOAT_FLOW_TEST_REAL_BASH" "$@"',
-            "",
-          ].join("\n"),
+          preload,
+          `const fs = require("node:fs");
+const failure = ${JSON.stringify(failure)};
+const copy = fs.copyFileSync;
+const rename = fs.renameSync;
+fs.copyFileSync = (...args) => {
+  if (failure === "exit") process.exit(71);
+  if (failure === "signal") process.kill(process.pid, "SIGTERM");
+  return copy(...args);
+};
+fs.renameSync = (source, destination) => {
+  if (failure === "receipt" && destination === ${JSON.stringify(statePath)}) throw new Error("injected receipt failure");
+  const result = rename(source, destination);
+  if (failure === "mismatch" && destination === ${JSON.stringify(join(projectPath, LOCAL_PATH))}) fs.appendFileSync(destination, "\\n// interrupted bytes\\n");
+  return result;
+};
+require("node:module").syncBuiltinESMExports();\n`,
         );
-        chmodSync(wrapperPath, 0o755);
         const install = spawnSync(
           "node",
           [
@@ -246,16 +261,20 @@ describe("verified install summary", () => {
             timeout: 30_000,
             env: {
               ...process.env,
-              PATH: `${binaryDirectory}${delimiter}${process.env.PATH ?? ""}`,
-              GOAT_FLOW_TEST_REAL_BASH: realBash,
+              NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(preload)}`,
             },
           },
         );
-        assert.equal(
-          install.status,
-          failure === "exit" ? 71 : 1,
-          install.stderr || install.stdout,
-        );
+        if (failure === "signal") {
+          assert.notEqual(install.status, 0);
+          if (process.platform !== "win32")
+            assert.equal(install.signal, "SIGTERM");
+        } else
+          assert.equal(
+            install.status,
+            failure === "exit" ? 71 : 1,
+            install.stderr || install.stdout,
+          );
         assert.doesNotMatch(
           install.stdout,
           /Install verified for|Next steps:|Remaining review:/u,
@@ -267,7 +286,8 @@ describe("verified install summary", () => {
           mismatch: /do not match their templates/u,
           receipt: /install state was not recorded/u,
         }[failure];
-        if (failure !== "exit") assert.match(install.stderr, expectedError);
+        if (failure !== "exit" && failure !== "signal")
+          assert.match(install.stderr, expectedError);
       },
     );
   }

@@ -264,7 +264,7 @@ function rejectedProbeExecution(): HookProbeExecution {
 }
 
 /**
- * Spawns one inert classifier operand through Bash, with no shell interpolation layer in between.
+ * Spawns one inert classifier operand through the installed native hook, without shell interpolation.
  * Exported so containment tests can prove redirected script paths never run; it reports containment and startup failures as a rejected result.
  *
  * @param projectPath - selected project checkout; empty or unresolved paths return a rejected probe result
@@ -294,10 +294,20 @@ export function executeManagedHookProbe(
   if (!isInsideProject(physicalProjectPath, physicalScriptPath)) {
     return rejectedProbeExecution();
   }
+  // A legacy shell script cannot supply evidence for the installed native runtime.
+  if (!physicalScriptPath.endsWith(".mjs")) {
+    return rejectedProbeExecution();
+  }
   const startedAt = performance.now();
   const execution = spawnSync(
-    "bash",
-    [physicalScriptPath, "--check", scenario.command],
+    process.execPath,
+    [
+      physicalScriptPath,
+      "--root",
+      physicalProjectPath,
+      "--check",
+      scenario.command,
+    ],
     {
       cwd: projectPath,
       encoding: "utf-8",

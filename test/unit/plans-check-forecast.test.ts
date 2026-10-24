@@ -19,6 +19,7 @@ import { parseMilestoneMarkdown } from "../../src/cli/plans-export.js";
 import {
   runPlansCommand,
   runPlansCheck,
+  runPlansCheckCli,
   assertSourceLabelledErrors,
   writeCheckFixture,
   writeCheckPlan,
@@ -1037,7 +1038,8 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
   });
 
   it("requires exactly one plan path", () => {
-    const result = runPlansCheck();
+    // The real process proves a usage error prints to stderr and exits 2.
+    const result = runPlansCheckCli();
 
     assert.equal(result.status, 2);
     assert.match(result.stderr, /plans check requires one <plan-path>/u);

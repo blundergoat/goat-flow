@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034,SC2154,SC2317,SC2319
-# goat-flow-hook-version: 1.18.0
+# goat-flow-hook-version: 1.19.0
 # Shared command parser and provider responses for the two managed policy hooks.
 #
 # Entry points own the immutable policy selection and bootstrap failure response.

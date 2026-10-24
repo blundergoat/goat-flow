@@ -8,7 +8,7 @@ Documentation framework for AI coding agent workflows. Four parts:
 - **Markdown docs** (`docs/`, `workflow/`, `workflow/setup/`): framework documentation and agent templates
 - **Shell scripts** (`scripts/`, `workflow/hooks/`, `.goat-flow/hooks/`): maintenance, preflight checks, and guardrail hooks
 
-Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-yaml`, `ws`; optional runtime dependency: `node-pty`.
+Package: `@blundergoat/goat-flow`. Node >= 20.12.0. Runtime dependencies: `js-yaml`, `ws`; optional runtime dependency: `node-pty`.
 
 ## Architecture
 

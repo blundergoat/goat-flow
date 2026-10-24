@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -16,6 +17,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { loadManifest } from "../../src/cli/manifest/manifest.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { HookManagedInstallationError } from "../../src/cli/server/hook-managed-installation.js";
 import { syncHookStates } from "../../src/cli/server/hook-registrar.js";
@@ -67,6 +69,29 @@ function installerTargetSnapshot(projectPath: string): Record<string, string> {
 }
 
 describe("installer policy-review preflight", () => {
+  it("refuses a pre-1.0 skill layout before writes and names the intermediate upgrade", () => {
+    const project = makeTempProject();
+    const staleName = loadManifest().skills.stale_names[0];
+    assert.ok(staleName);
+    const skill = join(project, ".claude/skills", staleName);
+    mkdirSync(skill, { recursive: true });
+    writeFileSync(join(skill, "SKILL.md"), "# Legacy skill\n");
+    const before = installerTargetSnapshot(project);
+    for (const flags of [
+      [],
+      ["--force-managed"],
+      ["--dry-run", "--format", "json"],
+    ]) {
+      const result = runCliInstaller(project, "--agent", "claude", ...flags);
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stdout + result.stderr,
+        /pre-1.0.*intermediate upgrade.*1.18.0/u,
+      );
+      assert.deepEqual(installerTargetSnapshot(project), before);
+    }
+  });
+
   // Neither direct force nor the CLI's cooperative admission marker substitutes for a user's policy decision.
   for (const admission of ["", "v2"]) {
     it(`refuses direct force before writes with admission=${admission || "absent"}`, () => {
@@ -167,7 +192,7 @@ describe("installer policy-review preflight", () => {
       assert.fail("Mixed policy choices must require the dashboard review");
     } catch (error) {
       // The user reaches this review after CLI install refuses to change which switch controls GitHub writes.
-      assert.ok(error instanceof HookManagedInstallationError);
+      assert.ok(error instanceof HookManagedInstallationError, String(error));
       review = error.details;
     }
     assert.equal(review?.code, "hook-policy-review-required");
@@ -189,13 +214,17 @@ describe("installer policy-review preflight", () => {
       /\.goat-flow\/\.gitignore \[unmanaged\]/u,
     );
     assert.deepEqual(installerTargetSnapshot(projectPath), beforeInstall);
-    // Sync's new ignore rules are outside the old receipt; the user must separately approve this named file replacement.
+    // Sync does not claim retained Bash files; their replacements need separate named consent with the ignore rules.
     const firstInstall = runCliInstaller(
       projectPath,
       "--agent",
       "codex",
       "--force-path",
       ".goat-flow/.gitignore",
+      "--force-path",
+      ".goat-flow/hooks/deny-dangerous.sh",
+      "--force-path",
+      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
     );
     assert.equal(
       firstInstall.status,
@@ -206,8 +235,8 @@ describe("installer policy-review preflight", () => {
       join(projectPath, ".codex/hooks.json"),
       "utf8",
     );
-    assert.ok(installedHooks.includes("deny-dangerous.sh"));
-    assert.ok(installedHooks.includes("deny-git-mutations.sh"));
+    assert.ok(installedHooks.includes("deny-dangerous.mjs"));
+    assert.ok(installedHooks.includes("deny-git-mutations.mjs"));
     assert.ok(
       existsSync(join(projectPath, ".goat-flow/state/install/codex.json")),
     );
@@ -363,10 +392,14 @@ function makePackageRootWithoutDependencies(): string {
   const packageRoot = makeTempProject();
   const workflowDirectory = join(packageRoot, "workflow");
   mkdirSync(workflowDirectory);
-  copyFileSync(
-    join(PROJECT_ROOT, "workflow", "install-goat-flow.sh"),
-    join(workflowDirectory, "install-goat-flow.sh"),
+  cpSync(
+    join(PROJECT_ROOT, "workflow", "hooks"),
+    join(workflowDirectory, "hooks"),
+    { recursive: true },
   );
+  cpSync(join(PROJECT_ROOT, "dist"), join(packageRoot, "dist"), {
+    recursive: true,
+  });
   copyFileSync(
     join(PROJECT_ROOT, "workflow", "manifest.json"),
     join(workflowDirectory, "manifest.json"),
@@ -379,8 +412,8 @@ function makePackageRootWithoutDependencies(): string {
 }
 
 /**
- * Run the copied low-level helper as a user would after extracting an incomplete package.
- * Side effects: spawns Bash against the disposable target and clears inherited package lookup hints without changing this checkout.
+ * Run the copied CLI as a user would after extracting an incomplete package.
+ * Spawns Node against the disposable target and clears inherited package lookup hints.
  *
  * @param packageRoot - non-empty disposable package root containing the installer but no `node_modules`
  * @param targetProjectPath - non-empty disposable project that must stay unchanged on preflight failure
@@ -392,9 +425,10 @@ function runInstallerWithoutPackageDependencies(
   targetProjectPath: string,
 ) {
   return spawnSync(
-    "bash",
+    process.execPath,
     [
-      join(packageRoot, "workflow", "install-goat-flow.sh"),
+      join(packageRoot, "dist", "cli", "cli.js"),
+      "install",
       targetProjectPath,
       "--agent",
       "codex",
@@ -430,14 +464,14 @@ describe("installer dependency preflight", () => {
       // Both policy launchers must be present and replay successfully after setup.
       for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
         assert.ok(
-          config.includes(`${hookId}.sh`),
+          config.includes(`${hookId}.mjs`),
           `attempt ${attempt} ${hookId}`,
         );
         const launch = spawnSync(
           process.execPath,
           [
-            join(root, ".goat-flow/hooks/run-with-bash.mjs"),
-            `.goat-flow/hooks/${hookId}.sh`,
+            join(root, ".goat-flow/hooks/run-hook.mjs"),
+            `.goat-flow/hooks/${hookId}.mjs`,
             "policy",
           ],
           {
@@ -476,10 +510,8 @@ describe("installer dependency preflight", () => {
 
     assert.notEqual(installResult.status, 0);
     assert.equal(installResult.stdout, "");
-    assert.equal(
-      installResult.stderr,
-      `ERROR: installer dependency 'js-yaml' is missing from goat-flow root '${packageRoot}'; run npm install in that root or reinstall @blundergoat/goat-flow, then retry.\n`,
-    );
+    assert.match(installResult.stderr, /ERR_MODULE_NOT_FOUND/u);
+    assert.match(installResult.stderr, /js-yaml/u);
     assert.deepEqual(readdirSync(targetProjectPath), []);
     assert.equal(
       existsSync(
@@ -499,14 +531,7 @@ describe("installer dependency preflight", () => {
       0,
       installResult.stderr || installResult.stdout,
     );
-    assert.match(
-      installResult.stdout,
-      /The public goat-flow CLI verifies managed files and records install state after this helper exits\./u,
-    );
-    assert.match(
-      installResult.stdout,
-      /Direct script use does not perform those CLI steps\./u,
-    );
+    assert.match(installResult.stdout, /HELPER DONE:/u);
     assert.equal(
       existsSync(
         join(targetProjectPath, ".agents", "skills", "goat", "SKILL.md"),

@@ -1,33 +1,46 @@
+# The CI workflow a developer sees as checks on every pull request to main or dev, and again after each merge to main.
+#
+# Every run includes three Ubuntu jobs; the platform jobs join only on the weekly schedule or a manual run:
+# - checks: preflight without its test suite, the shell syntax check and the version-stamp check.
+# - test-fast: every test file outside the slow set and the reference-job list, with a pinned jq 1.6.
+# - test-slow: the subprocess-heavy suite, one file at a time per runner, split across five shards.
+# - Platform jobs: Windows hook contracts, hook port controls (Linux, macOS, Windows, WSL2 in three parts), the Linux reference, the Windows ratchet.
 name: CI
 
-# Pull requests are the gate; `dev` is only ever merged to `main` through one. Listening on `push` for `dev` as well would run every job
-# twice for the same commit - once for the branch, once for the PR - so `push` is limited to `main` as the post-merge check.
+# Pull requests are the gate; `dev` is only ever merged to `main` through one.
+#
+# Listening on `push` for `dev` as well would run every job twice for the same commit, once for the branch and once for the PR.
+# So `push` is limited to `main` as the post-merge check.
 on:
   pull_request:
     branches: [main, dev]
   push:
     branches: [main]
+  # The platform jobs below run only on this weekly schedule and on manual runs; pull requests and pushes skip them.
+  # They are the hook ports, native Windows contracts, Linux references and the Windows ratchet.
+  schedule:
+    # Mondays at 18:00 UTC.
+    - cron: "0 18 * * 1"
+  # A manual start, for example `gh workflow run ci.yml --ref dev`, runs every job, platform jobs included.
+  workflow_dispatch:
 
-# A new commit on a PR branch cancels that PR's in-flight run instead of queueing a second one behind it. Pushes to `main` are never
-# cancelled, so every commit that lands on the default branch keeps its own verified result.
+# A new commit on a PR branch cancels that PR's in-flight run instead of queueing a second one behind it.
+#
+# A running push to `main` is never cancelled, so each merged commit whose run starts keeps its own verified result.
+# GitHub keeps one waiting run per group, so if two merges land while a run is going, the older waiting run is cancelled and only the newest starts.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Jobs get a read-only token: they can check out and test the code, but cannot push, comment on a PR or change the repository.
 permissions:
   contents: read
 
 jobs:
-  # The complete policy corpus is a release gate, not only a local preflight check.
-  deny-corpus:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Full deny-dangerous corpus
-        run: bash workflow/hooks/deny-dangerous.sh --self-test=full
-
-  # Lint, format, audit, and the cross-file consistency checks. Split from the test jobs so a formatting failure surfaces in about a minute
-  # instead of behind the full suite.
+  # Repository preflight without tests (lint, format, audit, cross-file consistency checks), plus the version-stamp check.
+  #
+  # It runs apart from the test jobs, so a lint or version failure on a PR shows without waiting behind the test suites.
+  # Locally, after `npm run build`, run `bash scripts/preflight-checks.sh --skip-tests`, then `npm run check-versions`, which preflight does not run.
   checks:
     runs-on: ubuntu-latest
     steps:
@@ -45,119 +58,23 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Dependency audit
-        run: npm audit
-
       - name: Build
         run: npm run build
 
-      - name: Lint
-        run: npx eslint src/cli src/dashboard
+      # The repository's own preflight runs once here; the fast suite it would call runs in test-fast.
+      - name: Preflight
+        run: bash scripts/preflight-checks.sh --skip-tests
 
-      - name: Format check
-        run: npm run format:check
-
-      - name: GOAT Flow Audit
-        run: node dist/cli/cli.js audit .
-
-      - name: Learning-loop stats check
-        run: node dist/cli/cli.js stats . --check
-
-      # Shell surfaces mirror scripts/preflight-checks.sh and CLAUDE.md Essential Commands. The installed hook mirrors under
-      # .goat-flow/hooks/ are tracked copies of workflow/hooks/ and exist in a fresh checkout, so they are checked alongside the sources:
-      # the aggregate audit step above pins the dispatcher and launcher mirrors to their templates but not the deny-dangerous/ policy
-      # modules, and the deny-corpus job exercises the installed modules behaviourally, not byte-for-byte. Same exclusions as preflight:
-      # SC2016 only for hook modules whose sed patterns intentionally use single quotes.
-      - name: Shellcheck
-        run: |
-          # The runner image ships shellcheck; install only covers an image that ever stops shipping it.
-          command -v shellcheck >/dev/null || sudo apt-get install -y shellcheck
-          shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh
-          shellcheck --exclude=SC2001 workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
-
+      # Preflight runs the same helper; this published copy is the CI surface that preflight-progress.test.ts proves fails on a bad file.
       - name: Shell syntax
         run: bash scripts/maintenance/check-shell-syntax.sh
 
-      - name: Instruction parity
-        run: node scripts/check-instruction-parity.mjs
-
-      - name: Path integrity
-        run: bash scripts/check-path-integrity.sh .
-
+      # Fails when a shipped skill, reference doc, hook runtime or the manifest carries a version other than package.json's.
+      # For example, editing the version in package.json by hand instead of running `bash scripts/bump-version.sh <ver>` fails here.
       - name: Version consistency (shared script)
         run: npm run check-versions
 
-      - name: Package links
-        run: npm run check-package-links
-
-      - name: Version consistency
-        run: |
-          pkg_version=$(node -e "console.log(require('./package.json').version)")
-          # AUDIT_VERSION derives from package.json since v1.1.0
-          audit_version="$pkg_version"
-
-          echo "package.json: $pkg_version"
-          echo "AUDIT_VERSION: $audit_version"
-
-          # AUDIT_VERSION should be valid
-          if [ -z "$audit_version" ]; then
-            echo "::error::AUDIT_VERSION not found - check package.json version field"
-            exit 1
-          fi
-
-          # Instruction file headers (current agent surfaces; AGENTS.md is
-          # shared by Codex and Antigravity - list it once)
-          for f in CLAUDE.md AGENTS.md .github/copilot-instructions.md; do
-            if [ -f "$f" ]; then
-              header_version=$(head -1 "$f" | grep -oE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | sed 's/^v//' || true)
-              if [ -n "$header_version" ] && [ "$header_version" != "$pkg_version" ]; then
-                echo "::error::$f header says v${header_version}, expected v${pkg_version}"
-                exit 1
-              fi
-              echo "$f: v${header_version:-none}"
-            fi
-          done
-
-          # Config version
-          if [ -f .goat-flow/config.yaml ]; then
-            config_version=$(grep '^version:' .goat-flow/config.yaml | grep -oE '"[^"]+"' | tr -d '"' || true)
-            if [ -n "$config_version" ] && [ "$config_version" != "$pkg_version" ]; then
-              echo "::error::.goat-flow/config.yaml version ($config_version) does not match package.json ($pkg_version)"
-                exit 1
-            fi
-          fi
-
-      - name: Skill template versions
-        run: |
-          # AUDIT_VERSION derives from package.json since v1.1.0
-          skill_version=$(node -e "console.log(require('./package.json').version)")
-          echo "Expected skill version: $skill_version"
-
-          fail=0
-          for f in workflow/skills/*/SKILL.md; do
-            ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
-            if [ "$ver" != "$skill_version" ]; then
-              echo "::error::$f has version '$ver', expected '$skill_version'"
-              fail=1
-            fi
-          done
-
-          for dir in .claude/skills .agents/skills .github/skills; do
-            if [ -d "$dir" ]; then
-              for f in $(find "$dir" -name 'SKILL.md'); do
-                ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
-                if [ -n "$ver" ] && [ "$ver" != "$skill_version" ]; then
-                  echo "::error::$f has version '$ver', expected '$skill_version'"
-                  fail=1
-                fi
-              done
-            fi
-          done
-
-          if [ "$fail" -eq 1 ]; then exit 1; fi
-          echo "All skill templates at version $skill_version"
-
-  # The concurrent unit/contract suite (scripts/run-tests.mjs fast).
+  # Every file outside the slow set and REFERENCE_JOB_TESTS (scripts/run-tests.mjs), with concurrency bounded by available CPUs up to 16; the same `npm run test:fast` a developer runs.
   test-fast:
     runs-on: ubuntu-latest
     steps:
@@ -178,10 +95,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Path write claim and state migration contracts
-        run: node --import tsx --test test/unit/path-write-claim.test.ts test/integration/local-state-migration.test.ts
-
-      # Only the fast suite pins jq: gruff-code-quality-smoke.test.ts asserts against jq 1.6 behaviour.
+      # Pins jq 1.6 because gruff-code-quality-smoke.test.ts asserts against its behaviour; the reference and WSL report jobs pin their own copies.
+      #
+      # The test reads GOAT_FLOW_JQ16_BIN (locally, /tmp/jq16/jq also works) and skips its jq 1.6 checks when neither exists.
+      # A changed or tampered download fails the SHA-256 check and stops the job before any test runs.
       - name: Provision jq 1.6
         run: |
           set -euo pipefail
@@ -199,18 +116,23 @@ jobs:
       - name: Test (fast)
         run: npm run test:fast
 
-  # The subprocess-heavy suite, split across runners because its files must stay single-concurrency within one checkout: several share
-  # repository-root state such as .goat-flow/dashboard-state.json. Shards get separate checkouts, so the split is safe where raising
-  # --test-concurrency is not. scripts/run-tests.mjs balances files by measured cost and assigns each file to exactly one shard.
+  # The subprocess-heavy suite, split across five runners that a PR lists as test-slow (1/5) through test-slow (5/5).
+  #
+  # Several of its files share repository-root state such as .goat-flow/dashboard-state.json, so within one checkout they run one at a time.
+  # Shards get separate checkouts, so the split is safe where raising --test-concurrency is not; run-tests.mjs balances files by measured cost.
   test-slow:
     runs-on: ubuntu-latest
     strategy:
+      # One failing shard leaves the other four running, so a single run reports every failing slow test.
       fail-fast: false
       matrix:
+        # Each value starts one runner and becomes --shard=N/5; changing the count means changing every /5 in this job too.
         shard: [1, 2, 3, 4, 5]
     name: test-slow (${{ matrix.shard }}/5)
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Fetch pinned upgrade fixture
+        run: git fetch --no-tags --depth=1 origin bd800f792968b0243eecd6983bc6f0ad9f84af3c refs/tags/v1.18.0:refs/tags/v1.18.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
@@ -227,18 +149,21 @@ jobs:
       - name: Build
         run: npm run build
 
+      # To rerun one failing shard locally after `npm run build`, run for example `npm run test:slow:ci -- --shard=3/5`.
       - name: Test (slow shard ${{ matrix.shard }}/5)
         run: npm run test:slow:ci -- --shard=${{ matrix.shard }}/5
 
-  # Proves ADR-048/ADR-053 hook contracts and the Windows-only audit/package paths on the package-minimum Node.
-  # Uses only the runner's preinstalled PowerShell, Git Bash, tar, and Node.
+  # Proves ADR-048/ADR-053 hook contracts and the Windows-only audit/package paths on the package-minimum Node, 20.12.0 from package.json's engines.
+  # Apart from that Node, it uses only the runner's preinstalled PowerShell, Git Bash and tar.
   windows-hook-contracts:
+    # Pull requests and pushes skip this job, so a Windows-only hook regression first shows on the weekly run unless someone starts a manual run.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20.11.0"
+          node-version: "20.12.0"
           cache: "npm"
       - name: Install
         run: npm ci
@@ -248,8 +173,116 @@ jobs:
         run: node --import tsx --test test/integration/preflight-progress.test.ts
       - name: Path write claim and state migration contracts
         run: node --import tsx --test test/unit/path-write-claim.test.ts test/integration/local-state-migration.test.ts
+      # Writes a Node wrapper to the runner's temp folder; the next step runs its tests through it and keeps their exit code.
+      #
+      # From launch and then every 15 seconds, it logs every process in the test run's tree, with CPU times, as `m07-windows-process-trace` lines.
+      # A failed sample never fails the tests; a process query that takes over two seconds or prints non-JSON is logged as `sample-unavailable`.
+      - name: Prepare Windows process observer
+        shell: pwsh
+        run: |
+          $observer = @'
+          /** Run the original Node test command while observing Windows descendants.
+           * Only process identity and cumulative CPU metadata enter trace records.
+           * A failed two-second sample never changes the test result or its deadlines.
+           */
+          import { spawn, spawnSync } from "node:child_process";
+          import { constants } from "node:os";
+
+          const record = (event) =>
+            process.stderr.write(
+              "m07-windows-process-trace " + JSON.stringify(event) + "\n",
+            );
+          const child = spawn(process.execPath, process.argv.slice(2), {
+            stdio: "inherit",
+          });
+          record({
+            event: "start",
+            pid: child.pid,
+            node: process.version,
+            platform: process.platform,
+          });
+
+          function sample() {
+            if (!Number.isInteger(child.pid)) return;
+            const result = spawnSync(
+              "powershell.exe",
+              [
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,KernelModeTime,UserModeTime | ConvertTo-Json -Compress",
+              ],
+              {
+                encoding: "utf8",
+                timeout: 2000,
+                maxBuffer: 1024 * 1024,
+                windowsHide: true,
+              },
+            );
+            if (result.error || result.status !== 0) {
+              record({
+                event: "sample-unavailable",
+                status: result.status,
+                code: result.error?.code,
+              });
+              return;
+            }
+            let entries;
+            try {
+              const parsed = JSON.parse(result.stdout.replace(/^\uFEFF/u, ""));
+              entries = Array.isArray(parsed) ? parsed : [parsed];
+            } catch {
+              record({ event: "sample-unavailable", code: "INVALID_JSON" });
+              return;
+            }
+            const descendants = new Set([child.pid]);
+            let count;
+            do {
+              count = descendants.size;
+              for (const entry of entries) {
+                if (
+                  entry &&
+                  Number.isInteger(entry.ProcessId) &&
+                  descendants.has(entry.ParentProcessId)
+                )
+                  descendants.add(entry.ProcessId);
+              }
+            } while (descendants.size !== count);
+            record({
+              event: "sample",
+              time: new Date().toISOString(),
+              processes: entries
+                .filter((entry) => entry && descendants.has(entry.ProcessId))
+                .map((entry) => ({
+                  pid: entry.ProcessId,
+                  ppid: entry.ParentProcessId,
+                  executable: entry.Name,
+                  kernelTime: entry.KernelModeTime,
+                  userTime: entry.UserModeTime,
+                })),
+            });
+          }
+
+          const interval = setInterval(sample, 15_000);
+          for (const signal of ["SIGINT", "SIGTERM"]) {
+            process.on(signal, () => child.kill(signal));
+          }
+          child.once("error", (error) => {
+            clearInterval(interval);
+            record({ event: "launch-error", code: error.code });
+            process.exitCode = 1;
+          });
+          child.once("close", (code, signal) => {
+            clearInterval(interval);
+            record({ event: "close", code, signal });
+            process.exitCode = code ?? 128 + (constants.signals[signal] ?? 1);
+          });
+          sample();
+          '@
+          $path = Join-Path $env:RUNNER_TEMP 'm07-observe-windows-contracts.mjs'
+          [System.IO.File]::WriteAllText($path, $observer.Replace("`r`n", "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
       - name: Descriptor spawn matrix and focused hook contracts
-        run: node --import tsx --test test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-effective-state.test.ts
+        run: node "$env:RUNNER_TEMP/m07-observe-windows-contracts.mjs" --import tsx --test test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-effective-state.test.ts
       # Native Windows has no POSIX owner and a 32,767-character command line, so Stop recovery and the multi-repo controller need a real run here.
       - name: Post-turn recovery and controller contracts
         run: node --import tsx --test --test-name-pattern="blocks a missing scanner once|preserves controller child findings" test/integration/post-turn-launcher-recovery.test.ts
@@ -261,16 +294,483 @@ jobs:
       - name: Windows packaged install contract
         run: node --import tsx --test --test-name-pattern="runs fresh install through the archived CLI bin" test/integration/packaged-hook-install.test.ts
 
-  # Reviewed Gruff warning-debt ratchet (scripts/check-gruff-warning-ratchet.mjs
-  # against scripts/gruff-warning-baseline.json). Runs in a dedicated job
-  # because the analyzer package requires Node 22 while the compatibility jobs
-  # intentionally keep Node 20 compatibility coverage.
-  gruff-warning-ratchet:
+  # Hook port controls on Linux, macOS and Windows: build with Node 24.21.0, then switch each runner to the Node version it checks.
+  #
+  # Every host checks both pinned consumer runtimes; native fixtures use the installed Node runtime.
+  # Complete policy parity and owning suites run here; live provider delivery retains its separate milestone gate.
+  hook-port-controls:
+    # Skipped on pull requests and pushes, so a PR never waits on the macOS and Windows runners.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      # Keep every remaining host/runtime cell running after one fails.
+      fail-fast: false
+      # Build with the producer runtime before switching each cell to its consumer runtime.
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ["20.12.0", "24.21.0"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.21.0"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      # Switch this runner to the Node version it checks; the dependencies and build from Node 24.21.0 stay as they are.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+      # Prints the Node version, platform, CPU architecture and commit, so a failing log names exactly what it checked.
+      - name: Record consumer identity
+        run: node -e "console.log(JSON.stringify({node:process.version,platform:process.platform,arch:process.arch,commit:process.env.GITHUB_SHA}))"
+      - name: Record hook artifact identity
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { createHash } from "node:crypto";
+          import { readFileSync, readdirSync } from "node:fs";
+          const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+          function files(directory) {
+            return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+              const path = `${directory}/${entry.name}`;
+              if (entry.isDirectory()) return files(path);
+              if (!entry.isFile()) throw new Error(`Unsupported policy artifact: ${path}`);
+              return [[path, digest(readFileSync(path))]];
+            }).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+          }
+          for (const [group, directory] of [
+            ["source", "src/hooks"],
+            ["generated", "workflow/hooks"],
+            ["installed", ".goat-flow/hooks"],
+            ["oracle", "test/fixtures/hooks-bash"],
+            ["fixtures", "test"],
+          ]) {
+            const rows = files(directory);
+            console.log("m14-policy-artifact " + JSON.stringify({
+              group, files: rows.length, sha256: digest(JSON.stringify(rows)),
+            }));
+          }
+          JS
+      # Retained installed-hook controls require Bash 4.4+; macOS ships Bash 3.2.
+      - name: Prepare macOS Bash controls
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew install bash
+          echo "$(brew --prefix bash)/bin" >> "$GITHUB_PATH"
+      # Writes a Node wrapper that runs the test command and logs its descendant processes from `ps`, from launch and then every 15 seconds.
+      # A failed sample never fails the tests; for example, a `ps` call that errors or takes over two seconds is logged as `sample-unavailable`.
+      - name: Prepare macOS process observer
+        # Linux and Windows skip this step and run the same tests without the wrapper.
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/m07-observe-test-command.mjs" <<'JS'
+          /** Run the original Node command while sampling its POSIX descendant processes.
+           * Diagnostics omit arguments and environment values, and never set a test deadline.
+           * The observer exits with the child result; sample failures remain diagnostic output.
+           */
+          import { spawn, spawnSync } from "node:child_process";
+          import { constants } from "node:os";
+          import { basename } from "node:path";
+
+          const record = (event) => process.stderr.write("m07-process-trace " + JSON.stringify(event) + "\n");
+          const child = spawn(process.execPath, process.argv.slice(2), { stdio: "inherit" });
+          record({ event: "start", pid: child.pid, node: process.version, platform: process.platform });
+
+          function sample() {
+            const result = spawnSync("ps", ["-axo", "pid=,ppid=,stat=,etime=,time=,comm="],
+              { encoding: "utf8", timeout: 2000, maxBuffer: 1024 * 1024 });
+            if (result.error || result.status !== 0) {
+              record({ event: "sample-unavailable", status: result.status, code: result.error?.code });
+              return;
+            }
+            const entries = result.stdout.split("\n").flatMap((line) => {
+              const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$/);
+              return match ? [{ pid: Number(match[1]), ppid: Number(match[2]), state: match[3],
+                elapsed: match[4], cpu: match[5], executable: basename(match[6]) }] : [];
+            });
+            const descendants = new Set([child.pid]);
+            let count;
+            do {
+              count = descendants.size;
+              for (const entry of entries) {
+                if (descendants.has(entry.ppid)) descendants.add(entry.pid);
+              }
+            } while (descendants.size !== count);
+            record({ event: "sample", time: new Date().toISOString(),
+              processes: entries.filter((entry) => descendants.has(entry.pid)) });
+          }
+
+          sample();
+          const interval = setInterval(sample, 15_000);
+          for (const signal of ["SIGINT", "SIGTERM"]) {
+            process.on(signal, () => child.kill(signal));
+          }
+          child.once("error", (error) => {
+            clearInterval(interval);
+            record({ event: "launch-error", code: error.code });
+            process.exitCode = 1;
+          });
+          child.once("close", (code, signal) => {
+            clearInterval(interval);
+            record({ event: "close", code, signal });
+            process.exitCode = code ?? 128 + (constants.signals[signal] ?? 1);
+          });
+          JS
+      # On macOS each test step uses the observer; elsewhere Node runs the tests directly.
+      - name: Restricted process and selector controls
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
+      # M02 owns these implemented launch/replay/audit suites; later port stages add their implemented owning cases here.
+      - name: Native launcher and audit controls
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/unit/hook-launch.test.ts test/unit/run-hook.test.ts test/unit/hook-launcher.test.ts test/unit/hook-result-delivery.test.ts test/unit/hook-stop-delivery.test.ts test/unit/agent-hook-command.test.ts test/integration/hook-command-native-replay.test.ts test/integration/hook-direct-native-probe.test.ts test/integration/hook-native-audit-configured.test.ts test/integration/hook-native-audit-direct.test.ts test/integration/hook-native-audit-discovery.test.ts test/integration/hook-native-audit-mechanism.test.ts test/integration/hook-policy-node.test.ts
+      # npm pack invokes the platform npm shim outside the restricted child.
+      - name: Corpus and package controls
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --test test/integration/hook-parity.test.ts
+
+      - name: Complete native policy parity
+        shell: bash
+        run: |
+          unset LC_ALL
+          node scripts/check-hook-parity.mjs --stage=candidate --require-complete
+      - name: Native policy integration suites
+        shell: bash
+        env:
+          GOAT_FLOW_HOOK_UNDER_TEST: installed
+        run: node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
+
+      - name: Native scanner and recovery suites
+        id: native-scanner
+        env:
+          GOAT_FLOW_HOOK_UNDER_TEST: installed
+          GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-scanner-spawn.jsonl
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
+
+      - name: Native Gruff integration suites
+        id: native-gruff
+        env:
+          GOAT_FLOW_HOOK_UNDER_TEST: installed
+          GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-gruff-spawn.jsonl
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts
+
+      - name: Native registered replay
+        id: native-replay
+        env:
+          GOAT_FLOW_HOOK_UNDER_TEST: installed
+          GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-replay-spawn.jsonl
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts
+
+      - name: Check native hook spawn journals
+        if: always()
+        shell: bash
+        env:
+          SCANNER_OUTCOME: ${{ steps.native-scanner.outcome }}
+          GRUFF_OUTCOME: ${{ steps.native-gruff.outcome }}
+          REPLAY_OUTCOME: ${{ steps.native-replay.outcome }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import { existsSync, readFileSync } from "node:fs";
+          import { join } from "node:path";
+          const outcomes = { scanner: process.env.SCANNER_OUTCOME, gruff: process.env.GRUFF_OUTCOME, replay: process.env.REPLAY_OUTCOME };
+          for (const family of ["scanner", "gruff", "replay"]) {
+            try {
+              const path = join(process.env.RUNNER_TEMP, `m16-${family}-spawn.jsonl`);
+              if (!existsSync(path) && outcomes[family] === "skipped") {
+                console.log("m16-spawn-proof " + JSON.stringify({ family, outcome: "skipped" }));
+                continue;
+              }
+              const events = readFileSync(path, "utf8").trim().split("\n").map(JSON.parse);
+              const loaded = events.filter((event) => event.event === "loaded").length;
+              const denied = events.filter((event) => event.event === "denied").length;
+              const unavailable = events.filter((event) => event.event === "unavailable").length;
+              console.log("m16-spawn-proof " + JSON.stringify({ family, loaded, denied, unavailable, node: process.version, platform: process.platform }));
+              assert(loaded > 0, `${family}: guard did not load`);
+              assert.equal(denied, 0, `${family}: prohibited child launch`);
+            } catch (error) {
+              console.error(`${family}: ${error.message}`);
+              process.exitCode = 1;
+            }
+          }
+          JS
+
+  # Bash extraction stays on native Linux with pinned jq and explicit locales; macOS runs the Node controls above, never reference extraction.
+  #
+  # Frozen scanner and Gruff expectations run on both consumer runtimes and both promised locales.
+  hook-reference-linux:
+    # Skipped on pull requests and pushes, so a frozen-reference regression first shows on the weekly run unless someone starts a manual run.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # Each runtime and locale pair gets its own runner. Build before switching to the consumer runtime.
       matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        node: ["20.12.0", "24.21.0"]
+        locale: [C, C.UTF-8]
+    # GOAT_FLOW_HOOK_UNDER_TEST=reference points the hook tests at the frozen copy in test/fixtures/hooks-bash; LC_ALL sets every step's locale.
+    env:
+      GOAT_FLOW_HOOK_UNDER_TEST: reference
+      LC_ALL: ${{ matrix.locale }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.21.0"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+      # Puts checksum-verified jq 1.6 first on PATH and in GOAT_FLOW_JQ16_BIN, so `jq` in every later step is 1.6, not the runner's version.
+      - name: Provision reference jq 1.6
+        run: |
+          set -euo pipefail
+          jq_dir="$RUNNER_TEMP/reference-bin"
+          mkdir -p "$jq_dir"
+          curl -fsSL -o "$jq_dir/jq" https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64
+          echo "af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44  $jq_dir/jq" | sha256sum --check
+          chmod +x "$jq_dir/jq"
+          echo "$jq_dir" >> "$GITHUB_PATH"
+          echo "GOAT_FLOW_JQ16_BIN=$jq_dir/jq" >> "$GITHUB_ENV"
+      # Prints the Node, kernel, commit, jq and locale this run used, so a failing log can be matched to its exact environment.
+      - name: Record reference identity
+        run: node --version && uname -a && git rev-parse HEAD && jq --version && locale
+      - name: Frozen policy invariants
+        run: node --import tsx --test --test-concurrency=1 test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
+      - name: Frozen scanner and recovery invariants
+        run: node --import tsx --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
+      - name: Frozen Gruff and provider invariants
+        run: node --import tsx --test --test-reporter=tap --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts test/integration/hook-provider-contracts.test.ts
+      # Writes the same process wrapper as the macOS controls above; only the frozen extraction step below runs through it.
+      # A `ps` sample that errors or takes over two seconds is logged as `sample-unavailable` and never fails the run.
+      - name: Prepare Linux process observer
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/m07-observe-test-command.mjs" <<'JS'
+          /** Run the original Node command while sampling its POSIX descendant processes.
+           * Diagnostics omit arguments and environment values, and never set a test deadline.
+           * The observer exits with the child result; sample failures remain diagnostic output.
+           */
+          import { spawn, spawnSync } from "node:child_process";
+          import { constants } from "node:os";
+          import { basename } from "node:path";
+
+          const record = (event) => process.stderr.write("m07-process-trace " + JSON.stringify(event) + "\n");
+          const child = spawn(process.execPath, process.argv.slice(2), { stdio: "inherit" });
+          record({ event: "start", pid: child.pid, node: process.version, platform: process.platform });
+
+          function sample() {
+            const result = spawnSync("ps", ["-axo", "pid=,ppid=,stat=,etime=,time=,comm="],
+              { encoding: "utf8", timeout: 2000, maxBuffer: 1024 * 1024 });
+            if (result.error || result.status !== 0) {
+              record({ event: "sample-unavailable", status: result.status, code: result.error?.code });
+              return;
+            }
+            const entries = result.stdout.split("\n").flatMap((line) => {
+              const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$/);
+              return match ? [{ pid: Number(match[1]), ppid: Number(match[2]), state: match[3],
+                elapsed: match[4], cpu: match[5], executable: basename(match[6]) }] : [];
+            });
+            const descendants = new Set([child.pid]);
+            let count;
+            do {
+              count = descendants.size;
+              for (const entry of entries) {
+                if (descendants.has(entry.ppid)) descendants.add(entry.pid);
+              }
+            } while (descendants.size !== count);
+            record({ event: "sample", time: new Date().toISOString(),
+              processes: entries.filter((entry) => descendants.has(entry.pid)) });
+          }
+
+          sample();
+          const interval = setInterval(sample, 15_000);
+          for (const signal of ["SIGINT", "SIGTERM"]) {
+            process.on(signal, () => child.kill(signal));
+          }
+          child.once("error", (error) => {
+            clearInterval(interval);
+            record({ event: "launch-error", code: error.code });
+            process.exitCode = 1;
+          });
+          child.once("close", (code, signal) => {
+            clearInterval(interval);
+            record({ event: "close", code, signal });
+            process.exitCode = code ?? 128 + (constants.signals[signal] ?? 1);
+          });
+          JS
+      # The only CI run of hook-parity-reference.test.ts; scripts/run-tests.mjs leaves it out of every suite (search: REFERENCE_JOB_TESTS).
+      - name: Frozen extraction controls
+        run: node "$RUNNER_TEMP/m07-observe-test-command.mjs" --import tsx --test test/integration/hook-parity-reference.test.ts
+
+  # Repeats the hook port controls inside WSL2 Ubuntu 22.04 and lists where the frozen Bash reference behaves differently there.
+  #
+  # WSL has its own identity, so a native Windows pass cannot stand in for it.
+  # Fail closed: if the disposable hosted runner cannot provide WSL2, the job fails rather than passing without WSL coverage.
+  hook-port-controls-wsl:
+    # Skipped on pull requests and pushes, so installing WSL never delays a PR.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      # Three runners in parallel: the floor and LTS controls, and the divergence report once per locale.
+      # One runner took about 14 minutes, 11 of them in the report (about 5 for C and 6 for C.UTF-8), so splitting it shortens the whole run.
+      matrix:
+        include:
+          - part: controls
+          - part: report
+            locale: C
+          - part: report
+            locale: C.UTF-8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # Installs Ubuntu 22.04 into WSL on the Windows runner.
+      - uses: Ubuntu/WSL/.github/actions/wsl-install@3b7a6b2a43af18aa541eeee1669ac27656630097
+        with:
+          distro: Ubuntu-22.04
+      # Converts Ubuntu-22.04 to WSL2 only when the listing shows another version, because converting a distro that is already WSL2 errors.
+      #
+      # A failed query or conversion, or a listing still without WSL2, throws and fails the job.
+      # For example, a distro that comes up as WSL1 and cannot be converted stops here with `WSL2 conversion failed`.
+      - name: Require WSL2
+        shell: pwsh
+        run: |
+          $env:WSL_UTF8 = '1'
+          $listing = (wsl --list --verbose) -replace "`0", ''
+          if ($LASTEXITCODE -ne 0) { throw 'WSL2 identity query failed' }
+          if (($listing -join "`n") -notmatch 'Ubuntu-22\.04\s+\S+\s+2\s*') {
+            wsl --set-version Ubuntu-22.04 2
+            if ($LASTEXITCODE -ne 0) { throw 'WSL2 conversion failed' }
+            $listing = (wsl --list --verbose) -replace "`0", ''
+          }
+          $listing
+          if ($LASTEXITCODE -ne 0 -or ($listing -join "`n") -notmatch 'Ubuntu-22\.04\s+\S+\s+2\s*') { throw 'WSL2 identity missing' }
+      # Copies the checkout into WSL's own filesystem, then runs the hook controls on Node 20.12.0 and on 24.21.0 in one log.
+      #
+      # Before the controls run:
+      # - The step fails at once unless /proc reports a WSL2 kernel.
+      # - build-essential lets the optional node-pty package compile; without it npm ci still exits 0, with node-pty missing.
+      # - Both Node archives must match nodejs.org's SHASUMS256.txt, and the build runs once on 24.21.0.
+      - name: WSL floor and LTS controls
+        if: matrix.part == 'controls'
+        uses: Ubuntu/WSL/.github/actions/wsl-bash@3b7a6b2a43af18aa541eeee1669ac27656630097
+        with:
+          distro: Ubuntu-22.04
+          exec: |
+            set -euo pipefail
+            uname -a
+            grep -i 'microsoft.*WSL2' /proc/sys/kernel/osrelease
+            apt-get update
+            apt-get install -y ca-certificates curl git jq xz-utils procps python3 build-essential
+            source_path=$(wslpath -u '${{ github.workspace }}')
+            work_path=$(mktemp -d /tmp/goat-flow-ci-XXXXXXXX)
+            cp -a "$source_path/." "$work_path/"
+            cd "$work_path"
+            git config --global --add safe.directory "$work_path"
+            git rev-parse HEAD
+            for version in 24.21.0 20.12.0; do
+              archive="node-v$version-linux-x64.tar.xz"
+              curl -fsSLO "https://nodejs.org/dist/v$version/$archive"
+              curl -fsSL "https://nodejs.org/dist/v$version/SHASUMS256.txt" | grep "  $archive$" > "$archive.sha256"
+              sha256sum --check "$archive.sha256"
+              tar -xf "$archive"
+            done
+            export PATH="$work_path/node-v24.21.0-linux-x64/bin:$PATH"
+            npm ci --foreground-scripts
+            npm run build
+            node --input-type=module <<'JS'
+            import { createHash } from "node:crypto";
+            import { readFileSync, readdirSync } from "node:fs";
+            const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+            function files(directory) {
+              return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+                const path = `${directory}/${entry.name}`;
+                if (entry.isDirectory()) return files(path);
+                if (!entry.isFile()) throw new Error(`Unsupported policy artifact: ${path}`);
+                return [[path, digest(readFileSync(path))]];
+              }).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+            }
+            for (const [group, directory] of [
+              ["source", "src/hooks"],
+              ["generated", "workflow/hooks"],
+              ["installed", ".goat-flow/hooks"],
+              ["oracle", "test/fixtures/hooks-bash"],
+              ["fixtures", "test"],
+            ]) {
+              const rows = files(directory);
+              console.log("m14-policy-artifact " + JSON.stringify({
+                group, files: rows.length, sha256: digest(JSON.stringify(rows)),
+              }));
+            }
+            JS
+            for version in 20.12.0 24.21.0; do
+              export PATH="$work_path/node-v$version-linux-x64/bin:$PATH"
+              node --version
+              node --import tsx --test test/integration/restricted-env-controls.test.ts test/unit/hook-entrypoint.test.ts
+              node --import tsx --test test/unit/hook-launch.test.ts test/unit/run-hook.test.ts test/unit/hook-launcher.test.ts test/unit/hook-result-delivery.test.ts test/unit/hook-stop-delivery.test.ts test/unit/agent-hook-command.test.ts test/integration/hook-command-native-replay.test.ts test/integration/hook-direct-native-probe.test.ts test/integration/hook-native-audit-configured.test.ts test/integration/hook-native-audit-direct.test.ts test/integration/hook-native-audit-discovery.test.ts test/integration/hook-native-audit-mechanism.test.ts test/integration/hook-policy-node.test.ts
+              node --import tsx --test test/integration/hook-parity.test.ts
+              (unset LC_ALL; node scripts/check-hook-parity.mjs --stage=candidate --require-complete)
+              GOAT_FLOW_HOOK_UNDER_TEST=installed node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-scanner-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-gruff-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-replay-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts
+              node --input-type=module - "$work_path/m16-scanner-$version.jsonl" "$work_path/m16-gruff-$version.jsonl" "$work_path/m16-replay-$version.jsonl" <<'JS'
+            import assert from "node:assert/strict";
+            import { readFileSync } from "node:fs";
+            for (const [index, family] of ["scanner", "gruff", "replay"].entries()) {
+              const events = readFileSync(process.argv[index + 2], "utf8").trim().split("\n").map(JSON.parse);
+              const loaded = events.filter((event) => event.event === "loaded").length;
+              const denied = events.filter((event) => event.event === "denied").length;
+              const unavailable = events.filter((event) => event.event === "unavailable").length;
+              console.log("m16-spawn-proof " + JSON.stringify({ family, loaded, denied, unavailable, node: process.version, platform: process.platform }));
+              assert(loaded > 0, `${family}: guard did not load`);
+              assert.equal(denied, 0, `${family}: prohibited child launch`);
+            }
+            JS
+            done
+      # Copies the checkout into WSL, adds checksum-verified Node 24.21.0 and jq 1.6, and lists where the frozen Bash reference behaves differently.
+      #
+      # The report needs no npm install or build: scripts/check-hook-parity.mjs imports only Node built-ins and a sibling script.
+      # Differences are listed, not failed; the log ends in a `PASS: host divergence report` line with their count for this part's locale.
+      - name: WSL frozen divergence report
+        if: matrix.part == 'report'
+        uses: Ubuntu/WSL/.github/actions/wsl-bash@3b7a6b2a43af18aa541eeee1669ac27656630097
+        with:
+          distro: Ubuntu-22.04
+          exec: |
+            set -euo pipefail
+            grep -i 'microsoft.*WSL2' /proc/sys/kernel/osrelease
+            apt-get update
+            apt-get install -y ca-certificates curl git xz-utils procps python3
+            source_path=$(wslpath -u '${{ github.workspace }}')
+            work_path=$(mktemp -d /tmp/goat-flow-ci-XXXXXXXX)
+            cp -a "$source_path/." "$work_path/"
+            cd "$work_path"
+            git config --global --add safe.directory "$work_path"
+            git rev-parse HEAD
+            archive="node-v24.21.0-linux-x64.tar.xz"
+            curl -fsSLO "https://nodejs.org/dist/v24.21.0/$archive"
+            curl -fsSL "https://nodejs.org/dist/v24.21.0/SHASUMS256.txt" | grep "  $archive$" > "$archive.sha256"
+            sha256sum --check "$archive.sha256"
+            tar -xf "$archive"
+            export PATH="$work_path/node-v24.21.0-linux-x64/bin:$PATH"
+            jq_dir=$(mktemp -d /tmp/goat-flow-jq-XXXXXXXX)
+            curl -fsSL -o "$jq_dir/jq" https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64
+            echo "af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44  $jq_dir/jq" | sha256sum --check
+            chmod +x "$jq_dir/jq"
+            export PATH="$jq_dir:$PATH" GOAT_FLOW_JQ16_BIN="$jq_dir/jq"
+            LC_ALL="${{ matrix.locale }}" node scripts/check-hook-parity.mjs --stage=extraction --list-divergent
+
+  # Reviewed Gruff warning-debt ratchet (scripts/check-gruff-warning-ratchet.mjs against scripts/gruff-warning-baseline.json) on Windows.
+  #
+  # The preflight in `checks` runs the same ratchet on Linux every time; this leg checks the script and its tests on Windows paths.
+  # It exits 1 when warning debt grows past the reviewed baseline or the baseline or scan is unusable, and 2 when the analyzer cannot run.
+  gruff-warning-ratchet:
+    # Skipped on pull requests and pushes, whose checks job already runs this ratchet on Linux through preflight.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -279,6 +779,7 @@ jobs:
           cache: "npm"
       - name: Install
         run: npm ci
+      # The ratchet's scan checks that package.json's bin file exists; a fresh checkout without `dist/` reports `design.package-bin-missing`.
       - name: Build package binary
         run: npm run build
       - name: Gruff warning ratchet

@@ -1,6 +1,6 @@
 ---
 category: skill-trial-evidence
-last_reviewed: 2026-09-15
+last_reviewed: 2026-10-18
 ---
 
 **Scope:** Skill-trial evidence: validate produced output, observe the action behind a behavioural claim, run every evaluation fixture, and keep an unskilled baseline loaded with every current owner before crediting a candidate.
@@ -52,7 +52,7 @@ The approved selector-wide clarification then produced a replacement with all se
 **Status:** active | **Created:** 2026-09-07 | **Evidence:** OBSERVED
 **Severity:** CORRECTNESS
 **Decision changed:** Execute every evaluation fixture and re-derive run counts from artifacts before any claim rests on them; a scorer and its fixtures are graded material, not scaffolding.
-**Incident count:** 10 | **Latest occurrence:** 2026-09-12
+**Incident count:** 17 | **Latest occurrence:** 2026-10-18
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
 
@@ -95,6 +95,24 @@ Closeout also caught an unmatched metadata replacement: plans time finalized the
 **Recurrence 2026-09-12 (forecast diagnostics):** A bare token-scanner hash rejected three comment-only edits; inverse substitution of those exact comment spans recovered the complete prior file digest. Treat an unvalidated preservation checker as a hypothesis, and verify the actual changed bytes before attributing its failure to source behavior. The focused forecast suite also omitted an adjacent whole-stdout assertion whose expected transcript lacked both new diagnostic lines. Search consumers of changed output before freezing the write scope, then rerun the actual failing fixture after its approved reconciliation. Evidence: `src/cli/plans-check-summary.ts` (search: `renderCalibrationSummary`) and `test/unit/plans-check.test.ts` (search: `reports the same cap-one transcript with omitted and explicit policy`).
 
 The preservation comparison then rejected its own prospectively advancing timing receipt while the completed corpus and original numerical output were unchanged. Separate the executing owner's permitted lifecycle changes from the frozen measured corpus: identify the exact changed fields before granting an owner-only exception, and continue comparing its forecast fields and every other record. Evidence: `src/cli/plans-time.ts` (search: `applyPlanTimeTransition`, `writeReceiptSection`) and `src/cli/plans-check-summary.ts` (search: `renderCalibrationSummary`).
+
+
+**Recurrence 2026-10-18 (test-runtime proof):** A temporary source-equivalence probe treated formatter layout and trailing commas as changed behavior in `test/integration/quality-history-diff.test.ts` (search: `renderQualityOutput`). Inspect the flagged delta before changing the product, then compare syntax structure without layout metadata and retain real CLI output controls. All fourteen moved outputs matched public CLI bytes; the candidate needed no correction.
+
+
+**Recurrence 2026-10-18 (permission-fixture qualification):** A probe assumed `runInstaller` produced v2 state, but its standalone Bash fixture reported `source: missing`. Compare relocated fixtures with the actual producer's state and bytes instead of borrowing the public CLI's receipt contract. Evidence: `test/integration/setup-install-permission-convergence.test.ts` (search: `installedProject`), `test/integration/setup-install.helpers.ts` (search: `runInstaller`), and `src/cli/managed-setup-state.ts` (search: `readManagedInstallStateFacade`).
+
+**Recurrence 2026-10-18 (preview-fixture copy):** Copy qualification found recursive copying changed three private directory modes from `0700` to `0755`. Preserve and compare directory permissions as well as file bytes and modes before reusing an installed fixture. The first wrapper also marked the failed probe complete; update proof state only after checking the child exit. Evidence: `test/integration/setup-install-preview.test.ts` (search: `installedCodexProject`) and `src/cli/path-write-claim.ts` (search: `ensureCoordinationDirectory`).
+
+
+**Recurrence 2026-10-18 (ownership-test proof):** A scoped analyzer comparison asserted zero introduced findings before classifying the new side-effect advisory. Preserve and inspect each new identity before deciding whether it requires a fix. The consolidated test comment omitted its temporary file writes and anchor deletion; making those effects explicit removed the advisory without changing executable syntax. Evidence: `test/integration/setup-install.test.ts` (search: `reinstalls system-owned, user-owned and generated files by declared ownership`).
+
+**Recurrence 2026-10-18 (hosted CI conclusions):** The handoff called eighteen completed Actions jobs successful although the saved rows already contained seventeen successes and one failure. Count successful jobs from each `conclusion`, separately from completed `status`; inspect every non-success before reporting the run. The eventual result was eighteen successes and one failure in the Windows Node 20 native audit controls. Preserve failed samples as diagnostics rather than accepting them as final timing proof. Evidence: `.github/workflows/ci.yml` (search: `Native launcher and audit controls`) and `test/integration/hook-native-audit-configured.test.ts` (search: `native configured audit preserves saved provider forms`).
+
+**Recurrence 2026-10-18 (migration-owner probe):** A temporary ambiguity control placed an extra Node heredoc against the end of a scoped source slice. Cutting at the next Bash header excluded the delimiter's trailing newline, so the probe counted one block and reached its spawn stub. A retry also had a syntax error. After two probe corrections, rewind to a saved, syntax-checked script and insert mutations inside the actual owner body with complete framing. The unchanged helper then refused missing and ambiguous owners before spawn. Final stats and preflight also caught a stale footgun anchor: changing the case-title template removed the literal old title although the retained alias still produced it at runtime. Search learning-loop source anchors before changing generated test titles, and repair their references with the same change. Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `runHookChoiceMigration`).
+
+
+**Recurrence 2026-10-18 (consumer-copy probe):** A temporary runner extracted the real consumer fixture but omitted its imported `assert` dependency, so qualification stopped with `ReferenceError` before any fixture comparison. Bind the helper’s imported dependencies when executing extracted source. With that binding restored, unchanged case bodies produced copies matching the original bytes, modes and preview rows, and mutations stayed isolated. The applied copy callback also introduced a missing-internal-function-doc advisory. Moving the existing permission explanation above that callback removed it without executable changes; compare stable analyzer identities before claiming no introduced findings. Evidence: `test/integration/setup-install-upgrade-1150.test.ts` (search: `measuredConsumerTarget`).
 
 ---
 

@@ -206,12 +206,56 @@ function git(root: string, ...args: string[]): string {
 }
 
 /**
- * Writes a disposable clone and dependency link, with its own Git exclusion and index.
+ * Writes a small real Git/TypeScript project with shared installed tools.
  * Test cleanup removes only this temporary tree; the real checkout stays untouched.
  */
 function checkout(t: TestContext): string {
   const root = directory(t);
-  git(repo, "clone", "--shared", "--quiet", repo, root);
+  git(root, "init", "--quiet");
+  put(root, "README.md", "Touched-check fixture.\n");
+  put(root, "src/cli/constants.ts", "export const value = 1;\n");
+  put(
+    root,
+    "src/cli/main.ts",
+    'import { value } from "./constants.js";\nexport { value };\n',
+  );
+  put(
+    root,
+    "package.json",
+    JSON.stringify({
+      private: true,
+      type: "module",
+      scripts: { typecheck: "tsc --noEmit" },
+    }),
+  );
+  put(
+    root,
+    "tsconfig.json",
+    JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        module: "NodeNext",
+        target: "ES2022",
+        types: [],
+      },
+      include: ["src/**/*.ts"],
+    }),
+  );
+  put(root, "tsconfig.dashboard.json", "{}\n");
+  git(root, "add", "--all");
+  // Plumbing creates fixture history only; the user's checkout and branches are untouched.
+  const revision = git(
+    root,
+    "-c",
+    "user.name=Fixture",
+    "-c",
+    "user.email=fixture@example.test",
+    "commit-tree",
+    git(root, "write-tree").trim(),
+    "-m",
+    "Touched-check fixture",
+  ).trim();
+  git(root, "update-ref", "HEAD", revision);
   // A dependency symlink is not matched by Git's directory-only ignore rule.
   const exclude = join(root, ".git/info/exclude");
   writeFileSync(exclude, readFileSync(exclude, "utf8") + "\n/node_modules\n");
@@ -452,8 +496,10 @@ it("keeps source, configuration and guidance triggers for deletions and renames 
   const cases = [
     ["src/cli/gone.ts", true, true, false],
     ["src/dashboard/gone.ts", true, true, false],
+    ["src/hooks/gone.mts", true, true, false],
     ["tsconfig.json", true, false, false],
     ["tsconfig.dashboard.json", true, false, false],
+    ["tsconfig.hooks.json", true, false, false],
     ["package.json", true, false, false],
     ["package-lock.json", true, false, false],
     ["AGENTS.md", false, false, true],
@@ -492,6 +538,7 @@ it("admits only existing files in each tool's owned paths and deduplicates renam
   const paths = [
     "src/cli/live.ts",
     "src/dashboard/live.ts",
+    "src/hooks/live.mts",
     "src/asset.html",
     "test/live.test.ts",
     "scripts/live.mjs",
@@ -509,11 +556,13 @@ it("admits only existing files in each tool's owned paths and deduplicates renam
     "src/asset.html",
     "src/cli/live.ts",
     "src/dashboard/live.ts",
+    "src/hooks/live.mts",
     "test/live.test.ts",
   ]);
   assert.deepEqual(selected.eslint, [
     "src/cli/live.ts",
     "src/dashboard/live.ts",
+    "src/hooks/live.mts",
   ]);
   assert.equal(selected.unicode.includes("src/gone.ts"), false);
   const testOnly = selectChecks(root, [
@@ -681,6 +730,13 @@ it("runs with the temporary directory inside the repository without changing its
 
 it("typechecks a real deletion-only imported module and exposes its broken imports", (t) => {
   const root = checkout(t);
+  const healthy = spawnSync(
+    process.execPath,
+    [join(repo, "node_modules", "typescript", "bin", "tsc"), "--noEmit"],
+    { cwd: root, encoding: "utf8" },
+  );
+  assertCompleted(healthy);
+  assert.equal(healthy.status, 0, healthy.stdout + healthy.stderr);
   unlinkSync(join(root, "src/cli/constants.ts"));
   const before = snapshot(root);
   const result = runCheckTouched(root);

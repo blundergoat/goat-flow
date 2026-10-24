@@ -16,6 +16,13 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+import {
+  applyInstaller,
+  type InstallerApplyOptions,
+} from "../../src/cli/installer/apply.js";
+import { hookSelection } from "../helpers/hook-entrypoint.js";
+import type { AgentId } from "../../src/cli/types.js";
 import type { TestContext } from "node:test";
 import { symlinkSync } from "node:fs";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
@@ -56,13 +63,12 @@ export function makeTempProject(): string {
 }
 
 /**
- * Run the shell installer (install-goat-flow.sh) synchronously against a target project, exactly
- * as users invoke setup --apply, so tests assert on the real script's exit and output. Spawns a
- * bash subprocess; the script itself writes scaffolding into root.
+ * Run the selected writer against a disposable target and capture its result.
+ * Native cases call the Node writer; the explicit reference selection launches Bash.
  *
  * @param root - target project directory passed as the installer's first argument
  * @param extraArgs - additional installer flags appended after the target (e.g. --dry-run)
- * @returns the spawnSync result (status, stdout, stderr) for the installer process
+ * @returns captured status and output from the selected writer
  */
 export function runInstaller(root: string, ...extraArgs: string[]) {
   return runInstallerWithEnvironment(root, {}, ...extraArgs);
@@ -101,7 +107,7 @@ export function readClaudePostTurnSafetyTimeout(
         ),
       ].join("\n");
       // Missing runnable text means this entry cannot be the managed safety hook.
-      if (runnableText.includes("post-turn-safety.sh")) {
+      if (/post-turn-safety\.(?:mjs|sh)/u.test(runnableText)) {
         return commandEntry.timeout;
       }
     }
@@ -110,7 +116,7 @@ export function readClaudePostTurnSafetyTimeout(
 }
 
 /**
- * Run the shell installer with controlled environment overrides for failure-path fixtures.
+ * Run the selected writer with controlled environment overrides for failure-path fixtures.
  * Use when a user-visible installer outcome depends on a command or signal boundary.
  *
  * @param root - target project directory; an empty path is rejected by the installer
@@ -123,6 +129,9 @@ export function runInstallerWithEnvironment(
   environmentOverrides: NodeJS.ProcessEnv,
   ...extraArgs: string[]
 ) {
+  if (hookSelection() !== "reference") {
+    return runNodeInstaller(root, environmentOverrides, ...extraArgs);
+  }
   return spawnSync(
     "bash",
     [
@@ -139,9 +148,89 @@ export function runInstallerWithEnvironment(
   );
 }
 
+/** Run the explicit native writer target in process, or in a child when a fixture needs environment injection. */
+export function runNodeInstaller(
+  root: string,
+  environment: NodeJS.ProcessEnv = {},
+  ...args: string[]
+) {
+  const options: InstallerApplyOptions = {
+    projectPath: root,
+    agent: "" as AgentId,
+    preservePaths: [],
+    replaceUserPaths: [],
+  };
+  for (let index = 0; index < args.length; index += 1) {
+    const flag = args[index];
+    if (flag === "--agent") options.agent = args[++index] as AgentId;
+    else if (flag === "--preserve-path")
+      options.preservePaths = [
+        ...(options.preservePaths ?? []),
+        args[++index] ?? "",
+      ];
+    else if (flag === "--replace-user-path")
+      options.replaceUserPaths = [
+        ...(options.replaceUserPaths ?? []),
+        args[++index] ?? "",
+      ];
+    else if (flag === "--update-config-version")
+      options.updateConfigVersion = true;
+    else if (flag === "--clean-deprecated") options.cleanDeprecated = true;
+    else if (flag !== "--force")
+      throw new Error(`Unknown installer fixture flag: ${flag}`);
+  }
+  if (Object.keys(environment).length > 0) {
+    const entry = pathToFileURL(
+      join(PROJECT_ROOT, "src/cli/installer/apply.ts"),
+    ).href;
+    return spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "--eval",
+        `import { applyInstaller } from ${JSON.stringify(entry)}; try { applyInstaller(JSON.parse(process.argv[1])); } catch(error) { console.error(error.message); process.exitCode = 1; }`,
+        JSON.stringify(options),
+      ],
+      {
+        cwd: PROJECT_ROOT,
+        env: { ...process.env, ...environment },
+        encoding: "utf8",
+        timeout: 30000,
+      },
+    );
+  }
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  try {
+    applyInstaller({
+      ...options,
+      output: (line) => stdout.push(line),
+      diagnostic: (line) => stderr.push(line),
+    });
+    return {
+      status: 0,
+      stdout: stdout.join("\n") + "\n",
+      stderr: stderr.join("\n"),
+      signal: null,
+    };
+  } catch (error) {
+    return {
+      status: 1,
+      stdout: stdout.join("\n"),
+      stderr: [
+        ...stderr,
+        error instanceof Error ? error.message : String(error),
+      ].join("\n"),
+      signal: null,
+    };
+  }
+}
+
 /**
  * Run the TypeScript CLI installer path (`cli.ts install`) synchronously via tsx against a temp
- * project, so tests cover the CLI entrypoint as well as the shell installer. Spawns a node
+ * project, so tests cover admission, claims and verification around the writer. Spawns a Node
  * subprocess; the install command writes scaffolding into root.
  *
  * @param root - target project directory passed as the install command's argument

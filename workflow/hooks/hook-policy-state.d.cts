@@ -21,13 +21,20 @@ export interface PolicyUpgradeReview {
   paths: string[];
 }
 export const POLICY_OWNERSHIP_FILES: readonly string[];
+/** Include legacy ownership only while that runtime remains in the incoming package. */
+export function policyOwnershipFiles(
+  bundledHooksRoot: string,
+  installedHooksRoot?: string,
+): readonly string[];
 /**
  * Resolve the switches shown in an upgrade review using the current runtime defaults.
  *
  * @param choices - saved or prepared choices; missing entries keep protection enabled
  * @returns explicit choices for both switches, including defaults for an empty config
  */
-export function effectivePolicyChoices(choices: PolicyChoices): EffectivePolicyChoices;
+export function effectivePolicyChoices(
+  choices: PolicyChoices,
+): EffectivePolicyChoices;
 /**
  * Identify a change in GitHub protection that needs the user's separate policy consent.
  *
@@ -39,7 +46,12 @@ export function effectivePolicyChoices(choices: PolicyChoices): EffectivePolicyC
  *
  * @returns before/after choices and affected paths, or null when no policy decision is pending
  */
-export function policyUpgradeReview(original: PolicyChoices, requested: PolicyChoices, hasPolicyInstallation: boolean, files: PolicyOwnershipIdentity[]): PolicyUpgradeReview | null;
+export function policyUpgradeReview(
+  original: PolicyChoices,
+  requested: PolicyChoices,
+  hasPolicyInstallation: boolean,
+  files: PolicyOwnershipIdentity[],
+): PolicyUpgradeReview | null;
 /**
  * Check existing hooks before a public installer writes to the selected project.
  *
@@ -49,4 +61,7 @@ export function policyUpgradeReview(original: PolicyChoices, requested: PolicyCh
  * @returns required review, or null when installation needs no migration consent
  * @throws when config or ownership files cannot be inspected safely; installation must stop
  */
-export function inspectPolicyUpgrade(projectRoot: string, bundledHooksRoot: string): PolicyUpgradeReview | null;
+export function inspectPolicyUpgrade(
+  projectRoot: string,
+  bundledHooksRoot: string,
+): PolicyUpgradeReview | null;

@@ -5,6 +5,7 @@
  * User settings and unrelated permission tables remain intact throughout.
  */
 import { describe, it } from "node:test";
+import { migrateCodexPermissions } from "../../src/cli/installer/codex-permissions.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,12 +22,12 @@ import {
 } from "./setup-install.helpers.js";
 
 /**
- * Spawns a read-only Git process to load exact v1.15.0 bytes for a user upgrade fixture.
+ * Spawns a read-only Git process to load exact v1.16.0 bytes for a user upgrade fixture.
  * @param relativePath - non-empty tagged path; empty cannot identify a release file
- * @returns file bytes, or null when the user's checkout lacks the v1.15.0 tag
+ * @returns file bytes, or null when the user's checkout lacks the v1.16.0 tag
  */
 function readReleaseFile(relativePath: string): string | null {
-  const gitShowResult = spawnSync("git", ["show", `v1.15.0:${relativePath}`], {
+  const gitShowResult = spawnSync("git", ["show", `v1.16.0:${relativePath}`], {
     cwd: PROJECT_ROOT,
     encoding: "utf-8",
   });
@@ -34,35 +35,54 @@ function readReleaseFile(relativePath: string): string | null {
   return gitShowResult.status === 0 ? gitShowResult.stdout : null;
 }
 
-const V1_15_0_CODEX_HOOKS = readReleaseFile(
+/**
+ * Runs the Node writer's permission migration in process to rewrite one disposable config when needed.
+ * Full-install cases below retain staging, validation, hook registration and repeat-install coverage.
+ */
+function runCodexPermissionMigration(root: string) {
+  const path = join(root, ".codex/config.toml");
+  const before = readFileSync(path, "utf8");
+  const messages: string[] = [];
+  const after = migrateCodexPermissions(before, (message) =>
+    messages.push(message),
+  );
+  if (after !== before) writeFileSync(path, after);
+  return {
+    status: 0,
+    stdout: after === before ? "unchanged\n" : "migrated\n",
+    stderr: messages.join("\n"),
+  };
+}
+
+const V1_16_0_CODEX_HOOKS = readReleaseFile(
   "workflow/hooks/agent-config/codex-hooks.json",
 );
-const V1_15_0_BASH_RUNNER = readReleaseFile("workflow/hooks/run-with-bash.mjs");
+const V1_16_0_BASH_RUNNER = readReleaseFile("workflow/hooks/run-with-bash.mjs");
 // Shallow archives have no release bytes, so users' upgrade proof is explicitly unavailable.
-const V1_15_0_UPGRADE_FIXTURE_UNAVAILABLE =
-  V1_15_0_CODEX_HOOKS === null || V1_15_0_BASH_RUNNER === null;
+const V1_16_0_UPGRADE_FIXTURE_UNAVAILABLE =
+  V1_16_0_CODEX_HOOKS === null || V1_16_0_BASH_RUNNER === null;
 
 describe("codex config migration", () => {
   it(
-    "migrates the literal 1.15.0 launcher and runner without creating Git state",
-    { skip: V1_15_0_UPGRADE_FIXTURE_UNAVAILABLE },
+    "migrates the literal 1.16.0 launcher and runner without creating Git state",
+    { skip: V1_16_0_UPGRADE_FIXTURE_UNAVAILABLE },
     () => {
       // The skip above handles shallow archives; these checks narrow the real tagged bytes.
-      assert.ok(V1_15_0_CODEX_HOOKS);
-      assert.ok(V1_15_0_BASH_RUNNER);
+      assert.ok(V1_16_0_CODEX_HOOKS);
+      assert.ok(V1_16_0_BASH_RUNNER);
       const targetProjectPath = makeTempProject();
       mkdirSync(join(targetProjectPath, ".codex"), { recursive: true });
       mkdirSync(join(targetProjectPath, ".goat-flow", "hooks"), {
         recursive: true,
       });
-      // This is the exact non-Git project a Codex user would have after installing v1.15.0.
+      // This is the exact non-Git project a Codex user would have after installing v1.16.0.
       writeFileSync(
         join(targetProjectPath, ".codex", "hooks.json"),
-        V1_15_0_CODEX_HOOKS,
+        V1_16_0_CODEX_HOOKS,
       );
       writeFileSync(
         join(targetProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
-        V1_15_0_BASH_RUNNER,
+        V1_16_0_BASH_RUNNER,
       );
 
       const installResult = runInstaller(targetProjectPath, "--agent", "codex");
@@ -105,7 +125,7 @@ describe("codex config migration", () => {
         ),
         true,
       );
-      assert.notEqual(installedBashRunner, V1_15_0_BASH_RUNNER);
+      assert.notEqual(installedBashRunner, V1_16_0_BASH_RUNNER);
       assert.equal(
         installedBashRunner,
         readFileSync(
@@ -280,7 +300,7 @@ describe("codex config migration", () => {
       ].join("\n"),
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runCodexPermissionMigration(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
@@ -310,7 +330,7 @@ describe("codex config migration", () => {
       ].join("\n"),
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runCodexPermissionMigration(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
@@ -364,7 +384,7 @@ describe("codex config migration", () => {
       ].join("\n"),
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runCodexPermissionMigration(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
@@ -378,7 +398,7 @@ describe("codex config migration", () => {
     assert.match(config, /"\*\*\/\.config\/gcloud\/\*\*"\s*=\s*"deny"/);
     assert.match(config, /"private\/\*\*"\s*=\s*"deny"/);
     assert.match(config, /env\.example stays readable/);
-    assert.match(result.stdout, /migrated:.*Codex permission profile/);
+    assert.equal(result.stdout.trim(), "migrated");
     assert.match(
       result.stderr,
       /retired Codex deny pattern removed: "\*\*\/secrets\/\*\*"/,
@@ -409,7 +429,7 @@ describe("codex config migration", () => {
       ].join("\n"),
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runCodexPermissionMigration(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
@@ -424,7 +444,7 @@ describe("codex config migration", () => {
     assert.doesNotMatch(config, /:project_roots/);
     assert.doesNotMatch(config, /"\*\.pem"\s*=\s*"none"/);
     assert.match(config, /"\*\*\/\*\.pem"\s*=\s*"deny"/);
-    assert.match(result.stdout, /migrated:.*Codex permission profile/);
+    assert.equal(result.stdout.trim(), "migrated");
   });
 
   // Fixture purpose: writes an old goat-flow profile to cover custom deny preservation.
@@ -444,13 +464,13 @@ describe("codex config migration", () => {
       ].join("\n"),
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runCodexPermissionMigration(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
     assert.match(config, /extends = ":workspace"/);
     assert.match(config, /"private\/\*\*"\s*=\s*"deny"/);
-    assert.match(result.stdout, /migrated:.*Codex permission profile/);
+    assert.equal(result.stdout.trim(), "migrated");
   });
 
   // Fixture purpose: writes inline workspace-root globs to cover table migration.
@@ -470,14 +490,14 @@ describe("codex config migration", () => {
       ].join("\n"),
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runCodexPermissionMigration(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
     assert.doesNotMatch(config, /"\*\.pem"\s*=\s*"none"/);
     assert.doesNotMatch(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
     assert.match(config, /"\*\*\/\*\.pem"\s*=\s*"deny"/);
-    assert.match(result.stdout, /migrated:.*Codex permission profile/);
+    assert.equal(result.stdout.trim(), "migrated");
   });
 
   // Fixture purpose: writes comment-only legacy text to cover no-op migration behavior.
@@ -524,13 +544,13 @@ describe("codex config migration", () => {
       ].join("\n"),
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runCodexPermissionMigration(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     // The profile already matches the current canonical list, so only a real legacy anchor could trigger a rewrite.
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
     assert.match(config, /# legacy :project_roots anchor was replaced/);
-    assert.doesNotMatch(result.stdout, /migrated:.*Codex permission profile/);
+    assert.equal(result.stdout.trim(), "unchanged");
   });
 
   // Fixture: writes a valid case where 'none' appears in a table the validator does not own, so a false positive there would block a clean install.
@@ -615,7 +635,7 @@ describe("codex hook and permission upgrade migrations", () => {
     writeFileSync(
       join(root, ".goat-flow", "config.yaml"),
       [
-        'version: "1.9.0"',
+        'version: "1.16.0"',
         "hooks:",
         "  deny-dangerous:",
         "    enabled: true",
@@ -630,11 +650,12 @@ describe("codex hook and permission upgrade migrations", () => {
 
     assert.equal(
       existsSync(join(root, ".codex", "hooks", "gruff-code-quality.sh")),
-      false,
+      true,
+      "unclassified legacy bytes require stored-baseline evidence before retirement",
     );
     const hooksJson = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
     assert.doesNotMatch(hooksJson, /\.codex\/hooks\/gruff-code-quality\.sh/);
-    assert.match(hooksJson, /\.goat-flow\/hooks\/gruff-code-quality\.sh/);
+    assert.match(hooksJson, /\.goat-flow\/hooks\/gruff-code-quality\.mjs/);
     assert.match(hooksJson, /"PostToolUse"/u);
     assert.match(hooksJson, /"matcher": "\^apply_patch\$"/u);
     assert.match(hooksJson, /"timeout": 90/u);
@@ -643,7 +664,7 @@ describe("codex hook and permission upgrade migrations", () => {
       /codex:gruff:goat-flow\.hook-result\.v1:post-tool:1:75000/u,
     );
     assert.match(hooksJson, /custom-user-hook\.mjs/u);
-    assert.match(hooksJson, /\.goat-flow\/hooks\/deny-dangerous\.sh/);
+    assert.match(hooksJson, /\.goat-flow\/hooks\/deny-dangerous\.mjs/);
     assert.doesNotMatch(hooksJson, /"matcher": "MultiEdit"/);
   });
 
@@ -663,7 +684,7 @@ describe("codex hook and permission upgrade migrations", () => {
       ].join("\n"),
     );
 
-    const result = runInstaller(root, "--agent", "codex");
+    const result = runCodexPermissionMigration(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(root, ".codex", "config.toml"), "utf-8");
