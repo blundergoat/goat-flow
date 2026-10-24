@@ -19,6 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { PassThrough, Writable } from "node:stream";
+import { pathToFileURL } from "node:url";
 import { describe, it } from "node:test";
 import {
   relayLegacyHookOutput,
@@ -57,6 +58,7 @@ describe("hook launcher script validation", () => {
    * @param hookScriptRelativePath - Non-empty managed hook path shown to the launcher.
    * @param responseMode - Agent response format; empty or omitted uses fail-closed policy output.
    * @param hookEnvironment - Launch environment; missing keys keep the user's current environment.
+   * @param startupTracePath - Optional fixture preload for the first Windows timing probe.
    * @returns Completed launcher result; empty output is valid for a hook that has nothing to report.
    */
   function runLauncherProcess(
@@ -64,16 +66,64 @@ describe("hook launcher script validation", () => {
     hookScriptRelativePath: string,
     responseMode = "policy",
     hookEnvironment: NodeJS.ProcessEnv = process.env,
+    startupTracePath?: string,
   ) {
     return spawnSync(
       process.execPath,
-      [HOOK_LAUNCHER_PATH, hookScriptRelativePath, responseMode],
+      [
+        ...(startupTracePath
+          ? ["--import", pathToFileURL(startupTracePath).href]
+          : []),
+        HOOK_LAUNCHER_PATH,
+        hookScriptRelativePath,
+        responseMode,
+      ],
       {
         cwd: fixtureProjectPath,
         encoding: "utf8" as const,
         env: hookEnvironment,
       },
     );
+  }
+
+  /**
+   * Record launcher startup and subprocess phases for the first Windows timeout case.
+   * Side effects: writes a preload inside the disposable project; its existing cleanup removes it.
+   */
+  function writeLauncherPhaseTracer(root: string): string {
+    const tracePath = join(root, "launcher-phase-trace.mjs");
+    writeFileSync(
+      tracePath,
+      `
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { basename } from "node:path";
+const readyAt = Date.now();
+const record = (phase, startedAt, result) => process.stderr.write(
+  "hook-launcher-phase " + JSON.stringify({
+    phase, startedAt, elapsedMs: Date.now() - startedAt,
+    status: result?.status, signal: result?.signal, errorCode: result?.error?.code,
+  }) + String.fromCharCode(10),
+);
+record("node-ready", readyAt);
+for (const method of ["spawn", "spawnSync"]) {
+  const original = childProcess[method];
+  childProcess[method] = function (...args) {
+    const startedAt = Date.now();
+    let result;
+    try {
+      result = Reflect.apply(original, this, args);
+      return result;
+    } finally {
+      record(method + ":" + basename(args[0]), startedAt, result);
+    }
+  };
+}
+syncBuiltinESMExports();
+process.on("exit", () => record("node-exit", readyAt));
+`,
+    );
+    return tracePath;
   }
 
   /**
@@ -150,11 +200,21 @@ describe("hook launcher script validation", () => {
           join(hookDir, "slow.sh"),
           "#!/usr/bin/env bash\nwhile :; do :; done\n",
         );
+        const startupTracePath =
+          process.platform === "win32" && fixture.mode === "policy"
+            ? writeLauncherPhaseTracer(root)
+            : undefined;
         const startedAt = Date.now();
-        const result = runLauncherProcess(root, scriptRel, fixture.mode, {
-          ...process.env,
-          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "1",
-        });
+        const result = runLauncherProcess(
+          root,
+          scriptRel,
+          fixture.mode,
+          {
+            ...process.env,
+            GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "1",
+          },
+          startupTracePath,
+        );
 
         assert.equal(
           result.status,
@@ -166,7 +226,11 @@ describe("hook launcher script validation", () => {
           result[fixture.stream],
           /exceeded its deadline; process-tree termination was requested/u,
         );
-        assert.ok(Date.now() - startedAt < 1_500, launcherDiagnostics(result));
+        const elapsedMs = Date.now() - startedAt;
+        assert.ok(
+          elapsedMs < 1_500,
+          `elapsed_ms=${elapsedMs}\n${launcherDiagnostics(result)}`,
+        );
       });
     });
   }
