@@ -1,6 +1,6 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-10-24
+last_reviewed: 2026-10-25
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
@@ -22,11 +22,11 @@ last_reviewed: 2026-10-24
 
 **Status:** active | **Created:** 2026-09-12 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Verify cleanup through the installed package manager and budget the whole fixture before accepting timeout evidence.
-**Incident count:** 3 | **Latest occurrence:** 2026-10-24
+**Incident count:** 4 | **Latest occurrence:** 2026-10-25
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Run an isolated package script through the production runner and assert that both its script process and worker exit after timeout. Keep the timeout status and diagnostic assertions, but do not treat them as proof of descendant cleanup. Preserve a failing run before changing the implementation. For shell-backed fixtures, also test a missing coordination signal and bound the wait inside the worker. Budget the outer guard for process startup, worker execution and report rendering; verify it under the original aggregate workload.
+**Prevention:** Run an isolated package script through the production runner and assert that both its script process and worker exit after timeout. Keep the timeout status and diagnostic assertions, but do not treat them as proof of descendant cleanup. Preserve a failing run before changing the implementation. For shell-backed fixtures, also test a missing coordination signal and bound the wait inside the worker. Budget the outer guard for process startup, worker execution and report rendering; verify it under the original aggregate workload. For serial replay commands, include every configured probe budget plus CLI overhead.
 
 **What happened:** During verification, I accepted a passing direct-Node timeout fixture as evidence that Windows cleanup removed the verification tree. The follow-up replaced that fixture with an actual `npm run` script. The runner returned timeout status 124, but the script-process exit assertion failed because the script remained alive.
 
@@ -37,6 +37,9 @@ last_reviewed: 2026-10-24
 **Recurrence 2026-10-24:** During M16, I accepted healthy scheduler overlap without checking a missing readiness signal. A native Windows fault probe made the shell worker exit before signaling; the outer spawn timed out after 15 seconds while its TypeScript peer remained alive. Bounding the fixture's wait made the same probe finish with the intended failure diagnostic and no surviving peer. The existing startup-failure test now enables the overlap barrier and requires a completed failure rather than a timeout. Owner: `test/integration/preflight-test-diagnostics.test.ts` (search: `overlap_deadline`, `reports a worker that exits before opening a report section`).
 
 **Recurrence 2026-10-24:** I retained the scheduler fixture's 15-second outer guard after bounding its readiness wait. Native aggregate verification still timed out. Captured output showed the healthy case had printed all twelve passing sections; the startup-failure case had reported the expected readiness timeout and reached report rendering. In `scripts/preflight-checks.sh`, `merge_preflight_workers` emits these sections after `run_preflight_workers` returns. The outer guard had to cover this reporting phase too. The fixture now allows 30 seconds while retaining the five-second readiness limit and result assertions. Owner: `test/integration/preflight-test-diagnostics.test.ts` (search: `fixtureTimeoutMs`, `scheduler elapsed_ms=`). Individual Windows subprocess costs were not measured in this investigation.
+
+
+**Recurrence 2026-10-25:** M19's installer fixture allowed only 60 seconds for an entire `hooks verify` command, while `selectHookScenarioResults` runs three deny or six Git probes serially, each with a 90-second Windows budget. In [the diagnostic CI run](https://github.com/blundergoat/goat-flow/actions/runs/40173735089), Node 20 completed its first PowerShell probe in 55,282 ms before the outer guard cut off the next probe. Node 24 completed four Git probes in 50,540 ms before the fifth was cut off. The fixture now derives Windows Codex command budgets from the canonical scenario count and adds the same extra time to the enclosing case. All assertions and production hook limits remain intact. The cause of slower PowerShell launches remains unverified. Owners: `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `hookProofTimeoutMs`, `ROUND_TRIP_TIMEOUT_MS`), `src/cli/hooks-runtime-evidence.ts` (search: `MANAGED_CONFIGURED_PROBE_TIMEOUT_MS`, `selectHookScenarioResults`).
 
 ---
 

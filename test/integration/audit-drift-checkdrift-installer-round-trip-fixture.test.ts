@@ -43,6 +43,31 @@ const REQUIRED_EFFECTIVE_HOOK_PROOFS = [
 ] as const;
 
 import { spawnSync } from "node:child_process";
+import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.ts";
+
+// Matches the per-probe Windows replay budget in hooks-runtime-evidence.ts.
+const WINDOWS_CODEX_PROBE_TIMEOUT_MS = 90_000;
+const COMMAND_TIMEOUT_MS = 60_000;
+
+function hookProofTimeoutMs(
+  proof: (typeof REQUIRED_EFFECTIVE_HOOK_PROOFS)[number],
+): number {
+  if (process.platform !== "win32" || proof.agentId !== "codex") {
+    return COMMAND_TIMEOUT_MS;
+  }
+  const scenarioCount =
+    HOOK_VERIFICATION_CONTRACTS[proof.scenario].requiredScenarioIds.length;
+  return COMMAND_TIMEOUT_MS + scenarioCount * WINDOWS_CODEX_PROBE_TIMEOUT_MS;
+}
+
+// Preserve the existing case budget and add only the extra Windows Codex command time.
+const ROUND_TRIP_TIMEOUT_MS =
+  400_000 +
+  REQUIRED_EFFECTIVE_HOOK_PROOFS.reduce(
+    (extraTime, proof) =>
+      extraTime + hookProofTimeoutMs(proof) - COMMAND_TIMEOUT_MS,
+    0,
+  );
 
 // Trace only the test-owned CLI process; omit arguments, payloads and environment values.
 const CODEX_PROBE_TRACE =
@@ -141,7 +166,7 @@ describe("checkDrift: installer round-trip fixture", () => {
 
   it(
     "installs fixture-backed references, proves the hooks, and reports zero drift",
-    { timeout: 400000 },
+    { timeout: ROUND_TRIP_TIMEOUT_MS },
     (testContext) => {
       const { agentIds, skillRoots } = patchInstallRoundTripFixture(root);
       // A user can install several agents before asking one audit to assess shared coverage.
@@ -201,7 +226,7 @@ describe("checkDrift: installer round-trip fixture", () => {
             requiredHookProof.scenario,
             "--trusted-target",
           ],
-          60000,
+          hookProofTimeoutMs(requiredHookProof),
         );
         if (traceArgs.length > 0) {
           for (const line of hookProof.stderr
