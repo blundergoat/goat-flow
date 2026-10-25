@@ -19,7 +19,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import {
+  dirname,
+  join,
+  relative,
+  resolve,
+  sep,
+  toNamespacedPath,
+} from "node:path";
 import { checkDrift } from "../../src/cli/audit/check-drift.js";
 import { createFS } from "../../src/cli/facts/fs.js";
 import { getSkillNames } from "../../src/cli/constants.js";
@@ -417,7 +424,7 @@ export function setupInstallRoundTripFixture(
   cpSync(sourceRoot, root, {
     recursive: true,
     filter: (src) => {
-      const rel = relative(sourceRoot, src);
+      const rel = relative(toNamespacedPath(sourceRoot), toNamespacedPath(src));
       // The root itself must remain so the user's fixture directory is created.
       if (rel === "") return true;
       const path = rel.split(sep).join("/");
@@ -427,7 +434,11 @@ export function setupInstallRoundTripFixture(
       return retained.has(path) || directories.has(path);
     },
   });
-  symlinkSync(join(sourceRoot, "node_modules"), join(root, "node_modules"));
+  symlinkSync(
+    join(sourceRoot, "node_modules"),
+    join(root, "node_modules"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
   const git = spawnSync("git", ["init", "-q"], {
     cwd: root,
     encoding: "utf-8",
@@ -585,11 +596,21 @@ export function runCommand(
         : spawnSync("npx", args, spawnOptions);
   const stdout = result.stdout ?? "";
   const stderr = result.stderr ?? "";
+  // A null status needs launch or termination evidence in the assertion output.
+  const diagnostic =
+    result.status === null
+      ? `\n[spawn-result] ${JSON.stringify({
+          errorCode:
+            (result.error as NodeJS.ErrnoException | undefined)?.code ?? null,
+          signal: result.signal,
+          timeoutMs: timeout,
+        })}`
+      : "";
   return {
     status: result.status,
     stdout,
     stderr,
-    output: `${stdout}${stderr}`,
+    output: `${stdout}${stderr}${diagnostic}`,
   };
 }
 

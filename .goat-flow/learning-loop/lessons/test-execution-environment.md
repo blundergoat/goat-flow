@@ -1,9 +1,24 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-10-18
+last_reviewed: 2026-10-25
 ---
 
 **Scope:** Choosing and invoking the right runner - which binary and loader actually execute, why a file argument may not narrow the suite, and when proof needs the published invocation path rather than source mode. Shell and process behaviour is [test-shell-environment.md](test-shell-environment.md).
+
+## Lesson: Bind automated test totals to an explicit reporter
+
+**Status:** active | **Created:** 2026-10-25 | **Evidence:** OBSERVED
+**Decision changed:** Select an explicit machine-readable reporter for ad-hoc Node test commands, or parse the reporter actually emitted before deciding whether collection succeeded.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Keep the test process exit code separate from result-collection status. Check the complete reporter footer for pass, fail, cancelled and skipped totals. When a retained log uses another format, extract its real footer rather than rerunning passing tests solely to change formatting.
+
+**What happened:** M19's WSL Node 24.21.0 installer run exited zero with 296 passes, zero failures and zero skips. The temporary collector accepted only TAP summary lines beginning with `#`; Node emitted a spec footer beginning with `ℹ`. Collection stopped even though the tests passed. Reading the retained footer recovered the evidence, and the remaining package check continued.
+
+**Evidence:** `.github/workflows/ci.yml` (search: `Installer lifecycle and safety suites`) runs the direct command without fixing a reporter; `scripts/run-tests.mjs` (search: `--test-reporter=tap`) explicitly selects TAP for the repository runner.
+
+---
 
 ## Lesson: An ad-hoc `node --test` run can execute stale checkout copies under `.goat-flow/scratchpad/`
 

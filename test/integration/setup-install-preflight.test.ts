@@ -15,7 +15,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadManifest } from "../../src/cli/manifest/manifest.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
@@ -58,7 +58,10 @@ function installerTargetSnapshot(projectPath: string): Record<string, string> {
       (entry) => {
         const path = join(entry.parentPath, entry.name);
         return [
-          path.slice(projectPath.length + 1),
+          path
+            .slice(projectPath.length + 1)
+            .split(sep)
+            .join("/"),
           entry.isDirectory()
             ? "directory"
             : readFileSync(path).toString("base64"),

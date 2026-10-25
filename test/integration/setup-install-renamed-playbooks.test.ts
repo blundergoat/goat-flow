@@ -42,9 +42,11 @@ function runPlaybookInstaller(root: string, failedCopy = "") {
       "copyFileSync",
       (source: fs.PathLike, destination: fs.PathLike, mode?: number) => {
         if (
-          String(source).endsWith(
-            failedCopy.replace(PLAYBOOK_ROOT, "workflow/skills/playbooks"),
-          )
+          String(source)
+            .replaceAll("\\", "/")
+            .endsWith(
+              failedCopy.replace(PLAYBOOK_ROOT, "workflow/skills/playbooks"),
+            )
         )
           throw new Error("injected Node copy failure");
         copyFile(source, destination, mode);

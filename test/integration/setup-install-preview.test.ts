@@ -300,7 +300,8 @@ describe("managed setup preview", () => {
     const state = readFileSync(statePath, "utf-8");
     assert.match(state, /goat-flow\.install-state\.v2/u);
     assert.match(state, /"agent": "codex"/u);
-    assert.doesNotMatch(state, new RegExp(projectPath, "u"));
+    const serializedProjectPath = JSON.stringify(projectPath).slice(1, -1);
+    assert.equal(state.includes(serializedProjectPath), false);
     assert.match(
       readFileSync(
         join(projectPath, ".goat-flow", "state", "install", "codex.json"),

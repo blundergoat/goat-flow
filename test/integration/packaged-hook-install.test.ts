@@ -1028,12 +1028,12 @@ require("node:module").syncBuiltinESMExports();
     }
     const priorRoot = makeDisposablePackageWorkspace("release-1-18-0");
     const archive = join(priorRoot, "release.tar");
-    for (const [command, args] of [
-      ["git", ["archive", predecessor, "--output", archive]],
-      ["tar", ["-xf", archive, "-C", priorRoot]],
+    for (const [command, args, cwd] of [
+      ["git", ["archive", predecessor, "--output", archive], PROJECT_ROOT],
+      ["tar", ["-xf", basename(archive)], priorRoot],
     ] as const) {
       const seeded = spawnSync(command, [...args], {
-        cwd: PROJECT_ROOT,
+        cwd,
         encoding: "utf8",
       });
       assert.equal(seeded.status, 0, seeded.stderr);

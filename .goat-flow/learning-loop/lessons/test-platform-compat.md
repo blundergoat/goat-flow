@@ -1,6 +1,6 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-10-23
+last_reviewed: 2026-10-25
 ---
 
 **Scope:** Platform and runtime differences that break tests - CI Node versions older than local, Windows path/URL shapes and symlink privileges, filesystem-clock skew, and npm scripts that assume a POSIX shell. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); shell and process behaviour under a test is [test-shell-environment.md](test-shell-environment.md).
@@ -109,13 +109,16 @@ Incident ledger: distinguish a missing fixture capability from a product failure
 
 ## Lesson: Archive tools need shell-native relative paths on Windows
 
-**Status:** active | **Created:** 2026-08-27 | **Trigger phase:** VERIFY | **Incident count:** 1 | **Latest occurrence:** 2026-08-27
+**Status:** active | **Created:** 2026-08-27 | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-10-25
+**Severity:** INTEGRATION
 
 **Prevention:** Give shell-oriented archive tools relative paths from an explicit `cwd` when a fixture controls both locations. This avoids drive-letter parsing and works on POSIX too. Re-run the complete archived-package canary after correcting the transport; do not replace it with a source-tree test. Evidence anchor: `test/integration/packaged-hook-install.test.ts` (search: `basename(packedArchivePath)`).
 
 **What happened:** The archived-package canary failed before it could execute Goat Flow. Node passed GNU tar an absolute `C:\...` archive path; tar interpreted the drive-letter colon as its remote-archive syntax and reported `Cannot connect to C: resolve failed`. Both package tests failed even though `npm pack` had produced the archive correctly.
 
 **Root cause:** A child process can start successfully while still receiving paths in the wrong dialect. Git for Windows supplied a POSIX-oriented tar, but the native Node parent passed a Windows drive path to tar's `-f` argument.
+
+**Recurrence 2026-10-25:** M19's native Windows Node 20.12.0 package canary passed five cases, then the pinned 1.18.0 upgrade failed before extraction: GNU tar 1.35 parsed the absolute archive drive letter as a remote host and returned 128. The same archive listed successfully with a relative filename and explicit working directory on Node 20.12.0 and 24.21.0. Windows bsdtar 3.8.9 accepted both forms, so a probe must match the suite-selected archive tool. Evidence: test/integration/packaged-hook-install.test.ts (search: "upgrades a complete pinned 1.18.0 install while preserving disabled choices and user files").
 
 ---
 
