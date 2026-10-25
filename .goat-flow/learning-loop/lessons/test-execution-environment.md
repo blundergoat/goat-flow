@@ -5,18 +5,36 @@ last_reviewed: 2026-10-25
 
 **Scope:** Choosing and invoking the right runner - which binary and loader actually execute, why a file argument may not narrow the suite, and when proof needs the published invocation path rather than source mode. Shell and process behaviour is [test-shell-environment.md](test-shell-environment.md).
 
+## Lesson: Matching missing fingerprints do not prove the test source matched
+
+**Status:** active | **Created:** 2026-10-25 | **Evidence:** OBSERVED
+**Decision changed:** Require non-null execution fingerprints before comparing them or crediting a test run to a reviewed workspace.
+**Trigger phase:** VERIFY
+
+**Prevention:** Check that each required identity exists before testing equality. When capture fails, retain the tool's reason and the direct process result separately; two missing identities cannot establish a source match.
+
+**What happened:** During M22's review, the five-file snapshot succeeded but full execution-source capture reported that live review paths could not enter nested repositories. Both workspace fingerprints were `null`. The collector compared them as equal and incorrectly reported a match. Both Node suites passed, but the review validator refused to credit those runs to an unavailable workspace identity. The corrected receipt preserves the direct test results and marks their review gate binding unavailable.
+
+**Evidence:** `src/cli/review-validate.ts` (search: `function attemptMatches`) requires `snapshot.workspace !== null` before crediting an execution; `src/cli/review-validate-anchors.ts` (search: `live review paths cannot enter nested repositories`) owns the reported capture refusal.
+
+---
+
 ## Lesson: Bind automated test totals to an explicit reporter
 
 **Status:** active | **Created:** 2026-10-25 | **Evidence:** OBSERVED
 **Decision changed:** Select an explicit machine-readable reporter for ad-hoc Node test commands, or parse the reporter actually emitted before deciding whether collection succeeded.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-10-25
 
-**Prevention:** Keep the test process exit code separate from result-collection status. Check the complete reporter footer for pass, fail, cancelled and skipped totals. When a retained log uses another format, extract its real footer rather than rerunning passing tests solely to change formatting.
+**Prevention:** Keep the test process exit code separate from result-collection status. Check the complete reporter footer for pass, fail, cancelled and skipped totals. When a retained log uses another format, extract its real footer rather than rerunning passing tests solely to change formatting. Classify each skipped case against the promised coverage before treating a nonzero skip total as missing platform proof.
 
 **What happened:** M19's WSL Node 24.21.0 installer run exited zero with 296 passes, zero failures and zero skips. The temporary collector accepted only TAP summary lines beginning with `#`; Node emitted a spec footer beginning with `ℹ`. Collection stopped even though the tests passed. Reading the retained footer recovered the evidence, and the remaining package check continued.
 
 **Evidence:** `.github/workflows/ci.yml` (search: `Installer lifecycle and safety suites`) runs the direct command without fixing a reporter; `scripts/run-tests.mjs` (search: `--test-reporter=tap`) explicitly selects TAP for the repository runner.
+
+**Recurrence 2026-10-25:** M22's temporary log audit initially required zero scanner skips on every host. Both macOS cells passed but skipped the non-UTF-8 filename fixture because the filesystem returned `EILSEQ`. The audit stopped on its own assertion, not a failed test. Inspecting `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `nonUtf8NameTestOptions`) distinguished that filesystem limit from the nine promised provider/event combinations; the three Windows-only replay skips were classified separately.
 
 ---
 

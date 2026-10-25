@@ -117,6 +117,8 @@ test("native completed results adapt real findings across provider reply shapes"
   const root = projectFixture(t);
   for (const [mode, outcome] of [
     ["claude:gruff:goat-flow.hook-result.v1:post-tool:1:75000", "advisory"],
+    ["codex:gruff:goat-flow.hook-result.v1:post-tool:1:75000", "advisory"],
+    ["copilot:gruff:goat-flow.hook-result.v1:post-tool:1:75000", "advisory"],
     [codexStop, "block"],
     ["copilot:policy:goat-flow.hook-result.v1:pre-tool:1:25000", "block"],
     [antigravityPolicy, "block"],
@@ -125,10 +127,17 @@ test("native completed results adapt real findings across provider reply shapes"
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, "child diagnostic\n");
     const response = JSON.parse(result.stdout);
-    if (mode.startsWith("claude:"))
+    if (mode.includes(":gruff:") && !mode.startsWith("copilot:")) {
       assert.equal(response.hookSpecificOutput.hookEventName, "PostToolUse");
+      assert.match(
+        response.hookSpecificOutput.additionalContext,
+        /Review the changed file/u,
+      );
+    }
+    if (mode.startsWith("copilot:gruff:"))
+      assert.match(response.additionalContext, /Review the changed file/u);
     if (mode === codexStop) assert.equal(response.decision, "block");
-    if (mode.startsWith("copilot:"))
+    if (mode.startsWith("copilot:policy:"))
       assert.equal(response.permissionDecision, "deny");
     if (mode === antigravityPolicy) assert.equal(response.decision, "deny");
     assert.match(result.stdout, /Review the changed file/u);
@@ -140,6 +149,8 @@ test("native clean results keep quiet replies and Antigravity explicit allow", (
   const root = projectFixture(t);
   for (const mode of [
     "claude:gruff:goat-flow.hook-result.v1:post-tool:1:75000",
+    "codex:gruff:goat-flow.hook-result.v1:post-tool:1:75000",
+    "copilot:gruff:goat-flow.hook-result.v1:post-tool:1:75000",
     codexStop,
     "copilot:policy:goat-flow.hook-result.v1:pre-tool:1:25000",
     antigravityPolicy,
