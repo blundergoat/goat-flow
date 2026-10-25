@@ -311,6 +311,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Fetch installer upgrade fixtures
+        shell: bash
+        run: >-
+          git fetch --no-tags --depth=1 origin
+          839fc59624034408e632617af0f8e9e273c37a49
+          bd800f792968b0243eecd6983bc6f0ad9f84af3c
+          refs/tags/v1.15.0:refs/tags/v1.15.0
+          refs/tags/v1.16.0:refs/tags/v1.16.0
+          refs/tags/v1.18.0:refs/tags/v1.18.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24.21.0"
@@ -341,6 +350,7 @@ jobs:
           }
           for (const [group, directory] of [
             ["source", "src/hooks"],
+            ["installer-source", "src/cli"],
             ["generated", "workflow/hooks"],
             ["installed", ".goat-flow/hooks"],
             ["oracle", "test/fixtures/hooks-bash"],
@@ -460,6 +470,19 @@ jobs:
           GOAT_FLOW_HOOK_UNDER_TEST: installed
           GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-replay-spawn.jsonl
         run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts
+
+      - name: Installer lifecycle and safety suites
+        shell: bash
+        run: node --import tsx --test --test-concurrency=1 test/integration/setup-install*.test.ts test/integration/path-write-claim-recovery.test.ts test/integration/managed-install-status.test.ts test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts test/unit/install-invocation.test.ts test/unit/managed-setup-preview.test.ts
+
+      - name: Packaged installer suites
+        shell: bash
+        run: node --import tsx --test --test-concurrency=1 test/integration/packaged-hook-install.test.ts
+
+      - name: Installer crash recovery
+        if: runner.os != 'macOS'
+        shell: bash
+        run: node --import tsx --test --test-concurrency=1 test/integration/hook-sync-recovery.test.ts test/integration/path-write-claim-recovery.test.ts
 
       - name: Check native hook spawn journals
         if: always()

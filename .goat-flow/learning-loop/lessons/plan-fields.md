@@ -1,13 +1,13 @@
 ---
 category: plan-fields
-last_reviewed: 2026-10-21
+last_reviewed: 2026-10-25
 ---
 
 ## Lesson: Copy machine-parsed forecast fields without shortening their grammar
 
 **Status:** active | **Created:** 2026-10-18
-**Incident count:** 2
-**Latest occurrence:** 2026-10-18
+**Incident count:** 3
+**Latest occurrence:** 2026-10-25
 **Decision changed:** Copy the forecast field's canonical grammar before writing a milestone, then run strict validation before starting its timer.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -19,6 +19,8 @@ last_reviewed: 2026-10-21
 **Root cause:** A machine-parsed field was shortened as ordinary prose without checking its literal grammar.
 
 **Recurrence 2026-10-18:** A CI milestone draft put procedure paragraphs after each final task. Strict validation reported one task missing an estimate in each milestone, with product totals and work-unit counts short by that item. `src/cli/plans-export.ts` (search: `readChecklistItems`) treats text through the next checkbox or heading as the task body; `src/cli/plans-effort.ts` (search: `TASK_ESTIMATE_PATTERN`) requires the estimate at the end. Move free-standing procedure text before `## Tasks` or into another existing section; do not change the totals or parser to conceal the missing estimate.
+
+**Recurrence 2026-10-25:** Rewriting the `What problem are we solving` and `Who benefits and how` lines of four 1.19.0 milestones produced three that strict validation rejected for length. `src/cli/plans-check-structure.ts` (search: `plain-language section`) requires 70-120 characters per line, measured when the plan was checked on 2026-10-25. Measure each rewritten one-liner against that window before saving, and run the strict check before any dependent edit; the same checker also rejects internal identifiers in those lines.
 
 ## Lesson: Read a plan patch's applied history before trusting its hash or checker
 
