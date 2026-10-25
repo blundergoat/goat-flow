@@ -44,6 +44,28 @@ const REQUIRED_EFFECTIVE_HOOK_PROOFS = [
 
 import { spawnSync } from "node:child_process";
 
+// Trace only the test-owned CLI process; omit arguments, payloads and environment values.
+const CODEX_PROBE_TRACE =
+  "data:text/javascript," +
+  encodeURIComponent(String.raw`import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { basename } from "node:path";
+const originalSpawnSync = childProcess.spawnSync;
+let sequence = 0;
+childProcess.spawnSync = (command, args, options) => {
+  const id = ++sequence;
+  const started = Date.now();
+  const record = (phase, details) => process.stderr.write(
+    "m19-codex-probe " + JSON.stringify({ id, phase, command: basename(String(command)), ...details }) + "\n",
+  );
+  record("start", { timeoutMs: options?.timeout ?? null });
+  const result = originalSpawnSync(command, args, options);
+  record("end", { durationMs: Date.now() - started, status: result.status,
+    signal: result.signal, errorCode: result.error?.code ?? null });
+  return result;
+};
+syncBuiltinESMExports();`);
+
 // Writes and copies a small temporary checkout, then removes both trees after checking the exclusions.
 it("copies maintained inputs without local plan or scratchpad contents", () => {
   const source = mkdtempSync(join(tmpdir(), "goat-flow-roundtrip-source-"));
@@ -120,7 +142,7 @@ describe("checkDrift: installer round-trip fixture", () => {
   it(
     "installs fixture-backed references, proves the hooks, and reports zero drift",
     { timeout: 400000 },
-    () => {
+    (testContext) => {
       const { agentIds, skillRoots } = patchInstallRoundTripFixture(root);
       // A user can install several agents before asking one audit to assess shared coverage.
       for (const agentId of agentIds) {
@@ -160,10 +182,15 @@ describe("checkDrift: installer round-trip fixture", () => {
 
       // Explicit offline scenarios provide the runtime evidence a normal audit never executes.
       for (const requiredHookProof of REQUIRED_EFFECTIVE_HOOK_PROOFS) {
+        const traceArgs =
+          process.platform === "win32" && requiredHookProof.agentId === "codex"
+            ? ["--import", CODEX_PROBE_TRACE]
+            : [];
         const hookProof = runCommand(
           root,
           "node",
           [
+            ...traceArgs,
             "dist/cli/cli.js",
             "hooks",
             "verify",
@@ -176,6 +203,19 @@ describe("checkDrift: installer round-trip fixture", () => {
           ],
           60000,
         );
+        if (traceArgs.length > 0) {
+          for (const line of hookProof.stderr
+            .split("\n")
+            .filter((line) => line.startsWith("m19-codex-probe "))) {
+            testContext.diagnostic(
+              requiredHookProof.agentId +
+                "/" +
+                requiredHookProof.scenario +
+                " " +
+                line,
+            );
+          }
+        }
         assert.equal(
           hookProof.status,
           0,
