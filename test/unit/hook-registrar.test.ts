@@ -58,6 +58,7 @@ import {
   SUPPORTED_PROVIDER_HOOK_CASES,
   countOwnedCommandRows,
   assertProviderDenyDescriptorsMatchInstallerContract,
+  assertAntigravityPolicyStartupCopy,
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: launchers and installation", () => {
@@ -641,11 +642,7 @@ describe("hook registrar: launchers and installation", () => {
         ),
       );
       assert.doesNotMatch(claudeSettings, /Guard.*git repository root/u);
-      assert.match(antigravityHooks, /Policy hook unavailable:/u);
-      assert.match(antigravityHooks, /managed root unavailable/u);
-      assert.doesNotMatch(antigravityHooks, /gruff-code-quality/u);
-      assert.doesNotMatch(antigravityHooks, /Guard.*git repository root/u);
-      assert.match(antigravityHooks, /"timeout": 30/u);
+      assertAntigravityPolicyStartupCopy(antigravityHooks);
       assert.match(copilotHooks, /"timeoutSec": 30/u);
       const expectedFeedbackTimeoutSeconds = 90;
       assert.equal(gruffSpec.timeoutSec, expectedFeedbackTimeoutSeconds);

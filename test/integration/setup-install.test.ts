@@ -23,6 +23,7 @@ import {
 import { join } from "node:path";
 import { load } from "js-yaml";
 import { migrateClaudePermissions } from "../../src/cli/installer/claude-permissions.js";
+import { agentHookSpawnDescriptor } from "../../src/cli/hook-spawn-descriptor.js";
 
 import { setHookEnabled } from "../../src/cli/config/writer.js";
 import { emitCommitGuidanceInstallResult } from "../../src/cli/prompt/commit-guidance.js";
@@ -411,6 +412,58 @@ describe("setup --apply installer", () => {
       /^hooks: \{ "gruff-code-quality": \{ enabled: true \}, deny-dangerous: \{ enabled: true \}, deny-git-mutations: \{ enabled: true \}, post-turn-safety: \{ enabled: true \} \}$/mu,
     );
     assert.doesNotMatch(config, /binaries/u);
+  });
+
+  it("standalone Antigravity install runs both saved policy hooks", () => {
+    const root = makeTempProject();
+    const installed = spawnSync(
+      "bash",
+      [
+        join(PROJECT_ROOT, "workflow/install-goat-flow.sh"),
+        root,
+        "--agent",
+        "antigravity",
+      ],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+        timeout: process.platform === "win32" ? 120_000 : 30_000,
+      },
+    );
+    assert.equal(installed.status, 0, installed.stderr || installed.stdout);
+    assert.ok(
+      existsSync(join(root, ".goat-flow/hooks/antigravity-hook-bootstrap.cjs")),
+    );
+    const config = JSON.parse(
+      readFileSync(join(root, ".agents/hooks.json"), "utf8"),
+    );
+    for (const [policy, blockedCommand] of [
+      ["deny-dangerous", "cat .env"],
+      ["deny-git-mutations", "git push origin main"],
+    ]) {
+      const command = config[policy].PreToolUse[0].hooks[0].command as string;
+      const invocation = agentHookSpawnDescriptor({ form: "shell", command });
+      for (const [commandText, decision] of [
+        ["echo safe", "allow"],
+        [blockedCommand, "deny"],
+      ]) {
+        const replay = spawnSync(invocation.command, invocation.args, {
+          cwd: join(root, ".agents"),
+          windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+          input: JSON.stringify({
+            hookEventName: "PreToolUse",
+            toolCall: {
+              name: "run_command",
+              args: { CommandLine: commandText },
+            },
+          }),
+          encoding: "utf8",
+          timeout: 15_000,
+        });
+        assert.equal(replay.status, 0, replay.stderr || replay.error?.message);
+        assert.equal(JSON.parse(replay.stdout).decision, decision, policy);
+      }
+    }
   });
 
   it("does not register unverified Antigravity Stop hooks during install", () => {

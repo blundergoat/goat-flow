@@ -20,7 +20,6 @@ import {
 import type { ReadonlyFS } from "../types.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
-import { buildAgentHookCommand } from "../server/agent-hook-writer.js";
 import {
   buildAgentHookDescriptor,
   commandEntryReferencesSpec,
@@ -64,7 +63,7 @@ function hookEventKey(agentId: AgentId, spec: HookSpec): string {
 
 /**
  * Build the command entry expected after a user enables a Copilot hook.
- * Compare against the same portable launcher that setup writes.
+ * Compare against the Bash command and Windows PowerShell override that setup writes.
  *
  * @param agent - Copilot profile; an absent hook folder uses the managed default
  * @param spec - registered hook; an absent timeout uses 30 seconds
@@ -73,17 +72,15 @@ function hookEventKey(agentId: AgentId, spec: HookSpec): string {
 function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
   // Older profiles may omit the hook folder, so audit uses setup's managed location.
   const hooksDirectory = agent.hooks_dir ?? ".goat-flow/hooks";
-  const crossPlatformCommand = buildAgentHookCommand(
-    "copilot",
-    hooksDirectory,
-    spec,
-  );
+  const descriptor = buildAgentHookDescriptor("copilot", hooksDirectory, spec);
   // A missing registry timeout means Copilot's documented default remains expected.
   const timeoutSeconds = spec.timeoutSec ?? 30;
   return {
     type: "command",
-    bash: crossPlatformCommand,
-    powershell: crossPlatformCommand,
+    bash: descriptor.command,
+    // Copilot runs this field on Windows, where only the literal PowerShell override parses.
+    powershell:
+      descriptor.form === "shell" ? descriptor.commandWindows : undefined,
     timeoutSec: timeoutSeconds,
   };
 }

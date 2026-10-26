@@ -104,6 +104,7 @@ const NATIVE_LAUNCH_RUNTIME_FILES = [
 // Both policy entrypoints load the same parser, rule modules and self-test corpus.
 const POLICY_RUNTIME_FILES = [
   ...NATIVE_LAUNCH_RUNTIME_FILES,
+  "antigravity-hook-bootstrap.cjs",
   "gh-graphql-read.cjs",
   "vendor/graphql.cjs",
   "policy-corpus.mjs",

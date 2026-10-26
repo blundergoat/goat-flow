@@ -260,6 +260,13 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
   ].join("");
 }
 
+/** Generate the managed file Antigravity starts from its .agents hook directory. */
+export function antigravityHookBootstrapSource(): string {
+  return (
+    "process.argv.splice(1,1);" + hookLaunchBootstrap("antigravity") + "\n"
+  );
+}
+
 /**
  * Build the structured `-e` source registered as one exec-form argv element.
  * Use for approved argv handlers to preserve root selection while loading the shipped launcher in-process.
@@ -414,6 +421,9 @@ export interface AgentHookSpawnDescriptor {
   command: string;
   args: string[];
   env?: NodeJS.ProcessEnv;
+  /** Provider hook directory relative to the selected project. */
+  cwd?: string;
+  windowsVerbatimArguments?: boolean;
 }
 
 /** Quote one literal argument for Windows PowerShell without exposing its contents to expression parsing. */
@@ -422,10 +432,10 @@ function quoteWindowsPowerShellArgument(argumentValue: string): string {
 }
 
 /**
- * Build Codex's Windows-only shell command from source and literal operands.
+ * Build the Windows PowerShell command Codex and Copilot register, from source and literal operands.
  * The Base64 token keeps the generated bootstrap opaque to PowerShell; removing that token restores the argv indexes the bootstrap reads.
  */
-function codexWindowsHookCommand(
+function windowsPowerShellHookCommand(
   bootstrapSource: string,
   operands: string[],
 ): string {
@@ -453,7 +463,7 @@ export { agentHookSpawnDescriptor } from "../hook-spawn-descriptor.js";
  * Build the handler descriptor written into the selected agent's configuration.
  *
  * Use during install, sync, and audit so every consumer derives one launch contract.
- * Claude uses the ADR-053 argv form. Codex retains that deferred command for non-Windows hosts and adds a PowerShell-safe Windows override.
+ * Claude uses the ADR-053 argv form. Codex and Copilot retain that deferred command for non-Windows hosts and add a PowerShell-safe Windows override.
  *
  * @param agentId - agent receiving the handler; empty is impossible after setup validation
  * @param hooksDirectory - project hook folder; empty would produce an invalid managed path
@@ -501,6 +511,20 @@ export function buildAgentHookDescriptor(
         : {}),
     };
   }
+  if (agentId === "antigravity") {
+    return {
+      form: "shell",
+      command: [
+        "node",
+        `../${commandPath(hooksDirectory, "antigravity-hook-bootstrap.cjs")}`,
+        hookScriptPath,
+        hookResponseMode,
+        rootEnvironmentName,
+        registrationPath,
+        bashLauncherPath,
+      ].join(" "),
+    };
+  }
   const bootstrapSource = hookLaunchBootstrap(hookResponseMode);
   const shellDescriptor: AgentHookHandlerDescriptor = {
     form: "shell",
@@ -515,20 +539,21 @@ export function buildAgentHookDescriptor(
       JSON.stringify(bashLauncherPath),
     ].join(" "),
   };
-  // Codex users on Windows need literal PowerShell transport for the same registered bootstrap and operands.
-  if (agentId === "codex") {
-    shellDescriptor.commandWindows = codexWindowsHookCommand(bootstrapSource, [
+  // Codex and Copilot users on Windows need literal PowerShell transport; PowerShell cannot parse the JSON-quoted command.
+  shellDescriptor.commandWindows = windowsPowerShellHookCommand(
+    bootstrapSource,
+    [
       hookScriptPath,
       hookResponseMode,
       rootEnvironmentName,
       registrationPath,
       bashLauncherPath,
-    ]);
-    // The shipped policy corpus exceeds Stop's default one-MiB file limit.
-    if (spec.id === "post-turn-safety") {
-      shellDescriptor.command = `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304 ${shellDescriptor.command}`;
-      shellDescriptor.commandWindows = `$env:GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304'; ${shellDescriptor.commandWindows}`;
-    }
+    ],
+  );
+  // The shipped policy corpus exceeds Stop's default one-MiB file limit.
+  if (spec.id === "post-turn-safety") {
+    shellDescriptor.command = `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304 ${shellDescriptor.command}`;
+    shellDescriptor.commandWindows = `$env:GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304'; ${shellDescriptor.commandWindows}`;
   }
   return shellDescriptor;
 }
@@ -713,11 +738,12 @@ export function entryCarriesHandlerDescriptor(
   agentId: AgentId,
   descriptor: AgentHookHandlerDescriptor,
 ): boolean {
-  // Copilot stores the same shell command in both of its platform fields.
+  // Copilot stores the JSON-quoted command for Bash and the literal PowerShell override for Windows.
   if (agentId === "copilot") {
     return (
+      descriptor.form === "shell" &&
       entry.bash === descriptor.command &&
-      entry.powershell === descriptor.command
+      entry.powershell === descriptor.commandWindows
     );
   }
   // Argv handlers must match the executable, every ordered argument, both inert shell routes, and the failure policy exactly.
@@ -881,6 +907,7 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
     return [
       "run_command",
       "view_file",
+      "read_file",
       "grep_search",
       "write_to_file",
       "replace_file_content",

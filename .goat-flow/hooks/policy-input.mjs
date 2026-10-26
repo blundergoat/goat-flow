@@ -57,7 +57,7 @@ export function extractPolicyCommandText(payload, checkCommand = "") {
     const toolArgs = decodedArguments(payload.toolArgs);
     const toolArgsSnake = decodedArguments(payload.tool_args);
     let command = firstString(toolInput.command, toolCall.CommandLine, toolCall.command, toolCall.commandLine, toolCall.input, payload.command, payload.input, toolArgs.command, toolArgs.CommandLine, toolArgs.commandLine, toolArgs.input, toolArgsSnake.command, toolArgsSnake.CommandLine, toolArgsSnake.commandLine, toolArgsSnake.input);
-    const path = firstString(toolInput.file_path, toolInput.path, toolCall.AbsolutePath, toolCall.TargetFile, toolCall.FilePath, toolCall.SearchPath, toolCall.path, toolCall.file_path, payload.path, payload.file_path, toolArgs.file_path, toolArgs.path, toolArgs.AbsolutePath, toolArgs.TargetFile, toolArgs.FilePath, toolArgs.SearchPath, toolArgsSnake.file_path, toolArgsSnake.path, toolArgsSnake.AbsolutePath, toolArgsSnake.TargetFile, toolArgsSnake.FilePath, toolArgsSnake.SearchPath);
+    const path = firstString(toolInput.file_path, toolInput.path, toolCall.AbsolutePath, toolCall.TargetFile, toolCall.FilePath, toolCall.SearchPath, toolCall.path, toolCall.file_path, payload.path, payload.file_path, toolArgs.file_path, toolArgs.path, toolArgs.AbsolutePath, toolArgs.TargetFile, toolArgs.FilePath, toolArgs.SearchPath, toolArgsSnake.file_path, toolArgsSnake.path, toolArgsSnake.AbsolutePath, toolArgsSnake.TargetFile, toolArgsSnake.FilePath, toolArgsSnake.SearchPath, toolCall.Path);
     if (path && !command.includes(path))
         command += " " + path;
     return command.replace(/^ /u, "");
@@ -76,6 +76,7 @@ export function isPolicySecretFileTool(tool) {
         "read",
         "view",
         "view_file",
+        "read_file",
         "write",
         "edit",
         "multiedit",

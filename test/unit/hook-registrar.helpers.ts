@@ -115,7 +115,7 @@ export const SUPPORTED_PROVIDER_HOOK_CASES = [
       {
         event: "PreToolUse",
         matcher:
-          "run_command|view_file|grep_search|write_to_file|replace_file_content|multi_replace_file_content",
+          "run_command|view_file|read_file|grep_search|write_to_file|replace_file_content|multi_replace_file_content",
       },
     ],
   },
@@ -282,10 +282,14 @@ function assertManagedHookRegistration(
   commandEntry: Record<string, unknown>,
   expectedDescriptor: AgentHookHandlerDescriptor,
 ): void {
-  // Copilot users need the same portable launcher in both supported shell fields.
+  // Copilot users need the JSON-quoted launcher under Bash and the literal PowerShell override on Windows.
   if (agentProfile.id === "copilot") {
+    if (expectedDescriptor.form !== "shell") {
+      assert.fail("Copilot registers a shell handler");
+    }
+    assert.equal(typeof expectedDescriptor.commandWindows, "string");
     assert.equal(commandEntry.bash, expectedDescriptor.command);
-    assert.equal(commandEntry.powershell, expectedDescriptor.command);
+    assert.equal(commandEntry.powershell, expectedDescriptor.commandWindows);
     assert.equal(commandEntry.timeoutSec, hookSpec.timeoutSec);
     return;
   }
@@ -335,7 +339,20 @@ function assertHookUnavailableResponse(
   }
   // Antigravity users receive a deny decision object on standard output.
   if (agentProfile.id === "antigravity") {
-    assert.match(installedCommand, /decision:'deny'/u);
+    assert.match(
+      installedCommand,
+      /^node \.\.\/\.goat-flow\/hooks\/antigravity-hook-bootstrap\.cjs /u,
+    );
+    assert.match(
+      readFileSync(
+        join(
+          import.meta.dirname,
+          "../../workflow/hooks/antigravity-hook-bootstrap.cjs",
+        ),
+        "utf8",
+      ),
+      /decision:'deny'/u,
+    );
     return;
   }
   // Copilot users receive its permission-decision response object.
@@ -344,6 +361,23 @@ function assertHookUnavailableResponse(
     return;
   }
   assert.match(installedCommand, /BLOCKED: Policy hook unavailable/u);
+}
+
+/** Keep Antigravity's startup response checks attached to the managed file its registration names. */
+export function assertAntigravityPolicyStartupCopy(registration: string): void {
+  assert.match(registration, /antigravity-hook-bootstrap\.cjs/u);
+  const bootstrap = readFileSync(
+    join(
+      import.meta.dirname,
+      "../../workflow/hooks/antigravity-hook-bootstrap.cjs",
+    ),
+    "utf8",
+  );
+  assert.match(bootstrap, /Policy hook unavailable:/u);
+  assert.match(bootstrap, /managed root unavailable/u);
+  assert.doesNotMatch(registration, /gruff-code-quality/u);
+  assert.doesNotMatch(registration, /Guard.*git repository root/u);
+  assert.match(registration, /"timeout": 30/u);
 }
 
 /**
@@ -490,7 +524,7 @@ export function assertProviderDenyDescriptorsMatchInstallerContract(): void {
   )[HOOK_IDENTIFIER].PreToolUse[0]!.hooks[0]!;
   assert.equal(antigravityContractRow.command, antigravityDescriptor.command);
 
-  // Copilot keeps the same deferred command in both shell fields.
+  // Copilot keeps the deferred command for Bash and the literal PowerShell override for Windows.
   const copilotDescriptor = managedAgentHookDescriptor(
     PROFILES.copilot,
     denySpec,
@@ -505,8 +539,9 @@ export function assertProviderDenyDescriptorsMatchInstallerContract(): void {
       };
     }
   ).hooks.preToolUse[0]!;
+  assert.equal(typeof copilotDescriptor.commandWindows, "string");
   assert.equal(copilotContractRow.bash, copilotDescriptor.command);
-  assert.equal(copilotContractRow.powershell, copilotDescriptor.command);
+  assert.equal(copilotContractRow.powershell, copilotDescriptor.commandWindows);
 
   // Claude's approved handler remains the provider-native argv form.
   const claudeDescriptor = managedAgentHookDescriptor(

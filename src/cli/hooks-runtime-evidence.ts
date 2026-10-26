@@ -361,6 +361,8 @@ function configuredDenyHookPayload(
 export interface ManagedConfiguredProbeTransport {
   command: string;
   args: string[];
+  cwd?: string;
+  windowsVerbatimArguments?: boolean;
   environment: NodeJS.ProcessEnv;
   input: string;
   stdin: "file" | "pipe";
@@ -417,7 +419,8 @@ function spawnManagedConfiguredProbe(
   probe: ManagedConfiguredProbeTransport,
 ) {
   const spawnOptions = {
-    cwd: projectPath,
+    cwd: probe.cwd ? join(projectPath, probe.cwd) : projectPath,
+    windowsVerbatimArguments: probe.windowsVerbatimArguments,
     encoding: "utf-8" as const,
     env: probe.environment,
     shell: false,

@@ -82,6 +82,40 @@ describe("native policy provider responses", () => {
 });
 
 describe("native policy request routing", () => {
+  it("protects the captured Antigravity read_file Path and refuses uninspectable reads", async () => {
+    for (const [Path, decision, reason] of [
+      [String.raw`C:\m61-fixture\.env`, "deny", "Policy secret:"],
+      [String.raw`C:\m61-fixture\control.txt`, "allow", ""],
+      [undefined, "deny", "did not expose"],
+      [42, "deny", "did not expose"],
+    ] as const) {
+      const outcome = await hook(
+        "deny-dangerous",
+        [],
+        JSON.stringify({ toolCall: { name: "read_file", args: { Path } } }),
+      );
+      assert.equal(outcome.kind, "response");
+      if (outcome.kind !== "response") throw new Error("missing response");
+      assert.equal(outcome.exitCode, 0);
+      const response = JSON.parse(outcome.stdout);
+      assert.equal(response.decision, decision);
+      if (reason) assert.ok(response.reason.includes(reason), response.reason);
+    }
+    const gitPolicy = await hook(
+      "deny-git-mutations",
+      [],
+      JSON.stringify({
+        toolCall: {
+          name: "read_file",
+          args: { Path: String.raw`C:\m61-fixture\.env` },
+        },
+      }),
+    );
+    assert.equal(gitPolicy.kind, "response");
+    if (gitPolicy.kind !== "response") throw new Error("missing response");
+    assert.deepEqual(JSON.parse(gitPolicy.stdout), { decision: "allow" });
+  });
+
   it("routes provider tools by ownership and refuses requests it cannot inspect", async () => {
     const notExposed =
       "BLOCKED: Policy deny-dangerous: Hook payload did not expose a bash command to evaluate\n";

@@ -195,6 +195,24 @@ describe("policy input primitives", () => {
     });
   }
 
+  it("extracts the captured Antigravity read_file Path without coercion", () => {
+    const path = String.raw`C:\m61-fixture\control.txt`;
+    for (const Path of [path, null, 17, { path }]) {
+      assert.equal(
+        extractPolicyCommandText({
+          toolCall: { name: "read_file", args: { Path } },
+        }),
+        typeof Path === "string" ? path : "",
+      );
+    }
+    assert.equal(
+      extractPolicyCommandText({
+        toolCall: { args: { AbsolutePath: "existing.txt", Path: path } },
+      }),
+      "existing.txt",
+    );
+  });
+
   it("decodes Unicode escapes in field names, values and encoded tool arguments", () => {
     const parsed = parsePolicyPayload(
       String.raw`{"tool_\u006eame":"B\u0061sh","toolArgs":"{\"command\":\"echo \\u03bb\"}"}`,
@@ -740,6 +758,8 @@ describe("policy tool ownership and stdin consumers", () => {
       "Read",
       "view",
       "view_file",
+      "read_file",
+      "READ_FILE",
       "Write",
       "Edit",
       "MultiEdit",
@@ -756,7 +776,6 @@ describe("policy tool ownership and stdin consumers", () => {
     for (const tool of [
       "",
       "Bash",
-      "read_file",
       "view_file ",
       "delete_file",
       "glob",

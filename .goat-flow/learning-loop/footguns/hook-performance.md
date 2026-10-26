@@ -22,7 +22,7 @@ last_reviewed: 2026-10-24
 
 **Evidence:** Before the fix, [job 120600539285](https://github.com/blundergoat/goat-flow/actions/runs/40007932927/job/120600539285) at `4525587` recorded managed pipe/file replays of 38,087/26,375 ms. After commit `6e2d28df` added only this environment key, [job 120620704758](https://github.com/blundergoat/goat-flow/actions/runs/40013834271/job/120620704758) recorded 541/532 ms with denial status 2 and the existing canary assertions intact. Its later location controls recorded present 313 ms, absent 10,021 ms with `ETIMEDOUT`, and restored 311 ms. The owning suites reported `# pass 54`, `# fail 0`, `# skipped 0`. These observations support the environment fix on that runner without proving a universal timing bound or live provider delivery.
 
-Source anchors: `src/cli/hooks-configured-runtime-evidence.ts` (search: `WINDOWS_MANAGED_ENVIRONMENT_KEYS`), `src/cli/server/agent-hook-command.ts` (search: `codexWindowsHookCommand`), `test/integration/hook-command-spawn-matrix.helpers.ts` (search: `modulePathState`), and `test/integration/hook-command-spawn-matrix.test.ts` (search: `the canary secret must never appear in a Codex handler stream`).
+Source anchors: `src/cli/hooks-configured-runtime-evidence.ts` (search: `WINDOWS_MANAGED_ENVIRONMENT_KEYS`), `src/cli/server/agent-hook-command.ts` (search: `windowsPowerShellHookCommand`), `test/integration/hook-command-spawn-matrix.helpers.ts` (search: `modulePathState`), and `test/integration/hook-command-spawn-matrix.test.ts` (search: `the canary secret must never appear in a Codex handler stream`).
 
 ## Footgun: Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash
 

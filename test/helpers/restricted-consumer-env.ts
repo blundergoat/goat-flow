@@ -49,11 +49,13 @@ export function resolveExecutable(
 /**
  * Build an explicit PATH and preload journal for a caller-owned disposable fixture.
  * Only Node, Git, native cleanup/provider tools and declared analyzers are admitted.
+ * Antigravity fixtures explicitly opt into the shell their provider starts.
  * This observes Node child-process APIs, not subprocesses inside native tools or workers.
  */
 export function restrictedConsumerEnvironment(
   directory: string,
   analyzers: string[] = [],
+  includeAntigravityShell = false,
 ): NodeJS.ProcessEnv {
   const allowed = [realpathSync(process.execPath), resolveExecutable("git")];
   const toolDirectory = join(directory, "restricted-tools");
@@ -65,6 +67,7 @@ export function restrictedConsumerEnvironment(
     for (const helper of [
       join(system, "taskkill.exe"),
       join(powershellDirectory, "powershell.exe"),
+      ...(includeAntigravityShell ? [join(system, "cmd.exe")] : []),
     ]) {
       allowed.push(resolveExecutable(helper));
     }
@@ -76,7 +79,12 @@ export function restrictedConsumerEnvironment(
     ].join(delimiter);
   } else {
     allowed.push(resolveExecutable("ps"));
-    for (const [index, name] of ["node", "git", "ps"].entries()) {
+    const names = ["node", "git", "ps"];
+    if (includeAntigravityShell) {
+      allowed.push(resolveExecutable("sh"));
+      names.push("sh");
+    }
+    for (const [index, name] of names.entries()) {
       symlinkSync(allowed[index], join(toolDirectory, name));
     }
     pathValue = toolDirectory;

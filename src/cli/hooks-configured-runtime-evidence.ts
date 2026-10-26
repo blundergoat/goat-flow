@@ -6,6 +6,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import { join } from "node:path";
 
 import { getAgentProfiles } from "./agents/registry.js";
 import type { HookScenario } from "./cli-types.js";
@@ -501,7 +502,8 @@ function executeConfiguredFeedbackProbe(
   const startedAt = performance.now();
   const probe = agentHookSpawnDescriptor(configuredHandler);
   const execution = spawnSync(probe.command, probe.args, {
-    cwd: projectPath,
+    cwd: probe.cwd ? join(projectPath, probe.cwd) : projectPath,
+    windowsVerbatimArguments: probe.windowsVerbatimArguments,
     encoding: "utf-8",
     env: { ...managedHookEnvironment(projectPath), ...probe.env },
     input: scenario.payload,

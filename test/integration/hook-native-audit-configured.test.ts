@@ -85,7 +85,8 @@ function createFixture(parent: string, provider: Provider) {
   assert.ok(row, "public writer must create the installed row first");
   if (provider === "copilot") {
     row.bash = native.command;
-    row.powershell = native.command;
+    // Copilot's Windows field carries the literal PowerShell override, not the Bash command.
+    if (native.form === "shell") row.powershell = native.commandWindows;
   } else {
     row.command = native.command;
     if (native.form === "argv") {
@@ -103,15 +104,23 @@ function createFixture(parent: string, provider: Provider) {
   );
   assert.ok(saved, "complete native identity must survive save/reload");
   assert.equal(entryCarriesHandlerDescriptor(saved, provider, installed), true);
+  const windowsCommand =
+    provider === "copilot" ? saved.powershell : saved.commandWindows;
   const configured = {
     command: (provider === "copilot" ? saved.bash : saved.command) as string,
-    commandWindows:
-      typeof saved.commandWindows === "string" ? saved.commandWindows : null,
+    commandWindows: typeof windowsCommand === "string" ? windowsCommand : null,
     args: native.form === "argv" ? (saved.args as string[]) : null,
     scriptFile: "deny-dangerous.mjs",
     scriptPath: ".goat-flow/hooks/deny-dangerous.mjs",
     configPath,
   };
+  if (native.form === "shell" && native.commandWindows !== undefined) {
+    assert.equal(
+      configured.commandWindows,
+      native.commandWindows,
+      "fixture must replay the saved Windows command",
+    );
+  }
   const observedPath = join(root, "observed.jsonl");
   const evaluator = join(hooks, "deny-dangerous.mjs");
   writeFileSync(
@@ -162,14 +171,16 @@ function runScenario(kind: "responses" | "failures") {
       import assert from "node:assert/strict";
       import { readFileSync, rmSync } from "node:fs";
       import { spawnSync } from "node:child_process";
+      import { join } from "node:path";
       import { spawnConfiguredHookProbe } from ${JSON.stringify(AUDIT_MODULE)};
       for(const fixture of ${JSON.stringify(fixtures)}) {
         const {provider,root,nested,configured,installed}=fixture;
+        const probeCwds=provider==="antigravity"?[join(root,".agents")]:[root,nested];
         const payload=(command)=>JSON.stringify(provider==="copilot"?{toolName:"bash",toolArgs:{command}}:provider==="antigravity"?{hookEventName:"PreToolUse",toolCall:{name:"run_command",args:{CommandLine:command}}}:{tool_name:"Bash",tool_input:{command}})+"\n";
         const probe=(input)=>({hookInput:input,expectedOutcome:"block",expectedStatus:2,expectedStream:"stderr",expectedPattern:/BLOCKED/u});
         if(${JSON.stringify(kind)}==="responses") {
           const expected=[];
-          for(const cwd of [root,nested])for(const command of ["native fixture allow '$&| (literal) 🐐","native fixture deny"]) {
+          for(const cwd of probeCwds)for(const command of ["native fixture allow '$&| (literal) 🐐","native fixture deny"]) {
             const input=payload(command), blocked=command==="native fixture deny";
             const probeStarted=Date.now();
             const result=spawnConfiguredHookProbe(configured,probe(input),cwd);
@@ -219,7 +230,7 @@ function runScenario(kind: "responses" | "failures") {
           const legacy={...configured,scriptFile:"deny-dangerous.sh",scriptPath:".goat-flow/hooks/deny-dangerous.sh"};
           assert.throws(()=>spawnConfiguredHookProbe(legacy,probe(payload("native fixture deny")),root),/native replay requires/u);
           rmSync(fixture.evaluator);
-          const missing=spawnConfiguredHookProbe(configured,probe(payload("native fixture deny")),root);
+          const missing=spawnConfiguredHookProbe(configured,probe(payload("native fixture deny")),probeCwds[0]);
           assert.match(missing.stdout+missing.stderr,/hook unavailable/u);
           assert.equal(missing.signal,null);
         }
@@ -228,7 +239,7 @@ function runScenario(kind: "responses" | "failures") {
     );
     const result = spawnSync(process.execPath, [runner], {
       cwd: parent,
-      env: restrictedConsumerEnvironment(parent),
+      env: restrictedConsumerEnvironment(parent, [], true),
       encoding: "utf8",
       timeout: 30000,
     });

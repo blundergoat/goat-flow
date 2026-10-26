@@ -7,14 +7,34 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
+import { PROFILES } from "../../src/cli/detect/agents.js";
 import {
   agentHookSpawnDescriptor,
   buildAgentHookDescriptor,
   entryCarriesHandlerDescriptor,
+  matcherForAgent,
 } from "../../src/cli/server/agent-hook-command.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 describe("agent hook replay descriptors", () => {
+  it("matches Antigravity read_file only for its content policy", () => {
+    const content = getHookSpec("deny-dangerous");
+    const git = getHookSpec("deny-git-mutations");
+    assert.ok(content);
+    assert.ok(git);
+    assert.ok(
+      matcherForAgent(PROFILES.antigravity, content)
+        .split("|")
+        .includes("read_file"),
+    );
+    assert.equal(matcherForAgent(PROFILES.antigravity, git), "run_command");
+    for (const agent of [PROFILES.claude, PROFILES.codex, PROFILES.copilot]) {
+      assert.ok(
+        !matcherForAgent(agent, content).split("|").includes("read_file"),
+      );
+    }
+  });
+
   /** Spawns two inert Bash replays so `hooks verify` stays honest on Windows when a caller drops the replay environment. */
   it("fails a Windows hook replay whose command environment was dropped", () => {
     // A shell handler without a Windows override carries its Bash source in the environment on Windows.
@@ -92,6 +112,54 @@ describe("Codex Stop scan budget", () => {
       ),
       false,
     );
+  });
+});
+
+describe("Copilot Windows transport", () => {
+  // Copilot runs `powershell` on Windows, where the JSON-quoted Bash command cannot be parsed.
+  it("registers the literal PowerShell override and treats the old shared row as stale", () => {
+    for (const hookId of [
+      "deny-dangerous",
+      "deny-git-mutations",
+      "gruff-code-quality",
+    ]) {
+      const spec = getHookSpec(hookId);
+      assert.ok(spec);
+      const descriptor = buildAgentHookDescriptor(
+        "copilot",
+        ".goat-flow/hooks",
+        spec,
+      );
+      if (descriptor.form !== "shell")
+        assert.fail("Copilot uses shell descriptors");
+      assert.ok(descriptor.command.startsWith('node -e "'));
+      const windowsCommand = descriptor.commandWindows;
+      assert.ok(windowsCommand);
+      assert.ok(
+        windowsCommand.startsWith("Set-Location -LiteralPath "),
+        `${hookId} must use the literal PowerShell transport`,
+      );
+      assert.ok(
+        windowsCommand.includes(`'.goat-flow/hooks/${spec.primaryScript}'`),
+      );
+      assert.equal(
+        entryCarriesHandlerDescriptor(
+          { bash: descriptor.command, powershell: windowsCommand },
+          "copilot",
+          descriptor,
+        ),
+        true,
+      );
+      assert.equal(
+        entryCarriesHandlerDescriptor(
+          { bash: descriptor.command, powershell: descriptor.command },
+          "copilot",
+          descriptor,
+        ),
+        false,
+        `${hookId} rows written before the fix must be repaired`,
+      );
+    }
   });
 });
 
@@ -212,9 +280,28 @@ describe("managed Node replay descriptors", () => {
       );
       assert.equal(candidate.form, installed.form);
       const replay = agentHookSpawnDescriptor(candidate, "linux");
-      assert.equal(replay.command, "node");
-      assert.equal(replay.args[2], ".goat-flow/hooks/deny-dangerous.mjs");
-      assert.equal(replay.args[6], ".goat-flow/hooks/run-hook.mjs");
+      if (agent === "antigravity") {
+        assert.ok(candidate.form === "shell");
+        assert.equal(
+          candidate.command,
+          "node ../.goat-flow/hooks/antigravity-hook-bootstrap.cjs .goat-flow/hooks/deny-dangerous.mjs antigravity CLAUDE_PROJECT_DIR .agents/hooks.json .goat-flow/hooks/run-hook.mjs",
+        );
+        assert.deepEqual(replay, {
+          command: "sh",
+          args: ["-c", candidate.command],
+          cwd: ".agents",
+        });
+        assert.deepEqual(agentHookSpawnDescriptor(candidate, "win32"), {
+          command: "cmd.exe",
+          args: ["/c", `"${candidate.command}"`],
+          cwd: ".agents",
+          windowsVerbatimArguments: true,
+        });
+      } else {
+        assert.equal(replay.command, "node");
+        assert.equal(replay.args[2], ".goat-flow/hooks/deny-dangerous.mjs");
+        assert.equal(replay.args[6], ".goat-flow/hooks/run-hook.mjs");
+      }
       if (installed.form === "argv") {
         assert.equal(installed.args[6], ".goat-flow/hooks/run-hook.mjs");
         assert.ok(candidate.form === "argv");

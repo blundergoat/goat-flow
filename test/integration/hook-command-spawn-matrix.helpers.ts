@@ -1,10 +1,18 @@
-/** Metadata-only Windows replay diagnostics for the spawn-matrix integration test. */
-import type {
+/** Windows provider-launch regressions, replay diagnostics and PowerShell parse checks for the spawn-matrix suite. */
+import assert from "node:assert/strict";
+import {
   spawnSync,
-  SpawnSyncOptionsWithStringEncoding,
+  type SpawnSyncOptionsWithStringEncoding,
 } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { it } from "node:test";
+import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { agentHookSpawnDescriptor } from "../../src/cli/hook-spawn-descriptor.js";
+import { PROFILES } from "../../src/cli/detect/agents.js";
+import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 type ReplayVariant = {
   environment: "full" | "managed";
@@ -18,6 +26,94 @@ type FileStreamRunner = (
   options: SpawnSyncOptionsWithStringEncoding,
   payload?: string,
 ) => ReturnType<typeof spawnSync>;
+
+/** Match Go syscall.appendEscapeArg, used by Antigravity's exec.Command("cmd", "/c", command).
+ * Source: https://go.dev/src/syscall/exec_windows.go (appendEscapeArg).
+ */
+export function goWindowsEscapeArg(value: string): string {
+  if (value.length === 0) return '""';
+  const hasSpace = /[ \t]/u.test(value);
+  let escaped = hasSpace ? '"' : "";
+  let slashes = 0;
+  for (const character of value) {
+    if (character === '"') {
+      escaped += "\\".repeat(slashes + 1);
+      slashes = 0;
+    } else if (character === "\\") {
+      slashes++;
+    } else {
+      slashes = 0;
+    }
+    escaped += character;
+  }
+  return hasSpace ? escaped + "\\".repeat(slashes) + '"' : escaped;
+}
+
+/** Record the argv Node receives through Go's cmd launch in a caller-owned temporary project. */
+export function assertAntigravityWindowsArgv(
+  root: string,
+  hookId: string,
+  install: (root: string) => void,
+): void {
+  mkdirSync(join(root, ".agents"));
+  install(root);
+  const spec = getHookSpec(hookId);
+  assert.ok(spec);
+  writeAgentHookState(root, PROFILES.antigravity, spec, true);
+  const config = JSON.parse(
+    readFileSync(join(root, ".agents/hooks.json"), "utf8"),
+  );
+  const command = config[hookId].PreToolUse[0].hooks[0].command as string;
+  const recorder = join(root, "record-argv.cjs");
+  writeFileSync(
+    recorder,
+    "console.log(JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()}));process.exit(0);\n",
+  );
+  const result = spawnSync("cmd.exe", ["/c", goWindowsEscapeArg(command)], {
+    cwd: join(root, ".agents"),
+    encoding: "utf8",
+    windowsVerbatimArguments: true,
+    env: {
+      ...process.env,
+      PATH: `${join(process.execPath, "..")};${process.env.PATH ?? ""}`,
+      NODE_OPTIONS: `--require="${recorder.replaceAll("\\", "/")}"`,
+    },
+    timeout: 10_000,
+  });
+  assert.equal(
+    result.status,
+    0,
+    `status=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+  );
+  assert.deepEqual(JSON.parse(result.stdout), {
+    args: [
+      `.goat-flow/hooks/${hookId}.mjs`,
+      "antigravity",
+      "CLAUDE_PROJECT_DIR",
+      ".agents/hooks.json",
+      ".goat-flow/hooks/run-hook.mjs",
+    ],
+    cwd: join(root, ".agents"),
+  });
+}
+
+/** Register both policy argv regressions while leaving fixture cleanup with the owning suite. */
+export function registerAntigravityWindowsArgvTests(
+  disposableParents: string[],
+  install: (root: string) => void,
+): void {
+  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    it(
+      `Antigravity cmd launch preserves ${hookId} argv from .agents`,
+      { skip: process.platform !== "win32" },
+      () => {
+        const root = mkdtempSync(join(tmpdir(), "goat-antigravity-cmd-"));
+        disposableParents.push(root);
+        assertAntigravityWindowsArgv(root, hookId, install);
+      },
+    );
+  }
+}
 
 /**
  * Emit metadata immediately so CI process samples can be matched to each replay.
@@ -143,6 +239,85 @@ export function runWindowsDiagnosticControls(
         error:
           (result.error as NodeJS.ErrnoException | undefined)?.code ?? "none",
       });
+    }
+  }
+}
+
+/**
+ * List the PowerShell hosts on this machine that can parse registered Windows commands.
+ * Windows always offers Windows PowerShell; `pwsh` joins wherever it is on PATH, which is the host Copilot uses.
+ */
+export function availablePowerShellHosts(): string[] {
+  const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR;
+  const candidates = ["pwsh"];
+  // Windows PowerShell has a fixed location; other hosts have only the PATH lookup.
+  if (process.platform === "win32" && windowsRoot) {
+    candidates.push(
+      join(
+        windowsRoot,
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+      ),
+    );
+  }
+  return candidates.filter(
+    (candidate) =>
+      spawnSync(
+        candidate,
+        ["-NoProfile", "-NonInteractive", "-Command", "exit 0"],
+        {
+          timeout: 60_000,
+        },
+      ).status === 0,
+  );
+}
+
+/**
+ * Read the `powershell` command of every Copilot row the public writer registered in one project.
+ * Copilot runs this field on Windows; the fixture registers two policy rows and one Gruff row.
+ */
+export function registeredCopilotPowerShellCommands(
+  projectRoot: string,
+): string[] {
+  const config = JSON.parse(
+    readFileSync(join(projectRoot, ".github", "hooks", "hooks.json"), "utf8"),
+  ) as { hooks: Record<string, Array<{ powershell: string }>> };
+  const commands = Object.values(config.hooks)
+    .flat()
+    .map((row) => row.powershell);
+  assert.equal(commands.length, 3, "two policy rows and one Gruff row");
+  return commands;
+}
+
+/**
+ * Assert every command parses without errors in each host, without running it.
+ * Commands travel in the environment so test-side argument quoting cannot change the parsed text.
+ */
+export function assertPowerShellParses(
+  hosts: string[],
+  commands: string[],
+): void {
+  const parseScript =
+    "$parseErrors = $null; $tokens = $null; [void][System.Management.Automation.Language.Parser]::ParseInput($env:GOAT_FLOW_PARSE_TEXT, [ref]$tokens, [ref]$parseErrors); @($parseErrors).Count";
+  for (const host of hosts) {
+    for (const command of commands) {
+      const result = spawnSync(
+        host,
+        ["-NoProfile", "-NonInteractive", "-Command", parseScript],
+        {
+          encoding: "utf8",
+          env: { ...process.env, GOAT_FLOW_PARSE_TEXT: command },
+          timeout: 60_000,
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(
+        Number(result.stdout.trim()),
+        0,
+        `${host} must parse this registered command:\n${command}`,
+      );
     }
   }
 }

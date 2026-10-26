@@ -26,8 +26,6 @@ import {
 import { writeFileAtomic } from "./safe-exec.js";
 import type { HookSpec } from "./hooks-registry.js";
 
-export { buildAgentHookCommand } from "./agent-hook-command.js";
-
 /** Result of reading an agent hook config without mutating it. */
 export interface AgentHookReadState {
   installed: boolean;
@@ -353,17 +351,25 @@ function claudeCodexEntries(
  * @param agent - selected Copilot profile; a null hook directory makes command creation throw
  *
  * @param spec - managed hook; an absent timeout uses the provider's 30-second default
- * @returns command row with Bash and PowerShell parity; never empty
+ * @returns command row with the JSON-quoted Bash command and the literal PowerShell override; never empty
+ * @throws when the descriptor has no Windows override, because PowerShell cannot parse the Bash command
  */
 function copilotEntry(
   agent: AgentProfile,
   spec: HookSpec,
 ): AgentHookJsonObject {
-  const crossPlatformCommand = managedAgentHookCommand(agent, spec);
+  const handlerDescriptor = managedAgentHookDescriptor(agent, spec);
+  // Copilot runs `powershell` on Windows; a row PowerShell cannot parse fails every call, denying the tool or dropping feedback.
+  if (
+    handlerDescriptor.form !== "shell" ||
+    handlerDescriptor.commandWindows === undefined
+  ) {
+    throw new Error(`${agent.id} hook descriptor has no Windows command`);
+  }
   return {
     type: "command",
-    bash: crossPlatformCommand,
-    powershell: crossPlatformCommand,
+    bash: handlerDescriptor.command,
+    powershell: handlerDescriptor.commandWindows,
     timeoutSec: spec.timeoutSec ?? 30,
   };
 }

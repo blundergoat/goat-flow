@@ -32,7 +32,10 @@ import {
 } from "../../src/cli/server/agent-hook-command.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
-import { restrictedConsumerEnvironment } from "../helpers/restricted-consumer-env.js";
+import {
+  restrictedConsumerEnvironment,
+  resolveExecutable,
+} from "../helpers/restricted-consumer-env.js";
 
 const WORKFLOW_HOOKS = resolve(import.meta.dirname, "../../workflow/hooks");
 const disposableParents: string[] = [];
@@ -168,8 +171,12 @@ function createNativePolicyFixture(agent: NativeFixtureAgent) {
     agent === "copilot" ? saved.bash : saved.command
   ) as string;
   if (descriptor.form === "argv") descriptor.args = saved.args as string[];
-  else if (typeof saved.commandWindows === "string")
-    descriptor.commandWindows = saved.commandWindows;
+  else {
+    const windowsCommand =
+      agent === "copilot" ? saved.powershell : saved.commandWindows;
+    if (typeof windowsCommand === "string")
+      descriptor.commandWindows = windowsCommand;
+  }
   const observedPath = join(projectRoot, "native-observed.jsonl");
   writeFileSync(
     join(hooks, "deny-dangerous.mjs"),
@@ -203,10 +210,11 @@ function runNativePolicyFixture(
     process.platform,
   );
   const result = runWithFileStreams(
-    selected.command,
+    selected.command === "sh" ? resolveExecutable("sh") : selected.command,
     selected.args,
     {
-      cwd,
+      cwd: selected.cwd ? join(fixture.projectRoot, selected.cwd) : cwd,
+      windowsVerbatimArguments: selected.windowsVerbatimArguments,
       encoding: "utf8",
       env: { ...fixture.environment, ...selected.env },
       timeout: 15000,

@@ -1,5 +1,5 @@
 /**
- * Executes the registered Claude exec-form handlers exactly as the provider spawns them: benign and blocked
+ * Exercises registered provider handlers through their launch transports: benign and blocked
  * payloads from hostile-named projects, then every catchable managed-file failure mapped to its provider response.
  *
  * Windows CI runs this file at the package-minimum Node to lock ADR-053.
@@ -46,7 +46,11 @@ import {
   writeContractGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
 import {
+  assertPowerShellParses,
+  registerAntigravityWindowsArgvTests,
+  availablePowerShellHosts,
   recordWindowsReplayStage,
+  registeredCopilotPowerShellCommands,
   runWindowsDiagnosticControls,
 } from "./hook-command-spawn-matrix.helpers.js";
 
@@ -130,13 +134,13 @@ interface RegisteredHandler {
 /**
  * Build a Git project whose name carries spaces and shell metacharacters, with
  *
- * the shipped hook files installed and all three selected-provider hooks registered.
+ * the shipped hook files installed and every managed hook the selected provider supports registered.
  * It writes one temporary tree, recorded for suite cleanup.
  *
  * @returns hostile-named project root ready for exact handler replay
  */
 function createRegisteredHostileProject(
-  agentId: "claude" | "codex" = "claude",
+  agentId: "claude" | "codex" | "copilot" = "claude",
 ): string {
   const disposableParent = mkdtempSync(
     join(tmpdir(), "goat-flow-spawn-matrix-"),
@@ -148,9 +152,11 @@ function createRegisteredHostileProject(
   if (agentId === "claude") {
     mkdirSync(join(projectRoot, ".claude"), { recursive: true });
     writeFileSync(join(projectRoot, ".claude", "settings.json"), "{}\n");
-  } else {
+  } else if (agentId === "codex") {
     mkdirSync(join(projectRoot, ".codex"), { recursive: true });
     writeFileSync(join(projectRoot, ".codex", "config.toml"), "\n");
+  } else {
+    mkdirSync(join(projectRoot, ".github", "hooks"), { recursive: true });
   }
   // A fake secret proves the block response without ever exposing real content.
   writeFileSync(join(projectRoot, ".env"), `${ENV_CANARY}\n`);
@@ -162,7 +168,8 @@ function createRegisteredHostileProject(
     "deny-dangerous",
     "deny-git-mutations",
     "gruff-code-quality",
-    "post-turn-safety",
+    // Copilot has no Stop registration adapter, so its users never receive this row.
+    ...(agentId === "copilot" ? [] : ["post-turn-safety"]),
   ]) {
     const hookSpec = getHookSpec(hookId);
     assert.ok(hookSpec);
@@ -365,7 +372,14 @@ function handlerDiagnostics(result: ReturnType<typeof spawnSync>): string {
   return `status=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
 }
 
+const POWERSHELL_HOSTS = availablePowerShellHosts();
+
 describe("hook command spawn matrix", () => {
+  registerAntigravityWindowsArgvTests(
+    disposableParents,
+    installShippedHookFiles,
+  );
+
   it("delivers benign and blocked payloads through the exact registered argv from a hostile-named root", () => {
     const projectRoot = createRegisteredHostileProject();
     const denyHandler = registeredHandler(projectRoot, "PreToolUse");
@@ -603,6 +617,23 @@ describe("hook command spawn matrix", () => {
         timeout: 60_000,
       });
       assert.equal(result.status, 1, handlerDiagnostics(result));
+    },
+  );
+
+  // Copilot runs its `powershell` field on Windows, and a failing preToolUse command denies every tool call.
+  it(
+    "registers Copilot PowerShell commands that every local PowerShell host can parse",
+    {
+      skip:
+        POWERSHELL_HOSTS.length === 0 && "no PowerShell host on this machine",
+    },
+    () => {
+      const codexRoot = createRegisteredHostileProject("codex");
+      const copilotRoot = createRegisteredHostileProject("copilot");
+      assertPowerShellParses(POWERSHELL_HOSTS, [
+        registeredCodexHandler(codexRoot, "PreToolUse").commandWindows,
+        ...registeredCopilotPowerShellCommands(copilotRoot),
+      ]);
     },
   );
 

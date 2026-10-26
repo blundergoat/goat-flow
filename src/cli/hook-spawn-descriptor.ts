@@ -6,11 +6,11 @@ import type {
 
 /**
  * Choose the process that replays a registered hook when the user runs `goat-flow hooks verify` on this platform.
- * A Windows override such as Codex's `commandWindows` wins; native commands become Node argv and legacy shell commands retain their source.
+ * A Windows override wins; Antigravity uses its provider shell from .agents, and other native commands become Node argv.
  *
  * @param descriptor - Registered handler whose current-platform command is selected.
  * @param platform - Host platform used for selection; defaults to the running Node process.
- * @returns Executable, arguments and optional environment additions; absent env means ordinary platform quoting is sufficient.
+ * @returns Executable, arguments, optional project-relative cwd, verbatim-argument setting and environment additions.
  * @throws when native replay names installed Bash operands or a noncanonical command.
  */
 export function agentHookSpawnDescriptor(
@@ -19,10 +19,7 @@ export function agentHookSpawnDescriptor(
 ): AgentHookSpawnDescriptor {
   // Claude's exec registration is already literal argv and needs no intermediate shell.
   if (descriptor.form === "argv") {
-    if (descriptor.args[6]?.endsWith("/run-hook.mjs"))
-      assertNativeOperands(descriptor.args, descriptor.command);
-    // Shell-routing fields belong to host config identity, never Claude's direct exec replay.
-    return { command: descriptor.command, args: [...descriptor.args] };
+    return nativeArgvReplay(descriptor);
   }
   // A registered Windows override keeps precedence for native and legacy replays.
   if (platform === "win32" && descriptor.commandWindows !== undefined) {
@@ -35,6 +32,13 @@ export function agentHookSpawnDescriptor(
         descriptor.commandWindows,
       ],
     };
+  }
+  if (
+    descriptor.command.startsWith(
+      "node ../.goat-flow/hooks/antigravity-hook-bootstrap.cjs ",
+    )
+  ) {
+    return antigravityShellReplay(descriptor.command, platform);
   }
   const nativeReplay = descriptor.command.includes("run-hook.mjs")
     ? nativeShellReplay(descriptor.command)
@@ -56,6 +60,44 @@ export function agentHookSpawnDescriptor(
     };
   }
   return { command: "bash", args: ["-c", descriptor.command] };
+}
+
+/** Keep Claude's literal argv and validate managed launcher operands without replaying its inert shell routes. */
+function nativeArgvReplay(
+  descriptor: Extract<AgentHookHandlerDescriptor, { form: "argv" }>,
+): AgentHookSpawnDescriptor {
+  if (descriptor.args[6]?.endsWith("/run-hook.mjs"))
+    assertNativeOperands(descriptor.args, descriptor.command);
+  return { command: descriptor.command, args: [...descriptor.args] };
+}
+
+/** Replay the managed-file command through Antigravity's shell; reject altered operands before launch. */
+function antigravityShellReplay(
+  command: string,
+  platform: NodeJS.Platform,
+): AgentHookSpawnDescriptor {
+  const operands = command.split(" ");
+  if (
+    operands.length !== 7 ||
+    operands.some((operand) => !/^[A-Za-z0-9._/-]+$/u.test(operand)) ||
+    !operands[2]?.endsWith(".mjs") ||
+    operands[3] !== "antigravity" ||
+    operands[4] !== "CLAUDE_PROJECT_DIR" ||
+    operands[5] !== ".agents/hooks.json" ||
+    operands[6] !== ".goat-flow/hooks/run-hook.mjs"
+  )
+    throw new Error(
+      "Antigravity replay requires the canonical managed-file command",
+    );
+  // Go quotes this whitespace-containing argument once; there are no embedded quotes to escape.
+  return platform === "win32"
+    ? {
+        command: "cmd.exe",
+        args: ["/c", `"${command}"`],
+        cwd: ".agents",
+        windowsVerbatimArguments: true,
+      }
+    : { command: "sh", args: ["-c", command], cwd: ".agents" };
 }
 
 /** Validate native registration operands; throws instead of replaying a Bash entrypoint. */

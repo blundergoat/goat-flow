@@ -58,6 +58,7 @@
     ".goat-flow/hooks/hook-launch-runtime.mjs",
     ".goat-flow/hooks/hook-launch.mjs",
     ".goat-flow/hooks/run-hook.mjs",
+    ".goat-flow/hooks/antigravity-hook-bootstrap.cjs",
     ".goat-flow/hooks/hook-supervisor.mjs",
     ".goat-flow/hooks/hook-output.mjs",
     ".goat-flow/hooks/policy-input.mjs",
@@ -318,6 +319,10 @@
     ".goat-flow/hooks/run-hook.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/run-hook.mjs"
+    },
+    ".goat-flow/hooks/antigravity-hook-bootstrap.cjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/antigravity-hook-bootstrap.cjs"
     },
     ".goat-flow/hooks/hook-supervisor.mjs": {
       "ownership": "system-owned",

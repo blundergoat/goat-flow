@@ -34,7 +34,7 @@ import {
   getInstalledSkillRoots,
   getSkillFiles,
 } from "../../src/cli/manifest/manifest.js";
-import { buildAgentHookCommand } from "../../src/cli/server/agent-hook-writer.js";
+import { buildAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import {
   getHookSpec,
   listHookSpecs,
@@ -84,15 +84,20 @@ export const COPILOT_HOOK_CONFIG_STUB =
   '{\n  "version": 1,\n  "hooks": { "preToolUse": [] }\n}\n';
 const COPILOT_GRUFF_SPEC = getHookSpec("gruff-code-quality");
 assert.ok(COPILOT_GRUFF_SPEC);
-const COPILOT_GRUFF_COMMAND = buildAgentHookCommand(
+const COPILOT_GRUFF_DESCRIPTOR = buildAgentHookDescriptor(
   "copilot",
   ".goat-flow/hooks",
   COPILOT_GRUFF_SPEC,
 );
+assert.ok(
+  COPILOT_GRUFF_DESCRIPTOR.form === "shell" &&
+    COPILOT_GRUFF_DESCRIPTOR.commandWindows !== undefined,
+);
+// Copilot runs the Bash command on Unix and the literal PowerShell override on Windows.
 export const COPILOT_GRUFF_HOOK_ENTRY = {
   type: "command",
-  bash: COPILOT_GRUFF_COMMAND,
-  powershell: COPILOT_GRUFF_COMMAND,
+  bash: COPILOT_GRUFF_DESCRIPTOR.command,
+  powershell: COPILOT_GRUFF_DESCRIPTOR.commandWindows,
   timeoutSec: 90,
 };
 

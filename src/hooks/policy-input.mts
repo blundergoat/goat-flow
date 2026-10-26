@@ -123,6 +123,7 @@ export function extractPolicyCommandText(
     toolArgsSnake.TargetFile,
     toolArgsSnake.FilePath,
     toolArgsSnake.SearchPath,
+    toolCall.Path,
   );
   if (path && !command.includes(path)) command += " " + path;
   return command.replace(/^ /u, "");
@@ -148,6 +149,7 @@ export function isPolicySecretFileTool(tool: string): boolean {
     "read",
     "view",
     "view_file",
+    "read_file",
     "write",
     "edit",
     "multiedit",

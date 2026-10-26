@@ -3662,6 +3662,7 @@ if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-with-bash.mjs" "$HOOKS_DIR/run-with-bash.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-hook.mjs" "$HOOKS_DIR/run-hook.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/antigravity-hook-bootstrap.cjs" "$HOOKS_DIR/antigravity-hook-bootstrap.cjs" "system-owned" "644"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-provider-adapters.mjs" "$HOOKS_DIR/hook-provider-adapters.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-launch-runtime.mjs" "$HOOKS_DIR/hook-launch-runtime.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-launch.mjs" "$HOOKS_DIR/hook-launch.mjs" "system-owned" "755"

@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-27
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -87,7 +87,7 @@ last_reviewed: 2026-10-08
 
 **Status:** active | **Created:** 2026-05-04
 **Severity:** INTEGRATION
-**Incident count:** 8 | **Latest occurrence:** 2026-09-07
+**Incident count:** 9 | **Latest occurrence:** 2026-10-27
 
 **Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; include install/round-trip suites when generated config shape changes. For every replaced sentence, grep its opening fragment as well as its changed terms, because an assertion may parse a sentence by its opener without naming the words being changed. Update those assertions with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
 
@@ -103,13 +103,15 @@ last_reviewed: 2026-10-08
 
 **Latest recurrence (2026-08-03):** The active Timing Receipt regression correctly failed strict validation, but its new assertion guessed `duplicate segment id` instead of copying the parser's emitted `timing receipt segment ids must be unique`. The focused run stopped at 62/63 despite correct product behaviour. Run the reproduction once or inspect the parser warning before pinning diagnostic text; do not invent a more specific contract than the implementation emits.
 
-**Latest recurrence (2026-08-06):** Replacing Copilot's `Get-Command bash` fallback with the shared Node launcher cleared the focused registrar and drift suites, but the full installer matrix still required the retired PowerShell marker in two cases. The corrected assertion now requires `run-with-bash.mjs` and rejects `Get-Command bash`. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `must use the managed Node launcher`) and `src/cli/server/agent-hook-writer.ts` (search: `powershell: crossPlatformCommand`).
+**Latest recurrence (2026-08-06):** Replacing Copilot's `Get-Command bash` fallback with the shared Node launcher cleared the focused registrar and drift suites, but the full installer matrix still required the retired PowerShell marker in two cases. The corrected assertion now requires `run-with-bash.mjs` and rejects `Get-Command bash`. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `must use the managed Node launcher`) and `src/cli/server/agent-hook-writer.ts` (search: `function copilotEntry`).
 
 **Recurrence (2026-08-17):** Moving instruction-parity phrases from the parity script into `workflow/manifest.json` passed the new focused tests, but the fast suite still had a contract test pinned to the old owner and a copied-repository fixture without the manifest. The live stats check also found a lesson anchor pointing at the removed script-owned phrase. When ownership moves, grep the old semantic anchors and fixture copy lists before declaring the focused slice complete. Evidence anchors: `workflow/manifest.json` (search: `"label": "test-selection READ route"`), `test/contract/test-selection-playbook-doctrine.test.ts` (search: `registers the exact route with instruction parity`), and `test/unit/local-instructions.test.ts` (search: `workflow/manifest.json`).
 
 A relocation also destroys its own evidence: once the inline list was deleted, the reader and its tests both resolved to the manifest, so a phrase dropped in transit would have vanished from the rule and the assertion in the same commit, and the tests would still have gone green. Green tests cannot show that a move preserved membership; only the pre-move copy can. Diff it structurally - parse the old literal out of `git show HEAD:<file>` and compare label, section, and phrase content rather than eyeballing labels, because a label survives a shortened phrase list. Verified for this move on 2026-08-17: 8 rules before and after, zero content differences.
 
 **Recurrence 2026-09-07:** The change rewrote the security root's inventory sentence and grepped both security contract suites for the changed nouns (`attackers`, `completeness proof`, `descriptor-anchored`). That found every affected assertion except one: `test/contract/skill-hardening-security-2.test.ts` (search: `current exhaustive baseline must retain 12 inventory kinds`) parsed the kind list from the sentence opener `Every authoritative assessment-driving inventory—` and failed the first GREEN run at 16 of 17 while the four intentionally revised cases passed. The assertion now parses the reconciled list and the declared pair separately, so the same 12-kind baseline holds.
+
+**Recurrence 2026-10-27:** Antigravity's move to a managed bootstrap left audit fixtures rejecting its provider shell and replaying from the old directories; three focused tests failed. Copilot's fixture also read `commandWindows` instead of its saved `powershell` field. A fresh Bash install then omitted the bootstrap even though the TypeScript installer copied it. Before verifying a transport change, check fixture process permissions, cwd, saved platform fields and every supported installer. Select the Bash installer explicitly in its regression: the shared installer helper defaults to TypeScript. Evidence: `test/integration/hook-native-audit-configured.test.ts` (search: `probeCwds`), `test/integration/hook-native-audit-discovery.test.ts` (search: `rows.length`), and `test/integration/setup-install.test.ts` (search: `standalone Antigravity install runs both saved policy hooks`).
 
 ---
 

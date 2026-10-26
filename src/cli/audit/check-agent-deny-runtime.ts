@@ -590,10 +590,11 @@ function collectNestedCommandValues(
       managedScripts,
     );
   }
+  // Copilot keeps its Windows PowerShell command in `powershell` beside the Bash command.
   pushConfiguredCommand(
     commands,
     obj.bash,
-    undefined,
+    obj.powershell,
     configPath,
     managedScripts,
   );
@@ -728,6 +729,9 @@ function configuredHookProbeLocations(
   label: string;
   cwd: string;
 }> {
+  if (agentFacts.agent.id === "antigravity") {
+    return [{ label: ".agents", cwd: join(ctx.projectPath, ".agents") }];
+  }
   const probeLocations = [{ label: "project root", cwd: ctx.projectPath }];
   // Copilot supplies its workspace root, so one root replay matches its user flow.
   if (agentFacts.agent.id === "copilot") return probeLocations;
@@ -831,6 +835,7 @@ function spawnNativeConfiguredHookProbe(
   );
   const options = {
     cwd,
+    windowsVerbatimArguments: descriptor.windowsVerbatimArguments,
     encoding: "utf8" as const,
     env: { ...runtimeProbeEnvironment(input), ...descriptor.env },
     timeout: 5000,
