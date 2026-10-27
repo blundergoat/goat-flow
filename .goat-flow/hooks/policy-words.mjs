@@ -98,6 +98,17 @@ export function normalizePolicyGitExecutableWord(word) {
         return word;
     return path.slice(0, slash + 1) + base.slice(0, -4);
 }
+/** Preserve Windows GitHub executable paths before shell decoding consumes their backslashes. */
+export function normalizePolicyGhExecutableWord(word) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(word))
+        return word;
+    const path = word.replaceAll("\\", "/");
+    const slash = path.lastIndexOf("/");
+    const base = asciiLowerCase(path.slice(slash + 1));
+    if (!/^gh(?:\.(?:exe|com|cmd|bat))?$/u.test(base))
+        return word;
+    return path.slice(0, slash + 1) + "gh";
+}
 /** An unescaped dollar immediately before this quote opens a Bash ANSI-C string. */
 export function isPolicyAnsiQuoteStart(input, index) {
     if (input.charAt(index) !== "'" || input.charAt(index - 1) !== "$")

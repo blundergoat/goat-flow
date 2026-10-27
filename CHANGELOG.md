@@ -11,6 +11,7 @@
 
 ### Security
 
+- **Windows GitHub CLI paths stay protected** - GitHub write protection recognizes Windows executable names and paths while preserving read and comment exceptions.
 - **Antigravity file reads reach secret protection** - `read_file` requests now reach the policy. Run `goat-flow hooks sync` to update existing installs.
 - **Node guards inspect more shell command forms** - Quotes in comments, ANSI-C strings, case arms, arithmetic-like command substitutions and functions with subshell bodies no longer hide a later delete or push. Dynamic Git verbs and uninspectable xargs subcommands are refused; known Git executable variables stay tracked through nested shells and pipelines.
 - **Node guards inspect wrapper option values and refuse unreadable Git aliases** - Sudo, Bash and env option operands no longer hide the command being checked. Git alias lookup follows env directory changes and refuses lookup failures; `git send-email` counts as publication.

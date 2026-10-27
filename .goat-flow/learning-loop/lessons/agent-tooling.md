@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-10-17
+last_reviewed: 2026-10-27
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -176,3 +176,78 @@ Inspect literals independently when checking renames, as described in
 **Prevention:** Before adding `--help` or another probe flag to a repository script, read how it parses arguments; a script that ignores unknown flags runs its real work. Before stopping a process, list candidates with `ps -eo pid,ppid,args`, select the exact PID by its argument vector, and signal that PID. A `pgrep -f` or `pkill -f` pattern also matches the invoking shell whenever the pattern text appears in that shell's own command line.
 
 **What happened:** While counting test files, the agent appended `--help` to `node scripts/run-tests.mjs slow --shard=1/1`. The runner reads its mode from the first argument and ignores other flags, so the command started the whole slow suite locally until it was stopped. The agent then stopped it with a `pgrep -f` loop whose pattern also appeared in its own Bash command, so the loop signalled its own shell, which exited with status 144 before reaching the test runner. Selecting the runner's PID from `ps` output and signalling it directly stopped the run; no repository file changed. Evidence: `scripts/run-tests.mjs` (search: `const mode = process.argv[2] ?? "fast";`, `function parseShard`).
+
+---
+
+## Lesson: Stream large files when verifying hashes
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Use a streaming checksum for large executables; distinguish a failed read from a byte mismatch.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Use `sha256sum --check` or a streaming hash for executable verification. Preserve read errors, keep their comparisons unresolved, and rerun only those files before accepting the packet.
+
+**What happened:** During M61 readiness verification, an inline Node checker used `readFileSync` to hash provider executables. Six comparisons returned `ENOMEM`. Streaming checks of the four distinct affected files then matched every expected SHA256. No provider ran.
+
+**Local incident evidence:** `.goat-flow/logs/review/m61-readiness.20261027-3e1456a6.json` (search: "ENOMEM", "sha256sum --check --strict") preserves the failed reads and successful recovery. This checkout-local receipt is not portable proof.
+
+---
+
+## Lesson: Approval to proceed does not prove native trust was completed
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Keep permission to run a session separate from factual confirmation of native workspace trust.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Do not turn a general approval into `nativeTrust.trusted: true`. Record completion from an explicit completion statement, or from observed native UI acceptance when the user delegates that action. If the provider contradicts a recorded confirmation, invalidate it and stop dependent captures without changing trust files or permission rules. Keep folder trust separate from tool permission: the subsequent trusted Claude C1 session still denied `command -v gh` because its noninteractive mode had no approval surface.
+
+**What happened:** The agent treated "i approve, keep going" as confirmation that seven native trust steps had happened. The first Claude session reported an untrusted workspace and denied a prerequisite command. Neither intended policy probe ran. The agent preserved the capture and invalidated the inferred confirmations.
+
+**Related contract:** `.goat-flow/learning-loop/footguns/hooks.md` (search: "Registered Stop hooks can be dead config behind agent trust gates") separates project trust, hook trust and live delivery. The local M61 capture retains this incident's transcript.
+
+---
+
+## Lesson: Wait for native terminal diagnostics to exit after their success output
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Treat terminal output and parent-process completion as separate checks.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Await the terminal's exit and any evidence save, then close the diagnostic host explicitly when its terminal library retains handles. Verify the host's exit code; a success line from its child is insufficient. Select exact process IDs when stopping a failed diagnostic.
+
+**What happened:** An M61 Windows ConPTY check exchanged its test line and printed success, but its Node host stayed alive after the child exited. The agent stopped the identified host and its children, then added an explicit host exit after awaited work. The repeated check completed with exit zero. No model ran.
+
+**Local incident evidence:** `.goat-flow/plans/1.19.0/evidence/m61-interactive-offline-proof.json` (search: "initial-native-pty-round-trip", "native ConPTY round trip and normal process exit") preserves the failure and recovery. This local receipt is not portable proof.
+
+---
+
+## Lesson: Rebase fixture paths without rewriting account homes
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Classify path fields before replacing a fixture root; preserve account homes independently.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Replace a fixture root only when the value equals that root or lies beneath a path separator. A textual prefix can also match a sibling such as an account-home directory. Compare account-home fields and their associated hook-source checks explicitly before freezing a capture packet.
+
+**What happened:** The M61 interactive recovery packet rebased the Copilot fixture by replacing its old root throughout nested strings. That also changed `COPILOT_HOME`, whose sibling name began with the same prefix, and the hook-source paths inside that home. The native CLI opened a new unsigned-in profile instead of the already authenticated one. No model task was submitted. The correction restored the original home and its hook-source checks without changing the installed fixture or permission rules. Native readiness was then confirmed from that home before the successful C8 capture.
+
+**Local incident evidence:** `.goat-flow/plans/1.19.0/evidence/m61-interactive-readiness-correction-offline.json` (search: "copilotHomeRewrite", "copilotOriginalHomeRestored") preserves the compared fields. The earlier packet remains unchanged. This local receipt is not portable proof.
+
+---
+
+## Lesson: Compare fixture bytes without newline translation
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Use binary reads for exact fixture comparisons, including small text scripts.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** Compare raw bytes with the packet's explicitly encoded text. Text readers can normalize line endings before equality checks; that changes the evidence even when the file is untouched.
+
+**What happened:** M61's final checker used Python `read_text()` on a Windows `gh.cmd` fixture and reported a mismatch. The reader had normalized CRLF to LF. `read_bytes()` matched the approved packet exactly, and the corrected full comparison passed without changing the fixture.
+
+**Local incident evidence:** `.goat-flow/plans/1.19.0/evidence/m61-final-live-proof.json` (search: "preservedDiagnostic", "rawByteRecheck") preserves the false mismatch and corrected comparison. This local receipt is not portable proof.

@@ -103,6 +103,32 @@ const apiCommands: ReadonlyArray<readonly [string, boolean]> = [
 ];
 
 describe("native GitHub write rules", () => {
+  it("preserves write and read decisions across Windows executable spellings", () => {
+    for (const executable of [
+      "gh",
+      "gh.exe",
+      "GH.EXE",
+      "gh.com",
+      "gh.cmd",
+      "gh.bat",
+      "C:/tools/gh.exe",
+      String.raw`C:\tools\gh.exe`,
+      String.raw`"C:\Program Files\GitHub CLI\gh.exe"`,
+      "env GH_HOST=example.invalid gh.exe",
+      "xargs --arg-file commands.txt gh.exe",
+    ]) {
+      for (const [args, expected] of [
+        ["pr create --fill", true],
+        ["pr view 61", false],
+        ["pr comment 61 --body hi", false],
+      ] as const) {
+        const command = `${executable} ${args}`;
+        assert.equal(isGhWriteOperation(command), expected, command);
+      }
+    }
+    for (const executable of ["notgh.exe", "gh-helper.exe", "gh.exe.other"])
+      assert.equal(isGhWriteOperation(`${executable} pr create --fill`), false);
+  });
   it("retains named writes, unknown aliases and read-only controls", () => {
     for (const [command, expected] of namedCommands)
       assert.equal(isGhWriteOperation(command), expected, command);

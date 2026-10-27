@@ -190,6 +190,38 @@ describe("native policy request routing", () => {
       },
     );
   });
+  it("preserves Windows GitHub executable decisions in Antigravity JSON responses", async () => {
+    const denied = {
+      decision: "deny",
+      reason:
+        "Policy repository: GitHub write via gh is blocked by Deny Git and GitHub writes. Draft the change for the user to perform; conversational approval does not bypass this hook.",
+    };
+    for (const [command, expected] of [
+      ["gh.exe pr create --fill", denied],
+      [String.raw`C:\tools\gh.exe pr create --fill`, denied],
+      [
+        String.raw`"C:\Program Files\GitHub CLI\gh.exe" pr create --fill`,
+        denied,
+      ],
+      ["cmd.exe /d /c C:/tools/gh.exe pr create --fill", denied],
+      ["gh.exe pr view 61", { decision: "allow" }],
+      [
+        String.raw`"C:\Program Files\GitHub CLI\gh.exe" pr comment 61 --body hi`,
+        { decision: "allow" },
+      ],
+    ] as const) {
+      const outcome = await hook(
+        "deny-git-mutations",
+        [],
+        JSON.stringify({
+          toolCall: { name: "run_command", args: { CommandLine: command } },
+        }),
+      );
+      assert.ok(outcome.kind === "response", command);
+      assert.equal(outcome.exitCode, 0, command);
+      assert.deepEqual(JSON.parse(outcome.stdout), expected, command);
+    }
+  });
 });
 
 describe("native policy dispatch and shell state", () => {

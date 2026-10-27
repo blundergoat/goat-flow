@@ -16,6 +16,7 @@ import {
   splitPolicyShellWords,
   normalizeLeadingPolicyWord,
   normalizePolicyGitExecutableWord,
+  normalizePolicyGhExecutableWord,
   normalizePolicyEnvPrefix,
   stripPolicyAssignmentPrefix,
   stripPolicyXargsPayload,
@@ -1114,16 +1115,27 @@ function rawPolicyCommandWord(command: string): string {
 }
 
 /**
- * Decode a quoted or escaped executable word such as `'git' status` to `git status` so wrapper lookup sees the real name.
+ * Normalize GitHub executable spellings and decode quoted or escaped words so wrapper lookup sees the real name.
  * An unquoted `$IFS` in the word hides word boundaries the hook cannot resolve, so it returns null and the command is refused.
  *
  * @param command - segment text with leading whitespace removed
- * @returns the command with its first word decoded, unchanged when no decoding is needed, or null for unresolved IFS expansion
+ * @returns the command with its first word normalized, or null for unresolved IFS expansion
  */
 function normalizePolicyExecutableCandidate(command: string): string | null {
-  return /['"\\]|\$(?:IFS|\{IFS\})/u.test(rawPolicyCommandWord(command))
-    ? normalizeLeadingPolicyWord(command)
-    : command;
+  const word = rawPolicyCommandWord(command);
+  const candidate =
+    normalizePolicyGhExecutableWord(word) + command.slice(word.length);
+  const decoded = /['"\\]|\$(?:IFS|\{IFS\})/u.test(
+    rawPolicyCommandWord(candidate),
+  )
+    ? normalizeLeadingPolicyWord(candidate)
+    : candidate;
+  if (decoded === null) return null;
+  const decodedWord = rawPolicyCommandWord(decoded);
+  return (
+    normalizePolicyGhExecutableWord(decodedWord) +
+    decoded.slice(decodedWord.length)
+  );
 }
 
 /**

@@ -9,7 +9,7 @@
  * the Node runtime replaces it. Nothing here executes text or expands shell syntax: when a shape cannot be read safely the
  * helpers return null, "unresolved" or -1 so the hook can refuse the command with a reason instead of guessing what would run.
  */
-import { dropFirstPolicyShellWord, isPolicyAnsiQuoteStart, isPolicyShellCommentBoundary, isPolicySubshellCommandSubstitution, joinPolicyShellWords, splitPolicyShellWords, normalizeLeadingPolicyWord, normalizePolicyGitExecutableWord, normalizePolicyEnvPrefix, stripPolicyAssignmentPrefix, stripPolicyXargsPayload, stripPolicyWatchPayload, stripPolicyParallelPayload, } from "./policy-words.mjs";
+import { dropFirstPolicyShellWord, isPolicyAnsiQuoteStart, isPolicyShellCommentBoundary, isPolicySubshellCommandSubstitution, joinPolicyShellWords, splitPolicyShellWords, normalizeLeadingPolicyWord, normalizePolicyGitExecutableWord, normalizePolicyGhExecutableWord, normalizePolicyEnvPrefix, stripPolicyAssignmentPrefix, stripPolicyXargsPayload, stripPolicyWatchPayload, stripPolicyParallelPayload, } from "./policy-words.mjs";
 import { asciiLowerCase } from "./policy-input.mjs";
 import { normalizePolicyTimePrefix, normalizePolicySudoPrefix, normalizePolicyExecPrefix, normalizePolicyTimeoutPrefix, normalizePolicySetsidPrefix, normalizePolicyStdbufPrefix, normalizePolicyIonicePrefix, normalizePolicyTasksetPrefix, normalizePolicyChrtPrefix, normalizePolicyFlockPrefix, } from "./policy-prefixes.mjs";
 // A redirection word on its own (`2>`, `{fd}>`, `&>>`) takes the next word as its target; an attached form (`>out`) is complete by itself.
@@ -942,16 +942,23 @@ function rawPolicyCommandWord(command) {
     return command.split(/[ \t\r\n\v\f]/u, 1)[0] ?? "";
 }
 /**
- * Decode a quoted or escaped executable word such as `'git' status` to `git status` so wrapper lookup sees the real name.
+ * Normalize GitHub executable spellings and decode quoted or escaped words so wrapper lookup sees the real name.
  * An unquoted `$IFS` in the word hides word boundaries the hook cannot resolve, so it returns null and the command is refused.
  *
  * @param command - segment text with leading whitespace removed
- * @returns the command with its first word decoded, unchanged when no decoding is needed, or null for unresolved IFS expansion
+ * @returns the command with its first word normalized, or null for unresolved IFS expansion
  */
 function normalizePolicyExecutableCandidate(command) {
-    return /['"\\]|\$(?:IFS|\{IFS\})/u.test(rawPolicyCommandWord(command))
-        ? normalizeLeadingPolicyWord(command)
-        : command;
+    const word = rawPolicyCommandWord(command);
+    const candidate = normalizePolicyGhExecutableWord(word) + command.slice(word.length);
+    const decoded = /['"\\]|\$(?:IFS|\{IFS\})/u.test(rawPolicyCommandWord(candidate))
+        ? normalizeLeadingPolicyWord(candidate)
+        : candidate;
+    if (decoded === null)
+        return null;
+    const decodedWord = rawPolicyCommandWord(decoded);
+    return (normalizePolicyGhExecutableWord(decodedWord) +
+        decoded.slice(decodedWord.length));
 }
 /**
  * Peel every supported wrapper, redirection and shell keyword until the command the agent would really run is exposed,
