@@ -214,7 +214,7 @@ function effectiveStateFacts(
   };
 }
 
-/** Check the current Stop paragraph so an unrelated hook's date or gate cannot satisfy the reader-facing claim. */
+/** Check the historical Stop paragraph so an unrelated hook's date or gate cannot satisfy the reader-facing claim. */
 function assertCurrentCodexStopEvidence(
   documentation: string,
   source: string,
@@ -225,7 +225,7 @@ function assertCurrentCodexStopEvidence(
   assert.equal(
     stopParagraphs.length,
     1,
-    `${source}: one current Stop capture paragraph is required`,
+    `${source}: one historical Stop capture paragraph is required`,
   );
   const stopParagraph = stopParagraphs[0]!;
   assert.match(stopParagraph, /Codex CLI 0\.154\.0/iu, source);
@@ -239,7 +239,7 @@ function assertCurrentCodexStopEvidence(
   );
 }
 
-/** Check the current deny paragraph so historical captures cannot satisfy the guide's live-support claim. */
+/** Keep the dated deny capture and its original support limitation attributable. */
 function assertCurrentCodexDenyEvidence(
   documentation: string,
   source: string,
@@ -250,7 +250,7 @@ function assertCurrentCodexDenyEvidence(
   assert.equal(
     denyParagraphs.length,
     1,
-    `${source}: one current deny capture paragraph is required`,
+    `${source}: one historical deny capture paragraph is required`,
   );
   const denyParagraph = denyParagraphs[0]!;
   assert.match(
@@ -265,7 +265,7 @@ function assertCurrentCodexDenyEvidence(
 }
 
 describe("hook provider contracts", () => {
-  it("keeps Codex documentation aligned with current Stop and deny evidence gates", () => {
+  it("keeps historical Codex captures and their support limitations in the documentation", () => {
     const stopEvidence =
       getHookSpec("post-turn-safety")?.providerEvidence.codex;
     const hookReadme = readFileSync(

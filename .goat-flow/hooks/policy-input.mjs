@@ -66,9 +66,13 @@ export function extractPolicyCommandText(payload, checkCommand = "") {
 export function asciiLowerCase(value) {
     return value.replace(/[A-Z]/gu, (letter) => String.fromCharCode(letter.charCodeAt(0) + 32));
 }
-/** Route supported provider command tools through command-policy inspection. */
+/** Identify provider tools that use the existing POSIX command-inspection path. */
 export function isPolicyShellTool(tool) {
     return ["bash", "shell", "sh", "run_command", "monitor"].includes(asciiLowerCase(tool));
+}
+/** Identify native PowerShell requests so ownership and grammar selection agree. */
+export function isPolicyPowerShellTool(tool) {
+    return asciiLowerCase(tool) === "powershell";
 }
 /** Route supported provider content tools through the selected secret-path policy. */
 export function isPolicySecretFileTool(tool) {

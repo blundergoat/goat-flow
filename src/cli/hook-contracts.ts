@@ -50,6 +50,29 @@ export interface HookProviderCaptureEvidence {
     "visible" | "not-visible" | "not-applicable" | "not-tested";
 }
 
+/** Host-specific delivery observations retained separately from effective support gates. */
+export interface HookProviderHostEvidence {
+  caseId: string;
+  host: "windows" | "wsl";
+  provider: AgentId;
+  canonicalEvent: HookLifecycleEvent;
+  providerEventName: string;
+  verification: "verified" | "incomplete" | "security-hold";
+  summary: string;
+  limitations: readonly string[];
+  /** Absent when no current-runtime capture is available; never infer delivery from the row. */
+  capture?: HookProviderCaptureEvidence & {
+    configurationPath: string;
+    nodeVersion: string;
+    artifactSha256: string;
+    approvalPacketSha256: string;
+    producer: string;
+    reviewSha256?: string;
+    /** SHA256 values keyed by paths relative to workflow/hooks; retained as captured. */
+    runtimeSha256: Readonly<Record<string, string>>;
+  };
+}
+
 /** Versioned evidence record for one provider, mode, event, and canonical tool combination. */
 export interface HookProviderEvidenceRecord {
   schema: typeof HOOK_PROVIDER_EVIDENCE_SCHEMA;

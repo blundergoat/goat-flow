@@ -4,12 +4,16 @@
 
 ### Changed
 
+- **Windows/WSL hook evidence** - Preserved sixteen earlier captures as historical after the shared policy change; current-runtime delivery requires fresh captures and support gates stay unchanged.
+
 - **BREAKING: Node 20.12.0 minimum** - The minimum supported Node version rises from 20.11.0 to 20.12.0. Upgrade Node before installing or running goat-flow.
 - **Stop hooks set a 4 MiB scan limit** - Claude and Codex hook registrations set `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304`, replacing any value exported by the user. The Codex Stop command text changes when registrations are synced.
 
 - **Issue briefs show likely minutes and per-task benefits** - Each `ISSUE.md` task ends in one likely figure, a total line and the headline sum them in hours, two new sections say what each task gives the user before and after the change, and the worked sample ships beside the format.
 
 ### Security
+
+- **Native PowerShell policy inspection** - Literal commands reach both owning policies; unresolved dynamic execution and session-state changes remain blocked. Run `goat-flow hooks sync` to refresh existing installations.
 
 - **Windows GitHub CLI paths stay protected** - GitHub write protection recognizes Windows executable names and paths while preserving read and comment exceptions.
 - **Antigravity file reads reach secret protection** - `read_file` requests now reach the policy. Run `goat-flow hooks sync` to update existing installs.

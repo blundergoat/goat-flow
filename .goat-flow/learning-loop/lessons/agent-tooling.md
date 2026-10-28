@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-28
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -251,3 +251,18 @@ Inspect literals independently when checking renames, as described in
 **What happened:** M61's final checker used Python `read_text()` on a Windows `gh.cmd` fixture and reported a mismatch. The reader had normalized CRLF to LF. `read_bytes()` matched the approved packet exactly, and the corrected full comparison passed without changing the fixture.
 
 **Local incident evidence:** `.goat-flow/plans/1.19.0/evidence/m61-final-live-proof.json` (search: "preservedDiagnostic", "rawByteRecheck") preserves the false mismatch and corrected comparison. This local receipt is not portable proof.
+
+## Lesson: Keep operator input open before launching an interactive capture
+
+**Status:** active | **Created:** 2026-10-28 | **Evidence:** OBSERVED
+**Decision changed:** Verify persistent input on the outer execution surface before consuming a live capture claim.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** An inner provider PTY does not keep its controller's stdin open. When the controller reads incremental operator actions, launch it with `exec_command` and `tty: true`, then use `write_stdin`. First run an inert child through that same outer surface, send a line and await its normal exit. An inner PTY rehearsal alone does not verify this input path.
+
+**What happened:** A Claude Code 2.1.311 hook-capture controller launched through plain pipes. Its `readline` close handler stopped the provider with `operator-input-closed` before any terminal output or task submission. A paired inert reproduction observed immediate input closure through plain pipes; the PTY launch stayed open, received the test line and exited zero. The consumed claim and empty capture were preserved.
+
+**Related source contract:** `src/cli/server/terminal-spawn.ts` (search: "ignored stdin reads as end of input") deliberately closes input for a version probe. A controller awaiting operator actions requires a persistent input surface.
+
+---

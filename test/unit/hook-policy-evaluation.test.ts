@@ -25,14 +25,15 @@ after(() => {
   rmSync(repository, { recursive: true, force: true });
 });
 
-/** Run one request through the hook with isolated Git configuration; `stdin` is the provider payload. */
+/** Run an isolated request; malformed-byte cases use Latin-1 while native Unicode cases select UTF-8. */
 async function hook(
   guard: PolicyGuard,
   argv: string[],
   stdin = "",
   stdinIsTerminal = false,
+  stdinEncoding: BufferEncoding = "latin1",
 ) {
-  const bytes = Buffer.from(stdin, "latin1");
+  const bytes = Buffer.from(stdin, stdinEncoding);
   return runPolicyHook(
     {
       guard,
@@ -116,6 +117,118 @@ describe("native policy request routing", () => {
     assert.deepEqual(JSON.parse(gitPolicy.stdout), { decision: "allow" });
   });
 
+  describe("native PowerShell decisions", () => {
+    const refused = /Cannot inspect native PowerShell/u;
+    const cases: ReadonlyArray<
+      readonly [string, RegExp | null, RegExp | null]
+    > = [
+      ["(Get-Location).Path", null, null],
+      ["Get-Content control.txt", null, null],
+      ["Get-Content 'report\u00a0notes.txt'", null, null],
+      ['Write-Output "typographic \u2018single\u2019 quotes"', null, null],
+      ["Write-Output 'Set-Alias g gh; g pr create --fill'", null, null],
+      ["Get-Content .env", /Policy secret:/u, null],
+      ["gh pr create --fill", null, /Policy repository: GitHub write/u],
+      ["Remove-Item build", /PowerShell destructive verb/u, null],
+      ["& $env:GF_COMMAND --fill", refused, refused],
+      ["& (Get-Command gh) pr create --fill", refused, refused],
+      ["Write-Output (gh pr create --fill)", refused, refused],
+      ["\u00a0Remove-Item target", refused, refused],
+      ["gh\u00a0pr\u00a0create\u00a0--fill", refused, refused],
+      ["& \u2018Remove-Item\u2019 target", refused, refused],
+      [
+        "Write-Output 'x\u2019; gh pr create --fill; \u2019y'",
+        refused,
+        refused,
+      ],
+      ["Start-Process gh \u2013ArgumentList 'pr create'", refused, refused],
+      [
+        "if ($true) { Write-Output Ready }; Write-Output (gh pr create --fill)",
+        refused,
+        refused,
+      ],
+      [
+        "if ($true) { Write-Output Ready }; Write-Output (Remove-Item -Recurse -Force build)",
+        refused,
+        refused,
+      ],
+      ["if ($true) { Write-Output Ready }; Write-Output Done", null, null],
+      ["return (gh pr create --fill)", refused, refused],
+      ['"text".GetType()', refused, refused],
+      ["Get-Process | ForEach-Object Kill", refused, refused],
+      ["pwsh -File unchecked.ps1", refused, refused],
+      [
+        "pwsh -NoProfile -Command 'gh pr create --fill'",
+        null,
+        /Policy repository: GitHub write/u,
+      ],
+      ["pwsh --version", null, null],
+      [". (Get-Command gh) pr create --fill", refused, refused],
+      ["Set-Alias g gh; g pr create --fill", refused, refused],
+      ["& { Set-Alias g gh; g pr create --fill }", refused, refused],
+      [
+        "[System.Diagnostics.Process]::Start('gh','pr create --fill')",
+        refused,
+        refused,
+      ],
+      ['Write-Output "$(gh pr create --fill)"', refused, refused],
+      ["Set-Location ..; git status", refused, refused],
+      [
+        "if ($true) { gh pr create --fill }",
+        null,
+        /Policy repository: GitHub write/u,
+      ],
+      [". Write-Output Ready", null, null],
+      ["echo {git.exe status --short} | % {& $_}", null, null],
+      ["echo {git.exe push origin main} | % {& $_}", null, /Git publication/u],
+      ["Get-Content commands.txt | % {& $_}", refused, refused],
+      ["echo (Get-Content commands.txt) | % {& $_}", refused, refused],
+    ];
+    for (const [command, dangerous, repository] of cases) {
+      for (const guard of ["deny-dangerous", "deny-git-mutations"] as const) {
+        const expected = guard === "deny-dangerous" ? dangerous : repository;
+        for (const encoding of ["object", "string"] as const) {
+          const toolArgs =
+            encoding === "object" ? { command } : JSON.stringify({ command });
+          it(`${guard} ${encoding}: ${command}`, async () => {
+            const outcome = await hook(
+              guard,
+              [],
+              JSON.stringify({ toolName: "powershell", toolArgs }),
+              false,
+              "utf8",
+            );
+            assert.equal(outcome.kind, "response");
+            if (outcome.kind !== "response") throw new Error(command);
+            assert.equal(outcome.exitCode, 0);
+            assert.equal(outcome.stderr, "");
+            const response = outcome.stdout ? JSON.parse(outcome.stdout) : {};
+            assert.equal(
+              response.permissionDecision ?? "allow",
+              expected === null ? "allow" : "deny",
+            );
+            assert.match(
+              response.permissionDecisionReason ?? "",
+              expected ?? /^$/u,
+            );
+          });
+        }
+      }
+    }
+    for (const guard of ["deny-dangerous", "deny-git-mutations"] as const) {
+      it(`${guard} refuses missing PowerShell command text`, async () => {
+        const outcome = await hook(
+          guard,
+          [],
+          '{"toolName":"powershell","toolArgs":{}}',
+        );
+        assert.equal(outcome.kind, "response");
+        if (outcome.kind !== "response") throw new Error(guard);
+        assert.equal(JSON.parse(outcome.stdout).permissionDecision, "deny");
+      });
+    }
+  });
+
   it("routes provider tools by ownership and refuses requests it cannot inspect", async () => {
     const notExposed =
       "BLOCKED: Policy deny-dangerous: Hook payload did not expose a bash command to evaluate\n";
@@ -136,7 +249,7 @@ describe("native policy request routing", () => {
         "deny-dangerous",
         [],
         '{"tool_name":"PowerShell","tool_input":{"command":"echo safe"}}',
-        "BLOCKED: Policy deny-dangerous: Native PowerShell tool commands are not supported by this policy. Use a supported shell tool instead.\n",
+        "",
       ],
       [
         "deny-dangerous",

@@ -663,7 +663,7 @@ function isApprovedException(row) {
   return row.exceptionId === "native-startup"
     ? row.availabilityCase
     : !row.exceptionId ||
-        /^(historical-gap-(?:[1-9]|10)|review-gap-(?:1[1-9]|2[01])|full-json-decoding|locale-C|invalid-request-encoding|obsolete-advice|recovery-message)$/.test(
+        /^(historical-gap-(?:[1-9]|10)|review-gap-(?:1[1-9]|2[01])|full-json-decoding|locale-C|invalid-request-encoding|obsolete-advice|native-powershell|recovery-message)$/.test(
           row.exceptionId,
         );
 }

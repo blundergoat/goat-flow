@@ -34,6 +34,7 @@ import {
   extractPolicyToolName,
   isPolicySecretFileTool,
   isPolicyShellTool,
+  isPolicyPowerShellTool,
   parsePolicyPayload,
   policyCommandSizeRefusal,
   policySegmentCountRefusal,
@@ -44,6 +45,8 @@ import {
 import {
   findPolicyNativeLaunchedCommands,
   findPolicyNativeScriptBlockCommands,
+  inspectPolicyPowerShellSyntax,
+  policyPowerShellPipelineSource,
   policyUnresolvedSplitRefusal,
   splitPolicyCommandSegments,
   splitPolicyTopLevelPipelineStages,
@@ -185,7 +188,12 @@ async function checkPipelineStages(
     context.inlineCommandHost,
   );
   if (split.kind === "unresolved" || split.segments.length < 2) return null;
-  for (const stage of split.segments) {
+  // The native-form pass already inspected this literal block's body; its bound consumer adds no new command text.
+  const boundSource = policyPowerShellPipelineSource(
+    policy,
+    context.inlineCommandHost,
+  );
+  for (const stage of boundSource === null ? split.segments : [boundSource]) {
     const denial = await evaluate(stage, context.depth + 1);
     if (denial !== null) return denial;
   }
@@ -783,6 +791,10 @@ async function checkPolicyCommandSegments(
   run: PolicyRun,
   inherited: EvaluationState,
 ): Promise<PolicyDenial | null> {
+  if (/^(?:powershell|pwsh)(?:\.exe)?$/u.test(inherited.inlineCommandHost)) {
+    const reason = inspectPolicyPowerShellSyntax(input);
+    if (reason !== null) return { scope: inherited.activeScope, reason };
+  }
   const state = {
     ...inherited,
     assignedGitExecutables: new Set(inherited.assignedGitExecutables),
@@ -1000,30 +1012,37 @@ function ownsPolicyRequest(run: PolicyRun, request: RequestState): boolean {
   return (
     request.tool === "" ||
     isPolicyShellTool(request.tool) ||
+    isPolicyPowerShellTool(request.tool) ||
     (run.guard === "deny-dangerous" && isPolicySecretFileTool(request.tool))
   );
 }
 
-/** Mask inert heredoc data, then apply the request-level size, segment and substitution bounds before segment inspection. */
+/** Keep native path separators literal and mask only POSIX heredoc data. */
+function policyCommandProjection(command: string, host: string): string {
+  if (host !== "") return command.replaceAll("\\", "/");
+  return command.includes("<<") || command.includes("\n")
+    ? maskSafeQuotedHeredocBodies(command).replace(/\n+$/u, "")
+    : command;
+}
+
+/** Enforce request bounds before inspecting commands under the selected shell grammar. */
 async function evaluatePolicyCommand(
   run: PolicyRun,
   command: string,
+  host = "",
 ): Promise<PolicyDenial | null> {
   const guardDenial = (reason: string): PolicyDenial => ({
     scope: run.guard,
     reason,
   });
-  const policy =
-    command.includes("<<") || command.includes("\n")
-      ? maskSafeQuotedHeredocBodies(command).replace(/\n+$/u, "")
-      : command;
+  const policy = policyCommandProjection(command, host);
   const size = policyCommandSizeRefusal(
     command,
     policy,
-    largeQualitySaveHeredocIsBoundedData(policy),
+    host === "" && largeQualitySaveHeredocIsBoundedData(policy),
   );
   if (size !== null) return guardDenial(size);
-  const split = splitPolicyCommandSegments(policy);
+  const split = splitPolicyCommandSegments(policy, host);
   const cap = policySegmentCountRefusal(
     split.kind === "segments" ? split.segments.length : 0,
   );
@@ -1044,7 +1063,7 @@ async function evaluatePolicyCommand(
       hostedDirectoryUnknown: false,
       configEnvUnresolved: false,
       assignedGitExecutables: new Set(),
-      inlineCommandHost: "",
+      inlineCommandHost: host,
       activeScope: run.guard,
       processSubstitution,
       continuedPipeline,
@@ -1093,12 +1112,6 @@ export async function runPolicyHook(
     ...renderPolicyResponse(request.mode, denial),
   });
   if (request.structured && request.tool !== "") {
-    if (asciiLowerCase(request.tool) === "powershell")
-      return respond({
-        scope: run.guard,
-        reason:
-          "Native PowerShell tool commands are not supported by this policy. Use a supported shell tool instead.",
-      });
     if (!ownsPolicyRequest(run, request)) return respond(null);
   }
   if (request.command === "")
@@ -1110,7 +1123,8 @@ export async function runPolicyHook(
           }
         : null,
     );
-  return respond(await evaluatePolicyCommand(run, request.command));
+  const host = isPolicyPowerShellTool(request.tool) ? "powershell" : "";
+  return respond(await evaluatePolicyCommand(run, request.command, host));
 }
 
 /** Finish before the launcher's kill deadline: its configured timeout or the 25-second policy ceiling, less two seconds to reply. */

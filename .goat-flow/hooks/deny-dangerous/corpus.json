@@ -18449,11 +18449,11 @@
       },
       "availabilityCase": false,
       "expected": {
-        "status": 2,
+        "status": 0,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBOYXRpdmUgUG93ZXJTaGVsbCB0b29sIGNvbW1hbmRzIGFyZSBub3Qgc3VwcG9ydGVkIGJ5IHRoaXMgcG9saWN5LiBVc2UgYSBzdXBwb3J0ZWQgc2hlbGwgdG9vbCBpbnN0ZWFkLgo="
+        "stderrBase64": ""
       },
-      "exceptionId": "obsolete-advice",
+      "exceptionId": "native-powershell",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"
@@ -54765,11 +54765,11 @@
       },
       "availabilityCase": false,
       "expected": {
-        "status": 2,
+        "status": 0,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZ2l0LW11dGF0aW9uczogTmF0aXZlIFBvd2VyU2hlbGwgdG9vbCBjb21tYW5kcyBhcmUgbm90IHN1cHBvcnRlZCBieSB0aGlzIHBvbGljeS4gVXNlIGEgc3VwcG9ydGVkIHNoZWxsIHRvb2wgaW5zdGVhZC4K"
+        "stderrBase64": ""
       },
-      "exceptionId": "obsolete-advice",
+      "exceptionId": "native-powershell",
       "predicates": {
         "requiresAvailable": true,
         "stderrIncludes": "BLOCKED: Policy"

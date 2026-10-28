@@ -16352,11 +16352,11 @@
         }
       },
       "expected": {
-        "status": 2,
+        "status": 0,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBOYXRpdmUgUG93ZXJTaGVsbCB0b29sIGNvbW1hbmRzIGFyZSBub3Qgc3VwcG9ydGVkIGJ5IHRoaXMgcG9saWN5LiBVc2UgYSBzdXBwb3J0ZWQgc2hlbGwgdG9vbCBpbnN0ZWFkLgo="
+        "stderrBase64": ""
       },
-      "exceptionId": "obsolete-advice"
+      "exceptionId": "native-powershell"
     },
     {
       "id": "selftest-deny-dangerous-061d6a6482f019a9-1",
@@ -46745,11 +46745,11 @@
         }
       },
       "expected": {
-        "status": 2,
+        "status": 0,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZ2l0LW11dGF0aW9uczogTmF0aXZlIFBvd2VyU2hlbGwgdG9vbCBjb21tYW5kcyBhcmUgbm90IHN1cHBvcnRlZCBieSB0aGlzIHBvbGljeS4gVXNlIGEgc3VwcG9ydGVkIHNoZWxsIHRvb2wgaW5zdGVhZC4K"
+        "stderrBase64": ""
       },
-      "exceptionId": "obsolete-advice"
+      "exceptionId": "native-powershell"
     },
     {
       "id": "selftest-deny-git-mutations-05e0540f89309e71-1",
@@ -80993,7 +80993,7 @@
     },
     {
       "id": "selftest-deny-dangerous-05c6ef8113f35b5d-1",
-      "exceptionId": "obsolete-advice",
+      "exceptionId": "native-powershell",
       "original": {
         "C": {
           "status": 2,
@@ -81007,9 +81007,9 @@
         }
       },
       "expected": {
-        "status": 2,
+        "status": 0,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZGFuZ2Vyb3VzOiBOYXRpdmUgUG93ZXJTaGVsbCB0b29sIGNvbW1hbmRzIGFyZSBub3Qgc3VwcG9ydGVkIGJ5IHRoaXMgcG9saWN5LiBVc2UgYSBzdXBwb3J0ZWQgc2hlbGwgdG9vbCBpbnN0ZWFkLgo="
+        "stderrBase64": ""
       }
     },
     {
@@ -81329,7 +81329,7 @@
     },
     {
       "id": "selftest-deny-git-mutations-05c6ef8113f35b5d-1",
-      "exceptionId": "obsolete-advice",
+      "exceptionId": "native-powershell",
       "original": {
         "C": {
           "status": 2,
@@ -81343,9 +81343,9 @@
         }
       },
       "expected": {
-        "status": 2,
+        "status": 0,
         "stdoutBase64": "",
-        "stderrBase64": "QkxPQ0tFRDogUG9saWN5IGRlbnktZ2l0LW11dGF0aW9uczogTmF0aXZlIFBvd2VyU2hlbGwgdG9vbCBjb21tYW5kcyBhcmUgbm90IHN1cHBvcnRlZCBieSB0aGlzIHBvbGljeS4gVXNlIGEgc3VwcG9ydGVkIHNoZWxsIHRvb2wgaW5zdGVhZC4K"
+        "stderrBase64": ""
       }
     },
     {

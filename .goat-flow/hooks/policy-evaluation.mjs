@@ -10,8 +10,8 @@ import { checkSecretSegment } from "./deny-dangerous/patterns-paths.mjs";
 import { checkCommandChainPolicy, checkDestructiveSegment, findHasDestructiveAction, isDownloaderPipeSource, isShellCommand, checkPipelineShellConsumers, } from "./deny-dangerous/patterns-shell.mjs";
 import { checkGitCommandEnvironment, isGitConfigEnvironmentUnresolved, } from "./policy-git.mjs";
 import { largeQualitySaveHeredocIsBoundedData, maskSafeQuotedHeredocBodies, joinPolicyPipelineLines, } from "./policy-heredoc.mjs";
-import { asciiLowerCase, detectPolicyOutputMode, extractPolicyCommandText, extractPolicyToolName, isPolicySecretFileTool, isPolicyShellTool, parsePolicyPayload, policyCommandSizeRefusal, policySegmentCountRefusal, readPolicyPayload, } from "./policy-input.mjs";
-import { findPolicyNativeLaunchedCommands, findPolicyNativeScriptBlockCommands, policyUnresolvedSplitRefusal, splitPolicyCommandSegments, splitPolicyTopLevelPipelineStages, trackPolicyGitConfigEnvironment, trackPolicyGitShellDirectory, } from "./policy-segments.mjs";
+import { asciiLowerCase, detectPolicyOutputMode, extractPolicyCommandText, extractPolicyToolName, isPolicySecretFileTool, isPolicyShellTool, isPolicyPowerShellTool, parsePolicyPayload, policyCommandSizeRefusal, policySegmentCountRefusal, readPolicyPayload, } from "./policy-input.mjs";
+import { findPolicyNativeLaunchedCommands, findPolicyNativeScriptBlockCommands, inspectPolicyPowerShellSyntax, policyPowerShellPipelineSource, policyUnresolvedSplitRefusal, splitPolicyCommandSegments, splitPolicyTopLevelPipelineStages, trackPolicyGitConfigEnvironment, trackPolicyGitShellDirectory, } from "./policy-segments.mjs";
 import { checkPolicyCommandSubstitutions, } from "./policy-substitutions.mjs";
 import { countPolicySubstitutionOpeners, findPolicyNativeConditionalCommands, findPolicyNativeShellCommand, stripPolicyCasePrefix, findUnmatchedPolicyClosingParen, normalizePolicyCommandCandidate, stripPolicySubshellParentheses, stripUnquotedPolicyShellComments, } from "./policy-syntax.mjs";
 import { dropFirstPolicyShellWord, joinPolicyShellWords, splitPolicyShellWords, stripPolicyXargsPayload, } from "./policy-words.mjs";
@@ -83,7 +83,9 @@ async function checkPipelineStages(policy, context, evaluate) {
     const split = splitPolicyTopLevelPipelineStages(policy, context.inlineCommandHost);
     if (split.kind === "unresolved" || split.segments.length < 2)
         return null;
-    for (const stage of split.segments) {
+    // The native-form pass already inspected this literal block's body; its bound consumer adds no new command text.
+    const boundSource = policyPowerShellPipelineSource(policy, context.inlineCommandHost);
+    for (const stage of boundSource === null ? split.segments : [boundSource]) {
         const denial = await evaluate(stage, context.depth + 1);
         if (denial !== null)
             return denial;
@@ -481,6 +483,11 @@ function splitInspectedChain(input, depth, run, state) {
  * @returns the first denial, or null when every segment is allowed
  */
 async function checkPolicyCommandSegments(input, depth, run, inherited) {
+    if (/^(?:powershell|pwsh)(?:\.exe)?$/u.test(inherited.inlineCommandHost)) {
+        const reason = inspectPolicyPowerShellSyntax(input);
+        if (reason !== null)
+            return { scope: inherited.activeScope, reason };
+    }
     const state = {
         ...inherited,
         assignedGitExecutables: new Set(inherited.assignedGitExecutables),
@@ -638,21 +645,28 @@ function readPolicyRequest(args, input) {
 function ownsPolicyRequest(run, request) {
     return (request.tool === "" ||
         isPolicyShellTool(request.tool) ||
+        isPolicyPowerShellTool(request.tool) ||
         (run.guard === "deny-dangerous" && isPolicySecretFileTool(request.tool)));
 }
-/** Mask inert heredoc data, then apply the request-level size, segment and substitution bounds before segment inspection. */
-async function evaluatePolicyCommand(run, command) {
+/** Keep native path separators literal and mask only POSIX heredoc data. */
+function policyCommandProjection(command, host) {
+    if (host !== "")
+        return command.replaceAll("\\", "/");
+    return command.includes("<<") || command.includes("\n")
+        ? maskSafeQuotedHeredocBodies(command).replace(/\n+$/u, "")
+        : command;
+}
+/** Enforce request bounds before inspecting commands under the selected shell grammar. */
+async function evaluatePolicyCommand(run, command, host = "") {
     const guardDenial = (reason) => ({
         scope: run.guard,
         reason,
     });
-    const policy = command.includes("<<") || command.includes("\n")
-        ? maskSafeQuotedHeredocBodies(command).replace(/\n+$/u, "")
-        : command;
-    const size = policyCommandSizeRefusal(command, policy, largeQualitySaveHeredocIsBoundedData(policy));
+    const policy = policyCommandProjection(command, host);
+    const size = policyCommandSizeRefusal(command, policy, host === "" && largeQualitySaveHeredocIsBoundedData(policy));
     if (size !== null)
         return guardDenial(size);
-    const split = splitPolicyCommandSegments(policy);
+    const split = splitPolicyCommandSegments(policy, host);
     const cap = policySegmentCountRefusal(split.kind === "segments" ? split.segments.length : 0);
     if (cap !== null)
         return guardDenial(cap);
@@ -668,7 +682,7 @@ async function evaluatePolicyCommand(run, command) {
             hostedDirectoryUnknown: false,
             configEnvUnresolved: false,
             assignedGitExecutables: new Set(),
-            inlineCommandHost: "",
+            inlineCommandHost: host,
             activeScope: run.guard,
             processSubstitution,
             continuedPipeline,
@@ -708,11 +722,6 @@ export async function runPolicyHook(run, input) {
         ...renderPolicyResponse(request.mode, denial),
     });
     if (request.structured && request.tool !== "") {
-        if (asciiLowerCase(request.tool) === "powershell")
-            return respond({
-                scope: run.guard,
-                reason: "Native PowerShell tool commands are not supported by this policy. Use a supported shell tool instead.",
-            });
         if (!ownsPolicyRequest(run, request))
             return respond(null);
     }
@@ -723,7 +732,8 @@ export async function runPolicyHook(run, input) {
                 reason: "Hook payload did not expose a bash command to evaluate",
             }
             : null);
-    return respond(await evaluatePolicyCommand(run, request.command));
+    const host = isPolicyPowerShellTool(request.tool) ? "powershell" : "";
+    return respond(await evaluatePolicyCommand(run, request.command, host));
 }
 /** Finish before the launcher's kill deadline: its configured timeout or the 25-second policy ceiling, less two seconds to reply. */
 function policyDeadlineAt(environment) {

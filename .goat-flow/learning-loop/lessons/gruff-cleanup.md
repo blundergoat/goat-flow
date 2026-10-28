@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-10-23
+last_reviewed: 2026-10-29
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
@@ -153,7 +153,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 
 **Status:** active | **Created:** 2026-05-31
 **Severity:** INTEGRATION
-**Incident count:** 3 | **Latest occurrence:** 2026-09-05
+**Incident count:** 4 | **Latest occurrence:** 2026-10-28
 
 **Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
 
@@ -169,12 +169,14 @@ Using a single-quoted plain search pattern let the read-only check run safely. E
 Smaller patches and verification commands that read the selected files directly completed the work within the enforced limit.
 Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `16384`).
 
+**Recurrence 2026-10-28:** Capture-packet generation exceeded the 16,384-byte command inspection limit and was refused before writes. Splitting generation into bounded commands preserved the guard and produced the proposal. Current owner: `workflow/hooks/policy-input.mjs` (search: `Command exceeds the 16384-byte policy inspection limit`).
+
 ## Lesson: Check Gruff file-length headroom before growing a large test file
 
 **Status:** active | **Created:** 2026-10-03
 **Severity:** INTEGRATION
 
-**Incident count:** 9 | **Latest occurrence:** 2026-10-23
+**Incident count:** 10 | **Latest occurrence:** 2026-10-28
 **Decision changed:** Before adding tests, assertions or validation branches to a large file, compare its substantive line count with Gruff's 1,000-line `size.file-length` limit and leave room for Prettier wrapping.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -202,6 +204,8 @@ The same batch put the controller YAML bundle in every temporary project, which 
 - **Recurrence 2026-10-23 (M03 scanner fixtures):** Converting launcher fixtures to Node pushed the recovery suite over the file-length limit. Removing dependency-copy loops already covered by `installPostTurnHook` preserved its assertions and brought it below the limit. Anchors: `test/integration/post-turn-launcher-recovery.test.ts` (search: `writeScanner`) and `test/integration/post-turn-safety-hook.helpers.ts` (search: `installPostTurnHook`). Run touched-file checks before the full runtime matrix.
 
 - **Recurrence 2026-10-23 (M04 native Gruff):** Adding the runtime selector pushed `test/integration/gruff-code-quality-contract.test.ts` to 1,004 substantive lines. Reusing `selectedHookPath` for the scanner path removed the extra import and long inline conditional while retaining every assertion. Check formatted headroom before adding selection logic, even when no test case is added. Anchor: `runProviderLauncher`.
+
+- **Recurrence 2026-10-28 (provider capture metadata):** The approved patch added two cases to `test/integration/hook-provider-contracts.test.ts` and reached 1,013 substantive lines. Both owning suites passed, but the ratchet rejected file size. Shortening the cases exposed five new non-null-assertion warnings. The correction isolates the cases in `test/integration/hook-provider-captures.test.ts` (search: `host-specific hook provider captures`) and uses an asserted host lookup. Check both file size and warning identities before approving a test-file addition.
 
 ## Lesson: Check each Gruff-driven comment against the code it describes
 

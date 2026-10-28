@@ -470,7 +470,15 @@ async function delayedPolicyInput(
   if (isIncomplete) rmSync(join(hooks, "policy-evaluation.mjs"));
   const payload = isIncomplete
     ? { toolName: "bash", toolArgs: { command: "echo safe" } }
-    : { tool_name: "PowerShell", tool_input: { command: "echo safe" } };
+    : {
+        toolName: "powershell",
+        toolArgs: JSON.stringify({
+          command:
+            policy === "deny-dangerous"
+              ? "Get-Content .env"
+              : "gh pr create --fill",
+        }),
+      };
   const child = spawn(process.execPath, [join(hooks, `${policy}.mjs`)], {
     cwd: root,
     env: environment,
@@ -523,10 +531,20 @@ for (const policy of ["deny-dangerous", "deny-git-mutations"]) {
         );
         assert.equal(result.stderr, "");
       } else {
-        assert.equal(result.status, 2, result.stderr);
-        assert.equal(result.stdout, "");
-        assert.match(result.stderr, /Native PowerShell tool commands/u);
-        assert.doesNotMatch(result.stderr, /Policy hook unavailable/u);
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stderr, "");
+        const response = JSON.parse(result.stdout);
+        assert.equal(response.permissionDecision, "deny");
+        assert.match(
+          response.permissionDecisionReason,
+          policy === "deny-dangerous"
+            ? /Policy secret:/u
+            : /Policy repository: GitHub write/u,
+        );
+        assert.doesNotMatch(
+          response.permissionDecisionReason,
+          /Policy hook unavailable/u,
+        );
       }
     });
   }

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   findPolicyNativeScriptBlockBodies,
   findPolicyNativeLaunchedCommands,
+  inspectPolicyPowerShellSyntax,
   splitPolicyCommandSegments,
   splitPolicyTopLevelPipelineStages,
   findPolicyNativeScriptBlockCommands,
@@ -15,6 +16,63 @@ import {
 } from "../../workflow/hooks/policy-segments.mjs";
 
 describe("policy native block and launch inspection", () => {
+  for (const command of [
+    "(Get-Location).Path",
+    "Get-Content control.txt",
+    "Get-Content 'report\u00a0notes.txt'",
+    'Write-Output "typographic \u2018single\u2019 quotes"',
+    "git -c color.ui=false status",
+    "& 'gh.exe' pr create --fill",
+    "Get-ChildItem | Select-Object Name",
+    "if (Test-Path .git) { git status } else { Write-Output missing }",
+    "if ($true) { Write-Output Ready }",
+    "if ($true) { Write-Output Ready }; Write-Output Done",
+    "if ($false) { Write-Output Ready } else { Write-Output Ready }",
+    ". Write-Output Ready",
+    "echo {git.exe status --short} | % {& $_}",
+    "pwsh --version",
+    "Write-Output '$env:COMMAND [type] + Set-Alias g gh'",
+  ]) {
+    it(`admits inspectable PowerShell syntax: ${command}`, () => {
+      assert.equal(inspectPolicyPowerShellSyntax(command), null);
+    });
+  }
+  for (const command of [
+    "& $env:COMMAND --fill",
+    "& (Get-Command gh) pr create --fill",
+    "Write-Output (gh pr create --fill)",
+    "\u00a0Remove-Item target",
+    "gh\u00a0pr\u00a0create\u00a0--fill",
+    "& \u2018Remove-Item\u2019 target",
+    "Write-Output 'x\u2019; gh pr create --fill; \u2019y'",
+    "Start-Process gh \u2013ArgumentList 'pr create'",
+    "if ($true) { Write-Output Ready }; Write-Output (gh pr create --fill)",
+    "if ($true) { Write-Output Ready }; Write-Output (Remove-Item -Recurse -Force build)",
+    "return (gh pr create --fill)",
+    '"text".GetType()',
+    "Get-Process | ForEach-Object Kill",
+    "pwsh -File unchecked.ps1",
+    ". (Get-Command gh) pr create --fill",
+    "Get-Content commands.txt | % {& $_}",
+    "echo (Get-Content commands.txt) | % {& $_}",
+    "Set-Alias g gh; g pr create --fill",
+    "[System.Diagnostics.Process]::Start('gh','pr create --fill')",
+    'Write-Output "$env:COMMAND"',
+    "& ('g' + 'h') pr create --fill",
+    "@('gh', 'pr', 'create')",
+    "Set-Location ..; git status",
+    ". local.ps1",
+    "./local.ps1",
+    "Write-Output 'unterminated",
+    "if (Test-Path .git) { git status",
+  ]) {
+    it(`refuses unresolved PowerShell syntax: ${command}`, () => {
+      assert.match(
+        inspectPolicyPowerShellSyntax(command) ?? "",
+        /Cannot inspect/u,
+      );
+    });
+  }
   it("distinguishes printed PowerShell blocks from expression, invocation and pipeline-consumed bodies", () => {
     for (const row of [
       ["", true, "pwsh", { kind: "commands", commands: [] }],

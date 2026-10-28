@@ -21,17 +21,42 @@ GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `den
 
 | Purpose | Claude Code | Codex CLI | Antigravity | Copilot CLI |
 |---------|-------------|-----------|-------------|-------------|
-| Block before tool runs | Separate PreToolUse registrations for both policy hooks | Separate PreToolUse registrations matched to `Bash`; interactive Linux CLI 0.155.1 delivery captured on 2026-09-21; fixed-scenario proof remains required | Separate PreToolUse registrations in `.agents/hooks.json`; Git matches `run_command`, while dangerous also matches secret-bearing file tools | Separate `preToolUse` registrations for both policies in `.github/hooks/hooks.json` |
-| Attributable Gruff quality | Registered PostToolUse for `Edit`, `Write`, and `Bash` containing `apply_patch`; no fresh 1.15.1 provider-delivery claim | Registered PostToolUse matched to `^apply_patch$`; trusted Codex CLI 0.149.1 `exec` delivery captured on 2026-08-27 | Disabled because PostToolUse did not deliver feedback to the active model | Registered `postToolUse`; no fresh 1.15.1 provider-delivery claim |
-| Universal post-turn safety | Registered Stop with `post-turn-safety.sh`; no fresh 1.15.1 provider-delivery claim | Registered Stop; interactive Linux Codex CLI 0.154.0 delivery captured on 2026-09-18; fixed-scenario proof remains required | Disabled because execution was not captured past the hook trust gate | Disabled because `agentStop` delivery and a Goat Flow registration adapter are unverified |
+| Block before tool runs | Separate PreToolUse registrations for both policy hooks | Separate PreToolUse registrations matched to `Bash`; host-specific delivery is recorded below | Separate PreToolUse registrations in `.agents/hooks.json`; Git matches `run_command`, while dangerous also matches secret-bearing file tools | Separate `preToolUse` registrations for both policies in `.github/hooks/hooks.json` |
+| Attributable Gruff quality | Registered PostToolUse for `Edit`, `Write`, and `Bash` containing `apply_patch`; host-specific delivery is recorded below | Registered PostToolUse matched to `^apply_patch$`; host-specific delivery is recorded below | Disabled because PostToolUse did not deliver feedback to the active model | Registered `postToolUse`; host-specific delivery is recorded below |
+| Universal post-turn safety | Registered Stop with `post-turn-safety.mjs`; host-specific delivery is recorded below | Registered Stop; host-specific delivery is recorded below | Disabled because execution was not captured past the hook trust gate | Disabled because `agentStop` delivery and a Goat Flow registration adapter are unverified |
 | Permission deny list | `.claude/settings.json` deny patterns | Filesystem permission profile in `.codex/config.toml`; command denies in the Bash hooks | Script-only guardrails; no provider-native file-read/file-write deny layer is claimed | Script-only guardrails; no provider-native file-read/file-write deny layer is claimed |
 | Config format | JSON | TOML + JSON | JSON | JSON |
+
+### Windows and WSL delivery captures
+
+Native `powershell` requests are inspected with PowerShell command context. Literal commands can reach their owning policies; unresolved dynamic execution, interpolation and session-state changes are refused. This is bounded command inspection, not a full PowerShell interpreter.
+
+The native PowerShell policy change requires fresh evidence for all 18 Windows/WSL delivery rows. Sixteen earlier verified captures are historical; none verifies the current runtime. C9 remains on security hold. Captures apply only to their recorded provider version, mode, host, trust and runtime bytes and do not activate support gates.
+
+| Provider | Host | Version and mode | PreToolUse | PostToolUse | Stop |
+|---|---|---|---|---|---|
+| Claude Code | Windows | 2.1.311, interactive/manual | C1 incomplete | C2 incomplete | C3 incomplete |
+| Codex CLI | Windows | 0.164.0, exec/JSON | C4 incomplete | C5 incomplete | C6 incomplete |
+| Copilot CLI | Windows | 1.0.103, interactive | C7 incomplete | C8 incomplete | No delivery claim |
+| Antigravity | Windows | No current complete capture | C9 security hold | No delivery claim | No delivery claim |
+| Claude Code | WSL | 2.1.311, interactive/manual | C10 incomplete | C11 incomplete | C12 incomplete |
+| Codex CLI | WSL | 0.165.0, exec/JSON | C13 incomplete | C14 incomplete | C15 incomplete |
+| Copilot CLI | WSL | 1.0.91, interactive | C16 incomplete | C17 incomplete | No delivery claim |
+| Antigravity | WSL | 1.4.9, interactive/Request Review | C18 incomplete | No delivery claim | No delivery claim |
+
+Verified PreToolUse rows delivered both independent policy reasons and allowed their harmless controls. Verified PostToolUse rows delivered Gruff findings to the model. Verified Stop rows blocked a conflict marker, allowed its repair and completed a clean reentry. Windows used Node 24.21.0; WSL used Node 22.22.1.
+
+In the historical captures, C1 changed from Opus 5.5 to Opus 4.8 after its initial controls. C16 includes an accepted Sonnet 5.5 to Sonnet 5 fallback, conflicting native model labels and two batched file views. C18 model identity is limited to the native display and a consistent opaque enum; the controller closed the client after idle. Raw hook stdin and forced-timeout behavior are not claimed by these captures.
+
+C7 remains open pending a fresh native PowerShell capture. Its earlier partial run denied the harmless control and did not expose the Git policy reason. C9 remains under a Windows security hold after launcher quarantine. C10 previously delivered both denials and four controls; that capture and the other fifteen verified rows now require replacement evidence for the changed runtime.
+
+The committed current-state [capture records](../../src/cli/hook-provider-captures.ts) keep incomplete rows separate from live support. Historical capture metadata, digests and the 41 runtime-file hashes remain preserved in the local evidence history. Fresh committed captures must supply those fields again. The registry attaches those observations to the relevant provider/event without changing its existing support gate. Audit does not yet compare the installed provider version, host or runtime hashes with these records; applicability still requires review.
 
 ### Linux/macOS compatibility and live delivery
 
 The native CI matrix checks consumer Node 20.12.0 and 24.21.0 against artifacts built with Node 24.21.0. Its coverage includes Claude and Codex PreToolUse, PostToolUse and Stop; Copilot CLI PreToolUse and PostToolUse; and Antigravity PreToolUse. Both independent deny policies are covered for PreToolUse. Native launcher, configured-command replay, evaluator and response-adapter checks establish compatibility at those boundaries.
 
-Live delivery through the current native hooks remains unverified on Linux and macOS. CI does not prove that an authenticated provider fired a hook, showed its result to the model or continued after Stop. The dated captures below describe their tested registrations and runtime bytes; they do not renew delivery evidence for the native runtime. Compatibility checks do not activate provider support gates.
+Live delivery through the current native hooks remains unverified on Linux and macOS. CI does not prove that an authenticated provider fired a hook, showed its result to the model or continued after Stop. The historical Linux captures below describe their tested registrations and runtime bytes; they do not renew delivery evidence for the native runtime. Compatibility checks do not activate provider support gates.
 
 The previous Codex CLI 0.147.0 PostToolUse and Stop claim was invalidated when the registration gained a Windows-only command override. An initial disposable Codex CLI 0.149.0 exec capture on 2026-08-22 did not load the project hooks: the requested fake `.env` canary read completed, so that run is invalid evidence. A subsequent exec capture in this already-trusted project loaded the exact changed registration and delivered a PreToolUse block for the same fake canary before shell execution. The reviewed 0.155.1 capture below supersedes that PreToolUse capture.
 
@@ -43,11 +68,11 @@ On 2026-09-18, an approved interactive Linux Codex CLI 0.154.0 capture with revi
 
 On 2026-09-21, interactive Linux Codex CLI 0.155.1 with gpt-6-astra (low reasoning) delivered separate registered PreToolUse denials from both deny hooks. Native project and handler review trusted the fixture; an output-preserving recorder retained field names and hook results, with six local controls confirming unchanged output and exits. A nonexistent secret-shaped path and cleanup of an empty Git fixture were blocked before their marker writes; harmless commands succeeded before and after, and the model reported both denial reasons. The session exited zero. Both registry rows retain `scenario-unverified` until their local groups pass. This capture covers the reviewed 1.17.0 runtime and ordinary completion in this Linux interactive mode; it renews neither Gruff nor Stop and does not test forced timeouts.
 
-Documentation and captures have no calendar expiry. Revalidate each capture when the provider version or mode, project-layer trust, event, adapter, or registration changes. Project-layer trust decides whether Codex loads project hooks; handler trust separately decides whether a loaded command may run. Passing either gate does not pass the other. Codex app-server, remote execution, and every other provider/mode/event combination have no fresh live-delivery claim in this release.
+Documentation and captures have no calendar expiry. Revalidate each capture when the provider version or mode, project-layer trust, event, adapter, or registration changes. Project-layer trust decides whether Codex loads project hooks; handler trust separately decides whether a loaded command may run. Passing either gate does not pass the other. Codex app-server, remote execution, and combinations absent from the host-specific matrix have no fresh live-delivery claim in this release.
 
 To revalidate a Codex provider row after a relevant change, repeat the exact event in a supported mode and record the provider version, configuration source, project and handler trust, payload shape, result delivery, model visibility, timeout, and continuation outcome. Update the registry gate, hook table, CLI guide, changelog, and relevant provider contract in one reviewed change; `hooks verify` supplies the separate fixed local scenario and cannot establish live delivery by itself.
 
-The registry's `providerEvidence` rows currently store identity and gate but not the provider version or mode. Audit therefore cannot detect provider-version drift directly; adding that binding remains unplanned follow-up. Until it exists, compare the runtime version and mode with this capture history before treating a row as applicable.
+The registry's `providerEvidence` rows retain host-specific capture metadata alongside identity and gate. Audit still does not detect provider-version drift automatically; compare the installed provider version, mode, host and runtime bytes with the applicable capture before using it as evidence.
 
 ## Setup
 

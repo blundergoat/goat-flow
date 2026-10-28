@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-10-24
+last_reviewed: 2026-10-28
 ---
 
 **Scope:** Adding, tuning, and trusting a repo-wide gate - dependency-audit baselines, count locks and provenance dates, what a PASS line does and does not prove, and the shell mechanics of the commands a gate runs. Formatter and lint debt is [verification-formatting.md](verification-formatting.md); an ad-hoc search that corrupts a file is [verification-scanners.md](verification-scanners.md); ordering edits and gate runs during a change, including a transient failure inside preflight, is [verification-gate-runs.md](verification-gate-runs.md).
@@ -53,7 +53,7 @@ last_reviewed: 2026-10-24
 
 **Root cause:** Adding the gate was treated as separate from proving the current baseline satisfies it, although a dependency-audit gate's first run can reveal already-present supply-chain debt.
 
-**Recurrence 2026-09-04:** The installer fixture reached its embedded preflight after the release candidate passed focused checks, but new advisories made the existing `typed-rest-client` override of `qs@6.15.3` fail; raising only that transitive override to `qs@6.16.0` and syncing the lockfile kept the repair inside the existing dependency boundary. `package.json` (search: `"qs": "6.16.0"`).
+**Recurrence 2026-09-04:** The installer fixture reached its embedded preflight after the release candidate passed focused checks, but new advisories made the existing `typed-rest-client` override of `qs@6.15.3` fail; raising only that transitive override to `qs@6.16.0` and syncing the lockfile kept the repair inside the existing dependency boundary. `package.json` (search: `"typed-rest-client"`).
 **Recurrence 2026-09-04 (timeout):** A release suite spent more than 21 minutes before its installer round-trip child returned null status at a 400-second limit, because the embedded preflight called `npm audit` without its own deadline; two later 120-second probes also expired while ordinary registry ping stayed responsive. The repair routes the audit through the process-group runner with a blocking timeout; since 2026-10-14 the round-trip test no longer runs an embedded preflight at all. `scripts/preflight-checks.sh` (search: `GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS`), `test/integration/preflight-progress.test.ts` (search: `bounds dependency audit without exposing a release-gate bypass`).
 
 ---

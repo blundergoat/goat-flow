@@ -10,7 +10,10 @@ import type { AgentId } from "../types.js";
 import {
   HOOK_RESULT_SCHEMA,
   type HookEffectiveState,
+  type HookProviderHostEvidence,
 } from "../hook-contracts.js";
+
+import { HOOK_PROVIDER_HOST_EVIDENCE } from "../hook-provider-captures.js";
 
 type HookEvent = "PreToolUse" | "PostToolUse" | "Stop";
 
@@ -27,7 +30,7 @@ export interface HookDeliveryContract {
 }
 
 /**
- * Names deterministic adapter evidence and one host's first unmet support gate.
+ * Names adapter evidence, reviewed host captures and the existing support gate.
  *
  * Use when UI and audit surfaces explain why delivery is not yet verified.
  * Invariant: fixture identity never upgrades itself into live provider proof.
@@ -35,6 +38,8 @@ export interface HookDeliveryContract {
 export interface HookProviderRegistryEvidence {
   identity: string;
   effectiveSupportGate: HookEffectiveState["status"];
+  /** Historical observations for this provider/event; these never select or advance the gate. */
+  hostCaptures?: readonly HookProviderHostEvidence[];
 }
 
 /**
@@ -145,18 +150,38 @@ const HOOKS: HookSpec[] = [
       claude: {
         identity: "hook-provider-adapter.v1:claude:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "claude" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "codex" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "antigravity" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "copilot" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
     },
   },
@@ -180,18 +205,38 @@ const HOOKS: HookSpec[] = [
       claude: {
         identity: "hook-provider-adapter.v1:claude:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "claude" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "codex" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "antigravity" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "copilot" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
     },
   },
@@ -222,18 +267,38 @@ const HOOKS: HookSpec[] = [
       claude: {
         identity: "hook-provider-adapter.v1:claude:post-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "claude" &&
+            capture.canonicalEvent === "post-tool",
+        ),
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:post-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "codex" &&
+            capture.canonicalEvent === "post-tool",
+        ),
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:post-tool",
         effectiveSupportGate: "result-undelivered",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "antigravity" &&
+            capture.canonicalEvent === "post-tool",
+        ),
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:post-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "copilot" &&
+            capture.canonicalEvent === "post-tool",
+        ),
       },
     },
     unsupportedAgents: {
@@ -272,18 +337,38 @@ const HOOKS: HookSpec[] = [
       claude: {
         identity: "hook-provider-adapter.v1:claude:turn-stop",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "claude" &&
+            capture.canonicalEvent === "turn-stop",
+        ),
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:turn-stop",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "codex" &&
+            capture.canonicalEvent === "turn-stop",
+        ),
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:turn-stop",
         effectiveSupportGate: "provider-capture-absent",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "antigravity" &&
+            capture.canonicalEvent === "turn-stop",
+        ),
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:turn-stop",
         effectiveSupportGate: "provider-capture-absent",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "copilot" &&
+            capture.canonicalEvent === "turn-stop",
+        ),
       },
     },
     unsupportedAgents: {

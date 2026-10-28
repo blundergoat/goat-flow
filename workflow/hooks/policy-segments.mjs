@@ -6,7 +6,7 @@ import { isAbsolute } from "node:path";
 import { asciiLowerCase } from "./policy-input.mjs";
 import { isGitConfigSourceVariable, isGitConfigSourceAmbientlyExported, } from "./policy-git.mjs";
 import { joinPolicyShellWords, isPolicyAnsiQuoteStart, isPolicyShellCommentBoundary, splitPolicyShellWords, } from "./policy-words.mjs";
-import { findPolicyNativeCommandGroup, } from "./policy-syntax.mjs";
+import { findPolicyNativeCommandGroup, findPolicyNativeShellCommand, } from "./policy-syntax.mjs";
 /** Escaped and quoted braces remain argument data rather than executable block boundaries. */
 function consumeBlockQuote(state, char) {
     if (state.escaped) {
@@ -333,6 +333,251 @@ export function splitPolicyCommandSegments(input, host = "", splitPipelines = fa
 /** Include top-level pipeline stages while keeping nested and escaped pipes inside their command. */
 export function splitPolicyTopLevelPipelineStages(input, host = "") {
     return splitPolicyCommandSegments(input, host, true);
+}
+/** A literal pipeline stage contributes exactly one complete script block, with no extra output operands. */
+function literalPowerShellPipelineBlock(input, prefix, host) {
+    const match = prefix.exec(asciiLowerCase(input));
+    if (!match)
+        return null;
+    const text = input.slice(match[0].length);
+    if (!text.startsWith("{"))
+        return null;
+    const group = findPolicyNativeCommandGroup(text, host);
+    return group && group.tail.trim() === "" ? group.body : null;
+}
+/** Bind the only consumer to the literal block emitted by the preceding stage; arbitrary pipeline values remain unknown. */
+export function policyPowerShellPipelineSource(input, host) {
+    if (!powerShellHost.test(host))
+        return null;
+    const split = splitPolicyTopLevelPipelineStages(input, host);
+    if (split.kind !== "segments" || split.segments.length !== 2)
+        return null;
+    const source = split.segments[0] ?? "";
+    const producer = literalPowerShellPipelineBlock(source, /^[ \t\r\n]*(?:echo|write-output)[ \t\r\n]+/u, host);
+    const consumer = literalPowerShellPipelineBlock(split.segments[1] ?? "", /^[ \t\r\n]*(?:%|foreach-object)[ \t\r\n]+/u, host);
+    if (producer === null || consumer === null)
+        return null;
+    return /^[ \t\r\n]*&[ \t\r\n]+\$_[ \t\r\n]*$/u.test(consumer) ? source : null;
+}
+/** PowerShell's immutable boolean/null values are data, unlike named or interpolated variables. */
+function powerShellConstantLength(input, index) {
+    const previous = index === 0 ? " " : input.charAt(index - 1);
+    if (!/[ \t\r\n({;|&]/u.test(previous))
+        return 0;
+    return (/^\$(?:true|false|null)(?=[ \t\r\n)};|&]|$)/u.exec(asciiLowerCase(input.slice(index)))?.[0].length ?? 0);
+}
+/** Find a complete inert string; interpolation and unterminated strings have no inspectable literal boundary. */
+function powerShellLiteralEnd(input, start) {
+    const quote = input.charAt(start);
+    const alternateQuote = quote === "'" ? /[\u2018-\u201b]/u : /[\u201c-\u201f]/u;
+    for (let index = start + 1; index < input.length; index++) {
+        const char = input.charAt(index);
+        if (alternateQuote.test(char))
+            return -1;
+        if (quote === '"' && (char === "$" || char === "`"))
+            return -1;
+        if (char !== quote)
+            continue;
+        if (input.charAt(index + 1) !== quote)
+            return index;
+        index++;
+    }
+    return -1;
+}
+/** Reject unsupported expansions and native delimiters before the ASCII command readers can misinterpret them. */
+function isUnsupportedPowerShellCharacter(char) {
+    return ("$`@[]<,".includes(char) ||
+        /[\u0085\u00a0\u1680\u2000-\u200a\u2013-\u201f\u2028\u2029\u202f\u205f\u3000\ufeff]/u.test(char));
+}
+/** Keep literal strings inert while rejecting syntax that would assemble executable PowerShell at runtime. */
+function powerShellLiteralProjection(input) {
+    let projection = "";
+    for (let index = 0; index < input.length; index++) {
+        const char = input.charAt(index);
+        if ("\"'".includes(char)) {
+            const end = powerShellLiteralEnd(input, index);
+            if (end < 0)
+                return null;
+            projection += " ".repeat(end - index + 1);
+            index = end;
+            continue;
+        }
+        if (char === "#" && isPolicyShellCommentBoundary(projection)) {
+            const newline = input.indexOf("\n", index);
+            index = newline < 0 ? input.length : newline - 1;
+            continue;
+        }
+        const length = char === "$" ? powerShellConstantLength(input, index) : 0;
+        if (length !== 0) {
+            projection += " ".repeat(length);
+            index += length - 1;
+            continue;
+        }
+        if (isUnsupportedPowerShellCharacter(char))
+            return null;
+        projection += char;
+    }
+    return projection;
+}
+const untrackedPowerShellCommands = new Set([
+    "set-alias",
+    "new-alias",
+    "sal",
+    "nal",
+    "remove-alias",
+    "set-item",
+    "new-item",
+    "si",
+    "ni",
+    "set-variable",
+    "new-variable",
+    "remove-variable",
+    "sv",
+    "nv",
+    "rv",
+    "set-location",
+    "push-location",
+    "pop-location",
+    "cd",
+    "chdir",
+    "sl",
+    "pushd",
+    "popd",
+    "import-module",
+    "remove-module",
+    "ipmo",
+    "rmo",
+    "add-pssnapin",
+    "invoke-command",
+    "icm",
+    "add-type",
+    "new-object",
+    "invoke-item",
+    "ii",
+    "invoke-history",
+    "ihy",
+    "r",
+    "start-job",
+    "sajb",
+    "start-threadjob",
+    "new-psdrive",
+    "remove-psdrive",
+    "function",
+    "filter",
+    "class",
+    "configuration",
+    "workflow",
+    "data",
+    "foreach",
+    "for",
+    "while",
+    "do",
+    "switch",
+    "try",
+    "trap",
+    "param",
+    "using",
+    "return",
+    "throw",
+    "exit",
+    "break",
+    "continue",
+    "begin",
+    "process",
+    "end",
+    "clean",
+    "dynamicparam",
+    "enum",
+]);
+/** Expressions in command arguments can run commands; only the existing conditional parser owns top-level parentheses. */
+function hasUninspectedPowerShellExpression(projection) {
+    if (/^[ \t\r\n]*if[ \t\r\n]*\(/u.test(asciiLowerCase(projection)))
+        return false;
+    let braces = 0;
+    for (const char of projection) {
+        if (char === "{")
+            braces++;
+        else if (char === "}")
+            braces--;
+        else if (char === "(" && braces === 0)
+            return true;
+    }
+    return false;
+}
+/** Reject group boundaries that cannot be passed intact to the native command readers. */
+function hasUnbalancedPowerShellGroups(projection) {
+    const stack = [];
+    for (const char of projection) {
+        if (char === "(" || char === "{")
+            stack.push(char);
+        else if (char === ")" || char === "}") {
+            if (stack.pop() !== (char === ")" ? "(" : "{"))
+                return true;
+        }
+    }
+    return stack.length !== 0;
+}
+/** Keep the location control while refusing operators whose executable value is not literal. */
+function hasUninspectedPowerShellOperators(source) {
+    const projection = powerShellLiteralProjection(source);
+    if (projection === null)
+        return true;
+    if (projection.includes("--%") ||
+        projection.includes("+") ||
+        /(?:^|[^&])&[ \t\r\n]*\(/u.test(projection))
+        return true;
+    const literalLocation = /^[ \t\r\n]*\([ \t]*get-location[ \t]*\)\.path[ \t\r\n]*$/u.test(asciiLowerCase(source));
+    return (!literalLocation &&
+        (hasUninspectedPowerShellExpression(projection) ||
+            /[)}][ \t\r\n]*\./u.test(projection)));
+}
+/** A native child shell must expose a command body, unless it only prints help or its version. */
+function hidesPowerShellChildScript(verb, words, segment) {
+    if (!powerShellHost.test(verb))
+        return false;
+    if (findPolicyNativeShellCommand(segment).kind === "command")
+        return false;
+    return !(words.length === 2 &&
+        ["-version", "--version", "-help", "-?"].includes(asciiLowerCase(words[1] ?? "")));
+}
+/** Member-invocation shorthand needs a literal body before its execution can be inspected. */
+function hasUninspectedPowerShellMemberCall(segment, words, verb) {
+    return (["foreach-object", "%", "where-object", "?"].includes(verb) &&
+        !segment
+            .slice(words[0]?.length ?? 0)
+            .trimStart()
+            .startsWith("{"));
+}
+/** Reject literal commands that change untracked state or invoke bodies the native readers cannot inspect. */
+function isUninspectedPowerShellSegment(input) {
+    const segment = input.trim();
+    if (hasUninspectedPowerShellOperators(segment))
+        return true;
+    const words = splitPolicyShellWords(segment);
+    const dot = words[0] === ".";
+    const word = asciiLowerCase(words[dot ? 1 : 0] ?? "").replaceAll("\\", "/");
+    const verb = word.slice(word.lastIndexOf("/") + 1);
+    if (dot && (word === "" || word.startsWith("(")))
+        return true;
+    if (hasUninspectedPowerShellMemberCall(segment, words, verb))
+        return true;
+    return (/\.(?:ps1|psm1|psd1)$/u.test(verb) ||
+        untrackedPowerShellCommands.has(verb) ||
+        hidesPowerShellChildScript(verb, words, segment));
+}
+/** Recognize only balanced, literal command syntax; unknown dispatch and session-state changes stay refused. */
+export function inspectPolicyPowerShellSyntax(input) {
+    const refusal = "Cannot inspect native PowerShell execution or session-state changes. Use separate literal commands without dynamic syntax.";
+    const source = policyPowerShellPipelineSource(input, "powershell") ?? input;
+    const projection = powerShellLiteralProjection(source);
+    if (projection === null)
+        return refusal;
+    if (hasUnbalancedPowerShellGroups(projection))
+        return refusal;
+    const split = splitPolicyCommandSegments(source, "powershell", true);
+    if (split.kind === "unresolved")
+        return refusal;
+    return split.segments.some(isUninspectedPowerShellSegment) ? refusal : null;
 }
 function collectPrintedPipelineBlocks(stages, host) {
     const commands = [];

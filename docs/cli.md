@@ -916,6 +916,10 @@ npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-
 npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook --trusted-target
 ```
 
+The native PowerShell policy change requires fresh Windows/WSL delivery evidence. The sixteen earlier verified rows are historical; no current-runtime row is verified, and Antigravity Windows remains on security hold. Native PowerShell commands now reach bounded policy inspection, while unresolved dynamic execution is refused. See the [host-specific capture matrix](../workflow/hooks/README.md#windows-and-wsl-delivery-captures) for current limitations. These records preserve the existing registry gates; they do not activate support or establish native Linux/macOS delivery.
+
+The following Codex captures are historical observations of their recorded registrations and runtime bytes.
+
 Goat Flow registers Codex project hooks for the `PreToolUse` deny policy, opt-in `PostToolUse` Gruff analysis on `apply_patch`, and default `Stop` safety. The Windows registration adds Codex's documented `commandWindows` override, which invalidated the earlier Codex CLI 0.147.0 `PostToolUse` and `Stop` delivery capture.
 
 On 2026-09-21, interactive Linux Codex CLI 0.155.1 delivered registered PreToolUse denials from both deny hooks after native project and handler review. Both probes were blocked before execution, harmless controls completed, and the model received the denial reasons. This capture supersedes the 0.149.0 evidence; each row remains `scenario-unverified` until its fixed local scenario group passes. It renews neither Gruff nor Stop.
@@ -924,11 +928,11 @@ A trusted Codex CLI 0.149.1 `exec` capture subsequently completed `apply_patch`,
 
 On 2026-09-18, interactive Linux Codex CLI 0.154.0 delivered registered Stop feedback for a conflict, the model repaired the fixture during one automatic continuation, and clean Stop completed. Its registry gate is `scenario-unverified`; the fixed local scenario must also pass before the hook is effective.
 
-Documentation and captures have no calendar expiry. Revalidate after a relevant provider, mode, trust, event, hook, adapter, or registration change. Exact configured-command replay does not upgrade provider-delivery evidence. Project-layer trust and handler trust remain separate, and app-server, remote execution, other platforms and modes, and forced-timeout behavior are unclaimed. See the [hook runtime matrix](../workflow/hooks/README.md#agent-event-name-mapping) for registered and disabled combinations.
+Documentation and captures have no calendar expiry. Revalidate after a relevant provider, mode, trust, event, hook, adapter, or registration change. Exact configured-command replay does not upgrade provider-delivery evidence. Project-layer trust and handler trust remain separate, and app-server, remote execution, platforms and modes absent from the host-specific matrix, and forced-timeout behavior are unclaimed. See the [hook runtime matrix](../workflow/hooks/README.md#agent-event-name-mapping) for registered and disabled combinations.
 
 Linux/macOS compatibility is checked in the native CI matrix at consumer Node 20.12.0 and 24.21.0, using artifacts built with Node 24.21.0. The covered combinations are Claude and Codex PreToolUse, PostToolUse and Stop; Copilot CLI PreToolUse and PostToolUse; and Antigravity PreToolUse. PreToolUse coverage includes both independent deny policies. Native launcher, configured-command replay, evaluator and response-adapter checks establish compatibility at those boundaries.
 
-Live delivery through the current native hooks remains unverified on Linux and macOS. CI does not establish that an authenticated provider fired a hook, showed its result to the model or continued after Stop. The dated captures above describe their tested registrations and runtime bytes; they do not renew delivery evidence for the native runtime. Check the applicable CI result and provider capture separately before making a support claim.
+Live delivery through the current native hooks remains unverified on Linux and macOS. CI does not establish that an authenticated provider fired a hook, showed its result to the model or continued after Stop. The historical Linux captures above describe their tested registrations and runtime bytes; they do not renew delivery evidence for the native runtime. Check the applicable CI result and provider capture separately before making a support claim.
 
 `enable` and `disable` require a `<hook-id>` (exit 2 if omitted). `sync` reapplies the `.goat-flow/config.yaml` hook state to supported agent configurations in the selected project without changing which hooks are enabled. It copies official files bundled with the running CLI; it does not download a release or upgrade the package.
 

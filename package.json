@@ -146,7 +146,7 @@
   "main": "dist/cli/index.js",
   "overrides": {
     "typed-rest-client": {
-      "qs": "6.16.0"
+      "qs": "6.16.1"
     }
   }
 }

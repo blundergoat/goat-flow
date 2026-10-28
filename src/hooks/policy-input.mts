@@ -136,11 +136,16 @@ export function asciiLowerCase(value: string): string {
   );
 }
 
-/** Route supported provider command tools through command-policy inspection. */
+/** Identify provider tools that use the existing POSIX command-inspection path. */
 export function isPolicyShellTool(tool: string): boolean {
   return ["bash", "shell", "sh", "run_command", "monitor"].includes(
     asciiLowerCase(tool),
   );
+}
+
+/** Identify native PowerShell requests so ownership and grammar selection agree. */
+export function isPolicyPowerShellTool(tool: string): boolean {
+  return asciiLowerCase(tool) === "powershell";
 }
 
 /** Route supported provider content tools through the selected secret-path policy. */
