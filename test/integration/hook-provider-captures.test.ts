@@ -39,9 +39,19 @@ describe("host-specific hook provider captures", () => {
       Array.from({ length: 18 }, (_, index) => "C" + (index + 1)).sort(),
     );
     for (const row of captures) {
+      // A verified row without its capture would pass every hash check below vacuously.
+      assert.equal(
+        row.capture !== undefined,
+        row.verification === "verified",
+        row.caseId + ": only verified rows carry a capture",
+      );
       if (!row.capture) continue;
       assert.match(row.capture.artifactSha256, /^[a-f0-9]{64}$/u);
       assert.match(row.capture.approvalPacketSha256, /^[a-f0-9]{64}$/u);
+      assert.ok(
+        Object.keys(row.capture.runtimeSha256).length > 0,
+        row.caseId + ": runtime hashes are required",
+      );
       for (const [file, expectedHash] of Object.entries(
         row.capture.runtimeSha256,
       )) {
@@ -79,13 +89,38 @@ describe("host-specific hook provider captures", () => {
         }
       }
     }
+    // Verified C7/C8 captures inform review only; each Copilot gate they attach to still waits for local scenario proof.
+    const copilot = (hookId: string) =>
+      getHookSpec(hookId)?.providerEvidence?.copilot;
+    /** Report whether the hook's Copilot evidence carries this verified host capture. */
+    const carriesVerified = (hookId: string, caseId: string) =>
+      copilot(hookId)?.hostCaptures?.some(
+        (row) => row.caseId === caseId && row.verification === "verified",
+      );
+    assert.ok(carriesVerified("deny-dangerous", "C7"));
+    assert.ok(carriesVerified("deny-git-mutations", "C7"));
+    assert.ok(carriesVerified("gruff-code-quality", "C8"));
+    assert.equal(
+      copilot("deny-dangerous")?.effectiveSupportGate,
+      "scenario-unverified",
+    );
+    assert.equal(
+      copilot("deny-git-mutations")?.effectiveSupportGate,
+      "scenario-unverified",
+    );
+    assert.equal(
+      copilot("gruff-code-quality")?.effectiveSupportGate,
+      "scenario-unverified",
+    );
   });
 
-  it("keeps historical captures incomplete after the shared runtime changes", () => {
+  it("verifies only the recaptured rows after the shared runtime change", () => {
     const windows = hostEvidence("copilot", "windows");
     const wsl = hostEvidence("copilot", "wsl");
-    assert.equal(windows.verification, "incomplete");
-    assert.equal(windows.capture, undefined);
+    assert.equal(windows.caseId, "C7");
+    assert.equal(windows.verification, "verified");
+    assert.equal(windows.capture?.providerVersion, "1.0.103");
+    assert.equal(windows.capture?.resultDelivery, "delivered");
     assert.equal(wsl.verification, "incomplete");
     assert.equal(wsl.capture, undefined);
     assert.match(wsl.limitations.join(" "), /fallback/u);
@@ -93,11 +128,16 @@ describe("host-specific hook provider captures", () => {
     const wslClaude = hostEvidence("claude", "wsl");
     assert.equal(wslClaude.capture, undefined);
     assert.equal(wslClaude.verification, "incomplete");
+    const expectedVerification: Readonly<
+      Record<string, HookProviderHostEvidence["verification"]>
+    > = { C7: "verified", C8: "verified", C9: "security-hold" };
     for (const row of HOOK_PROVIDER_HOST_EVIDENCE) {
-      assert.equal(row.capture, undefined, row.caseId);
+      const expected = expectedVerification[row.caseId] ?? "incomplete";
+      assert.equal(row.verification, expected, row.caseId);
       assert.equal(
-        row.verification,
-        row.caseId === "C9" ? "security-hold" : "incomplete",
+        row.capture !== undefined,
+        expected === "verified",
+        row.caseId,
       );
     }
     assert.equal(

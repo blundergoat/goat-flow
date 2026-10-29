@@ -31,26 +31,26 @@ GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `den
 
 Native `powershell` requests are inspected with PowerShell command context. Literal commands can reach their owning policies; unresolved dynamic execution, interpolation and session-state changes are refused. This is bounded command inspection, not a full PowerShell interpreter.
 
-The native PowerShell policy change requires fresh evidence for all 18 Windows/WSL delivery rows. Sixteen earlier verified captures are historical; none verifies the current runtime. C9 remains on security hold. Captures apply only to their recorded provider version, mode, host, trust and runtime bytes and do not activate support gates.
+The native PowerShell policy change requires fresh evidence for all 18 Windows/WSL delivery rows. Sixteen earlier verified captures are historical. C7 and C8 are verified on the current runtime; C9 remains on security hold, and the remaining 15 rows need fresh captures. Captures apply only to their recorded provider version, mode, host, trust and runtime bytes and do not activate support gates.
 
 | Provider | Host | Version and mode | PreToolUse | PostToolUse | Stop |
 |---|---|---|---|---|---|
 | Claude Code | Windows | 2.1.311, interactive/manual | C1 incomplete | C2 incomplete | C3 incomplete |
 | Codex CLI | Windows | 0.164.0, exec/JSON | C4 incomplete | C5 incomplete | C6 incomplete |
-| Copilot CLI | Windows | 1.0.103, interactive | C7 incomplete | C8 incomplete | No delivery claim |
+| Copilot CLI | Windows | 1.0.103, prompt/JSON | C7 verified | C8 verified | No delivery claim |
 | Antigravity | Windows | No current complete capture | C9 security hold | No delivery claim | No delivery claim |
 | Claude Code | WSL | 2.1.311, interactive/manual | C10 incomplete | C11 incomplete | C12 incomplete |
 | Codex CLI | WSL | 0.165.0, exec/JSON | C13 incomplete | C14 incomplete | C15 incomplete |
 | Copilot CLI | WSL | 1.0.91, interactive | C16 incomplete | C17 incomplete | No delivery claim |
 | Antigravity | WSL | 1.4.9, interactive/Request Review | C18 incomplete | No delivery claim | No delivery claim |
 
-Verified PreToolUse rows delivered both independent policy reasons and allowed their harmless controls. Verified PostToolUse rows delivered Gruff findings to the model. Verified Stop rows blocked a conflict marker, allowed its repair and completed a clean reentry. Windows used Node 24.21.0; WSL used Node 22.22.1.
+A verified PreToolUse row delivers both independent policy reasons and allows its harmless controls; a verified PostToolUse row delivers Gruff findings to the model. C7 and C8 meet those criteria on Windows with Node 24.21.0. Raw hook stdin and forced-timeout behavior are not claimed by any capture, including C7 and C8. The historical Stop captures blocked a conflict marker, allowed its repair and completed a clean reentry, and the historical WSL captures used Node 22.22.1.
 
-In the historical captures, C1 changed from Opus 5.5 to Opus 4.8 after its initial controls. C16 includes an accepted Sonnet 5.5 to Sonnet 5 fallback, conflicting native model labels and two batched file views. C18 model identity is limited to the native display and a consistent opaque enum; the controller closed the client after idle. Raw hook stdin and forced-timeout behavior are not claimed by these captures.
+In the historical captures, C1 changed from Opus 5.5 to Opus 4.8 after its initial controls. C16 includes an accepted Sonnet 5.5 to Sonnet 5 fallback, conflicting native model labels and two batched file views. C18 model identity is limited to the native display and a consistent opaque enum; the controller closed the client after idle.
 
-C7 remains open pending a fresh native PowerShell capture. Its earlier partial run denied the harmless control and did not expose the Git policy reason. C9 remains under a Windows security hold after launcher quarantine. C10 previously delivered both denials and four controls; that capture and the other fifteen verified rows now require replacement evidence for the changed runtime.
+C9 remains under a Windows security hold after launcher quarantine. C10 previously delivered both denials and four controls; that capture and the other fourteen historical rows still require replacement evidence for the changed runtime.
 
-The committed current-state [capture records](../../src/cli/hook-provider-captures.ts) keep incomplete rows separate from live support. Historical capture metadata, digests and the 41 runtime-file hashes remain preserved in the local evidence history. Fresh committed captures must supply those fields again. The registry attaches those observations to the relevant provider/event without changing its existing support gate. Audit does not yet compare the installed provider version, host or runtime hashes with these records; applicability still requires review.
+The committed current-state [capture records](../../src/cli/hook-provider-captures.ts) keep incomplete rows separate from live support. Historical capture metadata, digests and the 41 runtime-file hashes remain preserved in the local evidence history. C7 and C8 supply those fields again; each later recapture must do the same. The registry attaches those observations to the relevant provider/event without changing its existing support gate. Audit does not yet compare the installed provider version, host or runtime hashes with these records; applicability still requires review.
 
 ### Linux/macOS compatibility and live delivery
 
