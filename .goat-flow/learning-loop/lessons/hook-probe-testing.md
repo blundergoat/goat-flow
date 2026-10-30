@@ -3,7 +3,7 @@ category: hook-probe-testing
 last_reviewed: 2026-10-24
 ---
 
-**Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md).
+**Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md). What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md).
 
 ## Lesson: Interpreter-pipe tests need flag-operand and producer-language controls
 

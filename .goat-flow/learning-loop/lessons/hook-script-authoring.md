@@ -3,7 +3,7 @@ category: hook-script-authoring
 last_reviewed: 2026-10-22
 ---
 
-**Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
+**Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md). What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md).
 
 ## Lesson: Typed hook boundaries must distinguish absent fields from explicit undefined
 

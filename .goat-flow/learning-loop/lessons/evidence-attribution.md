@@ -1,6 +1,6 @@
 ---
 category: evidence-attribution
-last_reviewed: 2026-10-28
+last_reviewed: 2026-10-30
 ---
 
 **Scope:** Attributing guarantees to the implementation that supplies them, attributing readiness and run details to the host row or command output that recorded them, checking whether reused evidence still describes current bytes, and keeping committed incident evidence readable from a fresh clone. General guidance remains in [agent-evidence-claims.md](agent-evidence-claims.md).
@@ -118,3 +118,18 @@ last_reviewed: 2026-10-28
 **What happened:** Lessons recorded after a Windows hook-capture project named milestone and capture-row IDs, called some evidence "local plan evidence" and mentioned a handoff. `stats --check` and the touched-file checks passed, because none of these were backticked gitignored paths. The user caught them on review: in a fresh clone the IDs point at plan files that do not exist. The entries were rewritten in self-contained terms.
 
 **Root cause:** The entries were drafted from inside the active plan, where milestone IDs are the natural vocabulary, and nothing translated that vocabulary for a fresh-clone reader. Path citations are covered by `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` (search: `Agent cited gitignored content as evidence in committed docs`) and enforced by `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`); IDs and prose references have no automated check.
+
+---
+
+## Lesson: A fixture-change receipt must allow for the hooks' own writes
+
+**Status:** active | **Created:** 2026-10-30 | **Evidence:** OBSERVED
+**Decision changed:** Before a capture receipt counts every unlisted fixture change as unexpected, list the files the installed hooks write during the session and exempt exactly those.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** A live provider session runs the installed hooks, and some of them write into the project. The Gruff PostToolUse hook writes one health marker per session into the project's local events log directory, named from a checksum of the session identity. A receipt that diffs the whole fixture must declare such writes before approval, and should exempt only a new marker whose `session=` line names the live session, so a marker from any other session still counts as unexpected. Before fixing a receipt's expected changes, read the hook source for each event the session triggers and the file timestamps an earlier session left in the same fixture. Evidence anchor: `workflow/hooks/gruff-code-quality.mjs` (search: `function announceHealth`).
+
+**What happened:** A packet for a native Codex PostToolUse and Stop capture added a whole-fixture diff to its receipt and expected only the two synthetic files and the one-use claim to change. An independent review found that an earlier session in the same fixture had left a Gruff health marker written mid-session, so the new receipt would have reported the next marker as an unexpected change. The row requires that only the synthetic files change, so it would have failed after its claim was spent, with no retry allowed. The packet now declares the marker pattern and exempts a marker only when it names the run's thread id.
+
+**Root cause:** The receipt's expected changes were drawn from the prompt's edits, not from what the installed hooks write. The earlier receipt compared only the listed files, so it never showed the marker.

@@ -89,29 +89,30 @@ describe("host-specific hook provider captures", () => {
         }
       }
     }
-    // Verified C7/C8 captures inform review only; each Copilot gate they attach to still waits for local scenario proof.
-    const copilot = (hookId: string) =>
-      getHookSpec(hookId)?.providerEvidence?.copilot;
-    /** Report whether the hook's Copilot evidence carries this verified host capture. */
-    const carriesVerified = (hookId: string, caseId: string) =>
-      copilot(hookId)?.hostCaptures?.some(
-        (row) => row.caseId === caseId && row.verification === "verified",
+    // Verified captures inform review only; each gate they attach to still waits for local scenario proof.
+    const attached = [
+      ["copilot", "deny-dangerous", "C7"],
+      ["copilot", "deny-git-mutations", "C7"],
+      ["copilot", "gruff-code-quality", "C8"],
+      ["claude", "deny-dangerous", "C1"],
+      ["claude", "deny-git-mutations", "C1"],
+      ["claude", "gruff-code-quality", "C2"],
+      ["claude", "post-turn-safety", "C3"],
+    ] as const;
+    for (const [provider, hookId, caseId] of attached) {
+      const evidence = getHookSpec(hookId)?.providerEvidence?.[provider];
+      assert.ok(
+        evidence?.hostCaptures?.some(
+          (row) => row.caseId === caseId && row.verification === "verified",
+        ),
+        `${provider}/${hookId} carries verified ${caseId}`,
       );
-    assert.ok(carriesVerified("deny-dangerous", "C7"));
-    assert.ok(carriesVerified("deny-git-mutations", "C7"));
-    assert.ok(carriesVerified("gruff-code-quality", "C8"));
-    assert.equal(
-      copilot("deny-dangerous")?.effectiveSupportGate,
-      "scenario-unverified",
-    );
-    assert.equal(
-      copilot("deny-git-mutations")?.effectiveSupportGate,
-      "scenario-unverified",
-    );
-    assert.equal(
-      copilot("gruff-code-quality")?.effectiveSupportGate,
-      "scenario-unverified",
-    );
+      assert.equal(
+        evidence?.effectiveSupportGate,
+        "scenario-unverified",
+        `${provider}/${hookId} gate`,
+      );
+    }
   });
 
   it("verifies only the recaptured rows after the shared runtime change", () => {
@@ -124,13 +125,23 @@ describe("host-specific hook provider captures", () => {
     assert.equal(wsl.verification, "incomplete");
     assert.equal(wsl.capture, undefined);
     assert.match(wsl.limitations.join(" "), /fallback/u);
-    assert.equal(hostEvidence("claude", "windows").verification, "incomplete");
+    const windowsClaude = hostEvidence("claude", "windows");
+    assert.equal(windowsClaude.caseId, "C1");
+    assert.equal(windowsClaude.verification, "verified");
+    assert.equal(windowsClaude.capture?.providerVersion, "2.1.312");
     const wslClaude = hostEvidence("claude", "wsl");
     assert.equal(wslClaude.capture, undefined);
     assert.equal(wslClaude.verification, "incomplete");
     const expectedVerification: Readonly<
       Record<string, HookProviderHostEvidence["verification"]>
-    > = { C7: "verified", C8: "verified", C9: "security-hold" };
+    > = {
+      C1: "verified",
+      C2: "verified",
+      C3: "verified",
+      C7: "verified",
+      C8: "verified",
+      C9: "security-hold",
+    };
     for (const row of HOOK_PROVIDER_HOST_EVIDENCE) {
       const expected = expectedVerification[row.caseId] ?? "incomplete";
       assert.equal(row.verification, expected, row.caseId);

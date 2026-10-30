@@ -279,7 +279,7 @@ describe("Native shell conditionals", () => {
   it("keeps quoted conditional text and unevaluated PowerShell script blocks available", () => {
     // An investigator may print a script instead of running it; its braces and verbs remain argument data.
     for (const command of [
-      `powershell -Command 'Write-Output "if ($true) { Remove-Item example }"'`,
+      `powershell -Command 'Write-Output "if (Test-Path example) { Remove-Item example }"'`,
       `powershell -Command 'Write-Output { Remove-Item example }'`,
       `powershell -Command 'if ($true) { Write-Output "brace } and Remove-Item example" }'`,
       `cmd /c 'if exist "example folder" (echo "del /s /q example")'`,
@@ -287,6 +287,16 @@ describe("Native shell conditionals", () => {
       const result = checkProposedCommand("deny-dangerous", command);
       assert.equal(result.status, 0, result.stderr);
     }
+    // PowerShell expands `$` inside double quotes before printing, so Node refuses the text; the frozen Bash reference allows it.
+    const expanded = checkProposedCommand(
+      "deny-dangerous",
+      `powershell -Command 'Write-Output "if ($true) { Remove-Item example }"'`,
+    );
+    assert.equal(
+      expanded.status,
+      hookSelection() === "reference" ? 0 : 2,
+      expanded.stderr,
+    );
   });
   it("preserves provider denials for conditional deletions", () => {
     // Provider delivery must retain the same stop decision as the direct classifier interface.
@@ -305,15 +315,41 @@ describe("PowerShell executable script blocks", () => {
   const blockCommands = [
     'powershell -Command "1 | ForEach-Object { ACTION }"',
     "pwsh -Command '1 | % { ACTION }'",
-    "powershell -Command '1 | foreach -Begin { Write-Output Ready } -Process { Write-Output Ready } -End { ACTION }'",
     "powershell -Command '1 | ForEach-Object { if ($true) { ACTION } }'",
     "powershell -Command 'if ($true) { 1 | ForEach-Object { ACTION } }'",
     "powershell -Command '1 | ForEach-Object { 1 | ForEach-Object { ACTION } }'",
     `powershell -Command '1 | ForEach-Object { Write-Output "brace } | text"; ACTION }'`,
     "powershell -Command '1 | ForEach-Object { Write-Output Ready }; ACTION'",
+  ];
+  // Node refuses these forms whatever the body: it does not inspect the `foreach` alias, a parenthesised expression or a method
+  // call. The frozen Bash reference still reads their bodies.
+  const dynamicBlockCommands = [
+    "powershell -Command '1 | foreach -Begin { Write-Output Ready } -Process { Write-Output Ready } -End { ACTION }'",
     "powershell -Command 'Write-Output (& { ACTION })'",
     "powershell -Command '({ ACTION }).Invoke()'",
   ];
+  if (hookSelection() === "reference")
+    blockCommands.push(...dynamicBlockCommands);
+  else
+    for (const command of dynamicBlockCommands) {
+      it(`refuses uninspected script blocks in ${command}`, () => {
+        for (const policy of ["deny-dangerous", "deny-git-mutations"]) {
+          // The refusal comes before either policy reads the body, so a harmless body is refused too.
+          for (const action of [
+            "Remove-Item -Recurse -Force example",
+            "git.exe push origin main",
+            "Write-Output Ready",
+          ]) {
+            const result = checkProposedCommand(
+              policy,
+              command.replace("ACTION", action),
+            );
+            assert.equal(result.status, 2, result.stderr);
+            assert.match(result.stderr, /Cannot inspect native PowerShell/u);
+          }
+        }
+      });
+    }
   // Script-block arguments execute inside the host and must retain each policy's own deny and allow decisions.
   for (const command of blockCommands) {
     it(`inspects executed script blocks in ${command}`, () => {
@@ -523,19 +559,26 @@ describe("Windows LFS executable lookup", () => {
 });
 
 describe("Unqualified native PowerShell tool", () => {
-  // Each runtime must reject unsupported native-tool input with its own supported recovery route.
-  for (const [policy, command] of [
-    ["deny-git-mutations", "git push origin HEAD"],
-    ["deny-dangerous", "Remove-Item -Recurse -Force C:\\goat-probe-target"],
-  ]) {
-    it(`rejects ${policy} PowerShell events with a supported recovery route`, () => {
+  // Node inspects native PowerShell input and denies it with the owning policy's recovery route. The frozen Bash reference
+  // rejects the tool and names Bash as the route.
+  for (const [policy, command, inspectedReason] of [
+    [
+      "deny-git-mutations",
+      "git push origin HEAD",
+      /Git publication is not allowed\. Ask the user to push manually/u,
+    ],
+    [
+      "deny-dangerous",
+      "Remove-Item -Recurse -Force C:\\goat-probe-target",
+      /PowerShell destructive verb\. Run manually with explicit confirmation/u,
+    ],
+  ] as const) {
+    it(`denies ${policy} PowerShell events with a recovery route`, () => {
       const result = checkProposedCommand(policy, command, "PowerShell");
       assert.equal(result.status, 2, result.stderr);
       assert.match(
         result.stderr,
-        hookSelection() !== "reference"
-          ? /PowerShell.*supported shell tool/u
-          : /PowerShell.*Bash/u,
+        hookSelection() !== "reference" ? inspectedReason : /PowerShell.*Bash/u,
       );
     });
   }
