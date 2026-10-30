@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Windows/WSL hook evidence** - Claude Code 2.1.312 (interactive) and Copilot CLI 1.0.103 (prompt mode) on Windows delivered PreToolUse policy denials and PostToolUse Gruff feedback through the current hook runtime, and Claude Code also completed the Stop block-and-repair cycle; other Windows and WSL provider events still need fresh evidence, and support gates are unchanged.
+- **Windows/WSL hook evidence** - Claude Code 2.1.312 (interactive), Codex CLI 0.164.0 (`codex exec --json`) and Copilot CLI 1.0.103 (prompt mode) on Windows delivered PreToolUse policy denials and PostToolUse Gruff feedback through the current hook runtime, and Claude Code and Codex CLI also completed the Stop block-and-repair cycle; other Windows and WSL provider events still need fresh evidence, and support gates are unchanged.
 
 - **BREAKING: Node 20.12.0 minimum** - The minimum supported Node version rises from 20.11.0 to 20.12.0. Upgrade Node before installing or running goat-flow.
 - **Stop hooks set a 4 MiB scan limit** - Claude and Codex hook registrations set `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304`, replacing any value exported by the user. The Codex Stop command text changes when registrations are synced.

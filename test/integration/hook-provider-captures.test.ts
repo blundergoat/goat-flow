@@ -15,6 +15,9 @@ import {
   listHookSpecs,
 } from "../../src/cli/server/hooks-registry.js";
 
+/** Files a capture hashes, as `workflow/hooks/README.md` states; adding one means recapturing every verified row. */
+const CAPTURED_RUNTIME_FILE_COUNT = 41;
+
 /** Find the reviewed row or fail before asserting its host-specific outcome. */
 function hostEvidence(
   provider: HookProviderHostEvidence["provider"],
@@ -48,9 +51,11 @@ describe("host-specific hook provider captures", () => {
       if (!row.capture) continue;
       assert.match(row.capture.artifactSha256, /^[a-f0-9]{64}$/u);
       assert.match(row.capture.approvalPacketSha256, /^[a-f0-9]{64}$/u);
-      assert.ok(
-        Object.keys(row.capture.runtimeSha256).length > 0,
-        row.caseId + ": runtime hashes are required",
+      // Rows share one map, so dropping a key would silently stop every row from noticing a change to that file.
+      assert.equal(
+        Object.keys(row.capture.runtimeSha256).length,
+        CAPTURED_RUNTIME_FILE_COUNT,
+        row.caseId + ": a capture records every runtime hash",
       );
       for (const [file, expectedHash] of Object.entries(
         row.capture.runtimeSha256,
@@ -98,6 +103,10 @@ describe("host-specific hook provider captures", () => {
       ["claude", "deny-git-mutations", "C1"],
       ["claude", "gruff-code-quality", "C2"],
       ["claude", "post-turn-safety", "C3"],
+      ["codex", "deny-dangerous", "C4"],
+      ["codex", "deny-git-mutations", "C4"],
+      ["codex", "gruff-code-quality", "C5"],
+      ["codex", "post-turn-safety", "C6"],
     ] as const;
     for (const [provider, hookId, caseId] of attached) {
       const evidence = getHookSpec(hookId)?.providerEvidence?.[provider];
@@ -132,12 +141,22 @@ describe("host-specific hook provider captures", () => {
     const wslClaude = hostEvidence("claude", "wsl");
     assert.equal(wslClaude.capture, undefined);
     assert.equal(wslClaude.verification, "incomplete");
+    const windowsCodex = hostEvidence("codex", "windows");
+    assert.equal(windowsCodex.caseId, "C4");
+    assert.equal(windowsCodex.verification, "verified");
+    assert.equal(windowsCodex.capture?.providerVersion, "0.164.0");
+    const wslCodex = hostEvidence("codex", "wsl");
+    assert.equal(wslCodex.capture, undefined);
+    assert.equal(wslCodex.verification, "incomplete");
     const expectedVerification: Readonly<
       Record<string, HookProviderHostEvidence["verification"]>
     > = {
       C1: "verified",
       C2: "verified",
       C3: "verified",
+      C4: "verified",
+      C5: "verified",
+      C6: "verified",
       C7: "verified",
       C8: "verified",
       C9: "security-hold",

@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-10-28
+last_reviewed: 2026-10-30
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -264,5 +264,20 @@ Inspect literals independently when checking renames, as described in
 **What happened:** A Claude Code 2.1.311 hook-capture controller launched through plain pipes. Its `readline` close handler stopped the provider with `operator-input-closed` before any terminal output or task submission. A paired inert reproduction observed immediate input closure through plain pipes; the PTY launch stayed open, received the test line and exited zero. The consumed claim and empty capture were preserved.
 
 **Related source contract:** `src/cli/server/terminal-spawn.ts` (search: "ignored stdin reads as end of input") deliberately closes input for a version probe. A controller awaiting operator actions requires a persistent input surface.
+
+---
+
+## Lesson: Prove a capture helper's deadline stops its child on the host it runs on
+
+**Status:** active | **Created:** 2026-10-30 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Before a one-use live capture, run the helper's stop path against a no-cost child on that host, instead of relying on a review done on another platform.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** On POSIX, `stopHookProcessTree` kills the child's process group, so the child must be started with `detached: true`. Without it the kill fails quietly and the deadline stops nothing. When porting a helper between Windows and POSIX, start a `sleep` with a sleeping grandchild under the helper's exact spawn options, call the stop function and confirm both exited and `close` fired.
+
+**What happened:** A Linux capture helper was derived from a reviewed Windows helper. The Windows branch stops children with `taskkill`, so that review never exercised the process-group contract. An independent review flagged the missing option before any session ran. A paired run confirmed it: without `detached` both processes survived the stop call and `close` never fired, and with it both exited. An overrunning session would have kept spending past its limit and could have left no receipt after spending its one-use claim.
+
+**Related source contract:** `workflow/hooks/process-tree.mjs` (search: "must have started the POSIX hook as a detached process group").
 
 ---
