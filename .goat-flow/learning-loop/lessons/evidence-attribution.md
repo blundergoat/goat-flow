@@ -1,6 +1,6 @@
 ---
 category: evidence-attribution
-last_reviewed: 2026-10-30
+last_reviewed: 2026-10-31
 ---
 
 **Scope:** Attributing guarantees to the implementation that supplies them, attributing readiness and run details to the host row or command output that recorded them, checking whether reused evidence still describes current bytes, and keeping committed incident evidence readable from a fresh clone. General guidance remains in [agent-evidence-claims.md](agent-evidence-claims.md).
@@ -133,3 +133,18 @@ last_reviewed: 2026-10-30
 **What happened:** A packet for a native Codex PostToolUse and Stop capture added a whole-fixture diff to its receipt and expected only the two synthetic files and the one-use claim to change. An independent review found that an earlier session in the same fixture had left a Gruff health marker written mid-session, so the new receipt would have reported the next marker as an unexpected change. The row requires that only the synthetic files change, so it would have failed after its claim was spent, with no retry allowed. The packet now declares the marker pattern and exempts a marker only when it names the run's thread id.
 
 **Root cause:** The receipt's expected changes were drawn from the prompt's edits, not from what the installed hooks write. The earlier receipt compared only the listed files, so it never showed the marker.
+
+---
+
+## Lesson: A feature is absent only when its own signal is absent in a real session
+
+**Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
+**Decision changed:** Before a packet says a launch option keeps a client feature out of a session, run that client version with the option and search for the feature's actual screen and transcript signals; until then, report the feature as unknown.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Earlier runs that differ in both a setting and a feature do not show that the setting controls the feature. Find out how the feature appears in each place it can appear, then search for those exact signals during no-task readiness. A readiness field named for a feature proves only the text it matches. If the feature cannot be excluded, tell the user before spending a one-use claim, and state in the row how any affected claim is attributed. Evidence anchor: `src/cli/hook-provider-captures.ts` (search: `A Remote Control bridge was active`).
+
+**What happened:** A packet for interactive Claude Code 2.1.314 captures on WSL expected that loading project settings only would keep the Remote Control bridge out of the sessions. Earlier WSL receipts, which loaded user settings with `remoteControlAtStartup` on, held session links, and the project-settings Windows receipts held none. A readiness field then reported no Remote Control because it searched for those words, while the client's footer shows `/rc`. All three sessions showed `/rc` and each transcript held a bridge session id, although `/status` listed project settings only. The decision record names no approval channel, so tool approvals could be attributed to the operator only by timing. The user was told, and the rows and the hooks README now state that limit.
+
+**Root cause:** A correlation across earlier receipts was written down as a fact about what controls the bridge, and the readiness field matched words the footer does not use.

@@ -107,6 +107,10 @@ describe("host-specific hook provider captures", () => {
       ["codex", "deny-git-mutations", "C4"],
       ["codex", "gruff-code-quality", "C5"],
       ["codex", "post-turn-safety", "C6"],
+      ["claude", "deny-dangerous", "C10"],
+      ["claude", "deny-git-mutations", "C10"],
+      ["claude", "gruff-code-quality", "C11"],
+      ["claude", "post-turn-safety", "C12"],
       ["codex", "deny-dangerous", "C13"],
       ["codex", "deny-git-mutations", "C13"],
       ["codex", "gruff-code-quality", "C14"],
@@ -143,8 +147,9 @@ describe("host-specific hook provider captures", () => {
     assert.equal(windowsClaude.verification, "verified");
     assert.equal(windowsClaude.capture?.providerVersion, "2.1.312");
     const wslClaude = hostEvidence("claude", "wsl");
-    assert.equal(wslClaude.capture, undefined);
-    assert.equal(wslClaude.verification, "incomplete");
+    assert.equal(wslClaude.caseId, "C10");
+    assert.equal(wslClaude.verification, "verified");
+    assert.equal(wslClaude.capture?.providerVersion, "2.1.314");
     const windowsCodex = hostEvidence("codex", "windows");
     assert.equal(windowsCodex.caseId, "C4");
     assert.equal(windowsCodex.verification, "verified");
@@ -165,6 +170,9 @@ describe("host-specific hook provider captures", () => {
       C7: "verified",
       C8: "verified",
       C9: "security-hold",
+      C10: "verified",
+      C11: "verified",
+      C12: "verified",
       C13: "verified",
       C14: "verified",
       C15: "verified",
