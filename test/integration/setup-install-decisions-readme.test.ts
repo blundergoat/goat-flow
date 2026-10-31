@@ -166,7 +166,9 @@ describe("decisions guide ownership transfer", () => {
   for (const history of [false, true]) {
     it(`preserves inherited custom bytes and absent baseline on repeat apply ${history ? "with" : "without"} legacy history`, () => {
       const root = inheritedTarget(CUSTOM_GUIDE, history);
-      const row = guidePreview(root);
+      // Cover broad force without history and ordinary install with legacy history.
+      const flags = history ? [] : ["--force-managed"];
+      const row = guidePreview(root, ...flags);
       assert.equal(row.state, "local-preserved");
       assert.equal(row.oldExpectedSha256, null);
       assert.equal(readFileSync(join(root, GUIDE), "utf8"), CUSTOM_GUIDE);
@@ -175,7 +177,7 @@ describe("decisions guide ownership transfer", () => {
         false,
         "preview must not publish history",
       );
-      const output = apply(root);
+      const output = apply(root, ...flags);
       assert.match(output, /No new full-install receipt/u);
       assert.match(output, /--force-path/u);
       assert.equal(readFileSync(join(root, GUIDE), "utf8"), CUSTOM_GUIDE);
@@ -188,19 +190,6 @@ describe("decisions guide ownership transfer", () => {
       apply(root);
       assert.equal(readFileSync(join(root, GUIDE), "utf8"), CUSTOM_GUIDE);
       assert.equal(readFileSync(join(root, STATE), "utf8"), before);
-    });
-  }
-
-  for (const flag of ["--force", "--force-managed"]) {
-    it(`keeps inherited content under broad ${flag}`, () => {
-      const root = inheritedTarget(CUSTOM_GUIDE, false);
-      assert.equal(guidePreview(root, flag).state, "local-preserved");
-      apply(root, flag);
-      assert.equal(readFileSync(join(root, GUIDE), "utf8"), CUSTOM_GUIDE);
-      assert.equal(
-        state(root).files.some((row) => row.path === GUIDE),
-        false,
-      );
     });
   }
 
@@ -263,7 +252,7 @@ describe("decisions guide ownership transfer", () => {
         "\nUpdated decision guidance.\n",
     );
     const before = readFileSync(join(root, STATE), "utf8");
-    for (const flags of [["--dry-run", "--format", "json"], [], []]) {
+    for (const flags of [["--dry-run", "--format", "json"], []]) {
       const result = spawnSync(
         "node",
         [

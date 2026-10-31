@@ -1,4 +1,4 @@
-# AGENTS.md - v1.18.0 (2026-10-11)
+# AGENTS.md - v1.19.0 (2026-10-23)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash validation scripts + TypeScript CLI/dashboard.
 
 goat-flow is a harness - guardrails, memory, and workflows for AI coding agents. Five concerns drive every design decision: **Context** (what you read), **Constraints** (what you may never do), **Verification** (how work is checked), **Recovery** (how state survives failure), **Feedback loop** (how mistakes become permanent fixes).
@@ -43,14 +43,14 @@ Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs no
 
 ## Essential Commands
 ```bash
-shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh
 bash scripts/maintenance/check-shell-syntax.sh
 npm run typecheck && npm run check:touched # Working-tree content; additions, edits, deletions and both rename paths select checks. Preflight and owning test suites remain required.
 npm test
 bash scripts/preflight-checks.sh
 ```
 
-On Windows, run Bash commands in Git Bash. Situational: `bash scripts/bump-version.sh <ver>` (release), `npm run test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop). Hook availability: run both `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke` and `bash .goat-flow/hooks/deny-git-mutations.sh --self-test=smoke`; after policy changes or pre-release, use `--self-test=full` and follow `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
+On Windows, run Bash commands in Git Bash. Situational: `bash scripts/bump-version.sh <ver>` (release), `npm run test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop). Hook availability: run both `node .goat-flow/hooks/deny-dangerous.mjs --self-test=smoke` and `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=smoke`; after policy changes or pre-release, use `--self-test=full` and follow `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.

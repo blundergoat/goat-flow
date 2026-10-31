@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### Changed
+
+- **Windows/WSL hook evidence** - Claude Code 2.1.312 (interactive), Codex CLI 0.164.0 (`codex exec --json`) and Copilot CLI 1.0.103 (prompt mode) on Windows, and Claude Code 2.1.314, Codex CLI 0.165.0, Copilot CLI 1.0.91 (interactive) and Antigravity 1.4.12 (interactive) on WSL, delivered PreToolUse policy denials through the current hook runtime. All but Antigravity also delivered PostToolUse Gruff feedback, and Claude Code and Codex CLI also completed the Stop block-and-repair cycle. Antigravity on Windows remains on security hold, and support gates are unchanged.
+
+- **BREAKING: Node 20.12.0 minimum** - The minimum supported Node version rises from 20.11.0 to 20.12.0. Upgrade Node before installing or running goat-flow.
+- **Stop hooks set a 4 MiB scan limit** - Claude and Codex hook registrations set `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304`, replacing any value exported by the user. The Codex Stop command text changes when registrations are synced.
+
+- **Issue briefs show likely minutes and per-task benefits** - Each `ISSUE.md` task ends in one likely figure, a total line and the headline sum them in hours, two new sections say what each task gives the user before and after the change, and the worked sample ships beside the format.
+
+### Security
+
+- **Native PowerShell policy inspection** - Literal commands reach both owning policies; unresolved dynamic execution and session-state changes remain blocked. Run `goat-flow hooks sync` to refresh existing installations.
+
+- **Windows GitHub CLI paths stay protected** - GitHub write protection recognizes Windows executable names and paths while preserving read and comment exceptions.
+- **Antigravity file reads reach secret protection** - `read_file` requests now reach the policy. Run `goat-flow hooks sync` to update existing installs.
+- **Node guards inspect more shell command forms** - Quotes in comments, ANSI-C strings, case arms, arithmetic-like command substitutions and functions with subshell bodies no longer hide a later delete or push. Dynamic Git verbs and uninspectable xargs subcommands are refused; known Git executable variables stay tracked through nested shells and pipelines.
+- **Node guards inspect wrapper option values and refuse unreadable Git aliases** - Sudo, Bash and env option operands no longer hide the command being checked. Git alias lookup follows env directory changes and refuses lookup failures; `git send-email` counts as publication.
+
+- **Claude blocks a command when a policy hook cannot run** - Both PreToolUse policy registrations carry `onFailure: "block"`, so Claude Code 2.1.295 or later refuses the command when the hook fails to start, times out or exits with an unexpected status instead of letting it through. Run `goat-flow hooks sync` to add the field to an existing installation.
+
+### Fixed
+
+- **Antigravity hooks start on Windows** - Hook commands now survive cmd.exe parsing; run `goat-flow hooks sync` to repair existing installs.
+- **Node hook verification** - Native registration audits use the configured hook filename, and policy self-tests fail when no cases run or the declared case count is wrong.
+- **Copilot hooks start on Windows** - Copilot's PowerShell hook commands now parse, so goat-flow hooks run instead of failing on every tool call; run `goat-flow hooks sync` to repair existing installs.
+
+## v1.19.0 - 2026-10-23
+
+### Security
+
+- **Cmd caret escapes no longer hide blocked commands** - Node policies recognize caret-space and caret-tab spellings of publication, PR merge and recursive deletion commands while keeping ordinary inspection available.
+
+### Changed
+
+- **Hooks run on Node** - New installations and `goat-flow hooks sync` register Node handlers; reload your agent after syncing an existing installation.
+
+### Fixed
+
+- **Native hook checks** - Audit and hook verification recognize the installed Node handlers and report missing dependencies.
+
 ## v1.18.0 - 2026-10-11
 
 ### Added

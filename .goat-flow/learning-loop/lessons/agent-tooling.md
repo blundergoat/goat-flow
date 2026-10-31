@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-31
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -31,10 +31,10 @@ last_reviewed: 2026-10-11
 
 **Created:** 2026-03-28
 **Severity:** INTEGRATION
-**Updated:** 2026-09-30
+**Updated:** 2026-10-17
 **Decision changed:** After a guard rejects cleanup syntax, keep every destructive target literal and use the narrowest permitted file and directory operations.
 **Trigger phase:** ACT
-**Incident count:** 12 | **Latest occurrence:** 2026-09-30
+**Incident count:** 17 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves. This entry owns recovery after a block; authoring a search pattern that avoids the block is `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`).
 
@@ -58,6 +58,11 @@ For read-only reconciliation, run Git and checksum commands directly and compare
 - **Recurrence 2026-09-04:** Two read-only diagnostics were rejected before execution: a double-quoted search embedded Markdown backticks, and an inline Node wrapper referenced `spawnSync`. Literal-safe search terms and a direct CLI-to-`jq` pipeline produced the same evidence without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 - **Recurrence 2026-09-29:** Closeout put Git status and checksum reconciliation inside a Python `-c` helper using `subprocess.check_output`; PreToolUse rejected the helper before execution. Direct `git status`, `git diff --cached --binary` and `sha256sum` commands, compared in the orchestration layer, verified unchanged intake bytes and staging without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 - **Recurrence 2026-09-30:** Inventory piped `stats --format json` into an inline Node summarizer, and the `Pipe to interpreter` guard rejected it before execution. Writing the CLI JSON to a temporary file and feeding that file to the summarizer preserved the read-only count check. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`).
+- **Recurrence 2026-10-16:** M02 inventory again put Git reads inside a Python `-c` helper using `subprocess.check_output`; the guard rejected it before execution. Direct `git ls-files` and `git rev-parse` supplied the inventory, then a filesystem-only helper recorded hashes. The existing direct-command prevention rule applies. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-10-17:** An oversized evidence-save command was refused before execution. Bounded failure extracts and field-specific JSON writes preserved the receipt without bypassing inspection. The learning update then failed stale-last-reviewed and stale-ref checks. After two corrections, the note was rewound, its validator read, and the review date and citation reapplied. Keep evidence commands small and verify learning metadata and cited owners before indexing. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`) and `src/cli/stats/stats.ts` (search: `stale-last-reviewed`).
+- **Recurrence 2026-10-17 (plan snapshots):** Embedding two milestone documents in an inline Node command exceeded the command-size limit before execution. The file-edit tool saved those bounded temporary snapshots, then direct Git commands built and checked their patch. Keep document bodies out of shell command arguments. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
+- **Recurrence 2026-10-17 (clarity receipt):** Embedding the full clarity inventory exceeded command inspection limits before the receipt was saved. Save bounded counts, paths and hashes; derive case names from the existing test file. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
+- **Recurrence 2026-10-17 (receipt pipeline):** A case extractor looked for `test` calls although the suite uses `it`. Its assertion failed, but the downstream redactor exited zero and saved an empty receipt. Preserve that file, use a fresh destination, and enable `pipefail` so producer failure cannot masquerade as saved evidence. Evidence: `test/unit/hook-policy-prefixes.test.ts` (search: `policy timing and privilege prefixes`).
 
 ---
 
@@ -160,3 +165,151 @@ Inspect literals independently when checking renames, as described in
 **What happened:** While evaluating a GitHub PR, the agent staged scratch files in `/tmp` and ran `cd /tmp` to fetch them. From then on every Bash call was blocked by the PreToolUse guard with `BLOCKED: ... git repository root unavailable`, because the launcher runs `git rev-parse` in the session's persistent cwd and `/tmp` is outside any repo. The agent retried Bash several times, then reached for `dangerouslyDisableSandbox` before concluding it was stuck. The block also rejected the recovering `cd <repo>`, since the guard runs before the command's `cd`.
 
 **Root cause:** Two mistakes. (1) It used `/tmp` as scratch space, moving the persistent shell cwd outside the repo, when a repo-local dir (`.goat-flow/scratchpad/`) would have kept cwd inside the tree. (2) On seeing the same `git repository root unavailable` block on every Bash, it treated each as a one-off and retried or hunted for a bypass instead of recognising a cwd-wedge and asking the user to reset the shell. Trap and fix: `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `outside any git repo`).
+
+## Lesson: Probe and stop commands must match only their intended target
+
+**Status:** active | **Created:** 2026-10-13 | **Evidence:** OBSERVED
+**Decision changed:** Read a repository script's argument handling before passing it a probe flag, and stop processes by an exact PID taken from a filtered process list rather than by a command-line pattern.
+**Trigger phase:** ACT
+**Incident count:** 2 | **Latest occurrence:** 2026-10-13
+
+**Prevention:** Before adding `--help` or another probe flag to a repository script, read how it parses arguments; a script that ignores unknown flags runs its real work. Before stopping a process, list candidates with `ps -eo pid,ppid,args`, select the exact PID by its argument vector, and signal that PID. A `pgrep -f` or `pkill -f` pattern also matches the invoking shell whenever the pattern text appears in that shell's own command line.
+
+**What happened:** While counting test files, the agent appended `--help` to `node scripts/run-tests.mjs slow --shard=1/1`. The runner reads its mode from the first argument and ignores other flags, so the command started the whole slow suite locally until it was stopped. The agent then stopped it with a `pgrep -f` loop whose pattern also appeared in its own Bash command, so the loop signalled its own shell, which exited with status 144 before reaching the test runner. Selecting the runner's PID from `ps` output and signalling it directly stopped the run; no repository file changed. Evidence: `scripts/run-tests.mjs` (search: `const mode = process.argv[2] ?? "fast";`, `function parseShard`).
+
+---
+
+## Lesson: Stream large files when verifying hashes
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Use a streaming checksum for large executables; distinguish a failed read from a byte mismatch.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Use `sha256sum --check` or a streaming hash for executable verification. Preserve read errors, keep their comparisons unresolved, and rerun only those files before accepting the packet.
+
+**What happened:** During M61 readiness verification, an inline Node checker used `readFileSync` to hash provider executables. Six comparisons returned `ENOMEM`. Streaming checks of the four distinct affected files then matched every expected SHA256. No provider ran.
+
+**Local incident evidence:** `.goat-flow/logs/review/m61-readiness.20261027-3e1456a6.json` (search: "ENOMEM", "sha256sum --check --strict") preserves the failed reads and successful recovery. This checkout-local receipt is not portable proof.
+
+---
+
+## Lesson: Approval to proceed does not prove native trust was completed
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Keep permission to run a session separate from factual confirmation of native workspace trust.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Do not turn a general approval into `nativeTrust.trusted: true`. Record completion from an explicit completion statement, or from observed native UI acceptance when the user delegates that action. If the provider contradicts a recorded confirmation, invalidate it and stop dependent captures without changing trust files or permission rules. Keep folder trust separate from tool permission: the subsequent trusted Claude C1 session still denied `command -v gh` because its noninteractive mode had no approval surface.
+
+**What happened:** The agent treated "i approve, keep going" as confirmation that seven native trust steps had happened. The first Claude session reported an untrusted workspace and denied a prerequisite command. Neither intended policy probe ran. The agent preserved the capture and invalidated the inferred confirmations.
+
+**Related contract:** `.goat-flow/learning-loop/footguns/hooks.md` (search: "Registered Stop hooks can be dead config behind agent trust gates") separates project trust, hook trust and live delivery. The local M61 capture retains this incident's transcript.
+
+---
+
+## Lesson: Wait for native terminal diagnostics to exit after their success output
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Treat terminal output and parent-process completion as separate checks.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Await the terminal's exit and any evidence save, then close the diagnostic host explicitly when its terminal library retains handles. Verify the host's exit code; a success line from its child is insufficient. Select exact process IDs when stopping a failed diagnostic.
+
+**What happened:** An M61 Windows ConPTY check exchanged its test line and printed success, but its Node host stayed alive after the child exited. The agent stopped the identified host and its children, then added an explicit host exit after awaited work. The repeated check completed with exit zero. No model ran.
+
+**Local incident evidence:** `.goat-flow/plans/1.19.0/evidence/m61-interactive-offline-proof.json` (search: "initial-native-pty-round-trip", "native ConPTY round trip and normal process exit") preserves the failure and recovery. This local receipt is not portable proof.
+
+---
+
+## Lesson: Rebase fixture paths without rewriting account homes
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Classify path fields before replacing a fixture root; preserve account homes independently.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Replace a fixture root only when the value equals that root or lies beneath a path separator. A textual prefix can also match a sibling such as an account-home directory. Compare account-home fields and their associated hook-source checks explicitly before freezing a capture packet.
+
+**What happened:** The M61 interactive recovery packet rebased the Copilot fixture by replacing its old root throughout nested strings. That also changed `COPILOT_HOME`, whose sibling name began with the same prefix, and the hook-source paths inside that home. The native CLI opened a new unsigned-in profile instead of the already authenticated one. No model task was submitted. The correction restored the original home and its hook-source checks without changing the installed fixture or permission rules. Native readiness was then confirmed from that home before the successful C8 capture.
+
+**Local incident evidence:** `.goat-flow/plans/1.19.0/evidence/m61-interactive-readiness-correction-offline.json` (search: "copilotHomeRewrite", "copilotOriginalHomeRestored") preserves the compared fields. The earlier packet remains unchanged. This local receipt is not portable proof.
+
+---
+
+## Lesson: Compare fixture bytes without newline translation
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
+**Decision changed:** Use binary reads for exact fixture comparisons, including small text scripts.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** Compare raw bytes with the packet's explicitly encoded text. Text readers can normalize line endings before equality checks; that changes the evidence even when the file is untouched.
+
+**What happened:** M61's final checker used Python `read_text()` on a Windows `gh.cmd` fixture and reported a mismatch. The reader had normalized CRLF to LF. `read_bytes()` matched the approved packet exactly, and the corrected full comparison passed without changing the fixture.
+
+**Local incident evidence:** `.goat-flow/plans/1.19.0/evidence/m61-final-live-proof.json` (search: "preservedDiagnostic", "rawByteRecheck") preserves the false mismatch and corrected comparison. This local receipt is not portable proof.
+
+## Lesson: Keep operator input open before launching an interactive capture
+
+**Status:** active | **Created:** 2026-10-28 | **Evidence:** OBSERVED
+**Decision changed:** Verify persistent input on the outer execution surface before consuming a live capture claim.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** An inner provider PTY does not keep its controller's stdin open. When the controller reads incremental operator actions, launch it with `exec_command` and `tty: true`, then use `write_stdin`. First run an inert child through that same outer surface, send a line and await its normal exit. An inner PTY rehearsal alone does not verify this input path.
+
+**What happened:** A Claude Code 2.1.311 hook-capture controller launched through plain pipes. Its `readline` close handler stopped the provider with `operator-input-closed` before any terminal output or task submission. A paired inert reproduction observed immediate input closure through plain pipes; the PTY launch stayed open, received the test line and exited zero. The consumed claim and empty capture were preserved.
+
+**Related source contract:** `src/cli/server/terminal-spawn.ts` (search: "ignored stdin reads as end of input") deliberately closes input for a version probe. A controller awaiting operator actions requires a persistent input surface.
+
+---
+
+## Lesson: Prove a capture helper's deadline stops its child on the host it runs on
+
+**Status:** active | **Created:** 2026-10-30 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Before a one-use live capture, run the helper's stop path against a no-cost child on that host, instead of relying on a review done on another platform.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** On POSIX, `stopHookProcessTree` kills the child's process group, so the child must be started with `detached: true`. Without it the kill fails quietly and the deadline stops nothing. When porting a helper between Windows and POSIX, start a `sleep` with a sleeping grandchild under the helper's exact spawn options, call the stop function and confirm both exited and `close` fired.
+
+**What happened:** A Linux capture helper was derived from a reviewed Windows helper. The Windows branch stops children with `taskkill`, so that review never exercised the process-group contract. An independent review flagged the missing option before any session ran. A paired run confirmed it: without `detached` both processes survived the stop call and `close` never fired, and with it both exited. An overrunning session would have kept spending past its limit and could have left no receipt after spending its one-use claim.
+
+**Related source contract:** `workflow/hooks/process-tree.mjs` (search: "must have started the POSIX hook as a detached process group").
+
+---
+
+## Lesson: A pinned client binary needs its updater switched off first
+
+**Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
+**Decision changed:** Before launching a pinned client for any reason, including a no-task check, make its updater unable to replace what runs, and treat an off switch as unproven until a launch shows it working.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-31
+
+**Prevention:** A hash pin detects a replaced binary but does not stop the replacement, and an off switch found in a binary's text proves only that the name exists. Run the client from a private copy in a directory the updater cannot write to, so a failed switch costs nothing, and list what changes under the client's home, because the client can record the copy's path there: Antigravity 1.4.12 rewrote its `bin/agentapi` shim to the copy. Compare the hash after the client's background work has finished as well as at exit, because the replacement can land seconds later. Copilot CLI takes `--no-auto-update`. Antigravity's binary names `AGY_CLI_DISABLE_AUTO_UPDATE`, but setting it to `1` did not stop its updater on 1.4.9; disassembly of 1.4.12 shows the value compared with the exact string `true`.
+
+**What happened:** A capture packet for Antigravity 1.4.9 on WSL pinned the `agy` binary's hash but left its background updater on. An independent review found the switch in the binary's text. An update during readiness would have failed the pin after the refresh had used up its evidence path, and an update during the session would have spent the one-use claim on a binary nobody had reviewed.
+
+**Root cause:** The helpers were adapted from a Copilot packet by exact replacement. That removed Copilot's update flag as Copilot-only, without asking what the new client's equivalent was. The first fix then trusted a switch nobody had seen work.
+
+**Recurrence 2026-10-31:** With the switch set to `1`, the first no-task readiness launch still logged `Spawned background update process` and replaced the user's `~/.local/bin/agy` with 1.4.12 about six seconds later, keeping the old binary beside it as `.old`. The hash check at client exit had already passed. The packet's own "no provider update" boundary was broken, although no task ran and no one-use claim was spent, because the capture refuses a binary that does not match its pin.
+
+---
+
+## Lesson: A script driving a live client must prove the screen before every key
+
+**Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
+**Decision changed:** Before a script sends a key to an interactive client, require the exact screen state that key is safe in, and stop without a key on any other state.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Waiting for a word to appear proves little, because a typed command echoes that word back. Send Enter only when the prompt line equals the command exactly, free text only into a panel showing its own input, and Escape only while something is open. Test the script against a stand-in client that logs every key it receives, including a dropped key, a panel that takes no focus and a panel that will not close. A terminal renderer used for these checks must handle scroll regions and receive every frame, or it shows a stale screen.
+
+**What happened:** A no-task readiness driver for a coding client typed a settings filter and slash commands on fixed sleeps. An independent review showed that if the settings panel had not taken focus, the filter text would stay in the prompt, and the next slash command and Enter would send both to the model as a task. The rewritten driver passed a stand-in harness covering a trust dialog, a dropped key, a panel without focus, filter text reaching the prompt and a panel that would not close, with no task submitted in any of them.
+
+**Root cause:** The script treated elapsed time and matching text as proof of state, and it could not tell an echoed command from an open panel.

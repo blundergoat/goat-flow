@@ -5,6 +5,8 @@
  * provider adaptation. Legacy rendering remains covered while registration is gated by
  * separate live-provider evidence.
  */
+import { copyHookTree, selectedHookPath } from "../helpers/hook-entrypoint.js";
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -39,13 +41,6 @@ import {
 import { withCommandShim } from "./post-turn-safety-hook.helpers.js";
 
 const PROJECT_ROOT = join(import.meta.dirname, "..", "..");
-const HOOK_RUNNER = join(
-  PROJECT_ROOT,
-  "workflow",
-  "hooks",
-  "run-with-bash.mjs",
-);
-
 after(cleanupHookTestDirs);
 
 /**
@@ -58,6 +53,14 @@ after(cleanupHookTestDirs);
  */
 function runProviderLauncher(payload: string, responseMode: string) {
   const captureDirectory = mkdtempSync(join(tmpdir(), "goat-gruff-launcher-"));
+  copyHookTree(join(captureDirectory, "workflow/hooks"));
+  copyHookTree(join(captureDirectory, ".goat-flow/hooks"), "installed");
+  const selectedRunner = selectedHookPath(
+    join(captureDirectory, "workflow/hooks/run-with-bash.mjs"),
+  );
+  const selectedScript = selectedHookPath(
+    join(captureDirectory, "workflow/hooks/gruff-code-quality.sh"),
+  );
   const payloadPath = join(captureDirectory, "stdin");
   const stdoutPath = join(captureDirectory, "stdout");
   const stderrPath = join(captureDirectory, "stderr");
@@ -71,9 +74,9 @@ function runProviderLauncher(payload: string, responseMode: string) {
     }
     const result = spawnSync(
       process.execPath,
-      [HOOK_RUNNER, "workflow/hooks/gruff-code-quality.sh", responseMode],
+      [selectedRunner, selectedScript, responseMode],
       {
-        cwd: PROJECT_ROOT,
+        cwd: captureDirectory,
         encoding: "utf8",
         stdio: descriptors,
       },
@@ -595,34 +598,33 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
   // Fixture covers failed Git scope; writes a shim and edit, then runs both processes.
   it("reports Git diff failure as incomplete", () => {
-    const failedGitProjectRoot = makeEditedGruffContractProject(
-      CLEAN_GRUFF_CONTRACT_ENVELOPE,
-    );
-    initGit(failedGitProjectRoot);
-    git(failedGitProjectRoot, ["add", ".gruff-ts.yaml", "src/sample.ts"]);
-    const failingGitBin = join(failedGitProjectRoot, "failing-git-bin");
-    mkdirSync(failingGitBin);
-    writeFileSync(
-      join(failingGitBin, "git"),
-      '#!/usr/bin/env bash\n# The user may have a failing Git hook or corrupt index while Gruff resolves scope.\nif [[ "$1" == "-C" && "$3" == "diff" ]]; then\n  printf "fixture git diff failed\\n" >&2\n  exit 7\nfi\nexec /usr/bin/git "$@"\n',
-    );
-    chmodSync(join(failingGitBin, "git"), 0o755);
-    writeFileSync(
-      join(failedGitProjectRoot, "src", "sample.ts"),
-      "a\nb\nchanged\nd\n",
-    );
-    const failedGitResult = readMigratedGruffResult(
-      runMigratedHook(
-        failedGitProjectRoot,
-        { tool_name: "Edit", tool_input: { file_path: "src/sample.ts" } },
-        `${failingGitBin}:/usr/bin:/bin`,
-      ),
-    );
-    assert.equal(failedGitResult.outcome, "incomplete");
-    assert.equal(failedGitResult.reasonCode, "coverage-incomplete");
-    assert.equal(
-      (failedGitResult.findings as Array<{ code: string }>)[0]?.code,
-      "git-scope-failed",
+    const root = makeEditedGruffContractProject(CLEAN_GRUFF_CONTRACT_ENVELOPE);
+    initGit(root);
+    git(root, ["add", ".gruff-ts.yaml", "src/sample.ts"]);
+    writeFileSync(join(root, "src", "sample.ts"), "a\nb\nchanged\nd\n");
+    withCommandShim(
+      resolveExecutable("git"),
+      {
+        when: { includes: ["diff"] },
+        status: 7,
+        stderr: "fixture git diff failed\n",
+      },
+      (environment) => {
+        const failedGitResult = readMigratedGruffResult(
+          runMigratedHook(
+            root,
+            { tool_name: "Edit", tool_input: { file_path: "src/sample.ts" } },
+            environment.PATH ?? "/usr/bin:/bin",
+            environment,
+          ),
+        );
+        assert.equal(failedGitResult.outcome, "incomplete");
+        assert.equal(failedGitResult.reasonCode, "coverage-incomplete");
+        assert.equal(
+          (failedGitResult.findings as Array<{ code: string }>)[0]?.code,
+          "git-scope-failed",
+        );
+      },
     );
   });
 
@@ -815,20 +817,16 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       CLEAN_GRUFF_CONTRACT_ENVELOPE,
     );
     withCommandShim(
-      "mkdir",
-      [
-        'for argument in "$@"; do',
-        '  case "$argument" in /*) exit 1 ;; esac',
-        "done",
-      ].join("\n"),
+      resolveExecutable("mkdir"),
+      { when: { absoluteOperand: true }, status: 1 },
       (environment) => {
         // Repeat the same provider session to exercise marker persistence and reuse.
         const runHealthCheck = () =>
           runMigratedHook(
             projectRoot,
             sampleGruffEditPayload("relative-health-session"),
-            environment.PATH,
-            { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-10-01" },
+            environment.PATH ?? "/usr/bin:/bin",
+            { ...environment, GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-10-01" },
           );
         const first = runHealthCheck();
         assert.equal(readMigratedGruffResult(first).outcome, "pass");

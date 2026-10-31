@@ -4,6 +4,11 @@
  * Each test uses a disposable selected project and the shipped launcher, with no live provider or real user files.
  * Use this matrix to protect bounded retries, actionable findings and byte-safe delivery together.
  */
+import {
+  hookSelection,
+  hookTreeRoot,
+  selectedHookPath,
+} from "../helpers/hook-entrypoint.js";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -19,13 +24,18 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { installPostTurnHook } from "./post-turn-safety-hook.helpers.js";
+import { bashPath } from "../../scripts/check-hook-parity.mjs";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
-import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
+import {
+  buildAgentHookDescriptor,
+  agentHookSpawnDescriptor,
+} from "../../src/cli/server/agent-hook-command.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
@@ -38,9 +48,11 @@ import {
   decodeHookResultOutput,
 } from "../../workflow/hooks/hook-provider-adapters.mjs";
 
-const launcherPath = resolve("workflow/hooks/run-with-bash.mjs");
+const launcherPath = selectedHookPath(
+  join(hookTreeRoot(), "run-with-bash.mjs"),
+);
 const stopMode = "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
-const scriptArgument = ".goat-flow/hooks/post-turn-safety.sh";
+const scriptArgument = `.goat-flow/hooks/post-turn-safety.${hookSelection() !== "reference" ? "mjs" : "sh"}`;
 const invalidClaudeStopInputs = [
   '{"hook_event_name":"Stop","stop_hook_active":true}',
   '{"hook_event_name":"PostToolUse","session_id":"claude-session","stop_hook_active":true}',
@@ -140,25 +152,27 @@ function scanResult(
   };
 }
 
-/** Write the scanner behavior a user encounters on the next fresh Stop delivery.
- *
- * Side effects: writes the disposable project's hook directory and scanner script; shared user files are never passed.
- *
- * @param projectRoot - Disposable selected project; never empty.
- * @param scriptBody - Bash body; empty emits no result and is intentionally unavailable.
- * @returns No value; replaces only this test's owned script.
+/** Write one Node fixture for the selected launcher; reference Bash only forwards to it.
+ * Side effects: replaces files only inside the caller-owned disposable hook directory.
+ * @param projectRoot - Disposable project that owns all fixture files.
+ * @param scriptBody - Node module body providing the test's scanner behavior.
  */
 function writeScanner(projectRoot: string, scriptBody: string) {
-  mkdirSync(join(projectRoot, ".goat-flow/hooks"), { recursive: true });
-  mkdirSync(join(projectRoot, ".goat-flow/hooks/vendor"), { recursive: true });
-  writeFileSync(
-    join(projectRoot, ".goat-flow/hooks/vendor/js-yaml.cjs"),
-    readFileSync(resolve("workflow/hooks/vendor/js-yaml.cjs")),
-  );
-  writeFileSync(
-    join(projectRoot, scriptArgument),
-    "#!/usr/bin/env bash\n" + scriptBody + "\n",
-  );
+  const hooks = join(projectRoot, ".goat-flow/hooks");
+  mkdirSync(hooks, { recursive: true });
+  const fixturePath = join(hooks, "post-turn-safety.mjs");
+  writeFileSync(fixturePath, scriptBody + "\n");
+  if (hookSelection() === "reference") {
+    const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+    writeFileSync(
+      join(projectRoot, scriptArgument),
+      "#!/usr/bin/env bash\nexec " +
+        quote(bashPath(process.execPath)) +
+        " " +
+        quote(bashPath(fixturePath)) +
+        ' "$@"\n',
+    );
+  }
 }
 
 /** Run a test with guaranteed cleanup of its selected project.
@@ -224,27 +238,38 @@ function recoveryPaths(projectRoot: string) {
 
 describe("continuation recovery", () => {
   for (const missingDependency of [
-    "post-turn-safety.sh",
-    "hook-launch-runtime.mjs",
-    "run-with-bash.mjs",
+    hookSelection() !== "reference"
+      ? "post-turn-safety.mjs"
+      : "post-turn-safety.sh",
+    hookSelection() !== "reference"
+      ? "hook-launch.mjs"
+      : "hook-launch-runtime.mjs",
+    hookSelection() !== "reference" ? "run-hook.mjs" : "run-with-bash.mjs",
   ]) {
     it(`bounds the registered Claude Stop when ${missingDependency} is missing`, () =>
       withProject((projectRoot) => {
+        installPostTurnHook(projectRoot);
         writeScanner(
           projectRoot,
-          "printf 'unexpected scanner launch\\n' >&2\nexit 2",
+          "process.stderr.write('unexpected scanner launch\\n'); process.exit(2)",
         );
-        for (const name of ["run-with-bash.mjs", "hook-launch-runtime.mjs"]) {
-          writeFileSync(
-            join(projectRoot, ".goat-flow/hooks", name),
-            readFileSync(resolve("workflow/hooks", name)),
-          );
-        }
         const spec = getHookSpec("post-turn-safety")!;
         writeAgentHookState(projectRoot, PROFILES.claude, spec, true);
         const settings = JSON.parse(
           readFileSync(join(projectRoot, ".claude/settings.json"), "utf8"),
         );
+        if (hookSelection() !== "reference") {
+          const { form: _form, ...candidate } = buildAgentHookDescriptor(
+            "claude",
+            ".goat-flow/hooks",
+            spec,
+          );
+          settings.hooks.Stop[0].hooks[0] = { type: "command", ...candidate };
+          writeFileSync(
+            join(projectRoot, ".claude/settings.json"),
+            JSON.stringify(settings),
+          );
+        }
         const handler = settings.hooks.Stop[0].hooks[0];
         const command = agentHookSpawnDescriptor({ form: "argv", ...handler });
         rmSync(join(projectRoot, ".goat-flow/hooks", missingDependency));
@@ -281,7 +306,7 @@ describe("continuation recovery", () => {
       withProject((projectRoot) => {
         const environment: NodeJS.ProcessEnv = {};
         if (startupFailure !== "missing script")
-          writeScanner(projectRoot, "exit 0");
+          writeScanner(projectRoot, "process.exit(0)");
         if (startupFailure === "invalid timeout")
           environment.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS = "invalid";
         // Replay native Claude identity without borrowing Codex's turn_id field.
@@ -312,7 +337,7 @@ describe("continuation recovery", () => {
         // A repaired scanner's real block stays authoritative even on an active continuation.
         writeScanner(
           projectRoot,
-          "printf 'confirmed safety finding\\n' >&2\nexit 2",
+          "process.stderr.write('confirmed safety finding\\n'); process.exit(2)",
         );
         const repaired = launchStop(projectRoot, "claude-turn", true, {
           responseMode: "post-turn",
@@ -329,14 +354,7 @@ describe("continuation recovery", () => {
         " scanner infrastructure and rescans new findings",
       () =>
         withProject((projectRoot) => {
-          writeScanner(
-            projectRoot,
-            readFileSync(resolve("workflow/hooks/post-turn-safety.sh"), "utf8"),
-          );
-          writeFileSync(
-            join(projectRoot, ".goat-flow/hooks/hook-launch-runtime.mjs"),
-            readFileSync(resolve("workflow/hooks/hook-launch-runtime.mjs")),
-          );
+          installPostTurnHook(projectRoot);
           const environment =
             scannerMode === "compatibility"
               ? { GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "1" }
@@ -424,11 +442,14 @@ describe("continuation recovery", () => {
 
   it("does not renew the allowance when infrastructure failures alternate", () =>
     withProject((projectRoot) => {
-      writeScanner(projectRoot, "exit 3");
+      writeScanner(projectRoot, "process.exit(3)");
       assertBlocked(launchStop(projectRoot, "turn-one"));
-      writeScanner(projectRoot, "printf 'not JSON'");
+      writeScanner(projectRoot, "process.stdout.write('not JSON')");
       assertWarning(launchStop(projectRoot, "turn-one", true));
-      writeScanner(projectRoot, "sleep 2");
+      writeScanner(
+        projectRoot,
+        "await new Promise((resolve) => setTimeout(resolve, 2000))",
+      );
       assertWarning(
         launchStop(projectRoot, "turn-one", true, {
           environment: { GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "40" },
@@ -439,37 +460,41 @@ describe("continuation recovery", () => {
 
   it("rescans changed content and preserves findings after the allowance is spent", () =>
     withProject((projectRoot) => {
-      writeScanner(projectRoot, "exit 3");
+      writeScanner(projectRoot, "process.exit(3)");
       assertBlocked(launchStop(projectRoot, "turn-one"));
       assertWarning(launchStop(projectRoot, "turn-one", true));
       writeScanner(
         projectRoot,
-        "cat <<'RESULT'\n" + JSON.stringify(scanResult("block")) + "\nRESULT",
+        "process.stdout.write(JSON.stringify(" +
+          JSON.stringify(scanResult("block")) +
+          "))",
       );
       assert.match(
         assertBlocked(launchStop(projectRoot, "turn-one", true)).reason,
         /secret-pattern/,
       );
-      writeScanner(projectRoot, "exit 4");
+      writeScanner(projectRoot, "process.exit(4)");
       assertWarning(launchStop(projectRoot, "turn-one", true));
     }));
 
   it("retains the spent allowance after a clean rescan and duplicate initial delivery", () =>
     withProject((projectRoot) => {
-      writeScanner(projectRoot, "exit 3");
+      writeScanner(projectRoot, "process.exit(3)");
       assertBlocked(launchStop(projectRoot, "turn-one"));
       writeScanner(
         projectRoot,
-        "cat <<'RESULT'\n" + JSON.stringify(scanResult("pass")) + "\nRESULT",
+        "process.stdout.write(JSON.stringify(" +
+          JSON.stringify(scanResult("pass")) +
+          "))",
       );
       assert.equal(launchStop(projectRoot, "turn-one", true).stdout, "");
-      writeScanner(projectRoot, "exit 3");
+      writeScanner(projectRoot, "process.exit(3)");
       assertWarning(launchStop(projectRoot, "turn-one"));
     }));
 
   it("removes week-old allowance records when a new explicit turn records its own", () =>
     withProject((projectRoot) => {
-      writeScanner(projectRoot, "exit 3");
+      writeScanner(projectRoot, "process.exit(3)");
       assertBlocked(launchStop(projectRoot, "stale-turn"));
       const [staleRecord] = recoveryPaths(projectRoot);
       const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
@@ -485,15 +510,15 @@ describe("continuation recovery", () => {
 
   it("keeps declared coverage gaps blocking instead of treating them as infrastructure", () =>
     withProject((projectRoot) => {
-      writeScanner(projectRoot, "exit 3");
+      writeScanner(projectRoot, "process.exit(3)");
       assertBlocked(launchStop(projectRoot, "turn-one"));
       writeScanner(
         projectRoot,
-        "cat <<'RESULT'\n" +
+        "process.stdout.write(JSON.stringify(" +
           JSON.stringify(
             scanResult("incomplete", "Some changed files were skipped"),
           ) +
-          "\nRESULT",
+          "))",
       );
       assert.match(
         assertBlocked(launchStop(projectRoot, "turn-one", true)).reason,
@@ -507,7 +532,7 @@ describe("continuation recovery", () => {
       Object.assign(result.execution, { failureClass: "infrastructure" });
       writeScanner(
         projectRoot,
-        "cat <<'RESULT'\n" + JSON.stringify(result) + "\nRESULT",
+        "process.stdout.write(JSON.stringify(" + JSON.stringify(result) + "))",
       );
       assertBlocked(launchStop(projectRoot, "turn-one"));
       assertWarning(launchStop(projectRoot, "turn-one", true));
@@ -517,8 +542,8 @@ describe("continuation recovery", () => {
   it("separates projects, interleaved sessions and identical content on new explicit turns", () =>
     withProject((projectRoot) =>
       withProject((otherProject) => {
-        writeScanner(projectRoot, "exit 3");
-        writeScanner(otherProject, "exit 3");
+        writeScanner(projectRoot, "process.exit(3)");
+        writeScanner(otherProject, "process.exit(3)");
         assertBlocked(
           launchStop(projectRoot, "same-turn", false, {
             sessionId: "session-a",
@@ -554,7 +579,7 @@ describe("continuation recovery", () => {
 
   it("warns without claiming exhaustion when the first observed delivery is already active", () =>
     withProject((projectRoot) => {
-      writeScanner(projectRoot, "exit 3");
+      writeScanner(projectRoot, "process.exit(3)");
       assertWarning(
         launchStop(projectRoot, "unobserved-turn", true),
         "state-unavailable",
@@ -567,9 +592,9 @@ describe("continuation recovery", () => {
         ' { "session_id":"fixture-session", "turn_id":"turn-one", "stop_hook_active":false, "hook_event_name":"Stop" }\n';
       writeScanner(
         projectRoot,
-        "cat > accepted-input\ncat <<'RESULT'\n" +
+        "const fs = await import('node:fs'); fs.writeFileSync('accepted-input', fs.readFileSync(0)); process.stdout.write(JSON.stringify(" +
           JSON.stringify(scanResult("pass")) +
-          "\nRESULT",
+          "))",
       );
       const reply = launchStop(projectRoot, "turn-one", false, { input });
       assert.equal(reply.status, 0, reply.stderr);
@@ -582,14 +607,7 @@ describe("continuation recovery", () => {
 
   it("scans a clean project when the Stop payload carries a final message above the old 64 KiB cap", () =>
     withProject((projectRoot) => {
-      writeScanner(
-        projectRoot,
-        readFileSync(resolve("workflow/hooks/post-turn-safety.sh"), "utf8"),
-      );
-      writeFileSync(
-        join(projectRoot, ".goat-flow/hooks/hook-launch-runtime.mjs"),
-        readFileSync(resolve("workflow/hooks/hook-launch-runtime.mjs")),
-      );
+      installPostTurnHook(projectRoot);
       assert.equal(
         spawnSync("git", ["init", "-q"], { cwd: projectRoot }).status,
         0,
@@ -611,7 +629,10 @@ describe("continuation recovery", () => {
 
   it("blocks malformed, oversized, empty and incomplete context before running the scanner", () =>
     withProject((projectRoot) => {
-      writeScanner(projectRoot, "touch scanner-ran\nexit 3");
+      writeScanner(
+        projectRoot,
+        "(await import('node:fs')).writeFileSync('scanner-ran', ''); process.exit(3)",
+      );
       // An incomplete or oversized host event must not reach the scanner or change this user's files.
       for (const input of [
         "",
@@ -681,7 +702,7 @@ describe("continuation recovery", () => {
             eval: true,
             workerData: {
               module: pathToFileURL(
-                resolve("workflow/hooks/hook-launch-runtime.mjs"),
+                join(hookTreeRoot(), "hook-launch-runtime.mjs"),
               ).href,
               projectRoot,
               cycleKey,
@@ -707,7 +728,7 @@ describe("continuation recovery", () => {
 
   it("warns on corrupt or publicly readable state without overwriting it", () =>
     withProject((projectRoot) => {
-      writeScanner(projectRoot, "exit 3");
+      writeScanner(projectRoot, "process.exit(3)");
       assertBlocked(launchStop(projectRoot, "turn-one"));
       const [statePath] = recoveryPaths(projectRoot);
       for (const bytes of ["corrupt", "", '{"version":']) {
@@ -727,7 +748,7 @@ describe("continuation recovery", () => {
 
   it("refuses a hard-linked allowance without changing its other name", () =>
     withProject((projectRoot) => {
-      writeScanner(projectRoot, "exit 3");
+      writeScanner(projectRoot, "process.exit(3)");
       assertBlocked(launchStop(projectRoot, "turn-one"));
       const [statePath] = recoveryPaths(projectRoot);
       linkSync(statePath, join(projectRoot, "other-state-name"));
@@ -745,7 +766,7 @@ describe("continuation recovery", () => {
     () =>
       withProject((projectRoot) =>
         withProject((otherProject) => {
-          writeScanner(projectRoot, "exit 3");
+          writeScanner(projectRoot, "process.exit(3)");
           symlinkSync(
             otherProject,
             join(projectRoot, ".goat-flow/scratchpad"),
@@ -779,28 +800,16 @@ describe("output budgets", () => {
           spawnSync("git", ["init", "-q"], { cwd: childRoot }).status,
           0,
         );
-        const scanner = readFileSync(
-          resolve("workflow/hooks/post-turn-safety.sh"),
-          "utf8",
-        ).replace(
-          "SECONDS=0\n",
-          // Keep Bash's $$ literal; a replacement string would turn the ready PID into a single dollar sign.
-          () =>
-            'SECONDS=0\nif [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then\n' +
-            'printf "%s" "$$" > child.pid\nsleep 30 &\nprintf "%s" "$!" > sleeper.pid\nwait\nfi\n',
+        installPostTurnHook(
+          projectRoot,
+          `const fs = await import('node:fs');
+const { spawn } = await import('node:child_process');
+fs.writeFileSync('child.pid', String(process.pid));
+const sleeper = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+fs.writeFileSync('sleeper.pid', String(sleeper.pid));
+await new Promise(() => {});`,
+          'printf "%s" "$$" > child.pid\nsleep 30 &\nprintf "%s" "$!" > sleeper.pid\nwait',
         );
-        writeScanner(projectRoot, scanner);
-        // Installed controller imports must execute the actual launcher cleanup, including its shared runtime and adapter.
-        for (const moduleName of [
-          "run-with-bash.mjs",
-          "hook-launch-runtime.mjs",
-          "hook-provider-adapters.mjs",
-        ]) {
-          writeFileSync(
-            join(projectRoot, ".goat-flow/hooks", moduleName),
-            readFileSync(resolve("workflow/hooks", moduleName)),
-          );
-        }
         writeFileSync(
           join(projectRoot, ".goat-flow/config.yaml"),
           "hooks:\n  post-turn-safety:\n    scan-roots:\n      - child\n",
@@ -879,22 +888,10 @@ describe("output budgets", () => {
         join(childRoot, "changed.php"),
         "<<<<<<< HEAD\nfirst\n=======\nsecond\n>>>>>>> branch\n",
       );
-      const scanner = readFileSync(
-        resolve("workflow/hooks/post-turn-safety.sh"),
-        "utf8",
-      ).replace(
-        "SECONDS=0\n",
-        'SECONDS=0\nif [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then\nnode -e \'process.stderr.write("x".repeat(70000))\'\nfi\n',
-      );
-      writeScanner(projectRoot, scanner);
-      // Controller children use the installed launcher for the same process-tree cleanup as a single-project Stop.
-      writeFileSync(
-        join(projectRoot, ".goat-flow/hooks/run-with-bash.mjs"),
-        readFileSync(launcherPath),
-      );
-      writeFileSync(
-        join(projectRoot, ".goat-flow/hooks/hook-launch-runtime.mjs"),
-        readFileSync(resolve("workflow/hooks/hook-launch-runtime.mjs")),
+      installPostTurnHook(
+        projectRoot,
+        'process.stderr.write("x".repeat(70000));',
+        "node -e 'process.stderr.write(\"x\".repeat(70000))'",
       );
       writeFileSync(
         join(projectRoot, ".goat-flow/config.yaml"),
@@ -966,9 +963,9 @@ describe("output budgets", () => {
     withProject((projectRoot) => {
       writeScanner(
         projectRoot,
-        "cat <<'RESULT'\n" +
+        "process.stdout.write(JSON.stringify(" +
           JSON.stringify(scanResult("pass")) +
-          "\nRESULT\nsleep 2",
+          ")); await new Promise((resolve) => setTimeout(resolve, 2000))",
       );
       assert.match(
         assertBlocked(
@@ -983,9 +980,9 @@ describe("output budgets", () => {
     withProject((projectRoot) => {
       writeScanner(
         projectRoot,
-        "node -e 'process.stderr.write(\"x\".repeat(12000))'\ncat <<'RESULT'\n" +
+        "process.stderr.write('x'.repeat(12000)); process.stdout.write(JSON.stringify(" +
           JSON.stringify(scanResult("block")) +
-          "\nRESULT",
+          "))",
       );
       const reply = launchStop(projectRoot, "turn-one");
       assert.match(assertBlocked(reply).reason, /secret-pattern/);
@@ -997,7 +994,7 @@ describe("output budgets", () => {
       const result = scanResult("block", 'quoted "text" 漢字 '.repeat(1600));
       writeScanner(
         projectRoot,
-        "cat <<'RESULT'\n" + JSON.stringify(result) + "\nRESULT",
+        "process.stdout.write(JSON.stringify(" + JSON.stringify(result) + "))",
       );
       const reply = launchStop(projectRoot, "turn-one");
       assert.match(assertBlocked(reply).reason, /secret-pattern/);
@@ -1009,9 +1006,9 @@ describe("output budgets", () => {
     withProject((projectRoot) => {
       writeScanner(
         projectRoot,
-        "cat <<'RESULT'\n" +
+        "process.stdout.write(JSON.stringify(" +
           JSON.stringify(scanResult("pass")) +
-          "\nRESULT\nnode -e 'process.stderr.write(\"x\".repeat(1048577))'",
+          ")); process.stderr.write('x'.repeat(1048577))",
       );
       assert.match(
         assertBlocked(launchStop(projectRoot, "turn-one")).reason,
@@ -1023,11 +1020,11 @@ describe("output budgets", () => {
     withProject((projectRoot) => {
       // A child with no result, two results or a failed exit cannot claim the user's safety check completed.
       for (const body of [
-        "exit 0",
-        "printf '{}{}'",
-        "cat <<'RESULT'\n" +
+        "process.exit(0)",
+        "process.stdout.write('{}{}')",
+        "process.stdout.write(JSON.stringify(" +
           JSON.stringify(scanResult("pass")) +
-          "\nRESULT\nexit 3",
+          ")); process.exit(3)",
       ]) {
         writeScanner(projectRoot, body);
         assertBlocked(launchStop(projectRoot, "turn-" + body.length));
@@ -1054,9 +1051,9 @@ describe("UTF-8", () => {
       bytes[messageOffset] = 0xff;
       writeScanner(
         projectRoot,
-        "node -e 'process.stdout.write(Buffer.from(\"" +
+        'process.stdout.write(Buffer.from("' +
           bytes.toString("base64") +
-          '", "base64"))\'',
+          '", "base64"))',
       );
       assert.match(
         assertBlocked(launchStop(projectRoot, "turn-one")).reason,

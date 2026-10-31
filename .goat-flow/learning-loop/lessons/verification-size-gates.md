@@ -1,6 +1,6 @@
 ---
 category: verification-size-gates
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-24
 ---
 
 **Scope:** Size limits that added text crosses - Gruff file-length and module-size thresholds, the learning-loop bucket byte limit, and skill or playbook word caps reached by comments, contract cases, or new entries. Analyzer rules and baselines are [verification-gruff.md](verification-gruff.md); instruction and reference word budgets are [instruction-word-budgets.md](instruction-word-budgets.md).
@@ -9,7 +9,7 @@ last_reviewed: 2026-10-11
 
 **Status:** active | **Created:** 2026-08-07
 **Severity:** INTEGRATION
-**Incident count:** 13 | **Latest occurrence:** 2026-09-29
+**Incident count:** 16 | **Latest occurrence:** 2026-10-24
 **Merged:** 2026-09-05 - absorbed three file-length recurrences (2026-08-09 x2, 2026-08-28) from the Gruff comment-fixes lesson in `.goat-flow/learning-loop/lessons/verification-gruff.md`; same mechanism, different gate. Moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` on 2026-10-11 when that bucket was split to recover its headroom.
 
 **Prevention:** Before adding comments, contract cases, or learning text to a file within about 20 percent of its size threshold, measure its headroom with the gate's own counter and plan the split first; `wc -l` and a word count are not the gate. Split by responsibility. Never accept the new finding: an oversized file created by the change that added the gate is what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
@@ -17,6 +17,10 @@ last_reviewed: 2026-10-11
 **What happened:** Applying the mandatory comment standard to `scripts/check-gruff-warning-ratchet.mjs` grew it from 626 to 783 lines, past the 750-line `size.file-length` threshold, so the warning-debt ratchet reported its own checker as new debt on the run meant to prove the release clean.
 
 **Root cause:** Comment work was treated as free of quality-gate consequences; doc comments on every function, context lines on every branch, and tag meanings add real lines, so a file near a threshold crosses it.
+
+**Recurrence 2026-10-24:** The same Windows CI recording task exceeded the 40,000-byte bucket limit at 40,955 bytes, then 40,276 after shortening. A measured rewrite reached 39,923 bytes. A later replacement repeated the error at 40,013 bytes before a measured rewrite reached 39,904: below the blocking limit but still inside the headroom-warning band. Count this recording task once. Measure the complete proposed UTF-8 text before every write, including replacements. Evidence: `.goat-flow/learning-loop/lessons/hook-probe-testing.md` (search: `Hosted follow-up 2026-10-24`) and `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`, `BUCKET_SIZE_HEADROOM_WARN_BYTES`).
+
+**Recurrence 2026-10-23:** The Node installer port added retirement handling to an already crowded preview module. Gruff reported 1,026 substantive lines against its 1,000-line limit; formatting still left 1,005 after a first extraction. The repair removed the obsolete Bash-launch preview adapter, kept retirement classification in its own module and moved the existing change-direction function into the write-set owner. Measure the formatted result before declaring headroom. Evidence: `src/cli/managed-setup-preview.ts` (search: `applyRuntimeRetirementPreview`), `src/cli/installer/retired-runtime.ts` (search: `applyRuntimeRetirementPreview`), `src/cli/managed-setup-write-set.ts` (search: `managedSetupChangeDirection`).
 
 **Recurrence 2026-08-09:** A launcher refactor stopped at exactly 750 lines by `wc`, but gruff-ts counted 751 and still emitted `size.file-length`; removing one blank line restored a one-line buffer. `workflow/hooks/hook-launch-runtime.mjs` (search: `hookProcess.once("error"`).
 **Recurrence 2026-08-09 (fixture):** Typed delivery assertions grew a registrar fixture to 752 lines and only full preflight caught the file-length warning; remove optional separators in touched long files, then run targeted Gruff before preflight. `test/integration/hook-effective-state.test.ts` (search: `keeps deterministic delivery evidence below live support`).

@@ -1,9 +1,24 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-21
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and the static gates a touched TypeScript file must pass before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
+
+## Lesson: Validate review receipt names and scope labels before saving
+
+**Status:** active | **Created:** 2026-10-21
+**Severity:** INTEGRATION
+**Decision changed:** Use the review validator's exact receipt naming and source-label contract before persisting a report.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** Run draft validation before writing review receipts. An explicit path selection uses `uncommitted=n/a`; its receipt names require the literal `goat-review-bundle.` and `goat-review-refutations.` prefixes. Infer neither rule from the files' working-tree status or a similar-looking example name.
+
+**What happened:** The M03 handoff review's first draft used hyphenated receipt prefixes and `uncommitted=yes` for an explicit-path authority. Draft validation rejected four format/authority checks before any report was saved. Correcting the names and scope label produced a validated report.
+
+**Evidence:** `src/cli/review-validate-common.ts` (search: `REFUTATION_LEDGER_PATH`, `REVIEW_BUNDLE_PATH`) and `src/cli/review-validate-authority.ts` (search: `reviewScopeLabels`).
+
+---
 
 ## Lesson: Formatter verification must preserve repo style flags
 
@@ -35,7 +50,7 @@ last_reviewed: 2026-10-11
 **Recurrence 2026-04-19:** The round-trip test cloned the repo, patched the copy, and failed because the cloned `test/integration/audit-drift.test.ts` was unformatted in the source checkout; the formatter gate checks every `test/**/*.ts` in the clone, not only the patched files.
 **Recurrence 2026-04-20:** Extracting setup-detection helpers left `src/cli/server/dashboard.ts`, `src/cli/server/setup-detect.ts`, and `src/cli/server/dashboard-assets.ts` unformatted; preflight and the fixture failed together, and the next server split (`src/cli/server/dashboard-routes.ts` plus the rewritten `dashboard.ts`) repeated it.
 **Recurrence 2026-04-21:** A v1.2.2 version bump failed `npm test` only because the fixture's embedded preflight found committed drift in `src/dashboard/index.html`, outside the edit set; `npm run format:check` reproduced the single-file failure.
-**Recurrence 2026-09-21:** PR61 CI failed both `checks` and slow-test shard `2/5` on the same ESLint error: `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookFileSyntax`) had complexity 12 against a maximum of 10. The earlier review handoff identified the lint debt but left the PR gate blocked. When the user authorizes CI repair, fix the source checkout, then rerun both the direct lint command and `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `preflight should pass in temp round-trip repo`); a focused test result cannot close that known failure.
+**Recurrence 2026-09-21:** PR61 CI failed both `checks` and slow-test shard `2/5` on the same ESLint error: `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookFileSyntax`) had complexity 12 against a maximum of 10. The earlier review handoff identified the lint debt but left the PR gate blocked. When the user authorizes CI repair, fix the source checkout, then rerun both the direct lint command and the full preflight, whose ESLint row is what `checks` reports: `scripts/preflight-checks.sh` (search: `lint_output=$(npx eslint`); a focused test result cannot close that known failure. Since 2026-10-14 the round-trip test no longer embeds preflight, so this failure no longer appears in a slow shard.
 
 ---
 
@@ -46,16 +61,38 @@ last_reviewed: 2026-10-11
 **Decision changed:** After the first focused GREEN on any TypeScript change, run the repository formatter, file-scoped ESLint, the exact Knip command, and targeted Gruff before any suite, preflight, or completion claim; a receipt without their literal output is incomplete.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 69 | **Latest occurrence:** 2026-09-29
+**Incident count:** 82 | **Latest occurrence:** 2026-10-21
 **Merged:** 2026-09-05 - renamed from "New tests need formatter gate before verification claims"; absorbed "Slow installer round-trip catches prompt/test lint debt" (2026-04-26, 5 incidents), "Format touched TypeScript tests before repo-wide preflight" (2026-04-30), "Preflight TypeScript gates include Knip binary policy and touched-test formatting" (2026-06-07, 28 incidents), and "Format patched hook test fixtures before full preflight" (2026-06-02, 2 incidents) from `.goat-flow/learning-loop/lessons/hook-testing.md`, plus five touched-file recurrences previously logged under the attribution lesson above and one 2026-08-09 static-gate recurrence from `.goat-flow/learning-loop/lessons/verification-gruff.md`; the count is the sum of the declared totals.
 
 **Prevention:** After the first focused GREEN that touches TypeScript, and before any later aggregate suite, preflight, or completion claim, run `npm run check:touched` and quote each selected result. It checks touched formatting; for changed `src/*.ts`, it also runs file-scoped ESLint, typecheck, and the repository Gruff ratchet. `test/**` sits outside the lint project. Then run and quote the exact Knip command from `scripts/preflight-checks.sh` (search: `knip_command=(`), never an invented `npm run knip` or a bare `npx knip`, which exhausts the default heap; run targeted Gruff on the touched files too. Keep helpers module-private until a current consumer imports them, and reference child-process fixtures with `fileURLToPath(new URL(...))` so Knip can see them, as in `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`). When a later gate fails, fix it, rerun that gate, then restart the sequence; every earlier proof is stale. A milestone that edits `src/` lists `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` in its Commands table. For goat-clarity, freeze the check and write commands before mutation; anchors `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`) and `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
+
+**Recurrence 2026-10-17 (native failure probes):** The first focused run reported 22 passes while scoped Prettier rejected the new regex test; the edit hook also caught unchecked optional journal paths. Assert the log path before reading it, then format and rerun the owning suite and targeted Gruff before aggregate claims. `test/unit/run-hook.test.ts` (search: `native CLI interrupts a blocking regex`; `assert.ok(environment.GOAT_TEST_SPAWN_LOG)`).
 
 **What happened:** Focused tests and typecheck pass, then Prettier, ESLint complexity, Knip, or Gruff fails later in preflight or inside the installer round-trip fixture, and every earlier proof goes stale. The first case was the security-preset test, green before scoped Prettier rejected the new test file; evidence anchors `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`) and `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
 
 **Root cause:** Typecheck and runtime tests do not exercise formatting, lint complexity, unused-export policy, static fixture reachability, or analyzer size limits; those gates run only in preflight and in the fixture's copied checkout, so a proof sequence that starts with suites pays for them last.
 
 **Incident ledger** (one line per incident: the gate that fired, the repair, the anchor):
+
+**Recurrence 2026-10-21 (Stop context port):** Two malformed-input cases and typecheck passed, but touched checks rejected the translated emitter/parser complexity. Private helpers cleared those checks; a later Symbol sentinel was then rejected by only-throw-error. Full preflight also exposed an obsolete scaffold assertion and nested code-map rows that its direct-member inventory parses incorrectly. Preserve these failures and stop at the contract gate; apply the complete source, fixture and catalogue correction only after review, then rerun preflight. Evidence: `src/hooks/post-turn/context.mts` (search: `emitPostTurnHookResult`, `readStopContext`), `test/integration/hook-policy-node.test.ts` (search: `hookIdentifier`), and `scripts/preflight-checks.sh` (search: `listed_hook_members`). The locked Gruff 0.5.0 invocation on .mts files examined zero files; its empty findings were not analysis. Require the analysed-file count and scan the emitted .mjs modules. The first out-of-repository wrapper call also could not resolve tsx; use the inspected physical CLI and an absolute loader for that diagnostic scope.
+
+**Recurrence 2026-10-17 (parenthesis port):** The direct parser translation passed its runtime cases but reached ESLint complexity 15 and added a cognitive-complexity warning in generated JavaScript. A private quote-state transition helper keeps byte-boundary counting separate without changing the cases or policy. Run typed-source lint and the production ratchet before broadening a parser batch. Evidence: `src/hooks/policy-words.mts` (search: `consumeBoundaryQuote`, `findMatchingPolicyShellParen`) and `eslint.config.mjs` (search: `max: 10`).
+
+**Recurrence 2026-10-17 (policy case folding):** The first native tool-routing helpers used Unicode case folding despite the port's explicit C-locale contract. Review caught the mismatch after their focused tests passed. One ASCII-only helper now serves both routes. Read the translation contract before choosing JavaScript string defaults; passing finite tool-name cases does not verify the folding mechanism. Evidence: `src/hooks/policy-input.mts` (search: `asciiLowerCase`).
+
+**Recurrence 2026-10-17 (policy primitives):** Fourteen native primitive tests passed, but hook typecheck rejected a possibly undefined first array element. Finding the separator and slicing the command preserves empty-input behavior without an assertion or suppression. Run `npm run typecheck:hooks` before treating generated-module runtime tests as batch proof; those tests execute JavaScript and cannot check the typed producer. Evidence: `src/hooks/policy-heredoc.mts` (search: `goatFlowCliConsumesHeredocData`) and `tsconfig.hooks.json` (search: `src/hooks/**/*.mts`).
+
+**Recurrence 2026-10-17 (native mechanism self-test):** Adding native selection raised checkHookSelfTest's complexity to 15 against the configured limit of 10. Separating per-dispatcher execution and failure classification restored lint before runtime proof. Targeted analysis also found missing error-behavior markers in two comments; truthful reports wording matches the installed rule. Check static complexity before extending a dispatcher loop. Evidence: `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkDispatcherSelfTest`, `classifyHookSelfTestFailure`) and `eslint.config.mjs` (search: `max: 10`).
+
+**Recurrence 2026-10-17 (native audit export):** Runtime fixtures passed, but Knip reported verifyDirectHookRuntime unused because its only external call was inside generated child-program text. An installed-runtime control imports and calls the exported function directly, preserving runtime proof as well as static visibility. The cutover converted that control from Bash to Node. Dynamic fixture use alone does not establish an export consumer. Evidence: `src/cli/audit/check-agent-deny-runtime.ts` (search: `export function verifyDirectHookRuntime`) and `test/integration/preflight-deny-policy.test.ts` (search: `installed direct audit keeps the default Node transport`).
+
+**Recurrence 2026-10-17 (imported native launcher):** Thirty-six runtime cases passed, but moving startup initialization into runHookNative raised ESLint complexity to 14 against the configured limit of 10. A private invocation preparer preserves defaults and Stop ordering while keeping execution within the gate. Check static complexity before accepting a module-to-function move. The linked Gruff shim also exited 0 without JSON in the symlinked prototype; use its physical package entry and require an analysed-file count before claiming analysis. A purpose-only fixture comment introduced a side-effect advisory; rewind and read both marker rules before combining purpose with truthful Writes wording. Evidence: `src/hooks/run-hook.mts` (search: `prepareNativeHookInvocation`), `test/unit/run-hook.test.ts` (search: `Writes a native evaluator fixture`), `eslint.config.mjs` (search: `complexity`), and `node_modules/@blundergoat/gruff-ts/src/cli.ts` (search: `pathToFileURL(argv[1]`).
+
+**Recurrence 2026-10-16:** M02's isolated native supervisor passed six process tests, but ESLint rejected two shorthand callbacks with `no-confusing-void-expression`. Adding braces and rerunning the exact lint command cleared both errors. Run scoped static gates before treating runtime GREEN as a complete batch result. The learning check then rejected an unverified lint-config anchor; rereading the config and removing that citation restored valid references. The patch dry run also caught missing new-file mode headers; include them before checking a generated Git patch. Evidence: `src/hooks/hook-supervisor.mts` (search: `hookProcess.once`).
+
+**Recurrence 2026-10-16 (application):** Supervisor verification guessed `bin/gruff-ts.js`, which does not exist. Resolve package executables from their installed bin mapping or verified shim before invocation. `node_modules/.bin/gruff-ts` then analyzed the generated module successfully. Evidence: `scripts/check-gruff-warning-ratchet.mjs` (search: `analyzerPackage.bin["gruff-ts"]`).
+
+**Recurrence 2026-10-16 (saved choices):** Thirteen native launch tests passed while ESLint rejected the ported fallback response at complexity 11 against a limit of 10. Equivalent mode-membership checks cleared lint without adding a helper. The first repair patch missed formatter-rewritten context; rereading the actual region supplied the matching context. Run the typed source's static gates when porting existing JavaScript, then repeat affected proof after the repair. Evidence: `src/hooks/hook-launch.mts` (search: `reportNativeHookUnavailable`), `eslint.config.mjs` (search: `complexity: ["error", { max: 10 }]`).
 
 **Recurrence 2026-04-26:** Round-trip preflight rejected an over-complex compose-quality helper and an unformatted quality-command fixture after prompt tests and typecheck passed. `src/cli/prompt/compose-quality-common.ts` (search: `appendScopeSummary`).
 **Recurrence 2026-04-30:** Preflight stopped at `2 unformatted files`, both new test files; `npm run format` touched only them and a clean rerun passed. `test/unit/check-content-quality.test.ts` (search: `discovers current ADR files`), `src/cli/quality/schema-types.ts` (search: `evidence_warning_count`).
@@ -87,6 +124,8 @@ last_reviewed: 2026-10-11
 
 **Recurrence 2026-09-29:** The stats integration tests and typecheck were green before scoped ESLint found `collectGraduationCandidates` at complexity 18 against a limit of 10. Extracting optional-metadata readers brought the function within the limit; the focused suite and lint were rerun. Evidence: `src/cli/facts/shared/learning-loop.ts` (search: `function collectGraduationCandidates`).
 
+**Recurrence 2026-10-19:** An approved six-file hook patch passed its tests on both pinned runtimes, but `npm run check:touched` failed Prettier on the test file: only the source module had been formatted in the scratch tree. Formatting changed two string literals' quote style and the rerun stayed green. Run Prettier on every file in a proposed patch before asking for approval. Evidence: `test/unit/hook-policy-primitives.test.ts` (search: `not a real quoted heredoc`).
+
 Knip handling: run it with the repository gate's heap and traversal flags, `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) and `.goat-flow/learning-loop/footguns/preflight-plumbing.md` (search: `Knip's \`ignore\` cannot shrink`); a default `npx knip` out-of-memory abort is not the gate result. Binary policy lives in `knip.json` (search: `ignoreBinaries`).
 
 ---
@@ -114,11 +153,18 @@ Continuation: individually registering the same quick/full requests and eight in
 **Decision changed:** Treat lint as evidence only when output proves the selected files were analyzed; an ignored-file warning is not a pass even when exit status is zero.
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
+**Incident count:** 4 | **Latest occurrence:** 2026-10-17
 
 **Prevention:** Read every per-file diagnostic before appending pass text, and check the lint scope before choosing a command. If the configured parser excludes the target, record lint as not applicable; do not force the file through an incompatible parser project with `--no-ignore`.
+
+**Recurrence 2026-10-17 (test selection):** A Node 22 test command named two existing suites and two stale paths, exited 0 and ran only the existing suites. The 76 passing cases did not cover the intended launcher checks. Discover paths with `rg --files`, confirm each exists and reconcile registered case counts before crediting a combined command. The corrected selection uses `test/integration/hook-policy-node.test.ts` (search: `candidate refuses unsupported work`) and `test/unit/hook-launcher.test.ts` (search: `describe`).
+
+**Recurrence 2026-10-17 (candidate scaffolds):** The linked Gruff shim emitted no JSON, then a physical-binary scan of four `.mts` modules and one test reported only one analyzed file. After generation drift checks, scanning the four generated `.mjs` modules and test analyzed all five with zero warnings/errors. Preserve the physical executable and check analyzed-file coverage before accepting its exit status. `node_modules/@blundergoat/gruff-ts/src/cli.ts` (search: `pathToFileURL(argv[1]`) and `node_modules/@blundergoat/gruff-ts/src/discovery.ts` (search: `SCRIPT_FILE_EXTENSIONS`).
 
 **What happened:** An exact-path ESLint command exited 0 after reporting that `test/contract/local-data-contract.test.ts` was ignored, and a shell suffix printed a false PASS line. A `--no-ignore` diagnostic exited 1 because the test is absent from both parser projects. The focused runtime contract and typecheck remained valid; neither made the ignored lint command evidence.
 
 **Root cause:** The wrapper treated process status as coverage without reading the per-file warning or the configured target set.
 
-**Evidence:** `eslint.config.mjs` (search: `ignores: ["dist/**", "test/**", "node_modules/**", "*.js", "*.mjs"]`) excludes the test tree; `eslint.config.mjs` (search: `project: ["./tsconfig.json", "./tsconfig.dashboard.json"]`) limits typed parsing to the two source projects.
+**Evidence:** `eslint.config.mjs` (search: `ignores: ["dist/**", "test/**", "node_modules/**", "*.js", "*.mjs"]`) excludes the test tree; `eslint.config.mjs` (search: `"./tsconfig.hooks.json"`) declares the separate CLI, dashboard and hook parser projects.
+
+**Recurrence 2026-10-16:** In the isolated M02 proposal, Gruff 0.5.0 returned exit 0 and `analysedFiles: 0` for typed `.mts` hook source. Its installed extension list excludes `.mts`. Check the generated `.mjs` after generation drift checks, and use TypeScript and ESLint for typed source. A shim reached through a linked `node_modules` also returned empty stdout; the verified physical binary returned JSON. Evidence: `node_modules/@blundergoat/gruff-ts/src/discovery.ts` (search: `SCRIPT_FILE_EXTENSIONS`), `scripts/generate-hook-runtime.mjs` (search: `generateHookRuntime`) and `package.json` (search: `typecheck:hooks`).

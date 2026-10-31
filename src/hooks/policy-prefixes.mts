@@ -1,0 +1,498 @@
+/**
+ * Reveal the command hidden behind a launch wrapper such as sudo, time, exec, timeout, setsid, stdbuf, ionice, taskset, chrt or flock.
+ * The composed normalizer in policy-syntax.mts calls these so `sudo -n git push` is judged as `git push` and cannot slip past a Git rule.
+ * Each parser knows only its wrapper's documented option grammar; none executes text or expands shell syntax.
+ *
+ * Results are PolicyWrapperPayload values: "command" exposes the child to judge, "absent" means the wrapper launches nothing,
+ * and "unresolved" means an option the parser does not know, which makes the hook refuse the command instead of guessing.
+ * time returns plain text; sudo returns null when an option prevents identifying the child.
+ */
+import {
+  dropFirstPolicyShellWord,
+  joinPolicyShellWords,
+  splitPolicyShellWords,
+  type PolicyWrapperPayload,
+} from "./policy-words.mjs";
+
+// time's own options: flags with no value, options with a separate value, and -f/-o with the value attached.
+const timeFlagPrefix =
+  /^(?:--portability|--verbose|--quiet|--append|-p|-v|-q|-a)[ \t\r\n\v\f]+/u;
+const timeValuePrefix = /^(?:--format|--output|-f|-o)[ \t\r\n\v\f]+/u;
+const timeAttachedShortPrefix = /^-[fo][^ \t\r\n\v\f]+[ \t\r\n\v\f]*/u;
+
+/**
+ * Skip time's own options so the timed command is judged on its own, e.g. `time -p git status` is judged as `git status`.
+ * Scanning stops at the first word time would not recognise, which stays visible to the caller together with everything after it.
+ *
+ * @param command - text after the `time` word; empty or whitespace-only text yields an empty string
+ * @returns the remaining text starting at the timed command; empty when time was given settings but nothing to run
+ */
+export function normalizePolicyTimePrefix(command: string): string {
+  let remaining = command;
+  for (;;) {
+    remaining = remaining.replace(/^[ \t\r\n\v\f]+/u, "");
+    const flag = timeFlagPrefix.exec(remaining);
+    if (flag) remaining = remaining.slice(flag[0].length);
+    else if (/^--(?:format|output)=/u.test(remaining))
+      remaining = dropFirstPolicyShellWord(remaining);
+    else {
+      // A separate format or output value may be quoted, so the whole next word is skipped rather than the text up to a space.
+      const value = timeValuePrefix.exec(remaining);
+      if (value)
+        remaining = dropFirstPolicyShellWord(remaining.slice(value[0].length));
+      else {
+        const attached = timeAttachedShortPrefix.exec(remaining);
+        // `--` ends time's options; whatever follows is the timed command even when it starts with a dash.
+        const terminator = /^--[ \t\r\n\v\f]+/u.exec(remaining);
+        if (attached) remaining = remaining.slice(attached[0].length);
+        else if (terminator) remaining = remaining.slice(terminator[0].length);
+        else return remaining;
+      }
+    }
+  }
+}
+
+// Attached sudo values and valueless flags; separate option operands are consumed below.
+const sudoOptionPrefixes = [
+  /^-[ugCDRTprthU][^ \t\r\n\v\f-]+[ \t\r\n\v\f]*/u,
+  /^--(?:user|group|close-from|chdir|chroot|role|type|other-user|host|prompt|command-timeout|preserve-env)=[^ \t\r\n\v\f]*[ \t\r\n\v\f]*/u,
+  /^-[AbeEHhiKknPSsV]+[ \t\r\n\v\f]*/u,
+  /^--(?:askpass|background|bell|edit|preserve-env|set-home|help|login|list|remove-timestamp|reset-timestamp|non-interactive|stdin|shell|validate|version)[ \t\r\n\v\f]*/u,
+];
+const sudoValuePrefix =
+  /^(?:-[ugCDRTprthU]|--(?:user|group|close-from|chdir|chroot|role|type|other-user|host|prompt|command-timeout))[ \t\r\n\v\f]+/u;
+
+/**
+ * Skip sudo's identity, environment and privilege options so the real command is judged, e.g. `sudo -u root git status` as `git status`.
+ * Unknown options or missing operands return null so the caller refuses uncertain command boundaries.
+ *
+ * @param command - text after the `sudo` word; empty text yields an empty string
+ * @returns the privileged command with `--` removed, or null when an option cannot be inspected
+ */
+export function normalizePolicySudoPrefix(command: string): string | null {
+  let remaining = command;
+  for (;;) {
+    remaining = remaining.replace(/^[ \t\r\n\v\f]+/u, "");
+    const terminator = /^--[ \t\r\n\v\f]+/u.exec(remaining);
+    if (terminator) return remaining.slice(terminator[0].length);
+    const value = sudoValuePrefix.exec(remaining);
+    if (value) {
+      const operand = remaining.slice(value[0].length);
+      if (operand === "") return null;
+      remaining = dropFirstPolicyShellWord(operand);
+      continue;
+    }
+    const option = sudoOptionPrefixes
+      .map((pattern) => pattern.exec(remaining))
+      .find((match) => match !== null);
+    if (option) {
+      remaining = dropFirstPolicyShellWord(remaining);
+      continue;
+    }
+    return remaining.startsWith("-") ? null : remaining;
+  }
+}
+
+/**
+ * Tell whether a word is an I/O redirection such as `>log` or `2>>err` rather than a program name.
+ * exec relies on it: `exec 2>log` only rewires output and launches nothing, so there is no child command to judge.
+ *
+ * @param word - one already-split shell word; an empty word is not a redirection
+ * @returns true only for an optional ASCII descriptor number followed immediately by `<` or `>`
+ */
+export function policyWordStartsWithRedirection(word: string): boolean {
+  return /^(?:[0-9]+)?[<>]/u.test(word);
+}
+
+/**
+ * Build the child payload from the words left after a wrapper's own options, quoting each word so argv boundaries survive.
+ *
+ * @param words - the wrapper's split argument words
+ * @param index - position of the first child word; at or past the end means the wrapper was given nothing to run
+ * @returns "command" with the argv-quoted child, or "absent" when no child word remains
+ */
+function finishPolicyPrefix(
+  words: readonly string[],
+  index: number,
+): PolicyWrapperPayload {
+  return index < words.length
+    ? { kind: "command", command: joinPolicyShellWords(words, index, "argv") }
+    : { kind: "absent" };
+}
+
+/**
+ * Like finishPolicyPrefix, but a redirection in the child position is "absent": `exec >log` rewires I/O without running anything.
+ *
+ * @param words - exec's split argument words
+ * @param index - position where the child program would start
+ * @returns "absent" for a redirection-only exec, otherwise the argv payload from finishPolicyPrefix
+ */
+function finishPolicyExecPrefix(
+  words: readonly string[],
+  index: number,
+): PolicyWrapperPayload {
+  return policyWordStartsWithRedirection(words[index] ?? "")
+    ? { kind: "absent" }
+    : finishPolicyPrefix(words, index);
+}
+
+/**
+ * Reveal the program `exec` replaces the shell with, e.g. `exec -a name git status` is judged as `git status`.
+ * An option exec does not document, or `-a` with no name after it, is "unresolved" so the hook refuses instead of guessing.
+ *
+ * @param command - text after the `exec` word; empty text means a bare exec that runs nothing
+ * @returns "command" with the argv-quoted child, "absent" for bare or redirection-only exec, "unresolved" for unknown options
+ */
+export function normalizePolicyExecPrefix(
+  command: string,
+): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "--") return finishPolicyExecPrefix(words, index + 1);
+    // `-a` names the child's argv[0], so the word after it is a label and not the program.
+    if (word === "-a") {
+      if (index + 1 >= words.length) return { kind: "unresolved" };
+      index += 2;
+    } else if (/^-[cl]+$/u.test(word)) index++;
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    else return finishPolicyExecPrefix(words, index);
+  }
+  return { kind: "absent" };
+}
+
+// `--help` and `--version` print and exit, so a wrapper given either launches no child.
+const terminalOptions = new Set(["--help", "--version"]);
+const timeoutValueOptions = new Set(["-s", "-k", "--signal", "--kill-after"]);
+const timeoutFlags = new Set([
+  "--preserve-status",
+  "--foreground",
+  "--verbose",
+  "-v",
+]);
+const timeoutAttachedOption = /^(?:--(?:signal|kill-after)=.*|-[sk].+)$/su;
+
+/**
+ * Reveal the command run under `timeout`, skipping signal and kill settings plus the duration, e.g. `timeout 5 git status` as `git status`.
+ * A value option with nothing after it, or an unknown option, is "unresolved" because the duration can no longer be located safely.
+ *
+ * @param command - text after the `timeout` word
+ * @returns "command" with the argv-quoted child, "absent" for help/version or a duration with no command, "unresolved" for uncertain options
+ */
+export function normalizePolicyTimeoutPrefix(
+  command: string,
+): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    // `--` ends the options; the next word is the duration and the command starts after it.
+    if (word === "--") return finishPolicyPrefix(words, index + 2);
+    if (timeoutValueOptions.has(word)) {
+      if (index + 1 >= words.length) return { kind: "unresolved" };
+      index += 2;
+    } else if (timeoutFlags.has(word) || timeoutAttachedOption.test(word))
+      index++;
+    else if (terminalOptions.has(word)) return { kind: "absent" };
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    // The first word that is not an option is the duration; the command follows it.
+    else return finishPolicyPrefix(words, index + 1);
+  }
+  return { kind: "absent" };
+}
+
+const setsidFlags = new Set(["--ctty", "--fork", "--wait"]);
+
+/**
+ * Reveal the command `setsid` starts in a new session, e.g. `setsid -f git status` is judged as `git status`.
+ *
+ * @param command - text after the `setsid` word
+ * @returns "command" with the argv-quoted child, "absent" for help/version or no child, "unresolved" for an option setsid does not document
+ */
+export function normalizePolicySetsidPrefix(
+  command: string,
+): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "--") return finishPolicyPrefix(words, index + 1);
+    if (setsidFlags.has(word) || /^-[cfw]+$/u.test(word)) index++;
+    else if (terminalOptions.has(word)) return { kind: "absent" };
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    else return finishPolicyPrefix(words, index);
+  }
+  return { kind: "absent" };
+}
+
+const stdbufValueOptions = new Set([
+  "-i",
+  "-o",
+  "-e",
+  "--input",
+  "--output",
+  "--error",
+]);
+const stdbufAttachedOption = /^(?:-[ioe].+|--(?:input|output|error)=.*)$/su;
+
+/**
+ * Reveal the command run under `stdbuf`, skipping its stream buffering settings, e.g. `stdbuf -oL git status` is judged as `git status`.
+ *
+ * @param command - text after the `stdbuf` word
+ * @returns "command" with the argv-quoted child, "absent" for help/version or no child, "unresolved" for a missing value or unknown option
+ */
+export function normalizePolicyStdbufPrefix(
+  command: string,
+): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "--") return finishPolicyPrefix(words, index + 1);
+    if (stdbufValueOptions.has(word)) {
+      if (index + 1 >= words.length) return { kind: "unresolved" };
+      index += 2;
+    } else if (stdbufAttachedOption.test(word)) index++;
+    else if (terminalOptions.has(word)) return { kind: "absent" };
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    else return finishPolicyPrefix(words, index);
+  }
+  return { kind: "absent" };
+}
+
+const ioniceValueOptions = new Set(["-c", "-n", "--class", "--classdata"]);
+// `-p`/`--pid` retargets a process that already exists; ionice, taskset and chrt all share this shape and launch nothing with it.
+const ioniceProcessOption = /^(?:-p.*|--pid(?:=.*)?)$/su;
+const ioniceSingleOption =
+  /^(?:-[cn].+|--(?:class|classdata)=.*|-t|--ignore)$/su;
+
+/**
+ * Reveal the command `ionice` starts with an I/O priority, e.g. `ionice -c 2 git status` is judged as `git status`.
+ * `-p` or `--pid` changes a process that already exists, so those forms launch nothing and are "absent".
+ *
+ * @param command - text after the `ionice` word
+ * @returns "command" with the argv-quoted child, "absent" for process targets, help/version or no child, "unresolved" for uncertain options
+ */
+export function normalizePolicyIonicePrefix(
+  command: string,
+): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "--") return finishPolicyPrefix(words, index + 1);
+    if (ioniceProcessOption.test(word)) return { kind: "absent" };
+    if (ioniceValueOptions.has(word)) {
+      if (index + 1 >= words.length) return { kind: "unresolved" };
+      index += 2;
+    } else if (ioniceSingleOption.test(word)) index++;
+    else if (terminalOptions.has(word)) return { kind: "absent" };
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    else return finishPolicyPrefix(words, index);
+  }
+  return { kind: "absent" };
+}
+
+// taskset's flags take no value of their own; `-c` only changes how the following mask operand is read.
+const tasksetFlags = new Set(["-a", "--all-tasks", "-c", "--cpu-list"]);
+
+/**
+ * Reveal the command `taskset` pins to CPUs, skipping its flags and the mask or list operand, e.g. `taskset -c 0 git status` as `git status`.
+ * `-p` changes a process that already exists and launches nothing, so it is "absent".
+ *
+ * @param command - text after the `taskset` word
+ * @returns "command" with the argv-quoted child, "absent" for process targets, help/version or a mask with no command, "unresolved" otherwise
+ */
+export function normalizePolicyTasksetPrefix(
+  command: string,
+): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    // `--` ends the flags; the next word is the CPU mask or list and the command starts after it.
+    if (word === "--") return finishPolicyPrefix(words, index + 2);
+    if (ioniceProcessOption.test(word)) return { kind: "absent" };
+    if (tasksetFlags.has(word)) index++;
+    else if (terminalOptions.has(word)) return { kind: "absent" };
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    // The first word that is not a flag is the CPU mask or list; the command follows it.
+    else return finishPolicyPrefix(words, index + 1);
+  }
+  return { kind: "absent" };
+}
+
+const chrtFlags = new Set([
+  "-f",
+  "-r",
+  "-o",
+  "-b",
+  "-i",
+  "-d",
+  "--fifo",
+  "--rr",
+  "--other",
+  "--batch",
+  "--idle",
+  "--deadline",
+  "--reset-on-fork",
+  "-R",
+]);
+const chrtValueOptions = new Set([
+  "-T",
+  "-P",
+  "-D",
+  "--sched-runtime",
+  "--sched-period",
+  "--sched-deadline",
+]);
+const chrtAttachedOption =
+  /^(?:-[TPD].+|--(?:sched-runtime|sched-period|sched-deadline)=.*)$/su;
+// `-m`/`--max` only prints the scheduler's priority limits, so like help and version it launches nothing.
+const chrtTerminalOptions = new Set([...terminalOptions, "--max", "-m"]);
+
+/**
+ * Tell whether a chrt word is a policy flag or an option with its value attached, so it takes no separate operand.
+ *
+ * @param word - one of chrt's split words
+ * @returns true when the word consumes only itself before the priority operand
+ */
+function isChrtSingleOption(word: string): boolean {
+  return chrtFlags.has(word) || chrtAttachedOption.test(word);
+}
+
+/**
+ * Reveal the command `chrt` starts with a scheduling policy, skipping its settings and the priority, e.g. `chrt -f 1 git status` as `git status`.
+ * `-p` changes a process that already exists and `-m` only prints limits, so both launch nothing and are "absent".
+ *
+ * @param command - text after the `chrt` word
+ * @returns "command" with the argv-quoted child, "absent" for process targets, informational forms or no command, "unresolved" otherwise
+ */
+export function normalizePolicyChrtPrefix(
+  command: string,
+): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    // `--` ends the options; the next word is the priority and the command starts after it.
+    if (word === "--") return finishPolicyPrefix(words, index + 2);
+    if (ioniceProcessOption.test(word)) return { kind: "absent" };
+    if (chrtValueOptions.has(word)) {
+      if (index + 1 >= words.length) return { kind: "unresolved" };
+      index += 2;
+    } else if (isChrtSingleOption(word)) index++;
+    else if (chrtTerminalOptions.has(word)) return { kind: "absent" };
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    // The first word that is not an option is the priority; the command follows it.
+    else return finishPolicyPrefix(words, index + 1);
+  }
+  return { kind: "absent" };
+}
+
+const flockCommandOptions = new Set(["-c", "--command"]);
+const flockValueOptions = new Set([
+  "-E",
+  "-w",
+  "--conflict-exit-code",
+  "--timeout",
+]);
+const flockFlags = new Set([
+  "-s",
+  "-x",
+  "-n",
+  "-u",
+  "-o",
+  "-F",
+  "--shared",
+  "--exclusive",
+  "--nb",
+  "--nonblock",
+  "--unlock",
+  "--close",
+  "--no-fork",
+  "--verbose",
+]);
+const flockAttachedOption =
+  /^(?:-[Ew].+|--(?:conflict-exit-code|timeout)=.*)$/su;
+
+/**
+ * Tell whether a flock word is a lock flag or an option with its value attached, so it takes no separate operand.
+ *
+ * @param word - one of flock's split words
+ * @returns true when the word consumes only itself before the lock operand
+ */
+function isFlockSingleOption(word: string): boolean {
+  return flockFlags.has(word) || flockAttachedOption.test(word);
+}
+
+/**
+ * Read flock's `-c`/`--command` form, whose value is shell text rather than argv, e.g. `flock -c 'git status && echo ok' lock`.
+ *
+ * @param words - flock's split words
+ * @param index - position of the word to inspect
+ * @returns "command" with the shell text (possibly empty), "unresolved" when the option has no value, or null when this word is not that option
+ */
+function readPolicyFlockCommandOption(
+  words: readonly string[],
+  index: number,
+): PolicyWrapperPayload | null {
+  const word = words[index] ?? "";
+  if (flockCommandOptions.has(word))
+    return index + 1 < words.length
+      ? { kind: "command", command: words[index + 1] ?? "" }
+      : { kind: "unresolved" };
+  if (word.startsWith("-c") && word.length > 2)
+    return { kind: "command", command: word.slice(2) };
+  if (word.startsWith("--command="))
+    return { kind: "command", command: word.slice("--command=".length) };
+  return null;
+}
+
+/**
+ * Build flock's child after its lock file or descriptor: a separate `-c`/`--command` next switches to shell text, anything else is argv.
+ * flock stops reading options at the lock operand, so an attached form such as `-cgit` after it is the program name, not an option.
+ *
+ * @param words - flock's split words
+ * @param lockIndex - position of the lock file or descriptor operand
+ * @returns the "command" payload, "absent" when nothing follows the lock, or "unresolved" for `-c` with no text
+ */
+function finishPolicyFlockPrefix(
+  words: readonly string[],
+  lockIndex: number,
+): PolicyWrapperPayload {
+  const index = lockIndex + 1;
+  return flockCommandOptions.has(words[index] ?? "")
+    ? (readPolicyFlockCommandOption(words, index) ?? { kind: "unresolved" })
+    : finishPolicyPrefix(words, index);
+}
+
+/**
+ * Reveal the command `flock` runs while holding a lock, e.g. `flock lock git status` is judged as `git status`.
+ * A lock with no command (`flock -x 3`) only locks a descriptor and is "absent"; unknown options or a missing value are "unresolved".
+ *
+ * @param command - text after the `flock` word
+ * @returns "command" with argv or explicit shell text, "absent" for lock-only and help/version forms, "unresolved" for uncertain options
+ */
+export function normalizePolicyFlockPrefix(
+  command: string,
+): PolicyWrapperPayload {
+  const words = splitPolicyShellWords(command);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index] ?? "";
+    if (word === "--") return finishPolicyFlockPrefix(words, index + 1);
+    // An explicit `-c text` before the lock is shell text and is judged as typed, quotes included.
+    const explicitShellText = readPolicyFlockCommandOption(words, index);
+    if (explicitShellText !== null) return explicitShellText;
+    if (flockValueOptions.has(word)) {
+      if (index + 1 >= words.length) return { kind: "unresolved" };
+      index += 2;
+    } else if (isFlockSingleOption(word)) index++;
+    else if (terminalOptions.has(word)) return { kind: "absent" };
+    else if (word.startsWith("-")) return { kind: "unresolved" };
+    else return finishPolicyFlockPrefix(words, index);
+  }
+  return { kind: "absent" };
+}

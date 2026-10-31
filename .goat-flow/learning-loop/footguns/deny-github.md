@@ -1,11 +1,26 @@
 ---
 category: deny-github
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-27
 ---
 
 GitHub CLI and API write-policy traps, including allowed conversation comments and proven GraphQL reads.
 
 Sibling buckets: `deny-writes.md`, `deny-shell.md`, `deny-secrets.md`.
+
+## Footgun: Windows GitHub executable names miss write classification
+
+**Status:** active | **Created:** 2026-10-27 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
+**Decision changed:** Preserve Windows executable paths before shell-word decoding, then classify GitHub executable spellings through the existing write rules.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** Pair each supported executable spelling with a denied write, an allowed read and an allowed conversation comment. Include quoted paths with spaces and unquoted backslash paths. Check the shared normalizer's output before narrowing a repair to the final classifier; separators discarded upstream cannot be recovered by a basename comparison. Preserve unrelated executables and Git-specific normalization.
+
+**Symptoms:** The same installed Windows hook denied `gh pr create --fill` but allowed `gh.exe pr create --fill` and `C:/tools/gh.exe pr create --fill`. The original wrapper control still denied the bare command. No GitHub client or remote write ran. New classifier and provider-response regressions reproduced the gap while the sixteen existing tests in those two suites passed.
+
+**Why it happens:** `inspectGhWriteOperation` accepts only an executable basename equal to `gh`. The shared normalizer handles Windows Git executable names but leaves GitHub names unrecognized. Shell-word decoding also removes backslashes from unquoted Windows paths; quoted paths retain separators in the first normalization result but lose them during the classifier's next split. A final basename-only repair cannot recover that lost path information.
+
+**Evidence and repair:** `src/hooks/policy-words.mts` (search: `normalizePolicyGhExecutableWord`) now normalizes recognized GitHub executable words separately from Git. `src/hooks/policy-syntax.mts` (search: `normalizePolicyExecutableCandidate`) calls it before escape decoding and after quoted-word decoding. `src/hooks/deny-dangerous/github-command.mts` (search: `inspectGhWriteOperation`) retains its existing command classification. Regression owners: `test/unit/hook-policy-github.test.ts` (search: `preserves write and read decisions across Windows executable spellings`) and `test/unit/hook-policy-evaluation.test.ts` (search: `preserves Windows GitHub executable decisions in Antigravity JSON responses`). Both focused WSL and native Windows runs passed the denial, read and comment controls after this repair.
 
 ## Footgun: GitHub CLI comments bypassed shared-system write guardrails
 

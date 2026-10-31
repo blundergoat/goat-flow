@@ -19,6 +19,10 @@ import { installStateRelativeDirectory } from "./local-state-migration.js";
 import { readDecisionsReadmeTransfer } from "./decisions-readme-transfer.js";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
+import {
+  applyRuntimeRetirementPreview,
+  retireRuntimeRows,
+} from "./installer/retired-runtime.js";
 import { readProjectTextFile } from "./project-file.js";
 import { getSkillFiles, loadManifest } from "./manifest/manifest.js";
 import {
@@ -45,10 +49,6 @@ import {
   type ManagedSetupAuthority,
   type ManagedSetupAuthorityDecision,
 } from "./managed-setup-authority.js";
-import type {
-  InstallerInvocation,
-  InstallerInvocationError,
-} from "./install-invocation.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
 
 export {
@@ -107,7 +107,8 @@ type ManagedSetupAction =
   | "preserve"
   | "protect"
   | "regenerate"
-  | "migrate";
+  | "migrate"
+  | "remove";
 
 /** Overall preview outcome used by the CLI before it starts the installer. */
 type ManagedSetupVerdict = "ready" | "warning" | "blocked";
@@ -409,32 +410,6 @@ export interface ManagedSetupPreview {
   files: ManagedSetupPreviewFile[];
 }
 
-/**
- * Merge installer launch admission into the managed preview shown to users.
- * Use so dry-run and real install consume the same platform prerequisite result.
- *
- * @param installPreview - current file actions; an empty list still receives a launch blocker
- *
- * @param installerLaunch - selected Bash or actionable error; never null after discovery
- * @returns original ready preview or blocked copy; never null and never mutates the input
- */
-export function managedSetupPreviewForInstallerLaunch(
-  installPreview: ManagedSetupPreview,
-  installerLaunch: InstallerInvocation | InstallerInvocationError,
-): ManagedSetupPreview {
-  // A runnable Bash leaves the managed-file verdict exactly as the user saw it.
-  if (installerLaunch.ok) return installPreview;
-
-  return {
-    ...installPreview,
-    verdict: "blocked",
-    limits: [
-      ...installPreview.limits,
-      `Install prerequisite failed: ${installerLaunch.error}`,
-    ],
-  };
-}
-
 /** One exact-copy destination and its manifest-controlled package source. */
 interface ManagedTemplateDefinition {
   path: string;
@@ -513,26 +488,6 @@ const STATE_PRESENTATION: Record<
     reason: "Install rewrites this generated file from current project state.",
   },
 };
-
-/**
- * Translate the shared file comparison into the same repair direction for Install, Audit and Hooks.
- *
- * @param state - canonical three-way state; non-content states have no proven drift direction
- * @returns current, safely behind, locally diverged, or unclassified repair evidence
- */
-export function managedSetupChangeDirection(
-  state: ManagedSetupFileState,
-): ManagedSetupChangeDirection {
-  // Matching installed and bundled bytes let the user leave this file alone.
-  if (state === "unchanged") return "current";
-  // Only the bundle changed, so the user's pristine installed copy can safely advance.
-  if (state === "template-changed") return "behind";
-  // Locally changed bytes need review before the user replaces them with bundled content.
-  if (state === "both-changed" || state === "local-preserved") {
-    return "diverged";
-  }
-  return "unclassified";
-}
 
 /**
  * Classify one path from old, current, and new hashes.
@@ -1105,6 +1060,16 @@ export function buildManagedSetupPreview(
     );
   }
 
+  applyRuntimeRetirementPreview(
+    projectPath,
+    files,
+    baseline.facade.source === "v2"
+      ? baseline.facade.expectedHashes
+      : new Map(),
+    new Set(Object.keys(loadManifest().file_ownership)),
+    authority,
+  );
+
   // User-owned and generated destinations complete the write set an approved install may touch.
   for (const definition of collectProjectWriteDefinitions(projectPath, agent)) {
     // An exact-copy template already classified this path, so the seed rule must not restate it.
@@ -1175,6 +1140,7 @@ export function renderManagedSetupPreviewText(
  * Every selected exact-copy file must verify before its receipt changes; throws if a required row is missing and preserves unrelated history.
  */
 function buildManagedInstallReceiptCandidate(
+  projectPath: string,
   state: ManagedInstallStateV2,
   preview: ManagedSetupPreview,
 ): ManagedInstallStateV2 {
@@ -1236,11 +1202,15 @@ function buildManagedInstallReceiptCandidate(
     if (previousReceiptIndex === -1) receipts.push(selectedReceipt);
     else receipts[previousReceiptIndex] = selectedReceipt;
   }
-  return {
-    schemaVersion: state.schemaVersion,
-    files: [...rows.values()],
-    receipts,
-  };
+  return retireRuntimeRows(
+    projectPath,
+    {
+      schemaVersion: state.schemaVersion,
+      files: [...rows.values()],
+      receipts,
+    },
+    new Set(Object.keys(loadManifest().file_ownership)),
+  );
 }
 
 /**
@@ -1290,11 +1260,15 @@ export function recordManagedHookAfterVerification(
       }),
     );
   }
-  const candidate = {
-    schemaVersion: state.schemaVersion,
-    files: [...rows.values()],
-    receipts: state.receipts,
-  };
+  const candidate = retireRuntimeRows(
+    projectPath,
+    {
+      schemaVersion: state.schemaVersion,
+      files: [...rows.values()],
+      receipts: state.receipts,
+    },
+    new Set(Object.keys(loadManifest().file_ownership)),
+  );
   // Repeating a healthy Sync keeps canonical bytes stable and avoids an unnecessary replacement.
   if (
     canonicalManagedInstallStateBytes(candidate) !==
@@ -1350,6 +1324,7 @@ export function recordManagedInstallAfterVerification(
       );
     }
     const candidate = buildManagedInstallReceiptCandidate(
+      projectPath,
       facade.state,
       installedPreview,
     );
@@ -1365,3 +1340,5 @@ export function recordManagedInstallAfterVerification(
   }
   return [];
 }
+
+export { managedSetupChangeDirection } from "./managed-setup-write-set.js";

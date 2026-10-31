@@ -1,8 +1,9 @@
 /**
  * Prove the terminal help users see for global and top-level command requests.
  *
- * Use these process tests when routing or help metadata changes.
- * They spawn the real CLI so exit status, output, and dispatch avoidance stay covered together.
+ * Use these tests when routing or help metadata changes.
+ * Most render help in-process through the CLI's own help routing; one still spawns the real CLI so exit status, output, and dispatch avoidance
+ * stay covered together.
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -18,6 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { parseCLIArgs, renderInformationalRequest } from "../../src/cli/cli.js";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 const cliEntryPath = join(repositoryRoot, "src", "cli", "cli.ts");
@@ -53,7 +55,7 @@ const activeHelpCommands = [
  * @param commandArguments - arguments entered after `goat-flow`; empty follows the no-command menu route
  * @returns captured child-process status, stdout, and stderr
  */
-function runHelpCommand(commandArguments: string[]) {
+function runHelpProcess(commandArguments: string[]) {
   // Private files preserve child output when managed pipes return empty captures.
   const captureDirectory = mkdtempSync(join(tmpdir(), "goat-cli-help-output-"));
   const stdoutPath = join(captureDirectory, "stdout");
@@ -89,6 +91,24 @@ function runHelpCommand(commandArguments: string[]) {
   }
 }
 
+/**
+ * Render the help a terminal user would see for these arguments, in-process, through the same routing the real CLI uses.
+ *
+ * @param commandArguments - arguments entered after `goat-flow`, such as `["audit", "--help"]`
+ * @returns status 0 and the printed help, shaped like the real-process capture
+ * @throws when the arguments are not a help or version request, because only the real CLI may dispatch a command
+ */
+function runHelpCommand(commandArguments: string[]) {
+  const rendered = renderInformationalRequest(
+    commandArguments,
+    parseCLIArgs(commandArguments),
+  );
+  // A request without --help or --version would run a real command, which these tests must never do.
+  if (rendered === null)
+    throw new Error(`not a help request: ${commandArguments.join(" ")}`);
+  return { status: 0, stdout: `${rendered}\n`, stderr: "" };
+}
+
 describe("root CLI help", () => {
   // An empty path means this suite has not created the user-like project used to detect accidental writes.
   let bareProjectDirectory = "";
@@ -105,7 +125,7 @@ describe("root CLI help", () => {
 
   it("renders concise navigation and returns before project dispatch", () => {
     const requestedOutputPath = join(bareProjectDirectory, "audit-output.json");
-    const rootHelpProcess = runHelpCommand([
+    const rootHelpProcess = runHelpProcess([
       "--help",
       "--output",
       requestedOutputPath,
@@ -190,15 +210,11 @@ describe("root CLI help", () => {
   });
 
   it("shows exactly four executable examples", () => {
-    const rootHelpProcess = runHelpCommand(["--help"]);
+    const rootHelp = runHelpCommand(["--help"]);
 
-    assert.equal(
-      rootHelpProcess.status,
-      0,
-      `stderr: ${rootHelpProcess.stderr}`,
-    );
+    assert.equal(rootHelp.status, 0, `stderr: ${rootHelp.stderr}`);
     // Missing `Examples:` output leaves this value empty, so the exact assertion below reports a broken user-facing section.
-    const exampleCommands = rootHelpProcess.stdout
+    const exampleCommands = rootHelp.stdout
       .split("Examples:\n")[1]
       ?.split("\n\n", 1)[0]
       ?.split(/\r?\n/u)
@@ -216,97 +232,83 @@ describe("contextual CLI help", () => {
   // Give every command its own test name so a failed topic identifies the exact workflow the user requested.
   for (const helpCommand of activeHelpCommands) {
     it(`renders dedicated ${helpCommand} help`, () => {
-      const commandHelpProcess = runHelpCommand([helpCommand, "--help"]);
+      const commandHelp = runHelpCommand([helpCommand, "--help"]);
 
       assert.equal(
-        commandHelpProcess.status,
+        commandHelp.status,
         0,
-        `${helpCommand}: ${commandHelpProcess.stderr}`,
+        `${helpCommand}: ${commandHelp.stderr}`,
       );
       assert.match(
-        commandHelpProcess.stdout,
+        commandHelp.stdout,
         new RegExp(`^goat-flow ${helpCommand}$`, "mu"),
       );
-      assert.match(commandHelpProcess.stdout, /^Usage:$/mu);
-      assert.match(commandHelpProcess.stdout, /^Examples:$/mu);
-      assert.match(
-        commandHelpProcess.stdout,
-        /^Full reference: docs\/cli\.md$/mu,
-      );
-      assert.doesNotMatch(commandHelpProcess.stdout, /^Common workflows:$/mu);
+      assert.match(commandHelp.stdout, /^Usage:$/mu);
+      assert.match(commandHelp.stdout, /^Examples:$/mu);
+      assert.match(commandHelp.stdout, /^Full reference: docs\/cli\.md$/mu);
+      assert.doesNotMatch(commandHelp.stdout, /^Common workflows:$/mu);
     });
   }
 
   it("shows audit guidance without dispatch or unrelated hook flags", () => {
-    const auditHelpProcess = runHelpCommand([
+    const auditHelp = runHelpCommand([
       "audit",
       "/definitely/missing/goat-flow-project",
       "--help",
     ]);
 
-    assert.equal(
-      auditHelpProcess.status,
-      0,
-      `stderr: ${auditHelpProcess.stderr}`,
-    );
-    assert.match(
-      auditHelpProcess.stdout,
-      /^  goat-flow audit \[path\] \[flags\]$/mu,
-    );
-    assert.match(auditHelpProcess.stdout, /^  --harness\s+/mu);
-    assert.match(auditHelpProcess.stdout, /^  --check-drift\s+/mu);
-    assert.doesNotMatch(auditHelpProcess.stdout, /--scenario/u);
-    assert.equal(auditHelpProcess.stderr, "");
+    assert.equal(auditHelp.status, 0, `stderr: ${auditHelp.stderr}`);
+    assert.match(auditHelp.stdout, /^  goat-flow audit \[path\] \[flags\]$/mu);
+    assert.match(auditHelp.stdout, /^  --harness\s+/mu);
+    assert.match(auditHelp.stdout, /^  --check-drift\s+/mu);
+    assert.doesNotMatch(auditHelp.stdout, /--scenario/u);
+    assert.equal(auditHelp.stderr, "");
   });
 
   it("summarizes hooks subcommands without leaking audit-only flags", () => {
-    const hooksHelpProcess = runHelpCommand(["hooks", "--help"]);
+    const hooksHelp = runHelpCommand(["hooks", "--help"]);
 
-    assert.equal(
-      hooksHelpProcess.status,
-      0,
-      `stderr: ${hooksHelpProcess.stderr}`,
-    );
-    assert.match(hooksHelpProcess.stdout, /^Subcommands:$/mu);
-    assert.match(hooksHelpProcess.stdout, /^  list\s+/mu);
-    assert.match(hooksHelpProcess.stdout, /^  enable\s+/mu);
-    assert.match(hooksHelpProcess.stdout, /^  disable\s+/mu);
-    assert.match(hooksHelpProcess.stdout, /^  sync\s+/mu);
-    assert.match(hooksHelpProcess.stdout, /^  verify\s+/mu);
-    assert.match(hooksHelpProcess.stdout, /^  --scenario <name>\s+/mu);
-    assert.doesNotMatch(hooksHelpProcess.stdout, /--harness/u);
+    assert.equal(hooksHelp.status, 0, `stderr: ${hooksHelp.stderr}`);
+    assert.match(hooksHelp.stdout, /^Subcommands:$/mu);
+    assert.match(hooksHelp.stdout, /^  list\s+/mu);
+    assert.match(hooksHelp.stdout, /^  enable\s+/mu);
+    assert.match(hooksHelp.stdout, /^  disable\s+/mu);
+    assert.match(hooksHelp.stdout, /^  sync\s+/mu);
+    assert.match(hooksHelp.stdout, /^  verify\s+/mu);
+    assert.match(hooksHelp.stdout, /^  --scenario <name>\s+/mu);
+    assert.doesNotMatch(hooksHelp.stdout, /--harness/u);
   });
 
   it("shows the two-step claim recovery boundary", () => {
-    const claimsHelpProcess = runHelpCommand(["claims", "--help"]);
+    const claimsHelp = runHelpCommand(["claims", "--help"]);
 
-    assert.equal(claimsHelpProcess.status, 0, claimsHelpProcess.stderr);
-    assert.match(claimsHelpProcess.stdout, /^Subcommands:$/mu);
-    assert.match(claimsHelpProcess.stdout, /^  inspect\s+/mu);
-    assert.match(claimsHelpProcess.stdout, /^  recover\s+/mu);
-    assert.match(claimsHelpProcess.stdout, /^  --target <path>\s+/mu);
-    assert.match(claimsHelpProcess.stdout, /^  --marker-sha256 <hash>\s+/mu);
-    assert.match(claimsHelpProcess.stdout, /^  --confirm-abandoned\s+/mu);
-    assert.doesNotMatch(claimsHelpProcess.stdout, /--force/u);
+    assert.equal(claimsHelp.status, 0, claimsHelp.stderr);
+    assert.match(claimsHelp.stdout, /^Subcommands:$/mu);
+    assert.match(claimsHelp.stdout, /^  inspect\s+/mu);
+    assert.match(claimsHelp.stdout, /^  recover\s+/mu);
+    assert.match(claimsHelp.stdout, /^  --target <path>\s+/mu);
+    assert.match(claimsHelp.stdout, /^  --marker-sha256 <hash>\s+/mu);
+    assert.match(claimsHelp.stdout, /^  --confirm-abandoned\s+/mu);
+    assert.doesNotMatch(claimsHelp.stdout, /--force/u);
   });
 
   it("advertises narrow setup authority and learn output formats", () => {
-    const setupHelpProcess = runHelpCommand(["setup", "--help"]);
-    const learnHelpProcess = runHelpCommand(["learn", "--help"]);
+    const setupHelp = runHelpCommand(["setup", "--help"]);
+    const learnHelp = runHelpCommand(["learn", "--help"]);
 
-    assert.equal(setupHelpProcess.status, 0, setupHelpProcess.stderr);
-    assert.match(setupHelpProcess.stdout, /^  --force-managed\s+/mu);
-    assert.match(setupHelpProcess.stdout, /^  --force-path <path>\s+/mu);
-    assert.match(setupHelpProcess.stdout, /^  --force-user-owned\s+/mu);
-    assert.equal(learnHelpProcess.status, 0, learnHelpProcess.stderr);
-    assert.match(learnHelpProcess.stdout, /^  --format <type>\s+/mu);
+    assert.equal(setupHelp.status, 0, setupHelp.stderr);
+    assert.match(setupHelp.stdout, /^  --force-managed\s+/mu);
+    assert.match(setupHelp.stdout, /^  --force-path <path>\s+/mu);
+    assert.match(setupHelp.stdout, /^  --force-user-owned\s+/mu);
+    assert.equal(learnHelp.status, 0, learnHelp.stderr);
+    assert.match(learnHelp.stdout, /^  --format <type>\s+/mu);
   });
 
   it("explains managed-state migration and recovery from install help", () => {
-    const installHelpProcess = runHelpCommand(["install", "--help"]);
+    const installHelp = runHelpCommand(["install", "--help"]);
 
-    assert.equal(installHelpProcess.status, 0, installHelpProcess.stderr);
-    assert.match(installHelpProcess.stdout, /^Managed state:$/mu);
+    assert.equal(installHelp.status, 0, installHelp.stderr);
+    assert.match(installHelp.stdout, /^Managed state:$/mu);
     for (const expectedGuidance of [
       "Apply may update managed.json and every supported agent's cutover marker.",
       "After managed.json exists, legacy hashes are non-authoritative; ambiguous legacy history blocks every agent.",
@@ -316,7 +318,7 @@ describe("contextual CLI help", () => {
       "Force cannot repair install evidence, and ordinary install does not automatically prune it.",
     ]) {
       assert.ok(
-        installHelpProcess.stdout.includes(expectedGuidance),
+        installHelp.stdout.includes(expectedGuidance),
         `install help must include: ${expectedGuidance}`,
       );
     }

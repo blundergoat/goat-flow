@@ -30,6 +30,9 @@ paths:
     # Reproducible third-party bundles; the handwritten classifier and policy reader remain analysed.
     - "workflow/hooks/vendor/graphql.cjs"
     - "workflow/hooks/vendor/js-yaml.cjs"
+    # Hash-bound frozen originals and generated parity data; the runner remains analysed.
+    - "test/fixtures/hooks-bash/**"
+    - "workflow/hooks/deny-dangerous/corpus.json"
 
 allowlists:
   # Abbreviations listed here are accepted in identifiers without a naming finding.
@@ -57,6 +60,7 @@ allowlists:
     - "Y29u...KTs= (redacted, 7396 chars)"
     - "Y29u...cyk7 (redacted, 7344 chars)"
     - "Y29u...Ow== (redacted, 7332 chars)"
+    - "Y29u...KTs= (redacted, 7476 chars)"
   # Names that trigger naming.generic-function. Each key replaces the built-in
   # default when present; an empty list disables that rule's blacklist branch.
   # Default: [process, handle, doit, run, execute, manage]

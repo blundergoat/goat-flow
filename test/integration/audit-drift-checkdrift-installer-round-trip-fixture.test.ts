@@ -1,7 +1,8 @@
 /**
  * checkDrift installer round-trip: clones the repo, installs a fixture-backed reference skill for
- * every agent, then asserts the skill files land, preflight passes, and a real `audit --check-drift`
- * run reports zero drift - the end-to-end guard that install output matches what drift expects.
+ * every agent, then asserts the skill files land, each required hook proof passes, and a real
+ * `audit --check-drift` run reports zero drift - the end-to-end guard that install output matches what
+ * drift expects. The repository preflight runs once in CI's `checks` job, not inside this copy.
  */
 import {
   after,
@@ -13,159 +14,18 @@ import {
   INSTALL_FIXTURE_SKILL,
   it,
   join,
+  dirname,
+  mkdirSync,
+  mkdtempSync,
   patchInstallRoundTripFixture,
   PROJECT_ROOT,
+  readFileSync,
   rmSync,
   runCommand,
   setupInstallRoundTripFixture,
+  tmpdir,
+  writeFileSync,
 } from "./audit-drift.helpers.ts";
-import { spawn } from "node:child_process";
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { setTimeout as delay } from "node:timers/promises";
-
-/** One dependency-tree request observed by the fixture-local npm audit endpoint. */
-interface LocalAuditRequest {
-  method: string;
-  path: string;
-  bytes: number;
-}
-
-/** Running localhost endpoint and the requests it has reported to the parent test. */
-interface LocalAuditRegistry {
-  process: ChildProcessWithoutNullStreams;
-  registryUrl: string;
-  requests: LocalAuditRequest[];
-  stderr: () => string;
-}
-
-/**
- * Start a separate-process HTTP endpoint so it can answer npm while this test waits in spawnSync.
- * The endpoint implements only npm's bulk-advisory route and records the real request shape.
- * Side effect: spawns a localhost server child that the caller must stop.
- */
-function startLocalAuditRegistry(): Promise<LocalAuditRegistry> {
-  const serverSource = String.raw`
-    const http = require("node:http");
-    const server = http.createServer((request, response) => {
-      let bytes = 0;
-      request.on("data", (chunk) => { bytes += chunk.length; });
-      request.on("end", () => {
-        const record = { kind: "request", method: request.method, path: request.url, bytes };
-        process.stdout.write(JSON.stringify(record) + "\n");
-        if (request.method !== "POST" || request.url !== "/-/npm/v1/security/advisories/bulk") {
-          response.writeHead(404, { "content-type": "application/json" });
-          response.end(JSON.stringify({ error: "fixture route not found" }));
-          return;
-        }
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end("{}");
-      });
-    });
-    server.listen(0, "127.0.0.1", () => {
-      process.stdout.write(JSON.stringify({ kind: "ready", port: server.address().port }) + "\n");
-    });
-    process.on("SIGTERM", () => server.close(() => process.exit(0)));
-  `;
-  const registryProcess = spawn(process.execPath, ["-e", serverSource]);
-  registryProcess.stdin.end();
-  registryProcess.stdout.setEncoding("utf-8");
-  registryProcess.stderr.setEncoding("utf-8");
-  const requests: LocalAuditRequest[] = [];
-  let stdoutBuffer = "";
-  let stderr = "";
-  let hasStarted = false;
-
-  registryProcess.stderr.on("data", (chunk: string) => {
-    stderr += chunk;
-  });
-
-  return new Promise((resolveRegistry, rejectRegistry) => {
-    const startupTimer = setTimeout(() => {
-      registryProcess.kill("SIGKILL");
-      rejectRegistry(
-        new Error(`local npm audit registry did not start:\n${stderr}`),
-      );
-    }, 5_000);
-
-    registryProcess.once("error", (error) => {
-      clearTimeout(startupTimer);
-      rejectRegistry(error);
-    });
-    registryProcess.once("exit", (status, signal) => {
-      if (hasStarted) return;
-      clearTimeout(startupTimer);
-      rejectRegistry(
-        new Error(
-          `local npm audit registry exited before ready (${status ?? signal}):\n${stderr}`,
-        ),
-      );
-    });
-    registryProcess.stdout.on("data", (chunk: string) => {
-      stdoutBuffer += chunk;
-      const lines = stdoutBuffer.split("\n");
-      stdoutBuffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (line.length === 0) continue;
-        const record = JSON.parse(line) as
-          | { kind: "ready"; port: number }
-          | ({ kind: "request" } & LocalAuditRequest);
-        if (record.kind === "request") {
-          requests.push(record);
-          continue;
-        }
-        if (hasStarted) continue;
-        hasStarted = true;
-        clearTimeout(startupTimer);
-        resolveRegistry({
-          process: registryProcess,
-          registryUrl: `http://127.0.0.1:${record.port}/`,
-          requests,
-          stderr: () => stderr,
-        });
-      }
-    });
-  });
-}
-
-/** Stop the fixture endpoint, escalating only if a clean server close misses its short deadline. */
-async function stopLocalAuditRegistry(
-  registry: LocalAuditRegistry,
-): Promise<void> {
-  if (
-    registry.process.exitCode !== null ||
-    registry.process.signalCode !== null
-  ) {
-    return;
-  }
-  const exitPromise = new Promise<void>((resolveExit) => {
-    registry.process.once("exit", () => resolveExit());
-  });
-  registry.process.kill("SIGTERM");
-  const stoppedCleanly = await Promise.race([
-    exitPromise.then(() => true),
-    delay(1_000, false),
-  ]);
-  if (!stoppedCleanly) {
-    registry.process.kill("SIGKILL");
-    await exitPromise;
-  }
-}
-
-/** Wait briefly for the child-process stdout event that follows npm's completed HTTP request. */
-async function waitForAuditRequest(
-  registry: LocalAuditRegistry,
-): Promise<LocalAuditRequest> {
-  const deadline = Date.now() + 2_000;
-  while (registry.requests.length === 0 && Date.now() < deadline) {
-    await delay(10);
-  }
-  const request = registry.requests[0];
-  assert.ok(
-    request,
-    `expected npm to call the local bulk-advisory endpoint:\n${registry.stderr()}`,
-  );
-  return request;
-}
 
 /** Required offline proofs that let the fixture's audit show real effective coverage. */
 const REQUIRED_EFFECTIVE_HOOK_PROOFS = [
@@ -182,12 +42,117 @@ const REQUIRED_EFFECTIVE_HOOK_PROOFS = [
   { agentId: "claude", scenario: "post-turn-hook" },
 ] as const;
 
+import { spawnSync } from "node:child_process";
+import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.ts";
+
+// Matches the per-probe Windows replay budget in hooks-runtime-evidence.ts.
+const WINDOWS_CODEX_PROBE_TIMEOUT_MS = 90_000;
+const COMMAND_TIMEOUT_MS = 60_000;
+
+function hookProofTimeoutMs(
+  proof: (typeof REQUIRED_EFFECTIVE_HOOK_PROOFS)[number],
+): number {
+  if (process.platform !== "win32" || proof.agentId !== "codex") {
+    return COMMAND_TIMEOUT_MS;
+  }
+  const scenarioCount =
+    HOOK_VERIFICATION_CONTRACTS[proof.scenario].requiredScenarioIds.length;
+  return COMMAND_TIMEOUT_MS + scenarioCount * WINDOWS_CODEX_PROBE_TIMEOUT_MS;
+}
+
+// Preserve the existing case budget and add only the extra Windows Codex command time.
+const ROUND_TRIP_TIMEOUT_MS =
+  400_000 +
+  REQUIRED_EFFECTIVE_HOOK_PROOFS.reduce(
+    (extraTime, proof) =>
+      extraTime + hookProofTimeoutMs(proof) - COMMAND_TIMEOUT_MS,
+    0,
+  );
+
+// Trace only the test-owned CLI process; omit arguments, payloads and environment values.
+const CODEX_PROBE_TRACE =
+  "data:text/javascript," +
+  encodeURIComponent(String.raw`import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { basename } from "node:path";
+const originalSpawnSync = childProcess.spawnSync;
+let sequence = 0;
+childProcess.spawnSync = (command, args, options) => {
+  const id = ++sequence;
+  const started = Date.now();
+  const record = (phase, details) => process.stderr.write(
+    "m19-codex-probe " + JSON.stringify({ id, phase, command: basename(String(command)), ...details }) + "\n",
+  );
+  record("start", { timeoutMs: options?.timeout ?? null });
+  const result = originalSpawnSync(command, args, options);
+  record("end", { durationMs: Date.now() - started, status: result.status,
+    signal: result.signal, errorCode: result.error?.code ?? null });
+  return result;
+};
+syncBuiltinESMExports();`);
+
+// Writes and copies a small temporary checkout, then removes both trees after checking the exclusions.
+it("copies maintained inputs without local plan or scratchpad contents", () => {
+  const source = mkdtempSync(join(tmpdir(), "goat-flow-roundtrip-source-"));
+  let fixture: string | undefined;
+  const retained = {
+    ".goat-flow/plans/README.md": "plan anchor",
+    ".goat-flow/plans/.gitignore": "*",
+    ".goat-flow/scratchpad/README.md": "scratchpad anchor",
+    ".goat-flow/scratchpad/.gitkeep": "",
+    ".goat-flow/config.yaml": "version: 1",
+    ".goat-flow/learning-loop/lessons/fixture.md": "retained evidence",
+    "docs/guide.md": "maintained documentation",
+  };
+  const local = [
+    ".goat-flow/plans/active/work.md",
+    ".goat-flow/scratchpad/archive/work.md",
+  ];
+  try {
+    for (const [path, content] of Object.entries(retained)) {
+      mkdirSync(dirname(join(source, path)), { recursive: true });
+      writeFileSync(join(source, path), content);
+    }
+    for (const path of local) {
+      mkdirSync(dirname(join(source, path)), { recursive: true });
+      writeFileSync(join(source, path), "local working content");
+    }
+    mkdirSync(join(source, "node_modules"));
+    assert.equal(spawnSync("git", ["init", "-q"], { cwd: source }).status, 0);
+    assert.equal(
+      spawnSync("git", ["add", "-f", "--", ...Object.keys(retained)], {
+        cwd: source,
+      }).status,
+      0,
+    );
+    const copiedRoot = setupInstallRoundTripFixture(source);
+    fixture = copiedRoot;
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.keys(retained).map((path) => [
+          path,
+          readFileSync(join(copiedRoot, path), "utf8"),
+        ]),
+      ),
+      retained,
+    );
+    assert.deepEqual(
+      local.filter((path) => existsSync(join(copiedRoot, path))),
+      [],
+    );
+  } finally {
+    if (fixture !== undefined)
+      rmSync(dirname(fixture), { recursive: true, force: true });
+    rmSync(source, { recursive: true, force: true });
+  }
+});
+
 describe("checkDrift: installer round-trip fixture", () => {
   let root: string;
   before(() => {
     assert.ok(
       existsSync(join(PROJECT_ROOT, "node_modules")),
-      "node_modules must exist for temp-repo preflight coverage",
+      "node_modules must exist for the temp-repo CLI runs",
     );
     assert.ok(
       existsSync(join(PROJECT_ROOT, "dist", "cli", "cli.js")),
@@ -200,28 +165,10 @@ describe("checkDrift: installer round-trip fixture", () => {
   });
 
   it(
-    "installs fixture-backed references, passes preflight, and reports zero drift",
-    { timeout: 400000 },
-    async () => {
+    "installs fixture-backed references, proves the hooks, and reports zero drift",
+    { timeout: ROUND_TRIP_TIMEOUT_MS },
+    (testContext) => {
       const { agentIds, skillRoots } = patchInstallRoundTripFixture(root);
-      const format = runCommand(
-        root,
-        "npx",
-        [
-          "prettier",
-          "--write",
-          "workflow/manifest.json",
-          "src/cli/constants.ts",
-          "package.json",
-        ],
-        60000,
-      );
-      assert.equal(
-        format.status,
-        0,
-        `prettier should format temp round-trip files:\n${format.output}`,
-      );
-
       // A user can install several agents before asking one audit to assess shared coverage.
       for (const agentId of agentIds) {
         const install = runCommand(
@@ -260,10 +207,15 @@ describe("checkDrift: installer round-trip fixture", () => {
 
       // Explicit offline scenarios provide the runtime evidence a normal audit never executes.
       for (const requiredHookProof of REQUIRED_EFFECTIVE_HOOK_PROOFS) {
+        const traceArgs =
+          process.platform === "win32" && requiredHookProof.agentId === "codex"
+            ? ["--import", CODEX_PROBE_TRACE]
+            : [];
         const hookProof = runCommand(
           root,
           "node",
           [
+            ...traceArgs,
             "dist/cli/cli.js",
             "hooks",
             "verify",
@@ -274,51 +226,26 @@ describe("checkDrift: installer round-trip fixture", () => {
             requiredHookProof.scenario,
             "--trusted-target",
           ],
-          60000,
+          hookProofTimeoutMs(requiredHookProof),
         );
+        if (traceArgs.length > 0) {
+          for (const line of hookProof.stderr
+            .split("\n")
+            .filter((line) => line.startsWith("m19-codex-probe "))) {
+            testContext.diagnostic(
+              requiredHookProof.agentId +
+                "/" +
+                requiredHookProof.scenario +
+                " " +
+                line,
+            );
+          }
+        }
         assert.equal(
           hookProof.status,
           0,
           `${requiredHookProof.agentId}/${requiredHookProof.scenario} proof should pass:\n${hookProof.output}`,
         );
-      }
-
-      const inheritedRegistry = process.env.npm_config_registry;
-      const auditRegistry = await startLocalAuditRegistry();
-      try {
-        const preflight = runCommand(
-          root,
-          "bash",
-          ["scripts/preflight-checks.sh", "--verbose", "--no-color"],
-          400000,
-          { npm_config_registry: auditRegistry.registryUrl },
-        );
-        assert.equal(
-          preflight.status,
-          0,
-          `preflight should pass in temp round-trip repo:\n${preflight.output}`,
-        );
-        assert.match(
-          preflight.output,
-          /^\s*PASS(?: \(with warnings\))?\s+\d+\s+checks/m,
-        );
-        assert.match(
-          preflight.output,
-          /All installed skill files match workflow templates/,
-        );
-        assert.match(preflight.output, /npm audit \(0 vulnerabilities\)/);
-
-        const auditRequest = await waitForAuditRequest(auditRegistry);
-        assert.equal(auditRequest.method, "POST");
-        assert.equal(auditRequest.path, "/-/npm/v1/security/advisories/bulk");
-        assert.ok(
-          auditRequest.bytes > 0,
-          "npm audit should send a package tree",
-        );
-        assert.equal(auditRegistry.requests.length, 1);
-        assert.equal(process.env.npm_config_registry, inheritedRegistry);
-      } finally {
-        await stopLocalAuditRegistry(auditRegistry);
       }
 
       const drift = runCommand(

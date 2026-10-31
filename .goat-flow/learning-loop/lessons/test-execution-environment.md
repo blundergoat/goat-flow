@@ -1,9 +1,42 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-09-28
+last_reviewed: 2026-10-25
 ---
 
 **Scope:** Choosing and invoking the right runner - which binary and loader actually execute, why a file argument may not narrow the suite, and when proof needs the published invocation path rather than source mode. Shell and process behaviour is [test-shell-environment.md](test-shell-environment.md).
+
+## Lesson: Matching missing fingerprints do not prove the test source matched
+
+**Status:** active | **Created:** 2026-10-25 | **Evidence:** OBSERVED
+**Decision changed:** Require non-null execution fingerprints before comparing them or crediting a test run to a reviewed workspace.
+**Trigger phase:** VERIFY
+
+**Prevention:** Check that each required identity exists before testing equality. When capture fails, retain the tool's reason and the direct process result separately; two missing identities cannot establish a source match.
+
+**What happened:** During M22's review, the five-file snapshot succeeded but full execution-source capture reported that live review paths could not enter nested repositories. Both workspace fingerprints were `null`. The collector compared them as equal and incorrectly reported a match. Both Node suites passed, but the review validator refused to credit those runs to an unavailable workspace identity. The corrected receipt preserves the direct test results and marks their review gate binding unavailable.
+
+**Evidence:** `src/cli/review-validate.ts` (search: `function attemptMatches`) requires `snapshot.workspace !== null` before crediting an execution; `src/cli/review-validate-anchors.ts` (search: `live review paths cannot enter nested repositories`) owns the reported capture refusal.
+
+---
+
+## Lesson: Bind automated test totals to an explicit reporter
+
+**Status:** active | **Created:** 2026-10-25 | **Evidence:** OBSERVED
+**Decision changed:** Select an explicit machine-readable reporter for ad-hoc Node test commands, or parse the reporter actually emitted before deciding whether collection succeeded.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-10-25
+
+**Prevention:** Keep the test process exit code separate from result-collection status. Check the complete reporter footer for pass, fail, cancelled and skipped totals. When a retained log uses another format, extract its real footer rather than rerunning passing tests solely to change formatting. Classify each skipped case against the promised coverage before treating a nonzero skip total as missing platform proof.
+
+**What happened:** M19's WSL Node 24.21.0 installer run exited zero with 296 passes, zero failures and zero skips. The temporary collector accepted only TAP summary lines beginning with `#`; Node emitted a spec footer beginning with `ℹ`. Collection stopped even though the tests passed. Reading the retained footer recovered the evidence, and the remaining package check continued.
+
+**Evidence:** `.github/workflows/ci.yml` (search: `Installer lifecycle and safety suites`) runs the direct command without fixing a reporter; `scripts/run-tests.mjs` (search: `--test-reporter=tap`) explicitly selects TAP for the repository runner.
+
+**Recurrence 2026-10-25:** M22's temporary log audit initially required zero scanner skips on every host. Both macOS cells passed but skipped the non-UTF-8 filename fixture because the filesystem returned `EILSEQ`. The audit stopped on its own assertion, not a failed test. Inspecting `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `nonUtf8NameTestOptions`) distinguished that filesystem limit from the nine promised provider/event combinations; the three Windows-only replay skips were classified separately.
+
+---
 
 ## Lesson: An ad-hoc `node --test` run can execute stale checkout copies under `.goat-flow/scratchpad/`
 
@@ -112,7 +145,7 @@ last_reviewed: 2026-09-28
 
 **Root cause:** I treated an archive extraction as equivalent to a fresh clone. In this repo, deny-hook and audit tests intentionally rely on git-root discovery, so an archive is a different execution environment.
 
-**Recurrence 2026-06-04:** While I was fixing PR #47 CI, a clean temporary worktree with symlinked `node_modules` and `dist` produced a false installer round-trip `Skill Template Drift` failure. Re-running the same patch from a clean worktree with real `npm ci` and `npm run build` passed. For installer round-trip proof, symlink shortcuts are not CI-equivalent because the fixture copies the source tree before preflight rebuilds it. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `cpSync(PROJECT_ROOT, root`), `package.json` (search: `rmSync('dist'`).
+**Recurrence 2026-06-04:** While I was fixing PR #47 CI, a clean temporary worktree with symlinked `node_modules` and `dist` produced a false installer round-trip `Skill Template Drift` failure. Re-running the same patch from a clean worktree with real `npm ci` and `npm run build` passed. For installer round-trip proof, symlink shortcuts are not CI-equivalent because the fixture copies the source tree before preflight rebuilds it. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `setupInstallRoundTripFixture`), `package.json` (search: `rmSync('dist'`).
 
 ---
 
@@ -164,3 +197,15 @@ last_reviewed: 2026-09-28
 **Recurrence 2026-09-28:** Hook-input diagnostics used name filters that selected zero tests. Their successful exit was discarded as evidence; the unfiltered owning suites supplied the proof. Check both the selected test names and nonzero executed count before accepting a focused run. Evidence: `test/integration/deny-dangerous-operands.test.ts` (search: `classify`) and `test/helpers/check-installed-policy.ts` (search: `runHookWithPayload`).
 
 **Recurrence 2026-10-04:** A filter built from an assertion message matched no test, yet the run printed `# tests 1` and `# pass 1` for the file itself and was first counted as a pass. A nonzero count is not proof: require the named subtest line. The rerun under the real test title passed. Evidence: `test/integration/setup-install.test.ts` (search: `in-project ssh rule preserved`).
+
+---
+
+## Lesson: Per-file durations from a concurrent test run are not wall-time savings
+
+**Status:** active | **Created:** 2026-10-13 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Before promising a CI time saving, time the candidate files alone and scale by the suite's measured parallelism; never subtract a file's concurrent-run duration from the job's wall time.
+**Trigger phase:** SCOPE
+
+**Prevention:** The fast suite runs up to sixteen files at once, bounded by the available CPUs (`scripts/run-tests.mjs`, search: `testConcurrencyForMode`), so each file's TAP `duration_ms` includes time spent waiting for a CPU. Rank files by those durations if useful, but estimate a saving from the file's share of total suite time multiplied by the job's wall time, or from a sequential local run of the same file.
+
+**What happened:** A test-suite review summed CI `duration_ms` values for the plan-checker files to 437 seconds and reported "about 390 seconds off the fast suite". The whole `test-fast` job ran tests for 4 minutes 23 seconds. Running the same files alone on Node 20.11.0 took about 46 seconds; the plan checker is about a quarter of fast-suite work, so the realistic saving is about a minute. Process-spawning files inflate most under contention, about 9.5 times here. The corrected figure was recorded before any test changed.

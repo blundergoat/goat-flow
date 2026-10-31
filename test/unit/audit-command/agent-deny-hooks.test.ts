@@ -7,14 +7,14 @@
 import {
   agentHookSpawnDescriptor,
   buildAgentHookCommand,
+  buildAgentHookDescriptor,
   commandEntryReferencesSpec,
 } from "../../../src/cli/server/agent-hook-command.js";
-import { getHookSpec } from "../../../src/cli/server/hooks-registry.js";
-import { checkHookRuntimeSmoke } from "../../../src/cli/audit/check-agent-deny-runtime.js";
 import {
-  discoverWindowsBashCandidates,
-  pickWindowsBashPath,
-} from "../../../src/cli/install-invocation.js";
+  getHookSpec,
+  listHookSpecs,
+} from "../../../src/cli/server/hooks-registry.js";
+import { checkHookRuntimeSmoke } from "../../../src/cli/audit/check-agent-deny-runtime.js";
 import {
   AGENT_CHECKS,
   PROFILES,
@@ -30,6 +30,7 @@ import {
 } from "./helpers.js";
 import { afterEach } from "node:test";
 import { createRequire, syncBuiltinESMExports } from "node:module";
+import type { SpawnSyncOptions } from "node:child_process";
 
 const require = createRequire(import.meta.url);
 const childProcess =
@@ -53,13 +54,13 @@ afterEach(() => {
   syncBuiltinESMExports();
 });
 
-/** Build the EPERM error shape Node returns when spawnSync cannot launch bash. */
+/** Build the EPERM error shape Node returns when spawnSync cannot launch Node. */
 function spawnEperm(): NodeJS.ErrnoException {
-  const error = new Error("spawnSync bash EPERM") as NodeJS.ErrnoException;
+  const error = new Error("spawnSync node EPERM") as NodeJS.ErrnoException;
   error.code = "EPERM";
   error.errno = -1;
-  error.syscall = "spawnSync bash";
-  error.path = "bash";
+  error.syscall = "spawnSync node";
+  error.path = process.execPath;
   return error;
 }
 
@@ -91,6 +92,15 @@ function codexRuntimeProbeResult(
     stdout: "",
     stderr: isSafeUserCommand ? "" : blockedPolicyMessage,
   } as ReturnType<typeof childProcess.spawnSync>;
+}
+
+/** Read the stdin actually supplied to a mock, including finite PowerShell input on Windows. */
+function readHookProbeInput(options: SpawnSyncOptions): string {
+  if (typeof options.input === "string") return options.input;
+  const descriptor = Array.isArray(options.stdio)
+    ? options.stdio[0]
+    : undefined;
+  return typeof descriptor === "number" ? readFileSync(descriptor, "utf8") : "";
 }
 
 /**
@@ -130,18 +140,14 @@ function withGitRegistration(
     return content;
   const spec = getHookSpec("deny-git-mutations");
   assert.ok(spec);
+  const { form, ...handler } = buildAgentHookDescriptor(
+    path.startsWith(".codex") ? "codex" : "claude",
+    ".goat-flow/hooks",
+    spec,
+  );
   config.hooks.PreToolUse.push({
     matcher: "Bash",
-    hooks: [
-      {
-        type: "command",
-        command: buildAgentHookCommand(
-          path.startsWith(".codex") ? "codex" : "claude",
-          ".goat-flow/hooks",
-          spec,
-        ),
-      },
-    ],
+    hooks: [{ type: form === "argv" ? "exec" : "command", ...handler }],
   });
   return JSON.stringify(config);
 }
@@ -154,43 +160,40 @@ describe("agent deny hook template comparison", () => {
   function guardrailTemplates() {
     return {
       git: readFileSync(
-        resolve(PROJECT_ROOT, "workflow/hooks/deny-git-mutations.sh"),
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-git-mutations.mjs"),
         "utf-8",
       ),
       runtime: readFileSync(
-        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/guard-runtime.sh"),
+        resolve(PROJECT_ROOT, "workflow/hooks/policy-evaluation.mjs"),
         "utf-8",
       ),
       dispatcher: readFileSync(
-        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.mjs"),
         "utf-8",
       ),
       shell: readFileSync(
         resolve(
           PROJECT_ROOT,
-          "workflow/hooks/deny-dangerous/patterns-shell.sh",
+          "workflow/hooks/deny-dangerous/patterns-shell.mjs",
         ),
         "utf-8",
       ),
       paths: readFileSync(
         resolve(
           PROJECT_ROOT,
-          "workflow/hooks/deny-dangerous/patterns-paths.sh",
+          "workflow/hooks/deny-dangerous/patterns-paths.mjs",
         ),
         "utf-8",
       ),
       writes: readFileSync(
         resolve(
           PROJECT_ROOT,
-          "workflow/hooks/deny-dangerous/patterns-writes.sh",
+          "workflow/hooks/deny-dangerous/patterns-writes.mjs",
         ),
         "utf-8",
       ),
       selfTest: readFileSync(
-        resolve(
-          PROJECT_ROOT,
-          "workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
-        ),
+        resolve(PROJECT_ROOT, "workflow/hooks/policy-corpus.mjs"),
         "utf-8",
       ),
     };
@@ -202,15 +205,47 @@ describe("agent deny hook template comparison", () => {
     overrides: Record<string, string | null> = {},
   ) {
     const files: Record<string, string> = {
-      [".goat-flow/hooks/deny-dangerous.sh"]: templates.dispatcher,
-      ".goat-flow/hooks/deny-git-mutations.sh": templates.git,
-      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": templates.runtime,
-      ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
-      ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
-      ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
-      ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh":
-        templates.selfTest,
+      [".goat-flow/hooks/deny-dangerous.mjs"]: templates.dispatcher,
+      ".goat-flow/hooks/deny-git-mutations.mjs": templates.git,
+      ".goat-flow/hooks/policy-evaluation.mjs": templates.runtime,
+      ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs": templates.shell,
+      ".goat-flow/hooks/deny-dangerous/patterns-paths.mjs": templates.paths,
+      ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs": templates.writes,
+      ".goat-flow/hooks/policy-corpus.mjs": templates.selfTest,
     };
+    for (const file of new Set(
+      listHookSpecs().flatMap((spec) => spec.scriptFiles),
+    )) {
+      files[`.goat-flow/hooks/${file}`] ??= readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks", file),
+        "utf8",
+      );
+    }
+    for (const [configPath, agentId] of [
+      [".codex/hooks.json", "codex"],
+      [".claude/settings.json", "claude"],
+    ] as const) {
+      files[configPath] = JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: ["deny-dangerous", "deny-git-mutations"].map((id) => {
+                const { form, ...handler } = buildAgentHookDescriptor(
+                  agentId,
+                  ".goat-flow/hooks",
+                  getHookSpec(id)!,
+                );
+                return {
+                  type: form === "argv" ? "exec" : "command",
+                  ...handler,
+                };
+              }),
+            },
+          ],
+        },
+      });
+    }
     /** Resolve installed hook content from overrides before template defaults. */
     const readInstalledGuardrail = (path: string) => {
       if (Object.hasOwn(overrides, path))
@@ -228,14 +263,13 @@ describe("agent deny hook template comparison", () => {
   it("keeps the installed deny-hook mirrors byte-identical to their workflow templates", () => {
     const templates = guardrailTemplates();
     const mirrorsByTemplate: Record<string, string> = {
-      ".goat-flow/hooks/deny-dangerous.sh": templates.dispatcher,
-      ".goat-flow/hooks/deny-git-mutations.sh": templates.git,
-      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": templates.runtime,
-      ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
-      ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
-      ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
-      ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh":
-        templates.selfTest,
+      ".goat-flow/hooks/deny-dangerous.mjs": templates.dispatcher,
+      ".goat-flow/hooks/deny-git-mutations.mjs": templates.git,
+      ".goat-flow/hooks/policy-evaluation.mjs": templates.runtime,
+      ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs": templates.shell,
+      ".goat-flow/hooks/deny-dangerous/patterns-paths.mjs": templates.paths,
+      ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs": templates.writes,
+      ".goat-flow/hooks/policy-corpus.mjs": templates.selfTest,
     };
     const driftedMirrors = Object.entries(mirrorsByTemplate)
       .filter(
@@ -270,7 +304,7 @@ describe("agent deny hook template comparison", () => {
     // Replay the provider's current-platform registration, including its Windows override.
     const registeredCodexHook = registeredHookConfig.hooks.PreToolUse.flatMap(
       (registration) => registration.hooks,
-    ).find((handler) => handler.command.includes("deny-git-mutations.sh"));
+    ).find((handler) => handler.command.includes("deny-git-mutations.mjs"));
     assert.ok(registeredCodexHook, "expected the registered Codex Git policy");
     const registeredCodexHookCommand = agentHookSpawnDescriptor({
       form: "shell",
@@ -383,7 +417,8 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
+            gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
             readDenyCoversSecrets: false,
           },
         }),
@@ -391,63 +426,49 @@ describe("agent deny hook template comparison", () => {
       fs: stubFS({
         readFile: installedGuardrailContent(templates),
         listDir: (path) =>
-          path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
+          path === PROFILES.codex.hooksDir ? ["deny-dangerous.mjs"] : [],
       }),
     });
 
     const result = denyCheck.run(ctx);
     assert.ok(result, "expected child-process spawn failure");
-    assert.match(result.message, /could not spawn bash \(EPERM:/);
-    assert.doesNotMatch(result.message, /bash -n failed/);
+    assert.match(result.message, /could not spawn node \(EPERM:/);
+    assert.doesNotMatch(result.message, /node --check failed/);
     assert.match(
       result.howToFix ?? "",
       /outside the child-process-restricted sandbox/,
     );
   });
 
-  it(
-    "selects native Windows Bash for syntax checks even when WSL is first",
-    {
-      skip: process.platform !== "win32",
-    },
-    () => {
-      assert.ok(denyCheck);
-      const nativeBash = "C:\\Program Files\\Git\\bin\\bash.exe";
-      const syntaxCommands: string[] = [];
-      childProcess.execFileSync = ((command, args) => {
-        if (String(command).toLowerCase().endsWith("where.exe")) {
-          return args?.[0] === "bash"
-            ? `C:\\Windows\\System32\\bash.exe\n${nativeBash}\n`
-            : "";
-        }
-        if (args?.[0] === "-n") syntaxCommands.push(String(command));
-        return Buffer.from("");
-      }) as typeof childProcess.execFileSync;
-      syncBuiltinESMExports();
-
-      denyCheck.run(
-        makeAuditContext({
-          agentFilter: "codex",
-          denyMechanismEvidenceLevel: "static",
-          projectPath: PROJECT_ROOT,
-          agents: [stubAgentFacts({ agent: PROFILES.codex })],
-          fs: stubFS({
-            readFile: installedGuardrailContent(guardrailTemplates()),
-            listDir: (path) =>
-              path === PROFILES.codex.hooksDir ? ["deny-dangerous.sh"] : [],
-          }),
+  it("uses the current Node executable for native syntax checks", () => {
+    const syntaxCommands: string[] = [];
+    childProcess.execFileSync = ((command, args) => {
+      if (args?.[0] === "--check") syntaxCommands.push(String(command));
+      return Buffer.from("");
+    }) as typeof childProcess.execFileSync;
+    syncBuiltinESMExports();
+    assert.ok(denyCheck);
+    denyCheck.run(
+      makeAuditContext({
+        agentFilter: "codex",
+        projectPath: PROJECT_ROOT,
+        agents: [stubAgentFacts({ agent: PROFILES.codex })],
+        fs: stubFS({
+          readFile: installedGuardrailContent(guardrailTemplates()),
+          listDir: (path) =>
+            path === PROFILES.codex.hooksDir ? ["deny-dangerous.mjs"] : [],
         }),
-      );
-      assert.deepEqual(syntaxCommands, [nativeBash]);
-    },
-  );
+      }),
+    );
+    assert.deepEqual(syntaxCommands, [process.execPath]);
+  });
 
-  for (const status of [2, 127]) {
-    it(`distinguishes Bash parse errors from file access failures (exit ${status})`, () => {
+  for (const status of [1]) {
+    it(`reports native JavaScript parse errors (exit ${status})`, () => {
       assert.ok(denyCheck);
       childProcess.execFileSync = ((_command, args) => {
-        if (args?.[0] === "-n")
-          throw Object.assign(new Error("bash failed"), { status });
+        if (args?.[0] === "--check")
+          throw Object.assign(new Error("node failed"), { status });
         return Buffer.from("");
       }) as typeof childProcess.execFileSync;
       syncBuiltinESMExports();
@@ -459,19 +480,13 @@ describe("agent deny hook template comparison", () => {
           agents: [stubAgentFacts({ agent: PROFILES.codex })],
           fs: stubFS({
             listDir: (path) =>
-              path === PROFILES.codex.hooksDir ? ["deny-dangerous.sh"] : [],
+              path === PROFILES.codex.hooksDir ? ["deny-dangerous.mjs"] : [],
           }),
         }),
       );
       assert.ok(result);
-      assert.match(
-        result.message,
-        status === 2 ? /bash -n failed/ : /could not inspect/,
-      );
-      assert.match(
-        result.howToFix ?? "",
-        status === 2 ? /syntax errors/ : /path is readable/,
-      );
+      assert.match(result.message, /node --check failed/);
+      assert.match(result.howToFix ?? "", /syntax errors/);
     });
   }
 
@@ -479,7 +494,7 @@ describe("agent deny hook template comparison", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
     childProcess.execFileSync = ((command, args) => {
-      if (Array.isArray(args) && args[0] === "-n") return Buffer.from("");
+      if (Array.isArray(args) && args[0] === "--check") return Buffer.from("");
       throw spawnEperm();
     }) as typeof childProcess.execFileSync;
     syncBuiltinESMExports();
@@ -498,7 +513,8 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
+            gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
             readDenyCoversSecrets: false,
           },
         }),
@@ -506,7 +522,7 @@ describe("agent deny hook template comparison", () => {
       fs: stubFS({
         readFile: installedGuardrailContent(templates),
         listDir: (path) =>
-          path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
+          path === PROFILES.codex.hooksDir ? ["deny-dangerous.mjs"] : [],
       }),
     });
 
@@ -514,55 +530,37 @@ describe("agent deny hook template comparison", () => {
     assert.ok(result, "expected self-test spawn failure");
     assert.match(
       result.message,
-      /deny-dangerous self-test for codex could not spawn bash \(EPERM:/,
+      /deny-dangerous self-test for codex could not spawn node \(EPERM:/,
     );
     assert.doesNotMatch(result.message, /self-test=smoke failed/);
   });
 
-  it("runs self-test with the selected agent dispatcher in GOAT_DENY_DANGEROUS_HOOK", () => {
+  it("runs each installed dispatcher self-test with Node", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    const capturedDispatchers: string[] = [];
     const capturedCommands: string[] = [];
     const capturedScripts: string[] = [];
     const capturedTimeouts: number[] = [];
-    const nativeBash = "C:\\Program Files\\Git\\bin\\bash.exe";
     childProcess.execFileSync = ((command, args, options) => {
-      if (String(command).toLowerCase().endsWith("where.exe")) {
-        return args?.[0] === "bash"
-          ? `C:\\Windows\\System32\\bash.exe\n${nativeBash}\n`
-          : "";
-      }
-      if (Array.isArray(args) && args[0] === "-n") {
+      if (Array.isArray(args) && args[0] === "--check") {
         return Buffer.from("");
       }
       if (Array.isArray(args) && args[1] === "--self-test=smoke") {
         capturedTimeouts.push((options as { timeout: number }).timeout);
         capturedCommands.push(String(command));
         capturedScripts.push(String(args[0]));
-        const environment = (options as { env?: NodeJS.ProcessEnv }).env;
-        if (environment?.GOAT_DENY_DANGEROUS_HOOK)
-          capturedDispatchers.push(environment.GOAT_DENY_DANGEROUS_HOOK);
         return Buffer.from("");
       }
       return Buffer.from("");
     }) as typeof childProcess.execFileSync;
-    childProcess.spawnSync = (() =>
-      ({
-        status: 2,
-        signal: null,
-        error: undefined,
-        output: [
-          null,
-          "",
-          "BLOCKED: Policy repository: git push is not allowed.",
-        ],
-        pid: 0,
-        stdout: "",
-        stderr: "BLOCKED: Policy repository: git push is not allowed.",
-      }) as ReturnType<
-        typeof childProcess.spawnSync
-      >) as typeof childProcess.spawnSync;
+    childProcess.spawnSync = ((
+      _command: string,
+      _args: readonly string[],
+      options: SpawnSyncOptions,
+    ) =>
+      codexRuntimeProbeResult(
+        readHookProbeInput(options),
+      )) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();
 
     const ctx = makeCtx({
@@ -579,7 +577,8 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
+            gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
             readDenyCoversSecrets: false,
           },
         }),
@@ -587,30 +586,17 @@ describe("agent deny hook template comparison", () => {
       fs: stubFS({
         readFile: installedGuardrailContent(templates),
         listDir: (path) =>
-          path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
+          path === PROFILES.codex.hooksDir ? ["deny-dangerous.mjs"] : [],
       }),
     });
 
     assert.equal(denyCheck.run(ctx), null);
-    const expectedBash = process.platform === "win32" ? nativeBash : "bash";
-    assert.deepEqual(capturedCommands, [expectedBash, expectedBash]);
+    assert.deepEqual(capturedCommands, [process.execPath, process.execPath]);
     const expectedTimeout = process.platform === "win32" ? 120_000 : 30_000;
     assert.deepEqual(capturedTimeouts, [expectedTimeout, expectedTimeout]);
-    // Windows self-test paths must be readable by native Bash, including UNC checkout roots.
-    const shellPath = (path: string) =>
-      process.platform === "win32" ? path.replaceAll("\\", "/") : path;
-    const selfTestPath = shellPath(
-      resolve(
-        PROJECT_ROOT,
-        ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
-      ),
-    );
-    assert.deepEqual(capturedScripts, [selfTestPath, selfTestPath]);
-    assert.deepEqual(capturedDispatchers, [
-      shellPath(resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-dangerous.sh")),
-      shellPath(
-        resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-git-mutations.sh"),
-      ),
+    assert.deepEqual(capturedScripts, [
+      resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-dangerous.mjs"),
+      resolve(PROJECT_ROOT, ".goat-flow/hooks/deny-git-mutations.mjs"),
     ]);
   });
 
@@ -647,7 +633,8 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
+            gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
             readDenyCoversSecrets: false,
           },
         }),
@@ -662,7 +649,11 @@ describe("agent deny hook template comparison", () => {
                   hooks: [
                     {
                       type: "command",
-                      command: ".goat-flow/hooks/deny-dangerous.sh",
+                      command: buildAgentHookCommand(
+                        "codex",
+                        ".goat-flow/hooks",
+                        getHookSpec("deny-dangerous")!,
+                      ),
                     },
                   ],
                 },
@@ -671,7 +662,7 @@ describe("agent deny hook template comparison", () => {
           }),
         }),
         listDir: (path) =>
-          path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
+          path === PROFILES.codex.hooksDir ? ["deny-dangerous.mjs"] : [],
       }),
     });
 
@@ -679,7 +670,7 @@ describe("agent deny hook template comparison", () => {
     assert.ok(result, "expected configured-command spawn failure");
     assert.match(
       result.message,
-      /configured hook command for deny-dangerous\.sh could not spawn bash \(EPERM:/,
+      /configured hook command for deny-dangerous\.mjs could not spawn node \(EPERM:/,
     );
     assert.doesNotMatch(result.message, /exit -1/);
   });
@@ -693,10 +684,10 @@ describe("agent deny hook template comparison", () => {
     childProcess.spawnSync = ((
       _command: string,
       _args: readonly string[],
-      options: { env?: NodeJS.ProcessEnv },
+      options: SpawnSyncOptions,
     ) => {
       // A missing payload means no user command reached the mock and cannot prove policy.
-      const hookInput = options.env?.GOAT_HOOK_SMOKE_PAYLOAD ?? "";
+      const hookInput = readHookProbeInput(options);
       return codexRuntimeProbeResult(hookInput, spawnEperm());
     }) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();
@@ -715,7 +706,8 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
+            gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
             readDenyCoversSecrets: false,
           },
         }),
@@ -730,7 +722,11 @@ describe("agent deny hook template comparison", () => {
                   hooks: [
                     {
                       type: "command",
-                      command: ".goat-flow/hooks/deny-dangerous.sh",
+                      command: buildAgentHookCommand(
+                        "codex",
+                        ".goat-flow/hooks",
+                        getHookSpec("deny-dangerous")!,
+                      ),
                     },
                   ],
                 },
@@ -739,7 +735,7 @@ describe("agent deny hook template comparison", () => {
           }),
         }),
         listDir: (path) =>
-          path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
+          path === PROFILES.codex.hooksDir ? ["deny-dangerous.mjs"] : [],
       }),
     });
 
@@ -756,20 +752,20 @@ describe("agent deny hook template comparison", () => {
     childProcess.spawnSync = ((
       _command: string,
       args: readonly string[],
-      options: { env?: NodeJS.ProcessEnv; input?: string },
+      options: SpawnSyncOptions,
     ) => {
-      // A direct script replay belongs to the later agent and must remain a separate result.
-      if (args.length === 1 && args[0]?.endsWith("deny-dangerous.sh")) {
+      const hookInput = readHookProbeInput(options);
+      // The later provider must still be replayed after the first provider succeeds.
+      if (args.includes(".claude/settings.json")) {
         assert.ok(
-          options.input,
-          "direct replay must receive its provider payload on stdin",
+          hookInput,
+          "later provider replay must receive its payload on stdin",
         );
         directRuntimeProbeCalls += 1;
         return completedDirectHookProbe();
       }
       configuredRuntimeProbeCalls += 1;
       // A missing payload means no user command reached the configured launcher.
-      const hookInput = options.env?.GOAT_HOOK_SMOKE_PAYLOAD ?? "";
       return codexRuntimeProbeResult(hookInput);
     }) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();
@@ -783,7 +779,11 @@ describe("agent deny hook template comparison", () => {
               hooks: [
                 {
                   type: "command",
-                  command: ".goat-flow/hooks/deny-dangerous.sh",
+                  command: buildAgentHookCommand(
+                    "codex",
+                    ".goat-flow/hooks",
+                    getHookSpec("deny-dangerous")!,
+                  ),
                 },
               ],
             },
@@ -791,60 +791,6 @@ describe("agent deny hook template comparison", () => {
         },
       }),
     });
-    const ctx = makeCtx({
-      agentFilter: "codex",
-      agents: [
-        stubAgentFacts({
-          agent: PROFILES.codex,
-          settings: {
-            exists: true,
-            valid: true,
-            parsed: {},
-            hasDenyPatterns: false,
-          },
-          hooks: {
-            ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
-            readDenyCoversSecrets: false,
-          },
-        }),
-        stubAgentFacts({
-          agent: PROFILES.claude,
-          hooks: {
-            ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
-          },
-        }),
-      ],
-      fs: stubFS({
-        readFile,
-        listDir: (path) =>
-          path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
-      }),
-    });
-
-    const auditResult = denyCheck.run(ctx);
-    assert.ok(auditResult, "expected later-agent direct runtime failure");
-    assert.match(
-      auditResult.message,
-      /registered deny hook runtime check failed for claude/,
-    );
-    // Dangerous policy has three block probes and one allow; Git has two block probes and one allow.
-    assert.equal(configuredRuntimeProbeCalls, 7);
-    assert.equal(directRuntimeProbeCalls, 1);
-  });
-
-  it("fails when a direct configured command is replayed from nested cwd", () => {
-    assert.ok(denyCheck, "agent deny check should exist");
-    const templates = guardrailTemplates();
-    const nativeBash =
-      process.platform === "win32"
-        ? pickWindowsBashPath(discoverWindowsBashCandidates())
-        : null;
-    // Preserve the same relative-script failure on Windows without accidentally testing the WSL launcher.
-    const commandWindows = nativeBash
-      ? `& '${nativeBash.replaceAll("'", "''")}' '.goat-flow/hooks/deny-dangerous.sh'; exit $LASTEXITCODE`
-      : undefined;
     const ctx = makeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
@@ -859,7 +805,54 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
+            gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
+            readDenyCoversSecrets: false,
+          },
+        }),
+        stubAgentFacts({
+          agent: PROFILES.claude,
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
+            gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
+          },
+        }),
+      ],
+      fs: stubFS({
+        readFile,
+        listDir: (path) =>
+          path === PROFILES.codex.hooksDir ? ["deny-dangerous.mjs"] : [],
+      }),
+    });
+
+    const auditResult = denyCheck.run(ctx);
+    assert.ok(auditResult, "expected later-agent direct runtime failure");
+    assert.match(auditResult.message, /configured hook command/);
+    assert.equal(auditResult.evidence, ".claude/settings.json");
+    assert.ok(configuredRuntimeProbeCalls > 0, "first provider was replayed");
+    assert.ok(directRuntimeProbeCalls > 0, "later provider was replayed");
+  });
+
+  it("fails when a direct configured command is replayed from nested cwd", () => {
+    assert.ok(denyCheck, "agent deny check should exist");
+    const templates = guardrailTemplates();
+    const ctx = makeCtx({
+      agentFilter: "codex",
+      projectPath: PROJECT_ROOT,
+      agents: [
+        stubAgentFacts({
+          agent: PROFILES.codex,
+          settings: {
+            exists: true,
+            valid: true,
+            parsed: {},
+            hasDenyPatterns: false,
+          },
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
+            gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
             readDenyCoversSecrets: false,
           },
         }),
@@ -874,8 +867,7 @@ describe("agent deny hook template comparison", () => {
                   hooks: [
                     {
                       type: "command",
-                      command: ".goat-flow/hooks/deny-dangerous.sh",
-                      commandWindows,
+                      command: "node .goat-flow/hooks/deny-dangerous.mjs",
                     },
                   ],
                 },
@@ -884,7 +876,7 @@ describe("agent deny hook template comparison", () => {
           }),
         }),
         listDir: (path) =>
-          path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
+          path === PROFILES.codex.hooksDir ? ["deny-dangerous.mjs"] : [],
       }),
     });
 
@@ -892,7 +884,7 @@ describe("agent deny hook template comparison", () => {
     assert.ok(result, "expected nested-cwd configured command failure");
     assert.match(
       result.message,
-      /configured hook command exited before deny-dangerous\.sh could start from \.goat-flow \(exit 127\)/,
+      /configured hook command.*expected allow response.*from \.goat-flow/,
     );
     assert.equal(result.evidence, ".codex/hooks.json");
   });
@@ -914,7 +906,8 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
+            gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
             readDenyCoversSecrets: false,
           },
         }),
@@ -930,7 +923,7 @@ describe("agent deny hook template comparison", () => {
                     {
                       type: "command",
                       command:
-                        "bash -lc 'exit 127' # .goat-flow/hooks/deny-dangerous.sh",
+                        "bash -lc 'exit 127' # .goat-flow/hooks/deny-dangerous.mjs",
                     },
                   ],
                 },

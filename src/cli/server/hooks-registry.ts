@@ -10,7 +10,10 @@ import type { AgentId } from "../types.js";
 import {
   HOOK_RESULT_SCHEMA,
   type HookEffectiveState,
+  type HookProviderHostEvidence,
 } from "../hook-contracts.js";
+
+import { HOOK_PROVIDER_HOST_EVIDENCE } from "../hook-provider-captures.js";
 
 type HookEvent = "PreToolUse" | "PostToolUse" | "Stop";
 
@@ -27,7 +30,7 @@ export interface HookDeliveryContract {
 }
 
 /**
- * Names deterministic adapter evidence and one host's first unmet support gate.
+ * Names adapter evidence, reviewed host captures and the existing support gate.
  *
  * Use when UI and audit surfaces explain why delivery is not yet verified.
  * Invariant: fixture identity never upgrades itself into live provider proof.
@@ -35,6 +38,8 @@ export interface HookDeliveryContract {
 export interface HookProviderRegistryEvidence {
   identity: string;
   effectiveSupportGate: HookEffectiveState["status"];
+  /** Historical observations for this provider/event; these never select or advance the gate. */
+  hostCaptures?: readonly HookProviderHostEvidence[];
 }
 
 /**
@@ -88,17 +93,41 @@ const CODEX_POST_TURN_DELIVERY_CONTRACT: HookDeliveryContract = {
   launcherDeadlineMs: 75_000, // Ceiling: leaves Codex fifteen seconds to render Stop feedback.
 };
 
-// Both entrypoints load this complete target-local policy store.
-const POLICY_RUNTIME_FILES = [
+// Every native hook uses this launcher and provider-response boundary.
+const NATIVE_LAUNCH_RUNTIME_FILES = [
+  "run-hook.mjs",
+  "hook-launch.mjs",
+  "hook-output.mjs",
+  "hook-supervisor.mjs",
+  "process-tree.mjs",
+  "hook-launch-runtime.mjs",
+  "hook-provider-adapters.mjs",
   "hook-policy-state.cjs",
   "vendor/js-yaml.cjs",
+];
+
+// Both policy entrypoints load the same parser, rule modules and self-test corpus.
+const POLICY_RUNTIME_FILES = [
+  ...NATIVE_LAUNCH_RUNTIME_FILES,
+  "antigravity-hook-bootstrap.cjs",
   "gh-graphql-read.cjs",
   "vendor/graphql.cjs",
-  "deny-dangerous/guard-runtime.sh",
-  "deny-dangerous/patterns-shell.sh",
-  "deny-dangerous/patterns-paths.sh",
-  "deny-dangerous/patterns-writes.sh",
-  "deny-dangerous/deny-dangerous-self-test.sh",
+  "policy-corpus.mjs",
+  "policy-evaluation.mjs",
+  "policy-git.mjs",
+  "policy-heredoc.mjs",
+  "policy-input.mjs",
+  "policy-prefixes.mjs",
+  "policy-segments.mjs",
+  "policy-substitutions.mjs",
+  "policy-syntax.mjs",
+  "policy-words.mjs",
+  "deny-dangerous/git-command.mjs",
+  "deny-dangerous/github-command.mjs",
+  "deny-dangerous/patterns-paths.mjs",
+  "deny-dangerous/patterns-shell.mjs",
+  "deny-dangerous/patterns-writes.mjs",
+  "deny-dangerous/corpus.json",
 ];
 
 const HOOKS: HookSpec[] = [
@@ -108,13 +137,8 @@ const HOOKS: HookSpec[] = [
     description: "Block risky shell operations and direct secret-path access.",
     event: "PreToolUse",
     matcher: "Bash",
-    scriptFiles: [
-      "run-with-bash.mjs",
-      "hook-launch-runtime.mjs",
-      "deny-dangerous.sh",
-      ...POLICY_RUNTIME_FILES,
-    ],
-    primaryScript: "deny-dangerous.sh",
+    scriptFiles: ["deny-dangerous.mjs", ...POLICY_RUNTIME_FILES],
+    primaryScript: "deny-dangerous.mjs",
     togglable: true,
     defaultEnabled: true,
     requiresConfirmDialog: true,
@@ -126,18 +150,38 @@ const HOOKS: HookSpec[] = [
       claude: {
         identity: "hook-provider-adapter.v1:claude:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "claude" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "codex" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "antigravity" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "copilot" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
     },
   },
@@ -148,13 +192,8 @@ const HOOKS: HookSpec[] = [
       "Block Git commits, publication, remote lock changes, destructive Git operations, and GitHub writes; allow GitHub reads and issue or PR comments.",
     event: "PreToolUse",
     matcher: "Bash",
-    scriptFiles: [
-      "run-with-bash.mjs",
-      "hook-launch-runtime.mjs",
-      "deny-git-mutations.sh",
-      ...POLICY_RUNTIME_FILES,
-    ],
-    primaryScript: "deny-git-mutations.sh",
+    scriptFiles: ["deny-git-mutations.mjs", ...POLICY_RUNTIME_FILES],
+    primaryScript: "deny-git-mutations.mjs",
     togglable: true,
     defaultEnabled: true,
     requiresConfirmDialog: true,
@@ -166,18 +205,38 @@ const HOOKS: HookSpec[] = [
       claude: {
         identity: "hook-provider-adapter.v1:claude:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "claude" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "codex" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "antigravity" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "copilot" &&
+            capture.canonicalEvent === "pre-tool",
+        ),
       },
     },
   },
@@ -189,12 +248,14 @@ const HOOKS: HookSpec[] = [
     event: "PostToolUse",
     matcher: "Edit|Write|Bash",
     scriptFiles: [
-      "run-with-bash.mjs",
-      "hook-provider-adapters.mjs",
-      "hook-launch-runtime.mjs",
-      "gruff-code-quality.sh",
+      ...NATIVE_LAUNCH_RUNTIME_FILES,
+      "gruff-code-quality.mjs",
+      "gruff/analyzer.mjs",
+      "gruff/feedback.mjs",
+      "gruff/ranges.mjs",
+      "gruff/scope.mjs",
     ],
-    primaryScript: "gruff-code-quality.sh",
+    primaryScript: "gruff-code-quality.mjs",
     togglable: true,
     defaultEnabled: false,
     requiresConfirmDialog: false,
@@ -206,18 +267,38 @@ const HOOKS: HookSpec[] = [
       claude: {
         identity: "hook-provider-adapter.v1:claude:post-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "claude" &&
+            capture.canonicalEvent === "post-tool",
+        ),
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:post-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "codex" &&
+            capture.canonicalEvent === "post-tool",
+        ),
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:post-tool",
         effectiveSupportGate: "result-undelivered",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "antigravity" &&
+            capture.canonicalEvent === "post-tool",
+        ),
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:post-tool",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "copilot" &&
+            capture.canonicalEvent === "post-tool",
+        ),
       },
     },
     unsupportedAgents: {
@@ -233,12 +314,15 @@ const HOOKS: HookSpec[] = [
     event: "Stop",
     matcher: "",
     scriptFiles: [
-      "run-with-bash.mjs",
-      "hook-provider-adapters.mjs",
-      "hook-launch-runtime.mjs",
-      "post-turn-safety.sh",
+      ...NATIVE_LAUNCH_RUNTIME_FILES,
+      "post-turn-safety.mjs",
+      "post-turn/assignments.mjs",
+      "post-turn/context.mjs",
+      "post-turn/controller.mjs",
+      "post-turn/recovery.mjs",
+      "post-turn/scanner.mjs",
     ],
-    primaryScript: "post-turn-safety.sh",
+    primaryScript: "post-turn-safety.mjs",
     togglable: true,
     defaultEnabled: true,
     requiresConfirmDialog: false,
@@ -253,18 +337,38 @@ const HOOKS: HookSpec[] = [
       claude: {
         identity: "hook-provider-adapter.v1:claude:turn-stop",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "claude" &&
+            capture.canonicalEvent === "turn-stop",
+        ),
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:turn-stop",
         effectiveSupportGate: "scenario-unverified",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "codex" &&
+            capture.canonicalEvent === "turn-stop",
+        ),
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:turn-stop",
         effectiveSupportGate: "provider-capture-absent",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "antigravity" &&
+            capture.canonicalEvent === "turn-stop",
+        ),
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:turn-stop",
         effectiveSupportGate: "provider-capture-absent",
+        hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
+          (capture) =>
+            capture.provider === "copilot" &&
+            capture.canonicalEvent === "turn-stop",
+        ),
       },
     },
     unsupportedAgents: {

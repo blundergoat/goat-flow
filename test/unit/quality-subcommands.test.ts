@@ -625,27 +625,21 @@ describe("quality validate", () => {
       { rubric_version: getQualityRubricId("harness") },
     ],
   ] as const) {
-    it(`labels ${name} legacy-compatible and rejects saving the same bytes`, () => {
+    it(`parses ${name} as legacy and rejects it under current schema rules`, () => {
       const error = Object.keys(override)[0]!;
-      const root = makeIgnoredQualityRoot();
-      const report = { ...currentQualityReport(root), ...override };
-      const fixture = writeQualityReportFixture(report);
-      try {
-        const validated = runQualityValidate(fixture.reportPath);
-        assert.equal(validated.status, 0, validated.stderr);
-        assert.equal(
-          validated.stdout.trim(),
-          `OK LEGACY-COMPATIBLE ${fixture.reportPath}`,
-        );
-        assert.ok(validated.stderr.includes(`report.${error} must match`));
-        const saved = runQualitySave(root, report);
-        assert.equal(saved.status, CLI_USAGE_EXIT_CODE);
-        assert.ok(saved.stderr.includes(`report.${error} must match`));
-        assert.equal(existsSync(join(root, ".goat-flow/logs/quality")), false);
-      } finally {
-        rmSync(fixture.directory, { recursive: true, force: true });
-        rmSync(root, { recursive: true, force: true });
-      }
+      const report = {
+        ...currentQualityReport(resolve("quality-legacy-schema")),
+        ...override,
+      };
+      assert.equal(
+        parseQualityReport(report, { requireCurrentFields: false }).ok,
+        true,
+      );
+      const current = parseQualityReport(report, {
+        requireCurrentFields: true,
+      });
+      assert.ok(!current.ok);
+      assert.ok(current.error.includes(`report.${error} must match`));
     });
   }
 
@@ -664,27 +658,6 @@ describe("quality validate", () => {
     }
   });
 
-  it("labels a legacy-compatible report and names the rule it misses", () => {
-    const fixture = writeQualityReportFixture(
-      legacyQualityReport(resolve("quality-validate-legacy")),
-    );
-    try {
-      const result = runQualityValidate(fixture.reportPath);
-      assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.equal(
-        result.stdout.trim(),
-        `OK LEGACY-COMPATIBLE ${fixture.reportPath}`,
-      );
-      // Naming the failed rule is what separates "old but readable" from "ready to save".
-      assert.match(
-        result.stderr,
-        /report\.assessment_context is required for current quality reports/u,
-      );
-    } finally {
-      rmSync(fixture.directory, { recursive: true, force: true });
-    }
-  });
-
   it("keeps the saver stricter than the validator for the same legacy bytes", () => {
     const projectRoot = makeIgnoredQualityRoot();
     const legacy = legacyQualityReport(projectRoot);
@@ -692,7 +665,14 @@ describe("quality validate", () => {
     try {
       const validated = runQualityValidate(fixture.reportPath);
       assert.equal(validated.status, 0, validated.stderr || validated.stdout);
-      assert.match(validated.stdout, /OK LEGACY-COMPATIBLE /u);
+      assert.equal(
+        validated.stdout.trim(),
+        `OK LEGACY-COMPATIBLE ${fixture.reportPath}`,
+      );
+      assert.match(
+        validated.stderr,
+        /report\.assessment_context is required for current quality reports/u,
+      );
 
       // The qualifier is only truthful while the saver still refuses the identical report.
       const saved = runQualitySave(projectRoot, legacy);
@@ -700,6 +680,10 @@ describe("quality validate", () => {
       assert.match(
         saved.stderr,
         /report\.assessment_context is required for current quality reports/u,
+      );
+      assert.equal(
+        existsSync(join(projectRoot, ".goat-flow/logs/quality")),
+        false,
       );
     } finally {
       rmSync(fixture.directory, { recursive: true, force: true });

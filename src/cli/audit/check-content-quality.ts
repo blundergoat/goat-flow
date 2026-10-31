@@ -2,7 +2,8 @@
  * Inspect the selected project's guidance for prose, readiness, and evidence problems shown by audit.
  *
  * Curated documents and installed skills receive prose checks; learning-loop buckets omit vague-word warnings.
- * Additional Markdown receives readiness and semantic-anchor checks, with local working artifacts excluded.
+ * Additional Markdown receives readiness and semantic-anchor checks; active instructions also receive retired policy-probe warnings.
+ * Local working artifacts are excluded.
  *
  * Fence, heading, and anchor parsers preserve source line numbers so each finding points to the text the author can repair.
  */
@@ -513,13 +514,46 @@ function scanLine(
   }
 }
 
+/** Report obsolete managed policy probes in active instructions, including executable examples in fences. */
+function scanRetiredHookSelfTests(
+  path: string,
+  text: string,
+): ContentFinding[] {
+  const isInstruction =
+    /(?:^|\/)(?:AGENTS(?:\.override)?|CLAUDE)\.md$/u.test(path) ||
+    path === ".github/copilot-instructions.md" ||
+    path.startsWith(".github/instructions/");
+  if (!isInstruction) return [];
+  const findings: ContentFinding[] = [];
+  for (const [index, line] of text.split(/\r?\n/u).entries()) {
+    // Match managed operands only; unrelated scripts and incidental path suffixes remain outside this migration warning.
+    const commands = line.matchAll(
+      /(?:^|[\s`"'])((?:\.\/)?(?:\.goat-flow|workflow)[\\/]hooks[\\/](?:deny-dangerous|deny-git-mutations))\.sh["']?[ \t]+(--self-test(?:=(?:smoke|full))?)(?=$|[\s`"';|&])/gu,
+    );
+    for (const command of commands) {
+      const [, operand, option] = command;
+      if (operand === undefined || option === undefined) continue;
+      const scriptPath = operand.replaceAll("\\", "/");
+      findings.push({
+        severity: "warning",
+        rule: "retired-hook-self-test",
+        path,
+        line: index + 1,
+        message: `Instruction invokes the retired Bash policy self-test: ${scriptPath}.sh ${option}.`,
+        suggestion: `Run \`node ${scriptPath}.mjs ${option}\` instead.`,
+      });
+    }
+  }
+  return findings;
+}
+
 /**
  * Scans one document's prose and readiness answers and reports each finding at its source location for the author's repair.
- * Prose rules skip fenced blocks and table header labels; restricted mode omits vague-word warnings.
+ * Prose rules skip fenced blocks and table header labels; current instruction examples still receive retired policy-probe warnings.
  *
  * @param path - source path used in findings and surface-specific rules
  * @param text - Markdown or instruction text; empty content produces no findings
- * @param mode - full includes vague-word warnings; restricted omits those warnings from incident prose
+ * @param mode - restricted omits vague terms and retired policy-probe warnings from incident prose
  * @returns detected findings; empty means the enabled rules found nothing, not that every instruction is complete
  */
 export function scanContentQuality(
@@ -545,6 +579,7 @@ export function scanContentQuality(
     scanLine(line, i + 1, path, findings, mode);
   }
   findings.push(...scanUnresolvedReadiness(path, text));
+  if (mode === "full") findings.push(...scanRetiredHookSelfTests(path, text));
   return findings;
 }
 
@@ -663,7 +698,7 @@ function isLocalMarkdownArtifact(path: string): boolean {
 }
 
 /**
- * Discover additional Markdown for readiness and semantic-anchor checks after curated prose scans.
+ * Discover additional Markdown without walking local plans or scratchpad contents; retain README anchors.
  * Sort filesystem results to preserve the order of findings across repeated audits.
  *
  * @param ctx - audit context supplying the selected project's filesystem
@@ -674,8 +709,11 @@ function resolveAdditionalEvidenceTargets(
   ctx: AuditContext,
   scanned: ReadonlySet<string>,
 ): string[] {
-  return ctx.fs
-    .glob("**/*.md")
+  const targets = new Set(ctx.fs.glob("**/*.md"));
+  for (const path of COMMITTED_LOCAL_STATE_READMES) {
+    if (ctx.fs.exists(path)) targets.add(path);
+  }
+  return [...targets]
     .filter((path) => !scanned.has(path) && !isLocalMarkdownArtifact(path))
     .sort();
 }
@@ -737,6 +775,7 @@ export function runContentQualityChecks(ctx: AuditContext): {
     scanned.add(rel);
     filesScanned++;
     findings.push(...scanUnresolvedReadiness(rel, text));
+    findings.push(...scanRetiredHookSelfTests(rel, text));
     findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
   }
   return { findings, filesScanned };

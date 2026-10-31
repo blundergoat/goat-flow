@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.18.0
+// goat-flow-hook-version: 1.19.0
 /**
  * Cross-platform launcher for goat-flow's Bash hook scripts.
  *

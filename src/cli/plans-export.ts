@@ -1,15 +1,17 @@
 /**
  * Read local milestones for portable review through `plans export` and validation through `plans check`.
+ * Example: `goat-flow plans export .goat-flow/plans/<version> --format json` previews one redacted JSON record per M*.md milestone file.
  *
- * Preserve task, proof, effort and forecast history while reporting missing or conflicting authored fields.
- * Export previews are redacted before reaching stdout; only an explicit `--output` request creates generated files.
+ * How the developer's plan is handled:
+ * - Task, proof, effort and forecast history are preserved, and missing or conflicting authored fields become record warnings.
+ * - Export previews are redacted before reaching stdout.
+ * - Only an explicit `--output` request creates generated files, and replacing an earlier export needs `--force`.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { CLIError } from "./cli-error.js";
 import { PlansExportInputError } from "./plans-export-input-error.js";
-import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
 import {
   maskNonRenderedMarkdown,
@@ -45,13 +47,18 @@ import {
 export { redactPlanExportRecord } from "./plans-export-output.js";
 export { isPlansExportInputError } from "./plans-export-input-error.js";
 
-/** One task checkbox preserved for JSON consumers and future body generators. */
+/** One Markdown checkbox from Tasks, Proof, Mid-implementation proof or Exit criteria, as JSON consumers of `plans export` see it. */
 interface PlanExportTask extends TaskEstimateFields {
   isChecked: boolean;
   text: string;
 }
 
-/** Portable milestone fields shared by JSON and Markdown renderers. */
+/**
+ * Portable milestone fields shared by JSON and Markdown renderers.
+ *
+ * `plans export --format json` prints an array of these records after redaction, and `plans check` validates the same records.
+ * Required parts the author left out, such as Scope or Tasks, export empty and add a `missing ...` warning that `plans check --strict` rejects.
+ */
 export interface PlanExportRecord {
   /** Parsed H2 sections for local validation; symbol-keyed content never enters JSON or Markdown exports. */
   [PLAN_STRUCTURE_SECTIONS]?: MarkdownSection[];
@@ -85,7 +92,7 @@ export interface PlanExportRecord {
   warnings: string[];
 }
 
-/** One parsed level-two Markdown section and its unchanged body. */
+/** One `## Heading` section of a milestone: a lowercased heading for alias matching and the trimmed body as the author wrote it, minus any `Forecast method:` line. */
 interface MarkdownSection {
   heading: string;
   body: string;
@@ -122,17 +129,23 @@ function readMilestoneField(
   return fieldValues.at(0) ?? "";
 }
 
-/** Preserve declared Lane metadata without deriving the checker's effective default. */
+/**
+ * Preserve the author's Lane header as written, without filling in the `default` lane that `plans check` assumes when none is declared.
+ *
+ * @param content - milestone Markdown; no Lane header leaves the lane out of the export entirely
+ * @param warnings - record warnings that gain duplicate or invalid-lane messages, which `plans check --strict` rejects
+ * @returns the first declared lane; undefined means no Lane header, and an empty string means an explicitly blank header
+ */
 function readMilestoneLane(
   content: string,
   warnings: string[],
 ): string | undefined {
-  const values = readRenderedMarkdownFieldValues(content, "Lane");
-  const lane = values.at(0);
+  const laneValues = readRenderedMarkdownFieldValues(content, "Lane");
+  const lane = laneValues.at(0);
   // Older milestones must keep their existing export shape when no Lane is declared.
   if (lane === undefined) return undefined;
   // Competing lanes make it unclear where the author intends this milestone to run.
-  if (values.length > 1) warnings.push("multiple Lane values supplied");
+  if (laneValues.length > 1) warnings.push("multiple Lane values supplied");
   // An explicit empty lane retains the default; other values must be portable lane names.
   if (lane !== "" && !/^[a-z0-9][a-z0-9-]{0,39}$/u.test(lane)) {
     warnings.push("invalid Lane value; expected ^[a-z0-9][a-z0-9-]{0,39}$");
@@ -140,7 +153,14 @@ function readMilestoneLane(
   return lane;
 }
 
-/** Report ambiguous or deprecated exceptional-status reason fields. */
+/**
+ * Warn when a milestone's status explanation is duplicated, blank, written in the legacy `Abandoned` form, or written in both forms.
+ * `plans check --strict` rejects every one of these warnings, so the developer ends up with one clear `Status reason`.
+ *
+ * @param canonicalValues - every visible `Status reason` value; empty means the author wrote none
+ * @param legacyValues - every visible legacy `Abandoned` value; empty means the plan uses only the current field
+ * @param warnings - record warnings that this reports into
+ */
 function addStatusReasonWarnings(
   canonicalValues: readonly string[],
   legacyValues: readonly string[],
@@ -171,7 +191,15 @@ function addStatusReasonWarnings(
   }
 }
 
-/** Read the canonical exceptional-status explanation while preserving legacy abandoned snapshots. */
+/**
+ * Read the reason a blocked, abandoned, superseded or deferred milestone gives for its status, preferring `Status reason` over `Abandoned`.
+ * Legacy `Abandoned` text is used only while the milestone is still abandoned, preserving old snapshots without mislabelling resumed work.
+ *
+ * @param content - milestone Markdown; no reason field exports an empty reason
+ * @param status - the milestone's Status value; only `abandoned` in any letter case lets legacy `Abandoned` text through
+ * @param warnings - record warnings that gain any status-reason problems
+ * @returns the reason text; empty means no usable reason: none written, a blank `Status reason`, or legacy text on a resumed milestone
+ */
 function readStatusReason(
   content: string,
   status: string,
@@ -193,7 +221,13 @@ function readStatusReason(
   return "";
 }
 
-/** Split level-two sections while preserving nested headings and user-authored Markdown. */
+/**
+ * Split a milestone into its `## ` sections so later steps can find Tasks, Proof, Exit criteria and the rest by heading.
+ * Headings inside code fences are ignored, and nested `###` headings stay inside the owning section's body.
+ *
+ * @param content - milestone Markdown; with no visible `## ` heading, section-only parts such as Tasks are reported missing
+ * @returns sections in source order with lowercased headings; empty means the milestone has no level-two headings
+ */
 function readMilestoneSections(content: string): MarkdownSection[] {
   const headingMatches = Array.from(
     maskNonRenderedMarkdown(content).matchAll(
@@ -204,8 +238,10 @@ function readMilestoneSections(content: string): MarkdownSection[] {
   // Each heading owns text until the next peer heading, matching goat-plan's milestone layout.
   return headingMatches.map((headingMatch, index) => {
     const bodyStart = headingMatch.index + headingMatch[0].length;
+    // The last section has no next heading, so it runs to the end of the milestone file.
     const bodyEnd = headingMatches.at(index + 1)?.index ?? content.length;
     return {
+      // Lowercasing lets `## Proof` and `## proof` select the same section.
       heading: headingMatch[1]?.trim().toLowerCase() ?? "",
       body: content.slice(bodyStart, bodyEnd).trim(),
     };
@@ -213,9 +249,9 @@ function readMilestoneSections(content: string): MarkdownSection[] {
 }
 
 /**
- * Measure Markdown indentation using four-column tab stops.
+ * Measure Markdown indentation using four-column tab stops, so a tab-indented checkbox and a four-space-indented one count as the same task level.
  *
- * @param indentation - spaces and tabs before one checklist marker
+ * @param indentation - spaces and tabs before one checklist marker; empty means the checkbox starts at the left margin
  * @returns visual zero-based column where the marker begins
  */
 function markdownIndentColumns(indentation: string): number {
@@ -227,7 +263,14 @@ function markdownIndentColumns(indentation: string): number {
   return column;
 }
 
-/** Return every section matching one semantic alias group in source order. */
+/**
+ * Return every section whose heading equals an alias or starts with the alias and a space, in source order.
+ * Example: `## Tasks and notes` also matches `tasks`, so a heading like that beside `## Tasks` makes the caller warn about competing copies.
+ *
+ * @param sections - parsed milestone sections; empty means nothing can match
+ * @param headingAliases - lowercase headings that mean the same part, such as `exit criteria` and `exit`
+ * @returns matching sections in source order; empty means the milestone has no such section
+ */
 function readMilestoneSectionMatches(
   sections: MarkdownSection[],
   headingAliases: readonly string[],
@@ -240,20 +283,39 @@ function readMilestoneSectionMatches(
   );
 }
 
-/** Join complementary section bodies without inventing headings or reordering evidence. */
+/**
+ * Join several matching sections into one Markdown block in source order, without inventing headings or reordering evidence.
+ * Used for stop conditions, which older plans may split across `## Kill criteria` and `## Stop conditions`.
+ *
+ * @param sections - matching sections; sections with an empty body are skipped
+ * @returns the bodies separated by blank lines; empty means no section had any text
+ */
 function joinSectionBodies(sections: readonly MarkdownSection[]): string {
+  // A section with an empty body is skipped, so it leaves no stray blank gap in the joined text.
   return sections
     .map((section) => section.body)
     .filter(Boolean)
     .join("\n\n");
 }
 
-/** Remove a milestone identifier from an outcome title used as the objective fallback. */
+/**
+ * Remove the milestone identifier from a title used as the objective fallback, so `# M03: Add drift cache` gives `Add drift cache`.
+ *
+ * @param title - the milestone's top-level title; never empty, because parsing rejects milestones without one
+ * @returns the title without its `M03:` or `Milestone 3:` prefix; empty only when the title is nothing but that prefix
+ */
 function objectiveFromTitle(title: string): string {
   return title.replace(/^(?:M\d+|Milestone\s+\d+)\s*:\s*/iu, "").trim();
 }
 
-/** Record a deterministic alias conflict without copying user-authored text. */
+/**
+ * Add one fixed `conflicting <label> representations` warning when the milestone holds competing copies of the same part.
+ * The deterministic wording never copies the author's text, and `plans check --strict` rejects the warning.
+ *
+ * @param warnings - record warnings shown in the export and checked by `plans check`
+ * @param hasConflict - true when the caller found competing copies: a repeated section, a current heading beside a legacy one, a field that disagrees with its section, or a stop section beside an Exit stop line
+ * @param label - fixed part name such as `scope` or `stop`; never the author's text
+ */
 function addRepresentationConflict(
   warnings: string[],
   hasConflict: boolean,
@@ -264,15 +326,15 @@ function addRepresentationConflict(
 }
 
 /**
- * Convert Markdown checkbox lines into stable checked/text records for JSON consumers.
+ * Convert one section's Markdown checkboxes into checked/text records so `plans check` can count each item's `(est: ...)` estimate.
  *
- * An item owns every line until the next checkbox or heading, because real tasks wrap across indented continuation lines with the `(est: ...)` entry
- * at the block's end; single-line tasks keep their exact prior text.
+ * An item owns every line until the next checkbox or heading, because real tasks wrap across indented continuation lines with the estimate last.
+ * Nested checkboxes and nested lists stay in the parent item's text, but the estimate is read only from the text before them.
  *
- * @param markdown - one estimate-bearing section body
+ * @param markdown - one estimate-bearing section body; empty or checkbox-free text yields no items
  * @param warnings - record warning sink for malformed est entries
- * @param itemLabel - warning label for this section's items
- * @returns checkbox items in source order with optional estimate fields
+ * @param itemLabel - warning label for this section's items, such as `task` or `testing gate item`
+ * @returns checkbox items in source order with optional estimate fields; empty means the section has no checkboxes
  */
 function readChecklistItems(
   markdown: string,
@@ -283,6 +345,7 @@ function readChecklistItems(
   const checkboxMatches = Array.from(
     maskedMarkdown.matchAll(CHECKLIST_ITEM_PATTERN),
   );
+  // Only the outermost checkbox level counts as an item; a section without checkboxes yields no items at all.
   const shallowestTaskIndentation = Math.min(
     ...checkboxMatches.map((checkboxMatch) =>
       markdownIndentColumns(checkboxMatch[1] ?? ""),
@@ -297,19 +360,23 @@ function readChecklistItems(
   // Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate.
   return taskStarts.map((startMatch, taskIndex) => {
     const bodyStart = startMatch.index + startMatch[0].length;
+    // The last item has no next checkbox, so it can run to the end of the section.
     const nextCheckbox = taskStarts.at(taskIndex + 1)?.index ?? markdown.length;
     const nextHeadingOffset = maskedMarkdown
       .slice(bodyStart)
       .search(/^\s*#{1,6}\s+/mu);
+    // With no heading below the item, only the next checkbox or the section end can close it.
     const nextHeading =
       nextHeadingOffset >= 0 ? bodyStart + nextHeadingOffset : markdown.length;
     const bodyEnd = Math.min(nextCheckbox, nextHeading);
     const taskBodyMarkdown = markdown.slice(bodyStart, bodyEnd);
     const maskedTaskBodyMarkdown = maskedMarkdown.slice(bodyStart, bodyEnd);
+    // Wrapped lines are joined with single spaces, so the exported text reads as one line.
     const text = taskBodyMarkdown.replace(/\s+/gu, " ").trim();
     const nestedListStart = maskedTaskBodyMarkdown.search(
       NESTED_LIST_ITEM_PATTERN,
     );
+    // A nested list under the item is supporting detail, so the estimate is read only from the text before it.
     const estimateSourceMarkdown =
       nestedListStart < 0
         ? taskBodyMarkdown
@@ -318,6 +385,7 @@ function readChecklistItems(
       .replace(/\s+/gu, " ")
       .trim();
     return {
+      // Both `[x]` and `[X]` mark the item done.
       isChecked: startMatch[2]?.toLowerCase() === "x",
       text,
       ...readTaskEstimate(estimateSourceText, taskIndex, warnings, itemLabel),
@@ -325,7 +393,14 @@ function readChecklistItems(
   });
 }
 
-/** Add one warning when a portable field is absent from a partial milestone. */
+/**
+ * Add one `missing <label>` warning when a milestone lacks a part every current plan needs, such as Scope or Proof.
+ * Each absent part gets its own warning, and `plans check --strict` reports every one of them as an error in the same run.
+ *
+ * @param warnings - record warnings shown in the export
+ * @param fieldValue - parsed text or checkbox list; empty means the author left this part out, or wrote a Tasks or Proof section with no checkboxes
+ * @param label - fixed part name shown after `missing`, such as `stop/rescope`
+ */
 function addMissingFieldWarning(
   warnings: string[],
   fieldValue: string | readonly unknown[],
@@ -335,13 +410,27 @@ function addMissingFieldWarning(
   if (fieldValue.length === 0) warnings.push(`missing ${label}`);
 }
 
-/** Return the first populated field while preserving an empty fallback. */
+/**
+ * Pick the preferred value unless it is empty, such as a `**Scope:**` field before a `## Scope` section.
+ *
+ * @param primary - preferred trimmed value; empty means the author did not write this form or left it blank
+ * @param fallback - value used when primary is empty; may itself be empty
+ * @returns primary when it has text, otherwise fallback
+ */
 function firstPopulated(primary: string, fallback: string): string {
+  // Callers pass trimmed text, so an empty primary means the author skipped or blanked that form and the fallback is shown instead.
   return primary.length > 0 ? primary : fallback;
 }
 
 /**
- * Attach the author's optional effort fields so previews retain legacy absence and show every supplied allocation.
+ * Copy the author's optional effort numbers onto the record, leaving out each one the milestone never supplied.
+ * Older milestones without estimates therefore keep their original export shape, with no empty effort fields.
+ *
+ * @param record - export record being built; this mutates it in place
+ * @param effort - parsed `Effort estimate` line; undefined means the milestone has no readable effort line
+ * @param taskEstimateTotals - per-category task estimate sums; undefined means no task carries an `(est: ...)` entry
+ * @param planAdminEstimate - parsed `Plan/admin overhead` field; no minutes means the field is absent or unreadable
+ * @param workEstimateTotals - sums over tasks, proof items, mid-proof items and admin overhead; undefined means none carries an estimate
  */
 function addEffortFields(
   record: PlanExportRecord,
@@ -358,24 +447,52 @@ function addEffortFields(
   if (planAdminEstimate.estimateMinutes !== undefined) {
     record.planAdminEstimate = planAdminEstimate;
   }
-  // Counted work totals let strict-plan users compare every checklist estimate with the headline split.
+  // Counted work totals let `plans check --strict` compare task, proof, mid-proof and admin estimates with the headline split.
   if (workEstimateTotals) record.workEstimateTotals = workEstimateTotals;
 }
 
-/** Read one semantic section and warn when the author supplied competing copies. */
+/**
+ * Read one section such as `## Tasks` and warn when the author supplied competing copies; the first copy is the one exported.
+ *
+ * @param sections - parsed milestone sections; empty means the section reads as absent
+ * @param headingAliases - lowercase headings that mean this section, such as `boundary gate` and `boundary notes`
+ * @param warnings - record warnings that gain the conflict message
+ * @param conflictLabel - fixed part name used in the conflict warning, such as `task`
+ * @returns the first matching section's body; empty means the milestone has no such section
+ */
 function readSingleSectionMarkdown(
   sections: MarkdownSection[],
   headingAliases: readonly string[],
   warnings: string[],
   conflictLabel: string,
 ): string {
-  const matches = readMilestoneSectionMatches(sections, headingAliases);
-  addRepresentationConflict(warnings, matches.length > 1, conflictLabel);
+  const matchingSections = readMilestoneSectionMatches(
+    sections,
+    headingAliases,
+  );
+  addRepresentationConflict(
+    warnings,
+    matchingSections.length > 1,
+    conflictLabel,
+  );
   // An absent section stays empty so the export can show the missing context explicitly.
-  return matches.at(0)?.body ?? "";
+  return matchingSections.at(0)?.body ?? "";
 }
 
-/** Resolve a compact metadata field or its expanded section representation. */
+/**
+ * Resolve a compact metadata field or its expanded section representation, such as `**Scope:**` versus `## Scope`; the field wins.
+ *
+ * A second section, or a field whose text differs from the section, adds a conflict warning that `plans check --strict` rejects.
+ * Example: a note line starting `Scope:` under a milestone that already has `## Scope` counts as a competing copy.
+ *
+ * @param content - milestone Markdown searched for the compact field
+ * @param fieldLabel - field label such as `Scope`; a plain `Scope:` line matches as well as the bold form
+ * @param sections - parsed sections searched for the expanded form; empty means only the compact field can supply it
+ * @param headingAliases - lowercase headings that mean the same part, such as `scope` and `scope discipline`
+ * @param warnings - record warnings that gain duplicate-field and conflict messages
+ * @param conflictLabel - fixed part name used in the conflict warning
+ * @returns the field text, otherwise the first section body; empty means the author wrote neither form
+ */
 function readFieldOrSectionMarkdown(
   content: string,
   fieldLabel: string,
@@ -384,19 +501,34 @@ function readFieldOrSectionMarkdown(
   warnings: string[],
   conflictLabel: string,
 ): string {
-  const field = readMilestoneField(content, fieldLabel, warnings);
-  const matches = readMilestoneSectionMatches(sections, headingAliases);
-  const section = matches.at(0)?.body ?? "";
+  const fieldValue = readMilestoneField(content, fieldLabel, warnings);
+  const matchingSections = readMilestoneSectionMatches(
+    sections,
+    headingAliases,
+  );
+  // With no matching section, only the compact field can supply the value.
+  const sectionBody = matchingSections.at(0)?.body ?? "";
+  // The same text in both forms is allowed; only a second section or a disagreeing copy is a conflict.
   addRepresentationConflict(
     warnings,
-    matches.length > 1 ||
-      (field.length > 0 && section.length > 0 && field !== section),
+    matchingSections.length > 1 ||
+      (fieldValue.length > 0 &&
+        sectionBody.length > 0 &&
+        fieldValue !== sectionBody),
     conflictLabel,
   );
-  return firstPopulated(field, section);
+  return firstPopulated(fieldValue, sectionBody);
 }
 
-/** Resolve explicit or section-style objectives before falling back to the outcome title. */
+/**
+ * Resolve explicit or section-style objectives before falling back to the outcome title, so a milestone without an Objective still exports one.
+ *
+ * @param content - milestone Markdown searched for the `**Objective:**` field
+ * @param title - milestone title used when neither objective form exists; never empty
+ * @param sections - parsed sections searched for `## Objective`; empty means only the field or the title can supply the objective
+ * @param warnings - record warnings that gain duplicate-field and conflict messages
+ * @returns the field, else the section, else the title without its `M03:` prefix; empty only when the title is just that prefix
+ */
 function readObjective(
   content: string,
   title: string,
@@ -407,7 +539,9 @@ function readObjective(
   const objectiveSections = readMilestoneSectionMatches(sections, [
     "objective",
   ]);
+  // With no `## Objective` section, the field or the title supplies the objective.
   const objectiveSection = objectiveSections.at(0)?.body ?? "";
+  // The same text in both forms is allowed; only a second section or a disagreeing copy is a conflict.
   addRepresentationConflict(
     warnings,
     objectiveSections.length > 1 ||
@@ -416,52 +550,81 @@ function readObjective(
         objectiveField !== objectiveSection),
     "objective",
   );
+  // The field wins over the section, and the section wins over the title.
   return firstPopulated(
     objectiveField,
     firstPopulated(objectiveSection, objectiveFromTitle(title)),
   );
 }
 
-/** Prefer canonical Proof while accepting one legacy verification heading. */
+/**
+ * Prefer canonical `## Proof` while accepting one legacy `## Verification gate` or `## Testing gate` heading from older plans.
+ *
+ * @param sections - parsed milestone sections searched for the current and legacy proof headings; empty means the milestone has no level-two headings, so proof reads as absent
+ * @param warnings - record warnings that gain `conflicting proof representations` for duplicates or Proof beside a legacy heading
+ * @returns the proof section body; empty means the milestone has no proof heading of either kind
+ */
 function readProofMarkdown(
   sections: MarkdownSection[],
   warnings: string[],
 ): string {
-  const canonical = readMilestoneSectionMatches(sections, ["proof"]);
-  const legacy = readMilestoneSectionMatches(sections, [
+  const proofSections = readMilestoneSectionMatches(sections, ["proof"]);
+  const legacyProofSections = readMilestoneSectionMatches(sections, [
     "verification gate",
     "testing gate",
   ]);
+  // Two Proof headings, two legacy headings, or one of each leave the developer unsure which proof the export kept.
   addRepresentationConflict(
     warnings,
-    canonical.length > 1 ||
-      legacy.length > 1 ||
-      (canonical.length > 0 && legacy.length > 0),
+    proofSections.length > 1 ||
+      legacyProofSections.length > 1 ||
+      (proofSections.length > 0 && legacyProofSections.length > 0),
     "proof",
   );
-  const selected = canonical.length > 0 ? canonical : legacy;
-  return selected.at(0)?.body ?? "";
+  // A current `## Proof` heading wins over a legacy one, and a milestone with neither exports empty proof text.
+  const exportedProofSections =
+    proofSections.length > 0 ? proofSections : legacyProofSections;
+  return exportedProofSections.at(0)?.body ?? "";
 }
 
-/** Detect multiple explicit or compact stop representations. */
+/**
+ * Detect multiple explicit or compact stop representations, which `plans check --strict` rejects.
+ * Example: a `## Stop / rescope` section plus a `- Stop/rescope if ...` line under Exit counts as two copies.
+ *
+ * @param canonical - current `## Stop / rescope` or `## Stop / kill` sections; empty means the plan has no current stop heading
+ * @param legacyKill - legacy `## Kill criteria` sections; empty means none
+ * @param legacyStop - legacy `## Stop conditions` sections; empty means none
+ * @param stopSectionText - joined text of the stop sections; empty means no stop section has text
+ * @param exitStopLine - the compact stop line found under Exit; empty means there is none
+ * @returns true when the developer should see `conflicting stop representations`
+ */
 function hasStopRepresentationConflict(
   canonical: MarkdownSection[],
   legacyKill: MarkdownSection[],
   legacyStop: MarkdownSection[],
-  explicit: string,
-  embedded: string,
+  stopSectionText: string,
+  exitStopLine: string,
 ): boolean {
+  // Older plans may pair one Kill criteria section with one Stop conditions section.
+  // Two sections of one kind, a current section beside a legacy one, or section text beside a compact Exit stop line is a conflict.
   return (
     canonical.length > 1 ||
     (canonical.length > 0 &&
       (legacyKill.length > 0 || legacyStop.length > 0)) ||
     legacyKill.length > 1 ||
     legacyStop.length > 1 ||
-    (explicit.length > 0 && embedded.length > 0)
+    (stopSectionText.length > 0 && exitStopLine.length > 0)
   );
 }
 
-/** Read a dedicated stop section or the compact Exit-block stop line. */
+/**
+ * Read a dedicated stop section or the compact Exit-block stop line that tells the developer when to stop or rescope.
+ *
+ * @param sections - parsed milestone sections searched for current and legacy stop headings; empty means the milestone has no level-two headings, so only an Exit stop line could supply stop text
+ * @param exitMarkdown - Exit criteria body searched for a `- Stop/rescope if ...` line; empty means the milestone has no Exit section
+ * @param warnings - record warnings that gain `conflicting stop representations`
+ * @returns the stop text, section first; empty means no stop condition, which the caller reports as `missing stop/rescope`
+ */
 function readStopMarkdown(
   sections: MarkdownSection[],
   exitMarkdown: string,
@@ -475,14 +638,17 @@ function readStopMarkdown(
   ]);
   const legacyKill = readMilestoneSectionMatches(sections, ["kill criteria"]);
   const legacyStop = readMilestoneSectionMatches(sections, ["stop conditions"]);
-  const legacySet = sections.filter(
+  // Older plans may split stop conditions across Kill criteria and Stop conditions; both are kept in source order.
+  const legacyStopSections = sections.filter(
     (section) => legacyKill.includes(section) || legacyStop.includes(section),
   );
-  const explicit =
+  // A current stop heading wins; older plans fall back to their legacy headings.
+  const stopSectionText =
     canonical.length > 0
       ? joinSectionBodies(canonical)
-      : joinSectionBodies(legacySet);
-  const embedded =
+      : joinSectionBodies(legacyStopSections);
+  // Compact milestones may end Exit with one `- Stop/rescope if ...` line; examples inside code fences are ignored, and no line means empty text.
+  const exitStopLine =
     maskNonRenderedMarkdown(exitMarkdown)
       .match(/^\s*-\s+Stop\s*\/\s*rescope if\s+.+$/imu)
       ?.at(0)
@@ -493,27 +659,29 @@ function readStopMarkdown(
       canonical,
       legacyKill,
       legacyStop,
-      explicit,
-      embedded,
+      stopSectionText,
+      exitStopLine,
     ),
     "stop",
   );
-  return firstPopulated(explicit, embedded);
+  // A dedicated stop section wins over the compact Exit line.
+  return firstPopulated(stopSectionText, exitStopLine);
 }
 
 /**
- * Parse one goat-plan milestone into the portable export contract.
- * Use for previews and writes; only the top-level title is mandatory.
+ * Parse one goat-plan milestone into the portable export record used by `plans export`, `plans check` and forecast history.
+ * Only the top-level title is mandatory: a file holding just `# M01: Name` still parses, with one `missing ...` warning per absent part.
  *
  * @param content - milestone Markdown; empty or title-less text is malformed
  * @param sourceFile - source filename shown to export readers and reused for Markdown output
- * @returns portable fields plus warnings for every missing optional section
+ * @returns portable fields plus record warnings, including one `missing ...` warning per absent required part; a fully authored milestone has no `missing ...` warnings
  * @throws PlansExportInputError when no top-level milestone title exists
  */
 export function parseMilestoneMarkdown(
   content: string,
   sourceFile: string,
 ): PlanExportRecord {
+  // The first visible `# ` heading names the milestone; a heading inside a code fence does not count.
   const title =
     maskNonRenderedMarkdown(content)
       .match(/^ {0,3}#[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/mu)?.[1]
@@ -527,6 +695,7 @@ export function parseMilestoneMarkdown(
   }
 
   const warnings: string[] = [];
+  // Forecast method lines are removed from section text, so the Markdown export shows each method selector once, in its header.
   const sections = readMilestoneSections(maskForecastMethodLines(content));
   const status = readMilestoneField(content, "Status", warnings);
   const statusReason = readStatusReason(content, status, warnings);
@@ -602,6 +771,7 @@ export function parseMilestoneMarkdown(
     readMilestoneField(content, "Plan/admin overhead", warnings),
     warnings,
   );
+  // Counted work covers tasks, proof, mid-proof and admin overhead; Exit criteria estimates are parsed but not counted.
   const workEstimateTotals = sumTaskEstimates([
     ...tasks,
     ...testingGateItems,
@@ -615,6 +785,7 @@ export function parseMilestoneMarkdown(
     readMilestoneField(content, "Forecast range", warnings),
     readMilestoneField(content, "Forecast basis", warnings),
   );
+  // Each absent required part gets its own warning, so the developer sees everything to fix in one run.
   addMissingFieldWarning(warnings, status, "status");
   addMissingFieldWarning(warnings, scopeMarkdown, "scope");
   addMissingFieldWarning(warnings, tasks, "tasks");
@@ -626,9 +797,11 @@ export function parseMilestoneMarkdown(
     [PLAN_STRUCTURE_SECTIONS]: sections,
     sourceFile,
     title,
+    // A milestone with no Status exports as `unknown`, alongside its `missing status` warning.
     status: firstPopulated(status, "unknown"),
     statusReason,
     dependencies,
+    // Without a Lane header the record has no lane key, so older milestones keep their export shape.
     ...(lane !== undefined ? { lane } : {}),
     objective,
     scopeMarkdown,
@@ -654,6 +827,7 @@ export function parseMilestoneMarkdown(
   );
   // A valid receipt travels with the export so readers can audit measured Actuals.
   if (timingReceipt) record.timingReceipt = timingReceipt;
+  // Saved forecasts come only from a `## Forecast records` heading with nothing after it, unlike the prefix-matched sections above.
   const forecastContext = readPlanForecastContext(
     content,
     sections
@@ -673,11 +847,15 @@ export function parseMilestoneMarkdown(
 }
 
 /**
- * List milestone filenames in a stable numeric-order contract.
- * Throws when a selected plan directory disappears or becomes unreadable.
+ * List the plan directory's `M*.md` milestone files in a stable numeric-order contract, so M2 comes before M10 in every export and check.
+ * Reads the directory once and throws a `Cannot read plan directory` error when the path is missing, unreadable or not a directory.
+ *
+ * @param planPath - the `<plan-path>` the developer passed to `plans export` or `plans check`
+ * @returns milestone filenames only; empty means the directory holds no `M*.md` files
  */
 function listMilestoneFiles(planPath: string): string[] {
   try {
+    // Only regular files named like `M01-name.md` count; `ISSUE.md`, folders and symlinks are skipped.
     return readdirSync(planPath, { withFileTypes: true })
       .filter((entry) => entry.isFile() && /^M\d.*\.md$/iu.test(entry.name))
       .map((entry) => entry.name)
@@ -685,7 +863,7 @@ function listMilestoneFiles(planPath: string): string[] {
         left.localeCompare(right, undefined, { numeric: true }),
       );
   } catch (error) {
-    // Example: a user selected a completed plan folder that was moved between listing and export.
+    // Example: the developer passed a milestone file instead of its plan directory (ENOTDIR), or mistyped the plan path (ENOENT).
     throw new PlansExportInputError(
       `Cannot read plan directory ${planPath}: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -693,8 +871,8 @@ function listMilestoneFiles(planPath: string): string[] {
 }
 
 /**
- * Load every milestone record from one selected plan directory.
- * Throws when the plan is empty or any milestone is unreadable or malformed.
+ * Read and parse every milestone in the plan directory the developer passed to `plans export` or `plans check`.
+ * Throws when the plan is empty or any milestone is unreadable or malformed; both commands report that as a usage error (exit 2).
  *
  * @param planPath - selected directory; no M*.md files means a usage error rather than an empty report
  * @returns one record per milestone file in numeric order; never empty
@@ -702,7 +880,7 @@ function listMilestoneFiles(planPath: string): string[] {
 export function loadPlanExportRecords(planPath: string): PlanExportRecord[] {
   const milestoneFiles = listMilestoneFiles(planPath);
 
-  // An empty plan cannot produce a meaningful backlog or issue bundle.
+  // An empty plan cannot produce a meaningful backlog or issue bundle; e.g. the developer passed `.goat-flow/plans` instead of a version folder.
   if (milestoneFiles.length === 0) {
     throw new PlansExportInputError(
       `No M*.md milestone files found in ${planPath}.`,
@@ -717,8 +895,9 @@ export function loadPlanExportRecords(planPath: string): PlanExportRecord[] {
         sourceFile,
       );
     } catch (error) {
-      // Example: an editor changed file permissions after the user selected the plan.
+      // A missing-title error already names the milestone file to fix, so it reaches the developer unchanged.
       if (error instanceof PlansExportInputError) throw error;
+      // Example: M02 lost its read permission, or another tool deleted it after the directory was listed.
       throw new PlansExportInputError(
         `Cannot read ${sourceFile}: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -727,15 +906,18 @@ export function loadPlanExportRecords(planPath: string): PlanExportRecord[] {
 }
 
 /**
- * Preview or persist one local plan export without invoking any remote adapter.
- * Use from `plans export`; unsupported formats and input errors become usage failures.
+ * Preview or persist one local plan export without invoking any remote adapter, and return the text the CLI prints.
+ * Nothing is printed and no process state changes, so tests can call it in-process; requested export files are still written.
  *
- * @param options - parsed plan path, format, optional output, and explicit force choice
- * @returns nothing; preview goes to stdout and written paths are confirmed on stderr
+ * @param options - parsed plan path, format, optional output, and explicit force choice; no `--output` means preview only
+ * @returns the preview for stdout, or one `Written to` line per saved file for stderr; each line ends in a newline, and success always exits 0
  * @throws CLIError for unsupported formats, invalid plans, or protected output collisions
  */
-export function handlePlansExportCommand(options: ParsedCLI): void {
-  // SARIF has no plan-body contract and text aliases the human-readable Markdown preview.
+export function runPlansExportOutput(options: ParsedCLI): {
+  stdout: string;
+  stderr: string;
+} {
+  // `--format sarif` has no plan-body shape, so the developer gets a usage error (exit 2); `text` falls through to the Markdown preview.
   if (options.format === "sarif") {
     throw new CLIError("plans export supports --format markdown or json.", 2);
   }
@@ -744,45 +926,49 @@ export function handlePlansExportCommand(options: ParsedCLI): void {
   try {
     loadedRecords = loadPlanExportRecords(options.projectPath);
   } catch (error) {
-    // Example: a user selected a stale plan path or a milestone without a title.
+    // Example: the developer typed a plan path that no longer exists, or a milestone is missing its `# M01: Name` title.
+    // Those plan problems become a usage error (exit 2); anything else is unexpected and propagates unchanged.
     if (error instanceof PlansExportInputError) {
       throw new CLIError(error.message, 2);
     }
     throw error;
   }
+  // Unredacted filenames are kept only so the write checks can refuse an `--output` path that would overwrite a source milestone.
   const sourceFiles = loadedRecords.map((record) => record.sourceFile);
-  const records = loadedRecords.map(redactPlanExportRecord);
+  const redactedRecords = loadedRecords.map(redactPlanExportRecord);
 
   const isJson = options.format === "json";
+  // JSON prints one array of records; Markdown prints each milestone separated by a `---` rule.
   const renderedPreview = isJson
-    ? JSON.stringify(records, null, 2)
-    : records.map(renderPlanExportMarkdown).join("\n\n---\n\n");
+    ? JSON.stringify(redactedRecords, null, 2)
+    : redactedRecords.map(renderPlanExportMarkdown).join("\n\n---\n\n");
 
   // No output path is the safe preview mode and performs no export writes.
   if (!options.output) {
-    writeOutput({ ...options, output: null }, renderedPreview);
-    return;
+    return { stdout: `${renderedPreview}\n`, stderr: "" };
   }
 
   let writtenPaths: string[];
   try {
+    // JSON writes one file at the `--output` path; Markdown writes one file per milestone inside the `--output` directory.
     writtenPaths = isJson
       ? writeJsonExport(
-          records,
+          redactedRecords,
           options.output,
           options.shouldForce,
           options.projectPath,
           sourceFiles,
         )
       : writeMarkdownExports(
-          records,
+          redactedRecords,
           options.output,
           options.shouldForce,
           options.projectPath,
           sourceFiles,
         );
   } catch (error) {
-    // Example: a prior export exists and the user did not authorize regeneration.
+    // Example: `--output` names a file from an earlier export and the developer did not pass `--force`.
+    // Collisions and unsafe destinations become a usage error (exit 2); other filesystem failures propagate unchanged.
     if (error instanceof PlansExportInputError) {
       throw new CLIError(error.message, 2);
     }
@@ -790,6 +976,24 @@ export function handlePlansExportCommand(options: ParsedCLI): void {
   }
 
   // Written-path confirmations stay on stderr so scripted stdout remains artifact-free.
-  for (const writtenPath of writtenPaths)
-    console.error(`Written to ${writtenPath}`);
+  return {
+    stdout: "",
+    stderr: writtenPaths
+      .map((writtenPath) => `Written to ${writtenPath}\n`)
+      .join(""),
+  };
+}
+
+/**
+ * Run `plans export` for the CLI: print the preview to stdout or confirm each written file on stderr.
+ * Reached when the developer runs `goat-flow plans export <plan-path>`; `plans check` and `plans time` route elsewhere first.
+ *
+ * @param options - parsed plan path, format, optional output, and explicit force choice
+ * @returns nothing; preview goes to stdout and written paths are confirmed on stderr
+ * @throws CLIError for unsupported formats, invalid plans, or protected output collisions
+ */
+export function handlePlansExportCommand(options: ParsedCLI): void {
+  const { stdout, stderr } = runPlansExportOutput(options);
+  process.stdout.write(stdout);
+  process.stderr.write(stderr);
 }

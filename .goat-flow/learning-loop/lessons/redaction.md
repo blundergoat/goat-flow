@@ -1,6 +1,6 @@
 ---
 category: redaction
-last_reviewed: 2026-09-16
+last_reviewed: 2026-10-29
 ---
 
 **Scope:** Scrubbing secrets out of durable text - ordered rule interaction, redacting before the first write to a durable path, and metadata fields the body scrubber misses. Fixtures that must not embed real secret shapes are [hook-testing.md](hook-testing.md).
@@ -18,25 +18,31 @@ last_reviewed: 2026-09-16
 
 **Status:** active | **Created:** 2026-07-13
 **Severity:** SECURITY
-**Decision changed:** Version-check the redactor before writing any durable plan, decision, learning, or session text, and let its output create the destination.
+**Decision changed:** Version-check the redactor before writing any durable plan, decision, learning, or session text, send it the draft from memory, and let its output create the destination.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 5
-**Latest occurrence:** 2026-09-12
+**Incident count:** 6
+**Latest occurrence:** 2026-10-29
 
-**Prevention:** A pre-write redaction example must accept interactive stdin or another non-persistent source, and must never be demonstrated by redirecting from a raw draft file. A durable destination may receive only version-matched redactor output: if a draft reaches that path first, stop before indexing, redact to a temporary file, compare bytes, and replace the destination only from the redacted result.
+**Prevention:** Send every draft to the version-matched redactor on stdin from memory, never from a raw file on disk, including a temporary or scratch file, and never demonstrate the `< draft.md` redirect in an example. A durable destination may receive only redactor output. Recovery is the only exception: if raw text reaches any path first, stop before indexing, redact that file once to a temporary file, compare bytes, and replace the destination only from the redacted result.
 
 **What happened:** The change correctly scrubbed stdin before its output write, but the first docs demonstrated `< draft.md`, implying the raw candidate already existed on disk.
 
-**Evidence:** `.goat-flow/logs/sessions/README.md` (search: `Run the scrubber first`) - the corrected flow starts the command, accepts pasted stdin, and writes only the scrubbed result; `src/cli/redact-command.ts` (search: `readFileSync(0`) confirms stdin is read before the shared output sink.
+**Root cause:** Either raw text reached a path before the scrubber ran, at the durable path, in a temporary draft or in documentation that taught that shape, or shell-guard friction blocked the supported stdin route and invited a workaround.
 
-**Recurrence (2026-08-01):** A required redactor command combined its destination check with a large Markdown heredoc, so the deny hook counted table separators as shell segments and blocked it before execution. Checking the absent destination separately, then streaming the same content to a sole `goat-flow redact --output <path>` process, preserved both pre-write redaction and the shell guard.
+**Evidence:** `.goat-flow/logs/sessions/README.md` (search: `Run the scrubber first`) documents the supported interactive flow; `src/cli/redact-command.ts` (search: `readFileSync(0`) reads stdin before the shared output sink.
 
-**Recurrence (2026-08-14):** ADR-059 reached its durable path before the version-matched redactor ran. Before indexing, the correction redacted the file with goat-flow v1.15.1 and byte-compared it with the destination; later learning-loop corrections patched a temporary redacted copy and ran the redactor again with file input redirection after the hook rejected a pipe-to-interpreter form. Evidence anchors: `.goat-flow/learning-loop/decisions/ADR-059-useful-comment-doctrine.md` (search: `## Decision`) and `src/cli/redact-command.ts` (search: `readFileSync(0`).
+**Incident ledger:**
 
-**Recurrence (2026-08-24):** During the standalone local-hook-policy re-home, 17 plan and decision files reached their durable paths before the goat-plan redaction gate. The correction ran each file through goat-flow v1.16.0 to a temporary destination and byte-compared it with the written file; every comparison matched.
+**Recurrence 2026-08-01:** A redactor command combined its destination check with a large Markdown heredoc, so the deny hook counted table separators as shell segments and blocked it. Checking the absent destination separately, then streaming the content to a sole `goat-flow redact --output <path>` process, kept both pre-write redaction and the shell guard.
 
-**Recurrence 2026-09-12:** Evidence capture was blocked by an oversized inline command, an interpreter wrapper and a pipe. Direct foreground redactor stdin succeeded without a raw disk draft or policy change. Before capture, prefer the supported sole-process stdin route; suppress temporary server-auth startup output before recording validation. Validation also rejected the checkout-local plan as a durable citation. Evidence: `src/cli/redact-command.ts` (search: `handleRedactCommand`) reads stdin before emitting scrubbed output; `.goat-flow/logs/sessions/README.md` (search: `Run the scrubber first`) documents the supported interactive flow.
+**Recurrence 2026-08-14:** ADR-059 reached its durable path before the version-matched redactor ran. The correction redacted it with goat-flow v1.15.1 and byte-compared it with the destination before indexing; later corrections patched a temporary redacted copy and redacted that copy again by file redirection after the hook rejected a pipe-to-interpreter form. `.goat-flow/learning-loop/decisions/ADR-059-useful-comment-doctrine.md` (search: `## Decision`); `src/cli/redact-command.ts` (search: `readFileSync(0`).
+
+**Recurrence 2026-08-24:** During the standalone local-hook-policy re-home, 17 plan and decision files reached their durable paths before the goat-plan redaction gate. Each was run through goat-flow v1.16.0 to a temporary destination and byte-compared with the written file; every comparison matched.
+
+**Recurrence 2026-09-12:** Evidence capture was blocked by an oversized inline command, an interpreter wrapper and a pipe. Direct foreground redactor stdin succeeded without a raw disk draft or policy change. Suppress temporary server-auth startup output before recording validation. Validation also rejected a checkout-local plan as a durable citation. `src/cli/redact-command.ts` (search: `handleRedactCommand`).
+
+**Recurrence 2026-10-29:** A plan progress-log draft was saved to a session scratch file and piped from it into the redactor. Only redactor output reached the durable file and the redactor changed nothing, but the raw draft stayed on disk until it was deleted; later entries went to the redactor from memory. `.goat-flow/skill-docs/skill-preamble.md` (search: `Plan-summary exception`) governs that write; `.goat-flow/skill-docs/skill-preamble.md` (search: `Redact before disk, not after`) states the general rule.
 
 ## Lesson: Durable exports must redact metadata as well as body fields
 

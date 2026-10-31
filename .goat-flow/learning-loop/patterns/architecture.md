@@ -1,6 +1,6 @@
 ---
 category: architecture
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-23
 ---
 
 ## Pattern: UNSET sentinel + recursive merge for layered CLI overlays
@@ -17,7 +17,7 @@ last_reviewed: 2026-10-11
 
 **Context:** Every top-level import of a CLI entry module loads on every invocation, including `--help` and fast subcommands, so a heavy dependency needed by one subcommand taxes all of them.
 
-**Approach:** Import heavy modules inside the handler that needs them. Goat-flow already does this: `src/cli/cli.ts` keeps only lightweight parser, help, dispatch, error, and version imports at module scope, and `src/cli/cli-handlers.ts` loads audit, setup, and evidence code per command (search: `await import("./audit/audit.js")`). The same rule applies to hook launchers, because the Claude PreToolUse registration starts a Node process on every Bash tool call (`workflow/hooks/agent-config/claude.json`, search: `run-with-bash.mjs`). Time `node dist/cli/cli.js --help` before and after a deferral and keep only the ones that move the number; a sub-10ms import adds noise without payoff.
+**Approach:** Import heavy modules inside the handler that needs them. Goat-flow already does this: `src/cli/cli.ts` keeps only lightweight parser, help, dispatch, error, and version imports at module scope, and `src/cli/cli-handlers.ts` loads audit, setup, and evidence code per command (search: `await import("./audit/audit.js")`). The same rule applies to hook launchers, because the Claude PreToolUse registration starts a Node process on every Bash tool call (`workflow/hooks/agent-config/claude.json`, search: `run-hook.mjs`). Time `node dist/cli/cli.js --help` before and after a deferral and keep only the ones that move the number; a sub-10ms import adds noise without payoff.
 
 **Evidence (EXTERNAL_REFERENCE):** mini-swe-agent PR #749 (merged 2026-02-19) moved the `prompt_toolkit` import from module scope in `src/minisweagent/run/utilities/config.py` into the `prompt()` function, so only interactive subcommands pay its startup cost.
 

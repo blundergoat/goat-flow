@@ -1,6 +1,6 @@
 ---
 category: hook-scanning
-last_reviewed: 2026-09-05
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** What a hook-driven scanner can and cannot see: changed-file enumeration, diff and rename detection, gitignore and gitattribute interactions, and language or block parsing. Hook registration, launcher runtime, and policy-module behaviour live in `hooks.md`; execution cost lives in `hook-performance.md`; installation and per-agent config live in `hook-installation.md`.
@@ -60,7 +60,7 @@ last_reviewed: 2026-09-05
 
 **Why it happens:** A full-repository analyzer silently depends on gitignored local state that the developer tree has and a clean checkout lacks.
 
-**Evidence:** Measured from a clean `git archive` on 2026-08-07: the ratchet emitted stable identity `75483f7900f8f4f6` before the build and passed after `npm run build` with 449 analysed files. Anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`) and `.github/workflows/ci.yml` (search: `Build package binary`). **Recurrence 2026-09-04:** the installer round-trip fixture copied the live checkout and inherited its gitignored managed-install receipt, so the disposable repo failed its first-install assumption at the admission guard; the fixture now excludes the install-state directory, per `test/integration/audit-drift.helpers.ts` (search: `localInstallStateDirectory`).
+**Evidence:** Measured from a clean `git archive` on 2026-08-07: the ratchet emitted stable identity `75483f7900f8f4f6` before the build and passed after `npm run build` with 449 analysed files. Anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`) and `.github/workflows/ci.yml` (search: `Build package binary`). **Recurrence 2026-09-04:** the installer round-trip fixture copied the live checkout and inherited its gitignored managed-install receipt, so the disposable repo failed its first-install assumption at the admission guard; the fixture now excludes the install-state directory, per `test/integration/audit-drift.helpers.ts` (search: `setupInstallRoundTripFixture`).
 
 ## Footgun: Nested template literals can blind the gruff-ts block scanner to everything after them
 

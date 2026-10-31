@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "target": "ES2022", "noEmit": true },
+  "include": ["src/hooks/**/*.mts"],
+  "exclude": ["node_modules"]
+}

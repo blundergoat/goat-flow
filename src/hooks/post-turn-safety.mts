@@ -1,0 +1,238 @@
+#!/usr/bin/env node
+/** Validate Stop input, then scan Git changes or configured controller roots; self-test uses an isolated repository. */
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { reportNativeLauncherUnavailable } from "./hook-launch.mjs";
+import type { PostTurnContext } from "./post-turn/context.mjs";
+
+/** Exercise each scanner outcome in the already-created isolated repository. */
+function checkSelfTestCases(root: string): void {
+  const token =
+    "AKIA" +
+    (process.env.POST_TURN_SELF_TEST_TOKEN_SUFFIX ?? "1234567890ABCDEF");
+  const cases = [
+    { name: "clean", content: "API_KEY=your_api_key_here\n", status: 0 },
+    {
+      name: "invalid byte limit",
+      content: `AWS_ACCESS_KEY_ID=${token}\n`,
+      bytes: "invalid",
+      status: 2,
+    },
+    {
+      name: "leading-zero byte limit",
+      content: "API_KEY=your_api_key_here\n",
+      bytes: "0002",
+      status: 0,
+    },
+    { name: "finding", content: `AWS_ACCESS_KEY_ID=${token}\n`, status: 2 },
+    {
+      name: "EXPORT finding",
+      content: "EXPORT TOKEN=" + "Abcdef1" + "234567890\n",
+      status: 2,
+    },
+    {
+      name: "incomplete",
+      content: "API_KEY=your_api_key_here\n",
+      binary: true,
+      status: 2,
+    },
+  ];
+  for (const variant of ["0", "1"]) {
+    for (const scenario of cases) {
+      writeFileSync(join(root, "settings.env"), scenario.content);
+      const binary = join(root, "binary.dat");
+      if (scenario.binary) writeFileSync(binary, Buffer.from([0, 1, 2]));
+      else rmSync(binary, { force: true });
+      const result = spawnSync(
+        process.execPath,
+        [fileURLToPath(import.meta.url), "--root", root],
+        {
+          cwd: root,
+          input: "",
+          stdio: ["pipe", "ignore", "ignore"],
+          timeout: 10000,
+          windowsHide: true,
+          env: {
+            ...process.env,
+            GOAT_FLOW_HOOK_RESULT_PROTOCOL: "",
+            GOAT_FLOW_POST_TURN_CONTROLLER_CHILD: "1",
+            GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: scenario.bytes ?? "1048576",
+            GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "60",
+            GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS: "20",
+            GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: variant,
+          },
+        },
+      );
+      if (result.error || result.status !== scenario.status)
+        throw new Error(`${scenario.name} case failed on scanner ${variant}`);
+    }
+  }
+}
+
+/** Exercise installed scanner outcomes without reading or changing the user's repository. */
+function runSelfTest(): number {
+  let root: string | undefined;
+  try {
+    root = mkdtempSync(join(tmpdir(), "goat-post-turn-self-test-"));
+    const fixtureRoot = root;
+    const git = (args: string[]) =>
+      spawnSync("git", ["-C", fixtureRoot, ...args], {
+        stdio: "ignore",
+        timeout: 5000,
+        windowsHide: true,
+      }).status === 0;
+    writeFileSync(join(root, "README.md"), "# post-turn safety self-test\n");
+    if (
+      !git(["init", "-q"]) ||
+      !git(["add", "README.md"]) ||
+      !git([
+        "-c",
+        "user.name=goat-flow-self-test",
+        "-c",
+        "user.email=goat-flow-self-test@example.invalid",
+        "commit",
+        "-qm",
+        "initial",
+      ])
+    )
+      throw new Error("fixture setup failed");
+    checkSelfTestCases(root);
+    process.stdout.write("post-turn-safety self-test: ok\n");
+    return 0;
+  } catch (error) {
+    const reason =
+      error instanceof Error ? error.message : "fixture setup failed";
+    process.stderr.write(`post-turn-safety self-test: ${reason}\n`);
+    return 2;
+  } finally {
+    if (root !== undefined) rmSync(root, { recursive: true, force: true });
+  }
+}
+
+try {
+  const runtime = await import("./post-turn/context.mjs");
+  const args = process.argv.slice(2);
+  // The native launcher names the selected project first; an unenterable root fails through the unavailable reply below.
+  if (args[0] === "--root" && args.length >= 2) {
+    process.chdir(args[1] ?? "");
+    args.splice(0, 2);
+  }
+  if (args.length > 0 && !(args.length === 1 && args[0] === "--self-test")) {
+    runtime.printPostTurnUsage();
+    process.exitCode = 2;
+  } else if (args.length === 0) {
+    const env = process.env;
+    const context: PostTurnContext = {
+      environment: env,
+      startedAt: performance.now(),
+      hookVersion:
+        readFileSync(new URL(import.meta.url), "utf8").match(
+          /^\/\/ goat-flow-hook-version: ([^\r\n ]+)$/mu,
+        )?.[1] ?? "",
+      managedResultMode:
+        env.GOAT_FLOW_HOOK_RESULT_PROTOCOL === "goat-flow.hook-result.v1" &&
+        [
+          env.GOAT_FLOW_HOOK_PROVIDER,
+          env.GOAT_FLOW_HOOK_EVENT,
+          env.GOAT_FLOW_HOOK_PROVIDER_MODE,
+          env.GOAT_FLOW_HOOK_ADAPTER_VERSION,
+        ].every(Boolean),
+      findings: [],
+      detectedFindings: 0,
+      incomplete: false,
+      coverageGap: false,
+      recordError: false,
+      boundedReentryEnded: false,
+      infrastructureFailure: false,
+      detail: "",
+      reasonOverride: "",
+      stopPayloadPresent: false,
+      sessionFingerprint: "",
+      stopHookActive: false,
+      stopPayloadError: "",
+      statePaths: null,
+    };
+    if (!(await runtime.readStopContext(context))) {
+      context.detail = `The coding agent supplied an invalid Stop payload: ${context.stopPayloadError}`;
+      context.reasonOverride = "input-invalid";
+      process.stderr.write(
+        `post-turn-safety: scan incomplete (invalid Stop payload: ${context.stopPayloadError}).\n`,
+      );
+      process.exitCode = context.managedResultMode
+        ? await runtime.emitPostTurnHookResult(context, 2)
+        : 2;
+    } else {
+      const recovery = await import("./post-turn/recovery.mjs");
+      const lookup = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+        env: { ...env, LC_ALL: "C" },
+        encoding: "utf8",
+        timeout: 5000,
+        maxBuffer: 65536,
+        windowsHide: true,
+      });
+      const root =
+        lookup.status === 0 ? lookup.stdout.replace(/\n+$/u, "") : "";
+      const controller = await import("./post-turn/controller.mjs");
+      // Outside its own Git top level, a managed controller scans only its configured roots; 3 means none were established.
+      const controllerStatus =
+        env.GOAT_FLOW_POST_TURN_CONTROLLER_CHILD === "1" ||
+        controller.isGitTopLevel(root)
+          ? 3
+          : await controller.runControllerChildScans(context);
+      let failure = "";
+      if (controllerStatus !== 3) {
+        // Established child scope owns this result and must not fall back to scanning another project.
+        process.exitCode = controllerStatus;
+      } else if (root === "") {
+        recovery.reportRepositoryRootFailure(context, lookup.stderr || "");
+        failure = "git repository root unavailable";
+      } else {
+        try {
+          process.chdir(root);
+        } catch {
+          context.detail =
+            "The selected Git repository root could not be entered";
+          process.stderr.write(
+            "post-turn-safety: scan incomplete (repository root cannot be entered).\n",
+          );
+          failure = "repository root cannot be entered";
+        }
+      }
+      if (controllerStatus === 3 && failure !== "") {
+        const variant =
+          env.GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK === "1"
+            ? "fallback"
+            : "native";
+        const status = recovery.finishRepositoryRootFailure(
+          context,
+          `${variant}:${failure}`,
+        );
+        process.exitCode = context.managedResultMode
+          ? await runtime.emitPostTurnHookResult(context, status)
+          : status;
+      } else if (controllerStatus === 3) {
+        const scanner = await import("./post-turn/scanner.mjs");
+        process.exitCode = await runtime.finishPostTurnScan(
+          context,
+          (scanContext) => scanner.scanChangedContent(scanContext, root),
+        );
+      }
+    }
+  } else {
+    process.exitCode = runSelfTest();
+  }
+} catch {
+  process.exitCode = await reportNativeLauncherUnavailable(
+    "post-turn",
+    null,
+    null,
+    "post-turn-safety",
+    {
+      unavailableReasonCode: "hook-unavailable",
+      userFacingReason: "required post-turn runtime is unavailable",
+    },
+  );
+}

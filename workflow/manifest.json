@@ -1,6 +1,6 @@
 {
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.18.0",
+  "version": "1.19.0",
 
   "required_files": [
     ".goat-flow/.gitignore",
@@ -43,16 +43,51 @@
     ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
     ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
     ".goat-flow/hooks/deny-dangerous.sh",
+    ".goat-flow/hooks/deny-dangerous.mjs",
     ".goat-flow/hooks/deny-git-mutations.sh",
+    ".goat-flow/hooks/deny-git-mutations.mjs",
     ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+    ".goat-flow/hooks/deny-dangerous/corpus.json",
     ".goat-flow/hooks/gruff-code-quality.sh",
+    ".goat-flow/hooks/gruff-code-quality.mjs",
+    ".goat-flow/hooks/gruff/scope.mjs",
+    ".goat-flow/hooks/gruff/ranges.mjs",
+    ".goat-flow/hooks/gruff/analyzer.mjs",
+    ".goat-flow/hooks/gruff/feedback.mjs",
     ".goat-flow/hooks/hook-provider-adapters.mjs",
     ".goat-flow/hooks/hook-launch-runtime.mjs",
+    ".goat-flow/hooks/hook-launch.mjs",
+    ".goat-flow/hooks/run-hook.mjs",
+    ".goat-flow/hooks/antigravity-hook-bootstrap.cjs",
+    ".goat-flow/hooks/hook-supervisor.mjs",
+    ".goat-flow/hooks/hook-output.mjs",
+    ".goat-flow/hooks/policy-input.mjs",
+    ".goat-flow/hooks/policy-heredoc.mjs",
+    ".goat-flow/hooks/policy-words.mjs",
+    ".goat-flow/hooks/policy-git.mjs",
+    ".goat-flow/hooks/policy-prefixes.mjs",
+    ".goat-flow/hooks/policy-syntax.mjs",
+    ".goat-flow/hooks/policy-segments.mjs",
+    ".goat-flow/hooks/policy-substitutions.mjs",
+    ".goat-flow/hooks/policy-evaluation.mjs",
+    ".goat-flow/hooks/policy-corpus.mjs",
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs",
+    ".goat-flow/hooks/deny-dangerous/git-command.mjs",
+    ".goat-flow/hooks/deny-dangerous/github-command.mjs",
+    ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs",
+    ".goat-flow/hooks/deny-dangerous/patterns-paths.mjs",
+    ".goat-flow/hooks/process-tree.mjs",
     ".goat-flow/hooks/hook-policy-state.cjs",
     ".goat-flow/hooks/vendor/js-yaml.cjs",
     ".goat-flow/hooks/gh-graphql-read.cjs",
     ".goat-flow/hooks/vendor/graphql.cjs",
     ".goat-flow/hooks/post-turn-safety.sh",
+    ".goat-flow/hooks/post-turn-safety.mjs",
+    ".goat-flow/hooks/post-turn/assignments.mjs",
+    ".goat-flow/hooks/post-turn/context.mjs",
+    ".goat-flow/hooks/post-turn/controller.mjs",
+    ".goat-flow/hooks/post-turn/recovery.mjs",
+    ".goat-flow/hooks/post-turn/scanner.mjs",
     ".goat-flow/hooks/run-with-bash.mjs",
     ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
     ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
@@ -225,17 +260,49 @@
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-dangerous.sh"
     },
+    ".goat-flow/hooks/deny-dangerous.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous.mjs"
+    },
     ".goat-flow/hooks/deny-git-mutations.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-git-mutations.sh"
+    },
+    ".goat-flow/hooks/deny-git-mutations.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-git-mutations.mjs"
     },
     ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-dangerous/guard-runtime.sh"
     },
+    ".goat-flow/hooks/deny-dangerous/corpus.json": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/corpus.json"
+    },
     ".goat-flow/hooks/gruff-code-quality.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/gruff-code-quality.sh"
+    },
+    ".goat-flow/hooks/gruff-code-quality.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff-code-quality.mjs"
+    },
+    ".goat-flow/hooks/gruff/scope.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff/scope.mjs"
+    },
+    ".goat-flow/hooks/gruff/ranges.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff/ranges.mjs"
+    },
+    ".goat-flow/hooks/gruff/analyzer.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff/analyzer.mjs"
+    },
+    ".goat-flow/hooks/gruff/feedback.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff/feedback.mjs"
     },
     ".goat-flow/hooks/hook-provider-adapters.mjs": {
       "ownership": "system-owned",
@@ -244,6 +311,90 @@
     ".goat-flow/hooks/hook-launch-runtime.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/hook-launch-runtime.mjs"
+    },
+    ".goat-flow/hooks/hook-launch.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-launch.mjs"
+    },
+    ".goat-flow/hooks/run-hook.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/run-hook.mjs"
+    },
+    ".goat-flow/hooks/antigravity-hook-bootstrap.cjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/antigravity-hook-bootstrap.cjs"
+    },
+    ".goat-flow/hooks/hook-supervisor.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-supervisor.mjs"
+    },
+    ".goat-flow/hooks/hook-output.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-output.mjs"
+    },
+    ".goat-flow/hooks/policy-input.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-input.mjs"
+    },
+    ".goat-flow/hooks/policy-heredoc.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-heredoc.mjs"
+    },
+    ".goat-flow/hooks/policy-words.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-words.mjs"
+    },
+    ".goat-flow/hooks/policy-git.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-git.mjs"
+    },
+    ".goat-flow/hooks/policy-prefixes.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-prefixes.mjs"
+    },
+    ".goat-flow/hooks/policy-syntax.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-syntax.mjs"
+    },
+    ".goat-flow/hooks/policy-segments.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-segments.mjs"
+    },
+    ".goat-flow/hooks/policy-substitutions.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-substitutions.mjs"
+    },
+    ".goat-flow/hooks/policy-evaluation.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-evaluation.mjs"
+    },
+    ".goat-flow/hooks/policy-corpus.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/policy-corpus.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/patterns-writes.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/git-command.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/git-command.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/github-command.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/github-command.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/patterns-shell.mjs"
+    },
+    ".goat-flow/hooks/deny-dangerous/patterns-paths.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/patterns-paths.mjs"
+    },
+    ".goat-flow/hooks/process-tree.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/process-tree.mjs"
     },
     ".goat-flow/hooks/hook-policy-state.cjs": {
       "ownership": "system-owned",
@@ -264,6 +415,30 @@
     ".goat-flow/hooks/post-turn-safety.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/post-turn-safety.sh"
+    },
+    ".goat-flow/hooks/post-turn-safety.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/post-turn-safety.mjs"
+    },
+    ".goat-flow/hooks/post-turn/assignments.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/post-turn/assignments.mjs"
+    },
+    ".goat-flow/hooks/post-turn/context.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/post-turn/context.mjs"
+    },
+    ".goat-flow/hooks/post-turn/controller.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/post-turn/controller.mjs"
+    },
+    ".goat-flow/hooks/post-turn/recovery.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/post-turn/recovery.mjs"
+    },
+    ".goat-flow/hooks/post-turn/scanner.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/post-turn/scanner.mjs"
     },
     ".goat-flow/hooks/run-with-bash.mjs": {
       "ownership": "system-owned",
@@ -325,11 +500,14 @@
     ".goat-flow/skill-docs/playbooks/",
     ".goat-flow/skill-docs/skill-quality-testing/",
     ".goat-flow/hooks/",
+    ".goat-flow/hooks/post-turn/",
+    ".goat-flow/hooks/gruff/",
     ".goat-flow/hooks/deny-dangerous/",
     ".goat-flow/plans/"
   ],
 
   "directory_purposes": {
+    ".goat-flow/hooks/gruff/": "Generated native Gruff payload ownership, changed ranges, analyzer execution and feedback modules, kept in lockstep with workflow/hooks/gruff/.",
     ".goat-flow/learning-loop/decisions/": "Committed ADR history. Durable architectural, product-surface, and tooling decisions with context and rationale; part of the project's persistent knowledge, not session-scoped WIP.",
     ".goat-flow/learning-loop/footguns/": "Committed architectural trap records. Use for codebase or system footguns that exist independent of one agent mistake; entries should carry grep-friendly file evidence and remain part of durable project knowledge.",
     ".goat-flow/learning-loop/lessons/": "Committed behavioural mistake records. Use for real agent or workflow mistakes learned from incidents; these entries are durable project knowledge, not local session notes.",
@@ -345,6 +523,7 @@
     ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, hook-policy-testing.md for deny-hook policy, mirror, and registration verification, naming-and-placement.md for responsibility-first placement and truthful identifier claims, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline, skill-playbook-authoring-sync.md for built-in playbook shape, mirroring, discovery, registration, and verification, test-selection.md for value-led test dispositions and placement, writing-agent-facing-instructions.md for authoring agent-read documents (skills, playbooks, shared preamble/conventions, instruction files, hook messages, and README discovery rows), writing-sentence-diagnostics.md for sentence-level reader costs, writing-structure-diagnostics.md for document-level assembly defects, and writing-human-facing-prose.md for the human-read prose correctness router. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
     ".goat-flow/skill-docs/skill-quality-testing/": "Committed skill-authoring methodology pack. README.md indexes the pack; tdd-iteration.md, adversarial-framing.md, and deployment.md cover skill TDD, pressure-testing, and deployment discipline.",
     ".goat-flow/hooks/": "Committed central hook runtime. Holds the cross-platform launcher, its bounded launch runtime and provider adapters, deny-dangerous.sh, gruff-code-quality.sh, post-turn-safety.sh, and hook-specific policy modules under subdirectories.",
+    ".goat-flow/hooks/post-turn/": "Generated native Stop context, neutral-result, configured-root controller, scanner-recovery, changed-content scanner and credential-assignment modules, kept in lockstep with workflow/hooks/post-turn/.",
     ".goat-flow/hooks/deny-dangerous/": "Committed parser, response and policy store shared by deny-dangerous.sh and deny-git-mutations.sh. The Git hook owns native Git mutations and GitHub CLI write policy; deny-dangerous owns destructive shell and secret-path policy. The central self-test routes cases to their policy owner.",
     ".goat-flow/plans/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
@@ -372,7 +551,8 @@
       "goat-debug": ["references/diagnostic-techniques.md"],
       "goat-plan": [
         "references/milestone-examples.md",
-        "references/issue-format.md"
+        "references/issue-format.md",
+        "references/issue-sample.md"
       ],
       "goat-critique": [
         "references/rubric-examples.md",
@@ -437,11 +617,11 @@
       "hooks_dir": ".goat-flow/hooks/",
       "settings": ".claude/settings.json",
       "hook_config_file": ".claude/settings.json",
-      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.mjs",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".claude/settings.json",
-        "script_path": ".goat-flow/hooks/deny-dangerous.sh"
+        "script_path": ".goat-flow/hooks/deny-dangerous.mjs"
       },
       "local_pattern": "*/CLAUDE.md",
       "hook_events": {
@@ -449,9 +629,9 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "deny-dangerous.sh",
-        "gruff-code-quality.sh",
-        "post-turn-safety.sh"
+        "deny-dangerous.mjs",
+        "gruff-code-quality.mjs",
+        "post-turn-safety.mjs"
       ]
     },
     "codex": {
@@ -471,11 +651,11 @@
       "hooks_dir": ".goat-flow/hooks/",
       "settings": ".codex/config.toml",
       "hook_config_file": ".codex/hooks.json",
-      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.mjs",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".codex/config.toml",
-        "script_path": ".goat-flow/hooks/deny-dangerous.sh"
+        "script_path": ".goat-flow/hooks/deny-dangerous.mjs"
       },
       "local_pattern": "**/{AGENTS.override.md,AGENTS.md}",
       "hook_events": {
@@ -483,9 +663,9 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "deny-dangerous.sh",
-        "gruff-code-quality.sh",
-        "post-turn-safety.sh"
+        "deny-dangerous.mjs",
+        "gruff-code-quality.mjs",
+        "post-turn-safety.mjs"
       ]
     },
     "antigravity": {
@@ -505,17 +685,17 @@
       },
       "hooks_dir": ".goat-flow/hooks/",
       "hook_config_file": ".agents/hooks.json",
-      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.mjs",
       "deny_mechanism": {
         "type": "deny-script",
-        "path": ".goat-flow/hooks/deny-dangerous.sh"
+        "path": ".goat-flow/hooks/deny-dangerous.mjs"
       },
       "local_pattern": "*/AGENTS.md",
       "hook_events": {
         "pre_tool": "PreToolUse",
         "post_turn": null
       },
-      "hooks": ["deny-dangerous.sh"]
+      "hooks": ["deny-dangerous.mjs", "deny-git-mutations.mjs"]
     },
     "copilot": {
       "name": "Copilot CLI",
@@ -533,17 +713,17 @@
       },
       "hooks_dir": ".goat-flow/hooks/",
       "hook_config_file": ".github/hooks/hooks.json",
-      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.mjs",
       "deny_mechanism": {
         "type": "deny-script",
-        "path": ".goat-flow/hooks/deny-dangerous.sh"
+        "path": ".goat-flow/hooks/deny-dangerous.mjs"
       },
       "local_pattern": ".github/instructions/**/*.instructions.md",
       "hook_events": {
         "pre_tool": "preToolUse",
         "post_turn": null
       },
-      "hooks": ["deny-dangerous.sh", "gruff-code-quality.sh"]
+      "hooks": ["deny-dangerous.mjs", "deny-git-mutations.mjs", "gruff-code-quality.mjs"]
     }
   },
 

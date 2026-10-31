@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-10-01
+last_reviewed: 2026-10-23
 ---
 
 Git command-policy traps: publication, remote locks, history changes, aliases and commands hosted by Git.
@@ -12,7 +12,7 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 
 **Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
 **Severity:** SECURITY
-**Incident count:** 6 | **Latest occurrence:** 2026-10-01
+**Incident count:** 9 | **Latest occurrence:** 2026-10-23
 
 **Prevention:**
 1. Normalize to the command word before calling `is_git_push`, and read "command word" as every unquoting layer the target program applies, not only the shell's. Do not add one-off regexes for the latest bypass.
@@ -20,6 +20,9 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 3. Keep the workflow hook source and the installed `.goat-flow/hooks` mirror byte-identical after policy changes.
 4. Fail closed when wrapper option arity is unknown, and apply the full policy to each pipeline stage. Preserve `xargs` context: its input can supply recursive-delete targets absent from the visible payload.
 5. Parse the entire provider response as one JSON object, and end the parent on any nested denial: JSON providers deny with exit 0 and the captured decision is forwarded once; text providers deny with exit 2, which exits the parent instead of reaching the unavailable-result message.
+6. Remove only one outer quote layer from an env split-string payload; preserve inner executable quotes for ordinary word normalization.
+
+**Recurrence 2026-10-17:** Classifier-only checks returned exit 0 for `env -S '"git" push'`, while `env -S 'git push'` returned exit 2. No Git command ran. In `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `normalize_env_prefix`), two independent quote branches remove an outer single quote and then an inner executable double quote. The unmatched closing quote hides the verb. Use mutually exclusive outer-quote removal and retain a quoted read control beside the publication regression. The production repair is pending; the frozen reference remains historical evidence.
 
 **Symptoms:** The hook blocks a direct `git push` and allows the same push through `env -i`, a quoted assignment such as `FOO='a b'`, an `if true; then ... fi` body, a function body, `bash -lc '...'`, or a Git alias whose value carries a second quoting layer.
 
@@ -33,7 +36,11 @@ Sibling buckets: `deny-github.md`, `deny-shell.md`, `deny-secrets.md`.
 
 **Recurrence 2026-09-27:** In text mode a stage denial printed its `BLOCKED:` line and exited 2 inside the pipeline subshell; the parent returned that status to the runtime tail, which added `Policy hook unavailable: … could not evaluate the command. Re-run goat-flow setup.` A publication verb after a `cat` pipe printed both lines under `--check` and through the Claude PreToolUse launcher; at top level it printed one. The Git-hosted sites already exited on a child status of 2; the pipeline loop did not. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `wrapper_pipeline_status`) now applies that rule, and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `pipeline-stage publication copy`) pins one-line denials via the forbidden-reason argument of `expect_block_message`; exit-only rows had passed with two lines.
 
-**Recurrence 2026-10-01:** The classifier allowed `cmd //c git pu^sh origin main`, escaped executable letters, a caret-obfuscated PR merge, deletion and secret path. Cmd removes those word escapes outside its double quotes. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Decode cmd word escapes`) now normalizes word characters while retaining syntax escapes for later passes. The full corpus adds block/allow pairs under `cmd caret-obfuscated publication` and `cmd escaped ampersand stays literal after word normalization` in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh`. Probe the installed store: both entrypoints load it, so invoking the workflow entrypoint alone does not exercise an unsynced candidate.
+**Recurrence 2026-10-01:** The classifier allowed `cmd //c git pu^sh origin main`, escaped PR merge, deletion and secret paths. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Decode cmd word escapes`) repairs word escapes; its self-test keeps `cmd caret-obfuscated publication` and `cmd escaped ampersand stays literal after word normalization`.
+
+**Recurrence 2026-10-23:** Node also allowed caret-space/tab forms. Native cmd confirmed both; inline /c stops at newline, unlike batch continuation. `src/hooks/policy-segments.mts` (search: `consumeSegmentQuotedCharacter`) retains syntax/newline carets; `test/integration/deny-native-shells.test.ts` (search: `cmd caret whitespace`) pins eight deny/read pairs. RED failed eight protections; GREEN passed 156 cases.
+
+**Recurrence 2026-10-22 (Node review):** Probes exposed comments, ANSI-C strings, case arms, functions, wrapper options and dynamic Git forms. Further checks caught lost nested-variable state, env directory context and duplicate shell-body decoding. Repairs: `src/hooks/policy-segments.mts` (search: `consumeSegmentComment`), `src/hooks/policy-words.mts` (search: `readPolicyAnsiString`, `normalizePolicyEnvPrefix`, `isPolicySubshellCommandSubstitution`), `src/hooks/policy-syntax.mts` (search: `stripPolicyCasePrefix`), `src/hooks/policy-prefixes.mts` (search: `sudoValuePrefix`), `src/hooks/policy-evaluation.mts` (search: `assignedGitExecutables`, `commandStringBody`) and `src/hooks/deny-dangerous/git-command.mts` (search: `projectAssignedGitExpansions`, `gitSubcommandMayComeFromStdin`, `stageOptions`). `src/hooks/deny-dangerous/patterns-writes.mts` (search: `send-email`) guards publication. `test/integration/deny-reviewed-protections.test.ts` keeps controls; `test/fixtures/hooks-bash/policy-reference.json` preserves original outcomes beside `review-gap-` expectations.
 
 ---
 
@@ -178,6 +185,23 @@ Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `alias_confi
 **Recurrence 2026-09-27:** LFS import/export and import `--no-rewrite` exited 0 despite history writes. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_lfs_write_target`) guards them. The shared corpus (search: `LFS migration import writes history`) retains info/help. Recheck caught quoted `--help` messages falsely blamed on aliases; `git_history_block_reason` now uses original arguments. Probes classified text; no migration ran.
 
 **Recurrence 2026-09-28 (forced clean):** The installed classifier allowed `git clean --for -d`, `git clean --forc`, `git clean -d --fo -x` and `git clean --f -d`, but denied `git clean -efolder` and `git clean -- --force`. A prefix-only substitution also risks reading exclusion patterns as flags. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Original words let clean consume`) passes original direct and alias words to `git_option_present`; clean consumes separated and quoted exclusion values and stops at `--`. Existing string callers keep their grammar. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `clean force prefix for`, `clean quoted exclude value preserves words`, `clean alias force after quoted exclude value`) failed before repair and passed in the complete candidate hook store. Plain dry runs stay allowed; a dry run with force stays denied. Probes classified text without running cleanup.
+
+## Footgun: Native Windows paths need absolute checks and shell-safe fixture tokens
+
+**Status:** active | **Created:** 2026-10-20 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Use the host path API for absolute Git paths; normalize only fixture tokens entering shell command text.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Test drive-qualified directories on native Windows after changing Git context or bulk pathspec handling. Keep filesystem and environment values native; render injected command-token paths with forward slashes before shell tokenization. Run the complete candidate corpus in both locales and retain safe-command controls beside denied writes.
+
+**Symptoms:** M14 native Windows parity on Node 20.12.0 found eleven differences per locale on 2026-10-20: six bulk restores were allowed, three safe commands were refused, and two denials named the wrong reason. WSL parity had zero differences for the same source set.
+
+**Why it happens:** Three slash-prefix checks treated drive-qualified absolute paths as relative. Separately, corpus materialization inserted native backslashes into command text, where the shell tokenizer consumed them as escapes. Normalizing filesystem or environment values would conflate these two boundaries.
+
+**Evidence:** `src/hooks/policy-segments.mts` (search: "trackPolicyGitShellDirectory"), `src/hooks/deny-dangerous/git-command.mts` (search: "selectGitDirectory") and `src/hooks/deny-dangerous/patterns-writes.mts` (search: "isBulkResolvedGitPathspec") own directory and pathspec classification. `src/hooks/policy-corpus.mts` (search: "commandTokens") separates command substitution from cwd/environment substitution. M14's local `evidence/m14-windows-divergences.json` retains all twenty-two observations; `evidence/m14-native-path-probes.json` retains the measured path and token probes under `.goat-flow/plans/1.19.0/`.
+
+---
 
 ## Resolved Entries
 

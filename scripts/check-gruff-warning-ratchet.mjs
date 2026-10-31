@@ -1,7 +1,7 @@
 /**
  * Release gate that stops reviewed Gruff warning debt from growing unnoticed.
  * Run from `bash scripts/preflight-checks.sh` before accepting risky work or tagging a release, and
- * from the Node 22 CI job on every pull request. This file owns launching the analyzer and reporting
+ * from the weekly and manual Windows Node 22 CI job. This file owns launching the analyzer and reporting
  * the verdict; gruff-warning-ratchet-checks.mjs owns the rules for what counts as a regression, and
  * ratchet-failure-report.mjs collects the failure lines. A
  * maintainer reads one summary line on pass, or a short bounded list of what regressed on fail.
@@ -158,8 +158,8 @@ function printAcceptedDebtSummary(
  *   analyzer could not run at all
  */
 async function main() {
-  // e.g. a maintainer ran `bash scripts/preflight-checks.sh` before tagging a release, or CI started
-  // the Node 22 ratchet job on a pull request.
+  // e.g. a maintainer ran `bash scripts/preflight-checks.sh` before tagging a release, a pull request's checks job ran preflight,
+  // or the weekly CI run started the Windows Node 22 ratchet job.
   const failures = new RatchetFailureReport();
   const manifest = loadReviewedDebtManifest(failures);
   // The reviewed list itself is unusable, so stop before implying the scan was approved.
