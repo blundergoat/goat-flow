@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-10-30
+last_reviewed: 2026-10-31
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -281,3 +281,16 @@ Inspect literals independently when checking renames, as described in
 **Related source contract:** `workflow/hooks/process-tree.mjs` (search: "must have started the POSIX hook as a detached process group").
 
 ---
+
+## Lesson: A pinned client binary needs its updater switched off first
+
+**Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
+**Decision changed:** Before a one-use capture pins a client binary, find that client's updater and its off switch, and set the switch in the environment the session runs with.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** A hash pin detects a replaced binary but does not stop the replacement. Search the client's help and its binary text for an updater and an off switch, because the switch may not be listed in `--help`, then compare the hash before the one-use claim and after the session. Copilot CLI takes `--no-auto-update`, and Antigravity 1.4.9 reads `AGY_CLI_DISABLE_AUTO_UPDATE`.
+
+**What happened:** A capture packet for Antigravity 1.4.9 on WSL pinned the `agy` binary's hash but left its background updater on. An independent review found the switch in the binary's text. An update during readiness would have failed the pin after the refresh had used up its evidence path, and an update during the session would have spent the one-use claim on a binary nobody had reviewed. The packet now sets the switch, and readiness records whether the client honoured it.
+
+**Root cause:** The helpers were adapted from a Copilot packet by exact replacement. That removed Copilot's update flag as Copilot-only, without asking what the new client's equivalent was.

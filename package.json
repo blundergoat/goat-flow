@@ -145,6 +145,7 @@
   },
   "main": "dist/cli/index.js",
   "overrides": {
+    "minimatch": "11.0.1",
     "typed-rest-client": {
       "qs": "6.16.1"
     }
