@@ -152,3 +152,18 @@ last_reviewed: 2026-10-31
 **Root cause:** A correlation across earlier receipts was written down as a fact about what controls the bridge, and the readiness field matched words the footer does not use.
 
 **Recurrence 2026-10-31:** A Copilot 1.0.91 readiness driver had to show that no MCP server was connected. `/env` draws only the rows in view, so the first run never showed its MCP section. A scroll loop was added, but the second run's search matched "MCP servers" in the slash menu's help text, so the loop never ran and the check looked satisfied. The run's step list showed no scroll. Anchoring the search at the start of a line found the real section, where both servers were disabled, and only that third run's screens were recorded.
+
+---
+
+## Lesson: A filter for account details must allow known text, not remove one known shape
+
+**Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
+**Decision changed:** When printing or saving a client's raw screens, pass them through an allowlist that reduces any line that could name the account, instead of removing only what looks like an email address.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Client screens can carry an address or a handle, and the project redactor leaves email addresses in place: `src/cli/evidence/redaction.ts` (search: `scrubDurableText`) passed a synthetic address through unchanged on 2026-10-31. Before saving a capture receipt, hide the client's account line if it offers a switch, strip addresses from the terminal frames and record how many remain. Scan by starting from each `@`, because a plain address pattern over megabytes of frames can run for minutes.
+
+**What happened:** A test of a terminal renderer piped a client's screen through a `sed` that removed email addresses, and the screen's sign-in line printed a GitHub handle into the session output. The same session's scan found six address-like strings in the terminal frames of an earlier capture receipt, which had been saved through the redactor. That file is gitignored and stays as pinned evidence, and no other receipt or extract in the scan held one.
+
+**Root cause:** Both filters were built for one shape of account detail and passed everything else. Saving through the redactor was treated as proof the frames held no account details, although it targets secrets.

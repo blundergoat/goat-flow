@@ -285,12 +285,31 @@ Inspect literals independently when checking renames, as described in
 ## Lesson: A pinned client binary needs its updater switched off first
 
 **Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
-**Decision changed:** Before a one-use capture pins a client binary, find that client's updater and its off switch, and set the switch in the environment the session runs with.
+**Severity:** CORRECTNESS
+**Decision changed:** Before launching a pinned client for any reason, including a no-task check, make its updater unable to replace what runs, and treat an off switch as unproven until a launch shows it working.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-31
 
-**Prevention:** A hash pin detects a replaced binary but does not stop the replacement. Search the client's help and its binary text for an updater and an off switch, because the switch may not be listed in `--help`, then compare the hash before the one-use claim and after the session. Copilot CLI takes `--no-auto-update`, and Antigravity 1.4.9 reads `AGY_CLI_DISABLE_AUTO_UPDATE`.
+**Prevention:** A hash pin detects a replaced binary but does not stop the replacement, and an off switch found in a binary's text proves only that the name exists. Run the client from a private copy in a directory the updater cannot write to, so a failed switch costs nothing. Compare the hash after the client's background work has finished as well as at exit, because the replacement can land seconds later. Copilot CLI takes `--no-auto-update`. Antigravity's binary names `AGY_CLI_DISABLE_AUTO_UPDATE`, but setting it to `1` did not stop its updater on 1.4.9; disassembly of 1.4.12 shows the value compared with the exact string `true`.
 
-**What happened:** A capture packet for Antigravity 1.4.9 on WSL pinned the `agy` binary's hash but left its background updater on. An independent review found the switch in the binary's text. An update during readiness would have failed the pin after the refresh had used up its evidence path, and an update during the session would have spent the one-use claim on a binary nobody had reviewed. The packet now sets the switch, and readiness records whether the client honoured it.
+**What happened:** A capture packet for Antigravity 1.4.9 on WSL pinned the `agy` binary's hash but left its background updater on. An independent review found the switch in the binary's text. An update during readiness would have failed the pin after the refresh had used up its evidence path, and an update during the session would have spent the one-use claim on a binary nobody had reviewed.
 
-**Root cause:** The helpers were adapted from a Copilot packet by exact replacement. That removed Copilot's update flag as Copilot-only, without asking what the new client's equivalent was.
+**Root cause:** The helpers were adapted from a Copilot packet by exact replacement. That removed Copilot's update flag as Copilot-only, without asking what the new client's equivalent was. The first fix then trusted a switch nobody had seen work.
+
+**Recurrence 2026-10-31:** With the switch set to `1`, the first no-task readiness launch still logged `Spawned background update process` and replaced the user's `~/.local/bin/agy` with 1.4.12 about six seconds later, keeping the old binary beside it as `.old`. The hash check at client exit had already passed. The packet's own "no provider update" boundary was broken, although no task ran and no one-use claim was spent, because the capture refuses a binary that does not match its pin.
+
+---
+
+## Lesson: A script driving a live client must prove the screen before every key
+
+**Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
+**Decision changed:** Before a script sends a key to an interactive client, require the exact screen state that key is safe in, and stop without a key on any other state.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Waiting for a word to appear proves little, because a typed command echoes that word back. Send Enter only when the prompt line equals the command exactly, free text only into a panel showing its own input, and Escape only while something is open. Test the script against a stand-in client that logs every key it receives, including a dropped key, a panel that takes no focus and a panel that will not close. A terminal renderer used for these checks must handle scroll regions and receive every frame, or it shows a stale screen.
+
+**What happened:** A no-task readiness driver for a coding client typed a settings filter and slash commands on fixed sleeps. An independent review showed that if the settings panel had not taken focus, the filter text would stay in the prompt, and the next slash command and Enter would send both to the model as a task. The rewritten driver passed a stand-in harness covering a trust dialog, a dropped key, a panel without focus, filter text reaching the prompt and a panel that would not close, with no task submitted in any of them.
+
+**Root cause:** The script treated elapsed time and matching text as proof of state, and it could not tell an echoed command from an open panel.
