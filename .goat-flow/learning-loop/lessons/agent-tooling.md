@@ -313,3 +313,18 @@ Inspect literals independently when checking renames, as described in
 **What happened:** A no-task readiness driver for a coding client typed a settings filter and slash commands on fixed sleeps. An independent review showed that if the settings panel had not taken focus, the filter text would stay in the prompt, and the next slash command and Enter would send both to the model as a task. The rewritten driver passed a stand-in harness covering a trust dialog, a dropped key, a panel without focus, filter text reaching the prompt and a panel that would not close, with no task submitted in any of them.
 
 **Root cause:** The script treated elapsed time and matching text as proof of state, and it could not tell an echoed command from an open panel.
+
+---
+
+## Lesson: Check a Windows permission change before relying on it from WSL
+
+**Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
+**Decision changed:** Run a permission change as its own step, confirm that it applied and that reading and starting still work, and only then run anything that depends on it.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** `icacls.exe` may not be on the WSL `PATH`, so call it by full path. Its `D` right is wider than delete: a deny with `D` also stopped Node listing the folder, reading the file and starting a program there, while the same rule with `DE` left those working. A variable set in WSL reaches a Windows program only when `WSLENV` names it, so `env NAME=value agy.exe` does not set it. Write refusal probes so they undo whatever Windows allows.
+
+**What happened:** While preparing a client copy for a capture on Windows, a chained command's `icacls.exe` call failed, so its write and rename tests ran against an unprotected folder and renamed the copy. The same command then tried the copy's `--version` and `--help` before the user had approved any launch, one of them without the update switch. Neither started, only because the rename had moved the file. A later baseline probe renamed the copy again.
+
+**Root cause:** The command chained the change, its tests and a client start without stopping on failure, and the first rule was judged by what it refused rather than what it still allowed.
