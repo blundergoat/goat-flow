@@ -139,12 +139,16 @@ last_reviewed: 2026-10-31
 ## Lesson: A feature is absent only when its own signal is absent in a real session
 
 **Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
+**Severity:** CORRECTNESS
 **Decision changed:** Before a packet says a launch option keeps a client feature out of a session, run that client version with the option and search for the feature's actual screen and transcript signals; until then, report the feature as unknown.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-31
 
-**Prevention:** Earlier runs that differ in both a setting and a feature do not show that the setting controls the feature. Find out how the feature appears in each place it can appear, then search for those exact signals during no-task readiness. A readiness field named for a feature proves only the text it matches. If the feature cannot be excluded, tell the user before spending a one-use claim, and state in the row how any affected claim is attributed. Evidence anchor: `src/cli/hook-provider-captures.ts` (search: `A Remote Control bridge was active`).
+**Prevention:** Earlier runs that differ in both a setting and a feature do not show that the setting controls the feature. Find out how the feature appears in each place it can appear, then search for those exact signals during no-task readiness. A readiness field named for a feature proves only the text it matches, so confirm the match is the feature's own row and not other text on screen. If the feature cannot be excluded, tell the user before spending a one-use claim, and state in the row how any affected claim is attributed. Evidence anchor: `src/cli/hook-provider-captures.ts` (search: `A Remote Control bridge was active`).
 
 **What happened:** A packet for interactive Claude Code 2.1.314 captures on WSL expected that loading project settings only would keep the Remote Control bridge out of the sessions. Earlier WSL receipts, which loaded user settings with `remoteControlAtStartup` on, held session links, and the project-settings Windows receipts held none. A readiness field then reported no Remote Control because it searched for those words, while the client's footer shows `/rc`. All three sessions showed `/rc` and each transcript held a bridge session id, although `/status` listed project settings only. The decision record names no approval channel, so tool approvals could be attributed to the operator only by timing. The user was told, and the rows and the hooks README now state that limit.
 
 **Root cause:** A correlation across earlier receipts was written down as a fact about what controls the bridge, and the readiness field matched words the footer does not use.
+
+**Recurrence 2026-10-31:** A Copilot 1.0.91 readiness driver had to show that no MCP server was connected. `/env` draws only the rows in view, so the first run never showed its MCP section. A scroll loop was added, but the second run's search matched "MCP servers" in the slash menu's help text, so the loop never ran and the check looked satisfied. The run's step list showed no scroll. Anchoring the search at the start of a line found the real section, where both servers were disabled, and only that third run's screens were recorded.

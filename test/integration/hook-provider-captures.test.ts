@@ -115,6 +115,9 @@ describe("host-specific hook provider captures", () => {
       ["codex", "deny-git-mutations", "C13"],
       ["codex", "gruff-code-quality", "C14"],
       ["codex", "post-turn-safety", "C15"],
+      ["copilot", "deny-dangerous", "C16"],
+      ["copilot", "deny-git-mutations", "C16"],
+      ["copilot", "gruff-code-quality", "C17"],
     ] as const;
     for (const [provider, hookId, caseId] of attached) {
       const evidence = getHookSpec(hookId)?.providerEvidence?.[provider];
@@ -139,9 +142,10 @@ describe("host-specific hook provider captures", () => {
     assert.equal(windows.verification, "verified");
     assert.equal(windows.capture?.providerVersion, "1.0.103");
     assert.equal(windows.capture?.resultDelivery, "delivered");
-    assert.equal(wsl.verification, "incomplete");
-    assert.equal(wsl.capture, undefined);
-    assert.match(wsl.limitations.join(" "), /fallback/u);
+    assert.equal(wsl.caseId, "C16");
+    assert.equal(wsl.verification, "verified");
+    assert.equal(wsl.capture?.providerVersion, "1.0.91");
+    assert.equal(wsl.capture?.resultDelivery, "delivered");
     const windowsClaude = hostEvidence("claude", "windows");
     assert.equal(windowsClaude.caseId, "C1");
     assert.equal(windowsClaude.verification, "verified");
@@ -176,6 +180,8 @@ describe("host-specific hook provider captures", () => {
       C13: "verified",
       C14: "verified",
       C15: "verified",
+      C16: "verified",
+      C17: "verified",
     };
     for (const row of HOOK_PROVIDER_HOST_EVIDENCE) {
       const expected = expectedVerification[row.caseId] ?? "incomplete";
