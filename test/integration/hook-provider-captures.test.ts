@@ -118,6 +118,8 @@ describe("host-specific hook provider captures", () => {
       ["copilot", "deny-dangerous", "C16"],
       ["copilot", "deny-git-mutations", "C16"],
       ["copilot", "gruff-code-quality", "C17"],
+      ["antigravity", "deny-dangerous", "C18"],
+      ["antigravity", "deny-git-mutations", "C18"],
     ] as const;
     for (const [provider, hookId, caseId] of attached) {
       const evidence = getHookSpec(hookId)?.providerEvidence?.[provider];
@@ -162,6 +164,10 @@ describe("host-specific hook provider captures", () => {
     assert.equal(wslCodex.caseId, "C13");
     assert.equal(wslCodex.verification, "verified");
     assert.equal(wslCodex.capture?.providerVersion, "0.165.0");
+    const wslAntigravity = hostEvidence("antigravity", "wsl");
+    assert.equal(wslAntigravity.caseId, "C18");
+    assert.equal(wslAntigravity.verification, "verified");
+    assert.equal(wslAntigravity.capture?.providerVersion, "1.4.12");
     const expectedVerification: Readonly<
       Record<string, HookProviderHostEvidence["verification"]>
     > = {
@@ -182,6 +188,7 @@ describe("host-specific hook provider captures", () => {
       C15: "verified",
       C16: "verified",
       C17: "verified",
+      C18: "verified",
     };
     for (const row of HOOK_PROVIDER_HOST_EVIDENCE) {
       const expected = expectedVerification[row.caseId] ?? "incomplete";
