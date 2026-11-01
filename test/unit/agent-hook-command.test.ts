@@ -2,10 +2,13 @@
  * Checks the process `goat-flow hooks verify` starts when it replays a registered hook on the user's platform.
  *
  * A replay that silently runs nothing would report a passing hook, so each case proves the configured command decided the exit.
- * The commands only exit; no managed hook or user action runs.
+ * Disposable launchers expose inherited settings; no user action runs.
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import {
@@ -15,8 +18,10 @@ import {
   matcherForAgent,
 } from "../../src/cli/server/agent-hook-command.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 
 describe("agent hook replay descriptors", () => {
+  // Reading file content triggers the content policy without broadening Git-mutation checks to unrelated tools.
   it("matches Antigravity read_file only for its content policy", () => {
     const content = getHookSpec("deny-dangerous");
     const git = getHookSpec("deny-git-mutations");
@@ -28,6 +33,7 @@ describe("agent hook replay descriptors", () => {
         .includes("read_file"),
     );
     assert.equal(matcherForAgent(PROFILES.antigravity, git), "run_command");
+    // Other providers keep their own tool vocabulary for the same user action.
     for (const agent of [PROFILES.claude, PROFILES.codex, PROFILES.copilot]) {
       assert.ok(
         !matcherForAgent(agent, content).split("|").includes("read_file"),
@@ -65,6 +71,7 @@ describe("agent hook replay descriptors", () => {
 });
 
 describe("Codex Stop scan budget", () => {
+  // Sync must recognize a Codex Stop registration whose default scan limit was removed on either platform.
   it("keeps the scan limit in exact managed identity on both platforms", () => {
     const spec = getHookSpec("post-turn-safety");
     assert.ok(spec);
@@ -73,15 +80,17 @@ describe("Codex Stop scan budget", () => {
       ".goat-flow/hooks",
       spec,
     );
+    // Codex stores shell commands; another form would bypass the registration contract under test.
     if (descriptor.form !== "shell")
       assert.fail("Codex uses shell descriptors");
-    const posixPrefix = "GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304 ";
-    const windowsPrefix =
-      "$env:GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304'; ";
-    assert.ok(descriptor.command.startsWith(posixPrefix));
+    const prefix =
+      "process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES??='4194304';";
+    const replay = agentHookSpawnDescriptor(descriptor, "linux");
+    assert.ok(replay.args[1].startsWith(prefix));
     const windowsCommand = descriptor.commandWindows;
     assert.ok(windowsCommand);
-    assert.ok(windowsCommand.startsWith(windowsPrefix));
+    const encoded = Buffer.from(replay.args[1]).toString("base64");
+    assert.ok(windowsCommand.includes(encoded));
     const registered = {
       command: descriptor.command,
       commandWindows: windowsCommand,
@@ -94,7 +103,7 @@ describe("Codex Stop scan budget", () => {
       entryCarriesHandlerDescriptor(
         {
           ...registered,
-          command: registered.command.slice(posixPrefix.length),
+          command: registered.command.replace(prefix, ""),
         },
         "codex",
         descriptor,
@@ -105,7 +114,10 @@ describe("Codex Stop scan budget", () => {
       entryCarriesHandlerDescriptor(
         {
           ...registered,
-          commandWindows: registered.commandWindows.slice(windowsPrefix.length),
+          commandWindows: registered.commandWindows.replace(
+            encoded,
+            Buffer.from(replay.args[1].slice(prefix.length)).toString("base64"),
+          ),
         },
         "codex",
         descriptor,
@@ -118,6 +130,7 @@ describe("Codex Stop scan budget", () => {
 describe("Copilot Windows transport", () => {
   // Copilot runs `powershell` on Windows, where the JSON-quoted Bash command cannot be parsed.
   it("registers the literal PowerShell override and treats the old shared row as stale", () => {
+    // Each shipped Copilot hook needs a Windows command that preserves its bootstrap and literal paths.
     for (const hookId of [
       "deny-dangerous",
       "deny-git-mutations",
@@ -130,6 +143,7 @@ describe("Copilot Windows transport", () => {
         ".goat-flow/hooks",
         spec,
       );
+      // Copilot supplies both shell fields so sync can detect a stale Windows command.
       if (descriptor.form !== "shell")
         assert.fail("Copilot uses shell descriptors");
       assert.ok(descriptor.command.startsWith('node -e "'));
@@ -164,6 +178,7 @@ describe("Copilot Windows transport", () => {
 });
 
 describe("Claude Stop scan budget", () => {
+  // Sync must recognize a Claude Stop registration whose default limit is missing from its ordered arguments.
   it("keeps the per-file scan limit in the managed argv identity", () => {
     const spec = getHookSpec("post-turn-safety");
     assert.ok(spec);
@@ -174,7 +189,7 @@ describe("Claude Stop scan budget", () => {
     );
     assert.ok(descriptor.form === "argv", "Claude uses argv descriptors");
     const prefix =
-      "process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304';";
+      "process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES??='4194304';";
     assert.ok(descriptor.args[1].startsWith(prefix));
     assert.equal(
       entryCarriesHandlerDescriptor(descriptor, "claude", descriptor),
@@ -202,12 +217,87 @@ describe("Claude Stop scan budget", () => {
   });
 });
 
+describe("Stop scan budget inheritance", () => {
+  // Exercise each registered launch route that must deliver the user's Stop-scan settings.
+  for (const [agent, transport] of [
+    ["claude", "argv"],
+    ["codex", "posix"],
+    ["codex", "windows-bootstrap"],
+  ] as const) {
+    // Unset uses the shipped default; explicit larger and smaller user limits must both survive launch.
+    for (const [label, inherited, expected] of [
+      ["unset", undefined, "4194304"],
+      ["larger", "8388608", "8388608"],
+      ["smaller", "524288", "524288"],
+    ] as const) {
+      it(`${agent} ${transport} delivers the ${label} limit to its launcher`, () => {
+        const root = mkdtempSync(join(tmpdir(), "goat-hook-scan-budget-"));
+        try {
+          const spec = getHookSpec("post-turn-safety");
+          assert.ok(spec);
+          const descriptor = buildAgentHookDescriptor(
+            agent,
+            ".goat-flow/hooks",
+            spec,
+          );
+          const hookDirectory = join(root, ".goat-flow/hooks");
+          mkdirSync(hookDirectory, { recursive: true });
+          writeFileSync(join(hookDirectory, spec.primaryScript), "");
+          writeFileSync(
+            join(hookDirectory, "run-hook.mjs"),
+            "process.stdout.write(process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES ?? 'missing');export function runHookNative(){return 0;}\n",
+          );
+          writeAgentHookState(root, PROFILES[agent], spec, true);
+          const environment = { ...process.env };
+          delete environment.GIT_DIR;
+          delete environment.GIT_WORK_TREE;
+          delete environment.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES;
+          // An absent setting means use defaults; any supplied user setting remains authoritative.
+          if (inherited !== undefined)
+            environment.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES = inherited;
+
+          let command: string;
+          let args: string[];
+          // Claude launches its registered argv directly, without shell reinterpretation of the user's settings.
+          if (descriptor.form === "argv") {
+            command = process.execPath;
+            args = descriptor.args;
+            // Codex on POSIX must pass the same setting through its registered shell command.
+          } else if (transport === "posix") {
+            command = "bash";
+            args = ["-c", descriptor.command];
+          } else {
+            assert.ok(descriptor.commandWindows);
+            // Run the exact Node payload and literal operands registered for PowerShell; native PowerShell remains a platform check.
+            const operands = [
+              ...descriptor.commandWindows.matchAll(/'((?:''|[^'])*)'/gu),
+            ].map((match) => match[1].replaceAll("''", "'"));
+            assert.equal(operands.length, 7);
+            command = process.execPath;
+            args = ["-e", ...operands];
+          }
+          const result = spawnSync(command, args, {
+            cwd: root,
+            encoding: "utf8",
+            env: environment,
+            timeout: 5000,
+          });
+          assert.equal(result.status, 0, result.stderr);
+          assert.equal(result.stdout, expected);
+        } finally {
+          rmSync(root, { recursive: true, force: true });
+        }
+      });
+    }
+  }
+});
+
 describe("Claude host failure policy", () => {
-  // Covers the one host-boundary gap the launcher cannot close itself: Claude must refuse the command when the policy
-  // handler never starts, while optional Gruff feedback and the Stop scan keep their non-blocking host behaviour.
+  // Claude must refuse the user's command when its policy handler cannot start; optional feedback and Stop omit that host-only field.
   it("marks only Claude policy rows to block when the handler cannot run", () => {
     const policyIds = ["deny-dangerous", "deny-git-mutations"];
     const feedbackIds = ["gruff-code-quality", "post-turn-safety"];
+    // Compare policies, feedback, and Stop so a host failure setting cannot change unrelated user flows.
     for (const hookId of [...policyIds, ...feedbackIds]) {
       const spec = getHookSpec(hookId);
       assert.ok(spec, hookId);
@@ -259,9 +349,11 @@ describe("Claude host failure policy", () => {
 });
 
 describe("managed Node replay descriptors", () => {
+  // Users upgrading hooks must retain their provider's command form, replay route, and Stop-scan default.
   it("retains provider forms, inert routes and the Codex Stop budget in shipped Node descriptors", () => {
     const spec = getHookSpec("deny-dangerous");
     assert.ok(spec);
+    // Each provider replays its installed Node hook through its supported platform route.
     for (const agent of [
       "claude",
       "codex",
@@ -280,6 +372,7 @@ describe("managed Node replay descriptors", () => {
       );
       assert.equal(candidate.form, installed.form);
       const replay = agentHookSpawnDescriptor(candidate, "linux");
+      // Antigravity replays from its agent directory and needs a bootstrap path relative to that directory.
       if (agent === "antigravity") {
         assert.ok(candidate.form === "shell");
         assert.equal(
@@ -302,6 +395,7 @@ describe("managed Node replay descriptors", () => {
         assert.equal(replay.args[2], ".goat-flow/hooks/deny-dangerous.mjs");
         assert.equal(replay.args[6], ".goat-flow/hooks/run-hook.mjs");
       }
+      // Claude argv handlers keep inert shell routes so cross-loaded shell hosts do not run the hook twice.
       if (installed.form === "argv") {
         assert.equal(installed.args[6], ".goat-flow/hooks/run-hook.mjs");
         assert.ok(candidate.form === "argv");
@@ -310,6 +404,7 @@ describe("managed Node replay descriptors", () => {
       } else {
         assert.match(installed.command, /run-hook\.mjs/u);
       }
+      // Codex users on Windows must reach the explicit PowerShell override.
       if (agent === "codex") {
         assert.equal(
           agentHookSpawnDescriptor(candidate, "win32").command,
@@ -324,11 +419,10 @@ describe("managed Node replay descriptors", () => {
       ".goat-flow/hooks",
       stopSpec,
     );
-    assert.deepEqual(agentHookSpawnDescriptor(stop, "linux").env, {
-      GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "4194304",
-    });
+    assert.equal(agentHookSpawnDescriptor(stop, "linux").env, undefined);
   });
 
+  // A Windows override remains usable even when the default command cannot be parsed for replay.
   it("selects the Windows override before parsing the default native command", () => {
     const spec = getHookSpec("deny-dangerous");
     assert.ok(spec);
@@ -365,9 +459,11 @@ describe("managed Node replay descriptors", () => {
     );
   });
 
+  // Verification rejects stale Bash operands and malformed commands instead of reporting a successful Node-hook replay.
   it("rejects mixed-runtime operands and malformed native commands", () => {
     const spec = getHookSpec("deny-dangerous");
     assert.ok(spec);
+    // Both argv and shell registrations must reject stale script operands after the Node-hook migration.
     for (const agent of ["claude", "codex"] as const) {
       const installed = buildAgentHookDescriptor(
         agent,

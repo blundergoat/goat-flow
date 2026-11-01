@@ -1,5 +1,10 @@
 #!/usr/bin/env node
-// Freeze policy assertions from the Bash reference and compare the Node candidate against them.
+/**
+ * Check hook-policy parity against frozen Bash evidence before a maintainer accepts a runtime change.
+ *
+ * Re-run original assertions in disposable projects and compare their inputs, outputs, and exit status with saved evidence.
+ * Report mode records completed differences for investigation; it never approves them as new expectations.
+ */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -29,11 +34,22 @@ export { bashPath };
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixture = join(root, "test/fixtures/hooks-bash");
 const policies = ["deny-dangerous", "deny-git-mutations"];
-// Bind fixture and corpus bytes independently of Git's historical object IDs.
+/**
+ * Hash fixture or corpus bytes so parity checks can detect changes independently of Git object identity.
+ *
+ * @param bytes - fixture or corpus content; empty content still has a stable hash
+ * @returns SHA-256 identity for these exact bytes; never empty
+ */
 export const digest = (bytes) =>
   createHash("sha256").update(bytes).digest("hex");
 
-// Refuse incomplete or changed reference dependencies before any hook runs.
+/**
+ * Verify every frozen dependency before a maintainer runs policy comparisons.
+ * Reads fixture files and runs Git; throws on missing files, changed bytes, or an incomplete dependency inventory.
+ *
+ * @param base - frozen fixture directory; omitted uses the repository's checked-in reference
+ * @returns validated snapshot metadata; missing files or changed identities throw
+ */
 export function validateSnapshot(base = fixture) {
   const snapshot = JSON.parse(
     readFileSync(join(base, "snapshot.json"), "utf8"),
@@ -46,6 +62,7 @@ export function validateSnapshot(base = fixture) {
     "complete frozen dependency inventory",
   );
   assert.equal(new Set(snapshot.files.map((file) => file.path)).size, 43);
+  // Check every dependency before a replay can claim a trustworthy hook decision.
   for (const file of snapshot.files) {
     assert(
       !file.path.startsWith("/") && !file.path.split(/[\\/]/).includes(".."),
@@ -69,6 +86,7 @@ export function validateSnapshot(base = fixture) {
       assert.equal(gitBlob.status, 0, "Git blob identity calculation");
       assert.equal(gitBlob.stdout.trim(), file.gitBlob, "frozen Git blob");
     } catch (error) {
+      // A missing Git executable or changed fixture bytes aborts this check with the affected file and elapsed time.
       throw new Error(
         `Frozen Git blob failed: file=${file.path}; elapsedMs=${Date.now() - started}: ${error.message}`,
         { cause: error },
@@ -77,6 +95,7 @@ export function validateSnapshot(base = fixture) {
       closeSync(descriptor);
     }
   }
+  // Both reference trees need their own frozen parser dependencies before comparisons can start.
   for (const prefix of ["workflow/hooks/", ".goat-flow/hooks/"]) {
     assert(
       snapshot.files.some(
@@ -92,10 +111,17 @@ export function validateSnapshot(base = fixture) {
   return snapshot;
 }
 
-// Return an isolated, caller-owned project containing only hash-verified bytes.
+/**
+ * Create a disposable project from verified frozen files so comparisons cannot read the maintainer's live hook source.
+ * Writes files and permissions in a temporary directory; the caller removes that directory after use.
+ *
+ * @param base - frozen fixture directory; omitted uses the checked-in reference
+ * @returns new temporary project path; the caller removes it after comparison
+ */
 export function materializeReference(base = fixture) {
   const snapshot = validateSnapshot(base);
   const project = mkdtempSync(join(tmpdir(), "goat-hook-reference-"));
+  // Copy verified files into the disposable project so comparisons cannot borrow live source.
   for (const file of snapshot.files) {
     const destination = join(project, file.path);
     mkdirSync(dirname(destination), { recursive: true });
@@ -107,8 +133,16 @@ export function materializeReference(base = fixture) {
   return project;
 }
 
-// Pin the requested locale and clear root overrides. An explicit jq binary is
-// version-checked and copied locally; acceptance also checks the resolved jq.
+/**
+ * Prepare the reference environment so the maintainer's shell settings cannot select a different project or parser.
+ * An optional jq path is version-checked and copied into the disposable project; absent means use the inherited PATH.
+ *
+ * @param project - disposable reference project whose parser may be prepared
+ * @param locale - supported frozen locale, C or C.UTF-8
+ * @param jqBin - optional jq 1.6 executable; absent leaves parser lookup on the inherited PATH
+ *
+ * @returns environment map for the reference process; project-root overrides are removed
+ */
 export function referenceEnvironment(
   project,
   locale,
@@ -125,13 +159,16 @@ export function referenceEnvironment(
   // Windows treats Path and PATH as one variable; a spread object does not.
   // Keep one spelling before prepending jq so Bash remains discoverable.
   if (process.platform === "win32") {
+    // Collapse duplicate PATH spellings before adding the parser selected for this comparison.
     for (const key of Object.keys(env)) {
+      // Native Windows processes treat these spellings as one setting, so retain a single key.
       if (key.toUpperCase() === "PATH" && key !== "PATH") {
         env.PATH = env[key];
         Reflect.deleteProperty(env, key);
       }
     }
   }
+  // Clear inherited project overrides so the replay stays inside its disposable reference tree.
   for (const key of [
     "GIT_DIR",
     "GIT_WORK_TREE",
@@ -139,6 +176,7 @@ export function referenceEnvironment(
     "GOAT_HOOK_LIB_DIR",
   ])
     Reflect.deleteProperty(env, key);
+  // An explicit jq path selects the exact parser version used to freeze the evidence.
   if (jqBin) {
     const version = spawnSync(jqBin, ["--version"], { encoding: "utf8" });
     assert.equal(version.status, 0, "pinned jq starts");
@@ -149,6 +187,7 @@ export function referenceEnvironment(
       bin,
       process.platform === "win32" ? "jq.exe" : "jq",
     );
+    // Reuse the parser already copied for this disposable project instead of overwriting it on each replay.
     if (!existsSync(destination))
       cpSync(jqBin, destination, { errorOnExist: true });
     chmodSync(destination, 0o755);
@@ -157,8 +196,21 @@ export function referenceEnvironment(
   return env;
 }
 
-// Classify inert check text or raw provider bytes; proposed commands never run.
-// Process startup, timeout and incomplete output fail extraction visibly.
+/**
+ * Run the frozen policy on inert command text or provider input without executing the proposed user action.
+ * Use for replay comparisons; throws on process startup failure, timeout, or incomplete output.
+ *
+ * @param project - disposable reference project used for hook lookup
+ * @param policy - registered policy whose saved decision is being replayed
+ * @param input - inert command text or provider bytes; no command field selects the stdin route
+ *
+ * @param locale - frozen locale to replay; omitted uses C
+ * @param env - fixture environment overrides; empty means use only the prepared reference environment
+ * @param id - optional case identity for errors; absent uses a hash of the input
+ *
+ * @param options - timeout in milliseconds or timeout/cwd overrides; omitted uses the project cwd and 30 seconds
+ * @returns completed exit status and encoded output; no result is accepted when startup or completion fails
+ */
 export function runFrozen(
   project,
   policy,
@@ -172,6 +224,7 @@ export function runFrozen(
     typeof options === "number" ? { timeoutMs: options } : options;
   assert(policies.includes(policy), "known policy");
   const command = join(project, ".goat-flow/hooks", `${policy}.sh`);
+  // Without command text, the hook reads provider input from stdin instead of the explicit check route.
   const args = input.command === undefined ? [] : [`--check=${input.command}`];
   const started = Date.now();
   const result = spawnReferenceCommand("bash", [bashPath(command), ...args], {
@@ -183,6 +236,7 @@ export function runFrozen(
     timeout: timeoutMs,
     maxBuffer: 8 * 1024 * 1024,
   });
+  // A missing Bash executable or replay timeout produces no decision that a maintainer can accept.
   if (result.error || result.status === null)
     throw new Error(
       `Frozen launch failed: case=${id ?? digest(JSON.stringify(input))}; policy=${policy}; locale=${locale}; elapsedMs=${Date.now() - started}: ${result.error?.message ?? "reference process incomplete"}`,
@@ -195,12 +249,24 @@ export function runFrozen(
   };
 }
 
-// Replay through the existing reference transport with this driver's pinned environment and runner.
+/**
+ * Replay a saved case with its fixture setup and pinned environment when a maintainer compares supplemental evidence.
+ *
+ * @param project - disposable frozen project used to restore the saved case setup
+ * @param row - saved input, working directory, fixture files, and environment
+ * @param locale - saved locale to replay; omitted uses C
+ *
+ * @returns completed frozen outcome; startup failures throw instead of becoming policy evidence
+ */
 export const runFrozenRow = (project, row, locale = "C") =>
   replayFrozenRow(project, row, locale, referenceEnvironment, runFrozen);
 
-// This program observes a disposable self-test's real subprocesses. It forwards
-// their original output and exit so the original assertions still decide success.
+/**
+ * Build the observer program used while extracting evidence from a disposable Bash self-test.
+ * Forward each subprocess's output and exit status so the original assertions still decide whether that run succeeds.
+ *
+ * @returns Node observer source; extraction writes it into a disposable work directory
+ */
 function captureProgram() {
   return (
     String.raw`
@@ -284,8 +350,14 @@ process.stdout.write(result.stdout); process.stderr.write(result.stderr); proces
   );
 }
 
-// Instrument only the disposable copy, retaining every original assertion.
-// The caller owns work and must restore the self-test after extraction.
+/**
+ * Build an instrumented self-test and write its observer into the caller's temporary work directory.
+ * Use during evidence extraction; preserve original assertions and leave restoration of the disposable self-test to the caller.
+ *
+ * @param source - original Bash self-test text; empty or missing execution markers fail validation
+ * @param work - existing disposable directory where the observer file is written
+ * @returns instrumented text and observer path; the original assertions remain byte-identical
+ */
 export function instrumentSelfTest(source, work) {
   const capture = join(work, "capture.mjs");
   writeFileSync(capture, captureProgram(), { flag: "wx" });
@@ -341,10 +413,20 @@ export function instrumentSelfTest(source, work) {
   return { instrumented, capture };
 }
 
-// Reconcile real subprocess captures against original executed/skipped totals.
-// Failed assertions retain their external journal; successful runs clean it up.
-// Only divergence reporting may retain completed assertion failures as data;
-// acceptance, incomplete runs and process failures always throw.
+/**
+ * Run original assertions and reconcile captured subprocesses with their executed/skipped totals.
+ *
+ * Temporarily rewrites the disposable self-test, then restores it; successful runs remove the temporary journal.
+ * Only report mode retains completed failures as evidence; acceptance failures and incomplete runs throw.
+ *
+ * @param project - disposable project whose Bash self-test is temporarily rewritten
+ * @param locale - pinned locale used for every original subprocess
+ * @param mode - original smoke or full suite to run
+ *
+ * @param policy - hook whose assertions and skip counts are being measured
+ * @param allowAssertionFailures - true only for reports; false makes failed original assertions stop acceptance
+ * @returns assertion totals and captures; a null diagnosticsDirectory means no failed-assertion journal was retained
+ */
 export function extractSelfTests(
   project,
   locale,
@@ -392,6 +474,7 @@ export function extractSelfTests(
   );
   writeFileSync(sourcePath, source);
   assert.ifError(result.error);
+  // Strict acceptance stops on failed assertions; report mode retains completed failures for diagnosis.
   if (!allowAssertionFailures)
     assert.equal(
       result.status,
@@ -430,6 +513,7 @@ export function extractSelfTests(
     new Set(assertions.map((row) => row.sequence)).size,
     assertions.length,
   );
+  // Every original assertion needs a captured subprocess before the extracted totals can be trusted.
   for (const row of assertions)
     assert(
       records.some((record) => record.sequence === row.sequence),
@@ -441,6 +525,7 @@ export function extractSelfTests(
     ),
     "no orphan capture",
   );
+  // Retain failed-assertion journals for investigation; successful extraction needs no diagnostic files.
   if (!failed) rmSync(work, { recursive: true, force: true });
   return {
     policy,
@@ -454,8 +539,13 @@ export function extractSelfTests(
   };
 }
 
-// IDs follow assertion identity across smoke/full and locales. Exact inputs stay
-// separate because Bash decodes ANSI-C Unicode escapes differently by locale.
+/**
+ * Turn captured assertions into stable cases for comparison across smoke/full runs and locales.
+ * Preserve each locale's actual input because Bash can decode the same Unicode escape differently.
+ *
+ * @param report - extracted original assertions; empty records produce no comparison cases
+ * @returns case rows with stable IDs and the exact measured inputs and outcomes
+ */
 export function caseRows(report) {
   const occurrences = new Map();
   return report.records.map((record) => {
@@ -466,6 +556,7 @@ export function caseRows(report) {
     const args = record.args.slice(hook + 1);
     const check = args.find((arg) => arg.startsWith("--check="));
     const selfTest = args.find((arg) => arg.startsWith("--self-test"));
+    // Without an explicit check or self-test argument, this capture represents the provider payload route.
     const input =
       check !== undefined
         ? { kind: "check", command: check.slice("--check=".length) }
@@ -505,13 +596,25 @@ export function caseRows(report) {
   });
 }
 
-// Supply C reports first to establish candidate inputs and expectations. Preserve
-// every locale's measured input and outcome independently of the candidate.
+/**
+ * Build candidate and reference inventories from measured reports without changing the frozen evidence.
+ * Supply C reports first to establish candidate expectations; retain every locale's actual input and outcome independently.
+ *
+ * @param reports - measured self-test reports, with C first to establish candidate expectations
+ * @param extras - supplemental cases; empty adds no cases beyond the original assertions
+ * @param snapshot - frozen reference metadata and original execution counts
+ *
+ * @param historicalSha256 - identity of the historical input evidence bound to this reference
+ * @returns separate candidate and frozen-reference inventories; each locale retains its own evidence
+ */
 export function buildCorpora(reports, extras, snapshot, historicalSha256) {
   const byId = new Map();
+  // Merge measured runs without allowing one locale to replace another locale's evidence.
   for (const report of reports) {
+    // Match the same assertion across smoke/full reports before accumulating its evidence.
     for (const row of caseRows(report)) {
       let saved = byId.get(row.id);
+      // The first observation establishes this case; later runs must agree with its saved input and outcome.
       if (!saved) {
         saved = {
           ...row,
@@ -522,14 +625,17 @@ export function buildCorpora(reports, extras, snapshot, historicalSha256) {
         };
         byId.set(row.id, saved);
       }
+      // Repeated locales must use the same input even when smoke and full runs share an assertion.
       if (saved.inputs[report.locale])
         assert.deepEqual(
           saved.inputs[report.locale],
           row.input,
           `smoke/full input drift: ${row.id}`,
         );
+      // Record each suite once so the final inventory accounts for both smoke and full coverage.
       if (!saved.membership.includes(report.mode))
         saved.membership.push(report.mode);
+      // Repeated observations must not silently change the decision or message a user would receive.
       if (saved.original[report.locale])
         assert.deepEqual(
           saved.original[report.locale],
@@ -540,6 +646,7 @@ export function buildCorpora(reports, extras, snapshot, historicalSha256) {
       saved.inputs[report.locale] = row.input;
     }
   }
+  // Supplemental evidence needs new IDs so it cannot replace an original assertion.
   for (const row of extras) {
     assert(!byId.has(row.id), `duplicate extra: ${row.id}`);
     byId.set(row.id, row);
@@ -596,8 +703,17 @@ export function buildCorpora(reports, extras, snapshot, historicalSha256) {
   return { corpus, reference };
 }
 
-// A missing runtime is an intentional dependency fixture only in named cases.
-// Ordinary expected allows/denials must never pass by failing to load both hooks.
+/**
+ * Compare a completed policy result with the saved decision and user-visible messages.
+ * Missing runtime is acceptable only for named dependency fixtures; ordinary cases must prove that a hook actually ran.
+ *
+ * @param actual - completed process outcome; null or missing status cannot prove a hook decision
+ * @param expected - saved decision and output, or an approved denial-message predicate
+ * @param requiresAvailable - false only for fixtures that deliberately omit the runtime
+ *
+ * @param id - case identity included in mismatch diagnostics; omitted uses a generic case label
+ * @returns no value; a decision or message mismatch throws before acceptance
+ */
 export function assertOutcome(
   actual,
   expected,
@@ -607,12 +723,14 @@ export function assertOutcome(
   assert(actual && Number.isInteger(actual.status), `missing result: ${id}`);
   const stdout = Buffer.from(actual.stdoutBase64, "base64").toString();
   const stderr = Buffer.from(actual.stderrBase64, "base64").toString();
+  // Ordinary allow/block comparisons cannot pass merely because both hook launches were unavailable.
   if (requiresAvailable)
     assert(
       !`${stdout}${stderr}`.includes("Policy hook unavailable"),
       `unavailable: ${id}`,
     );
   assert.equal(actual.status, expected.status, `exit drift: ${id}`);
+  // Approved message predicates require a denial message without expecting a provider JSON envelope.
   if (expected.stderrIncludes !== undefined) {
     assert.equal(stdout, "", `unexpected provider envelope: ${id}`);
     assert(stderr.includes(expected.stderrIncludes), `required message: ${id}`);
@@ -629,6 +747,7 @@ export function assertOutcome(
     `missing stderr expectation: ${id}`,
   );
   const expectedOut = Buffer.from(expected.stdoutBase64, "base64").toString();
+  // Provider JSON compares by field values; plain-text responses retain their exact saved bytes.
   if (expectedOut.trim().startsWith("{"))
     assert.deepEqual(
       JSON.parse(stdout),
@@ -643,6 +762,13 @@ export function assertOutcome(
   );
 }
 
+/**
+ * Check inventory identity and case counts before a maintainer trusts any saved policy comparisons.
+ *
+ * @param artifact - saved corpus/reference inventory with declared IDs and case count
+ * @param snapshot - frozen identity the inventory must retain
+ * @returns no value; a mismatched identity, count, or duplicate case ID throws
+ */
 function validateCorpusHeader(artifact, snapshot) {
   assert.equal(artifact.schemaVersion, 1, "corpus schema");
   assert.equal(artifact.freezeCommit, snapshot.freezeCommit, "freeze identity");
@@ -658,7 +784,13 @@ function validateCorpusHeader(artifact, snapshot) {
   );
 }
 
-// Startup exceptions belong only to fixtures that deliberately omit the runtime.
+/**
+ * Check whether a saved difference has an approved evidence category before accepting its expectation.
+ * Startup exceptions belong only to cases that intentionally omit the runtime; an absent exception means no deviation is claimed.
+ *
+ * @param row - case with an optional exception ID; absent means no expectation difference is claimed
+ * @returns true for an approved category; false prevents an unknown difference from being accepted
+ */
 function isApprovedException(row) {
   return row.exceptionId === "native-startup"
     ? row.availabilityCase
@@ -668,8 +800,16 @@ function isApprovedException(row) {
         );
 }
 
-// Refuse missing identities, changed inputs and unrecorded expectation changes.
-// Original generated counts and the named exception inventory must reconcile.
+/**
+ * Validate that candidate expectations still refer to the complete, unchanged frozen evidence.
+ * Use before replay; reject missing identities, changed inputs, and differences without an approved exception.
+ *
+ * @param corpus - candidate case inventory and expected decisions
+ * @param reference - independent saved inputs and original outcomes
+ * @param snapshot - frozen metadata; omitted revalidates the checked-in snapshot
+ *
+ * @returns validated case and policy totals; incomplete or unapproved evidence throws
+ */
 export function validateCorpora(
   corpus,
   reference,
@@ -683,6 +823,7 @@ export function validateCorpora(
     "orphaned reference/candidate IDs",
   );
   const originals = new Map(reference.rows.map((row) => [row.id, row]));
+  // Bind every candidate decision to independent saved evidence before allowing replay acceptance.
   for (const row of corpus.rows) {
     assert(policies.includes(row.policy), `unknown policy: ${row.id}`);
     assert(
@@ -696,6 +837,7 @@ export function validateCorpora(
     );
     const original = originals.get(row.id);
     assert(original, `orphaned candidate ID: ${row.id}`);
+    // Ownership and input identity must agree even when an approved exception changes the expected decision.
     for (const [field, label] of Object.entries({
       inputSha256: "reference input drift",
       policy: "policy ownership",
@@ -720,6 +862,7 @@ export function validateCorpora(
           row.expected.stderrIncludes === "BLOCKED: Policy"),
       `unapproved message predicate: ${row.id}`,
     );
+    // Both pinned locales need a saved result; a missing locale would hide host-dependent behavior.
     for (const locale of ["C", "C.UTF-8"]) {
       assert(original.original[locale], `missing pinned locale: ${row.id}`);
       assertOutcome(
@@ -741,7 +884,9 @@ export function validateCorpora(
       `availability predicate: ${row.id}`,
     );
   }
+  // Coverage from one policy cannot hide missing original assertions in the other policy.
   for (const policy of policies) {
+    // Both suite sizes must match their frozen original counts before the inventory is trusted.
     for (const mode of ["smoke", "full"]) {
       const count = corpus.rows.filter(
         (row) =>
@@ -772,7 +917,14 @@ export function validateCorpora(
   return { cases: corpus.caseCount, policies: policies.length };
 }
 
-// Acceptance cannot use a development filter or a non-executing listing mode.
+/**
+ * Read the maintainer's parity-check options and reject unknown arguments or unsupported stages.
+ * Complete acceptance rejects case filters and report-only mode so a partial run cannot claim full coverage.
+ *
+ * @param args - CLI arguments; empty selects unfiltered reference extraction
+ * @returns validated stage, selected case IDs, and mode flags; empty cases means the full corpus
+ * @throws when an option or stage is unknown, or complete acceptance is combined with a filter or report mode
+ */
 export function parseOptions(args) {
   const options = {
     stage: "extraction",
@@ -780,10 +932,15 @@ export function parseOptions(args) {
     requireComplete: false,
     listDivergent: false,
   };
+  // An unrecognized option must not silently alter the scope of the maintainer's acceptance check.
   for (const arg of args) {
+    // The selected stage chooses reference extraction or a runtime comparison.
     if (arg.startsWith("--stage=")) options.stage = arg.slice(8);
+    // Case filters narrow a development run and are forbidden for complete acceptance below.
     else if (arg.startsWith("--case=")) options.cases.push(arg.slice(7));
+    // Complete mode requires every case and rejects report-only execution.
     else if (arg === "--require-complete") options.requireComplete = true;
+    // Report mode collects completed host differences for diagnosis rather than approving them.
     else if (arg === "--list-divergent") options.listDivergent = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
@@ -802,8 +959,12 @@ export function parseOptions(args) {
   return options;
 }
 
-// The shipped mirror and test-only reference are distinct artifacts. Binding
-// their hashes here prevents a regenerated candidate from rewriting its oracle.
+/**
+ * Load and validate the shipped corpus and independent frozen reference before any maintainer comparison.
+ * Bind their hashes and installed mirror bytes so regenerating candidate expectations cannot silently rewrite the reference.
+ *
+ * @returns validated snapshot, corpus, and reference; missing or changed artifacts throw
+ */
 export function loadArtifacts() {
   const snapshot = validateSnapshot();
   const corpus = JSON.parse(
@@ -833,7 +994,13 @@ export function loadArtifacts() {
   return { snapshot, corpus, reference };
 }
 
-// JSON-equivalent reformatting is still installed-file drift.
+/**
+ * Reject any byte difference between the shipped and installed corpus so status cannot hide installed-file drift.
+ *
+ * @param canonical - shipped corpus bytes, including whitespace
+ * @param installed - installed corpus bytes; empty differs from a non-empty shipped corpus
+ * @returns no value when bytes match; non-buffer inputs or any byte difference throw
+ */
 export function assertMirrorBytes(canonical, installed) {
   assert(
     Buffer.isBuffer(canonical) && Buffer.isBuffer(installed),
@@ -842,7 +1009,12 @@ export function assertMirrorBytes(canonical, installed) {
   assert(canonical.equals(installed), "corpus mirror bytes");
 }
 
-// Check npm's actual archive inventory, independently of manifest declarations.
+/**
+ * Run npm's archive dry run to verify what a maintainer would publish, independently of manifest declarations.
+ * Spawns npm without lifecycle scripts; the archive must include the corpus and exclude test references and pre-cutover candidate output.
+ *
+ * @returns number of packed paths after the required inclusion and exclusion checks
+ */
 export function checkPackInventory() {
   const command = process.platform === "win32" ? "npm.cmd" : "npm";
   const result = spawnSync(
@@ -874,11 +1046,23 @@ export function checkPackInventory() {
   return paths.length;
 }
 
-// Missing identities remain fatal; report mode records input and outcome drift.
+/**
+ * Compare captured original assertions with the selected frozen evidence during extraction.
+ * Unknown identities always throw; report mode records completed input or outcome differences for maintainer investigation.
+ *
+ * @param report - freshly extracted original assertions and locale
+ * @param comparison - saved outcomes, selected IDs, report mode, and collected differences
+ * @param seen - IDs visited in this locale; empty means no cases have been visited yet
+ *
+ * @returns no value; selected completed cases update seen and report-mode differences
+ * @throws on an unknown original case, or a completed mismatch outside report mode
+ */
 function compareOriginalRows(report, comparison, seen) {
   const { originals, selected, options, divergences } = comparison;
+  // Compare each recaptured assertion with its saved identity and selected locale outcome.
   for (const row of caseRows(report)) {
     assert(originals.has(row.id), `unrecorded original ID: ${row.id}`);
+    // A development case filter excludes other known assertions from this comparison.
     if (!selected.has(row.id)) continue;
     seen.add(row.id);
     const original = originals.get(row.id);
@@ -895,6 +1079,7 @@ function compareOriginalRows(report, comparison, seen) {
         row.id,
       );
     } catch (error) {
+      // A changed locale-decoded input or denial message is reportable only when the maintainer requested differences.
       if (!options.listDivergent) throw error;
       divergences.push({
         id: row.id,
@@ -909,20 +1094,34 @@ function compareOriginalRows(report, comparison, seen) {
   }
 }
 
-// Supplemental rows classify inert inputs directly, including the locale sentinel.
-function compareExtraRows(project, rows, comparison, seen, locale) {
+/**
+ * Compare supplemental frozen outcomes after a maintainer selects report mode or strict acceptance.
+ * Record completed differences only in report mode; a launch failure cannot serve as comparison evidence.
+ * @param project - isolated frozen project used for execution
+ *
+ * @param rows - supplemental inputs to compare; empty means there are no supplemental cases in this call
+ * @param comparison - saved outcomes, selected IDs, mode and destination for reported differences
+ * @param seen - completed IDs, updated after each comparison; an empty set means no cases have completed yet
+ *
+ * @param locale - pinned locale whose saved outcomes apply
+ * @throws on launch failure, or any outcome difference in strict acceptance mode
+ */
+export function compareExtraRows(project, rows, comparison, seen, locale) {
   const { originals, selected, options, divergences } = comparison;
+  // Compare selected supplemental cases after handling the original self-test assertions.
   for (const row of rows.filter(
     (row) => row.origin.kind !== "self-test" && selected.has(row.id),
   )) {
+    // Launch outside the outcome catch: a missing cwd or failed process is not a completed policy difference.
     const actual = runFrozenRow(project, row, locale);
-    if (row.origin.kind === "locale-sentinel")
-      assert.equal(
-        actual.status,
-        locale === "C" ? 2 : 0,
-        "locale sentinel must distinguish byte and character limits",
-      );
     try {
+      // Sentinels expose the frozen parser's byte-versus-character limit in the selected locale.
+      if (row.origin.kind === "locale-sentinel")
+        assert.equal(
+          actual.status,
+          locale === "C" ? 2 : 0,
+          "locale sentinel must distinguish byte and character limits",
+        );
       assertOutcome(
         actual,
         originals.get(row.id).original[locale],
@@ -930,6 +1129,7 @@ function compareExtraRows(project, rows, comparison, seen, locale) {
         row.id,
       );
     } catch (error) {
+      // A sentinel that allows instead of blocking is recorded in report mode; strict acceptance still stops.
       if (!options.listDivergent) throw error;
       divergences.push({
         id: row.id,
@@ -943,24 +1143,35 @@ function compareExtraRows(project, rows, comparison, seen, locale) {
   }
 }
 
-// Extraction reruns original assertions rather than replaying captured results.
-// Divergence mode reports host differences; it never approves new expectations.
+/**
+ * Re-run original assertions and supplemental cases so the maintainer can check this host against frozen evidence.
+ *
+ * Creates and removes a disposable project; report mode keeps completed differences separate from strict acceptance.
+ * Replay original assertions rather than trusting captured results; every selected ID must complete in each requested locale.
+ *
+ * @param options - validated stage, selected IDs, and report/acceptance mode
+ * @param artifacts - validated saved evidence; omitted loads and verifies the checked-in files
+ * @returns host details, compared case count, and differences; an empty differences list means none were observed
+ */
 export function compareExtraction(options, artifacts = loadArtifacts()) {
   assert.equal(
     options.stage,
     "extraction",
     `${options.stage} runtime unavailable; later milestone required`,
   );
+  // Reject a mistyped case filter before running expensive original assertions.
   for (const id of options.cases)
     assert(
       artifacts.corpus.rows.some((row) => row.id === id),
       `unknown case: ${id}`,
     );
+  // No case filters means compare the complete corpus rather than an empty selection.
   const selected = new Set(
     options.cases.length
       ? options.cases
       : artifacts.corpus.rows.map((row) => row.id),
   );
+  // A supported pinned locale selects one comparison; otherwise exercise both frozen locales.
   const locales = ["C", "C.UTF-8"].includes(process.env.LC_ALL)
     ? [process.env.LC_ALL]
     : ["C", "C.UTF-8"];
@@ -991,9 +1202,12 @@ export function compareExtraction(options, artifacts = loadArtifacts()) {
   const divergences = [];
   const selfTests = [];
   const comparison = { originals, selected, options, divergences };
+  // Repeat the selected inventory in each requested locale to expose parser differences.
   for (const locale of locales) {
     const seen = new Set();
+    // Each policy retains its own original assertion counts and skip accounting.
     for (const policy of policies) {
+      // Run both suite modes; saved outcomes alone cannot verify the live reference transport.
       for (const mode of ["smoke", "full"]) {
         const report = extractSelfTests(
           project,
@@ -1034,6 +1248,7 @@ export function compareExtraction(options, artifacts = loadArtifacts()) {
     console.log(`PASS: ${locale} complete policy inventory ${seen.size} IDs`);
   }
   rmSync(project, { recursive: true, force: true });
+  // Include diagnostic evidence only when the maintainer requested a host-divergence report.
   if (options.listDivergent)
     console.log(JSON.stringify({ host, selfTests, divergences }, null, 2));
   console.log(
@@ -1042,23 +1257,29 @@ export function compareExtraction(options, artifacts = loadArtifacts()) {
   return { host, cases: selected.size, divergences };
 }
 
-// Avoid top-level await: the candidate runner imports helpers from this module,
-// so this module must finish loading before waiting for the candidate import.
-// Failures print on stderr and set exit status 1.
+/**
+ * Run the maintainer's selected parity stage; failures print on stderr and set exit status 1.
+ * Defer the candidate import until this module loads because that runner imports these helpers too.
+ *
+ * @returns completion promise; failures print a diagnostic and set the CLI exit status to 1
+ */
 async function runCli() {
   try {
     const options = parseOptions(process.argv.slice(2));
+    // Load the candidate runner only when the maintainer selected that stage.
     if (options.stage === "candidate") {
       const { compareCandidate } =
         await import("./check-hook-parity-candidate.mjs");
       await compareCandidate(options);
     } else compareExtraction(options);
   } catch (error) {
+    // An unknown case or missing jq 1.6 makes this CLI invocation fail visibly for the maintainer.
     console.error(`FAIL: hook parity: ${error.message}`);
     process.exitCode = 1;
   }
 }
 
+// Importing helpers must not start a parity run; execute only when the maintainer invokes this file directly.
 if (
   process.argv[1] &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)

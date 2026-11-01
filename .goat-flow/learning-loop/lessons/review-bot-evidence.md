@@ -1,9 +1,17 @@
 ---
 category: review-bot-evidence
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-01
 ---
 
 **Scope:** Weighing an automated reviewer's output - sandbox reruns that reach different conclusions, position-independent ordering findings, an "addressed" marker that proves nothing, and a bot finding that contradicts a passing test. Human and multi-agent critique is [review-feedback.md](review-feedback.md).
+
+**Verification correction (2026-11-01):** Comment-only equivalence must include text used as test input, not just executable tokens.
+
+The PR #69 clarity pass changed two headings in `scripts/setup-initial.sh`; the ShellCheck fixture then extracted an empty section and failed.
+Restoring those headings preserved the fixture. Search the original text before editing; see
+[contract-pinned-wording.md](contract-pinned-wording.md).
+
+Evidence: `test/contract/documented-shellcheck-command.test.ts` (search: `setupScript.indexOf("# 5. Install shellcheck")`).
 
 ## Lesson: Reproduce review findings through the production parser before mutating parsed fixtures
 
@@ -11,7 +19,7 @@ last_reviewed: 2026-10-31
 **Severity:** CORRECTNESS
 **Decision changed:** Serialize suspect input and run the production parser before testing a downstream consumer's response to it.
 **Trigger phase:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-10-31
+**Incident count:** 4 | **Latest occurrence:** 2026-11-01
 
 **Prevention:** Trace validation before accepting an automated finding. A fixture changed after parsing can construct a state the application rejects and cannot deliver to the consumer. Test malformed source through the real parser and assert its acceptance status before interpreting downstream output.
 
@@ -22,6 +30,8 @@ last_reviewed: 2026-10-31
 **Recurrence 2026-09-25:** A PR #61 goat-review confirmed a Codex claim that `learn new` could publish an entry into an unindexed bucket after a mid-run config edit. The confirmation rested on `src/cli/learn-scaffold.ts` (search: `function regenerateLearningLoopIndexes`) alone. A double-check traced the paths through `src/cli/config/reader.ts` (search: `old path overrides are ignored`), which always keeps the canonical learning-loop paths, and the re-issued report withdrew the finding. Trace how a consumer's input is produced before confirming a bot claim about that consumer.
 
 **Recurrence 2026-10-31:** The PR #69 feedback review promoted a mirror-equality claim to a merge blocker after comparing a frozen scanner with the live installed copy. The owning assertion actually calls `hookTreeRoot("installed")`: that argument selects the directory layout, while the default selection still follows `GOAT_FLOW_HOOK_UNDER_TEST=reference`. Replaying those exact helper calls resolved both files below `test/fixtures/hooks-bash` and returned `equal=true`; the blocker was withdrawn. Trace arguments, defaults and environment through the real producer before comparing downstream artifacts. Evidence: `test/helpers/hook-entrypoint.ts` (search: `layout: HookLayout`), `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `the installed mirror matches the workflow hook source`). A structural report-validation PASS did not validate the comparison or its severity.
+
+**Recurrence 2026-11-01:** A parity regression test tried to inject a launch failure by changing the reference root to a missing directory. Fixture materialization supplied a different working directory, so Bash started and returned a completed script error; the test failed with `Missing expected exception.` Setting the row's `setup.cwd` to a missing directory exercised the actual spawn failure and verified that report mode still throws. Follow the producer into the final process options before choosing fault injection. Evidence: `scripts/hook-parity-reference-command.mjs` (search: `cwd: request.cwd`), `scripts/check-hook-parity.mjs` (search: `Frozen launch failed`), and `test/integration/hook-parity-reference.test.ts` (search: `setup: { ...changed.setup, cwd:`).
 
 ## Lesson: External code-review bots that re-run verification commands in their own sandbox produce false-positive Critical findings
 

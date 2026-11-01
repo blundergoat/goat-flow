@@ -243,7 +243,7 @@ const STRUCTURED_IMPORT_TAIL_FRAGMENTS = [
 ];
 
 /**
- * Build shell-neutral Node source that finds the user's project before starting its Bash hook.
+ * Build shell-neutral Node source that finds the user's project before starting its managed Node hook.
  * Use in generated agent configs so PowerShell, cmd, and POSIX shells share one launch path.
  *
  * @param hookResponseMode - host response selected for this hook; empty uses fail-closed policy behavior
@@ -260,7 +260,12 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
   ].join("");
 }
 
-/** Generate the managed file Antigravity starts from its .agents hook directory. */
+/**
+ * Generate the managed bootstrap Antigravity runs after a user enables hooks.
+ * Use when setup writes the entry point in the agent's .agents hook directory.
+ *
+ * @returns Node source ending in a newline; setup writes this non-empty source as the runnable bootstrap
+ */
 export function antigravityHookBootstrapSource(): string {
   return (
     "process.argv.splice(1,1);" + hookLaunchBootstrap("antigravity") + "\n"
@@ -395,9 +400,8 @@ export function agentRegistersHostTimeout(
 /**
  * Complete handler shape one provider registers for a managed hook.
  *
- * Shell handlers carry a command and optional Windows override; Claude argv handlers carry an executable, ordered arguments, inert shell routes,
- * and a host failure policy on policy rows. Compare the complete descriptor when reporting installation drift; reconstructing a command string
- * loses provider-specific identity.
+ * Shell handlers carry a command and optional Windows override; Claude argv handlers carry ordered arguments, inert shell routes, and failure policy.
+ * Compare the complete descriptor when reporting installation drift; reconstructing one command string loses provider-specific identity.
  */
 export type AgentHookHandlerDescriptor =
   | { form: "shell"; command: string; commandWindows?: string }
@@ -407,7 +411,7 @@ export type AgentHookHandlerDescriptor =
       args: string[];
       bash: string;
       powershell: string;
-      /** Claude Code 2.1.295+ refuses the tool call when this handler cannot start, times out, or exits outside 0/2; absent on feedback and Stop rows. */
+      /** Claude Code 2.1.295+ refuses tools when this handler fails to start, times out, or exits outside 0/2; absent on feedback and Stop. */
       onFailure?: "block";
     };
 
@@ -426,7 +430,13 @@ export interface AgentHookSpawnDescriptor {
   windowsVerbatimArguments?: boolean;
 }
 
-/** Quote one literal argument for Windows PowerShell without exposing its contents to expression parsing. */
+/**
+ * Quote one registration operand so PowerShell treats the user's paths as literal text.
+ * Use while building the Windows command; an empty operand stays an empty argument.
+ *
+ * @param argumentValue - literal operand; empty means the registration passes an empty argument
+ * @returns single-quoted PowerShell operand, including quotes for an empty value
+ */
 function quoteWindowsPowerShellArgument(argumentValue: string): string {
   return `'${argumentValue.replaceAll("'", "''")}'`;
 }
@@ -434,6 +444,10 @@ function quoteWindowsPowerShellArgument(argumentValue: string): string {
 /**
  * Build the Windows PowerShell command Codex and Copilot register, from source and literal operands.
  * The Base64 token keeps the generated bootstrap opaque to PowerShell; removing that token restores the argv indexes the bootstrap reads.
+ *
+ * @param bootstrapSource - Node startup code encoded as one operand; enabled hooks supply non-empty source
+ * @param operands - ordered hook and project-discovery arguments; empty would leave the bootstrap without its required registration context
+ * @returns PowerShell command that preserves the hook's exit status; never empty
  */
 function windowsPowerShellHookCommand(
   bootstrapSource: string,
@@ -468,6 +482,7 @@ export { agentHookSpawnDescriptor } from "../hook-spawn-descriptor.js";
  * @param agentId - agent receiving the handler; empty is impossible after setup validation
  * @param hooksDirectory - project hook folder; empty would produce an invalid managed path
  * @param spec - hook behavior and script; missing metadata is rejected before config generation
+ *
  * @returns complete provider handler descriptor; never empty because enabled hooks must be runnable
  * @throws when the selected provider has no hook config path
  */
@@ -477,31 +492,32 @@ export function buildAgentHookDescriptor(
   spec: HookSpec,
 ): AgentHookHandlerDescriptor {
   const hookScriptPath = commandPath(hooksDirectory, spec.primaryScript);
-  const bashLauncherPath = commandPath(hooksDirectory, "run-hook.mjs");
+  const hookLauncherPath = commandPath(hooksDirectory, "run-hook.mjs");
   const hookResponseMode = hookLaunchMode(agentId, spec);
   const registrationPath = PROFILES[agentId].hookConfigFile;
   // A provider without a config surface cannot receive the handler the user enabled.
   if (!registrationPath) throw new Error(`${agentId} has no hook config file`);
   // Codex can use managed ancestors but has no supported final host-root environment fallback.
   const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
+  // The shipped corpus needs four MiB by default; an explicit user budget takes precedence on every transport.
+  const scanLimitDefaultsSource =
+    spec.id === "post-turn-safety"
+      ? "process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES??='4194304';"
+      : "";
   // Claude's live capture approves exec form, while cross-loading shell hosts receive inert routes.
   if (agentId === "claude") {
-    // Set the per-file scan limit in Node so literal argv works on POSIX and Windows.
-    const scanBudget =
-      spec.id === "post-turn-safety"
-        ? "process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304';"
-        : "";
     return {
       form: "argv",
       command: "node",
       args: [
         "-e",
-        scanBudget + structuredHookLaunchBootstrap(hookResponseMode),
+        scanLimitDefaultsSource +
+          structuredHookLaunchBootstrap(hookResponseMode),
         hookScriptPath,
         hookResponseMode,
         rootEnvironmentName,
         registrationPath,
-        bashLauncherPath,
+        hookLauncherPath,
       ],
       bash: "exit 0",
       powershell: "exit 0",
@@ -511,6 +527,7 @@ export function buildAgentHookDescriptor(
         : {}),
     };
   }
+  // Antigravity starts from its agent directory, so its managed bootstrap path is relative to that directory.
   if (agentId === "antigravity") {
     return {
       form: "shell",
@@ -521,11 +538,12 @@ export function buildAgentHookDescriptor(
         hookResponseMode,
         rootEnvironmentName,
         registrationPath,
-        bashLauncherPath,
+        hookLauncherPath,
       ].join(" "),
     };
   }
-  const bootstrapSource = hookLaunchBootstrap(hookResponseMode);
+  const bootstrapSource =
+    scanLimitDefaultsSource + hookLaunchBootstrap(hookResponseMode);
   const shellDescriptor: AgentHookHandlerDescriptor = {
     form: "shell",
     command: [
@@ -536,7 +554,7 @@ export function buildAgentHookDescriptor(
       JSON.stringify(hookResponseMode),
       JSON.stringify(rootEnvironmentName),
       JSON.stringify(registrationPath),
-      JSON.stringify(bashLauncherPath),
+      JSON.stringify(hookLauncherPath),
     ].join(" "),
   };
   // Codex and Copilot users on Windows need literal PowerShell transport; PowerShell cannot parse the JSON-quoted command.
@@ -547,14 +565,9 @@ export function buildAgentHookDescriptor(
       hookResponseMode,
       rootEnvironmentName,
       registrationPath,
-      bashLauncherPath,
+      hookLauncherPath,
     ],
   );
-  // The shipped policy corpus exceeds Stop's default one-MiB file limit.
-  if (spec.id === "post-turn-safety") {
-    shellDescriptor.command = `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304 ${shellDescriptor.command}`;
-    shellDescriptor.commandWindows = `$env:GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES='4194304'; ${shellDescriptor.commandWindows}`;
-  }
   return shellDescriptor;
 }
 
@@ -565,6 +578,7 @@ export function buildAgentHookDescriptor(
  * @param agent - selected agent profile; a missing hook folder means this host cannot register hooks
  * @param spec - enabled hook; missing metadata is rejected before this writer runs
  * @returns complete provider handler descriptor; never empty for supported agents
+ *
  * @throws when the selected agent has no managed hook directory
  */
 export function managedAgentHookDescriptor(
@@ -583,6 +597,7 @@ export function managedAgentHookDescriptor(
  * @param agentId - agent receiving the command; empty is impossible after setup validation
  * @param hooksDirectory - project hook folder; empty would produce an invalid managed path
  * @param spec - hook behavior and script; missing metadata is rejected before config generation
+ *
  * @returns shell-neutral Node command; never empty for shell-form providers
  * @throws when the provider uses a structured argv descriptor instead of one command string
  */
@@ -608,6 +623,7 @@ export function buildAgentHookCommand(
  * @param agent - selected agent profile; a missing hook folder means this host cannot register hooks
  * @param spec - enabled hook; missing metadata is rejected before this writer runs
  * @returns registered Node command; never empty for shell-form providers
+ *
  * @throws when the agent has no hook directory or registers a structured argv handler
  */
 export function managedAgentHookCommand(
@@ -731,6 +747,7 @@ export function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
  * @param entry - keyed config row; missing handler fields cannot equal a descriptor
  * @param agentId - selected provider; Copilot compares both of its shell fields
  * @param descriptor - expected complete handler; never empty for supported providers
+ *
  * @returns true only when every selected descriptor field is byte-identical
  */
 export function entryCarriesHandlerDescriptor(
@@ -795,6 +812,7 @@ export function entryCarriesHandlerDescriptor(
  * @param entry - unknown parsed row; null or empty values cannot match a command
  * @param agent - selected provider; a null hook directory makes expected-descriptor creation throw
  * @param spec - expected hook contract; empty metadata cannot produce an exact descriptor
+ *
  * @returns true for byte-identical direct or nested handlers; false means command repair is needed
  */
 export function entryMatchesSpecCommand(
@@ -825,6 +843,7 @@ export function entryMatchesSpecCommand(
  * @param entry - unknown parsed row; null or empty values cannot carry a timeout
  * @param agent - selected provider profile
  * @param spec - expected hook; an absent timeout keeps an unowned provider default valid
+ *
  * @returns true when timeout is exact or unowned; false means the host may end the hook too early
  */
 export function entryMatchesSpecTimeout(
@@ -861,6 +880,7 @@ export function entryMatchesSpecTimeout(
  * @param entry - unknown parsed row; null or empty values cannot be installed
  * @param agent - selected provider profile
  * @param spec - expected managed hook contract
+ *
  * @returns true only when command and timeout are current; false exposes repairable drift
  */
 export function entryMatchesSpecRegistration(
@@ -891,6 +911,7 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
   if (agent.id === "codex" && spec.id === "gruff-code-quality") {
     return "^apply_patch$";
   }
+  // Other providers retain the registry matcher after their explicit tool mappings above.
   if (agent.id !== "antigravity") return spec.matcher;
   // Antigravity uses its file-edit tool names for the same user action.
   if (spec.id === "gruff-code-quality") {
@@ -917,13 +938,22 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
   return spec.matcher;
 }
 
-/** Include the reviewed command and content tools without widening discovery-only tool coverage. */
+/**
+ * Select the policy tools whose actions need checks before the user's agent runs them.
+ * Use before general matcher translation; null means this hook/provider pair has no policy-specific override.
+ *
+ * @param agentId - provider whose tool names appear in the registration
+ * @param hookId - enabled hook; an unmatched id leaves its registry matcher in use
+ * @returns provider tool matcher, or null to continue with the registry's normal matcher
+ */
 function policyToolMatcher(agentId: AgentId, hookId: string): string | null {
+  // Claude policy checks cover its shell and monitor tools before those actions can affect the user's project.
   if (
     agentId === "claude" &&
     ["deny-dangerous", "deny-git-mutations"].includes(hookId)
   )
     return "Bash|PowerShell|Monitor";
+  // Copilot content protection also checks direct file tools the user's agent may invoke.
   if (agentId === "copilot" && hookId === "deny-dangerous")
     return "bash|powershell|view|edit|create|grep|rg|str_replace_editor";
   return null;
