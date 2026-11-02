@@ -31,7 +31,7 @@ GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `den
 
 Native `powershell` requests are inspected with PowerShell command context. Literal commands can reach their owning policies; unresolved dynamic execution, interpolation and session-state changes are refused. This is bounded command inspection, not a full PowerShell interpreter.
 
-All 18 Windows/WSL delivery rows have reviewed captures on the native PowerShell policy runtime. C3, C6, C12 and C15 now cover the current Stop registrations. Captures apply only to their recorded provider version, mode, host, trust, registration and runtime bytes and do not activate support gates.
+All 18 Windows/WSL delivery rows have reviewed captures on the native PowerShell policy runtime. C3, C6, C12 and C15 now cover the current Stop registrations. Captures apply only to their recorded provider version, mode, host, trust, registration and runtime bytes. Every `scenario-unverified` registry gate rests on verified delivery from both hosts in this table, and a contract test fails when a gate and its rows disagree; the three gates whose cells read "No delivery claim" (Antigravity PostToolUse and Stop, Copilot Stop) keep their provider gap.
 
 | Provider | Host | Version and mode | PreToolUse | PostToolUse | Stop |
 |---|---|---|---|---|---|
@@ -50,7 +50,7 @@ In the historical captures, the earlier C1 changed from Opus 5.5 to Opus 4.8 aft
 
 C9 ran a private read-only copy of Antigravity 1.4.8 without the quarantined helper. The packet prohibited Defender changes, and saved detection counts stayed at three; the separate helper's quarantine cause remains unexplained. Its native conversation record and final response contain both complete policy reasons. Approvals are attributed to the operator by timing because the record names no channel; the log reports remote control off. Hook records name no owner and contain an unexplained extra allow for harmless calls, so policy attribution rests on the pinned runtime, rehearsal and matching reason text. Model identity is limited to the native display and a consistent opaque enum. The controller closed the client after its final response; natural exit is not claimed.
 
-The committed [capture records](../../src/cli/hook-provider-captures.ts) retain reviewed observations separately from live support. C1-C18 supply capture metadata, digests and the 41 runtime-file hashes; each later recapture must do the same. The registry attaches those observations to the relevant provider/event without changing its existing support gate. Audit does not yet compare the installed provider version, host, registration or runtime hashes with these records; applicability still requires review against those exact inputs.
+The committed [capture records](../../src/cli/hook-provider-captures.ts) retain reviewed observations separately from live support. C1-C18 supply capture metadata, digests and the 41 runtime-file hashes; each later recapture must do the same. The registry attaches those observations to the relevant provider/event; no gate changes at runtime, and the reviewed `scenario-unverified` gates are the ones these rows justify. Audit does not yet compare the installed provider version, host, registration or runtime hashes with these records; applicability still requires review against those exact inputs.
 
 ### Linux/macOS compatibility and live delivery
 

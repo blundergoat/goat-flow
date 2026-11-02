@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-10-20
+last_reviewed: 2026-11-02
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts: evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -12,7 +12,7 @@ last_reviewed: 2026-10-20
 **Decision changed:** Keep machine-parsed checklist sections contiguous, leave `(est: ...)` as each row's final token, and put explanatory prose and tables under their own headings outside the checklist.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-08-30
+**Incident count:** 7 | **Latest occurrence:** 2026-11-02
 
 **Prevention:** Keep a checklist section to its rows, with `(est: ...)` as the final token of every estimated row, and never append completion evidence after that suffix. Caveats, inventories, and tables go under a dedicated heading outside the parsed checklist; gate evidence goes under `## Mid-implementation evidence`. This applies to every section `readChecklistItems` parses: tasks, proof, and mid-proof. Run `plans check --strict` immediately after editing checklist sections; three errors together with unchanged estimates point at absorbed content, not arithmetic.
 
@@ -27,6 +27,7 @@ last_reviewed: 2026-10-20
 - **Recurrence 2026-08-23:** One indented evidence bullet after each completed P1/C1-C3 row; zero proof minutes, four gates without estimates, 8 of 12 units.
 - **Recurrence 2026-08-27:** A `Satisfied on ...` sentence after `(est: 2 min proof)`; moving it before the suffix restored the row.
 - **Recurrence 2026-08-30:** Two checkpoint paragraphs after the sole mid-proof row; proof work 5 to 3, 11 of 12 units.
+- **Recurrence 2026-11-02:** A reopened-proof caveat after the last proof row, then after the `[HUMAN]` row; first all three errors, then one gate without an estimate. Placing it under `## Proof` before the first row restored exit 0.
 
 ---
 

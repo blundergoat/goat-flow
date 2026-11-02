@@ -139,6 +139,45 @@ describe("host-specific hook provider captures", () => {
     }
   });
 
+  it("keeps each reviewed support gate within its verified host delivery", () => {
+    for (const hook of listHookSpecs()) {
+      for (const [provider, evidence] of Object.entries(
+        hook.providerEvidence ?? {},
+      )) {
+        const label = `${provider}/${hook.id}`;
+        const deliveredHosts = [
+          ...new Set(
+            (evidence.hostCaptures ?? [])
+              .filter(
+                (row) =>
+                  row.verification === "verified" &&
+                  row.capture?.supportOutcome === "supported" &&
+                  row.capture.resultDelivery === "delivered",
+              )
+              .map((row) => row.host),
+          ),
+        ].sort();
+        if (
+          currentHookProviderSupportGate(evidence) === "scenario-unverified"
+        ) {
+          // Only live delivery on both captured hosts lets a gate wait for nothing but local scenario proof.
+          assert.deepEqual(
+            deliveredHosts,
+            ["windows", "wsl"],
+            label + ": verified delivery on both hosts",
+          );
+        } else {
+          // A delivered capture behind a provider gap means the reviewed gate is stale, not conservative.
+          assert.deepEqual(
+            deliveredHosts,
+            [],
+            label + ": provider gap without delivery",
+          );
+        }
+      }
+    }
+  });
+
   it("keeps renewed Stop versions separate from earlier event captures", () => {
     for (const [caseId, provider, host, version] of [
       ["C3", "claude", "windows", "2.1.316"],

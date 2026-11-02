@@ -38,7 +38,11 @@ export interface HookDeliveryContract {
 export interface HookProviderRegistryEvidence {
   identity: string;
   effectiveSupportGate: HookEffectiveState["status"];
-  /** Historical observations for this provider/event; these never select or advance the gate. */
+  /**
+   * Reviewed observations for this provider/event. They never select or advance the gate at runtime.
+   *
+   * `test/integration/hook-provider-captures.test.ts` requires a scenario-unverified gate to carry verified delivery from both captured hosts.
+   */
   hostCaptures?: readonly HookProviderHostEvidence[];
 }
 
