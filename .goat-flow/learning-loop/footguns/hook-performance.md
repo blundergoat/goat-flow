@@ -1,9 +1,25 @@
 ---
 category: hook-performance
-last_reviewed: 2026-10-24
+last_reviewed: 2026-11-02
 ---
 
 **Scope:** Hook execution cost: Windows process creation and PowerShell launch environments, shared policy parsing work, and the context cost of policy denials. Runtime delivery, provider adapters, Stop recovery, and policy-module correctness live in [hooks.md](hooks.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md).
+
+## Footgun: Windows hook-proof budgets keyed to one agent miss agents that adopt the PowerShell launcher
+
+**Status:** active | **Created:** 2026-11-02 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
+**Decision changed:** When a registration change moves an agent onto the `Set-Location` PowerShell launcher, extend every Windows proof budget that lists launcher agents in the same change.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Key Windows replay budgets to the launcher an agent's registration uses, not to the agent that first exposed the cost. After changing a Windows command shape, search test budgets for agent-name checks and run the Windows platform jobs; PR CI does not run them.
+
+**Symptoms:** Both Windows `hook-port-controls` jobs failed in the installer round-trip fixture with `[spawn-result] {"errorCode":"ETIMEDOUT","signal":"SIGTERM","timeoutMs":60000}` on a Copilot `hooks verify` proof, while every Codex proof in the same test passed under its larger budget.
+
+**Why it happens:** The fixture gave each verify command 60 s and added 90 s per scenario only for Codex, the one agent replaying through PowerShell when the budget was written. A later registration change gave Copilot the same launcher, `src/cli/server/agent-hook-command.ts` (search: `Set-Location -LiteralPath ([Environment]::CurrentDirectory)`). The traced Codex PowerShell probes took 18-24 s each on the hosted runner, so Copilot's three- and six-scenario proofs overran the flat budget; Copilot probes are not traced. PR CI skips the platform jobs, so the gap surfaced at the next manual Windows run.
+
+**Evidence:** [job 125167047632](https://github.com/blundergoat/goat-flow/actions/runs/41412038920/job/125167047632) (Node 20.12.0, Copilot git-mutations proof) and [job 125167047669](https://github.com/blundergoat/goat-flow/actions/runs/41412038920/job/125167047669) (Node 24.21.0, Copilot deny proof). The fix gives both launcher agents the per-scenario budget in `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `WINDOWS_POWERSHELL_REPLAY_AGENTS`); its Windows proof is pending the next platform run.
 
 ## Footgun: Managed Windows replay can stall when PSModulePath is omitted
 

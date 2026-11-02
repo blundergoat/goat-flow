@@ -46,21 +46,38 @@ import { spawnSync } from "node:child_process";
 import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.ts";
 
 // Matches the per-probe Windows replay budget in hooks-runtime-evidence.ts.
-const WINDOWS_CODEX_PROBE_TIMEOUT_MS = 90_000;
+const WINDOWS_POWERSHELL_PROBE_TIMEOUT_MS = 90_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 
+/** Agents whose Windows registration replays every scenario through the `Set-Location` PowerShell launcher. */
+const WINDOWS_POWERSHELL_REPLAY_AGENTS: ReadonlySet<string> = new Set([
+  "codex",
+  "copilot",
+]);
+
+/**
+ * Budget one `hooks verify` command: the shared 60 s, plus one probe budget per scenario for a Windows PowerShell replay agent.
+ *
+ * @param proof - required agent and scenario whose verify command runs next
+ * @returns spawn timeout in milliseconds for that command
+ */
 function hookProofTimeoutMs(
   proof: (typeof REQUIRED_EFFECTIVE_HOOK_PROOFS)[number],
 ): number {
-  if (process.platform !== "win32" || proof.agentId !== "codex") {
+  if (
+    process.platform !== "win32" ||
+    !WINDOWS_POWERSHELL_REPLAY_AGENTS.has(proof.agentId)
+  ) {
     return COMMAND_TIMEOUT_MS;
   }
   const scenarioCount =
     HOOK_VERIFICATION_CONTRACTS[proof.scenario].requiredScenarioIds.length;
-  return COMMAND_TIMEOUT_MS + scenarioCount * WINDOWS_CODEX_PROBE_TIMEOUT_MS;
+  return (
+    COMMAND_TIMEOUT_MS + scenarioCount * WINDOWS_POWERSHELL_PROBE_TIMEOUT_MS
+  );
 }
 
-// Preserve the existing case budget and add only the extra Windows Codex command time.
+// Preserve the existing case budget and add only the extra Windows PowerShell replay time.
 const ROUND_TRIP_TIMEOUT_MS =
   400_000 +
   REQUIRED_EFFECTIVE_HOOK_PROOFS.reduce(
