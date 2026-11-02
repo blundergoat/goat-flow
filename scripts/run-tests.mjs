@@ -96,10 +96,6 @@ function isSlowTest(path) {
 // That job runs only on weekly and manual runs, so start a manual run before merging such a change, for example `gh workflow run ci.yml --ref dev`.
 const REFERENCE_JOB_TESTS = ["test/integration/hook-parity-reference.test.ts"];
 
-// Only the compatibility-launcher suite still executes Bash directly.
-// Native hook suites participate in the normal preflight selection.
-const LEGACY_BASH_HOOK_TESTS = new Set(["test/unit/hook-launcher.test.ts"]);
-
 /**
  * Keep only the tests the developer's chosen mode runs, before any --shard split; files in REFERENCE_JOB_TESTS are never kept.
  * An unknown mode writes the valid choices to stderr and exits with code 2 instead of running an unintended suite.
@@ -112,14 +108,11 @@ function filesForMode(allFiles) {
     (path) => !REFERENCE_JOB_TESTS.includes(path),
   );
   switch (mode) {
-    // Fast and coverage select the same files; coverage only adds the coverage report when the tests launch.
+    // Fast, preflight and coverage select the same files; coverage only adds the coverage report when the tests launch.
     case "fast":
+    case "preflight":
     case "coverage":
       return modeCandidates.filter((path) => !isSlowTest(path));
-    case "preflight":
-      return modeCandidates.filter(
-        (path) => !isSlowTest(path) && !LEGACY_BASH_HOOK_TESTS.has(path),
-      );
     case "slow":
       return modeCandidates.filter(isSlowTest);
     // A typo such as `slwo`, or a flag typed first such as `node scripts/run-tests.mjs --shard=1/5`, lands here.

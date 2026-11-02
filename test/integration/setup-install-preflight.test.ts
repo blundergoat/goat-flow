@@ -95,31 +95,6 @@ describe("installer policy-review preflight", () => {
     }
   });
 
-  // Neither direct force nor the CLI's cooperative admission marker substitutes for a user's policy decision.
-  for (const admission of ["", "v2"]) {
-    it(`refuses direct force before writes with admission=${admission || "absent"}`, () => {
-      const projectPath = pendingPolicyUpgradeProject();
-      const before = installerTargetSnapshot(projectPath);
-      const result = spawnSync(
-        "bash",
-        [
-          join(PROJECT_ROOT, "workflow/install-goat-flow.sh"),
-          projectPath,
-          "--agent",
-          "codex",
-          "--force",
-        ],
-        {
-          encoding: "utf8",
-          env: { ...process.env, GOAT_FLOW_INSTALL_ADMISSION: admission },
-        },
-      );
-      assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /GitHub policy review is required/u);
-      assert.deepEqual(installerTargetSnapshot(projectPath), before);
-    });
-  }
-
   // Writes a disposable mixed-policy project to verify storage migration preserves record bytes and policy choices.
   // Reports policy/file conflicts before writes, then checks deterministic repeated-install output.
   it("reports review in CLI dry-run and refuses force before legacy-state migration", () => {
@@ -217,17 +192,13 @@ describe("installer policy-review preflight", () => {
       /\.goat-flow\/\.gitignore \[unmanaged\]/u,
     );
     assert.deepEqual(installerTargetSnapshot(projectPath), beforeInstall);
-    // Sync does not claim retained Bash files; their replacements need separate named consent with the ignore rules.
+    // Sync leaves the ignore rules unmanaged, so replacing them needs separate named consent.
     const firstInstall = runCliInstaller(
       projectPath,
       "--agent",
       "codex",
       "--force-path",
       ".goat-flow/.gitignore",
-      "--force-path",
-      ".goat-flow/hooks/deny-dangerous.sh",
-      "--force-path",
-      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
     );
     assert.equal(
       firstInstall.status,

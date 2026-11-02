@@ -314,7 +314,6 @@ describe("contextual CLI help", () => {
       "After managed.json exists, legacy hashes are non-authoritative; ambiguous legacy history blocks every agent.",
       "Package, path-set, row-generation, target-byte, or cutover-marker drift makes a receipt stale.",
       "After verified bytes but a failed state write, repair .goat-flow/state/install/ and rerun the printed command.",
-      "After cutover, workflow/install-goat-flow.sh refuses before mutation; use the public CLI.",
       "Force cannot repair install evidence, and ordinary install does not automatically prune it.",
     ]) {
       assert.ok(

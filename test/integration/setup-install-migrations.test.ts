@@ -205,8 +205,8 @@ require("node:module").syncBuiltinESMExports();
   }
 
   // Historical incident anchor: "preserves retired writing playbooks when installing replacements".
-  // Writes edited old copies and legacy state, then runs preview and the production playbook block in a disposable project.
-  // The invariant is removal after replacement with baseline history intact; later stages cannot hide cleanup behind a timeout.
+  // Writes edited old copies and legacy state, then runs preview and the public install in a disposable project.
+  // The invariant is removal after replacement; setup-install-renamed-playbooks.test.ts owns baseline-row retention.
   it("removes renamed writing playbooks after installing replacements", () => {
     const root = makeTempProject();
     const playbookDirectory = join(root, ".goat-flow/skill-docs/playbooks");
@@ -258,45 +258,7 @@ require("node:module").syncBuiltinESMExports();
       assert.equal(previewRow.action, "preserve", `Preserve: ${retiredPath}`);
     }
 
-    const installerSource = readFileSync(
-      join(PROJECT_ROOT, "workflow", "install-goat-flow.sh"),
-      "utf-8",
-    );
-    const blockStart = installerSource.indexOf('echo "Standalone playbooks');
-    const blockEnd = installerSource.indexOf(
-      'copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md"',
-      blockStart,
-    );
-    assert.ok(blockStart >= 0, "standalone playbook install block is missing");
-    assert.ok(blockEnd > blockStart, "playbook block end is missing");
-    // Execute the shipped migration, not a copy of its policy; only the ordinary copy primitive is supplied by the fixture.
-    const install = spawnSync(
-      "bash",
-      [
-        "-c",
-        [
-          "set -euo pipefail",
-          "REMOVED=0",
-          "copy_file() {",
-          '  local src="$1" dst="$2"',
-          '  mkdir -p "$(dirname "$dst")"',
-          '  cp "$src" "$dst"',
-          '  printf "%s\\n" "$dst"',
-          "}",
-          installerSource.slice(blockStart, blockEnd),
-        ].join("\n"),
-      ],
-      {
-        cwd: root,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          GOAT_FLOW_ROOT: PROJECT_ROOT,
-          MANIFEST_PATH: join(PROJECT_ROOT, "workflow/manifest.json"),
-        },
-        timeout: 10000,
-      },
-    );
+    const install = runCliInstaller(root, "--agent", "codex");
     assert.equal(install.status, 0, install.stderr || install.stdout);
     // Every replacement must contain the shipped guidance before its old copy disappears.
     for (const replacementPlaybook of [
@@ -316,11 +278,7 @@ require("node:module").syncBuiltinESMExports();
     }
     assert.equal(existsSync(retiredAgentPath), false);
     assert.equal(existsSync(retiredHumanProse), false);
-    assert.deepEqual(
-      JSON.parse(readFileSync(statePath, "utf-8")),
-      legacyBaseline,
-    );
-    // The install log names each actual cleanup without pruning historical baseline rows.
+    // The install log names each actual cleanup.
     for (const retiredPath of retiredPlaybookPaths) {
       assert.ok(
         install.stdout.includes(
@@ -684,21 +642,14 @@ require("node:module").syncBuiltinESMExports();
         ),
         true,
       );
+      // The upgrade installs the Node policy runtime; the retired Bash runtime is no longer part of the package.
       assert.equal(
-        existsSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh")),
+        existsSync(join(root, ".goat-flow", "hooks", "deny-dangerous.mjs")),
         true,
       );
       assert.equal(
-        existsSync(
-          join(
-            root,
-            ".goat-flow",
-            "hooks",
-            "deny-dangerous",
-            "deny-dangerous-self-test.sh",
-          ),
-        ),
-        true,
+        existsSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh")),
+        false,
       );
       assert.doesNotMatch(stdout, /removed stale hook/);
     });

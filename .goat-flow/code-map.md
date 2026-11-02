@@ -249,7 +249,6 @@ src/dashboard/                   = browser dashboard frontend bundled into dist/
 ```text
 workflow/                        = packaged template source copied into target projects
 ├── manifest.json                = expected installed files, dirs, agents, hooks, skills, stale names
-├── install-goat-flow.sh         = retained Bash helper; public installation uses the Node writer
 ├── manifest-snapshots/          = historical manifest snapshots for upgrade/drift tests
 │
 ├── setup/                       = six-step setup prompt sequence
@@ -276,7 +275,6 @@ workflow/                        = packaged template source copied into target p
 │   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, naming-and-placement, observability, page-capture, release-notes, skill-playbook-authoring-sync, test-selection, writing-agent-facing-instructions, writing-human-facing-prose, writing-sentence-diagnostics, writing-structure-diagnostics
 │
 ├── hooks/                       = hook templates and agent hook config templates
-│   ├── run-with-bash.mjs        = cross-platform Git Bash discovery and managed shell launcher
 │   ├── run-hook.mjs             = generated native launcher API and CLI from src/hooks
 │   ├── antigravity-hook-bootstrap.cjs = generated bootstrap for Antigravity shell launches
 │   ├── hook-launch-runtime.mjs  = managed launcher runtime shared by every provider hook entry
@@ -295,20 +293,16 @@ workflow/                        = packaged template source copied into target p
 │   ├── policy-corpus.mjs        = generated native self-test over the shipped policy corpus
 │   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
-│   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy template
 │   ├── deny-dangerous.mjs       = generated native policy entrypoint
-│   ├── deny-git-mutations.sh    = fixed Git commit, publication, destructive-operation and GitHub CLI write policy template
 │   ├── deny-git-mutations.mjs   = generated native policy entrypoint
-│   ├── gruff-code-quality.sh    = canonical gruff code-quality hook template
 │   ├── gruff-code-quality.mjs   = generated native Gruff entrypoint
 │   ├── gruff/                  = generated scope.mjs, ranges.mjs, analyzer.mjs and feedback.mjs for native Gruff evaluation
-│   ├── post-turn-safety.sh      = canonical post-turn safety hook template
 │   ├── post-turn-safety.mjs     = generated native Stop scanner entrypoint
 │   ├── post-turn/              = generated assignments.mjs, context.mjs, controller.mjs, recovery.mjs and scanner.mjs for Stop input, configured-root scans, recovery and changed-content scanning
 │   ├── gh-graphql-read.cjs      = admits one literal GitHub GraphQL query for the Git policy without executing command text
 │   ├── hook-policy-state.cjs    = dependency-free reader of saved hook choices for launchers and installers
 │   ├── hook-policy-state.d.cts  = type declarations for the shared hook-choice reader
-│   ├── deny-dangerous/          = shared parser, response implementation, policy modules and routed self-test templates
+│   ├── deny-dangerous/          = policy rule modules, Git and GitHub command classifiers and the shared policy corpus
 │   ├── agent-config/            = claude, codex, antigravity, copilot hook config templates
 │   └── vendor/                  = locked js-yaml and graphql parsers bundled for dependency-free installed hooks
 │
@@ -382,7 +376,7 @@ test/
 
 `.github/workflows/ci.yml` owns native Linux/macOS/Windows floor/LTS controls, a separately identified WSL2 route, Linux reference tests with jq 1.6 in the C locale, and WSL divergence reports. Divergence reports do not accept candidates. The original Bash self-tests stay immutable; each port owns its candidate suite conversion.
 
-The shipped corpus lives at `workflow/hooks/deny-dangerous/corpus.json`, mirrored to `.goat-flow/hooks/deny-dangerous/corpus.json`. `workflow/manifest.json` declares ownership and required delivery; `workflow/install-goat-flow.sh` copies it as data. The test-only reference outcomes stay under `test/fixtures/hooks-bash/`.
+The shipped corpus lives at `workflow/hooks/deny-dangerous/corpus.json`, mirrored to `.goat-flow/hooks/deny-dangerous/corpus.json`. `workflow/manifest.json` declares ownership and required delivery; the Node installer copies it as data. The test-only reference outcomes stay under `test/fixtures/hooks-bash/`.
 
 ## docs/ -- Documentation
 
@@ -424,7 +418,6 @@ docs/                            = user and maintainer documentation
 │   ├── lessons/                 = behavioural mistake records and prevention rules
 │   └── patterns/                = successful reusable approaches
 ├── hooks/                       = committed central hook dispatchers and policy store
-│   ├── run-with-bash.mjs        = cross-platform Git Bash discovery and managed shell launcher
 │   ├── run-hook.mjs             = generated native launcher API and CLI from src/hooks
 │   ├── antigravity-hook-bootstrap.cjs = generated bootstrap for Antigravity shell launches
 │   ├── hook-launch-runtime.mjs  = managed launcher runtime shared by every provider hook entry
@@ -443,19 +436,15 @@ docs/                            = user and maintainer documentation
 │   ├── policy-corpus.mjs        = generated native self-test over the shipped policy corpus
 │   ├── process-tree.mjs         = generated native hook process-tree cleanup from src/hooks
 │   ├── hook-provider-adapters.mjs = per-provider payload and response adaptation for hook launches
-│   ├── deny-dangerous.sh        = fixed destructive-shell and secret-path policy entrypoint
 │   ├── deny-dangerous.mjs       = generated native policy entrypoint
-│   ├── deny-git-mutations.sh    = fixed Git commit, publication, destructive-operation and GitHub CLI write policy entrypoint
 │   ├── deny-git-mutations.mjs   = generated native policy entrypoint
-│   ├── gruff-code-quality.sh    = central gruff quality dispatcher used by all agents
 │   ├── gruff-code-quality.mjs   = generated native Gruff entrypoint
 │   ├── gruff/                  = generated scope.mjs, ranges.mjs, analyzer.mjs and feedback.mjs for native Gruff evaluation
-│   ├── post-turn-safety.sh      = central post-turn safety hook used by supported Stop agents
 │   ├── post-turn-safety.mjs     = generated native Stop scanner entrypoint
 │   ├── post-turn/              = generated assignments.mjs, context.mjs, controller.mjs, recovery.mjs and scanner.mjs for Stop input, configured-root scans, recovery and changed-content scanning
 │   ├── gh-graphql-read.cjs      = admits one literal GitHub GraphQL query for the Git policy without executing command text
 │   ├── hook-policy-state.cjs    = dependency-free reader of saved hook choices for launchers and installers
-│   ├── deny-dangerous/          = shared parser, response implementation, policy modules and routed self-test
+│   ├── deny-dangerous/          = policy rule modules, Git and GitHub command classifiers and the shared policy corpus
 │   └── vendor/                  = locked js-yaml and graphql parsers bundled for dependency-free installed hooks
 ├── skill-docs/                  = installed shared skill doctrine and playbooks
 │   ├── README.md                = index for shared skill doctrine and playbooks

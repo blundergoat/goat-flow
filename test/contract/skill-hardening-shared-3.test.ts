@@ -582,10 +582,6 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       required_files: string[];
     };
     assert.ok(manifest.required_files.includes(installedPath));
-    assert.match(
-      readProjectFile("workflow/install-goat-flow.sh"),
-      /session-logs-readme\.md" "\.goat-flow\/logs\/sessions\/README\.md"/u,
-    );
 
     // Both gitignore copies must keep only the README committed while receipt files stay local.
     for (const gitignorePath of [

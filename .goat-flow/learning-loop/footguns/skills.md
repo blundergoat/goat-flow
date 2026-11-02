@@ -39,7 +39,7 @@ last_reviewed: 2026-10-09
 
 **Why it happens:** Installation overwrites the files the manifest lists, and a copy-only upgrade never deletes files a merge removed from that list.
 
-**Evidence:** A gruff-php upgrade on 2026-05-21 left `auth-authz.md`, `cicd-and-agent-surfaces.md`, `dependency-and-supply-chain.md`, and `secrets-and-data-exposure.md` under `.claude/skills/goat-security/references/` after they were merged into the v1.7.0 `identity-and-data.md` and `supply-chain-and-cicd.md` set. `workflow/install-goat-flow.sh` (search: `prune_unlisted_skill_references`) now removes unlisted Markdown from canonical `references/` directories before copying, and `src/cli/audit/check-agent-setup.ts` (search: `checkUnexpectedSkillReferences`) fails `agent-skills` when installed references are not listed.
+**Evidence:** A gruff-php upgrade on 2026-05-21 left `auth-authz.md`, `cicd-and-agent-surfaces.md`, `dependency-and-supply-chain.md`, and `secrets-and-data-exposure.md` under `.claude/skills/goat-security/references/` after they were merged into the v1.7.0 `identity-and-data.md` and `supply-chain-and-cicd.md` set. `src/cli/installer/apply.ts` (search: `function pruneSkillReferences`) now removes unlisted Markdown from canonical `references/` directories before copying, and `src/cli/audit/check-agent-setup.ts` (search: `checkUnexpectedSkillReferences`) fails `agent-skills` when installed references are not listed.
 
 ---
 

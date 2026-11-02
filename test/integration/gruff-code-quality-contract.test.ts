@@ -95,12 +95,12 @@ function runProviderLauncher(payload: string, responseMode: string) {
 describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   it("routes naming guidance to the naming and placement owner", () => {
     for (const hookPath of [
-      join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh"),
-      join(PROJECT_ROOT, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+      join(PROJECT_ROOT, "workflow", "hooks", "gruff", "feedback.mjs"),
+      join(PROJECT_ROOT, ".goat-flow", "hooks", "gruff", "feedback.mjs"),
     ]) {
       const hookSource = readFileSync(hookPath, "utf8");
       const namingGuidance = hookSource.match(
-        /printf 'gruff-code-quality: naming findings[^']+'/u,
+        /"gruff-code-quality: naming findings[^"]+"/u,
       );
 
       assert.ok(

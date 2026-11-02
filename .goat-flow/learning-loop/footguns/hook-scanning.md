@@ -12,7 +12,7 @@ last_reviewed: 2026-10-23
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Git rename detection needs both sides of the move. Query full `--name-status --find-renames` output first, then diff the matched source and destination together before parsing positive hunks. Anchors: `workflow/hooks/gruff-code-quality.sh` (search: `rename_source_for_path`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `classifies rename-only Git changes as not applicable`).
+**Prevention:** Git rename detection needs both sides of the move. Query full `--name-status --find-renames` output first, then diff the matched source and destination together before parsing positive hunks. Anchors: `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `rename_source_for_path`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `classifies rename-only Git changes as not applicable`).
 
 **Symptoms:** A diff limited to a rename destination hides the source path and renders an unchanged rename as a full-file addition, so edit-time analysis treats every line as user-authored and reports a clean scan or unrelated debt instead of a not-applicable rename.
 
@@ -29,7 +29,7 @@ last_reviewed: 2026-10-23
 
 **Symptoms:** Every edit to an oversized file reports clean, so the file keeps growing and no warning is ever emitted for an agent to ignore. Measured 2026-08-05: editing `test/unit/hook-registrar.test.ts` at 1,139 lines against a 750 threshold produced no hook output while `gruff-ts analyse` reported `size.file-length` immediately, and twenty files had crossed the gate that way. A full-repository scan the same day found 36 findings while preflight reported `PASS   79 checks · 0 warnings`, because its Gruff Policy check only rejects disabled rules and never runs the analyzer.
 
-**Why it happens:** `size.file-length`, `docs.missing-file-overview`, and `design.circular-import` report at line 1 with `scope=file`, and `--changed-ranges` makes the analyzer drop them before the hook sees them. The fix requests the whole file and selects scopes in the hook, keeping `scope=file` and `scope=project` findings unconditionally while confining line and symbol findings to edited ranges; symbol widening is lost, and the legacy `analyse` path still delegates ranges to analyzers that cannot express scope. Anchors: `workflow/hooks/gruff-code-quality.sh` (search: `hook_contract_report`) and (search: `A file-scope finding describes the file the agent is editing right now`).
+**Why it happens:** `size.file-length`, `docs.missing-file-overview`, and `design.circular-import` report at line 1 with `scope=file`, and `--changed-ranges` makes the analyzer drop them before the hook sees them. The fix requests the whole file and selects scopes in the hook, keeping `scope=file` and `scope=project` findings unconditionally while confining line and symbol findings to edited ranges; symbol widening is lost, and the legacy `analyse` path still delegates ranges to analyzers that cannot express scope. Anchors: `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `hook_contract_report`) and (search: `A file-scope finding describes the file the agent is editing right now`).
 
 **Incident ledger:**
 - **Recurrence 2026-08-08:** shortening `src/cli/cli-handlers.ts` from 759 to 747 lines made preflight fail on stale accepted identity `4348d703d920ab92` until that baseline entry was removed; `src/cli/prompt/commit-guidance.ts` (search: `emitCommitGuidanceInstallResult`) later took the guidance reporting when the threshold was crossed again on 2026-08-10.
@@ -46,7 +46,7 @@ last_reviewed: 2026-10-23
 
 **Why it happens:** A blocking Stop hook runs at turn end, not commit time, so scanning ignored files treats local runtime state, including real local `.env` files and coverage output, as work the agent must fix before it can yield.
 
-**Evidence:** 2026-06-14 live loop: `post-turn-safety` scanned ignored mutation-test sandbox copies of an environment example and blocked placeholders such as `NOTION_TOKEN="ntn_your_notion_token_here"`. `workflow/hooks/post-turn-safety.sh` (search: `scan_tracked_changes`) and (search: `scan_untracked_changes`) scan committable changes only; `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `allows ignored env files that are not staged`) and (search: `blocks ignored env files once they are force-staged`) lock the boundary.
+**Evidence:** 2026-06-14 live loop: `post-turn-safety` scanned ignored mutation-test sandbox copies of an environment example and blocked placeholders such as `NOTION_TOKEN="ntn_your_notion_token_here"`. `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `scan_tracked_changes`) and (search: `scan_untracked_changes`) scan committable changes only; `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `allows ignored env files that are not staged`) and (search: `blocks ignored env files once they are force-staged`) lock the boundary.
 
 ## Footgun: Gitignored local artifacts make repository scans diverge between local and CI
 
@@ -70,7 +70,7 @@ last_reviewed: 2026-10-23
 
 **Symptoms:** A template nested inside another template's `${...}`, such as `` `${JSON.stringify({ reason: `text ${value}` })}` ``, makes gruff-ts 0.4.0 read the inner backtick as closing the outer template, misread the following braces, and attribute the rest of the file to the enclosing function, so findings in the blinded region never appear.
 
-**Evidence:** Measured 2026-08-07: with nested templates in `reportUnavailable`, the analyzer reported `size.function-length` of 226 lines for a roughly 40-line function and zero process-exec findings for the file; replacing the nesting with concatenation removed the phantom finding and surfaced the file's real `spawnSync` warning. Anchors: `workflow/hooks/run-with-bash.mjs` (search: `a template literal`) and (search: `const windowsTreeKillResult = spawnSync`).
+**Evidence:** Measured 2026-08-07: with nested templates in `reportUnavailable`, the analyzer reported `size.function-length` of 226 lines for a roughly 40-line function and zero process-exec findings for the file; replacing the nesting with concatenation removed the phantom finding and surfaced the file's real `spawnSync` warning. Anchors: `test/fixtures/hooks-bash/workflow/hooks/run-with-bash.mjs` (search: `a template literal`) and (search: `const windowsTreeKillResult = spawnSync`).
 
 ---
 
@@ -84,7 +84,7 @@ last_reviewed: 2026-10-23
 
 **Why it happens:** `binary` is shorthand for `-text -diff`, and `-diff`, not `-text`, makes numstat report `-\t-\t<path>`, so a numstat-driven scanner cannot tell a binary from text whose diff is merely suppressed.
 
-**Evidence:** `.goat-flow/hooks/post-turn-safety.sh` (search: `binary changed path not scanned`) builds its inventory from `git diff --numstat`; `.gitattributes` (search: `package-lock.json`) previously carried `binary`, so numstat emitted `-\t-\tpackage-lock.json` while `file` reported JSON text with zero NUL bytes. Switching to `text -diff` did not fix it; only removing `-diff` restored `2\t2\tpackage-lock.json`.
+**Evidence:** `test/fixtures/hooks-bash/.goat-flow/hooks/post-turn-safety.sh` (search: `binary changed path not scanned`) builds its inventory from `git diff --numstat`; `.gitattributes` (search: `package-lock.json`) previously carried `binary`, so numstat emitted `-\t-\tpackage-lock.json` while `file` reported JSON text with zero NUL bytes. Switching to `text -diff` did not fix it; only removing `-diff` restored `2\t2\tpackage-lock.json`. Current Node owner: `src/hooks/post-turn/scanner.mts` (search: `binary changed path not scanned`).
 
 ---
 
@@ -115,6 +115,6 @@ last_reviewed: 2026-10-23
 
 **Original symptoms:** A project with a root `.gruff-<lang>.yaml` edited a matching file and the PostToolUse hook exited 0 with no output, so the agent could infer the lines were clean while the analyzer never ran. In a monorepo incident `gruff-py` lived only under `strands_agents/.venv/bin/`, and ADR-032 correctly rejects automatic `*/.venv/bin` discovery.
 
-**Anchors:** `workflow/hooks/gruff-code-quality.sh` (search: `present but %s not found on search paths`) and (search: `config_error_message`); `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses an explicit env override for a non-standard monorepo gruff binary`); `.goat-flow/learning-loop/decisions/ADR-032-scope-gruff-hook-binary-discovery.md` (search: `Scope gruff-code-quality hook binary discovery to standard install locations`).
+**Anchors:** `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `present but %s not found on search paths`) and (search: `config_error_message`); `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses an explicit env override for a non-standard monorepo gruff binary`); `.goat-flow/learning-loop/decisions/ADR-032-scope-gruff-hook-binary-discovery.md` (search: `Scope gruff-code-quality hook binary discovery to standard install locations`).
 
 **Prevention retained:** Keep config-present/binary-absent visible while preserving fail-soft exit 0 and ADR-032's no-recursive-discovery rule; monorepos with analyzers outside standard paths use an explicit executable override.

@@ -117,8 +117,8 @@ ownership semantics does need an ADR before implementation.
    `src/cli/audit/artifact-templates.ts`.
 8. Register ownership/source in `workflow/manifest.json` `required_files`, and
    name the playbook in the playbooks `directory_purposes` description.
-9. Add the `copy_file` enrollment to `workflow/install-goat-flow.sh` and the
-   corresponding existence check to `workflow/setup/03-install-skills.md`.
+9. Add the installed playbook's existence check to
+   `workflow/setup/03-install-skills.md`.
 10. Add the playbook to preflight mirror/budget checks and the integration
     parity/budget tests so release verification covers the installed copy.
 11. Update explicit inventories in architecture, code map, and quality prompts.
@@ -158,10 +158,9 @@ intentionally regenerated.
 
 ## Installer and Release Enrollment
 
-Manifest ownership does not currently copy standalone playbooks by itself.
-Every built-in playbook also needs an explicit `copy_file` line in
-`workflow/install-goat-flow.sh`; without it, local audit passes while a fresh
-consumer install is incomplete.
+Manifest ownership is the install enrollment: the Node installer copies every
+`system-owned` `file_ownership` entry that names a `source`. A playbook missing
+from step 8 passes local audit while a fresh consumer install is incomplete.
 
 Keep the manual setup checklist, preflight mirror and word-budget gates,
 `preamble-sync.test.ts`, the skill-hardening budget inventory, architecture,

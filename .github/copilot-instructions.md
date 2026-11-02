@@ -17,7 +17,7 @@ Non-overridable means the Never-tier prohibitions against agent commit/push, sec
 
 Boundaries: instruction files (`.github/copilot-instructions.md`, `CLAUDE.md`, `AGENTS.md`); workflow/manifest (`workflow/{setup,skills,hooks}/`, `workflow/manifest.json`); architecture (`.goat-flow/architecture.md`); skill docs (`.goat-flow/skill-docs/`, including playbooks); server runtime (`src/cli/server/`); agent configs (`.claude/`, `.codex/`, `.agents/`); CI/hooks (`.github/{workflows,actions,hooks,skills}/`); hook policy (`.goat-flow/hooks/`, `hooks:` in `.goat-flow/config.yaml`); new top-level surfaces or 5+ new files; any remove/rename; changes spanning 3+ committed documentation files; cross-harness invocation (an agent-harness CLI subprocess such as `claude -p`, `codex exec`, `agy` (Antigravity), or `copilot`, including this harness; native sub-agents remain unrestricted).
 
-Provider capabilities: use available sub-agent or task tools only for genuinely independent work. Recommend relevant interactive Copilot CLI commands to the user after checking current help; do not claim to invoke user commands as agent tools. Treat `.github/actions/**`, `.github/hooks/hooks.json`, `.goat-flow/hooks/deny-dangerous.mjs`, `.goat-flow/hooks/deny-dangerous.sh`, `.goat-flow/hooks/deny-dangerous/**`, `.github/skills/**`, `.github/copilot-instructions.md`, and `.copilotignore` as security-sensitive runtime surfaces; verify after touching them. `.github/agents/` remains out of scope unless a concrete specialization gap is proven.
+Provider capabilities: use available sub-agent or task tools only for genuinely independent work. Recommend relevant interactive Copilot CLI commands to the user after checking current help; do not claim to invoke user commands as agent tools. Treat `.github/actions/**`, `.github/hooks/hooks.json`, `.goat-flow/hooks/deny-dangerous.mjs`, `.goat-flow/hooks/deny-dangerous/**`, `.github/skills/**`, `.github/copilot-instructions.md`, and `.copilotignore` as security-sensitive runtime surfaces; verify after touching them. `.github/agents/` remains out of scope unless a concrete specialization gap is proven.
 
 **Never:**
 - If interrupted or told no changes, freeze writes; run only read-only status/diff checks until explicit cleanup, revert, or apply approval.
@@ -45,7 +45,7 @@ Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs no
 
 ## Essential Commands
 ```bash
-shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh
+shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
 bash scripts/maintenance/check-shell-syntax.sh
 npm run typecheck && npm run check:touched # Working-tree content; additions, edits, deletions and both rename paths select checks. Preflight and owning test suites remain required.
 npm test
@@ -118,7 +118,7 @@ When asked to add, create, or update a goat-flow artifact, route it to the artif
 | Workflow source (canonical) | `workflow/` (`workflow/skills/` is canonical; also setup, hooks, evaluation, and agent config templates) |
 | CLI + dashboard | `src/cli/`, `src/dashboard/` |
 | Scripts | `scripts/` |
-| Hooks | `.github/hooks/hooks.json`, `.goat-flow/hooks/deny-dangerous.mjs`, `.goat-flow/hooks/deny-dangerous.sh`, `.goat-flow/hooks/deny-dangerous/` |
+| Hooks | `.github/hooks/hooks.json`, `.goat-flow/hooks/deny-dangerous.mjs`, `.goat-flow/hooks/deny-dangerous/` |
 | Config and optional security policy | `.goat-flow/config.yaml`, `.goat-flow/security-policy.md` (read policy when present) |
 | Documentation | `docs/` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/plans/` |

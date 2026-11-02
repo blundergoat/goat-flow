@@ -565,18 +565,22 @@ describe("hook sync migration and claim recovery", () => {
       const projectPath = fs.mkdtempSync(join(tmpdir(), "hook-migration-"));
       try {
         const legacyScript = join(legacyDirectory, "deny-dangerous.sh");
-        const officialScript = fs.readFileSync(
-          join(REPOSITORY_ROOT, "workflow/hooks/deny-dangerous.sh"),
+        // The frozen fixture holds the v1.18.0 bytes of the retired Bash policy script.
+        const releasedScriptBytes = fs.readFileSync(
+          join(
+            REPOSITORY_ROOT,
+            "test/fixtures/hooks-bash/workflow/hooks/deny-dangerous.sh",
+          ),
           "utf8",
         );
         fs.mkdirSync(join(projectPath, legacyDirectory), { recursive: true });
-        fs.writeFileSync(join(projectPath, legacyScript), officialScript);
+        fs.writeFileSync(join(projectPath, legacyScript), releasedScriptBytes);
 
         syncHookStates(projectPath);
 
         assert.equal(
           fs.readFileSync(join(projectPath, legacyScript), "utf8"),
-          officialScript,
+          releasedScriptBytes,
         );
         assert.deepEqual(
           // A profile without a hook config cannot appear as an installed hook provider.

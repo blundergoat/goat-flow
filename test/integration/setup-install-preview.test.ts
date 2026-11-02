@@ -216,13 +216,6 @@ describe("managed setup preview", () => {
       true,
     );
     assert.equal(report.files.every(isSafeFreshTargetRow), true);
-    // The preview tells users which guarantees they lose when they bypass the public CLI.
-    assert.equal(
-      report.limits.includes(
-        "Direct workflow/install-goat-flow.sh execution skips CLI admission, post-write verification, and install-state recording.",
-      ),
-      true,
-    );
     // Every exact-copy template on a fresh target is a create backed by a package hash.
     assert.equal(
       report.files
@@ -248,7 +241,7 @@ describe("managed setup preview", () => {
       action: "create",
     });
     assertPreviewLists(report.files, {
-      path: ".goat-flow/hooks/deny-dangerous.sh",
+      path: ".goat-flow/hooks/deny-dangerous.mjs",
     });
     assertPreviewLists(report.files, { path: ".agents/skills/goat/SKILL.md" });
     const repeatedResult = runCliInstaller(
@@ -280,7 +273,7 @@ describe("managed setup preview", () => {
     assert.match(result.stdout, /Coverage: install-write-set/u);
     assert.match(
       result.stdout,
-      /create\s+system-owned\s+\.goat-flow\/hooks\/deny-dangerous\.sh \[added\] - The current goat-flow package adds this managed file\./u,
+      /create\s+system-owned\s+\.goat-flow\/hooks\/deny-dangerous\.mjs \[added\] - The current goat-flow package adds this managed file\./u,
     );
     assert.match(
       result.stdout,

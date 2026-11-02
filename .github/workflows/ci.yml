@@ -464,12 +464,13 @@ jobs:
           GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-gruff-spawn.jsonl
         run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts
 
+      # These four suites are the installed floor matrix's final replay rows: spawn matrix, provider contracts, effective state and consumer canary.
       - name: Native registered replay
         id: native-replay
         env:
           GOAT_FLOW_HOOK_UNDER_TEST: installed
           GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-replay-spawn.jsonl
-        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-provider-contracts.test.ts test/integration/hook-effective-state.test.ts test/integration/hook-consumer-canary.test.ts
 
       - name: Installer lifecycle and safety suites
         shell: bash
@@ -483,6 +484,14 @@ jobs:
         if: runner.os != 'macOS'
         shell: bash
         run: node --import tsx --test --test-concurrency=1 test/integration/hook-sync-recovery.test.ts test/integration/path-write-claim-recovery.test.ts
+
+      # The installed floor matrix needs one complete suite run on the Linux LTS cell; every other cell keeps its focused steps.
+      - name: Full suites
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '24.21.0'
+        shell: bash
+        run: |
+          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/state/locks
+          npm run test:full
 
       - name: Check native hook spawn journals
         if: always()
@@ -738,7 +747,7 @@ jobs:
               GOAT_FLOW_HOOK_UNDER_TEST=installed node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
               GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-scanner-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
               GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-gruff-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts
-              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-replay-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-replay-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-provider-contracts.test.ts test/integration/hook-effective-state.test.ts test/integration/hook-consumer-canary.test.ts
               node --input-type=module - "$work_path/m16-scanner-$version.jsonl" "$work_path/m16-gruff-$version.jsonl" "$work_path/m16-replay-$version.jsonl" <<'JS'
             import assert from "node:assert/strict";
             import { readFileSync } from "node:fs";

@@ -746,15 +746,10 @@ describe("preflight Tests-phase progress", () => {
 describe("preflight shell syntax", () => {
   // One file in every required group catches directory omissions; whitespace must remain one argument.
   const fixtureScripts = [
-    "workflow/install-goat-flow.sh",
     "scripts/a-valid.sh",
     SHELL_SYNTAX_HELPER,
     "scripts/installers/a-valid.sh",
-    "workflow/hooks/a-valid.sh",
-    "workflow/hooks/deny-dangerous/a-valid.sh",
-    ".goat-flow/hooks/a-valid.sh",
-    ".goat-flow/hooks/deny-dangerous/a-valid.sh",
-    ".goat-flow/hooks/deny-dangerous/z later.sh",
+    "scripts/installers/z later.sh",
   ];
 
   /** Writes temporary shell fixtures and copies the real helper; registers every file's directory for cleanup. */
@@ -819,13 +814,13 @@ describe("preflight shell syntax", () => {
 
   it("reports a malformed later whitespace path through the preflight gate", () => {
     const directory = createSyntaxFixture();
-    const invalid = ".goat-flow/hooks/deny-dangerous/z later.sh";
+    const invalid = "scripts/installers/z later.sh";
     writeFileSync(join(directory, invalid), "if then\n");
     const result = runSyntaxSection(directory);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.ok(result.stdout.includes(`FAIL Bash syntax: ${invalid}`));
     assert.ok(
-      result.stdout.indexOf("PASS Bash syntax: workflow/install-goat-flow.sh") <
+      result.stdout.indexOf("PASS Bash syntax: scripts/a-valid.sh") <
         result.stdout.indexOf(`FAIL Bash syntax: ${invalid}`),
     );
     assert.match(result.stdout, /syntax error/u);
@@ -833,7 +828,10 @@ describe("preflight shell syntax", () => {
 
   it("reports multiple malformed files and still parses later valid groups", () => {
     const directory = createSyntaxFixture();
-    const invalidFiles = ["scripts/a-valid.sh", "workflow/hooks/a-valid.sh"];
+    const invalidFiles = [
+      "scripts/a-valid.sh",
+      "scripts/installers/a-valid.sh",
+    ];
     for (const script of invalidFiles)
       writeFileSync(join(directory, script), "if then\n");
     const result = runSyntaxSection(directory);
@@ -842,26 +840,22 @@ describe("preflight shell syntax", () => {
       assert.ok(result.stdout.includes(`FAIL Bash syntax: ${script}`), script);
     assert.match(
       result.stdout,
-      /PASS Bash syntax: \.goat-flow\/hooks\/deny-dangerous\/z later\.sh/u,
+      /PASS Bash syntax: scripts\/installers\/z later\.sh/u,
     );
-    assert.match(result.stdout, /9 files checked; 2 failures/u);
+    assert.match(result.stdout, /4 files checked; 2 failures/u);
   });
 
-  it("fails for an absent required installer and an empty required script group", () => {
+  it("fails for an empty required script group", () => {
     const directory = createSyntaxFixture();
-    rmSync(join(directory, "workflow/install-goat-flow.sh"));
     rmSync(join(directory, "scripts/installers/a-valid.sh"));
+    rmSync(join(directory, "scripts/installers/z later.sh"));
     const result = runSyntaxSection(directory);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(
       result.stdout,
-      /FAIL Bash syntax: workflow\/install-goat-flow\.sh/u,
-    );
-    assert.match(
-      result.stdout,
       /FAIL required shell group: scripts\/installers\/\*\.sh/u,
     );
-    assert.match(result.stdout, /2 failures/u);
+    assert.match(result.stdout, /1 failures/u);
   });
 
   // Writes valid and malformed fixtures, then spawns each published command to prove failure propagation.

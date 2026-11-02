@@ -25,10 +25,10 @@ Mixed-policy ownership upgrades require independent policy consent before write 
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | Setup prompts | `workflow/setup/` | Agent-specific setup instructions, upgrade guides |
-| Setup installer | `workflow/install-goat-flow.sh` | Manifest-driven installation with ownership checks, safe parent-path validation, and adjacent per-file atomic staging |
+| Setup installer | `src/cli/installer/` | Manifest-driven installation with ownership checks, safe parent-path validation, and adjacent per-file atomic staging |
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 8 goat-flow skill templates (7 functional, including direct `goat-clarity`, + 1 dispatcher) |
-| Hook scripts | `src/hooks/` (TypeScript source), `workflow/hooks/` (generated distribution), `.goat-flow/hooks/` (installed, active) | Native `deny-dangerous.mjs`, `deny-git-mutations.mjs`, opt-in `gruff-code-quality.mjs`, and default `post-turn-safety.mjs` run through `run-hook.mjs`. Shared policy modules and bounded provider adapters install together. `scripts/generate-hook-runtime.mjs` compiles the native source; `workflow/hooks/agent-config/` holds generated provider configurations. Legacy Bash files remain bundled during the migration but are no longer the registered runtime. |
+| Hook scripts | `src/hooks/` (TypeScript source), `workflow/hooks/` (generated distribution), `.goat-flow/hooks/` (installed, active) | Native `deny-dangerous.mjs`, `deny-git-mutations.mjs`, opt-in `gruff-code-quality.mjs`, and default `post-turn-safety.mjs` run through `run-hook.mjs`. Shared policy modules and bounded provider adapters install together. `scripts/generate-hook-runtime.mjs` compiles the native source; `workflow/hooks/agent-config/` holds generated provider configurations. No Bash hook runtime ships; install deletes retired Bash copies whose bytes match the saved install hash and keeps edited ones. |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
@@ -55,7 +55,6 @@ Consumer runs `npx @blundergoat/goat-flow@latest install . --agent <id> --dry-ru
   -> CLI compares manifest-managed template hashes with the selected target and last successful local baseline
   -> Unsafe paths and ambiguous user edits block before the native installer writes
   -> User runs `install` or `setup --apply`; the CLI invokes the installer, which completes each file beside its destination before rename
-  -> Direct `workflow/install-goat-flow.sh` use skips CLI preview, post-write verification, and the install-state receipt while retaining ownership, path-safety, and atomic-write enforcement; once `.goat-flow/state/install/managed.json` or a cutover marker exists, the script refuses before target mutation and prints the public `goat-flow install` command
 ```
 
 ## CLI Layout

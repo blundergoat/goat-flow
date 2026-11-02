@@ -43,7 +43,7 @@ Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs no
 
 ## Essential Commands
 ```bash
-shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh
+shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
 bash scripts/maintenance/check-shell-syntax.sh
 npm run typecheck && npm run check:touched # Working-tree content; additions, edits, deletions and both rename paths select checks. Preflight and owning test suites remain required.
 npm test

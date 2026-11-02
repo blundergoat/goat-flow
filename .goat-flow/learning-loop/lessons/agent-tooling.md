@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-03
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -19,7 +19,7 @@ last_reviewed: 2026-11-02
 
 **What happened:** Four pre-edit reads or commands inferred paths: the agent misread a workflow source/install pair as a move, pluralized a managed source directory, guessed the removed historical `ADR-016-dispatcher-is-canonical-skill.md` path, then guessed a milestone filename. Each failed. `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-033-goat-flow-directory-restructure.md`), and `rg --files --hidden --no-ignore` supplied the exact paths.
 
-**Recurrence 2026-08-16:** Copying `workflow/hooks/post-turn-safety.sh` from the NTFS-backed source checkout into a Linux controller with `cp --preserve=mode` propagated mode `0777` over the controller's intended `0755`. The content was correct, but the installation metadata was not. An immediate `chmod 0755` plus `stat` and byte-parity checks restored the expected installation.
+**Recurrence 2026-08-16:** Copying `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` from the NTFS-backed source checkout into a Linux controller with `cp --preserve=mode` propagated mode `0777` over the controller's intended `0755`. The content was correct, but the installation metadata was not. An immediate `chmod 0755` plus `stat` and byte-parity checks restored the expected installation.
 
 **Root cause:** The agent inferred concept-shaped names instead of resolving the manifest, generated index, or ignored-plan inventory; the install cases also collapsed workflow sources into installed copies or assumed source filesystem metadata was portable.
 
@@ -44,24 +44,24 @@ For read-only reconciliation, run Git and checksum commands directly and compare
 
 **Root cause:** The agent treated one rejected command shape as a dead end, or assumed a separately validated variable made an unresolved destructive operand easy for the policy hook to verify. The guard classifies the submitted command; it cannot rely on earlier shell reasoning.
 
-**Earlier recurrence (date not recorded):** During CLI menu/install verification, an installer smoke used recursive removal through a temporary-path variable. The recovery preserved the command status, removed files narrowly, and then removed the empty directory. The current guard owns this classification at `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`).
+**Earlier recurrence (date not recorded):** During CLI menu/install verification, an installer smoke used recursive removal through a temporary-path variable. The recovery preserved the command status, removed files narrowly, and then removed the empty directory. The current guard owns this classification at `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`).
 
 **Incident ledger:**
 
-- **Recurrence 2026-05-17:** A release-blocker cleanup embedded a large helper in one command and hit the segment cap. Moving the inspected helper to a file made the invocation reviewable. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command has more than 50 chained segments`).
-- **Recurrence 2026-07-13:** Two truncation variants were blocked while assembling a rollback patch. The recovery verified an absent destination, created it from the first diff, and appended later diffs. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`).
-- **Recurrence 2026-07-16:** A read-only search embedded an executable-looking destructive literal and was rejected before `rg` ran. Searching for semantic terms avoided replaying the command shape. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`).
-- **Recurrence 2026-07-19:** An inline Node summarizer embedded a shell-execution primitive. Piping direct CLI output to `jq` supplied the same assertion without an interpreter wrapper. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
-- **Recurrence 2026-08-16:** A known JSON Stop payload was piped into a shell hook. Redirecting an inspected local payload file preserved the test without the prohibited pipe-to-shell shape. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`).
-- **Recurrence 2026-08-22:** Planning reads hit both the command-segment cap and backtick classification. Smaller read batches and an inspected file-backed draft avoided both rejected shapes. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and (search: `Command has more than 50 chained segments`).
-- **Recurrence 2026-09-03:** An approved disposable-worktree cleanup used recursive removal through a validated shell variable, so PreToolUse rejected the whole batch before execution. The corrected command named the worktree literally, removed the four remaining files individually, and used `rmdir` for the two empty directories. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`).
-- **Recurrence 2026-09-04:** Two read-only diagnostics were rejected before execution: a double-quoted search embedded Markdown backticks, and an inline Node wrapper referenced `spawnSync`. Literal-safe search terms and a direct CLI-to-`jq` pipeline produced the same evidence without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
-- **Recurrence 2026-09-29:** Closeout put Git status and checksum reconciliation inside a Python `-c` helper using `subprocess.check_output`; PreToolUse rejected the helper before execution. Direct `git status`, `git diff --cached --binary` and `sha256sum` commands, compared in the orchestration layer, verified unchanged intake bytes and staging without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
-- **Recurrence 2026-09-30:** Inventory piped `stats --format json` into an inline Node summarizer, and the `Pipe to interpreter` guard rejected it before execution. Writing the CLI JSON to a temporary file and feeding that file to the summarizer preserved the read-only count check. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`).
-- **Recurrence 2026-10-16:** M02 inventory again put Git reads inside a Python `-c` helper using `subprocess.check_output`; the guard rejected it before execution. Direct `git ls-files` and `git rev-parse` supplied the inventory, then a filesystem-only helper recorded hashes. The existing direct-command prevention rule applies. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
-- **Recurrence 2026-10-17:** An oversized evidence-save command was refused before execution. Bounded failure extracts and field-specific JSON writes preserved the receipt without bypassing inspection. The learning update then failed stale-last-reviewed and stale-ref checks. After two corrections, the note was rewound, its validator read, and the review date and citation reapplied. Keep evidence commands small and verify learning metadata and cited owners before indexing. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`) and `src/cli/stats/stats.ts` (search: `stale-last-reviewed`).
-- **Recurrence 2026-10-17 (plan snapshots):** Embedding two milestone documents in an inline Node command exceeded the command-size limit before execution. The file-edit tool saved those bounded temporary snapshots, then direct Git commands built and checked their patch. Keep document bodies out of shell command arguments. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
-- **Recurrence 2026-10-17 (clarity receipt):** Embedding the full clarity inventory exceeded command inspection limits before the receipt was saved. Save bounded counts, paths and hashes; derive case names from the existing test file. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
+- **Recurrence 2026-05-17:** A release-blocker cleanup embedded a large helper in one command and hit the segment cap. Moving the inspected helper to a file made the invocation reviewable. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command has more than 50 chained segments`).
+- **Recurrence 2026-07-13:** Two truncation variants were blocked while assembling a rollback patch. The recovery verified an absent destination, created it from the first diff, and appended later diffs. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`).
+- **Recurrence 2026-07-16:** A read-only search embedded an executable-looking destructive literal and was rejected before `rg` ran. Searching for semantic terms avoided replaying the command shape. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`).
+- **Recurrence 2026-07-19:** An inline Node summarizer embedded a shell-execution primitive. Piping direct CLI output to `jq` supplied the same assertion without an interpreter wrapper. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-08-16:** A known JSON Stop payload was piped into a shell hook. Redirecting an inspected local payload file preserved the test without the prohibited pipe-to-shell shape. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`).
+- **Recurrence 2026-08-22:** Planning reads hit both the command-segment cap and backtick classification. Smaller read batches and an inspected file-backed draft avoided both rejected shapes. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and (search: `Command has more than 50 chained segments`).
+- **Recurrence 2026-09-03:** An approved disposable-worktree cleanup used recursive removal through a validated shell variable, so PreToolUse rejected the whole batch before execution. The corrected command named the worktree literally, removed the four remaining files individually, and used `rmdir` for the two empty directories. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`).
+- **Recurrence 2026-09-04:** Two read-only diagnostics were rejected before execution: a double-quoted search embedded Markdown backticks, and an inline Node wrapper referenced `spawnSync`. Literal-safe search terms and a direct CLI-to-`jq` pipeline produced the same evidence without bypassing the guard. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`) and `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-09-29:** Closeout put Git status and checksum reconciliation inside a Python `-c` helper using `subprocess.check_output`; PreToolUse rejected the helper before execution. Direct `git status`, `git diff --cached --binary` and `sha256sum` commands, compared in the orchestration layer, verified unchanged intake bytes and staging without bypassing the guard. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-09-30:** Inventory piped `stats --format json` into an inline Node summarizer, and the `Pipe to interpreter` guard rejected it before execution. Writing the CLI JSON to a temporary file and feeding that file to the summarizer preserved the read-only count check. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`).
+- **Recurrence 2026-10-16:** M02 inventory again put Git reads inside a Python `-c` helper using `subprocess.check_output`; the guard rejected it before execution. Direct `git ls-files` and `git rev-parse` supplied the inventory, then a filesystem-only helper recorded hashes. The existing direct-command prevention rule applies. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-10-17:** An oversized evidence-save command was refused before execution. Bounded failure extracts and field-specific JSON writes preserved the receipt without bypassing inspection. The learning update then failed stale-last-reviewed and stale-ref checks. After two corrections, the note was rewound, its validator read, and the review date and citation reapplied. Keep evidence commands small and verify learning metadata and cited owners before indexing. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`) and `src/cli/stats/stats.ts` (search: `stale-last-reviewed`).
+- **Recurrence 2026-10-17 (plan snapshots):** Embedding two milestone documents in an inline Node command exceeded the command-size limit before execution. The file-edit tool saved those bounded temporary snapshots, then direct Git commands built and checked their patch. Keep document bodies out of shell command arguments. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
+- **Recurrence 2026-10-17 (clarity receipt):** Embedding the full clarity inventory exceeded command inspection limits before the receipt was saved. Save bounded counts, paths and hashes; derive case names from the existing test file. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
 - **Recurrence 2026-10-17 (receipt pipeline):** A case extractor looked for `test` calls although the suite uses `it`. Its assertion failed, but the downstream redactor exited zero and saved an empty receipt. Preserve that file, use a fresh destination, and enable `pipefail` so producer failure cannot masquerade as saved evidence. Evidence: `test/unit/hook-policy-prefixes.test.ts` (search: `policy timing and privilege prefixes`).
 
 ---
@@ -121,7 +121,7 @@ Before rewriting a source comment, search its distinctive text in learning-loop 
 
 **Recurrence 2026-09-01:** A same-agent quality assessment found the active `dashboard-terminal.md` footgun (search: `Workspace terminal waiting state has multiple derived surfaces`) telling agents to instrument "the else branch at line 1916" - a branch the Round-6 redesign had removed - and to add cases to a monolithic test file that had been split months earlier. Both survived `stats --check` because a prose line number ("around line 1916") is not a `file:line` ref, and in a footgun a bare backtick path is existence-checked only on an `Evidence anchors:` line (`src/cli/facts/shared/learning-loop-common.ts`, search: `scanBareEvidenceAnchors`); lessons do check bare paths, but their prefix grammar omits `test/` (search: `const pathPattern`), so a dead `test/` path passes there too. Prevention rules are forward-looking instructions, so the scanner's blind spot matters most there: write every path in a Prevention item as `file (search: "needle")` so it is validated, and describe a mechanism by its function, never by its line.
 
-**Recurrence 2026-10-11:** A comment cleanup passed 262 focused tests but removed phrases used as learning-loop search anchors. Full preflight caught five stale references and one recall-test failure. Restoring the phrases in concise, accurate comments made `stats --check` and all 15 recall tests pass. Comment-only edits still need citation and recall checks: `src/cli/facts/shared/learning-loop-common.ts` (search: "confirm the literal string still appears"), `workflow/hooks/post-turn-safety.sh` (search: "scan_untracked_changes"), and `test/unit/learning-loop-recall.test.ts` (search: "marks moved needles beside valid citations and warns before guidance").
+**Recurrence 2026-10-11:** A comment cleanup passed 262 focused tests but removed phrases used as learning-loop search anchors. Full preflight caught five stale references and one recall-test failure. Restoring the phrases in concise, accurate comments made `stats --check` and all 15 recall tests pass. Comment-only edits still need citation and recall checks: `src/cli/facts/shared/learning-loop-common.ts` (search: "confirm the literal string still appears"), `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: "scan_untracked_changes"), and `test/unit/learning-loop-recall.test.ts` (search: "marks moved needles beside valid citations and warns before guidance").
 
 Final diff review also caught six `byte-count` labels changed by a local-variable replacement; the strings were restored before delivery.
 The source comparison had repeated the same broad replacement, so it missed the error despite a passing full gate.
@@ -194,21 +194,6 @@ Inspect literals independently when checking renames, as described in
 
 ---
 
-## Lesson: Approval to proceed does not prove native trust was completed
-
-**Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
-**Decision changed:** Keep permission to run a session separate from factual confirmation of native workspace trust.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** Do not turn a general approval into `nativeTrust.trusted: true`. Record completion from an explicit completion statement, or from observed native UI acceptance when the user delegates that action. If the provider contradicts a recorded confirmation, invalidate it and stop dependent captures without changing trust files or permission rules. Keep folder trust separate from tool permission: the subsequent trusted Claude C1 session still denied `command -v gh` because its noninteractive mode had no approval surface.
-
-**What happened:** The agent treated "i approve, keep going" as confirmation that seven native trust steps had happened. The first Claude session reported an untrusted workspace and denied a prerequisite command. Neither intended policy probe ran. The agent preserved the capture and invalidated the inferred confirmations.
-
-**Related contract:** `.goat-flow/learning-loop/footguns/hooks.md` (search: "Registered Stop hooks can be dead config behind agent trust gates") separates project trust, hook trust and live delivery. The local M61 capture retains this incident's transcript.
-
----
-
 ## Lesson: Wait for native terminal diagnostics to exit after their success output
 
 **Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
@@ -251,21 +236,6 @@ Inspect literals independently when checking renames, as described in
 **What happened:** M61's final checker used Python `read_text()` on a Windows `gh.cmd` fixture and reported a mismatch. The reader had normalized CRLF to LF. `read_bytes()` matched the approved packet exactly, and the corrected full comparison passed without changing the fixture.
 
 **Local incident evidence:** `.goat-flow/plans/1.19.0/evidence/m61-final-live-proof.json` (search: "preservedDiagnostic", "rawByteRecheck") preserves the false mismatch and corrected comparison. This local receipt is not portable proof.
-
-## Lesson: Keep operator input open before launching an interactive capture
-
-**Status:** active | **Created:** 2026-10-28 | **Evidence:** OBSERVED
-**Decision changed:** Verify persistent input on the outer execution surface before consuming a live capture claim.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** An inner provider PTY does not keep its controller's stdin open. When the controller reads incremental operator actions, launch it with `exec_command` and `tty: true`, then use `write_stdin`. First run an inert child through that same outer surface, send a line and await its normal exit. An inner PTY rehearsal alone does not verify this input path.
-
-**What happened:** A Claude Code 2.1.311 hook-capture controller launched through plain pipes. Its `readline` close handler stopped the provider with `operator-input-closed` before any terminal output or task submission. A paired inert reproduction observed immediate input closure through plain pipes; the PTY launch stayed open, received the test line and exited zero. The consumed claim and empty capture were preserved.
-
-**Related source contract:** `src/cli/server/terminal-spawn.ts` (search: "ignored stdin reads as end of input") deliberately closes input for a version probe. A controller awaiting operator actions requires a persistent input surface.
-
----
 
 ## Lesson: Prove a capture helper's deadline stops its child on the host it runs on
 

@@ -185,13 +185,16 @@ describe("setup --apply installer", () => {
       true,
     );
     assert.equal(
-      existsSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh")),
+      existsSync(join(root, ".goat-flow", "hooks", "deny-dangerous.mjs")),
       true,
     );
-    assert.equal(
-      existsSync(join(root, ".goat-flow", "hooks", "plan-checkbox-guard.sh")),
-      false,
-    );
+    for (const retiredHook of ["deny-dangerous.sh", "plan-checkbox-guard.sh"]) {
+      assert.equal(
+        existsSync(join(root, ".goat-flow", "hooks", retiredHook)),
+        false,
+        retiredHook,
+      );
+    }
     const codexHooks = readFileSync(
       join(root, ".codex", "hooks.json"),
       "utf-8",
@@ -215,19 +218,7 @@ describe("setup --apply installer", () => {
           ".goat-flow",
           "hooks",
           "deny-dangerous",
-          "patterns-shell.sh",
-        ),
-      ),
-      true,
-    );
-    assert.equal(
-      existsSync(
-        join(
-          root,
-          ".goat-flow",
-          "hooks",
-          "deny-dangerous",
-          "deny-dangerous-self-test.sh",
+          "patterns-shell.mjs",
         ),
       ),
       true,
@@ -414,22 +405,11 @@ describe("setup --apply installer", () => {
     assert.doesNotMatch(config, /binaries/u);
   });
 
-  it("standalone Antigravity install runs both saved policy hooks", () => {
+  // A user installing Antigravity through the public CLI gets both policy hooks, and each allows a safe command and denies a risky one.
+  // It installs into a disposable project, then spawns each saved hook command from `.agents` with a replayed tool call.
+  it("public Antigravity install runs both saved policy hooks", () => {
     const root = makeTempProject();
-    const installed = spawnSync(
-      "bash",
-      [
-        join(PROJECT_ROOT, "workflow/install-goat-flow.sh"),
-        root,
-        "--agent",
-        "antigravity",
-      ],
-      {
-        cwd: PROJECT_ROOT,
-        encoding: "utf8",
-        timeout: process.platform === "win32" ? 120_000 : 30_000,
-      },
-    );
+    const installed = runCliInstaller(root, "--agent", "antigravity");
     assert.equal(installed.status, 0, installed.stderr || installed.stdout);
     assert.ok(
       existsSync(join(root, ".goat-flow/hooks/antigravity-hook-bootstrap.cjs")),

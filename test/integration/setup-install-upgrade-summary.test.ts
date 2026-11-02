@@ -25,7 +25,8 @@ import {
   spawnSync,
 } from "./setup-install.helpers.js";
 
-const LOCAL_PATH = ".goat-flow/hooks/run-with-bash.mjs";
+// A managed hook file the tests edit to stand in for a user's local change.
+const LOCAL_PATH = ".goat-flow/hooks/run-hook.mjs";
 const SUMMARY = "Install verified for";
 
 let codexFixturePath: string | undefined;

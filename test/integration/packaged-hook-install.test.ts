@@ -30,6 +30,7 @@ import { pathToFileURL } from "node:url";
 import { readPolicyChoices } from "../../workflow/hooks/hook-policy-state.cjs";
 import { loadConfig } from "../../src/cli/config/index.js";
 import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const PACKAGE_VERSION = (
@@ -222,26 +223,25 @@ function runPackedCli(
 }
 
 /**
- * Review an old launcher with no recorded install history before the packed CLI can sync it.
+ * Walk an old install through Sync's review as a user would: `hooks sync` refuses, the Hooks page approves, and a second sync converges.
  *
- * Use the archived dashboard handler for consent, then prove the public CLI converges without another review.
+ * For example, a user upgrading a 1.16.0 Codex project has no saved install hashes, so its registered launcher needs that review first.
  * Starts child processes that replace reviewed files in the disposable project.
  *
  * @param packedPackageRoot - extracted package whose handler performs the review; empty cannot locate that handler
  * @param packedCliLaunchPath - archived CLI entry; empty cannot start the user's Sync command
  *
  * @param projectPath - existing disposable install; empty would lose the selected-project boundary
+ * @param reviewPaths - files the review must list, in Sync's order; the retired launcher comes first while a registration names it
  * @returns final CLI result; empty output is valid when Sync finishes silently
  */
 function reviewAndSyncPackedHooks(
   packedPackageRoot: string,
   packedCliLaunchPath: string,
   projectPath: string,
+  reviewPaths: readonly string[],
 ) {
-  const priorFiles = [
-    ".codex/hooks.json",
-    ".goat-flow/hooks/hook-launch-runtime.mjs",
-  ];
+  const priorFiles = [".codex/hooks.json", ...reviewPaths];
   const priorBytes = priorFiles.map((file) =>
     readFileSync(join(projectPath, file)),
   );
@@ -272,7 +272,7 @@ function reviewAndSyncPackedHooks(
     // An old launcher without recorded install history requires the user's replacement review.
     try { syncHookStates(projectPath); } catch (error) { review = error.details; }
     assert.equal(review?.code, "hook-replacement-required");
-    assert.deepEqual(review.paths, [".goat-flow/hooks/hook-launch-runtime.mjs"]);
+    assert.deepEqual(review.paths, ${JSON.stringify(reviewPaths)});
     assert.equal(review.replacementAvailable, true);
     syncHookStates(projectPath, { replace: true, confirmationIdentity: review.confirmationIdentity });
   `,
@@ -440,30 +440,26 @@ function installPackedCanaryBytes(
     "hooks",
   );
   mkdirSync(installedHookDirectoryPath, { recursive: true });
-  cpSync(
-    join(packedPackageRoot, "workflow", "hooks", "run-with-bash.mjs"),
-    join(installedHookDirectoryPath, "run-with-bash.mjs"),
-  );
-  cpSync(
-    join(packedPackageRoot, "workflow", "hooks", "hook-provider-adapters.mjs"),
-    join(installedHookDirectoryPath, "hook-provider-adapters.mjs"),
-  );
-  cpSync(
-    join(packedPackageRoot, "workflow", "hooks", "hook-launch-runtime.mjs"),
-    join(installedHookDirectoryPath, "hook-launch-runtime.mjs"),
-  );
+  // Copy the packed Gruff dependency set the registry declares, so the canary cannot borrow a source-checkout module.
+  const gruffHookSpec = getHookSpec("gruff-code-quality");
+  assert.ok(gruffHookSpec);
+  for (const file of gruffHookSpec.scriptFiles) {
+    const destination = join(installedHookDirectoryPath, file);
+    mkdirSync(dirname(destination), { recursive: true });
+    cpSync(join(packedPackageRoot, "workflow", "hooks", file), destination);
+  }
   writeFileSync(
-    join(installedHookDirectoryPath, "canary-stall.sh"),
+    join(installedHookDirectoryPath, "canary-stall.mjs"),
     [
-      "#!/usr/bin/env bash",
-      "# Simulates packaged analyzer work that exceeds the user's feedback deadline.",
-      "# Keeps the child alive so archived launcher bytes must stop it and explain why.",
-      "# Use only inside this disposable package installation canary.",
-      "sleep 5",
+      "// Native analyzer fixture",
+      "// Simulates packaged analyzer work that exceeds the user's feedback deadline.",
+      "// Keeps the child alive so archived launcher bytes must stop it and explain why.",
+      "// Use only inside this disposable package installation canary.",
+      "await new Promise((resolve) => setTimeout(resolve, 5000));",
       "",
     ].join("\n"),
   );
-  return join(installedHookDirectoryPath, "run-with-bash.mjs");
+  return join(installedHookDirectoryPath, "run-hook.mjs");
 }
 
 /**
@@ -483,7 +479,7 @@ function runPackedDeadlineCanary(
     process.execPath,
     [
       packedLauncherPath,
-      ".goat-flow/hooks/canary-stall.sh",
+      ".goat-flow/hooks/canary-stall.mjs",
       CODEX_GRUFF_LAUNCH_CONTRACT,
     ],
     {
@@ -512,7 +508,7 @@ describe("packaged hook installation canary", () => {
     assert.equal(
       readFileSync(packedLauncherPath, "utf8"),
       readFileSync(
-        join(PROJECT_ROOT, "workflow", "hooks", "run-with-bash.mjs"),
+        join(PROJECT_ROOT, "workflow", "hooks", "run-hook.mjs"),
         "utf8",
       ),
       "npm archive must contain the candidate launcher bytes",
@@ -750,6 +746,10 @@ describe("packaged hook installation canary", () => {
         packedPackageRoot,
         packedCliLaunchPath,
         upgradedProjectPath,
+        [
+          ".goat-flow/hooks/run-with-bash.mjs",
+          ".goat-flow/hooks/hook-launch-runtime.mjs",
+        ],
       );
       assert.equal(
         migrationResult.status,
@@ -819,11 +819,12 @@ describe("packaged hook installation canary", () => {
         join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
         V1_15_0_BASH_RUNNER,
       );
-      // This release has no shared native launcher to replace: adding Node files needs no overwrite consent.
-      const migrationResult = runPackedCli(
+      // The registered retired launcher has no saved install hash, so Sync asks for review before migrating it.
+      const migrationResult = reviewAndSyncPackedHooks(
+        packedPackageRoot,
         packedCliLaunchPath,
-        ["hooks", "sync", upgradedProjectPath],
         upgradedProjectPath,
+        [".goat-flow/hooks/run-with-bash.mjs"],
       );
       assert.equal(
         migrationResult.status,

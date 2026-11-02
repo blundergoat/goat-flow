@@ -57,15 +57,6 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       ),
       true,
     );
-    const installerSource = readFileSync(
-      join(import.meta.dirname, "..", "..", "workflow", "install-goat-flow.sh"),
-      "utf-8",
-    );
-    assert.match(
-      installerSource,
-      /function filesystemPathsAreEquivalent[\s\S]*pathModule\.relative\(leftDirectory, rightDirectory\)[\s\S]*pathModule\.relative\(rightDirectory, leftDirectory\)/u,
-    );
-    assert.doesNotMatch(installerSource, /gitTopLevel\([^\n]+\) === [^\n]+/u);
   });
 
   it("uses directory identity when Windows aliases have different spellings", () => {
@@ -95,19 +86,6 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         }),
       ),
       false,
-    );
-
-    const installerSource = readFileSync(
-      join(import.meta.dirname, "..", "..", "workflow", "install-goat-flow.sh"),
-      "utf-8",
-    );
-    assert.match(
-      installerSource,
-      /function filesystemDirectoryIdentity[\s\S]*fs\.statSync\(directoryPath, \{ bigint: true \}\)[\s\S]*stats\.ino === 0n/u,
-    );
-    assert.match(
-      installerSource,
-      /leftIdentity\.device === rightIdentity\.device[\s\S]*leftIdentity\.inode === rightIdentity\.inode/u,
     );
   });
 

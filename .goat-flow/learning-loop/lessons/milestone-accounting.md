@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-10-23
+last_reviewed: 2026-11-03
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Timing receipt evidence and lifecycle are in [milestone-timing.md](milestone-timing.md). Multi-agent council coordination is [coordination.md](coordination.md).
@@ -65,8 +65,8 @@ Check each ported function's callees before assigning it to an independent stage
 
 **Recurrence 2026-10-17:** The local M08 amendment put fixtures after ports whose immediate proof needed them; M51 put failing contracts after instruction replacement. Review reordered both before implementation, following `workflow/skills/goat-plan/SKILL.md` (search: `Risk-weighted task ordering`). No runtime fix was credited.
 
-**Recurrence 2026-10-17 (callee ownership):** M08's `__goat_git_strip_globals` needed later alias tracking and refusal dispatch. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_strip_globals`, `record_git_alias_config`) and `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `record_git_persistent_alias`). Use real callees, never protection stubs.
-**Recurrence 2026-10-17 (context):** M09's `prepare_segment_context` needed M13 callees. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `prepare_segment_context`).
+**Recurrence 2026-10-17 (callee ownership):** M08's `__goat_git_strip_globals` needed later alias tracking and refusal dispatch. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `__goat_git_strip_globals`, `record_git_alias_config`) and `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `record_git_persistent_alias`). Use real callees, never protection stubs.
+**Recurrence 2026-10-17 (context):** M09's `prepare_segment_context` needed M13 callees. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `prepare_segment_context`).
 
 ---
 
@@ -187,7 +187,6 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 
 **Recurrence 2026-10-16:** M02 closeout appended an indented implementation note after Task 6's terminal estimate. Strict validation counted 26 product minutes against 28, one unestimated task and 31 work units against 32. Removing the note, already covered by Context, restored exit 0. Plain prose remains part of its checkbox until the next checkbox or heading. Evidence: `src/cli/plans-export.ts` (search: `function readChecklistItems`) and `src/cli/plans-effort.ts` (search: `export function readTaskEstimate`).
 
-
 ## Lesson: Milestone plans need exporter-contract verification before handoff
 
 **Status:** active | **Created:** 2026-07-17
@@ -205,7 +204,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-07-31:** Compact Scope and Exit forms were absent from the parser, focused tests missed three complexity errors, and the dashboard reused a filename as a malformed objective; expanded coverage keeps the filename only as a row title.
 **Recurrence 2026-08-03:** Prose-form `Plan/admin overhead` did not satisfy the required bold field. `src/cli/plans-export.ts` (search: `readMilestoneField(content, "Plan/admin overhead"`).
 **Recurrence 2026-08-05:** Strict checking and export exited zero, but supplementary checks found 13 unresolved citations and one nine-word ISSUE item.
-**Recurrence 2026-08-15:** A fresh-consumer command omitted the installer's required target directory; `mkdir -p` made it executable. `workflow/install-goat-flow.sh` (search: `is not a directory`).
+**Recurrence 2026-08-15:** A fresh-consumer command omitted the installer's required target directory; `mkdir -p` made it executable. `src/cli/installer/apply.ts` (search: `is not a directory`).
 **Recurrence 2026-08-25:** A draft nested Stop/rescope at H3, then an ad hoc trim broke Forecast range grammar; rewinding to the exact Standard template fixed both.
 **Recurrence 2026-09-02:** Reconciliation produced a 220-character problem statement naming an internal task ID; strict validation rejected both defects, and one 90-character public sentence passed. `src/cli/plans-check-structure.ts` (search: `collectPlainLanguageSectionFindings`).
 **Recurrence 2026-09-03:** `plans check` was given the milestone file during closeout; the loader called `readdirSync` on it and returned `ENOTDIR`, and the containing version directory passed. `src/cli/plans-export.ts` (search: `function listMilestoneFiles`).
@@ -253,17 +252,3 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-09-09:** The shipped ISSUE headline was 6-9h against 4-8h bands. CLI ignores ISSUE; evidence: `test/integration/goat-plan-templates.test.ts` (search: `plans check leaves ISSUE arithmetic`).
 
 ---
-
-## Lesson: Recover capped study counts from independent attempt receipts
-
-**Status:** active | **Created:** 2026-10-02 | **Evidence:** ACTUAL_MEASURED
-**Severity:** CORRECTNESS
-**Decision changed:** Treat a study's shared manifest as a derived index; recover consumed attempts from individual launch/result records before considering another call.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-
-**Prevention:** Retain one independent record per attempted launch, including its identity, actual argv, status, duration and reported usage. Keep shared manifest writes sequential, or use the complete claim-and-content guard in ADR-048. Reconcile every registered slot and assert the consumed cap from those records; a hard-coded pass message is not a count. Preserve failed attempts and missing fields; never reconstruct lost metadata as observed evidence or spend an extra call because an aggregate counter was lost.
-
-**What happened:** A temporary controller overlapped Claude and Codex launches. A later completion wrote a stale manifest copy, resetting two consumed Codex slots to registered despite four surviving failure receipts. An initial pass message inspected only the stale manifest's listed completions. Reading all independent receipts recovered exactly two spent slots per agent; the remaining launches ran sequentially. Lost Codex argv fields stayed explicitly unavailable, and no extra call or successful score was invented. This accounting incident is local workflow evidence, not a shipped runtime defect.
-
-**Evidence:** The controller incident was measured locally; ignored workflow notes are not committed proof. The shipped guard's authority is `.goat-flow/learning-loop/decisions/ADR-048-concurrent-session-detection.md` (search: `complete read, validate, and replace operation`), implemented by `src/cli/path-write-claim.ts` (search: `acquirePathWriteClaims`).

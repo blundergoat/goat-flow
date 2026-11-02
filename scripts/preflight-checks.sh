@@ -118,22 +118,6 @@ if (mode === "skill-roots") {
   process.exit(0);
 }
 
-if (mode === "hook-dirs") {
-  const dirs = [
-    ...new Set(
-      Object.values(manifest.agents || {})
-        .map((agent) =>
-          typeof agent.hooks_dir === "string"
-            ? agent.hooks_dir.replace(/\/$/, "")
-            : "",
-        )
-        .filter(Boolean),
-    ),
-  ];
-  for (const dir of dirs) console.log(dir);
-  process.exit(0);
-}
-
 if (mode === "instruction-files") {
   const files = [
     ...new Set(
@@ -186,7 +170,7 @@ manifest_cache_ready=0
 cache_manifest_inventory() {
     local mode skill key value
     manifest_cache_ready=0
-    for mode in hook-dirs skill-roots instruction-files supported-skills; do
+    for mode in skill-roots instruction-files supported-skills; do
         if value=$(manifest_eval "$mode"); then
             manifest_cache_keys+=("$mode")
             manifest_cache_values+=("$value")
@@ -829,41 +813,22 @@ _emit_footer() {
 check_shell() {
 # ── Shell Scripts ────────────────────────────────────────────────────
 section "Shell Scripts"
-# Only a successful syntax check earns a pass for project scripts and hooks.
+# Only a successful syntax check earns a pass for project scripts.
 if syntax_output=$(bash scripts/maintenance/check-shell-syntax.sh 2>&1); then
-    pass "Bash syntax (scripts and hooks)"
+    pass "Bash syntax (scripts)"
 else
-    fail "Bash syntax check (scripts and hooks)"
+    fail "Bash syntax check (scripts)"
     printf '%s\n' "$syntax_output" | details_pipe
 fi
 
 # Run the installed shell linter when it is available to inspect project scripts.
 if command -v shellcheck >/dev/null 2>&1; then
     # Report script lint success only after shellcheck completes successfully.
-    if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh >/dev/null 2>&1; then
+    if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh >/dev/null 2>&1; then
         pass "Shellcheck (scripts)"
     else
-        fail "Shellcheck (scripts) - run shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh for details"
+        fail "Shellcheck (scripts) - run shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh for details"
     fi
-
-    # Lint hook entrypoints and sourced modules with the same exclusion as project scripts.
-    while IFS= read -r hookdir; do
-        hook_shell_files=()
-        for hook_shell_file in "$hookdir"/*.sh "$hookdir"/deny-dangerous/*.sh; do
-            [[ ! -f "$hook_shell_file" ]] || hook_shell_files+=("$hook_shell_file")
-        done
-        if [[ "${#hook_shell_files[@]}" -gt 0 ]]; then
-            if shellcheck --exclude=SC2001 "${hook_shell_files[@]}" >/dev/null 2>&1; then
-                pass "Shellcheck ($hookdir/)"
-            else
-                fail "Shellcheck ($hookdir/) - run the instruction file's shellcheck command for details"
-            fi
-        fi
-    done < <(
-        manifest_eval hook-dirs
-        # Framework development also checks canonical copies; consumer projects need only their installed hooks.
-        if [[ -d workflow/hooks ]]; then printf '%s\n' workflow/hooks; fi
-    )
 else
     warn "Shellcheck not installed - run: bash scripts/setup-initial.sh"
 fi

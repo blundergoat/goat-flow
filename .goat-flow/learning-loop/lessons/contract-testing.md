@@ -106,7 +106,7 @@ Preserve applicability when consolidating procedures; test relocated fields thro
 
 **Root cause:** I reused compact serialization for both semantic equality and the final file write, overlooking the installer's established two-space JSON output.
 
-**Fix:** Keep compact JSON only for before/after comparison and pretty-print the user file. Evidence anchors: `workflow/install-goat-flow.sh` (search: `JSON.stringify(currentConfig, null, 2)`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `"timeout": 90`).
+**Fix:** Keep compact JSON only for before/after comparison and pretty-print the user file. Evidence anchors: `src/cli/server/agent-hook-writer.ts` (search: `JSON.stringify(config, null, 2)`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `"timeout": 90`).
 
 **Recurrence 2026-08-27:** The first v2 bootstrap fixture rebuilt small v1 files in an order that happened to satisfy the new UTF-8 canonicalizer. The production v1 writer orders its complete path set with `localeCompare`; a direct writer-to-facade reproduction returned `malformed-blocking` for every agent shape checked. The correction preserves parsed v1 row order during byte normalization, then applies UTF-8 sorting only to the virtual v2 state. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `V1 predates UTF-8 canonical ordering`) and `test/unit/managed-setup-preview.test.ts` (search: `bootstraps a baseline written by the v1 state writer`).
 

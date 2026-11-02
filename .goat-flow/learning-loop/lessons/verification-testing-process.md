@@ -14,7 +14,7 @@ last_reviewed: 2026-10-23
 **Incident count:** 5 | **Latest occurrence:** 2026-10-10
 **Merged:** 2026-09-15 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split along the process-lifecycle seam to recover its headroom.
 
-**Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert readiness, response mode, timeout message, return deadline, owned-process termination and an unrelated live control; a kill signal or timeout message alone does not prove the user regains control. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`), `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
+**Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert readiness, response mode, timeout message, return deadline, owned-process termination and an unrelated live control; a kill signal or timeout message alone does not prove the user regains control. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`), `test/fixtures/hooks-bash/workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
 
 Enforce an approved live-capture deadline with a process timer independent of agent polling, so context compaction cannot extend the session.
 Verify the returned status and process cleanup; Node may represent SIGKILL as a null status plus signal rather than shell exit 137.
@@ -23,7 +23,7 @@ Verify the returned status and process cleanup; Node may represent SIGKILL as a 
 
 **Root cause:** Both timeout paths treated direct-child termination as completion, and the hook launcher killed Bash without bounding the process tree it had started.
 
-**Recurrence 2026-08-09:** A preflight run reported `bounds gruff hooks with a timeout-specific response` as transient because its full-suite retry passed. Running the named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound, and a fixture that wrote a marker after starting the background child reproduced the wait. `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`), `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
+**Recurrence 2026-08-09:** A preflight run reported `bounds gruff hooks with a timeout-specific response` as transient because its full-suite retry passed. Running the named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound, and a fixture that wrote a marker after starting the background child reproduced the wait. `test/fixtures/hooks-bash/workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
 
 **Recurrence 2026-10-02:** The approved five-minute Codex discovery depended on operator polling through context compaction.
 The first turn finished in six seconds, but closure occurred after 354 seconds; two required explicit turns were never submitted.
@@ -43,7 +43,7 @@ The launcher now stops detached descendant groups before its own group; the regr
 The first fixture edit collapsed Bash `$$` in a JavaScript replacement string, producing an invalid PID and incomplete cleanup.
 
 A replacement callback preserves `$$`; the fixture checks positive integer PIDs and always cleans up its unrelated control.
-Evidence: `workflow/hooks/run-with-bash.mjs` (search: `findDetachedHookProcessGroups`).
+Evidence: `test/fixtures/hooks-bash/workflow/hooks/run-with-bash.mjs` (search: `findDetachedHookProcessGroups`).
 The owning regression is `test/integration/post-turn-launcher-recovery.test.ts` (search: `terminates detached controller children`).
 
 **Recurrence 2026-10-10:** The shared command-capture helper returned `ENOBUFS` and `ETIMEDOUT` after killing its direct child, but a confirmed-started grandchild remained alive in both reproductions.

@@ -34,6 +34,7 @@ import {
   writeProjectFile,
 } from "./dashboard-server.helpers.js";
 import type { AgentId } from "../../src/cli/types.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 describe("dashboard /api/audit", () => {
   /** Read dashboard profile spans from an endpoint response body. */
   function getProfileSpans(body: unknown): Record<string, unknown>[] {
@@ -523,10 +524,13 @@ describe("dashboard /api/audit", () => {
     const markerPath = join(project.root, "launcher-executed.marker");
     try {
       // Install the real shared policy dependencies so the HTTP case inspects a complete hook installation.
-      for (const hookFile of [
-        "deny-git-mutations.sh",
-        "deny-dangerous/guard-runtime.sh",
-      ]) {
+      const policyFiles = new Set(
+        ["deny-dangerous", "deny-git-mutations"].flatMap(
+          (hookId) => getHookSpec(hookId)?.scriptFiles ?? [],
+        ),
+      );
+      assert.ok(policyFiles.size > 0);
+      for (const hookFile of policyFiles) {
         await writeProjectFile(
           project.root,
           `.goat-flow/hooks/${hookFile}`,
@@ -546,11 +550,11 @@ describe("dashboard /api/audit", () => {
                 hooks: [
                   {
                     type: "command",
-                    command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-dangerous.sh`,
+                    command: `touch "${markerPath}"; node .goat-flow/hooks/deny-dangerous.mjs`,
                   },
                   {
                     type: "command",
-                    command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-git-mutations.sh`,
+                    command: `touch "${markerPath}"; node .goat-flow/hooks/deny-git-mutations.mjs`,
                   },
                 ],
               },

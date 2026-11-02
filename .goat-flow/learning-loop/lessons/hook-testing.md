@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-10-30
+last_reviewed: 2026-11-03
 ---
 
 **Scope:** Hook test coverage strategy - what a self-test or fixture actually exercises, which suites and CI jobs run a changed hook, fixtures that must not carry real secrets, and splits that only look like coverage. What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md); the script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -30,7 +30,7 @@ last_reviewed: 2026-10-30
 
 **Recurrence 2026-10-03:** The comment-wrap audit mistook Bash case patterns beginning with `*` for comments and reported two false failures.
 Use shell comment markers for Bash; reserve multiline `*` markers for parsed TypeScript/JavaScript comments.
-Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_key`, `is_credential_key`).
+Evidence: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_key`, `is_credential_key`).
 
 ## Lesson: Secret-scanner tests must not embed literal secret-shaped fixtures
 
@@ -38,7 +38,7 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_
 **Severity:** INTEGRATION
 **Incident count:** 2 | **Latest occurrence:** 2026-09-04
 
-**Prevention:** In secret-scanner tests and shipped self-tests, build secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner while the committed source holds no contiguous token or private-key pattern. Apply the same rule to harmless structural fixtures the repository scanner classifies as REVIEW, and never add a waiver that could hide a real credential. After adding or editing scanner fixtures, run the scanner against the current repo, not only temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`), `workflow/hooks/post-turn-safety.sh` (search: `synthetic_assignment_prefix`), `test/unit/plans-check-structure.test.ts` (search: `BANNED_IDENTIFIER_CASES`), `test/unit/redact-command.test.ts` (search: `TEST_BEARER_INPUT`).
+**Prevention:** In secret-scanner tests and shipped self-tests, build secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner while the committed source holds no contiguous token or private-key pattern. Apply the same rule to harmless structural fixtures the repository scanner classifies as REVIEW, and never add a waiver that could hide a real credential. After adding or editing scanner fixtures, run the scanner against the current repo, not only temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`), `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `synthetic_assignment_prefix`), `test/unit/plans-check-structure.test.ts` (search: `BANNED_IDENTIFIER_CASES`), `test/unit/redact-command.test.ts` (search: `TEST_BEARER_INPUT`).
 
 **What happened:** After `post-turn-safety` became the default Stop hook, the Codex Stop command blocked this repo because the changed safety-hook test source embedded literal secret-shaped fixtures; the fixtures were fake, but the hook scans changed source text and cannot know a token-shaped string in a test file is harmless.
 
@@ -60,7 +60,7 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_
 
 **Status:** active | **Created:** 2026-06-06
 
-**Prevention:** For guardrail parsers, vary shell structure in the allow corpus rather than only verbs: substitutions with and without inner operators, quoted against unquoted, arithmetic expansion, process substitution, and redirects (`2>&1`, `2>/dev/null`, redirect-to-other-file) on allowlisted-readable files, each paired with its dangerous counterpart. A green smoke run proves only the cases present. When a report fingers a downstream catch-all rule, trace the token that rule sees back to the tokenizer before relaxing it. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `arithmetic expansion`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `.env.example read with stderr dup`), `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `track substitution depth`).
+**Prevention:** For guardrail parsers, vary shell structure in the allow corpus rather than only verbs: substitutions with and without inner operators, quoted against unquoted, arithmetic expansion, process substitution, and redirects (`2>&1`, `2>/dev/null`, redirect-to-other-file) on allowlisted-readable files, each paired with its dangerous counterpart. A green smoke run proves only the cases present. When a report fingers a downstream catch-all rule, trace the token that rule sees back to the tokenizer before relaxing it. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `arithmetic expansion`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `.env.example read with stderr dup`), `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `track substitution depth`).
 
 **What happened:** A downstream agent hit `Policy destructive: Complex command substitution` on benign `$()` inside a `for` loop while `deny-dangerous.sh --self-test=smoke` reported `executed=23, skipped=0` PASS. The corpus had no allow case for a substitution containing a control operator, nor for arithmetic `$(())`, nor for a `.env.example` read carrying `2>&1`, so three false-positive classes shipped behind a green suite. The catch-all was correct; the orphan `$(` was manufactured upstream by the segment splitter.
 
@@ -75,7 +75,7 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_
 **Caught at:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-09-27
 
-**Prevention:** Before writing an `expect_block_message` case, locate the owning block reason or capture the hook's attributed output, then reuse a stable source-owned fragment. Run the full central self-test after the RED fixture and after implementation; a verdict-only integration pass is not copy proof. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `dangerous nested command substitution`), `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Destructive git operation`).
+**Prevention:** Before writing an `expect_block_message` case, locate the owning block reason or capture the hook's attributed output, then reuse a stable source-owned fragment. Run the full central self-test after the RED fixture and after implementation; a verdict-only integration pass is not copy proof. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `dangerous nested command substitution`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Destructive git operation`).
 
 **What happened:** The change added exact-copy self-test cases for nested deletion and a background hard reset, expecting "Recursive deletion" where the runtime says "rm -r without safe scoping", then "git reset --hard" where the policy says only "reset --hard"; the full self-test failed two verification iterations although the verdict-only matrix was green.
 
@@ -89,7 +89,7 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_
 
 **Status:** active | **Created:** 2026-05-27
 
-**Prevention:** When splitting a safety hook, define the ownership boundary before porting code. If the hooks must stay self-contained, generate or review each file from explicit function sets: common payload parsing may be shared, but secret, repository, and destructive policy helpers must not cross guard boundaries. A line-count spike across every split file is a review blocker until the duplication is explained or removed. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm_has_recursive`), `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `npm token delete/revoke`).
+**Prevention:** When splitting a safety hook, define the ownership boundary before porting code. If the hooks must stay self-contained, generate or review each file from explicit function sets: common payload parsing may be shared, but secret, repository, and destructive policy helpers must not cross guard boundaries. A line-count spike across every split file is a review blocker until the duplication is explained or removed. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm_has_recursive`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `npm token delete/revoke`).
 
 **What happened:** Restoring lost guardrail coverage copied one parser and checker into all three scoped hooks; runtime filters separated outcomes, but every hook still carried unrelated secret, write, and destructive-command logic.
 
@@ -104,14 +104,13 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_
 **Caught at:** VERIFY
 **Incident count:** 7 | **Latest occurrence:** 2026-10-12
 
-**Prevention:** Measure clean, finding, config-refusal, fatal and ignored-operand branches separately. Use a scratch project for refusals, then run the finished consumer against the real executables. Evidence: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `shows the analyzer's own message`); `workflow/hooks/gruff-code-quality.sh` (search: `if type == "object" then (.message // tostring)`).
+**Prevention:** Measure clean, finding, config-refusal, fatal and ignored-operand branches separately. Use a scratch project for refusals, then run the finished consumer against the real executables. Evidence: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `shows the analyzer's own message`); `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `if type == "object" then (.message // tostring)`).
 
 **What happened:** The Gruff v2 clean fixture came from a real gruff-ts run, but its refused-config fixture guessed that `config.error` was a string. Protocol tests passed. Running all five real ports with a missing `schemaVersion` exposed an object with `message` and `remediation`; the hook displayed raw JSON. The hook now reads the message and the fixture uses that measured shape.
 
 **Root cause:** One measured payload was treated as proof of the whole envelope's shape, so the unmeasured error branch was modelled from the field name.
 
-**Recurrence 2026-09-22:** A Codex renewal control used tool API fields `exec_command` and `cmd`; the Git policy returned zero because this was not its shell-event contract. The configured extractor required `Bash` and `tool_input.command`. Six corrected controls preserved production bytes/exits, and a live CLI 0.155.1 capture observed that field and both denials. Evidence: `src/cli/hooks-runtime-evidence.ts` (search: `tool_name: "Bash"`); `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `tool_is_shell_command`, `.tool_input.command`); `workflow/hooks/README.md` (search: `On 2026-09-21,`).
-
+**Recurrence 2026-09-22:** A Codex renewal control used tool API fields `exec_command` and `cmd`; the Git policy returned zero because this was not its shell-event contract. The configured extractor required `Bash` and `tool_input.command`. Six corrected controls preserved production bytes/exits, and a live CLI 0.155.1 capture observed that field and both denials. Evidence: `src/cli/hooks-runtime-evidence.ts` (search: `tool_name: "Bash"`); `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `tool_is_shell_command`, `.tool_input.command`); `workflow/hooks/README.md` (search: `On 2026-09-21,`).
 
 **Recurrence 2026-10-11:** A supervised timeout probe expected legacy exit 2 from managed Claude. The adapter correctly returned exit 0 with JSON denial. Reading its schema test corrected the probe to require the denial and timeout reason; the regex and busy-loop reproductions then passed on WSL and native Windows. A zero exit can carry denial, and pre-timeout output cannot establish completed allowance. Evidence: `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptPreToolResult`); `test/unit/hook-provider-adapters.test.ts` (search: `preserves pre-tool blocking across provider schemas`).
 
@@ -151,3 +150,15 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `is_excluded_credential_
 **What happened:** The first parity corpus was built before the extractor changed an outside-project path from `$CWD` to `$FIXTURE0`. Fresh C and C.UTF-8 comparisons rejected the saved unavailable-fixture message. The approved rewind repeated all eight original captures and rebuilt the pair. Only fixture-root tokens changed in inputs and messages; assertion identities and verdicts were preserved. Bash also decoded six Unicode-escape inputs differently across locales, so IDs now follow assertions while the reference retains exact per-locale inputs. The working-tree check then rejected an actual U+200B in JSON; escaping it preserved the parsed reference values.
 
 **Evidence:** `scripts/check-hook-parity.mjs` (search: `captureProgram`, `caseRows`, `asserted message drift`); `test/integration/hook-parity.test.ts` (search: `saved pair binds every original case and both mirror bytes`). Structural controls passed while fresh extraction failed; pair consistency alone did not prove producer consistency.
+
+---
+
+## Lesson: Interpreter-pipe tests need flag-operand and producer-language controls
+
+**Status:** active | **Created:** 2026-07-05
+
+**Prevention:** Every interpreter-pipe exemption needs paired controls for (1) a flag operand that looks like a script path but is not positional code, (2) a real script path after that same flag, and (3) producer tools that can execute commands before emitting bytes. Run those controls through the live dispatcher path before declaring the self-test enough. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `interpreter_option_action`), (search: `is_local_data_pipe_source`), and `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `node require flag operand is not a script file`), (search: `sed producer with shell escape stays blocked`), (search: `local data pipe to node script after require flag`).
+
+**What happened:** A review of the local-data-to-interpreter pipe fix found two gaps after the full self-test was green. `cat script.js | node --require ./package.json` returned exit 0 even though Node executed stdin as the program, because the classifier treated the path-shaped `--require` operand as a script file. `printf x | sed '1e echo SED_EXECUTED' | python3 -c ...` also returned exit 0 while the producer executed a command, because `sed`/`awk` were included in a "read-only producer" allowlist.
+
+**Root cause:** The added grammar matrix covered bare interpreters, `-`, `/dev/stdin`, `python -m`, non-path flag values, downloader latching, and script-file allows, but it did not include path-shaped interpreter flag operands or command-capable producer languages. The test corpus proved the intended examples, not the edges where "path-shaped" and "read-only" assumptions break.

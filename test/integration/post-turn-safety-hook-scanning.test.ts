@@ -36,7 +36,6 @@ import {
   runGit,
   commitAll,
   runHook,
-  hookFindingSignatures,
   withCommandShim,
   withScannerFileFault,
   assertHookIncomplete,
@@ -119,30 +118,24 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       },
     );
   }
-  /** Confirm both scanner paths tell the user that declared coverage is incomplete.
+  /** Confirm the scanner tells the user that declared coverage is incomplete.
    *
    * @param root - fixture repository with a path the hook cannot fully scan
    * @param env - optional fault controls; empty uses normal user commands
-   * @returns nothing; either scanner allowing the turn fails the user contract
+   * @returns nothing; a scanner that allows the turn fails the user contract
    */
-  function assertIncompleteOnBothScanners(
+  function assertIncompleteScan(
     root: string,
     env: Record<string, string> = {},
   ): void {
-    // Native and compatibility scanners must show the same blocking result to the user.
-    for (const forceFallback of ["0", "1"]) {
-      assertHookIncomplete(root, {
-        ...env,
-        [FORCE_BASH3_ENV_KEY]: forceFallback,
-      });
-    }
+    assertHookIncomplete(root, { ...env, [FORCE_BASH3_ENV_KEY]: "0" });
   }
 
   describe("incomplete scan failures", () => {
-    it("blocks when the repository root is unavailable on both paths", () => {
+    it("blocks when the repository root is unavailable", () => {
       const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-no-git-"));
       try {
-        assertIncompleteOnBothScanners(root);
+        assertIncompleteScan(root);
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
@@ -158,7 +151,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
             status: 0,
           },
           (shimEnv) => {
-            assertIncompleteOnBothScanners(root, {
+            assertIncompleteScan(root, {
               ...shimEnv,
               GOAT_FLOW_TEST_MISSING_ROOT: join(root, "missing-root"),
             });
@@ -175,7 +168,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
             resolveExecutable("mktemp"),
             { status: 2 },
             (shimEnv) => {
-              assertIncompleteOnBothScanners(root, shimEnv);
+              assertIncompleteScan(root, shimEnv);
             },
           );
         });
@@ -193,7 +186,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
             status: 2,
           },
           (shimEnv) => {
-            assertIncompleteOnBothScanners(root, shimEnv);
+            assertIncompleteScan(root, shimEnv);
           },
         );
       });
@@ -208,7 +201,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           resolveExecutable("git"),
           { when: { includes: ["diff", "--unified=0"] }, status: 2 },
           (shimEnv) => {
-            assertIncompleteOnBothScanners(root, shimEnv);
+            assertIncompleteScan(root, shimEnv);
           },
         );
       });
@@ -219,7 +212,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         writeFile(root, "settings.env", "safe=1\n");
         if (hookSelection() !== "reference") {
           withScannerFileFault("readFileSync", (environment) =>
-            assertIncompleteOnBothScanners(root, environment),
+            assertIncompleteScan(root, environment),
           );
           return;
         }
@@ -236,12 +229,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       });
     });
 
-    it("blocks when the binary-content gate fails on both paths", () => {
+    it("blocks when the binary-content gate fails", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
         if (hookSelection() !== "reference") {
           withScannerFileFault("readSync", (environment) =>
-            assertIncompleteOnBothScanners(root, environment),
+            assertIncompleteScan(root, environment),
           );
           return;
         }
@@ -249,23 +242,23 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           resolveExecutable("grep"),
           { when: { any: ["-IlZ", "-Iq"] }, status: 2 },
           (shimEnv) => {
-            assertIncompleteOnBothScanners(root, shimEnv);
+            assertIncompleteScan(root, shimEnv);
           },
         );
       });
     });
 
-    it("blocks when byte counting fails on both paths", () => {
+    it("blocks when byte counting fails", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
         if (hookSelection() !== "reference") {
           withScannerFileFault("lstatSync", (environment) =>
-            assertIncompleteOnBothScanners(root, environment),
+            assertIncompleteScan(root, environment),
           );
           return;
         }
         withCommandShim(resolveExecutable("wc"), { status: 2 }, (shimEnv) => {
-          assertIncompleteOnBothScanners(root, shimEnv);
+          assertIncompleteScan(root, shimEnv);
         });
       });
     });
@@ -274,13 +267,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       withTempRepo((root) => {
         if (hookSelection() !== "reference") {
           withScannerFileFault("vanish", (environment) => {
-            for (const variant of ["0", "1"]) {
-              writeFile(root, "settings.env", "safe=1\n");
-              assertHookIncomplete(root, {
-                ...environment,
-                [FORCE_BASH3_ENV_KEY]: variant,
-              });
-            }
+            writeFile(root, "settings.env", "safe=1\n");
+            assertHookIncomplete(root, {
+              ...environment,
+              [FORCE_BASH3_ENV_KEY]: "0",
+            });
           });
           return;
         }
@@ -288,34 +279,18 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           resolveExecutable("wc"),
           { delegateThenRemoveEnvironment: "GOAT_FLOW_TEST_VANISH_PATH" },
           (shimEnv) => {
-            // Recreate the user's file because each scanner sees the shim delete it once.
-            for (const forceFallback of ["0", "1"]) {
-              writeFile(root, "settings.env", "safe=1\n");
-              assertHookIncomplete(root, {
-                ...shimEnv,
-                GOAT_FLOW_TEST_VANISH_PATH: join(root, "settings.env"),
-                [FORCE_BASH3_ENV_KEY]: forceFallback,
-              });
-            }
+            writeFile(root, "settings.env", "safe=1\n");
+            assertHookIncomplete(root, {
+              ...shimEnv,
+              GOAT_FLOW_TEST_VANISH_PATH: join(root, "settings.env"),
+              [FORCE_BASH3_ENV_KEY]: "0",
+            });
           },
         );
       });
     });
 
-    if (hookSelection() === "reference")
-      it("blocks when fallback text normalization fails", () => {
-        withTempRepo((root) => {
-          writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
-          withCommandShim(resolveExecutable("tr"), { status: 2 }, (shimEnv) => {
-            assertHookIncomplete(root, {
-              ...shimEnv,
-              [FORCE_BASH3_ENV_KEY]: "1",
-            });
-          });
-        });
-      });
-
-    it("blocks when changed-content coverage inventory fails on both paths", () => {
+    it("blocks when changed-content coverage inventory fails", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
         commitAll(root, "add staged size fixture");
@@ -327,7 +302,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           resolveExecutable("git"),
           { when: { includes: ["--numstat"] }, status: 2 },
           (shimEnv) => {
-            assertIncompleteOnBothScanners(root, shimEnv);
+            assertIncompleteScan(root, shimEnv);
           },
         );
       });
@@ -385,7 +360,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     for (const fixture of fixtures) {
       withTempRepo((root) => {
         writeFile(root, fixture.path, fixture.content);
-        assertIncompleteOnBothScanners(root);
+        assertIncompleteScan(root);
         if (hookSelection() !== "reference" && fixture.path === "large.txt") {
           const first = runHook(
             root,
@@ -519,60 +494,38 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     });
   });
 
-  describe("Bash 3 compatibility scan", () => {
-    const compatibilityEnv = {
-      GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "1",
-    };
+  describe("scanner finding rules", () => {
+    // Selects the primary scanner; the frozen reference otherwise runs its Bash 3 fallback as well.
+    const nativeScannerEnv = { [FORCE_BASH3_ENV_KEY]: "0" };
 
     /**
-     * Confirms that stock macOS Bash and newer Bash give the user one Stop result.
+     * Confirms the Stop result and explanation the user receives for one fixture.
      *
-     * @param root - non-empty fixture root both scanners inspect
+     * @param root - non-empty fixture root the scanner inspects
      * @param expectedStatus - 0 allows the turn; 2 means the user sees a block
-     * @param expectedPattern - optional explanation; absent compares outcome and findings only
+     * @param expectedPattern - optional explanation; absent checks the outcome only
      * @param env - optional scanner controls; empty uses normal user commands
-     * @returns nothing; any user-visible scanner difference fails the active test
+     * @returns nothing; an unexpected outcome or explanation fails the active test
      */
-    function assertScannerParity(
+    function assertScannerResult(
       root: string,
       expectedStatus: 0 | 2,
       expectedPattern?: RegExp,
       env: Record<string, string> = {},
     ): void {
-      const nativeResult = runHook(root, {
+      const result = runHook(root, {
         ...env,
         GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "0",
       });
-      const compatibilityResult = runHook(root, {
-        ...env,
-        ...compatibilityEnv,
-      });
-      const diagnostics = [
-        `native status=${nativeResult.status}`,
-        `native stderr:\n${nativeResult.stderr}`,
-        `fallback status=${compatibilityResult.status}`,
-        `fallback stderr:\n${compatibilityResult.stderr}`,
-      ].join("\n");
+      const diagnostics = `status=${result.status}\nstderr:\n${result.stderr}`;
 
-      assert.equal(nativeResult.status, expectedStatus, diagnostics);
-      assert.equal(
-        compatibilityResult.status,
-        nativeResult.status,
-        diagnostics,
-      );
-      assert.deepStrictEqual(
-        hookFindingSignatures(compatibilityResult.stderr),
-        hookFindingSignatures(nativeResult.stderr),
-        diagnostics,
-      );
-      // A supplied warning pattern confirms both paths explain the same user action.
+      assert.equal(result.status, expectedStatus, diagnostics);
       if (expectedPattern) {
-        assert.match(nativeResult.stderr, expectedPattern, diagnostics);
-        assert.match(compatibilityResult.stderr, expectedPattern, diagnostics);
+        assert.match(result.stderr, expectedPattern, diagnostics);
       }
     }
 
-    it("blocks fine-grained GitHub tokens on both paths", () => {
+    it("blocks fine-grained GitHub tokens", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -580,11 +533,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           `GITHUB_TOKEN=${TEST_FINE_GRAINED_GITHUB_TOKEN}\n`,
         );
 
-        assertScannerParity(root, 2, /GitHub token/u);
+        assertScannerResult(root, 2, /GitHub token/u);
       });
     });
 
-    it("blocks a double-quoted credential terminated by a semicolon on both paths", () => {
+    it("blocks a double-quoted credential terminated by a semicolon", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -592,11 +545,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           'export DB_PASSWORD="correct-horse-battery-staple";\n',
         );
 
-        assertScannerParity(root, 2, /credential assignment/u);
+        assertScannerResult(root, 2, /credential assignment/u);
       });
     });
 
-    it("blocks a single-quoted credential terminated by a semicolon on both paths", () => {
+    it("blocks a single-quoted credential terminated by a semicolon", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -604,35 +557,37 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           "export DB_PASSWORD='correct-horse-battery-staple';\n",
         );
 
-        assertScannerParity(root, 2, /credential assignment/u);
+        assertScannerResult(root, 2, /credential assignment/u);
       });
     });
 
     // Both common Git path shapes must decode to the file name the user recognizes.
     for (const path of ["space name.env", "café.env"]) {
-      it(`decodes the Git diff header for ${path} on both paths`, () => {
+      it(`decodes the Git diff header for ${path}`, () => {
         withTempRepo((root) => {
           writeFile(root, path, "safe=1\n");
           commitAll(root, `add ${path}`);
           writeFile(root, path, `OPENAI_API_KEY=${TEST_API_TOKEN}\n`);
 
-          assertHookBlocks(root, new RegExp(`API token in ${path}`, "u"));
+          assertHookBlocks(root, new RegExp(`API token in ${path}`, "u"), {
+            [FORCE_BASH3_ENV_KEY]: "0",
+          });
         });
       });
     }
 
-    it("pins mnemonic Git diff prefixes on both paths", () => {
+    it("pins mnemonic Git diff prefixes", () => {
       withTempRepo((root) => {
         writeFile(root, "mnemonic.env", "safe=1\n");
         commitAll(root, "add mnemonic prefix fixture");
         runGit(root, ["config", "diff.mnemonicPrefix", "true"]);
         writeFile(root, "mnemonic.env", `API_KEY=${TEST_API_TOKEN}\n`);
 
-        assertScannerParity(root, 2, /API token in mnemonic\.env/u);
+        assertScannerResult(root, 2, /API token in mnemonic\.env/u);
       });
     });
 
-    it("pins custom Git diff source and destination prefixes on both paths", () => {
+    it("pins custom Git diff source and destination prefixes", () => {
       withTempRepo((root) => {
         writeFile(root, "custom.env", "safe=1\n");
         commitAll(root, "add custom prefix fixture");
@@ -640,11 +595,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         runGit(root, ["config", "diff.dstPrefix", "after/"]);
         writeFile(root, "custom.env", `API_KEY=${TEST_API_TOKEN}\n`);
 
-        assertScannerParity(root, 2, /API token in custom\.env/u);
+        assertScannerResult(root, 2, /API token in custom\.env/u);
       });
     });
 
-    it("combines staged and unstaged conflict-marker state on both paths", () => {
+    it("combines staged and unstaged conflict-marker state", () => {
       withTempRepo((root) => {
         writeFile(root, "conflict.txt", "safe\n");
         commitAll(root, "add conflict fixture");
@@ -656,11 +611,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> branch\n",
         );
 
-        assertScannerParity(root, 2, /merge conflict marker/u);
+        assertScannerResult(root, 2, /merge conflict marker/u);
       });
     });
 
-    it("does not let added content impersonate a fallback diff header", () => {
+    it("does not let added content impersonate a diff header", () => {
       withTempRepo((root) => {
         writeFile(root, "conflict.txt", "safe\n");
         commitAll(root, "add fallback frame fixture");
@@ -679,11 +634,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           ].join("\n"),
         );
 
-        assertScannerParity(root, 2, /merge conflict marker/u);
+        assertScannerResult(root, 2, /merge conflict marker/u);
       });
     });
 
-    it("blocks a leading-plus token assignment on both paths and allows its placeholder control", () => {
+    it("blocks a leading-plus token assignment and allows its placeholder control", () => {
       withTempRepo((root) => {
         writeFile(root, "leading-plus.env", "+API_KEY=your_api_key_here\n");
         commitAll(root, "add leading plus placeholder");
@@ -693,19 +648,19 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           `+API_KEY=${TEST_API_TOKEN}\n+API_KEY=your_api_key_here\n`,
         );
 
-        assertScannerParity(root, 2, /API token/u);
+        assertScannerResult(root, 2, /API token/u);
       });
     });
 
-    it("allows source assignments on both paths", () => {
+    it("allows source assignments", () => {
       withTempRepo((root) => {
         writeFile(root, "app.py", `API_TOKEN = "${TEST_CLIENT_SECRET}"\n`);
 
-        assertScannerParity(root, 0);
+        assertScannerResult(root, 0);
       });
     });
 
-    it("uses the optimized token thresholds on both paths", () => {
+    it("uses the optimized token thresholds", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -713,7 +668,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           [TEST_SHORT_GITHUB_TOKEN, TEST_SHORT_NPM_TOKEN, ""].join("\n"),
         );
 
-        assertScannerParity(root, 0);
+        assertScannerResult(root, 0);
       });
     });
 
@@ -730,7 +685,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           ].join("\n"),
         );
 
-        assertScannerParity(root, 2, /AWS access key/u);
+        assertScannerResult(root, 2, /AWS access key/u);
       });
     });
 
@@ -738,7 +693,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       withTempRepo((root) => {
         writeFile(root, ".env.example", "API_KEY=your_api_key_here\n");
 
-        assertHookAllows(root, compatibilityEnv);
+        assertHookAllows(root, nativeScannerEnv);
       });
     });
 
@@ -750,7 +705,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         runGit(root, ["add", "settings.env"]);
         writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
 
-        assertHookBlocks(root, /API token/u, compatibilityEnv);
+        assertHookBlocks(root, /API token/u, nativeScannerEnv);
       });
     });
 
@@ -760,7 +715,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         commitAll(root, "add key fixture");
         writeFile(root, "key.pem", `${TEST_PRIVATE_KEY_HEADER}\nbody\n`);
 
-        assertHookBlocks(root, /private key block/u, compatibilityEnv);
+        assertHookBlocks(root, /private key block/u, nativeScannerEnv);
       });
     });
 
@@ -772,7 +727,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> branch\n",
         );
 
-        assertHookBlocks(root, /merge conflict marker/u, compatibilityEnv);
+        assertHookBlocks(root, /merge conflict marker/u, nativeScannerEnv);
       });
     });
 
@@ -783,12 +738,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         assertHookBlocks(
           root,
           /credential assignment \(password\)/u,
-          compatibilityEnv,
+          nativeScannerEnv,
         );
       });
     });
 
-    // Writes three commented credentials so both scanners must block the same user edit.
+    // Writes three commented credentials so the scanner must block each one.
     it("matches literal assignments followed by trailing comments", () => {
       withTempRepo((root) => {
         writeFile(
@@ -802,20 +757,20 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           ].join("\n"),
         );
 
-        assertScannerParity(root, 2, /credential assignment/u);
+        assertScannerResult(root, 2, /credential assignment/u);
       });
     });
 
-    // Writes a bare-dollar expression so both scanners leave the user's turn unblocked.
+    // Writes a bare-dollar expression so the scanner leaves the user's turn unblocked.
     it("allows a bare dollar inside a double-quoted assignment", () => {
       withTempRepo((root) => {
         writeFile(root, "config.env", `API_KEY="${TEST_CLIENT_SECRET}$"\n`);
 
-        assertScannerParity(root, 0);
+        assertScannerResult(root, 0);
       });
     });
 
-    // Writes and commits an oversized tracked file so both scanners honor the user's byte cap.
+    // Writes and commits an oversized tracked file so the scanner honors the user's byte cap.
     it("applies the byte cap to tracked worktree diffs", () => {
       withTempRepo((root) => {
         writeFile(root, "large.env", "safe=1\n");
@@ -826,7 +781,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           `safe=${"x".repeat(80)}\nAPI_KEY=${TEST_CLIENT_SECRET}\n`,
         );
 
-        assertScannerParity(root, 2, /credential assignment/u, {
+        assertScannerResult(root, 2, /credential assignment/u, {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "64",
         });
       });
@@ -845,14 +800,14 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         runGit(root, ["add", "large.env"]);
         writeFile(root, "large.env", "safe=1\n");
 
-        assertScannerParity(root, 2, /credential assignment/u, {
+        assertScannerResult(root, 2, /credential assignment/u, {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "64",
         });
       });
     });
 
     // Writes and commits a fixture, then adds a line whose token follows a carriage return the candidate filters must cross.
-    it("blocks a tracked token after a carriage return on both paths", () => {
+    it("blocks a tracked token after a carriage return", () => {
       withTempRepo((root) => {
         writeFile(root, "notes.txt", "base\n");
         commitAll(root, "add notes");
@@ -862,32 +817,32 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           `base\nsafe\rkey ${TEST_AWS_ACCESS_KEY}\n`,
         );
 
-        assertScannerParity(root, 2, /AWS access key in notes\.txt/u);
+        assertScannerResult(root, 2, /AWS access key in notes\.txt/u);
       });
     });
 
     // Writes and commits a fixture, then adds a private-key header that starts after a carriage return.
-    it("blocks a tracked private-key header after a carriage return on both paths", () => {
+    it("blocks a tracked private-key header after a carriage return", () => {
       withTempRepo((root) => {
         writeFile(root, "notes.txt", "base\n");
         commitAll(root, "add notes");
         writeFile(root, "notes.txt", `base\n\r${TEST_PRIVATE_KEY_HEADER}\n`);
 
-        assertScannerParity(root, 2, /private key block in notes\.txt/u);
+        assertScannerResult(root, 2, /private key block in notes\.txt/u);
       });
     });
 
     // Writes an untracked file where only the labelled API-token form can match, because an underscore precedes the token.
-    it("blocks a labelled API token after a carriage return in an untracked file on both paths", () => {
+    it("blocks a labelled API token after a carriage return in an untracked file", () => {
       withTempRepo((root) => {
         writeFile(root, "new.txt", `OPENAI_KEY=\rprefix_${TEST_API_TOKEN}\n`);
 
-        assertScannerParity(root, 2, /API token in new\.txt/u);
+        assertScannerResult(root, 2, /API token in new\.txt/u);
       });
     });
 
-    // Writes an untracked file whose only NUL byte lies beyond the first 32 KiB, so both scanners must still call it binary.
-    it("reports a binary gap when the first NUL byte follows the first 32 KiB on both paths", () => {
+    // Writes an untracked file whose only NUL byte lies beyond the first 32 KiB, so the scanner must still call it binary.
+    it("reports a binary gap when the first NUL byte follows the first 32 KiB", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -899,7 +854,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           ]),
         );
 
-        assertScannerParity(
+        assertScannerResult(
           root,
           2,
           /binary untracked path not scanned in bundle\.dat/u,
@@ -909,7 +864,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
 
     // Writes, commits and then deletes a non-UTF-8 name beside a staged clean edit; staged deduplication must not report it.
     it(
-      "ignores an unstaged deletion of a non-UTF-8 tracked name on both paths",
+      "ignores an unstaged deletion of a non-UTF-8 tracked name",
       nonUtf8NameTestOptions(),
       () => {
         withTempRepo((root) => {
@@ -924,18 +879,18 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           runGit(root, ["add", "README.md"]);
           rmSync(invalidName);
 
-          assertScannerParity(root, 0);
+          assertScannerResult(root, 0);
         });
       },
     );
 
     // Writes three untracked files with findings so a leading-zero limit must still cap direct output at two.
-    it("caps direct-mode findings when MAX_FINDINGS has a leading zero on both paths", () => {
+    it("caps direct-mode findings when MAX_FINDINGS has a leading zero", () => {
       withTempRepo((root) => {
         for (const name of ["a.txt", "b.txt", "c.txt"])
           writeFile(root, name, `key ${TEST_AWS_ACCESS_KEY}\n`);
 
-        assertScannerParity(
+        assertScannerResult(
           root,
           2,
           /1 additional finding\(s\) hidden by output cap/u,
@@ -957,18 +912,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "0",
           [FORCE_BASH3_ENV_KEY]: "0",
         });
-        const compatibilityResult = runHook(root, {
-          GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "0",
-          [FORCE_BASH3_ENV_KEY]: "1",
-        });
 
         assert.equal(result.status, 2);
-        assert.equal(compatibilityResult.status, 2);
         assert.match(
           result.stderr,
           /post-turn-safety: scan incomplete, \d+ file\(s\) unscanned/u,
         );
-        assert.match(compatibilityResult.stderr, /scan incomplete/u);
       });
     });
 

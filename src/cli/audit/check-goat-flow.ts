@@ -413,7 +413,6 @@ const goatFlowGitignoreContent: BuildCheck = {
   scope: "setup",
   provenance: setupSpecProvenance([
     "workflow/setup/reference/goat-flow-gitignore",
-    "workflow/install-goat-flow.sh",
   ]),
   /** Run the goat-flow gitignore exceptions check. */
   run: (ctx) => {

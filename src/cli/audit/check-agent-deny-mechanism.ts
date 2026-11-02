@@ -259,9 +259,9 @@ function checkLegacyHookDrift(
       if (ctx.fs.readFile(legacyRelPath) !== null) {
         return {
           check: "Agent deny mechanism",
-          message: `${legacyFile} is a legacy guardrail hook for ${agentId}; migrate to deny-dangerous.sh`,
+          message: `${legacyFile} is a legacy guardrail hook for ${agentId}; migrate to deny-dangerous.mjs`,
           evidence: evidencePath(legacyRelPath),
-          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to remove legacy guard hooks and install deny-dangerous.sh.`,
+          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to remove legacy guard hooks and install deny-dangerous.mjs.`,
         };
       }
     }

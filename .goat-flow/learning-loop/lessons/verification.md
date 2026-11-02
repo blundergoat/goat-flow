@@ -22,9 +22,9 @@ last_reviewed: 2026-10-10
 
 **Evidence:** The replacement control case passed against unchanged route code, and a real defect surfaced from the same reading: `ctx.validatedPath` substitutes the server default for an empty value, so a request sending no target still rendered one. Anchors: `src/dashboard/dashboard-setup-quality.ts` (search: `function dashboardQualityReportProjectPath`), `src/cli/server/dashboard-quality-routes.ts` (search: `const requestedTarget`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `names a selected target only when the request sent one`).
 
-**Recurrence 2026-08-30 (delegated runner):** A cross-harness runner closed its assessment by reporting that the shipped `quality save` heredoc is unusable because the command parser rejects any heredoc containing an object-literal opener as expansion obfuscation, and supplied a reproduction. All three checks disagreed: the reproduction ran clean, a search for that diagnostic across both hook trees returned nothing, and the hook admits exactly that form. The runner hit a real failure and misattributed its cause; recording it unverified would have entered a phantom contract defect into a release gate's evidence. Anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `large_quality_save_heredoc_is_bounded_data`).
+**Recurrence 2026-08-30 (delegated runner):** A cross-harness runner closed its assessment by reporting that the shipped `quality save` heredoc is unusable because the command parser rejects any heredoc containing an object-literal opener as expansion obfuscation, and supplied a reproduction. All three checks disagreed: the reproduction ran clean, a search for that diagnostic across both hook trees returned nothing, and the hook admits exactly that form. The runner hit a real failure and misattributed its cause; recording it unverified would have entered a phantom contract defect into a release gate's evidence. Anchor: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `large_quality_save_heredoc_is_bounded_data`).
 
-**Recurrence 2026-10-02 (Stop result boundaries):** Reviewing Stop recovery, the agent initially treated empty final provider output as a missing managed-child envelope. A current-runtime check returned `childEnvelopeState=valid`, `providerStdoutBytes=0` and `emptyChildEnvelopeState=invalid`: these are different boundaries. Clarify acceptance wording instead of adding an empty-child success exception. Evidence: `workflow/hooks/hook-provider-adapters.mjs` (search: `decodeHookResultOutput`, `adaptCleanResult`) and `workflow/hooks/post-turn-safety.sh` (search: `emit_post_turn_hook_result`).
+**Recurrence 2026-10-02 (Stop result boundaries):** Reviewing Stop recovery, the agent initially treated empty final provider output as a missing managed-child envelope. A current-runtime check returned `childEnvelopeState=valid`, `providerStdoutBytes=0` and `emptyChildEnvelopeState=invalid`: these are different boundaries. Clarify acceptance wording instead of adding an empty-child success exception. Evidence: `workflow/hooks/hook-provider-adapters.mjs` (search: `decodeHookResultOutput`, `adaptCleanResult`) and `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `emit_post_turn_hook_result`).
 
 ---
 
@@ -66,7 +66,7 @@ Evidence: `src/cli/review-validate-authority.ts` (search: `reviewScopeLabels`).
 **Trigger phase:** READ
 **Caught at:** ACT
 
-**Prevention:** When a script branches on capability detection, run the detection first and confirm which branch is taken before editing; here `gruff-ts hook --capabilities` answers it in one command. A behaviour change that produces no observable difference is evidence of a dead edit rather than a stubborn bug, so re-check the branch before stacking more changes on top. Evidence anchors: `.goat-flow/hooks/gruff-code-quality.sh` (search: `supports_native_changed_regions`), `.goat-flow/hooks/gruff-code-quality.sh` (search: `process_file_contract`).
+**Prevention:** When a script branches on capability detection, run the detection first and confirm which branch is taken before editing; here `gruff-ts hook --capabilities` answers it in one command. A behaviour change that produces no observable difference is evidence of a dead edit rather than a stubborn bug, so re-check the branch before stacking more changes on top. Evidence anchors: `test/fixtures/hooks-bash/.goat-flow/hooks/gruff-code-quality.sh` (search: `supports_native_changed_regions`), `test/fixtures/hooks-bash/.goat-flow/hooks/gruff-code-quality.sh` (search: `process_file_contract`).
 
 **What happened:** Fixing the gruff hook's file-scope blind spot, the `--changed-scope` flag changed in `run_gruff_json` and the behaviour did not move. The hook has two paths, a legacy `analyse` path and a contract path selected when the analyzer advertises `gruff.hook.v1`; gruff-ts 0.4.0 advertises it, so `process_file_contract` runs and the edit was in code that never executes.
 
@@ -76,10 +76,10 @@ Evidence: `src/cli/review-validate-authority.ts` (search: `reviewScopeLabels`).
 A later mirror write overlapped a running corpus and invalidated that run. Finish mirror updates before starting proof, then freeze bytes until it exits.
 The alias fixture also expected attached `-Cpath` to execute, but Git's read-only config probe rejected it with exit 129; keep only valid command forms.
 A first integration-test placement crossed Gruff's file-size threshold; the regressions moved to the existing central corpus.
-Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
-`workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `selected repository commit alias`).
+Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
+`test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `selected repository commit alias`).
 
-**Recurrence 2026-10-04:** A patched module copy run from this checkout loaded the installed module; a working fix read as ruled out. `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`).
+**Recurrence 2026-10-04:** A patched module copy run from this checkout loaded the installed module; a working fix read as ruled out. `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`).
 
 ---
 
@@ -160,7 +160,7 @@ Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Bind the focused fixture to semantic anchors around the production block, run that exact block with only the primitives it needs, and assert both final filesystem state and operation order. Do not copy the migration sequence into the test, and keep the full installer run as separate repository proof because it covers unrelated stages. Evidence anchors: `workflow/install-goat-flow.sh` (search: `retired_writing_playbook`), `test/integration/setup-install-migrations.test.ts` (search: `preserves retired writing playbooks when installing replacements`), `test/integration/setup-install.helpers.ts` (search: `runInstallerWithEnvironment`).
+**Prevention:** Bind the focused fixture to semantic anchors around the production block, run that exact block with only the primitives it needs, and assert both final filesystem state and operation order. Do not copy the migration sequence into the test, and keep the full installer run as separate repository proof because it covers unrelated stages. Evidence anchors: `src/cli/installer/apply.ts` (search: `removed renamed playbook`), `test/integration/setup-install-migrations.test.ts` (search: `preserves retired writing playbooks when installing replacements`), `test/integration/setup-install.helpers.ts` (search: `runInstallerWithEnvironment`).
 
 **Evidence note:** The current test checks public preview, then executes the production playbook block in isolation. Full installer runs remain separate proof.
 

@@ -1,6 +1,6 @@
 ---
 category: verification-gate-runs
-last_reviewed: 2026-10-24
+last_reviewed: 2026-11-03
 ---
 
 **Scope:** Running gates during a change - stopping each edit batch at its declared proof, checking every target after a failed multi-file patch, invoking tools with the repository's own flags, and telling a transient gate failure from a task regression. Adding or trusting a repo-wide gate is [verification-preflight.md](verification-preflight.md); what a test must establish is [verification-testing.md](verification-testing.md).
@@ -101,6 +101,22 @@ last_reviewed: 2026-10-24
 
 **Recurrence 2026-10-12:** Claude's local Stop registration and canonical template still used the scanner's one-MiB default after Codex received four MiB. Three untracked JSON artifacts measured 2,885,754 to 2,944,548 bytes each, so every Claude Stop reported incomplete coverage. The first diagnostic ran only `node`, omitting its registered arguments; its zero exit was discarded. Complete argv replay reproduced all three gaps with exit two. Setting the per-file limit inside Claude's Node bootstrap, in both the descriptor writer and template, then regenerating the installer contract changed that same replay to exit zero with no coverage gaps. Four MiB provides bounded headroom over these files and matches Codex; it is not a model context budget or the smallest possible limit. Automatic Claude delivery remains unverified.
 
-**Evidence:** `src/cli/server/agent-hook-command.ts` (search: `buildAgentHookDescriptor`, `entryCarriesHandlerDescriptor`); `scripts/generate-managed-hook-desired-state.mjs` (search: `renderManagedHookContract`); `scripts/preflight-checks.sh` (search: `agent_config_output`); `workflow/hooks/agent-config/codex-hooks.json` and `workflow/hooks/agent-config/claude.json` (search: `Stop`); `.goat-flow/hooks/post-turn-safety.sh` (search: `MAX_FILE_BYTES`, `oversized untracked text not scanned`); `test/unit/agent-hook-command.test.ts` (search: `keeps the per-file scan limit in the managed argv identity`).
+**Evidence:** `src/cli/server/agent-hook-command.ts` (search: `buildAgentHookDescriptor`, `entryCarriesHandlerDescriptor`); `scripts/generate-managed-hook-desired-state.mjs` (search: `renderManagedHookContract`); `scripts/preflight-checks.sh` (search: `agent_config_output`); `workflow/hooks/agent-config/codex-hooks.json` and `workflow/hooks/agent-config/claude.json` (search: `Stop`); `test/fixtures/hooks-bash/.goat-flow/hooks/post-turn-safety.sh` (search: `MAX_FILE_BYTES`, `oversized untracked text not scanned`); `test/unit/agent-hook-command.test.ts` (search: `keeps the per-file scan limit in the managed argv identity`).
 
-**Recurrence 2026-10-23:** The native registration cutover passed focused replay, but the full fast run failed 122 tests. Several fixtures treated only the explicit candidate as Node while the default installed runtime was already Node, selecting Bash filenames and ineffective shell fault injectors. Keep runtime selection, emitted fixture language, saved descriptors and fault injection aligned. Preserve legacy fixtures for explicit reference runs. Evidence: `test/helpers/hook-entrypoint.ts` (search: `selectedHookPath`), `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `assertIncompleteOnBothScanners`) and `test/unit/hook-registrar.helpers.ts` (search: `GENERATED_AGENT_SURFACES`).
+**Recurrence 2026-10-23:** The native registration cutover passed focused replay, but the full fast run failed 122 tests. Several fixtures treated only the explicit candidate as Node while the default installed runtime was already Node, selecting Bash filenames and ineffective shell fault injectors. Keep runtime selection, emitted fixture language, saved descriptors and fault injection aligned. Preserve legacy fixtures for explicit reference runs. Evidence: `test/helpers/hook-entrypoint.ts` (search: `selectedHookPath`), `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `assertIncompleteScan`) and `test/unit/hook-registrar.helpers.ts` (search: `GENERATED_AGENT_SURFACES`).
+
+---
+
+## Lesson: A package removal needs the slow suite and a fresh build before it is called green
+
+**Status:** active | **Created:** 2026-11-03
+**Severity:** INTEGRATION
+**Decision changed:** After removing shipped files, rebuild `dist/` and run the slow suite before reporting the change green; a passing fast suite does not cover upgrade, installer or packaged-install tests.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** Run `npm run build` after source edits and before any suite that packs the repository or runs the built CLI, then run `node scripts/run-tests.mjs slow` once before the human gate.
+
+**What happened:** After the Bash hook runtimes were removed, the fast suite passed all 3988 tests, but the slow suite failed 15. Upgrade and installer tests still used a removed launcher as their sample shared file, and an installer round-trip ran a `dist/` built before the source edit, so its audit provenance still named the deleted installer.
+
+**Evidence:** `scripts/run-tests.mjs` (search: `function isSlowTest`) keeps installer, dashboard and packaged-install suites out of the fast run. `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `drift audit should pass after round-trip install`) failed until `npm run build` refreshed `dist/`.

@@ -6,7 +6,7 @@
  * - every instruction file publishes the same complete command, and shellcheck is installed to verify it;
  * - documented and automated commands exclude only SC2001;
  * - on Windows Git Bash, scripts/setup-initial.sh installs shellcheck per user through winget and explains a stale PATH;
- * - the workflow installer stays inside every shell lint and syntax check, and CI keeps running preflight.
+ * - preflight lints only the scripts/ shell groups, every syntax owner calls the shared helper, and CI keeps running preflight.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -37,13 +37,12 @@ const AUTOMATED_SHELL_VALIDATION_OWNERS = [
 // CI runs shell lint through preflight rather than a step of its own.
 const CI_WORKFLOW = ".github/workflows/ci.yml";
 
-// The installer every lint and syntax check must cover, and the shared helper that runs bash -n over it.
-const WORKFLOW_INSTALLER = "workflow/install-goat-flow.sh";
+// The shared helper that runs bash -n over every script in scripts/, scripts/maintenance/ and scripts/installers/.
 const SHELL_SYNTAX_HELPER = "scripts/maintenance/check-shell-syntax.sh";
 
 /**
  * Reads the shellcheck line a developer or coding agent would copy from one instruction file; throws when that file is missing.
- * The parity and installer-coverage tests use it so each failure names the file that drifted.
+ * The parity and syntax-helper tests use it so each failure names the file that drifted.
  *
  * @param surface - repository-relative instruction file
  * @returns the published command, trimmed; empty when the surface publishes none, which leaves that agent without a lint command
@@ -73,7 +72,6 @@ describe("documented shell-lint command", () => {
     }
     const [first, ...rest] = publishedCommands;
     // Parity alone cannot catch a broken command copied to every instruction surface.
-    // Keep the repository installer covered even after bundled legacy hooks are retired.
     assert.equal(
       first.command,
       [
@@ -81,7 +79,6 @@ describe("documented shell-lint command", () => {
         "scripts/*.sh",
         "scripts/maintenance/*.sh",
         "scripts/installers/*.sh",
-        WORKFLOW_INSTALLER,
       ].join(" "),
       `${first.surface}: published shell-lint command has invalid syntax or scope`,
     );
@@ -137,7 +134,9 @@ describe("documented shell-lint command", () => {
     }
   });
 
-  it("lints manifest and canonical hook entrypoints and sourced modules", () => {
+  // Fails when preflight stops linting a repository script group, or lints a path outside scripts/ such as a retired Bash hook runtime.
+  // It spawns Bash on the real check_shell section with a stub shellcheck that only records its arguments, so nothing is linted for real.
+  it("lints the repository script groups and nothing outside scripts/", () => {
     const source = readFileSync(
       resolve(PROJECT_ROOT, "scripts/preflight-checks.sh"),
       "utf8",
@@ -146,8 +145,7 @@ describe("documented shell-lint command", () => {
     const end = source.indexOf("\ncheck_contracts() {", start);
     assert.ok(start >= 0 && end > start, "shell check section exists");
 
-    // Exercise the real lint owner, reporting arguments through a descriptor
-    // that survives its output suppression. The normal preflight runs shellcheck.
+    // The stub prints each argument to descriptor 3, which survives the section's >/dev/null redirection.
     const result = spawnSync(
       "bash",
       [
@@ -157,7 +155,6 @@ describe("documented shell-lint command", () => {
           "exec 3>&1",
           "section() { :; }; pass() { :; }",
           "fail() { exit 1; }; warn() { exit 1; }",
-          'manifest_eval() { [[ "$1" == hook-dirs ]] && printf "%s\\n" .goat-flow/hooks; }',
           'shellcheck() { printf "lint:%s\\n" "$@" >&3; }',
           source.slice(start, end),
           "check_shell",
@@ -166,18 +163,28 @@ describe("documented shell-lint command", () => {
       { cwd: PROJECT_ROOT, encoding: "utf8" },
     );
     assert.equal(result.status, 0, result.stderr);
-    const lintedArguments = result.stdout.trim().split("\n");
-    for (const directory of [".goat-flow/hooks", "workflow/hooks"]) {
-      for (const file of [
-        "deny-dangerous.sh",
-        "deny-dangerous/patterns-paths.sh",
-      ]) {
-        assert.ok(
-          lintedArguments.includes(`lint:${directory}/${file}`),
-          `${directory}/${file}: omitted from preflight shellcheck`,
-        );
-      }
+    // Drop the --exclude option so only the linted file paths remain.
+    const lintedFiles = result.stdout
+      .trim()
+      .split("\n")
+      .filter((line) => !line.startsWith("lint:--"));
+    // One file from each required group shows preflight still lints that group.
+    for (const file of [
+      "scripts/preflight-checks.sh",
+      "scripts/maintenance/check-shell-syntax.sh",
+      "scripts/installers/install-claude.sh",
+    ]) {
+      assert.ok(
+        lintedFiles.includes(`lint:${file}`),
+        `${file}: omitted from preflight shellcheck`,
+      );
     }
+    // A path outside scripts/ means preflight lints a file the instruction files do not publish.
+    assert.deepEqual(
+      lintedFiles.filter((line) => !line.startsWith("lint:scripts/")),
+      [],
+      "preflight shellcheck reaches outside scripts/",
+    );
   });
 
   // A Windows developer reaches this step by running bash scripts/setup-initial.sh in Git Bash without shellcheck installed.
@@ -225,33 +232,19 @@ describe("documented shell-lint command", () => {
     assert.match(result.stdout, /Open a new Git Bash session/u);
   });
 
-  // Fails when workflow/install-goat-flow.sh drops out of an instruction file, the shared syntax helper, .goat-flow/config.yaml or preflight.
-  // It also fails when a file stops calling the shared syntax helper, an instruction file runs its own bash -n list, or CI stops running preflight.
-  it("keeps the workflow installer in every shell lint and syntax owner", () => {
-    const helper = readFileSync(
-      resolve(PROJECT_ROOT, SHELL_SYNTAX_HELPER),
-      "utf8",
-    );
-    // The shared helper holds the bash -n script list, so it must name the workflow installer.
-    assert.ok(helper.includes(WORKFLOW_INSTALLER));
-    // Each instruction file must lint the installer and run syntax checks through the shared helper, never its own bash -n list that could drift.
+  // Fails when an instruction file, .goat-flow/config.yaml or preflight stops calling the shared syntax helper, an instruction file runs its own
+  // bash -n list, or CI stops running preflight.
+  it("keeps every shell syntax owner on the shared helper", () => {
+    // Each instruction file must run syntax checks through the shared helper, never its own bash -n list that could drift.
     for (const surface of INSTRUCTION_FILES) {
       const content = readFileSync(resolve(PROJECT_ROOT, surface), "utf8");
-      assert.ok(
-        publishedShellcheckCommand(surface).includes(WORKFLOW_INSTALLER),
-        `${surface}: shellcheck omits ${WORKFLOW_INSTALLER}`,
-      );
       assert.ok(content.includes(`\nbash ${SHELL_SYNTAX_HELPER}\n`), surface);
       assert.doesNotMatch(content, /^bash -n .+\.sh\s+.+\.sh/mu, surface);
     }
 
-    // Automated checks must retain the same installer coverage promised in agent instructions.
+    // Automated checks must call the same helper the instruction files publish.
     for (const surface of AUTOMATED_SHELL_VALIDATION_OWNERS) {
       const content = readFileSync(resolve(PROJECT_ROOT, surface), "utf8");
-      assert.ok(
-        content.includes(WORKFLOW_INSTALLER),
-        `${surface}: shell lint omits ${WORKFLOW_INSTALLER}`,
-      );
       assert.ok(content.includes(`bash ${SHELL_SYNTAX_HELPER}`), surface);
     }
     // Without the preflight step, CI would lint no shell scripts at all.

@@ -1,15 +1,15 @@
 # Guardrails
 
-Guardrails are goat-flow's runtime command-safety hooks. Each agent registers `deny-dangerous.sh` and `deny-git-mutations.sh` separately. Both use the parser and policy modules in `.goat-flow/hooks/deny-dangerous/`.
+Guardrails are goat-flow's runtime command-safety hooks. Each agent registers `deny-dangerous.mjs` and `deny-git-mutations.mjs` separately, and both run through the `run-hook.mjs` launcher. They share the `policy-*.mjs` parser and the policy rules in `.goat-flow/hooks/deny-dangerous/`.
 
 ## Surfaces
 
 | Surface | Path | Role |
 | --- | --- | --- |
-| Dangerous policy | `workflow/hooks/deny-dangerous.sh` | Blocks recursive force deletion, privileged package-manager mutation, and secret-path access |
-| Git and GitHub policy | `workflow/hooks/deny-git-mutations.sh` | Blocks Git commits, publication, remote lock changes, destructive Git operations, and GitHub writes; permits GitHub reads and issue/PR comments |
-| Policy store | `.goat-flow/hooks/deny-dangerous/` | Shared `guard-runtime.sh` parser and response implementation plus three policy modules |
-| Self-test | `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` | Routes smoke/full cases to each owning policy; preflight invokes both entrypoints |
+| Dangerous policy | `workflow/hooks/deny-dangerous.mjs` | Blocks recursive force deletion, privileged package-manager mutation, and secret-path access |
+| Git and GitHub policy | `workflow/hooks/deny-git-mutations.mjs` | Blocks Git commits, publication, remote lock changes, destructive Git operations, and GitHub writes; permits GitHub reads and issue/PR comments |
+| Policy store | `.goat-flow/hooks/deny-dangerous/` | Policy rule modules, Git and GitHub command classifiers, and the shared `corpus.json` |
+| Self-test | `.goat-flow/hooks/policy-corpus.mjs` | Runs the smoke or full corpus cases for the policy whose entrypoint received `--self-test` |
 
 GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `deny-git-mutations`). If either the current or requested switch pair has one policy on and the other off, changing an existing installation’s ownership files requires review on the newer dashboard Hooks page. Review the selected project, both sets of choices, affected files and GitHub protection before accepting. Policy consent and replacement of local edits have separate checkboxes; Cancel changes nothing. CLI Sync, install and force options cannot provide policy consent. Once the ownership files match the bundle, ordinary Sync needs no repeated policy review.
 
@@ -26,10 +26,10 @@ Enabled Claude Code deny hooks block native PowerShell tool requests and direct 
 
 ## Verification
 
-- `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke`
-- `bash .goat-flow/hooks/deny-dangerous.sh --self-test=full`
-- `bash .goat-flow/hooks/deny-git-mutations.sh --self-test=smoke`
-- `bash .goat-flow/hooks/deny-git-mutations.sh --self-test=full`
+- `node .goat-flow/hooks/deny-dangerous.mjs --self-test=smoke`
+- `node .goat-flow/hooks/deny-dangerous.mjs --self-test=full`
+- `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=smoke`
+- `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=full`
 - `goat-flow hooks list --json`
 - After trusting the selected checkout: `goat-flow hooks verify . --agent <id> --scenario all --trusted-target`
 

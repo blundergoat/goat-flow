@@ -33,7 +33,8 @@ import {
   runInstaller,
 } from "./setup-install.helpers.js";
 
-const SHARED_HOOK_PATH = ".goat-flow/hooks/run-with-bash.mjs";
+// A hook file every agent installs, so tests can check that agents share one managed-state row for it.
+const SHARED_HOOK_PATH = ".goat-flow/hooks/run-hook.mjs";
 const SHARED_SKILL_PATH = ".agents/skills/goat/SKILL.md";
 const CLAUDE_SKILL_PATH = ".claude/skills/goat/SKILL.md";
 const MANAGED_STATE_PATH = ".goat-flow/state/install/managed.json";

@@ -35,10 +35,6 @@ import {
   isValidHookIdShape,
   listHookSpecs,
 } from "../../src/cli/server/hooks-registry.js";
-import {
-  discoverWindowsBashCandidates as discoverHookWindowsBashCandidates,
-  pickWindowsBashPath as pickHookWindowsBashPath,
-} from "../../workflow/hooks/run-with-bash.mjs";
 
 import {
   HOOK_IDENTIFIER,
@@ -76,21 +72,6 @@ describe("hook registrar: launchers and installation", () => {
       }
     });
   });
-  /** Proves installed hooks can find default Git Bash when PATH exposes only WSL. */
-  it("finds default Git Bash for hooks when PATH exposes only the WSL shim", () => {
-    const defaultGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
-    const candidates = discoverHookWindowsBashCandidates({
-      environment: { ProgramFiles: "C:\\Program Files" },
-      // Model the default Git Bash install so the launcher fixture cannot depend on this machine's Windows tools.
-      pathExists: (candidate: string) => candidate === defaultGitBash,
-      // Model PATH finding only the WSL shim so the fixture proves the user's native Git Bash fallback is selected.
-      runWhere: (executable: string) =>
-        executable === "bash" ? ["C:\\Windows\\System32\\bash.exe"] : [],
-    });
-
-    assert.equal(pickHookWindowsBashPath(candidates), defaultGitBash);
-  });
-
   it("refuses to overwrite a hook stamped newer than the running CLI", () => {
     withTempProject((root) => {
       const hookDir = join(root, ".goat-flow", "hooks");

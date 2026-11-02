@@ -21,7 +21,6 @@ import {
   applyInstaller,
   type InstallerApplyOptions,
 } from "../../src/cli/installer/apply.js";
-import { hookSelection } from "../helpers/hook-entrypoint.js";
 import type { AgentId } from "../../src/cli/types.js";
 import type { TestContext } from "node:test";
 import { symlinkSync } from "node:fs";
@@ -63,12 +62,12 @@ export function makeTempProject(): string {
 }
 
 /**
- * Run the selected writer against a disposable target and capture its result.
- * Native cases call the Node writer; the explicit reference selection launches Bash.
+ * Run the Node writer against a disposable target and capture its result.
+ * Use it for ordinary install fixtures; use runCliInstaller when a test needs the public CLI's preview, consent flags or receipt.
  *
  * @param root - target project directory passed as the installer's first argument
- * @param extraArgs - additional installer flags appended after the target (e.g. --dry-run)
- * @returns captured status and output from the selected writer
+ * @param extraArgs - additional installer flags appended after the target (e.g. --dry-run); empty runs a plain install
+ * @returns captured status and output from the Node writer
  */
 export function runInstaller(root: string, ...extraArgs: string[]) {
   return runInstallerWithEnvironment(root, {}, ...extraArgs);
@@ -116,7 +115,7 @@ export function readClaudePostTurnSafetyTimeout(
 }
 
 /**
- * Run the selected writer with controlled environment overrides for failure-path fixtures.
+ * Run the Node writer with controlled environment overrides for failure-path fixtures.
  * Use when a user-visible installer outcome depends on a command or signal boundary.
  *
  * @param root - target project directory; an empty path is rejected by the installer
@@ -129,23 +128,7 @@ export function runInstallerWithEnvironment(
   environmentOverrides: NodeJS.ProcessEnv,
   ...extraArgs: string[]
 ) {
-  if (hookSelection() !== "reference") {
-    return runNodeInstaller(root, environmentOverrides, ...extraArgs);
-  }
-  return spawnSync(
-    "bash",
-    [
-      join(PROJECT_ROOT, "workflow", "install-goat-flow.sh"),
-      root,
-      ...extraArgs,
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: "utf-8",
-      env: { ...process.env, ...environmentOverrides },
-      timeout: process.platform === "win32" ? 120_000 : 30_000,
-    },
-  );
+  return runNodeInstaller(root, environmentOverrides, ...extraArgs);
 }
 
 /** Run the explicit native writer target in process, or in a child when a fixture needs environment injection. */

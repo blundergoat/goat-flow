@@ -42,13 +42,9 @@
     ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
     ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
     ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
-    ".goat-flow/hooks/deny-dangerous.sh",
     ".goat-flow/hooks/deny-dangerous.mjs",
-    ".goat-flow/hooks/deny-git-mutations.sh",
     ".goat-flow/hooks/deny-git-mutations.mjs",
-    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
     ".goat-flow/hooks/deny-dangerous/corpus.json",
-    ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/gruff-code-quality.mjs",
     ".goat-flow/hooks/gruff/scope.mjs",
     ".goat-flow/hooks/gruff/ranges.mjs",
@@ -81,18 +77,12 @@
     ".goat-flow/hooks/vendor/js-yaml.cjs",
     ".goat-flow/hooks/gh-graphql-read.cjs",
     ".goat-flow/hooks/vendor/graphql.cjs",
-    ".goat-flow/hooks/post-turn-safety.sh",
     ".goat-flow/hooks/post-turn-safety.mjs",
     ".goat-flow/hooks/post-turn/assignments.mjs",
     ".goat-flow/hooks/post-turn/context.mjs",
     ".goat-flow/hooks/post-turn/controller.mjs",
     ".goat-flow/hooks/post-turn/recovery.mjs",
     ".goat-flow/hooks/post-turn/scanner.mjs",
-    ".goat-flow/hooks/run-with-bash.mjs",
-    ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
-    ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
-    ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
-    ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
     ".goat-flow/architecture.md",
     ".goat-flow/code-map.md",
     ".goat-flow/glossary.md",
@@ -256,33 +246,17 @@
       "ownership": "system-owned",
       "source": "workflow/skills/playbooks/skill-quality-testing/deployment.md"
     },
-    ".goat-flow/hooks/deny-dangerous.sh": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/deny-dangerous.sh"
-    },
     ".goat-flow/hooks/deny-dangerous.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-dangerous.mjs"
-    },
-    ".goat-flow/hooks/deny-git-mutations.sh": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/deny-git-mutations.sh"
     },
     ".goat-flow/hooks/deny-git-mutations.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-git-mutations.mjs"
     },
-    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/deny-dangerous/guard-runtime.sh"
-    },
     ".goat-flow/hooks/deny-dangerous/corpus.json": {
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-dangerous/corpus.json"
-    },
-    ".goat-flow/hooks/gruff-code-quality.sh": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/gruff-code-quality.sh"
     },
     ".goat-flow/hooks/gruff-code-quality.mjs": {
       "ownership": "system-owned",
@@ -412,10 +386,6 @@
       "ownership": "system-owned",
       "source": "workflow/hooks/vendor/graphql.cjs"
     },
-    ".goat-flow/hooks/post-turn-safety.sh": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/post-turn-safety.sh"
-    },
     ".goat-flow/hooks/post-turn-safety.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/post-turn-safety.mjs"
@@ -439,26 +409,6 @@
     ".goat-flow/hooks/post-turn/scanner.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/post-turn/scanner.mjs"
-    },
-    ".goat-flow/hooks/run-with-bash.mjs": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/run-with-bash.mjs"
-    },
-    ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/deny-dangerous/patterns-shell.sh"
-    },
-    ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/deny-dangerous/patterns-paths.sh"
-    },
-    ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/deny-dangerous/patterns-writes.sh"
-    },
-    ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh": {
-      "ownership": "system-owned",
-      "source": "workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh"
     },
     ".goat-flow/architecture.md": {
       "ownership": "generated",

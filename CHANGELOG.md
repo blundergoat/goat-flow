@@ -11,6 +11,12 @@
 
 - **Issue briefs show likely minutes and per-task benefits** - Each `ISSUE.md` task ends in one likely figure, a total line and the headline sum them in hours, two new sections say what each task gives the user before and after the change, and the worked sample ships beside the format.
 
+### Removed
+
+- **BREAKING: Bash installer removed** - `workflow/install-goat-flow.sh` no longer ships; install and upgrade with `goat-flow install . --agent <id>`, which needs only Node. The script already refused managed installs.
+- **BREAKING: Bash hook runtimes removed** - The `.sh` hooks and the Bash launcher no longer ship, so hooks run without Bash. On upgrade, `goat-flow install` deletes old copies that match their saved hash and keeps edited ones.
+  - If an agent's hook config still runs an old copy that has no saved hash, install and `goat-flow hooks sync` stop for review. Approve it with `goat-flow install . --agent <id> --force-path <file>` or on the dashboard Hooks page; the file is kept.
+
 ### Security
 
 - **Native PowerShell policy inspection** - Literal commands reach both owning policies; unresolved dynamic execution and session-state changes remain blocked. Run `goat-flow hooks sync` to refresh existing installations.

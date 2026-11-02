@@ -85,7 +85,14 @@ describe("codex config migration", () => {
         V1_16_0_BASH_RUNNER,
       );
 
-      const installResult = runInstaller(targetProjectPath, "--agent", "codex");
+      // The registered 1.16.0 runner has no saved install hash, so the user approves switching its registration by name.
+      const installResult = runCliInstaller(
+        targetProjectPath,
+        "--agent",
+        "codex",
+        "--force-path",
+        ".goat-flow/hooks/run-with-bash.mjs",
+      );
       // When setup fails, show whichever user-facing stream explains the problem.
       assert.equal(
         installResult.status,
@@ -125,14 +132,8 @@ describe("codex config migration", () => {
         ),
         true,
       );
-      assert.notEqual(installedBashRunner, V1_16_0_BASH_RUNNER);
-      assert.equal(
-        installedBashRunner,
-        readFileSync(
-          join(PROJECT_ROOT, "workflow", "hooks", "run-with-bash.mjs"),
-          "utf-8",
-        ),
-      );
+      // The retired runner is no longer shipped; its unclassified local bytes are preserved.
+      assert.equal(installedBashRunner, V1_16_0_BASH_RUNNER);
 
       const denySpec = getHookSpec("deny-dangerous");
       // A missing registry entry means setup cannot prove the user's deny registration.

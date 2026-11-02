@@ -155,7 +155,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 **Severity:** INTEGRATION
 **Incident count:** 4 | **Latest occurrence:** 2026-10-28
 
-**Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
+**Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
 
 **What happened:** During the gruff size cleanup, several long inline Node shell snippets were blocked by the guardrail hook before they could run. The commands were meant to perform mechanical test-file edits, but their length and nested shell shape crossed the safety rules and slowed the cleanup.
 
@@ -163,11 +163,11 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 
 **Recurrence 2026-08-24:** While verifying `learn new`, two ripgrep commands put literal backticks inside a double-quoted shell command.
 The deny-dangerous hook correctly treated them as command substitution and blocked both attempts before execution.
-Using a single-quoted plain search pattern let the read-only check run safely. Evidence anchor: `.goat-flow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`).
+Using a single-quoted plain search pattern let the read-only check run safely. Evidence anchor: `test/fixtures/hooks-bash/.goat-flow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Recurrence 2026-09-05:** Clarity-pass commands containing serialized source exceeded the hook's 16 KB command limit and were rejected before writes.
 Smaller patches and verification commands that read the selected files directly completed the work within the enforced limit.
-Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `16384`).
+Evidence anchor: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `16384`).
 
 **Recurrence 2026-10-28:** Capture-packet generation exceeded the 16,384-byte command inspection limit and was refused before writes. Splitting generation into bounded commands preserved the guard and produced the proposal. Current owner: `workflow/hooks/policy-input.mjs` (search: `Command exceeds the 16384-byte policy inspection limit`).
 
