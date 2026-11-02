@@ -1,6 +1,6 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-10-25
+last_reviewed: 2026-11-02
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
@@ -205,15 +205,20 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 ## Lesson: Keep native dependencies local to each test platform
 
 **Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Check the test loader's native dependencies before replaying a Windows test from a WSL checkout.
+**Decision changed:** Verify Node, shell and native dependencies use the intended host before replaying a test.
 **Trigger phase:** READ
 **Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-11-02
 
 **Prevention:** Use dependencies installed for the executing platform. If a disposable JavaScript translation can isolate the failing contract, retain the original test and production source hashes, preserve assertions and fixtures, and identify that run as reduced proof rather than the original hosted reproduction.
 
 **What happened:** I invoked native Windows Node against `test/integration/preflight-progress.test.ts` and `test/integration/gruff-warning-ratchet.test.ts` in the WSL checkout. The loader failed before either suite ran because the installed `esbuild` binary was `linux-x64`, while Windows required `win32-x64`. A disposable TypeScript-erasure translation of the unchanged npm-timeout case then passed on local Windows Node 24.9.0 with a byte-identical copy of the production runner. The reduced case also passed on a native Windows temporary volume using the hosted job's Node 22.23.3/npm 10.9.9 versions; the temporary copy was removed afterward.
 
 **Evidence and limit:** `package-lock.json` (search: `node_modules/@esbuild/linux-x64`, `node_modules/@esbuild/win32-x64`) records separate native packages. `test/integration/preflight-progress.test.ts` (search: `times out installed npm with exit 124 and removes its script and worker`) owns the original contract. The local reduced pass does not explain or clear the [hosted Node 22 cleanup failure](https://github.com/blundergoat/goat-flow/actions/runs/38208889365/job/114678400808); retain that failure and capture the cleanup command's result before choosing a fix.
+
+**Recurrence 2026-11-02:** A WSL readiness run finished, but its TypeScript redactor loaded Windows esbuild and could not save the receipt. Its transcript had no assistant or tool records. A pinned, version-matched compiled CLI redactor passed native stdin checks. Probe artifact saving before a live run.
+
+**Recurrence 2026-11-02 (runner):** PowerShell resolved Bash to WSL, failing Gruff and 21 contracts on Windows paths. Explicit Git for Windows Bash passed without source changes. Verify both executable hosts.
 
 ---
 

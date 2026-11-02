@@ -4,10 +4,10 @@
 
 ### Changed
 
-- **Windows/WSL hook evidence** - Claude Code 2.1.312 (interactive), Codex CLI 0.164.0 (`codex exec --json`) and Copilot CLI 1.0.103 (prompt mode) on Windows, and Claude Code 2.1.314, Codex CLI 0.165.0, Copilot CLI 1.0.91 (interactive) and Antigravity 1.4.12 (interactive) on WSL, delivered PreToolUse policy denials through the current hook runtime. All but Antigravity also delivered PostToolUse Gruff feedback, and Claude Code and Codex CLI also completed the Stop block-and-repair cycle. Antigravity on Windows remains on security hold, and support gates are unchanged.
+- **Windows/WSL hook evidence** - Reviewed captures cover all 18 delivery rows, including helper-free Antigravity 1.4.8 on Windows and renewed Claude and Codex Stop delivery through the current registrations on both hosts. Support gates are unchanged.
 
 - **BREAKING: Node 20.12.0 minimum** - The minimum supported Node version rises from 20.11.0 to 20.12.0. Upgrade Node before installing or running goat-flow.
-- **Stop hooks set a 4 MiB scan limit** - Claude and Codex hook registrations set `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=4194304`, replacing any value exported by the user. The Codex Stop command text changes when registrations are synced.
+- **Stop hooks default to a 4 MiB scan limit** - Claude and Codex hook registrations default `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES` to `4194304` while preserving an existing user value. The Codex Stop command text changes when registrations are synced.
 
 - **Issue briefs show likely minutes and per-task benefits** - Each `ISSUE.md` task ends in one likely figure, a total line and the headline sum them in hours, two new sections say what each task gives the user before and after the change, and the worked sample ships beside the format.
 

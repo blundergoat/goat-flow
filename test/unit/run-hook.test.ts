@@ -9,27 +9,37 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { listHookSpecs } from "../../src/cli/server/hooks-registry.js";
 import { restrictedConsumerEnvironment } from "../helpers/restricted-consumer-env.js";
 
 const codexStop = "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
 
-/** Copy only the hook tree into one selected project; teardown owns its complete temporary parent. */
+/** Copy declared hook files into one selected project; teardown owns its complete temporary parent. */
 function fixture(t: TestContext) {
   const parent = realpathSync(mkdtempSync(join(tmpdir(), "goat-native-cli-")));
   const root = join(parent, "project '$& 🐐");
   const hooks = join(root, ".goat-flow/hooks");
   mkdirSync(hooks, { recursive: true });
-  cpSync(
-    fileURLToPath(new URL("../../workflow/hooks", import.meta.url)),
-    hooks,
-    { recursive: true },
+  const source = fileURLToPath(
+    new URL("../../workflow/hooks", import.meta.url),
   );
+  // Copy declared files directly because recursive copying can miss this Unicode Windows path.
+  for (const file of new Set(
+    listHookSpecs().flatMap((spec) => spec.scriptFiles),
+  )) {
+    const destination = join(hooks, file);
+    mkdirSync(dirname(destination), { recursive: true });
+    cpSync(join(source, file), destination);
+    assert.ok(statSync(destination).isFile(), `fixture copies ${file}`);
+  }
   t.after(() => rmSync(parent, { recursive: true, force: true }));
   writeFileSync(
     join(hooks, "fixture.mjs"),
@@ -144,7 +154,9 @@ test("native CLI rejects missing, escaped and non-file scripts before an opt-out
     "hooks:\n  deny-dangerous:\n    enabled: false\n",
   );
   // The missing-path control must not depend on which hooks the package ships.
-  rmSync(join(hooks, "deny-dangerous.mjs"));
+  const missingScript = join(hooks, "deny-dangerous.mjs");
+  unlinkSync(missingScript);
+  assert.throws(() => statSync(missingScript), { code: "ENOENT" });
   assert.equal(run(root, ".goat-flow/hooks/deny-dangerous.mjs").status, 2);
 });
 
@@ -207,7 +219,9 @@ test("native CLI bounds Claude startup recovery while healthy feedback retains s
 
 test("native CLI recovers Codex startup faults even when its provider adapter is missing", (t) => {
   const { root, hooks } = fixture(t);
-  rmSync(join(hooks, "hook-provider-adapters.mjs"));
+  const missingAdapter = join(hooks, "hook-provider-adapters.mjs");
+  unlinkSync(missingAdapter);
+  assert.throws(() => statSync(missingAdapter), { code: "ENOENT" });
   const invalid = run(
     root,
     "missing.mjs",

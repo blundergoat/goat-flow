@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-10-23
+last_reviewed: 2026-11-02
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Parser-specific coverage and producer shapes are [test-fixtures-parsers.md](test-fixtures-parsers.md). Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -155,7 +155,7 @@ last_reviewed: 2026-10-23
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 32 | **Latest occurrence:** 2026-10-23
+**Incident count:** 33 | **Latest occurrence:** 2026-11-02
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the system under test or the assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behaviour, run the fixture through the unchanged strict baseline so unrelated errors are absent, and keep every non-target value inside its passing bounds. Assert that every text substitution changed its fixture before using the result as simulated input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. For an invalid-state case, name and trigger the exact production predicate; arbitrary content is not invalid when the implementation treats its bytes as opaque. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
@@ -178,6 +178,8 @@ last_reviewed: 2026-10-23
 **What happened:** The first ADR-024 enforcement test for `stats --check` used `package.json` with a line suffix to trigger an `invalid-line-ref` finding, but the temp fixture repo had no `package.json`, so the checker correctly reported a stale ref and the test failed with "expected an invalid-line-ref finding".
 
 **Root cause:** A familiar root file path was reused without checking the isolated fixture filesystem; the stats extractor validates refs against the temp repo, not the real checkout.
+
+**Recurrence 2026-11-02:** Windows fixtures used a POSIX command, and recursive copy/removal silently missed emoji-containing paths. Gate transport by host, copy declared files, and verify readiness or absence. Evidence: `test/unit/agent-hook-command.test.ts` (search: `Stop scan budget inheritance`); `test/integration/hook-command-native-replay.test.ts` (search: `createNativePolicyFixture`); `test/unit/run-hook.test.ts` (search: `function fixture`).
 
 **Recurrence 2026-08-01:** Three PR #57 fixtures failed before the product assertions: an ignored-root temp repo asserted `.goat-flow/plans/README.md` without creating it, the launch VM reached `window.__GOAT_FLOW_DEFAULT_PATH__` without injecting `window`, and a source-shape test searched `readDashboardAppSource()` although that helper excludes `views/home.html`. `test/unit/terminal-spawn.test.ts` (search: `grants build-directory writes only when Git proves they are ignored`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `__GOAT_FLOW_DEFAULT_PATH__`), `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `launches Home setup and harness repair with workspace access`).
 **Recurrence 2026-08-01 (full suite):** `test/unit/dashboard-home.test.ts` (search: `Setup Claude Code via Claude Code`) deep-compared the complete setup launch-options object with its old two-field fixture and failed until it required `accessMode: "workspace"`.

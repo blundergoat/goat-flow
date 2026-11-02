@@ -16,6 +16,8 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -143,10 +145,16 @@ function createNativePolicyFixture(agent: NativeFixtureAgent) {
   const projectRoot = join(parent, "native's flow & (quoted) [fixture] 🐐");
   const hooks = join(projectRoot, ".goat-flow/hooks");
   mkdirSync(hooks, { recursive: true });
-  cpSync(WORKFLOW_HOOKS, hooks, { recursive: true });
-  initializeGit(projectRoot);
   const spec = getHookSpec("deny-dangerous");
   assert.ok(spec);
+  // Recursive directory copying can silently omit files under this Unicode Windows path.
+  for (const file of spec.scriptFiles) {
+    const destination = join(hooks, file);
+    mkdirSync(join(destination, ".."), { recursive: true });
+    cpSync(join(WORKFLOW_HOOKS, file), destination);
+    assert.ok(statSync(destination).isFile(), `fixture copies ${file}`);
+  }
+  initializeGit(projectRoot);
   writeAgentHookState(projectRoot, PROFILES[agent], spec, true);
   const installed = buildAgentHookDescriptor(agent, ".goat-flow/hooks", spec);
   const candidate = installed;
@@ -230,6 +238,75 @@ function runNativePolicyFixture(
   return { ...result, events };
 }
 
+describe("native Windows Stop scan budget", () => {
+  for (const [label, inherited, expected] of [
+    ["unset", undefined, "4194304"],
+    ["larger", "8388608", "8388608"],
+    ["smaller", "524288", "524288"],
+  ] as const) {
+    it(
+      `delivers the ${label} limit through the complete registered PowerShell command`,
+      {
+        skip: process.platform !== "win32",
+      },
+      () => {
+        const root = mkdtempSync(join(tmpdir(), "goat-native-stop-budget-"));
+        disposableParents.push(root);
+        const spec = getHookSpec("post-turn-safety");
+        assert.ok(spec);
+        const hooks = join(root, ".goat-flow/hooks");
+        mkdirSync(hooks, { recursive: true });
+        writeFileSync(join(hooks, spec.primaryScript), "");
+        writeFileSync(
+          join(hooks, "run-hook.mjs"),
+          "process.stdout.write(process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES ?? 'missing');export function runHookNative(){return 0;}\n",
+        );
+        writeAgentHookState(root, PROFILES.codex, spec, true);
+        const descriptor = buildAgentHookDescriptor(
+          "codex",
+          ".goat-flow/hooks",
+          spec,
+        );
+        assert.equal(descriptor.form, "shell");
+        assert.ok(descriptor.commandWindows);
+        const selected = agentHookSpawnDescriptor(descriptor, "win32");
+        assert.equal(selected.command, "powershell.exe");
+        assert.deepEqual(selected.args, [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          descriptor.commandWindows,
+        ]);
+        const environment = { ...process.env };
+        // An absent Windows setting must remove every spelling of its case-insensitive key.
+        for (const key of Object.keys(environment)) {
+          if (
+            [
+              "GIT_DIR",
+              "GIT_WORK_TREE",
+              "GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES",
+            ].includes(key.toUpperCase())
+          )
+            delete environment[key];
+        }
+        if (inherited !== undefined)
+          environment.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES = inherited;
+        const result = spawnSync(selected.command, selected.args, {
+          cwd: root,
+          env: environment,
+          input: "",
+          encoding: "utf8",
+          timeout: 15_000,
+          maxBuffer: 64 * 1024,
+        });
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stdout, expected);
+        assert.equal(result.stderr, "");
+      },
+    );
+  }
+});
+
 describe("managed Node registered policy replay", () => {
   // Writes real registrations and evaluator fixtures; literal stdin and Node journals expose quoting, root or extra-process regressions.
   it("preserves hostile roots, literal input and the two/three-process descriptor families without Bash", () => {
@@ -287,7 +364,9 @@ describe("managed Node registered policy replay", () => {
     for (const agent of NATIVE_FIXTURE_AGENTS) {
       for (const missing of ["run-hook.mjs", "deny-dangerous.mjs"]) {
         const fixture = createNativePolicyFixture(agent);
-        rmSync(join(fixture.hooks, missing));
+        const missingPath = join(fixture.hooks, missing);
+        unlinkSync(missingPath);
+        assert.throws(() => statSync(missingPath), { code: "ENOENT" });
         const result = runNativePolicyFixture(
           fixture,
           denyPayload("native fixture allow"),

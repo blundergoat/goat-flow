@@ -230,64 +230,73 @@ describe("Stop scan budget inheritance", () => {
       ["larger", "8388608", "8388608"],
       ["smaller", "524288", "524288"],
     ] as const) {
-      it(`${agent} ${transport} delivers the ${label} limit to its launcher`, () => {
-        const root = mkdtempSync(join(tmpdir(), "goat-hook-scan-budget-"));
-        try {
-          const spec = getHookSpec("post-turn-safety");
-          assert.ok(spec);
-          const descriptor = buildAgentHookDescriptor(
-            agent,
-            ".goat-flow/hooks",
-            spec,
-          );
-          const hookDirectory = join(root, ".goat-flow/hooks");
-          mkdirSync(hookDirectory, { recursive: true });
-          writeFileSync(join(hookDirectory, spec.primaryScript), "");
-          writeFileSync(
-            join(hookDirectory, "run-hook.mjs"),
-            "process.stdout.write(process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES ?? 'missing');export function runHookNative(){return 0;}\n",
-          );
-          writeAgentHookState(root, PROFILES[agent], spec, true);
-          const environment = { ...process.env };
-          delete environment.GIT_DIR;
-          delete environment.GIT_WORK_TREE;
-          delete environment.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES;
-          // An absent setting means use defaults; any supplied user setting remains authoritative.
-          if (inherited !== undefined)
-            environment.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES = inherited;
+      it(
+        `${agent} ${transport} delivers the ${label} limit to its launcher`,
+        {
+          skip:
+            transport === "posix" && process.platform === "win32"
+              ? "POSIX command quoting is tested on POSIX; Windows runs its registered PowerShell command."
+              : false,
+        },
+        () => {
+          const root = mkdtempSync(join(tmpdir(), "goat-hook-scan-budget-"));
+          try {
+            const spec = getHookSpec("post-turn-safety");
+            assert.ok(spec);
+            const descriptor = buildAgentHookDescriptor(
+              agent,
+              ".goat-flow/hooks",
+              spec,
+            );
+            const hookDirectory = join(root, ".goat-flow/hooks");
+            mkdirSync(hookDirectory, { recursive: true });
+            writeFileSync(join(hookDirectory, spec.primaryScript), "");
+            writeFileSync(
+              join(hookDirectory, "run-hook.mjs"),
+              "process.stdout.write(process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES ?? 'missing');export function runHookNative(){return 0;}\n",
+            );
+            writeAgentHookState(root, PROFILES[agent], spec, true);
+            const environment = { ...process.env };
+            delete environment.GIT_DIR;
+            delete environment.GIT_WORK_TREE;
+            delete environment.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES;
+            // An absent setting means use defaults; any supplied user setting remains authoritative.
+            if (inherited !== undefined)
+              environment.GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES = inherited;
 
-          let command: string;
-          let args: string[];
-          // Claude launches its registered argv directly, without shell reinterpretation of the user's settings.
-          if (descriptor.form === "argv") {
-            command = process.execPath;
-            args = descriptor.args;
-            // Codex on POSIX must pass the same setting through its registered shell command.
-          } else if (transport === "posix") {
-            command = "bash";
-            args = ["-c", descriptor.command];
-          } else {
-            assert.ok(descriptor.commandWindows);
-            // Run the exact Node payload and literal operands registered for PowerShell; native PowerShell remains a platform check.
-            const operands = [
-              ...descriptor.commandWindows.matchAll(/'((?:''|[^'])*)'/gu),
-            ].map((match) => match[1].replaceAll("''", "'"));
-            assert.equal(operands.length, 7);
-            command = process.execPath;
-            args = ["-e", ...operands];
+            let command: string;
+            let args: string[];
+            // Claude launches its registered argv directly, without shell reinterpretation of the user's settings.
+            if (descriptor.form === "argv") {
+              command = process.execPath;
+              args = descriptor.args;
+              // Codex on POSIX must pass the same setting through its registered shell command.
+            } else if (transport === "posix") {
+              command = "bash";
+              args = ["-c", descriptor.command];
+            } else {
+              assert.ok(descriptor.commandWindows);
+              // Run the exact Node payload and literal operands registered for PowerShell; native PowerShell remains a platform check.
+              const operands = [
+                ...descriptor.commandWindows.matchAll(/'((?:''|[^'])*)'/gu),
+              ].map((match) => match[1].replaceAll("''", "'"));
+              assert.equal(operands.length, 7);
+              command = process.execPath;
+              args = ["-e", ...operands];
+            }
+            const result = spawnSync(command, args, {
+              cwd: root,
+              encoding: "utf8",
+              env: environment,
+              timeout: 5000,
+            });
+            assert.equal(result.status, 0, result.stderr);
+            assert.equal(result.stdout, expected);
+          } finally {
+            rmSync(root, { recursive: true, force: true });
           }
-          const result = spawnSync(command, args, {
-            cwd: root,
-            encoding: "utf8",
-            env: environment,
-            timeout: 5000,
-          });
-          assert.equal(result.status, 0, result.stderr);
-          assert.equal(result.stdout, expected);
-        } finally {
-          rmSync(root, { recursive: true, force: true });
-        }
-      });
+        },
+      );
     }
   }
 });

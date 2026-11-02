@@ -1,6 +1,6 @@
 ---
 category: evidence-attribution
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-02
 ---
 
 **Scope:** Attributing guarantees to the implementation that supplies them, attributing readiness and run details to the host row or command output that recorded them, checking whether reused evidence still describes current bytes, and keeping committed incident evidence readable from a fresh clone. General guidance remains in [agent-evidence-claims.md](agent-evidence-claims.md).
@@ -79,15 +79,25 @@ last_reviewed: 2026-10-31
 ## Lesson: A packet offered for approval is a claim about the proof rows it covers
 
 **Status:** active | **Created:** 2026-10-28 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
+**Incident count:** 3 | **Latest occurrence:** 2026-11-02
 **Decision changed:** Before asking approval for an execution packet, map every proof row it is meant to satisfy to the exact probes or commands in the packet, and add any missing case first.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
 
 **Prevention:** Proof rows name the cases a plan promises. An execution packet, the reviewed bundle of commands, probes and limits, names the cases a runner will execute. Before the approval request, list each proof row the packet should close beside the probe IDs that exercise it, and treat a row with no probe as a packet defect. If a gap still surfaces after approval, close it with a separate offline check that carries its own evidence, never by reading the packet's results as covering it.
 
+Derive native readiness counts from each provider's saved registration. A hook owner can have several matcher entries; a count copied from another provider does not establish the expected native view.
+
+A PTY's name does not establish the child's `TERM` environment. Pin and verify the terminal identity used by native readiness before requesting live-capture approval.
+
 **What happened:** Two proof rows required fresh Antigravity fixtures to pass a replay of the original Windows GitHub executable cases. All four reviewed packets defined rehearsal probes for `git status`, `git push origin main`, a protected read and an ordinary read, but none for the `gh.exe` or path spellings. The gap surfaced only when the rows were being ticked after the approved rehearsals passed. A separate offline replay of the eight original commands through each fresh Antigravity registration then closed both rows; no provider ran.
 
 **Root cause:** The packets were copied from an earlier capture round and kept its generic probe set, which was never checked against the new proof text. Evidence anchor: the cases the rows named are the unit matrix in `test/unit/hook-policy-github.test.ts` (search: `xargs --arg-file commands.txt gh.exe`).
+
+**Recurrence 2026-11-02:** A Stop recapture packet expected four registrations for both Claude and Codex. Claude's native view reported "6 hooks on 3 events": two PreToolUse entries, three PostToolUse matcher entries and one Stop entry. Readiness stopped before any model task. The packet had counted the four distinct owners instead of the provider's entries. `src/cli/server/agent-hook-writer.ts` (search: `matcherParts`) splits the shared matcher; `src/cli/server/hooks-registry.ts` (search: `matcher: "Edit|Write|Bash"`) supplies Gruff's three Claude matchers. The replacement derives counts from each saved config.
+
+**Recurrence 2026-11-02:** Codex 0.166.0 readiness inherited `TERM=dumb`, warned that its interactive TUI might not work, and stopped at `Continue anyway? [y/N]`. The approved input protocol could not answer that startup prompt. The provider exited without a model task. With `TERM=xterm-256color` pinned, native Windows and WSL stand-ins both printed `TERM=xterm-256color` despite inheriting `dumb`. This verifies environment delivery; it does not prove live Codex startup or hook delivery.
 
 ---
 

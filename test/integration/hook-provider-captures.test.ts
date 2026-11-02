@@ -118,6 +118,8 @@ describe("host-specific hook provider captures", () => {
       ["copilot", "deny-dangerous", "C16"],
       ["copilot", "deny-git-mutations", "C16"],
       ["copilot", "gruff-code-quality", "C17"],
+      ["antigravity", "deny-dangerous", "C9"],
+      ["antigravity", "deny-git-mutations", "C9"],
       ["antigravity", "deny-dangerous", "C18"],
       ["antigravity", "deny-git-mutations", "C18"],
     ] as const;
@@ -133,6 +135,30 @@ describe("host-specific hook provider captures", () => {
         evidence?.effectiveSupportGate,
         "scenario-unverified",
         `${provider}/${hookId} gate`,
+      );
+    }
+  });
+
+  it("keeps renewed Stop versions separate from earlier event captures", () => {
+    for (const [caseId, provider, host, version] of [
+      ["C3", "claude", "windows", "2.1.316"],
+      ["C6", "codex", "windows", "0.166.0"],
+      ["C12", "claude", "wsl", "2.1.316"],
+      ["C15", "codex", "wsl", "0.166.0"],
+    ] as const) {
+      const stop = getHookSpec("post-turn-safety")?.providerEvidence?.[
+        provider
+      ]?.hostCaptures?.find((row) => row.host === host);
+      const earlier = hostEvidence(provider, host);
+      assert.equal(stop?.caseId, caseId);
+      assert.equal(stop.verification, "verified");
+      assert.equal(stop.capture?.providerVersion, version);
+      assert.equal(stop.capture?.resultDelivery, "delivered");
+      assert.equal(stop.capture?.continuationBehavior, "continued");
+      assert.notEqual(
+        stop.capture?.artifactSha256,
+        earlier.capture?.artifactSha256,
+        caseId + ": the Stop capture must not reuse another event's receipt",
       );
     }
   });
@@ -168,6 +194,10 @@ describe("host-specific hook provider captures", () => {
     assert.equal(wslAntigravity.caseId, "C18");
     assert.equal(wslAntigravity.verification, "verified");
     assert.equal(wslAntigravity.capture?.providerVersion, "1.4.12");
+    const windowsAntigravity = hostEvidence("antigravity", "windows");
+    assert.equal(windowsAntigravity.caseId, "C9");
+    assert.equal(windowsAntigravity.verification, "verified");
+    assert.equal(windowsAntigravity.capture?.providerVersion, "1.4.8");
     const expectedVerification: Readonly<
       Record<string, HookProviderHostEvidence["verification"]>
     > = {
@@ -179,7 +209,7 @@ describe("host-specific hook provider captures", () => {
       C6: "verified",
       C7: "verified",
       C8: "verified",
-      C9: "security-hold",
+      C9: "verified",
       C10: "verified",
       C11: "verified",
       C12: "verified",
@@ -199,9 +229,5 @@ describe("host-specific hook provider captures", () => {
         row.caseId,
       );
     }
-    assert.equal(
-      hostEvidence("antigravity", "windows").verification,
-      "security-hold",
-    );
   });
 });

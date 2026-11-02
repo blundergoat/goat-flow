@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-02
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -304,15 +304,24 @@ Inspect literals independently when checking renames, as described in
 ## Lesson: A script driving a live client must prove the screen before every key
 
 **Status:** active | **Created:** 2026-10-31 | **Evidence:** OBSERVED
-**Decision changed:** Before a script sends a key to an interactive client, require the exact screen state that key is safe in, and stop without a key on any other state.
+**Incident count:** 4 | **Latest occurrence:** 2026-11-02
+**Decision changed:** Validate input bytes before launch; send keys only when their exact screen conditions hold.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Waiting for a word to appear proves little, because a typed command echoes that word back. Send Enter only when the prompt line equals the command exactly, free text only into a panel showing its own input, and Escape only while something is open. Test the script against a stand-in client that logs every key it receives, including a dropped key, a panel that takes no focus and a panel that will not close. A terminal renderer used for these checks must handle scroll regions and receive every frame, or it shows a stale screen.
+**Prevention:** Test allowed input bytes, including terminators, before launch. Require the exact prompt for Enter and the correct panel for text or Escape. Do not accept echoes as screen state. Test dropped keys, lost focus and panels that stay open. Render every frame and scroll region.
 
 **What happened:** A no-task readiness driver for a coding client typed a settings filter and slash commands on fixed sleeps. An independent review showed that if the settings panel had not taken focus, the filter text would stay in the prompt, and the next slash command and Enter would send both to the model as a task. The rewritten driver passed a stand-in harness covering a trust dialog, a dropped key, a panel without focus, filter text reaching the prompt and a panel that would not close, with no task submitted in any of them.
 
 **Root cause:** The script treated elapsed time and matching text as proof of state, and it could not tell an echoed command from an open panel.
+
+**Recurrence 2026-11-02:** Filler passed, but a 1,485-character prompt displayed 1,588. Require full prompt visibility.
+
+**Native paste receipt:** SHA256 `99ff38c399a5149af89eab3bb2ef2a0480669abcbe19798edb1c121e080cdb23` recorded `submit`, then `abort`, with no key event: `TASK NOT VISIBLE: Enter was not sent`.
+
+**Recurrence 2026-11-02:** The operator sent `/hooks` instead of `/hooks\r`. The guard rejected it before forwarding; readiness closed without a task or attestation. Check input terminators before launch.
+
+**Recurrence 2026-11-02:** A prompt guard stripped all whitespace, accepting `node--version` for `node --version`. Preserve spaces within rendered lines and allow only the client's known wrapping seams.
 
 ---
 
