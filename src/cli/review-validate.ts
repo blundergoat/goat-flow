@@ -5,15 +5,8 @@
  * The validator checks visible Markdown, frozen source authority, trusted gate records, and declared local ledgers.
  * Validation does not persist artifacts or run gates; the CLI writes only the explicitly requested validation output.
  */
-import { readFileSync, realpathSync, statSync } from "node:fs";
-import { getPackageVersion } from "./paths.js";
-import { CLIError } from "./cli-error.js";
-import type { ParsedCLI } from "./cli-types.js";
-import { assertOutputPreservesInput, writeOutput } from "./cli-output.js";
 import { maskNonRenderedMarkdown } from "./rendered-markdown.js";
 import {
-  canonicalReviewJson,
-  captureReviewSnapshot,
   ReviewAuthorityError,
   verifyReviewAuthority,
 } from "./review-validate-authority.js";
@@ -566,7 +559,7 @@ function validateDraftLedgerEnvelope(
 }
 
 /** Validate one pending report and its transient ledger together before persistence. */
-function validateReviewDraftEnvelope(
+export function validateReviewDraftEnvelope(
   input: string,
   projectRoot: string,
 ): ReviewValidationResult {
@@ -641,161 +634,6 @@ export function renderReviewValidationResult(
     );
   }
   return lines.join("\n");
-}
-
-/** Render the transient ledger gate with the exact record count a report must claim. */
-function renderLedgerValidationResult(
-  result: ReturnType<typeof validateRefutationLedgerText>,
-): string {
-  // A valid ledger receives its record count; a failed ledger uses the shared issue renderer.
-  if (result.status === "pass") {
-    const noun = result.recordCount === 1 ? "record" : "records";
-    return `review validate-ledger: PASS (${result.recordCount} ${noun})`;
-  }
-  return renderReviewValidationResult(result, "review validate-ledger");
-}
-
-/**
- * Produce canonical source metadata for the operator to retain throughout the review.
- *
- * @throws CLIError when the request or selected source cannot be captured without ambiguity
- */
-function renderReviewSnapshot(input: string, projectRoot: string): string {
-  try {
-    return canonicalReviewJson(captureReviewSnapshot(input, projectRoot));
-  } catch (error) {
-    // A branch may have been removed or a selected path may be a symlink; neither can become a fallback review source.
-    throw new CLIError(
-      error instanceof ReviewAuthorityError
-        ? `${error.code}: ${error.message}`
-        : "Cannot capture the selected review source.",
-      2,
-    );
-  }
-}
-
-/**
- * Read the supplied report or request without silently replacing invalid UTF-8 bytes.
- *
- * @param path - saved input file; null reads stdin from the calling terminal or pipeline
- *
- * @returns exact decoded input; empty text remains empty so the selected parser can report its missing content
- * @throws CLIError when stdin or the named file is unreadable or cannot round-trip as UTF-8
- */
-function readReviewInput(path: string | null): string {
-  try {
-    const bytes = readFileSync(path ?? 0);
-    const text = bytes.toString("utf8");
-    // Lossy decoding could select a different literal filename than the operator supplied.
-    if (!Buffer.from(text, "utf8").equals(bytes))
-      throw new CLIError("Review input must be round-trip UTF-8.", 2);
-    return text;
-  } catch (error) {
-    // A moved or unreadable saved report cannot be validated; report the input error before evaluating any evidence.
-    throw new CLIError(
-      `Cannot read review input: ${error instanceof Error ? error.message : String(error)}`,
-      2,
-    );
-  }
-}
-
-/**
- * Read stdin or one saved validation input, run the selected review proof gate, and emit every issue.
- * Usage and read errors throw CLIError; structural failures set the process exit code after rendering.
- *
- * @param options - parsed review request; a missing validation operation or unreadable input path is a usage error
- *
- * @returns nothing; validation output is written through the shared CLI sink
- * @throws CLIError when command usage is invalid or the selected input cannot be read
- */
-export function handleReviewCommand(options: ParsedCLI): void {
-  validateReviewCommandUsage(options);
-  const projectRoot =
-    options.reviewSubcommand === "validate-ledger"
-      ? options.projectPath
-      : resolveReviewedProject(options.projectPath);
-  assertOutputPreservesInput(options.output, options.reviewValidatePath ?? 0);
-  const input = readReviewInput(options.reviewValidatePath);
-  dispatchReviewInput(options, projectRoot, input);
-}
-
-/** Refuse unsupported operations or validator versions before reading the operator's input; each refusal throws a usage error. */
-function validateReviewCommandUsage(options: ParsedCLI): void {
-  const actualVersion = getPackageVersion();
-  // A skill can reject an older PATH binary before it reads report data or asks the operator for stdin.
-  if (
-    options.reviewExpectedVersion &&
-    options.reviewExpectedVersion !== actualVersion
-  )
-    throw new CLIError(
-      `Review validator version mismatch: expected ${JSON.stringify(options.reviewExpectedVersion)}, actual ${actualVersion}.`,
-      2,
-    );
-  // Without an operation, the CLI cannot know which review artifact the operator wants checked.
-  if (!options.reviewSubcommand) {
-    throw new CLIError(
-      'review requires subcommand "snapshot", "validate", "validate-draft", or "validate-ledger".',
-      2,
-    );
-  }
-  // Snapshot output is transient authority metadata; --output would create an unsupported persisted baseline.
-  if (options.reviewSubcommand === "snapshot" && options.output)
-    throw new CLIError(
-      "review snapshot does not accept --output; retain its stdout metadata through the review.",
-      2,
-    );
-}
-
-/** Validate the selected input and write the result the operator requested. */
-function dispatchReviewInput(
-  options: ParsedCLI,
-  projectRoot: string,
-  input: string,
-): void {
-  // The operator requested a source selection, so produce its authority before any report validation.
-  if (options.reviewSubcommand === "snapshot") {
-    writeOutput(options, renderReviewSnapshot(input, projectRoot));
-    return;
-  }
-  // Ledger-only validation checks its text grammar without claiming that a report has persisted it.
-  if (options.reviewSubcommand === "validate-ledger") {
-    const result = validateRefutationLedgerText(input);
-    writeOutput(options, renderLedgerValidationResult(result));
-    // A failed ledger must signal failure to the operator's shell or calling tool.
-    if (result.status === "fail") process.exitCode = 1;
-    return;
-  }
-  const result =
-    options.reviewSubcommand === "validate-draft"
-      ? validateReviewDraftEnvelope(input, projectRoot)
-      : validateReviewReport(input, projectRoot);
-  const rendered = renderReviewValidationResult(
-    result,
-    `review ${options.reviewSubcommand}`,
-    options.reviewSubcommand === "validate-draft"
-      ? "persistence unverified"
-      : null,
-  );
-  writeOutput(options, rendered);
-  // A failed report must signal failure even after all repairable issues have been printed.
-  if (result.status === "fail") process.exitCode = 1;
-}
-
-/** Resolve the operator's chosen project once before any saved input is read; a missing directory throws a usage error. */
-function resolveReviewedProject(selectedPath: string): string {
-  try {
-    const projectRoot = realpathSync(selectedPath);
-    // Selecting a report file as the project cannot establish a directory for source evidence.
-    if (!statSync(projectRoot).isDirectory())
-      throw new Error("expected a directory");
-    return projectRoot;
-  } catch (error) {
-    // A moved project folder or a file passed to --project needs a corrected path, not a fallback to this workspace.
-    throw new CLIError(
-      `Cannot open reviewed project ${JSON.stringify(selectedPath)}: ${error instanceof Error ? error.message : String(error)}`,
-      2,
-    );
-  }
 }
 
 /** Require an origin's literal raw hash rather than accepting an arbitrary label as command provenance. */

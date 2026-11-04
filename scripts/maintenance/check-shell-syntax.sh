@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Parse every declared shell file in a goat-flow framework checkout without executing it.
-# Run from the repository root. Required missing/empty groups fail; this helper is not shipped to target projects.
-# Exit 0 only when every selected file parses; report all failures before returning 1.
+# Check that every repository shell script parses, without running it; preflight and the published instruction-file commands both call it.
+#
+# Run it from the repository root: it checks scripts/, scripts/maintenance/ and scripts/installers/, and a missing or empty group fails.
+# It reports every broken file before exiting 1, so a developer fixes them in one pass; this helper is not shipped to target projects.
 
 set -euo pipefail
 shopt -s nullglob
@@ -10,12 +11,8 @@ required_directories=(
     scripts
     scripts/maintenance
     scripts/installers
-    workflow/hooks
-    workflow/hooks/deny-dangerous
-    .goat-flow/hooks
-    .goat-flow/hooks/deny-dangerous
 )
-scripts=(workflow/install-goat-flow.sh)
+scripts=()
 failures=0
 checked=0
 

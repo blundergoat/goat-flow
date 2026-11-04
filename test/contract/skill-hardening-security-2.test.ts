@@ -9,8 +9,8 @@ import assert from "node:assert/strict";
 import {
   assertForEachTarget,
   assertMatchesAll,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readPresetPrompt,
   readPresetStringField,
@@ -20,7 +20,7 @@ import {
 describe("skill hardening contracts: security (2/2)", () => {
   it("keeps goat-security identity preconditions and sensitive hashes calibrated", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/identity-and-data.md",
       ),
@@ -50,7 +50,7 @@ describe("skill hardening contracts: security (2/2)", () => {
 
   it("makes goat-security compliance source-bound with complete dispositions", () => {
     // Selecting Compliance Mode loads the policy reference's mapping rules after the review's Proof Gate.
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       assertMatchesAll(
         readMarkdownSection(skillPath, "Compliance Mode"),
         [
@@ -61,7 +61,7 @@ describe("skill hardening contracts: security (2/2)", () => {
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/project-policy-template.md",
       ),
@@ -153,7 +153,7 @@ describe("skill hardening contracts: security (2/2)", () => {
   });
 
   it("uses non-executing Git inspection and phase-aware persistence recovery", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       assert.match(
         readMarkdownSection(skillPath, "Step 0 - Intake"),
         /Before any Git read.*common-threats.*non-executing Git inspection profile/iu,
@@ -188,7 +188,7 @@ describe("skill hardening contracts: security (2/2)", () => {
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/common-threats.md",
       ),
@@ -297,7 +297,7 @@ describe("skill hardening contracts: security (2/2)", () => {
 
   it("hardens supply-chain verification and binds active testing to exact scope", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/supply-chain-and-cicd.md",
       ),
@@ -351,7 +351,7 @@ describe("skill hardening contracts: security (2/2)", () => {
 
   it("covers upload resource abuse and race-safe path handling", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/file-upload-and-paths.md",
       ),
@@ -377,7 +377,7 @@ describe("skill hardening contracts: security (2/2)", () => {
 
   it("separates copyable project policy from assessment instructions", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/project-policy-template.md",
       ),
@@ -415,7 +415,7 @@ describe("skill hardening contracts: security (2/2)", () => {
   });
 
   it("gives goat-security distinct quick and full reporting contracts", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const output = readMarkdownSection(skillPath, "Output Format");
       assert.match(
         output,
@@ -478,7 +478,7 @@ describe("skill hardening contracts: security (2/2)", () => {
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/common-threats.md",
       ),
@@ -507,7 +507,7 @@ describe("skill hardening contracts: security (2/2)", () => {
       },
     );
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/supply-chain-and-cicd.md",
       ),
@@ -591,7 +591,7 @@ describe("skill hardening contracts: security (2/2)", () => {
   it("uses one Quick gap-ledger row while Full keeps exhaustive rows", () => {
     const exhaustiveInventoryKindBaseline = 12;
 
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const outputFormat = readMarkdownSection(skillPath, "Output Format");
       // A missing Quick template becomes empty text so the required report fields fail validation.

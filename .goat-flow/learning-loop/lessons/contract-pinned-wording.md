@@ -1,6 +1,6 @@
 ---
 category: contract-pinned-wording
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-22
 ---
 
 **Scope:** Changing prose, a path, an adjacent section, or a word budget that tests or semantic anchors already pin, and the full-suite failures that follow when the exact old text was not searched first. Other pinned-contract lessons, such as anchor-preserving compaction and user-visible serialization, are [contract-testing.md](contract-testing.md); instruction and reference word budgets are [instruction-word-budgets.md](instruction-word-budgets.md).
@@ -9,7 +9,7 @@ last_reviewed: 2026-10-11
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** OBSERVED
 **Severity:** INTEGRATION
-**Incident count:** 27 | **Latest occurrence:** 2026-10-11
+**Incident count:** 28 | **Latest occurrence:** 2026-10-18
 **Merged:** 2026-10-11 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split to recover its headroom.
 
 **Prevention:** Before changing prose, a path, or an adjacent command, search the tests and durable semantic anchors for the exact old text; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest. When fixture size feeds a derived assertion, recompute it with the production formula after every fixture edit. Update a contract only when product semantics change. Before drafting in a near-cap skill, measure the current word budget and pay for additions from unpinned text; before quoting a budget or score outcome, measure the exact sizes with the function the gate uses and state the margin.
@@ -77,8 +77,8 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
   rationale`).
 
 - **Recurrence 2026-09-08:** Clarity owner delegation missed public-reader assertions and the explicit selector exception in `docs/skills.md`; the
-  optional catalogue rewrite was rewound. `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the skill, reference, manifest, and public
-  documentation aligned`) caught the mismatch. `stats --check` also caught a historical pointer to `workflow/skills/goat-clarity/SKILL.md` (search:
+  optional catalogue rewrite was rewound. `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the reference manifest and public documentation aligned`)
+  caught the mismatch. `stats --check` also caught a historical pointer to `workflow/skills/goat-clarity/SKILL.md` (search:
   `Added-test dispositions`); retain semantic anchors beside delegated owners and inspect every consumer before deleting its text.
 
 - **Recurrence 2026-09-09:** The clarity dependency case passed a path to a helper that requires Markdown text and a source label. The missing-heading
@@ -95,8 +95,10 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 
 - **Recurrence 2026-09-26:** Documenting the recovery guard changed the architecture claim path and the manifest's claim recovery wording. The full fast suite failed its local-data contract, which pins both phrases. Restoring the claim contract and adding guard detail beside it passed the focused contract. `test/contract/local-data-contract.test.ts` (search: `registers path-write claims as transient fail-closed coordination`), `.goat-flow/architecture.md` (search: `Local coordination state`), `workflow/manifest.json` (search: `exclusive path-write coordination`).
 
-**Recurrence 2026-10-01:** A new Gruff test guessed the result label as `clean` instead of the observed `pass`, and native launch fixtures put `call` and `start` outside the explicit cmd body. The first assertions failed before proving the intended regressions. Read the result vocabulary and interpreter boundary before extending a fixture. For native WSL-to-cmd probes, inspect the transported bytes: argv quoting inserted backslashes into a quoted echo control, while stdin preserved the intended command and established the literal-caret result. A quality-diff wording change also left a row-integrity assertion matching the old prefix; preserve its control-character invariant while updating the displayed text. Owners: `test/integration/gruff-code-quality-contract.test.ts` (search: `deduplicates verified health when mkdir refuses absolute paths`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `cmd caret-obfuscated publication`), and `test/unit/quality-diff-delta-tag.test.ts` (search: `keeps line-feed and carriage-return summaries on their own rows`).
+**Recurrence 2026-10-01:** A new Gruff test guessed the result label as `clean` instead of the observed `pass`, and native launch fixtures put `call` and `start` outside the explicit cmd body. The first assertions failed before proving the intended regressions. Read the result vocabulary and interpreter boundary before extending a fixture. For native WSL-to-cmd probes, inspect the transported bytes: argv quoting inserted backslashes into a quoted echo control, while stdin preserved the intended command and established the literal-caret result. A quality-diff wording change also left a row-integrity assertion matching the old prefix; preserve its control-character invariant while updating the displayed text. Owners: `test/integration/gruff-code-quality-contract.test.ts` (search: `deduplicates verified health when mkdir refuses absolute paths`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `cmd caret-obfuscated publication`), and `test/unit/quality-diff-delta-tag.test.ts` (search: `keeps line-feed and carriage-return summaries on their own rows`).
 
 **Recurrence 2026-10-01:** Three text assertions failed against the CLI's default JSON output. Read format defaults; explicit `--format text` restored the suite. `test/integration/quality-history-diff.test.ts` (search: `retains workspace conclusions`).
 
-**Recurrence 2026-10-11:** Removing the runner's performance mode also rewrote the adjacent concurrency ternary; the first fast suite failed one source-regex pin that the grep for the removed mode's names could not find. Restoring the pinned line fixed it: search each adjacent edited line for its exact text. `scripts/run-tests.mjs` (search: `mode === "slow" ? "1" : mode === "fast" ? "8" : "8"`), `test/integration/preflight-progress.test.ts` (search: `keeps fast concurrency bounded`).
+**Recurrence 2026-10-11:** Removing the runner's performance mode also rewrote the adjacent concurrency ternary; the first fast suite failed one source-regex pin that the grep for the removed mode's names could not find. Restoring the pinned line fixed it: search each adjacent edited line for its exact text. `scripts/run-tests.mjs` (search: `testConcurrencyForMode`), `test/integration/preflight-progress.test.ts` (search: `keeps fast concurrency bounded`).
+
+- **Recurrence 2026-10-18:** Moving quality version/rubric cases from CLI processes to the shared parser modes renamed a test title still cited by a lesson. All 151 focused tests passed, but preflight reported a stale reference. Restore the stable test title when changing execution level, or migrate its durable consumers in the same packet; assertion equivalence alone does not preserve retrieval. Evidence: `test/unit/quality-subcommands.test.ts` (search: `parses ${name} as legacy and rejects it under current schema rules`) and `.goat-flow/learning-loop/lessons/audit-contracts.md` (search: `Recurrence 2026-09-30`).

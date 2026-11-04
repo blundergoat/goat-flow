@@ -60,7 +60,7 @@ const agentFacingInstructionScopePaths = [
 
 /** The one copyable command a reader runs when a provider denies the quoted `--check` operand first. */
 const HOOK_STDIN_PROBE_COMMAND =
-  "bash .goat-flow/hooks/deny-dangerous.sh < .goat-flow/scratchpad/payload.json";
+  "node .goat-flow/hooks/deny-dangerous.mjs < .goat-flow/scratchpad/payload.json";
 
 /** Guidance that keeps the stdin fallback runnable and tells a reader when the direct examples apply. */
 const HOOK_PROBE_REQUIRED_PHRASES = [
@@ -398,7 +398,7 @@ describe("standalone playbook audit contract", () => {
     assertRegistrationCommandForEachPlaybook(
       {
         ".claude/settings.json":
-          '{"command":".goat-flow/hooks/deny-dangerous.sh"}\n',
+          '{"command":".goat-flow/hooks/deny-dangerous.mjs"}\n',
       },
       (registrationResult, playbookPath) => {
         assert.equal(
@@ -408,7 +408,7 @@ describe("standalone playbook audit contract", () => {
         );
         assert.match(
           registrationResult.standardOutput,
-          /\.claude\/settings\.json.*\.goat-flow\/hooks\/deny-dangerous\.sh/u,
+          /\.claude\/settings\.json.*\.goat-flow\/hooks\/deny-dangerous\.mjs/u,
           playbookPath,
         );
       },
@@ -429,7 +429,7 @@ describe("standalone playbook audit contract", () => {
         "workflow/manifest.json",
       ].map((registrationPath) => [
         registrationPath,
-        '{"command":".goat-flow/hooks/deny-dangerous.sh"}\n',
+        '{"command":".goat-flow/hooks/deny-dangerous.mjs"}\n',
       ]),
     );
 

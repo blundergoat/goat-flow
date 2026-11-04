@@ -40,7 +40,7 @@ Build mode is the structural install gate. It validates files, directories, conf
 | `other-files` | Other required files | Every manifest-required file or directory not already covered by a named setup check exists, including local log README surfaces. When the manifest-declared optional `.goat-flow/security-policy.md` is installed, the code map and every present agent Router Table must point to it; a project without the optional policy remains valid |
 | `config-parses` | Config file | `.goat-flow/config.yaml` exists, parses as YAML, and validates against the manifest-backed config contract |
 | `config-version` | Config version | `.goat-flow/config.yaml` declares the current `AUDIT_VERSION` |
-| `hook-version` | Hook version | Installed hook dispatchers in `.goat-flow/hooks/` (`deny-dangerous.sh`, `deny-git-mutations.sh`, `gruff-code-quality.sh`, `post-turn-safety.sh`) and the shared `deny-dangerous/guard-runtime.sh` carry the current `goat-flow-hook-version` stamp; a missing or behind stamp signals a partial upgrade and the fix re-runs `hooks sync` |
+| `hook-version` | Hook version | Installed hook entrypoints in `.goat-flow/hooks/` (`deny-dangerous.mjs`, `deny-git-mutations.mjs`, `post-turn-safety.mjs` and, when installed, `gruff-code-quality.mjs`) and the shared `policy-evaluation.mjs` carry the current `goat-flow-hook-version` stamp; a missing or behind stamp signals a partial upgrade and the fix re-runs `hooks sync` |
 
 ### Agent Scope (4)
 

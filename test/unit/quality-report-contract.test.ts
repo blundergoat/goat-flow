@@ -8,7 +8,7 @@
 import { getQualityRubricId } from "../../src/cli/quality/rubric.js";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   mkdtempSync,
@@ -35,6 +35,7 @@ import {
 } from "../../src/cli/quality/schema-types.js";
 import { makeSharedFacts } from "../fixtures/projects/index.js";
 import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
+import { checkInstalledPolicy } from "../helpers/check-installed-policy.js";
 
 /** Top-level JSON keys every contract render must show in its body shape. */
 const REQUIRED_TOP_LEVEL_FIELDS = [
@@ -794,14 +795,21 @@ describe("quality report contract: CLI surfaces", () => {
           ],
         ] as const;
         for (const [block, expected] of blocks) {
-          const result = spawnSync("bash", [hookPath, "--check", block], {
-            cwd: REPOSITORY_ROOT,
-            encoding: "utf-8",
-          });
+          const result = checkInstalledPolicy(hookPath, REPOSITORY_ROOT, block);
           assert.equal(
             result.status,
             expected,
-            `${hook}, indent=${indent}: ${result.stderr}`,
+            JSON.stringify({
+              hook,
+              indent,
+              expected,
+              commandLength: block.length,
+              commandStart: block.slice(0, 160),
+              stdout: result.stdout,
+              stderr: result.stderr,
+              error: result.error?.message,
+              signal: result.signal,
+            }),
           );
         }
       }

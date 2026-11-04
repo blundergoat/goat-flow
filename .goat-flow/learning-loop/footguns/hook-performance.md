@@ -1,9 +1,44 @@
 ---
 category: hook-performance
-last_reviewed: 2026-10-03
+last_reviewed: 2026-11-02
 ---
 
-**Scope:** Hook execution cost: process creation on Windows Git Bash, shared policy parsing work, and the context cost of policy denials. Runtime delivery, provider adapters, Stop recovery, and policy-module correctness live in [hooks.md](hooks.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md).
+**Scope:** Hook execution cost: Windows process creation and PowerShell launch environments, shared policy parsing work, and the context cost of policy denials. Runtime delivery, provider adapters, Stop recovery, and policy-module correctness live in [hooks.md](hooks.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md).
+
+## Footgun: Windows hook-proof budgets keyed to one agent miss agents that adopt the PowerShell launcher
+
+**Status:** active | **Created:** 2026-11-02 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
+**Decision changed:** When a registration change moves an agent onto the `Set-Location` PowerShell launcher, extend every Windows proof budget that lists launcher agents in the same change.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Key Windows replay budgets to the launcher an agent's registration uses, not to the agent that first exposed the cost. After changing a Windows command shape, search test budgets for agent-name checks and run the Windows platform jobs; PR CI does not run them.
+
+**Symptoms:** Both Windows `hook-port-controls` jobs failed in the installer round-trip fixture with `[spawn-result] {"errorCode":"ETIMEDOUT","signal":"SIGTERM","timeoutMs":60000}` on a Copilot `hooks verify` proof, while every Codex proof in the same test passed under its larger budget.
+
+**Why it happens:** The fixture gave each verify command 60 s and added 90 s per scenario only for Codex, the one agent replaying through PowerShell when the budget was written. A later registration change gave Copilot the same launcher, `src/cli/server/agent-hook-command.ts` (search: `Set-Location -LiteralPath ([Environment]::CurrentDirectory)`). The traced Codex PowerShell probes took 18-24 s each on the hosted runner, so Copilot's three- and six-scenario proofs overran the flat budget; Copilot probes are not traced. PR CI skips the platform jobs, so the gap surfaced at the next manual Windows run.
+
+**Evidence:** [job 125167047632](https://github.com/blundergoat/goat-flow/actions/runs/41412038920/job/125167047632) (Node 20.12.0, Copilot git-mutations proof) and [job 125167047669](https://github.com/blundergoat/goat-flow/actions/runs/41412038920/job/125167047669) (Node 24.21.0, Copilot deny proof). The fix gives both launcher agents the per-scenario budget in `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `WINDOWS_POWERSHELL_REPLAY_AGENTS`). With the fix, [job 125214678298](https://github.com/blundergoat/goat-flow/actions/runs/41425948617/job/125214678298) (Node 24.21.0) passed the fixture, Copilot proofs included, in 442 s.
+
+## Footgun: Managed Windows replay can stall when PSModulePath is omitted
+
+**Status:** active | **Created:** 2026-10-24 | **Evidence:** ACTUAL_MEASURED
+**Severity:** INTEGRATION
+**Decision changed:** Preserve the host's nonempty `PSModulePath` when building the managed Windows hook environment, and verify the registered handler after changing its environment.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+**hallucination-risk:** high
+
+**Prevention:** Treat the selected shell's environment as part of the registered-command contract. Compare full and managed environments without changing the handler, payload, stdin transport or denial assertions. After adding a variable to an allowlist, restoring it against the updated baseline is a no-op. Build present/absent/restored controls from separate copies of one managed environment so removal cannot mutate later controls. Read the timings as single-run diagnostics, not a stable performance bound.
+
+**Symptoms:** When the managed filter omitted `PSModulePath` on the affected hosted Windows runner, the registered Codex handler returned the expected denial under the full environment but took tens of seconds or timed out under the managed environment. The current allowlist preserves it. Native local Windows remained fast in both cases, so its pass did not clear the hosted failure.
+
+**Why it happens:** `managedHookEnvironment` filters host variables before `agentHookSpawnDescriptor` launches the registered `powershell.exe` override. That override restores the literal location before invoking Node. The hosted location-only control reproduced the delay without a hook payload or Node child: removing only `PSModulePath` timed out after a successful present arm, and restoration was fast again. This weakens a simple first-run warm-up explanation; the internal PowerShell mechanism was not traced.
+
+**Evidence:** Before the fix, [job 120600539285](https://github.com/blundergoat/goat-flow/actions/runs/40007932927/job/120600539285) at `4525587` recorded managed pipe/file replays of 38,087/26,375 ms. After commit `6e2d28df` added only this environment key, [job 120620704758](https://github.com/blundergoat/goat-flow/actions/runs/40013834271/job/120620704758) recorded 541/532 ms with denial status 2 and the existing canary assertions intact. Its later location controls recorded present 313 ms, absent 10,021 ms with `ETIMEDOUT`, and restored 311 ms. The owning suites reported `# pass 54`, `# fail 0`, `# skipped 0`. These observations support the environment fix on that runner without proving a universal timing bound or live provider delivery.
+
+Source anchors: `src/cli/hooks-configured-runtime-evidence.ts` (search: `WINDOWS_MANAGED_ENVIRONMENT_KEYS`), `src/cli/server/agent-hook-command.ts` (search: `windowsPowerShellHookCommand`), `test/integration/hook-command-spawn-matrix.helpers.ts` (search: `modulePathState`), and `test/integration/hook-command-spawn-matrix.test.ts` (search: `the canary secret must never appear in a Codex handler stream`).
 
 ## Footgun: Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash
 
@@ -22,7 +57,7 @@ last_reviewed: 2026-10-03
 
 **Why it happens:** MSYS2 and Cygwin have no `fork()`; process creation is emulated, so every subshell or external command costs orders of magnitude more than on Linux, and `$(...)` counts even with no external binary. This does not generalise: removing forks from `deny-dangerous.sh` the same day made it slower, as the next entry records.
 
-**Evidence:** Measured 2026-08-01 on Windows 11 Pro 10.0.26200, Git Bash bash 5.3.15, NTFS: one forked pipeline costs about 44ms (200 pipelines = 8.852s) while 20,000 pure-bash loop iterations cost 0.151s, so one fork is worth roughly 2,900 bash operations. On the same workload (25 changed, 22 staged, 375 added lines across 10 env-assignment files, zero findings) the per-line `post-turn-safety.sh` ran 4m22.109s on Windows and 6.465s on Linux WSL2; the batched rewrite runs 0.655s and 0.027s. The pre-fix hot path spawned two `sed` per scanned line plus per-call helpers and one `git diff` per changed path. Current anchors: `workflow/hooks/post-turn-safety.sh` (search: `run_diff_batch`), (search: `gate_scannable_files`), and (search: `scan_content_files`).
+**Evidence:** Measured 2026-08-01 on Windows 11 Pro 10.0.26200, Git Bash bash 5.3.15, NTFS: one forked pipeline costs about 44ms (200 pipelines = 8.852s) while 20,000 pure-bash loop iterations cost 0.151s, so one fork is worth roughly 2,900 bash operations. On the same workload (25 changed, 22 staged, 375 added lines across 10 env-assignment files, zero findings) the per-line `post-turn-safety.sh` ran 4m22.109s on Windows and 6.465s on Linux WSL2; the batched rewrite runs 0.655s and 0.027s. The pre-fix hot path spawned two `sed` per scanned line plus per-call helpers and one `git diff` per changed path. Current anchors: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `run_diff_batch`), (search: `gate_scannable_files`), and (search: `scan_content_files`). Current Node owner: `src/hooks/post-turn/scanner.mts` (search: `function runDiffBatch`).
 
 ## Footgun: Policy modules must share one prepared command context
 
@@ -40,7 +75,7 @@ last_reviewed: 2026-10-03
 
 **Why it happens:** When policy checks independently call `prepare_segment_context`, the shared tokenisers (`split_shell_words_into`, `normalize_command_candidate`, `normalize_leading_command_word`) walk the same command once per policy. The dominant term is not established: converting the hot tokenisers to fork-free `_into` forms plus memoization made the hook slower, 272 to 392ms simple and 309 to 729ms pipeline, while executing about 3.3x more traced operations with identical verdicts, and was reverted without the cause being identified. Do not repeat that attempt without new evidence.
 
-**Evidence:** 2026-08-01, Windows 11 Git Bash, interleaved A/B, 30 invocations per cell: 272ms per call for `--check='npm run typecheck'`, 309ms for a four-stage pipeline, 652ms for the JSON-stdin path, against about 50ms for a bare `bash empty.sh`; only 6 external processes per invocation against about 1,959 traced bash operations for a simple command. 2026-08-04 Linux interleaved A/B: hoisting preparation from three policy calls to one moved the simple-command median from 39.08ms to 30.99ms and the pipeline median from 102.62ms to 93.12ms, with a 15-case byte-exact verdict comparison at 0 mismatches and both corpora at 327/327. Anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Parse once per segment`).
+**Evidence:** 2026-08-01, Windows 11 Git Bash, interleaved A/B, 30 invocations per cell: 272ms per call for `--check='npm run typecheck'`, 309ms for a four-stage pipeline, 652ms for the JSON-stdin path, against about 50ms for a bare `bash empty.sh`; only 6 external processes per invocation against about 1,959 traced bash operations for a simple command. 2026-08-04 Linux interleaved A/B: hoisting preparation from three policy calls to one moved the simple-command median from 39.08ms to 30.99ms and the pipeline median from 102.62ms to 93.12ms, with a 15-case byte-exact verdict comparison at 0 mismatches and both corpora at 327/327. Anchor: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Parse once per segment`). Current Node owner: `src/hooks/policy-segments.mts` (search: `export interface PolicySegmentContext`).
 
 ## Footgun: Claude policy denials echo the whole launcher command into agent context
 
@@ -58,4 +93,4 @@ last_reviewed: 2026-10-03
 
 **Why it happens:** ADR-053 moved Claude registrations to exec-form `args` so no shell retokenizes the bootstrap, and its failure-mode comparison weighs transport only. The echo format for exit-2 denials is not in Claude Code's hooks documentation, which states only that a JSON deny feeds `permissionDecisionReason` back to Claude.
 
-**Evidence:** `src/cli/server/agent-hook-command.ts` (search: `structuredHookLaunchBootstrap`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `BLOCKED: Policy %s`), and the unused Claude deny shape in `workflow/hooks/hook-provider-adapters.mjs` (search: `Claude and Codex share the current hookSpecificOutput permission shape`).
+**Evidence:** `src/cli/server/agent-hook-command.ts` (search: `structuredHookLaunchBootstrap`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `BLOCKED: Policy %s`), and the unused Claude deny shape in `workflow/hooks/hook-provider-adapters.mjs` (search: `Claude and Codex share the current hookSpecificOutput permission shape`).

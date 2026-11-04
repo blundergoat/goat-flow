@@ -1,6 +1,6 @@
 ---
 category: verification-testing-process
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-23
 ---
 
 **Scope:** Process-lifecycle tests - timeout deadlines independent of child close, observable readiness before termination signals, and delegated multi-turn runs that must keep recoverable session state. What a test must establish in general is [verification-testing.md](verification-testing.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -14,7 +14,7 @@ last_reviewed: 2026-10-10
 **Incident count:** 5 | **Latest occurrence:** 2026-10-10
 **Merged:** 2026-09-15 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split along the process-lifecycle seam to recover its headroom.
 
-**Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert readiness, response mode, timeout message, return deadline, owned-process termination and an unrelated live control; a kill signal or timeout message alone does not prove the user regains control. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`), `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
+**Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert readiness, response mode, timeout message, return deadline, owned-process termination and an unrelated live control; a kill signal or timeout message alone does not prove the user regains control. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`), `test/fixtures/hooks-bash/workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
 
 Enforce an approved live-capture deadline with a process timer independent of agent polling, so context compaction cannot extend the session.
 Verify the returned status and process cleanup; Node may represent SIGKILL as a null status plus signal rather than shell exit 137.
@@ -23,7 +23,7 @@ Verify the returned status and process cleanup; Node may represent SIGKILL as a 
 
 **Root cause:** Both timeout paths treated direct-child termination as completion, and the hook launcher killed Bash without bounding the process tree it had started.
 
-**Recurrence 2026-08-09:** A preflight run reported `bounds gruff hooks with a timeout-specific response` as transient because its full-suite retry passed. Running the named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound, and a fixture that wrote a marker after starting the background child reproduced the wait. `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`), `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
+**Recurrence 2026-08-09:** A preflight run reported `bounds gruff hooks with a timeout-specific response` as transient because its full-suite retry passed. Running the named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound, and a fixture that wrote a marker after starting the background child reproduced the wait. `test/fixtures/hooks-bash/workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
 
 **Recurrence 2026-10-02:** The approved five-minute Codex discovery depended on operator polling through context compaction.
 The first turn finished in six seconds, but closure occurred after 354 seconds; two required explicit turns were never submitted.
@@ -43,7 +43,7 @@ The launcher now stops detached descendant groups before its own group; the regr
 The first fixture edit collapsed Bash `$$` in a JavaScript replacement string, producing an invalid PID and incomplete cleanup.
 
 A replacement callback preserves `$$`; the fixture checks positive integer PIDs and always cleans up its unrelated control.
-Evidence: `workflow/hooks/run-with-bash.mjs` (search: `findDetachedHookProcessGroups`).
+Evidence: `test/fixtures/hooks-bash/workflow/hooks/run-with-bash.mjs` (search: `findDetachedHookProcessGroups`).
 The owning regression is `test/integration/post-turn-launcher-recovery.test.ts` (search: `terminates detached controller children`).
 
 **Recurrence 2026-10-10:** The shared command-capture helper returned `ENOBUFS` and `ETIMEDOUT` after killing its direct child, but a confirmed-started grandchild remained alive in both reproductions.
@@ -61,7 +61,7 @@ Evidence: `scripts/capture-command.mjs` (search: `process.kill(-child.pid, "SIGK
 **Severity:** CORRECTNESS
 **Decision changed:** Process-lifecycle tests wait for an observable ready state before sending termination signals; elapsed time alone is never readiness.
 **Trigger phase:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-09-19
+**Incident count:** 7 | **Latest occurrence:** 2026-10-23
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/browser-evidence.md`, which owns proving browser-visible behaviour; every incident here is process readiness in the preflight runner, and the sibling entry above owns the completion bound for the same runner.
 **Merged:** 2026-09-15 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split along the process-lifecycle seam to recover its headroom.
 
@@ -78,6 +78,8 @@ Evidence: `scripts/capture-command.mjs` (search: `process.kill(-child.pid, "SIGK
 **Recurrence 2026-09-19:** A local `publish:check` release run failed the same escaped-pipe test: `runner returned after 2063ms instead of its bounded cleanup window`, against a 2,000 ms bound. The fast suite stopped the gate, so the slow suite never ran. The agent had started four `hooks verify` runs alongside it, and they overlapped the fast suite. Run alone, the test passed in 1,149 ms. A rerun with nothing else running passed the fast suite, 3010 of 3015 with 5 skipped. The runner defect in the entry above was not the cause.
 
 **Recurrence 2026-09-19:** A second failure the same day. The same test failed a plain `npm test` with nothing started alongside it: `runner returned after 2136ms instead of its bounded cleanup window`. The load average was 5.94 just after the run, from the fast suite's own eight-way concurrency and other sessions on the machine. The file alone passed 24 of 24, and an immediate full rerun passed 3049 of 3054 with 5 skipped. Keeping other work off the machine is therefore not enough: alone the test takes about 1,150 ms, but on a loaded host it overran the 2,000 ms bound by 136 ms. A first failure of this one test is rerun once, alone and then in the full suite, and recorded; a failure that repeats alone is investigated as a product regression.
+
+**Recurrence 2026-10-23:** A review ran `npm test` and preflight concurrently. The fast suite reported `owned controller work survived its deadline`, while preflight passed. The named cleanup case then passed alone. That result does not establish the cause or justify changing cleanup behavior. Run the broad gates sequentially and retain the original failure until it is explained. Evidence: `test/integration/post-turn-launcher-recovery.test.ts` (search: `terminates detached controller children at the outer deadline without stopping unrelated work`).
 
 **Root cause:** Real-timer tests treated scheduler time as proof that an asynchronous process or terminal had reached the state their assertions required. Heavy concurrent work can delay that state independently of the timer, and buffered output cannot serve as a live readiness signal.
 

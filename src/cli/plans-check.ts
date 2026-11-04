@@ -881,16 +881,20 @@ function assertCheckUsage(options: ParsedCLI): void {
 }
 
 /**
- * Run `plans check` on one plan folder: load its milestones, validate them, then print the whole report to stdout.
+ * Build the `plans check` report for one plan folder: load its milestones, validate them and render every report line.
  *
  * Exit code 1 means at least one `error:` line; an off-target product/proof/other mix or a default-mode plan with no estimates never fails.
- * Milestone text is redacted before validation, and history entries are redacted when their advice lines are printed.
+ * Milestone text is redacted before validation, and history entries are redacted when their advice lines are rendered.
+ * Nothing is printed and no process state changes, so tests can call it in-process.
  *
  * @param options - parsed plan path plus global flags
- * @returns nothing; the report goes to stdout and the exit code carries the verdict
+ * @returns the verdict and the report text the CLI prints, without its trailing newline
  * @throws CLIError with exit code 2 for a rejected flag, an unreadable or empty plan folder, or unreadable project config
  */
-function handlePlansCheckCommand(options: ParsedCLI): void {
+export function runPlansCheckReport(options: ParsedCLI): {
+  exitCode: 0 | 1;
+  report: string;
+} {
   // e.g. the user finished writing milestones and ran `goat-flow plans check .goat-flow/plans/<active>`.
   assertCheckUsage(options);
   const { maxActiveMilestones: maxActive, forecastBandQuantiles } =
@@ -962,11 +966,26 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
   }
 
   // Deterministic errors end the report and flip the exit code so scripts can gate on it.
+  let exitCode: 0 | 1 = 0;
   if (errors.length > 0) {
     reportLines.push(...errors.map((line) => `error: ${line}`));
-    process.exitCode = 1;
+    exitCode = 1;
   }
-  writeOutput({ ...options, output: null }, reportLines.join("\n"));
+  return { exitCode, report: reportLines.join("\n") };
+}
+
+/**
+ * Run `plans check` for the CLI: print the report to stdout and set exit code 1 when it contains an error.
+ *
+ * @param options - parsed plan path plus global flags
+ * @returns nothing; the report goes to stdout and the exit code carries the verdict
+ * @throws CLIError with exit code 2 for a rejected flag, an unreadable or empty plan folder, or unreadable project config
+ */
+function handlePlansCheckCommand(options: ParsedCLI): void {
+  const { exitCode, report } = runPlansCheckReport(options);
+  // An error line makes the process fail so scripts can gate on the report.
+  if (exitCode === 1) process.exitCode = 1;
+  writeOutput({ ...options, output: null }, report);
 }
 
 /**

@@ -386,6 +386,7 @@ describe("deployed landing evidence", () => {
     const sandbox = mkdtempSync(join(tmpdir(), "goat-flow-landing-deploy-"));
     const fakeBin = join(sandbox, "bin");
     const awsLog = join(sandbox, "aws.log");
+    const curlLog = join(sandbox, "curl.log");
     const deployScript = resolve(PROJECT_ROOT, "scripts/deploy-landing.sh");
 
     mkdirSync(fakeBin);
@@ -408,6 +409,7 @@ esac
       join(fakeBin, "curl"),
       `#!/usr/bin/env bash
 set -euo pipefail
+printf 'mock-curl\\n' >> "$GOAT_DEPLOY_CURL_LOG"
 output_path=""
 while (( $# > 0 )); do
   case "$1" in
@@ -429,11 +431,28 @@ fi
     chmodSync(join(fakeBin, "sleep"), 0o755);
     writeFileSync(awsLog, "");
 
+    // Bash startup can prepend real tools on Windows; restore mock precedence inside the child.
+    const deployArgs = [
+      "-c",
+      [
+        "set -euo pipefail",
+        'fixture_bin=$(cd -- "$1" && pwd)',
+        'export PATH="$fixture_bin:$PATH"',
+        "script_path=$2",
+        "shift 2",
+        'source "$script_path" "$@"',
+      ].join("\n"),
+      "landing-deploy-fixture",
+      fakeBin,
+      deployScript,
+      "--landing-only",
+    ];
     const baseEnvironment = {
       ...process.env,
       PATH: `${fakeBin}${delimiter}${process.env.PATH ?? ""}`,
       GOAT_DEPLOY_SOURCE: resolve(PROJECT_ROOT, landingPath),
       GOAT_DEPLOY_TEST_LOG: awsLog,
+      GOAT_DEPLOY_CURL_LOG: curlLog,
     };
 
     try {
@@ -445,7 +464,7 @@ fi
       assert.equal(invalidArguments.status, 2);
       assert.match(invalidArguments.stderr, /Usage:/u);
 
-      const success = spawnSync("bash", [deployScript, "--landing-only"], {
+      const success = spawnSync("bash", deployArgs, {
         cwd: sandbox,
         encoding: "utf-8",
         env: baseEnvironment,
@@ -456,6 +475,7 @@ fi
         `landing-only success probe failed:\n${success.stdout}${success.stderr}`,
       );
 
+      assert.match(readFileSync(curlLog, "utf-8"), /^mock-curl$/mu);
       const awsCalls = readFileSync(awsLog, "utf-8");
       const s3Uploads = awsCalls
         .split("\n")
@@ -480,12 +500,14 @@ fi
       assert.ok(deploymentDone > readbackDone, success.stdout);
 
       writeFileSync(awsLog, "");
-      const mismatch = spawnSync("bash", [deployScript, "--landing-only"], {
+      writeFileSync(curlLog, "");
+      const mismatch = spawnSync("bash", deployArgs, {
         cwd: sandbox,
         encoding: "utf-8",
         env: { ...baseEnvironment, GOAT_DEPLOY_CURL_MISMATCH: "1" },
       });
       assert.notEqual(mismatch.status, 0, mismatch.stdout);
+      assert.match(readFileSync(curlLog, "utf-8"), /^mock-curl$/mu);
       assert.doesNotMatch(mismatch.stdout, /Deployment Complete/u);
       assert.match(
         `${mismatch.stdout}${mismatch.stderr}`,

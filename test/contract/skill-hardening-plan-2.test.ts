@@ -8,16 +8,16 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertForEachTarget,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readProjectFile,
-  INSTALLED_SKILL_ROOTS,
+  CANONICAL_SKILL_ROOT,
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: goat-plan (2/2)", () => {
   it("uses plan mode selection as the shared depth decision", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       assert.match(
         readMarkdownSection(skillPath, "Shared Conventions"),
         /Mode selection discharges the shared Quick\/Full depth choice; ceremony follows the preamble's complexity table\./u,
@@ -27,7 +27,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   });
 
   it("defines proportional goat-plan renderings and a mixed-audience ISSUE contract", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -43,7 +43,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths("goat-plan", "references/issue-format.md"),
+      canonicalSkillReferencePaths("goat-plan", "references/issue-format.md"),
       (issuePath) => {
         const issueGuidance = readProjectFile(issuePath);
         const orderedHeadings = [
@@ -53,6 +53,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
           "## Who benefits and how",
           "## Requirements",
           "## Tasks",
+          "## What each task gives the user",
+          "## Before and After Goals",
           "## Out of scope",
         ];
         const issueLines = issueGuidance.split(/\r?\n/u);
@@ -124,7 +126,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         );
         assert.match(
           issueGuidance,
-          /never repository evidence; every name and number below is invented/u,
+          /an illustrative brief for a made-up home-services product, never repository evidence/u,
           issuePath,
         );
         assert.doesNotMatch(
@@ -137,25 +139,40 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
           /open at authoring and close only after verified delivery/u,
           issuePath,
         );
-        assert.match(issueGuidance, /= <agent-time range>/u, issuePath);
+        assert.match(issueGuidance, /= <likely> min/u, issuePath);
         assert.match(
           issueGuidance,
-          /delivery band.*derived from.*milestone forecast/isu,
-          `${issuePath}: ISSUE delivery bands are not derived from milestones`,
-        );
-        assert.match(
-          issueGuidance,
-          /never.*input.*milestone estimate/isu,
-          `${issuePath}: ISSUE bands can still anchor milestone estimates`,
-        );
-        assert.match(
-          issueGuidance,
-          /800 words and 60 nonblank lines/u,
+          /rounded to the nearest half hour/u,
           issuePath,
         );
         assert.match(
           issueGuidance,
-          /above 1,200 words names the safety reason/u,
+          /One bullet per task, in task order, 6-25 words/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /one row per task in task order/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /minutes are the likely figure from the milestones it covers/u,
+          `${issuePath}: ISSUE minutes are not taken from milestone likely estimates`,
+        );
+        assert.match(
+          issueGuidance,
+          /never.*input.*milestone estimate/isu,
+          `${issuePath}: ISSUE minutes can still anchor milestone estimates`,
+        );
+        assert.match(
+          issueGuidance,
+          /about 800 words of prose outside tables and headings, about 1,500 words and 70 nonblank lines/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /prose above 1,200 words names the safety reason/u,
           issuePath,
         );
       },
@@ -165,7 +182,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   // Keep the problem and beneficiary sections understandable to readers outside the project.
   // The worked example must demonstrate that wording as well as preserve the section names.
   it("pins the plain-language milestone sections and the example that shows their register", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       assert.match(
         readProjectFile(skillPath),
         /`## What problem are we solving` and `## Who benefits and how` between Objective and Context, one plain line each/u,
@@ -174,7 +191,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-plan",
         "references/milestone-examples.md",
       ),
@@ -232,7 +249,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
 
   // Standard plans need an ISSUE.md beside their milestones; this contract preserves the format reference that guides authors.
   it("writes the user-facing ISSUE artifact without treating its format reference as output", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const planGuidance = readProjectFile(skillPath);
 
       assert.match(
@@ -291,19 +308,19 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     // RED 2026-08-23: File-Write created M47 in the 1.17.0 train but left the terminal milestone's `Depends on` and the
     // ISSUE band untouched, so the release cut would have closed without it (lesson: milestone-accounting.md).
     const rule =
-      /Existing plan: identify its prior final join covering every participating lane; amend a missing join first\. Append: new `Depends on` prior join\. Insert before prior: preserve its existing dependencies and add new\. Re-derive `ISSUE\.md` bands and totals\./u;
+      /Existing plan: identify its prior final join covering every participating lane; amend a missing join first\. Append: new `Depends on` prior join\. Insert before prior: preserve its existing dependencies and add new\. Re-derive `ISSUE\.md` minutes and totals\./u;
     assert.match(
       readProjectFile("workflow/skills/goat-plan/SKILL.md"),
       rule,
       "workflow/skills/goat-plan/SKILL.md",
     );
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       assert.match(readProjectFile(skillPath), rule, skillPath);
     });
   });
 
   it("aligns goat-plan lifecycle guidance with human-verification-pending", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -340,13 +357,13 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     const compactSkillRule =
       /For exceptional states, use `references\/milestone-examples\.md` → Status reason; remove stale reasons on ordinary states/u;
 
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, compactSkillRule, skillPath);
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-plan",
         "references/milestone-examples.md",
       ),
@@ -409,12 +426,12 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   // A user handing work to a fresh agent needs the same drift-safe plan in every runner.
 
   it("keeps goat-plan handoff artifacts drift-aware without burdening small plans", () => {
-    // Every installed reference must expose the detailed template linked from its skill.
-    const milestoneExamplePaths = INSTALLED_SKILL_ROOTS.map(
+    // The canonical reference must expose the detailed template linked from its skill.
+    const milestoneExamplePaths = [CANONICAL_SKILL_ROOT].map(
       (skillRoot) => `${skillRoot}/goat-plan/references/milestone-examples.md`,
     );
 
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Handoff-grade artifacts/, skillPath);
       assert.match(
@@ -456,7 +473,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   // A user resuming old local work needs status reconciliation without accidental implementation.
 
   it("keeps goat-plan reconciliation local and status-aware", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -478,7 +495,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   });
 
   it("makes goat-qa Audit mode assess misaligned effort without inventing it", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const auditMode = readMarkdownSection(skillPath, "Audit Mode");
       const constraints = readMarkdownSection(skillPath, "Constraints");
 
@@ -504,7 +521,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      canonicalSkillReferencePaths("goat-qa", "references/output-templates.md"),
       (referencePath) => {
         const outputTemplates = readProjectFile(referencePath);
         const auditOutputHeading = "### Audit mode (no diff - A1–A4 shape)";
@@ -524,7 +541,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   });
 
   it("labels goat-plan issue examples as non-evidence placeholders", () => {
-    const issueFormatPaths = INSTALLED_SKILL_ROOTS.map(
+    const issueFormatPaths = [CANONICAL_SKILL_ROOT].map(
       (skillRoot) => `${skillRoot}/goat-plan/references/issue-format.md`,
     );
 
@@ -535,17 +552,29 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         /illustrative input\/output shape only, never repository evidence/iu,
         referencePath,
       );
-      assert.match(
-        issueFormat,
-        /<Observable requirement and acceptance boundary expressed in stakeholder language\.>/u,
-        referencePath,
-      );
       assert.doesNotMatch(
         issueFormat,
         /Dashboard users cannot sign in|refresh-token rotation|OAuth callback/,
         referencePath,
       );
     });
+  });
+
+  // The worked sample lives in its own reference so the format file stays under its cap; its label must say the content is
+  // invented so no reader treats the brief as evidence about this repository.
+  it("labels the goat-plan worked sample as invented placeholder content", () => {
+    assertForEachTarget(
+      canonicalSkillReferencePaths("goat-plan", "references/issue-sample.md"),
+      (samplePath) => {
+        const sample = readProjectFile(samplePath);
+        assert.match(
+          sample,
+          /never repository evidence; every name and number below is invented/u,
+          samplePath,
+        );
+        assert.match(sample, /^## Worked sample$/mu, samplePath);
+      },
+    );
   });
 
   it("routes planning narrative through writing style without styling plan mechanics", () => {

@@ -1,37 +1,51 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-09-27
+last_reviewed: 2026-11-03
 ---
 
 **Scope:** Platform and runtime differences that break tests - CI Node versions older than local, Windows path/URL shapes and symlink privileges, filesystem-clock skew, and npm scripts that assume a POSIX shell. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); shell and process behaviour under a test is [test-shell-environment.md](test-shell-environment.md).
 
 ## Lesson: Test runners need CI-runtime reproduction when local Node is newer
 
-**Status:** active | **Created:** 2026-06-07 | **Incident count:** 4 | **Latest occurrence:** 2026-08-18
+**Status:** active | **Created:** 2026-06-07 | **Incident count:** 9 | **Latest occurrence:** 2026-10-23
 **Severity:** INTEGRATION
 
 **Prevention:** When changing test infrastructure or platform-sensitive runtime code, reproduce the package's minimum supported Node path or the exact CI runner before treating local output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. For shell-wrapped binaries, put the alternate Node on `PATH`; do not pass the wrapper to Node. Timing overrides must define zero explicitly and include a future-timestamp fixture instead of assuming the filesystem clock never leads `Date.now()`. A Windows path comparison that decides ownership or containment must handle aliases by proven filesystem identity, not case and separators alone. Evidence anchors: `scripts/run-tests.mjs` (search: `--import`), `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`), and `test/unit/hook-registrar-surfaces.test.ts` (search: `uses directory identity when Windows aliases have different spellings`).
 
 **What happened:** PR #48 local verification ran on Node 22 and passed the programmatic `node:test` runner path. GitHub Actions ran Node 20.20.2 and failed every `.ts` test with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts"` because the programmatic runner's `execArgv: ["--import", "tsx"]` path did not behave like the CLI preload path on the supported minimum Node version.
 
-**Recurrence 2026-08-01:** PR #57 passed the staged-quality capture suite on local Node 22 but failed seven or eight cases per Node 20 CI run. The test override used `stableMs: 0`, yet the runtime still compared `Date.now() - stats.mtimeMs < 0`; CI filesystem timestamps could therefore leave a just-written draft unprocessed when its mtime appeared slightly ahead of the process clock. A deterministic future-mtime fixture reproduced the skipped draft. The correction makes zero explicitly disable the stability gate and keeps that future-mtime case in the focused suite.
+**Incident ledger:**
 
-**Recurrence 2026-08-02:** An alternate-Node probe passed Gruff's POSIX wrapper to Node as JavaScript, causing a false `SyntaxError`. Putting Node 20 on `PATH` and executing the wrapper normally proved `gruff-ts 0.4.0` ran.
+- **Recurrence 2026-10-23 (native controller):** The manual Windows matrix rejected configured scan roots while Linux passed. The native port compared path strings even though the CLI already recognized aliases by directory identity. A controlled alias fixture reproduced that rejection and verified acceptance only for matching directory IDs; other directories, files, missing paths and zero IDs remain rejected. Carry the identity contract into runtime ports and rerun the actual Windows job before claiming host coverage. Evidence: `src/hooks/post-turn/controller.mts` (search: `samePhysicalDirectory`); `test/integration/post-turn-safety-controller.test.ts` (search: `uses directory identity when an alias`).
 
-**Recurrence 2026-08-18:** PR #60 passed its focused hook suite on local Linux but both Node 20.11.0 Windows jobs failed the same three post-turn cases. The shared root gate accepted case and separator changes but compared directory spellings only, so another Windows alias form could make one Git root look like two locations and suppress its Stop registration. The correction keeps the spelling fast path, falls back to the directory's device and inode/file ID, and adds an alias-form regression; the exact Windows job remains the release proof.
+- **Recurrence 2026-10-17:** Node 20.12.0 CI exposed two fixture assumptions: WSL reached a 250 ms hook deadline before the descendant-start marker, and Windows raised initial-directory EBUSY despite configured rmSync retries. Reproductions confirmed both. Keep the marker and prompt-return assertion with enough startup time; explicitly retry only transient Windows EBUSY and propagate persistent errors. Inspect the floor runtime's failing filesystem path instead of assuming an option covers it. Evidence: `test/unit/hook-registrar.helpers.ts` (search: `withTempProject`).
 
-**Root cause:** The package advertised `node >=20.11.0`, but the implementations were verified only on a newer local runtime. A green local test did not prove the CI-supported runtime and filesystem-time behavior matched.
+- **Recurrence 2026-08-01:** PR #57's Node 20 CI failures came from treating `stableMs: 0` as an active mtime check. Future filesystem timestamps suppressed fresh drafts. Zero now disables the check, with a future-mtime regression in `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`).
+
+- **Recurrence 2026-08-02:** Passing Gruff's POSIX wrapper to Node as JavaScript caused a false `SyntaxError`. Put the alternate Node on `PATH` and execute the wrapper normally; this proved `gruff-ts 0.4.0` ran. The npm invocation is owned by `package.json` (search: `"gruff-ts": "gruff-ts"`).
+
+- **Recurrence 2026-08-18:** PR #60's Windows jobs failed three post-turn cases because the root gate compared directory spellings, suppressing Stop registration for another alias of the same Git root. Keep the spelling fast path, then compare device and inode/file ID. The alias regression is in `test/unit/hook-registrar-surfaces.test.ts` (search: `uses directory identity when Windows aliases have different spellings`); the exact Windows job remains the release proof.
+
+- **Recurrence 2026-10-17:** Node 24.21.0 failed nine native audit/probe cases that passed on Node 22.22.1 and 20.11.0: `--import tsx` started esbuild inside the restricted child, and the guard refused it. Build first with the producer runtime, then import built CLI JavaScript; keep the compiler outside the consumer allowlist. Evidence: `test/helpers/spawn-guard.mjs` (search: `GOAT_TEST_SPAWN_DENIED`), `test/integration/hook-direct-native-probe.test.ts` (search: `PROBE_MODULE`) and `test/integration/hook-native-audit-mechanism.test.ts` (search: `MECHANISM_MODULE`).
+
+- **Recurrence 2026-10-17:** The hosted hook matrix lacked supported Bash on macOS and jq in WSL. Windows expanded short fixture paths, omitted the admitted PowerShell directory from restricted PATH and reported EPERM during timeout teardown. Provision retained controls' tools, use native physical paths, include admitted executable directories on PATH and bound cleanup retries. Local WSL proof did not cover the other hosts. Evidence: `.github/workflows/ci.yml` (search: `Prepare macOS Bash controls`), `test/integration/hook-command-native-replay.test.ts` (search: `realpathSync.native`), `test/helpers/restricted-consumer-env.ts` (search: `powershellDirectory`) and `test/unit/hook-registrar.helpers.ts` (search: `maxRetries`).
+
+- **Recurrence 2026-10-17:** Windows/20.11.0 hook CI stopped reporting progress while the same suites passed on Linux, macOS and Windows/24.21.0. A native Windows probe isolated an upstream filesystem defect: creating an emoji directory returned ENOENT, and recursive creation hung until the parent's three-second timeout. The same recursive probe and focused launcher checks passed on 20.12.0. Keep the Unicode-path assertions and seek approval for a runtime-floor amendment rather than hiding the gap with ASCII fixtures. Evidence: `test/unit/hook-launch.test.ts` (search: `project '$& 🐐`), `test/integration/hook-command-native-replay.test.ts` (search: `native's flow & (quoted) [fixture] 🐐`), `package.json` (search: `"engines"`) and the [upstream Windows filename incident and 20.12.0 backport](https://github.com/nodejs/node/issues/48673). The bounded local reproduction establishes the filesystem defect; it does not establish the complete hosted job's state.
+
+**Root cause:** Local verification did not reproduce the supported runtime, host tools, path aliases or filesystem timing. A local pass could therefore miss failures in CI's actual environment.
 
 ---
 
 ## Lesson: `node --import <abs-path>` on Windows needs a file:// URL
 
-**Status:** active | **Created:** 2026-05-11
+**Status:** active | **Created:** 2026-05-11 | **Evidence:** ACTUAL_MEASURED
+**Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-10-23
 
 **Prevention:**
-1. Any test that spawns Node with `--import`, `--loader`, or `--experimental-loader` and passes an absolute path must convert it via `pathToFileURL` first.
+1. Any caller that spawns Node with `--import`, `--loader`, or `--experimental-loader` and passes an absolute path must convert it via `pathToFileURL` first.
 2. Same rule applies to dynamic `import()` of absolute paths in production code on Windows. `import("D:\\...\\foo.js")` will throw; `import(pathToFileURL("D:\\...\\foo.js").href)` works.
-3. Treat `ERR_UNSUPPORTED_ESM_URL_SCHEME` as a likely Windows path-shape issue, not an actual code bug, until the file:// conversion is verified.
+3. On `ERR_UNSUPPORTED_ESM_URL_SCHEME`, check the loader argument before changing analyzer or CLI behavior.
 
 **What happened:** Two `runCLI` test helpers (`test/unit/quality-command.test.ts`, `test/integration/quality-history-diff.test.ts`) passed `join(PROJECT_ROOT, "node_modules", "tsx", "dist", "loader.mjs")` to `spawnSync(process.execPath, ["--import", TSX_LOADER_PATH, ...])`. On Windows the path is `D:\dev-lab\...\loader.mjs`. Node's ESM loader rejected it with `ERR_UNSUPPORTED_ESM_URL_SCHEME: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. On Windows, absolute paths must be valid file:// URLs. Received protocol 'd:'.` Every test that shelled out via the helper failed with exit 1 - the failures looked like CLI bugs but came from the spawn shape. The 25-test full-suite failure baseline on 2026-05-11 included these as 7-8 of the original count.
 
@@ -45,6 +59,8 @@ const TSX_LOADER_URL = pathToFileURL(
 ).href;
 spawnSync(process.execPath, ["--import", TSX_LOADER_URL, CLI_PATH, ...args], ...);
 ```
+
+**Recurrence 2026-10-23:** Native Windows Node 20.12.0 rejected the npm analyzer loader with protocol `c:` during M16 proof. `src/hooks/gruff/analyzer.mts` (search: `packagedGruffCommand`) passed an absolute `tsx` filename to `--import`; the existing case in `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `launches the installed Gruff npm package through Node without its shell wrapper`) exposed the failure. Convert the loader with `pathToFileURL(loader).href` and repeat the native package launch.
 
 ---
 
@@ -83,8 +99,8 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 Incident ledger: distinguish a missing fixture capability from a product failure, and keep unrelated assertions running.
 
 - **Recurrence 2026-08-22 (ACTUAL_MEASURED):** Three managed-shape fixtures and an existing scan-root fixture raised symlink `EPERM`; hard-linked variants ran. Guard only link mutations at their owning `TestContext`, preserving other filesystem failures. Anchors: `test/unit/hook-registrar-surfaces.test.ts` (search: `mutateOrSkip`) and `test/unit/hook-registrar.helpers.ts` (search: `MANAGED_SHAPE_MUTATIONS`).
-- **Recurrence 2026-08-22 (ACTUAL_MEASURED):** Focused ADR-053 suites passed, but the native fast suite failed on unguarded symlinks and a `C:\...` hook path whose backslashes Bash consumed, returning 127. Anchors: `test/unit/hook-launcher.test.ts` (search: `fails closed when the managed hook script is a symlink`) and `test/unit/hooks-runtime-evidence.test.ts` (search: `still executes a regular in-checkout hook script`).
-- **Recurrence 2026-08-27 (ACTUAL_MEASURED):** Gruff smoke reached 18 passes and six failures: two symlink refusals and four synthetic Windows mode-bit mismatches. Launcher tests reached 34 passes with three symlink failures; seven focused timeout/path/output controls and the Gruff provider suites passed. Anchors: `test/integration/gruff-code-quality-smoke.test.ts` (search: `accepts a contained configured analyzer symlink`), `test/unit/hook-launcher.test.ts` (search: `fails closed when the managed hook script is a symlink`), and `workflow/hooks/gruff-code-quality.sh` (search: `non-executable config override diagnostic failed`).
+- **Recurrence 2026-08-22 (ACTUAL_MEASURED):** Focused ADR-053 suites passed, but the native fast suite failed on unguarded symlinks and a `C:\...` hook path whose backslashes Bash consumed, returning 127. Anchors: `test/unit/hooks-runtime-evidence.test.ts` (search: `still executes a regular in-checkout hook script`).
+- **Recurrence 2026-08-27 (ACTUAL_MEASURED):** Gruff smoke reached 18 passes and six failures: two symlink refusals and four synthetic Windows mode-bit mismatches. Launcher tests reached 34 passes with three symlink failures; seven focused timeout/path/output controls and the Gruff provider suites passed. Anchors: `test/integration/gruff-code-quality-smoke.test.ts` (search: `accepts a contained configured analyzer symlink`) and `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `non-executable config override diagnostic failed`).
 - **Recurrence 2026-09-13:** The change passed save but failed three race fixtures: symlink refusal after two successful renames and rename refusal with an open descriptor. Junctions preserved the redirect assertions; a separate rename probe skipped only that syscall's EPERM, while Linux ran all assertions. Anchors: `test/unit/quality-subcommands.test.ts` (search: `DIRECTORY_LINK_TYPE`, `first-save race replaces an existing ancestor`, `allocation follows a swapped parent`), `test/unit/quality-save-safety.test.ts` (search: `rename-probe`, `allocated report parent moves during writing`), and `src/cli/quality/quality-command.ts` (search: `could not persist the validated report`).
 - **Recurrence 2026-09-27:** The native 1.17.0 assessment reported 71 failures across product defects and assumptions about privileges, modes, signals and paths. The capability probe and platform-specific assertions preserve surrounding behavior checks. A recheck separated incompatible revisions and hard-link receipts from symlink skips. Anchors: `test/helpers/symlink-capability.ts` (search: `symlinkTestOptions`), `test/unit/quality-draft-staging.test.ts` (search: `win32`), `test/unit/review-validate.helpers.ts` (search: `ETIMEDOUT`), `test/integration/review-validate-authority.test.ts` (search: `refuses incompatible execution views without requiring symlinks`), and `test/unit/quality-draft-capture.test.ts` (search: `receipt destination`). Run the complete native suite after focused repairs.
 
@@ -92,13 +108,16 @@ Incident ledger: distinguish a missing fixture capability from a product failure
 
 ## Lesson: Archive tools need shell-native relative paths on Windows
 
-**Status:** active | **Created:** 2026-08-27 | **Trigger phase:** VERIFY | **Incident count:** 1 | **Latest occurrence:** 2026-08-27
+**Status:** active | **Created:** 2026-08-27 | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-10-25
+**Severity:** INTEGRATION
 
 **Prevention:** Give shell-oriented archive tools relative paths from an explicit `cwd` when a fixture controls both locations. This avoids drive-letter parsing and works on POSIX too. Re-run the complete archived-package canary after correcting the transport; do not replace it with a source-tree test. Evidence anchor: `test/integration/packaged-hook-install.test.ts` (search: `basename(packedArchivePath)`).
 
 **What happened:** The archived-package canary failed before it could execute Goat Flow. Node passed GNU tar an absolute `C:\...` archive path; tar interpreted the drive-letter colon as its remote-archive syntax and reported `Cannot connect to C: resolve failed`. Both package tests failed even though `npm pack` had produced the archive correctly.
 
 **Root cause:** A child process can start successfully while still receiving paths in the wrong dialect. Git for Windows supplied a POSIX-oriented tar, but the native Node parent passed a Windows drive path to tar's `-f` argument.
+
+**Recurrence 2026-10-25:** M19's native Windows Node 20.12.0 package canary passed five cases, then the pinned 1.18.0 upgrade failed before extraction: GNU tar 1.35 parsed the absolute archive drive letter as a remote host and returned 128. The same archive listed successfully with a relative filename and explicit working directory on Node 20.12.0 and 24.21.0. Windows bsdtar 3.8.9 accepted both forms, so a probe must match the suite-selected archive tool. Evidence: test/integration/packaged-hook-install.test.ts (search: "upgrades a complete pinned 1.18.0 install while preserving disabled choices and user files").
 
 ---
 
@@ -113,3 +132,33 @@ Incident ledger: distinguish a missing fixture capability from a product failure
 **Root cause:** npm uses `cmd.exe` by default on Windows when `script-shell` is unset. Mixed shell chains are only partially portable in that setup: external GNU helpers such as `rm`, `cp`, and `chmod` may resolve from Git for Windows, but `cmd` still intercepts builtins like `mkdir` and applies Windows syntax rules.
 
 **Updated 2026-06-07:** Windows preflight exposed the same portability class in test scripts: `npm run test:fast` failed before the suite started because `cmd.exe` parsed the Bash-only `$(find ... | sort)` expression as a Windows command, producing `'sort)' is not recognized as an internal or external command`. The fix moved test discovery into `scripts/run-tests.mjs` (search: `filesForMode`) and changed `package.json` (search: `node scripts/run-tests.mjs fast`) so `test:fast`, `test:coverage`, `test:slow`, and `test:performance` no longer depend on npm's shell.
+
+---
+
+## Lesson: Query WSL identity before changing its version
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Query the installed WSL version before requesting a conversion, and require hosted execution evidence after changing provisioning.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Use `wsl --list --verbose` to inspect the target distribution and check the command status. Convert only when the requested version is absent, then query again. Keep the kernel check and fail on unavailable identity or a failed conversion. A conversion command is a state change, not an idempotent readiness probe.
+
+**What happened:** PR #69's `hook-port-controls-wsl` job installed Ubuntu and successfully launched its echo command. The subsequent unconditional `wsl --set-version Ubuntu-22.04 2` reported that the distribution was already the requested version, followed by `WSL_E_VM_MODE_INVALID_STATE`. The workflow threw `WSL2 conversion failed` before reaching its identity listing or restricted controls. Treating an already-satisfied conversion as a safe probe blocked the intended proof.
+
+**Evidence:** `.github/workflows/ci.yml` (search: `Require WSL2`, `WSL2 conversion failed`); [failed hosted job](https://github.com/blundergoat/goat-flow/actions/runs/38199639896/job/114649958758). A disposable PowerShell branch fixture reproduced the old failure and exercised seven proposed success/refusal paths. That fixture does not establish hosted WSL2 kernel availability or passing restricted controls; rerun the original hosted job before accepting that proof.
+
+---
+
+## Lesson: Provision native build dependencies in fresh WSL distributions
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Inspect native dependency install scripts before treating a fresh WSL distribution as equivalent to a provisioned Linux CI runner.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Provision the build prerequisites required by locked native dependencies before installation. Preserve install-script output when diagnosing an optional package that disappears: a successful npm exit does not prove that every optional dependency installed.
+
+**What happened:** I added the hosted WSL controls with curl, Git and archive tools, but omitted Python and a compiler toolchain. After the WSL identity correction, the [next hosted job](https://github.com/blundergoat/goat-flow/actions/runs/38208889365/job/114678400988) passed its identity and kernel checks, then failed compilation because `node-pty` was absent despite a successful `npm ci`.
+
+**Evidence and limit:** `package.json` (search: `optionalDependencies`) pins `node-pty` 1.1.0. That package's install script falls back to `node-gyp rebuild` because it ships no Linux prebuild. In two disposable installs on Node 22.22.1/npm 10.9.4, making `make` unavailable produced exit zero with `node-pty` absent; the otherwise identical install with the compiler available retained the package. This proves the omission mechanism, not the hosted machine's exact failure: the hosted job used npm 11.19.0 and did not retain its optional-package failure detail. `.github/workflows/ci.yml` (search: `WSL floor and LTS controls`) owns provisioning; `src/cli/server/terminal.ts` (search: `type NodePtyModule`) still requires the package's types at build time. Hosted execution remains open.

@@ -106,13 +106,13 @@ export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
     // Required hook fixtures carry the current version users receive from setup.
     if (
       [
-        ".goat-flow/hooks/deny-dangerous.sh",
-        ".goat-flow/hooks/deny-git-mutations.sh",
-        ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
-        ".goat-flow/hooks/post-turn-safety.sh",
+        ".goat-flow/hooks/deny-dangerous.mjs",
+        ".goat-flow/hooks/deny-git-mutations.mjs",
+        ".goat-flow/hooks/policy-evaluation.mjs",
+        ".goat-flow/hooks/post-turn-safety.mjs",
       ].includes(path)
     ) {
-      return `#!/usr/bin/env bash\n# goat-flow-hook-version: ${AUDIT_VERSION}\n`;
+      return `// goat-flow-hook-version: ${AUDIT_VERSION}\n`;
     }
     // Unlisted files have no fixture content; a test requiring their bytes must provide an override.
     return null;
@@ -199,7 +199,7 @@ export const STUB_AGENT_PROFILE: AgentProfile = {
   skillsDir: ".claude/skills",
   hooksDir: ".claude/hooks",
   denyMechanism: { type: "settings-deny", path: ".claude/settings.json" },
-  denyHookFile: ".goat-flow/hooks/deny-dangerous.sh",
+  denyHookFile: ".goat-flow/hooks/deny-dangerous.mjs",
   localPattern: "*/CLAUDE.md",
   hookEvents: { preTool: "PreToolUse", postTurn: "Stop" },
 };
@@ -257,10 +257,10 @@ export function stubAgentFacts(
       denyBlocksPipeToShell: false,
       denyBlocksCloudDestructive: false,
       denyIsRegistered: true,
-      denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+      denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
       gitDenyExists: true,
       gitDenyIsRegistered: true,
-      gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.sh",
+      gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.mjs",
       postTurnExists: false,
       postTurnRegistered: false,
       postTurnRegisteredPath: null,

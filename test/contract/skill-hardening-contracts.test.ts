@@ -12,8 +12,8 @@ import { DISPATCHER_SKILL_WORD_LIMIT } from "../../src/cli/constants.js";
 import {
   assertForEachTarget,
   countSkillBodyWords,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readProjectFile,
 } from "./skill-hardening.helpers.js";
 
@@ -51,8 +51,8 @@ describe("ADR-023 word budget tiers", () => {
     "goat-clarity",
   ] as const;
 
-  it("dispatcher /goat stays within the 600-word cap across all mirrors", () => {
-    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+  it("dispatcher /goat stays within the 600-word cap in canonical guidance", () => {
+    assertForEachTarget(canonicalSkillPaths("goat"), (skillPath) => {
       const userFacingWordCount = countSkillBodyWords(skillPath);
       assert.ok(
         userFacingWordCount <= DISPATCHER_CAP,
@@ -79,10 +79,10 @@ describe("ADR-023 word budget tiers", () => {
     );
   });
 
-  it("functional skills stay within the 2500-word cap across all mirrors", () => {
+  it("functional skills stay within the 2500-word cap in canonical guidance", () => {
     // A user may invoke any functional skill from any supported agent integration.
     const installedFunctionalSkillPaths = FUNCTIONAL_SKILLS.flatMap(
-      (skillName) => installedSkillPaths(skillName),
+      (skillName) => canonicalSkillPaths(skillName),
     );
 
     assertForEachTarget(installedFunctionalSkillPaths, (skillPath) => {
@@ -165,21 +165,22 @@ describe("ADR-023 word budget tiers", () => {
         "automated-review.md",
         "review-traps.md",
       ].flatMap((name) =>
-        installedSkillReferencePaths("goat-review", `references/${name}`),
+        canonicalSkillReferencePaths("goat-review", `references/${name}`),
       ),
-      ...installedSkillReferencePaths(
+      ...canonicalSkillReferencePaths(
         "goat-debug",
         "references/diagnostic-techniques.md",
       ),
-      ...installedSkillReferencePaths(
+      ...canonicalSkillReferencePaths(
         "goat-clarity",
         "references/target-scope-and-evidence.md",
       ),
       ...[
         "references/milestone-examples.md",
         "references/issue-format.md",
+        "references/issue-sample.md",
       ].flatMap((referencePath) =>
-        installedSkillReferencePaths("goat-plan", referencePath),
+        canonicalSkillReferencePaths("goat-plan", referencePath),
       ),
     ].map((referencePath) => ({
       referencePath,

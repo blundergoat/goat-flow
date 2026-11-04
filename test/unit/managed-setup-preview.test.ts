@@ -21,12 +21,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildInstallerInvocation } from "../../src/cli/install-invocation.js";
+import { installerVersionBlocker } from "../../src/cli/installer/apply.js";
 import {
   buildManagedSetupPreview,
   classifyManagedSetupFile,
   managedSetupChangeDirection,
-  managedSetupPreviewForInstallerLaunch,
   managedInstallStatePath,
   prepareManagedInstallStateForApply,
   writeManagedInstallState,
@@ -179,41 +178,23 @@ describe("managed setup classification", () => {
 });
 
 describe("managed setup prerequisites", () => {
-  /** Contract: preview and install share the blocker while the input stays unchanged. */
-  it("blocks dry-run with the same launch failure the real install would report", () => {
-    const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v2",
-      coverage: "install-write-set",
-      agent: "claude",
-      goatFlowVersion: "1.15.0",
-      baselineStatus: "missing",
-      verdict: "ready",
-      limits: [],
-      files: [],
-    };
-    const installerLaunch = buildInstallerInvocation({
-      scriptPath: "C:\\package\\workflow\\install-goat-flow.sh",
-      projectPath: "C:\\Users\\Example\\project",
-      agent: "claude",
-      installerFlags: [],
-      platform: "win32",
-      windowsBashCandidates: [],
-    });
-
-    const blocked = managedSetupPreviewForInstallerLaunch(
-      preview,
-      installerLaunch,
-    );
-
-    assert.ok(!installerLaunch.ok, "Expected missing Windows Bash");
-    assert.equal(blocked.verdict, "blocked");
-    assert.equal(
-      blocked.limits.includes(
-        `Install prerequisite failed: ${installerLaunch.error}`,
-      ),
-      true,
-    );
-    assert.equal(preview.verdict, "ready");
+  it("rejects an unsupported upgrade before changing saved bytes", () => {
+    const project = mkdtempSync(join(tmpdir(), "goat-flow-upgrade-floor-"));
+    const path = join(project, ".goat-flow/config.yaml");
+    try {
+      mkdirSync(join(project, ".goat-flow"));
+      const old = 'version: "1.15.0"\n# preserve this guidance\n';
+      writeFileSync(path, old);
+      assert.match(
+        installerVersionBlocker(project) ?? "",
+        /Install goat-flow 1\.18\.0 first/u,
+      );
+      assert.equal(readFileSync(path, "utf8"), old);
+      writeFileSync(path, 'version: "1.16.0"\n');
+      assert.equal(installerVersionBlocker(project), null);
+    } finally {
+      rmSync(project, { recursive: true, force: true });
+    }
   });
 });
 

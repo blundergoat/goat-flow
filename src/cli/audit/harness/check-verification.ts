@@ -52,12 +52,11 @@ type AgentFacts = AuditContext["agents"][number];
  * Use when audit output needs to explain why a user sees partial post-turn evidence.
  *
  * @param agentFacts - agent audit facts; missing post-turn path means no safety hook is installed
- * @returns `true` when the registered hook is `post-turn-safety.sh`, otherwise `false`
+ * @returns `true` when the registered hook is `post-turn-safety.mjs` or its legacy Bash entrypoint, otherwise `false`
  */
 function isPostTurnSafetyHook(agentFacts: AgentFacts): boolean {
-  return (
-    agentFacts.hooks.postTurnRegisteredPath?.endsWith("post-turn-safety.sh") ??
-    false
+  return /post-turn-safety\.(?:mjs|sh)$/u.test(
+    agentFacts.hooks.postTurnRegisteredPath ?? "",
   );
 }
 

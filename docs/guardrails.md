@@ -1,15 +1,15 @@
 # Guardrails
 
-Guardrails are goat-flow's runtime command-safety hooks. Each agent registers `deny-dangerous.sh` and `deny-git-mutations.sh` separately. Both use the parser and policy modules in `.goat-flow/hooks/deny-dangerous/`.
+Guardrails are goat-flow's runtime command-safety hooks. Each agent registers `deny-dangerous.mjs` and `deny-git-mutations.mjs` separately, and both run through the `run-hook.mjs` launcher. They share the `policy-*.mjs` parser and the policy rules in `.goat-flow/hooks/deny-dangerous/`.
 
 ## Surfaces
 
 | Surface | Path | Role |
 | --- | --- | --- |
-| Dangerous policy | `workflow/hooks/deny-dangerous.sh` | Blocks recursive force deletion, privileged package-manager mutation, and secret-path access |
-| Git and GitHub policy | `workflow/hooks/deny-git-mutations.sh` | Blocks Git commits, publication, remote lock changes, destructive Git operations, and GitHub writes; permits GitHub reads and issue/PR comments |
-| Policy store | `.goat-flow/hooks/deny-dangerous/` | Shared `guard-runtime.sh` parser and response implementation plus three policy modules |
-| Self-test | `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` | Routes smoke/full cases to each owning policy; preflight invokes both entrypoints |
+| Dangerous policy | `workflow/hooks/deny-dangerous.mjs` | Blocks recursive force deletion, privileged package-manager mutation, and secret-path access |
+| Git and GitHub policy | `workflow/hooks/deny-git-mutations.mjs` | Blocks Git commits, publication, remote lock changes, destructive Git operations, and GitHub writes; permits GitHub reads and issue/PR comments |
+| Policy store | `.goat-flow/hooks/deny-dangerous/` | Policy rule modules, Git and GitHub command classifiers, and the shared `corpus.json` |
+| Self-test | `.goat-flow/hooks/policy-corpus.mjs` | Runs the smoke or full corpus cases for the policy whose entrypoint received `--self-test` |
 
 GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `deny-git-mutations`). If either the current or requested switch pair has one policy on and the other off, changing an existing installation’s ownership files requires review on the newer dashboard Hooks page. Review the selected project, both sets of choices, affected files and GitHub protection before accepting. Policy consent and replacement of local edits have separate checkboxes; Cancel changes nothing. CLI Sync, install and force options cannot provide policy consent. Once the ownership files match the bundle, ordinary Sync needs no repeated policy review.
 
@@ -26,10 +26,10 @@ Enabled Claude Code deny hooks block native PowerShell tool requests and direct 
 
 ## Verification
 
-- `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke`
-- `bash .goat-flow/hooks/deny-dangerous.sh --self-test=full`
-- `bash .goat-flow/hooks/deny-git-mutations.sh --self-test=smoke`
-- `bash .goat-flow/hooks/deny-git-mutations.sh --self-test=full`
+- `node .goat-flow/hooks/deny-dangerous.mjs --self-test=smoke`
+- `node .goat-flow/hooks/deny-dangerous.mjs --self-test=full`
+- `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=smoke`
+- `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=full`
 - `goat-flow hooks list --json`
 - After trusting the selected checkout: `goat-flow hooks verify . --agent <id> --scenario all --trusted-target`
 
@@ -46,7 +46,7 @@ A policy denial means the hook rejected the proposed command. An unavailable pol
 | `exceeded its deadline; process-tree termination was requested` | The launcher reached its deadline. Let other verification work finish, then retry the same check once on its own. If it times out again, retain the diagnostic and investigate the named hook. A successful sequential retry does not establish what caused the original timeout. |
 | `hook timeout configuration is invalid` | Remove or correct `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS`. An unset or empty value uses the registered deadline; a supplied value must be a positive whole number of milliseconds. Values above the registered ceiling are capped at that ceiling. |
 
-The launcher can report these failures only after Node starts. A host that cannot start Node or rejects the handler before launch has a host-prerequisite failure; the hook cannot guarantee a blocking response at that earlier boundary.
+The launcher can report these failures only after Node starts. A host that cannot start Node or rejects the handler before launch has a host-prerequisite failure; the hook cannot guarantee a blocking response at that earlier boundary. Claude is the exception: both policy registrations carry `onFailure: "block"`, so Claude Code 2.1.295 or later blocks the command itself when the handler cannot start, times out, or exits with an unexpected status. Run `goat-flow hooks sync` on an existing installation to add that field; other agents keep the host-prerequisite limit.
 
 For shell-context problems, distinguish the hook's launcher from the command being inspected. A PowerShell registration describes how the hook starts, not which shell will interpret the proposed command. Use the provider's captured command fields and established tool-shell context when diagnosing grammar. Missing context leaves the case unresolved; it does not justify stripping escapes or relaxing a denial.
 

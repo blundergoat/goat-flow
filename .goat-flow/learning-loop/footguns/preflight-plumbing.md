@@ -1,6 +1,6 @@
 ---
 category: preflight-plumbing
-last_reviewed: 2026-09-05
+last_reviewed: 2026-10-22
 ---
 
 **Scope:** Data crossing the Node-to-shell boundary inside preflight and CI scripts: command substitution, formatting that shell arithmetic cannot parse, and stdout fed into pattern matchers. What the audit checks mean lives in [auditor.md](auditor.md).
@@ -15,7 +15,7 @@ last_reviewed: 2026-09-05
 
 **Why it happens:** The installed `node_modules/knip/schema.json` titles `ignore` "Files to exclude from the report (any issue type)" and `ignoreFiles` "Unused files to exclude from the report"; only `project` and `entry` define the analysed set, which here is already `src/**/*.ts`, `scripts/**/*.mjs`, and `test/**/*.ts`. `knip --debug` shows the real cost: it walks the entire checkout collecting every nested `.gitignore` into a `gitignoreFiles` list, and a scratchpad holding cloned repositories contributes hundreds, so the heap is spent deciding what to skip before analysis starts.
 
-**Evidence:** Measured 2026-08-16 with `.goat-flow/scratchpad` holding 31,249 `.ts` files across 5.4 GB: a detached worktree at the same commit passed under the identical 5120 MB cap while this tree exhausted it, adding `.goat-flow/**` and `_temp/**` to `ignore` changed nothing, and a 10240 MB heap completed with zero findings. `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) now passes `--no-gitignore`: 0.845 s, exit 0, and the TypeScript phase fell from about 250 s to 15.9 s. Coverage was proven unchanged: `knip --debug` analysed 425 paths with and without the flag, a planted unused export in `src/` was still reported with exit 1, and `git status --ignored --short src test scripts` plus `git ls-files --others --ignored --exclude-standard` showed nothing gitignored under `src/`, `test/`, or `scripts/` against a `dist/` control that reported `!!`. CI never invokes Knip, so the blast radius is the local gate; re-run the path diff if the `project` globs ever widen to a directory holding gitignored files.
+**Evidence:** Measured 2026-08-16 with `.goat-flow/scratchpad` holding 31,249 `.ts` files across 5.4 GB: a detached worktree at the same commit passed under the identical 5120 MB cap while this tree exhausted it, adding `.goat-flow/**` and `_temp/**` to `ignore` changed nothing, and a 10240 MB heap completed with zero findings. `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) now passes `--no-gitignore`: 0.845 s, exit 0, and the TypeScript phase fell from about 250 s to 15.9 s. Coverage was proven unchanged: `knip --debug` analysed 425 paths with and without the flag, a planted unused export in `src/` was still reported with exit 1, and `git status --ignored --short src test scripts` plus `git ls-files --others --ignored --exclude-standard` showed nothing gitignored under `src/`, `test/`, or `scripts/` against a `dist/` control that reported `!!`. CI runs Knip only through preflight on fresh checkouts, inside the round-trip test's temporary copy and in the `checks` job, so local scratchpad state cannot reach it there; re-run the path diff if the `project` globs ever widen to a directory holding gitignored files.
 
 ## Footgun: Colourized `node -e` output silently disables shell numeric guards
 
@@ -31,7 +31,78 @@ last_reviewed: 2026-09-05
 
 **Evidence:** Measured 2026-08-15 with `FORCE_COLOR=3`: `node -e "console.log(...line_target)" | cat -v` printed `^[[33m125^[[39m`, and wrapping the value in `String(...)` printed `125`. `scripts/preflight-checks.sh` (search: `String() is load-bearing`) carries the fix; before it the instruction-file line-budget loop produced four fewer checks (82 to 78) while still reporting PASS.
 
+## Footgun: A preflight diagnostics test cuts the Tests section out by its first marker string
+
+**Status:** active | **Created:** 2026-10-14 | **Evidence:** OBSERVED
+**Decision changed:** Before adding a branch, option or second call near a preflight section, search `test/` for tests that slice `scripts/preflight-checks.sh` by marker strings, and keep each marker's first occurrence in the section it delimits.
+
+**Prevention:** `test/integration/preflight-test-diagnostics.test.ts` (search: `source.indexOf('section "Tests"')`) runs the Tests section alone by cutting the script from the first `section "Tests"` to `# Show coverage only when`. Add new behaviour after the section's closing `fi`, or as an extra test in its opening condition, so the first marker still begins the original body.
+
+**Symptoms:** A `--skip-tests` branch placed before the original Tests block made preflight report `Tests failed (7/3235 failures)`. Each diagnostics case failed with `ENOENT` for its `ledger.tsv`, because the extracted shell began with the new branch and ended at a dangling `elif`, so bash rejected it before writing the ledger.
+
+**Why it happens:** The test treats source text as an interface: `indexOf` returns the first match, so a second `section "Tests"` call earlier in the file silently changes what the test executes.
+
+**Evidence:** `scripts/preflight-checks.sh` (search: `Package tests skipped by --skip-tests`) now records the skip in a separate block after the Tests section, and the diagnostics file passes 7 of 7.
+
 ---
+
+## Footgun: Tests read `ci.yml` as text, so removing a CI step that preflight repeats still breaks them
+
+**Status:** active | **Created:** 2026-10-14 | **Evidence:** OBSERVED
+**Decision changed:** Before removing or reshaping a CI job or step, search `test/` for every reader of `.github/workflows/ci.yml`, including paths built with `join(..., "workflows", "ci.yml")`, and decide for each pin whether the step stays or the test changes.
+
+**Prevention:** Three tests read the workflow: `test/contract/documented-shellcheck-command.test.ts` (search: `const CI_WORKFLOW`), `test/integration/gruff-warning-ratchet.test.ts` (search: `runs the warning ratchet in a dedicated Node 22 CI job`) and `test/integration/preflight-progress.test.ts` (search: `runs each published syntax command against a valid control and a later malformed file`). A literal search for `.github/workflows/ci.yml` misses the ratchet test, which builds the path with `join`.
+
+**Symptoms:** Removing the `checks` steps that preflight already runs, and the Ubuntu ratchet leg, left a workflow that parsed and passed the touched-file checks. Preflight then reported `Tests failed (4/3235 failures)`, and after two tests were updated, `Tests failed (1/3235 failures)` from the third.
+
+**Why it happens:** These tests treat the workflow as a place where a command is published, so a step is a contract even when preflight runs the same check.
+
+**Evidence:** The shell-syntax step stays in `checks` (`.github/workflows/ci.yml`, search: `this published copy is the CI surface`), and the other two tests now assert that CI runs the preflight that owns shell lint and the Linux ratchet.
+
+---
+
+## Footgun: First-line shell pipelines can turn passing preflight stats into exit 141
+
+**Status:** active | **Created:** 2026-10-18 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Extract the first line of captured shell output without an early-closing pipeline when pipefail is enabled.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** For a captured Bash variable, use parameter expansion to read its first line. If output must cross a pipe, let the reader consume the full stream. A short successful run does not disprove a scheduling-dependent SIGPIPE.
+
+**Symptoms:** CI run [39110726824](https://github.com/blundergoat/goat-flow/actions/runs/39110726824) reported `Preflight memory worker failed (exit 141)` before counting the three stats advisories. All test jobs succeeded.
+
+**Why it happens:** `scripts/preflight-checks.sh` (`check_memory`, search: `stats_summary=`) previously used `printf` piped into `head -1` under the worker's `set -euo pipefail`. Bash can write each output line separately. Once head reads the summary and closes its input, a later printf write receives SIGPIPE; pipefail makes the assignment fail and errexit stops the worker before its warning verdict.
+
+**Evidence:** The actual 604-byte passing stats receipt completed 1,000 ordinary pipeline attempts locally. A syscall trace showed four separate printf writes. Delaying its second write by 10 ms reproduced EPIPE, SIGPIPE and exit 141 with those same bytes; parameter expansion returned the same summary with exit zero under the same delay. The controlled large-receipt extension of `test/integration/preflight-progress.test.ts` (search: `surfaces passing stats advisories as non-blocking preflight warnings`) fails with status 141 on the original parser and passes on the proposed replacement. The failed CI run has no syscall trace, so its exact interleaving remains inferred.
+
+---
+
+## Footgun: Filtering results does not prune local-state traversal
+
+**Status:** active | **Created:** 2026-10-18 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Exclude local working directories before recursive discovery or fixture copying enters them, rather than filtering their results afterward.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Prune `.goat-flow/plans` and `.goat-flow/scratchpad` during broad discovery. Preserve explicit plan access and maintained README checks separately. When copying a checkout into an integration fixture, keep required root anchors and reject working descendants before recursion. With `find`, use `-prune`; `-not -path` filters output but still visits directories. Trace directory opens when proving absence, including file-descriptor-relative opens (`strace -yy`).
+
+**Symptoms:** A local full-suite run used a checkout containing a 4.3G scratchpad and 567M of plans, measured on 2026-10-18. Its installer round-trip group took 197.668 seconds. That duration includes other work and is not a measurement of copy overhead or hosted CI savings.
+
+**Why it happens:** `src/cli/audit/check-content-quality.ts` (`resolveAdditionalEvidenceTargets`) filtered local Markdown after `src/cli/facts/fs.ts` (`walkGlobStar`, `walkGlobStarExists`) had traversed it. `test/integration/audit-drift.helpers.ts` (`setupInstallRoundTripFixture`) also copied the working trees. `scripts/check-markdown-links.sh` (search: `files_with_links=`) excluded local paths from results without pruning traversal.
+
+**Evidence:** Small real-directory probes reproduced both traversal and copying with the original code. After the fixes, broad discovery opened neither local tree; the fixture retained README/.gitignore/.gitkeep anchors and learning data without copying working descendants. The Markdown checker retained the same valid-link count, rejected a broken-link control, and opened no excluded local directories. Existing filesystem coverage proves explicit rooted access remains available: `test/unit/filesystem.test.ts` (search: `uses the same ignored-directory behavior`); the real-copy regression is `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `copies maintained inputs without local plan or scratchpad contents`). These checks establish excluded IO, not a percentage speedup.
+
+---
+
+## Footgun: Preflight needs a complete executable build before Gruff
+
+**Status:** active | **Created:** 2026-10-22 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Gate Gruff on the build marker and preserve the package build's executable CLI permission before writing that marker.
+
+**Prevention:** `scripts/preflight-checks.sh` (search: `check_typescript`, `tests|audit|memory|content|drift|gruff`) must complete both compiler output and the CLI permission step before Gruff starts. Test a checkout with no `dist`, not only an existing development build. `test/integration/preflight-test-diagnostics.test.ts` (search: `start gruff`) checks the scheduler order.
+
+**Evidence:** An untouched no-build worktree reported `design.package-bin-missing package.json`; gating Gruff alone changed that to `design.package-bin-not-executable package.json`. `package.json` (search: `chmodSync`) already defines the required build permission step. The main checkout's older executable build had concealed both failures.
 
 ## Resolved Entries
 
@@ -44,3 +115,5 @@ last_reviewed: 2026-09-05
 **Resolution:** Node output is piped through `grep -oE '^[0-9]+$' | tail -1` to keep only numeric lines, architecture doc matching switched from `grep -q` to `grep -Fq`, and `setup_count` is initialized before the conditional block to avoid a `set -u` crash: `scripts/preflight-checks.sh` (search: `grep -oE '^[0-9]+$'`).
 
 **Original symptoms:** `npm publish` failed because `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `installs fixture-backed references`) intermittently crashed with `grep: Unmatched [, [^, [:, [., or [=` in the Doc/Code Drift section. `node --input-type=module` commands that compute check counts captured stray diagnostic lines containing `[`, which grep then read as a character class, and the first fix left `setup_count` unset when the sanitized pipeline returned empty in a fixture without a working `dist/`.
+
+---

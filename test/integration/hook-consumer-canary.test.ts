@@ -17,8 +17,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CODEX_GRUFF_LAUNCHER_DEADLINE_MS = 75_000;
@@ -50,7 +52,7 @@ function makeDisposableConsumer(): string {
 /**
  * Install source launcher bytes and one bounded stalling hook into the consumer.
  * Use to reproduce a user-visible deadline before any provider registration is propagated.
- * Side effects: creates the consumer's hook directory and writes four hook inputs.
+ * Side effects: creates the consumer's hook directory and writes the native runtime and a stalled evaluator.
  *
  * @param disposableConsumerPath - non-empty consumer root; empty would escape fixture ownership
  * @returns Absolute launcher path; never empty after source bytes are copied.
@@ -62,30 +64,31 @@ function installSourceCanaryBytes(disposableConsumerPath: string): string {
     "hooks",
   );
   mkdirSync(installedHookDirectoryPath, { recursive: true });
-  cpSync(
-    join(PROJECT_ROOT, "workflow", "hooks", "run-with-bash.mjs"),
-    join(installedHookDirectoryPath, "run-with-bash.mjs"),
-  );
-  cpSync(
-    join(PROJECT_ROOT, "workflow", "hooks", "hook-provider-adapters.mjs"),
-    join(installedHookDirectoryPath, "hook-provider-adapters.mjs"),
-  );
-  cpSync(
-    join(PROJECT_ROOT, "workflow", "hooks", "hook-launch-runtime.mjs"),
-    join(installedHookDirectoryPath, "hook-launch-runtime.mjs"),
-  );
+  const spec = getHookSpec("gruff-code-quality");
+  assert.ok(spec);
+  for (const file of spec.scriptFiles) {
+    const destination = join(installedHookDirectoryPath, file);
+    mkdirSync(dirname(destination), { recursive: true });
+    cpSync(join(PROJECT_ROOT, "workflow/hooks", file), destination);
+  }
   writeFileSync(
-    join(installedHookDirectoryPath, "canary-stall.sh"),
+    join(installedHookDirectoryPath, "canary-stall.mjs"),
     [
-      "#!/usr/bin/env bash",
-      "# Simulates an analyzer that cannot finish before the user's feedback deadline.",
-      "# Keeps the child alive so the managed launcher must stop it and explain the result.",
-      "# Use only inside the disposable source and packed consumer canaries.",
-      "sleep 5",
+      "// Native analyzer fixture",
+      "// Simulates an analyzer that cannot finish before the user's feedback deadline.",
+      "// Keeps the child alive so the managed launcher must stop it and explain the result.",
+      "// Use only inside the disposable source and packed consumer canaries.",
+      "await new Promise((resolve) => setTimeout(resolve, 5000));",
       "",
     ].join("\n"),
   );
-  return join(installedHookDirectoryPath, "run-with-bash.mjs");
+  const syntax = spawnSync(
+    process.execPath,
+    ["--check", join(installedHookDirectoryPath, "canary-stall.mjs")],
+    { encoding: "utf8" },
+  );
+  assert.equal(syntax.status, 0, syntax.stderr);
+  return join(installedHookDirectoryPath, "run-hook.mjs");
 }
 
 /**
@@ -101,8 +104,8 @@ function writeObservedCodexFeedbackConfig(
   const codexConfigDirectoryPath = join(disposableConsumerPath, ".codex");
   mkdirSync(codexConfigDirectoryPath, { recursive: true });
   const registeredCommand =
-    `node ".goat-flow/hooks/run-with-bash.mjs" ` +
-    `".goat-flow/hooks/canary-stall.sh" "${CODEX_GRUFF_LAUNCH_CONTRACT}"`;
+    `node ".goat-flow/hooks/run-hook.mjs" ` +
+    `".goat-flow/hooks/canary-stall.mjs" "${CODEX_GRUFF_LAUNCH_CONTRACT}"`;
   writeFileSync(
     join(codexConfigDirectoryPath, "hooks.json"),
     `${JSON.stringify(
@@ -156,7 +159,7 @@ function runDeadlineCanary(
       process.execPath,
       [
         installedLauncherPath,
-        ".goat-flow/hooks/canary-stall.sh",
+        ".goat-flow/hooks/canary-stall.mjs",
         CODEX_GRUFF_LAUNCH_CONTRACT,
       ],
       {

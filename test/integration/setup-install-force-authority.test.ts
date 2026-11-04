@@ -10,7 +10,13 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  lstatSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -44,32 +50,54 @@ interface ConflictedTarget {
   userOwnedBytes: string;
 }
 
+let conflictedSeedPath: string | undefined;
+
 /**
- * Install Codex, then create two managed conflicts and one edited user-owned file.
+ * Install Codex once, then create two managed conflicts and one edited user-owned file, and give each case a copy.
  * Use as the shared starting point so each authority is measured against identical state.
- * This writes into a disposable target created by `makeTempProject`.
+ * This writes into disposable targets created by `makeTempProject`; each case mutates only its own copy.
  *
- * @returns the target root plus the exact bytes each unauthorized path must still hold
+ * @returns the copied target root plus the exact bytes each unauthorized path must still hold
  */
 function conflictedTarget(): ConflictedTarget {
-  const projectPath = makeTempProject();
-  const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
-  assert.equal(
-    firstInstall.status,
-    0,
-    firstInstall.stderr || firstInstall.stdout,
-  );
-
   const localBytes = "local bytes under a changed template\n";
-  writeFileSync(join(projectPath, FIRST_CONFLICT_PATH), localBytes);
-  writeFileSync(join(projectPath, SECOND_CONFLICT_PATH), localBytes);
-  recordStaleBaselineHashes(projectPath, "codex", [
-    FIRST_CONFLICT_PATH,
-    SECOND_CONFLICT_PATH,
-  ]);
-
   const userOwnedBytes = "# Team security policy\n\nKeep this rule.\n";
-  writeFileSync(join(projectPath, USER_OWNED_PATH), userOwnedBytes);
+  if (conflictedSeedPath === undefined) {
+    const seedPath = makeTempProject();
+    const firstInstall = runCliInstaller(seedPath, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+
+    writeFileSync(join(seedPath, FIRST_CONFLICT_PATH), localBytes);
+    writeFileSync(join(seedPath, SECOND_CONFLICT_PATH), localBytes);
+    recordStaleBaselineHashes(seedPath, "codex", [
+      FIRST_CONFLICT_PATH,
+      SECOND_CONFLICT_PATH,
+    ]);
+
+    writeFileSync(join(seedPath, USER_OWNED_PATH), userOwnedBytes);
+    conflictedSeedPath = seedPath;
+  }
+
+  const projectPath = makeTempProject();
+  const directories: Array<{ path: string; mode: number }> = [];
+  cpSync(conflictedSeedPath, projectPath, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+    /** Recursive copies recreate directories with default modes; retain the seed's private permissions. */
+    filter(source, destination) {
+      const stats = lstatSync(source);
+      if (stats.isDirectory()) {
+        directories.push({ path: destination, mode: stats.mode & 0o777 });
+      }
+      return true;
+    },
+  });
+  for (const { path, mode } of directories) chmodSync(path, mode);
 
   return { projectPath, localBytes, userOwnedBytes };
 }
@@ -145,33 +173,32 @@ describe("install force authority", () => {
     );
   });
 
-  // Named per flag so a failure reports which authority broke, not just "one of them".
-  for (const authorityFlag of ["--force-managed", "--force"]) {
-    it(`replaces every managed conflict under ${authorityFlag}`, () => {
-      const target = conflictedTarget();
+  // Bare --force is an alias that sets the same authority, so one flag covers both.
+  // See src/cli/install-command.ts (search: "function readManagedSetupAuthority").
+  it("replaces every managed conflict under --force-managed", () => {
+    const target = conflictedTarget();
 
-      const rows = previewRows(target.projectPath, authorityFlag);
-      assert.equal(authorityFor(rows, FIRST_CONFLICT_PATH), "granted-managed");
-      assert.equal(authorityFor(rows, SECOND_CONFLICT_PATH), "granted-managed");
+    const rows = previewRows(target.projectPath, "--force-managed");
+    assert.equal(authorityFor(rows, FIRST_CONFLICT_PATH), "granted-managed");
+    assert.equal(authorityFor(rows, SECOND_CONFLICT_PATH), "granted-managed");
 
-      const forced = runCliInstaller(
-        target.projectPath,
-        "--agent",
-        "codex",
-        authorityFlag,
-      );
-      assert.equal(forced.status, 0, forced.stderr || forced.stdout);
-      assert.notEqual(
-        readFileSync(join(target.projectPath, FIRST_CONFLICT_PATH), "utf-8"),
-        target.localBytes,
-      );
-      // Managed authority reaches system-owned conflicts only; user content is a separate decision.
-      assert.equal(
-        readFileSync(join(target.projectPath, USER_OWNED_PATH), "utf-8"),
-        target.userOwnedBytes,
-      );
-    });
-  }
+    const forced = runCliInstaller(
+      target.projectPath,
+      "--agent",
+      "codex",
+      "--force-managed",
+    );
+    assert.equal(forced.status, 0, forced.stderr || forced.stdout);
+    assert.notEqual(
+      readFileSync(join(target.projectPath, FIRST_CONFLICT_PATH), "utf-8"),
+      target.localBytes,
+    );
+    // Managed authority reaches system-owned conflicts only; user content is a separate decision.
+    assert.equal(
+      readFileSync(join(target.projectPath, USER_OWNED_PATH), "utf-8"),
+      target.userOwnedBytes,
+    );
+  });
 
   it("never replaces user-owned content under managed authority alone", () => {
     const target = conflictedTarget();

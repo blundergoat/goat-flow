@@ -1,7 +1,7 @@
 # .goat-flow/config.yaml - project configuration
 # Docs: https://github.com/blundergoat/goat-flow
 
-version: "1.18.0"
+version: "1.19.0"
 
 # ── Project Setup ───────────────────────────────
 skills:
@@ -24,7 +24,7 @@ skills:
 toolchain:
   lint:
     - >-
-      shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh
+      shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
       workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh
       .goat-flow/hooks/deny-dangerous/*.sh
     - bash scripts/maintenance/check-shell-syntax.sh

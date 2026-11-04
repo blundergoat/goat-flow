@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-23
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -25,7 +25,7 @@ last_reviewed: 2026-10-10
 **Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-07-14
 
-**Prevention:** Keep playbook rules self-contained; reference only installed siblings and the consumer's instruction files, and move goat-flow-specific commands, scans, and ADR pointers into goat-flow's own instruction files. Before declaring a playbook or shipped skill done, grep it for `\.goat-flow/(decisions|lessons|patterns|footguns)|src/cli|scripts/|ADR-|check-(drift|goat-flow)|stats --check|DESIGN_TARGET` and confirm any `scripts/...` path it names is listed in `workflow/manifest.json`; otherwise genericize it. Triage each hit: a reference to a learning-loop directory the consumer is meant to populate is portable, because `workflow/install-goat-flow.sh` (search: `for dir in .goat-flow/learning-loop/footguns`) seeds those directories, and only a specific goat-flow-authored file or ADR number is dead.
+**Prevention:** Keep playbook rules self-contained; reference only installed siblings and the consumer's instruction files, and move goat-flow-specific commands, scans, and ADR pointers into goat-flow's own instruction files. Before declaring a playbook or shipped skill done, grep it for `\.goat-flow/(decisions|lessons|patterns|footguns)|src/cli|scripts/|ADR-|check-(drift|goat-flow)|stats --check|DESIGN_TARGET` and confirm any `scripts/...` path it names is listed in `workflow/manifest.json`; otherwise genericize it. Triage each hit: a reference to a learning-loop directory the consumer is meant to populate is portable, because `src/cli/installer/apply.ts` (search: `manifest.required_dirs`) seeds those directories, and only a specific goat-flow-authored file or ADR number is dead.
 
 **Symptoms:** A playbook under `workflow/skills/playbooks/` or a skill under `workflow/skills/` cites an ADR, CLI source, a learning-loop file, an unshipped script such as `scripts/install-browser-tools.sh`, roadmap jargon, or a not-yet-existing file. The reference resolves in this repo and is dead in every consumer install.
 
@@ -137,7 +137,7 @@ The follow-up review found a second symptom in `.goat-flow/learning-loop/decisio
 
 **Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
 **Severity:** INTEGRATION
-**Incident count:** 6 | **Latest occurrence:** 2026-10-11
+**Incident count:** 7 | **Latest occurrence:** 2026-10-23
 
 **Prevention:** Derive fanout from manifest ownership. After every bump, search tracked release surfaces for literal and regex-escaped old versions, capture the release snapshot, run packed-byte canaries, and run the full suite.
 
@@ -147,7 +147,10 @@ The follow-up review found a second symptom in `.goat-flow/learning-loop/decisio
 
 **Evidence:** Earlier releases missed synthetic dashboard projects, playbook frontmatter, plan examples, and regex-escaped assertions; 1.15.1 first omitted shared Node hook runtimes, and final proof found two 1.15.0 contract assertions and no frozen v1.15.1 manifest snapshot. Anchors: `scripts/bump-version.sh` (search: `manifest_hook_runtime_paths`), `scripts/check-versions.mjs` (search: `hookRuntimeTemplates`), `test/contract/skill-hardening-review-1.test.ts` (search: `registers evidenced goat-review reasoning traps across every root`), `test/unit/manifest.test.ts` (search: `provides a readable snapshot for every changelog release`).
 
-**Recurrence 2026-10-11:** The 1.18.0 bump left `workflow/hooks/deny-dangerous/guard-runtime.sh` and its installed mirror stamped 1.17.0, and `check-versions` passed. Both the writer and the checker scan only top-level `workflow/hooks`, but the audit requires the nested stamp, so `audit` failed `Hook version` until both stamps were edited by hand. The same bump also needed a hand edit to the packed `--version` assertion in `test/integration/packaged-hook-install.test.ts` (search: `goat-flow v1.`). The writer now stamps and mirrors every stamped nested module, `scripts/bump-version.sh` (search: `nested_hook_runtime`), and the checker verifies the same set, `scripts/check-versions.mjs` (search: `nestedStampedHookTemplates`). A nested module that the audit requires but that has no stamp falls outside both. Audit anchor: `src/cli/audit/check-goat-flow.ts` (search: `deny-dangerous/guard-runtime.sh`).
+**Recurrence 2026-10-11:** The 1.18.0 bump left `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` and its installed mirror stamped 1.17.0, and `check-versions` passed. Both the writer and the checker scan only top-level `workflow/hooks`, but the audit requires the nested stamp, so `audit` failed `Hook version` until both stamps were edited by hand. The same bump also needed a hand edit to the packed `--version` assertion in `test/integration/packaged-hook-install.test.ts` (search: `packedVersionResult.stdout.trim()`). The writer now stamps and mirrors every stamped nested module, `scripts/bump-version.sh` (search: `nested_hook_runtime`), and the checker verifies the same set, `scripts/check-versions.mjs` (search: `nestedStampedHookTemplates`). A nested module that the audit requires but that has no stamp falls outside both. Audit anchor: `src/cli/audit/check-goat-flow.ts` (search: `.goat-flow/hooks/policy-evaluation.mjs`).
+
+
+**Recurrence 2026-10-23:** The native-hook cutover stamped the package, instructions and mirrors to 1.19.0, and `check-versions` passed. Instruction parity and the full fast suite then failed because the prepared changelog heading was absent. The heading also requires a manifest snapshot. Include both paths in the reviewed bump packet before stamping. Evidence: `scripts/check-instruction-parity.mjs` (`readReleaseMetadata`), `test/unit/local-instructions.test.ts` (search: `rejects a live instruction header date that differs from the changelog release`), and `test/unit/manifest.test.ts` (search: `provides a readable snapshot for every changelog release`).
 
 ---
 

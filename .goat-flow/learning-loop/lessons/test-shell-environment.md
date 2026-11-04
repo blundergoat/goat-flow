@@ -1,24 +1,44 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-09-29
+last_reviewed: 2026-11-04
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
 
-## Lesson: Verify timeout cleanup through the real package-manager process tree
+## Lesson: Clear bootstrap arguments before sourcing a script with no flags
 
-**Status:** active | **Created:** 2026-09-12 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Verify timeout cleanup through the installed package manager before accepting a direct-child fixture as proof that all descendants exit.
+**Status:** active | **Created:** 2026-10-24 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Save the script path and consume every bootstrap argument before sourcing a script whose argument list may be empty.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Run an isolated package script through the production runner and assert that both its script process and worker exit after timeout. Keep the timeout status and diagnostic assertions, but do not treat them as proof of descendant cleanup. Preserve a failing run before changing the implementation.
+**Prevention:** Check both the no-flag and explicit-flag paths when introducing a Bash bootstrap. With no arguments after the filename, `source` inherits the caller's positional parameters. Save the filename, shift away the bootstrap parameters, then source the saved path with the remaining arguments.
+
+**What happened:** While repairing the native Windows publish fixture, I established its mock PATH after Bash startup but initially used `shift; source "$@"`. With no publish flags, the script inherited its own filename as an argument. Eighteen publish cases failed on both WSL and Windows with an unknown-option diagnostic. The audit and hook-facts cases in the same run passed. Saving `script_path` and consuming both bootstrap arguments fixed the forwarding; the three owning suites then reported 46 tests, 46 passes and zero failures on each host.
+
+**Evidence:** `test/integration/npm-publish.test.ts` (search: `PUBLISH_FIXTURE_BASH_ARGS`, `script_path=$2`, `shift 2`); `scripts/npm-publish.sh` (search: `unknown option`). The existing no-flag publish cases caught the regression; no assertion or production argument parser was weakened.
+
+## Lesson: Verify timeout cleanup through the real package-manager process tree
+
+**Status:** active | **Created:** 2026-09-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Verify cleanup through the installed package manager and budget the whole fixture before accepting timeout evidence.
+**Incident count:** 4 | **Latest occurrence:** 2026-10-25
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Run an isolated package script through the production runner and assert that both its script process and worker exit after timeout. Keep the timeout status and diagnostic assertions, but do not treat them as proof of descendant cleanup. Preserve a failing run before changing the implementation. For shell-backed fixtures, also test a missing coordination signal and bound the wait inside the worker. Budget the outer guard for process startup, worker execution and report rendering; verify it under the original aggregate workload. For serial replay commands, include every configured probe budget plus CLI overhead.
 
 **What happened:** During verification, I accepted a passing direct-Node timeout fixture as evidence that Windows cleanup removed the verification tree. The follow-up replaced that fixture with an actual `npm run` script. The runner returned timeout status 124, but the script-process exit assertion failed because the script remained alive.
 
 **Root cause:** The fixture omitted npm's additional process layers. Killing the runner's direct child did not prove that the package script and its worker had stopped.
 
 **Correction:** Windows cleanup now invokes bounded `taskkill /T /F` while npm's root process still exists. The replacement test failed before the fix and passed afterward on Windows; the same focused suite passed on Linux. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: "stopChildProcessGroup") and `test/integration/preflight-progress.test.ts` (search: "times out installed npm with exit 124 and removes its script and worker").
+
+**Recurrence 2026-10-24:** During M16, I accepted healthy scheduler overlap without checking a missing readiness signal. A native Windows fault probe made the shell worker exit before signaling; the outer spawn timed out after 15 seconds while its TypeScript peer remained alive. Bounding the fixture's wait made the same probe finish with the intended failure diagnostic and no surviving peer. The existing startup-failure test now enables the overlap barrier and requires a completed failure rather than a timeout. Owner: `test/integration/preflight-test-diagnostics.test.ts` (search: `overlap_deadline`, `reports a worker that exits before opening a report section`).
+
+**Recurrence 2026-10-24:** I retained the scheduler fixture's 15-second outer guard after bounding its readiness wait. Native aggregate verification still timed out. Captured output showed the healthy case had printed all twelve passing sections; the startup-failure case had reported the expected readiness timeout and reached report rendering. In `scripts/preflight-checks.sh`, `merge_preflight_workers` emits these sections after `run_preflight_workers` returns. The outer guard had to cover this reporting phase too. The fixture now allows 30 seconds while retaining the five-second readiness limit and result assertions. Owner: `test/integration/preflight-test-diagnostics.test.ts` (search: `fixtureTimeoutMs`, `scheduler elapsed_ms=`). Individual Windows subprocess costs were not measured in this investigation.
+
+**Recurrence 2026-10-25:** M19's installer fixture allowed only 60 seconds for an entire `hooks verify` command, while `selectHookScenarioResults` runs three deny or six Git probes serially, each with a 90-second Windows budget. In [the diagnostic CI run](https://github.com/blundergoat/goat-flow/actions/runs/40173735089), Node 20 completed its first PowerShell probe in 55,282 ms before the outer guard cut off the next probe. Node 24 completed four Git probes in 50,540 ms before the fifth was cut off. The fixture now derives Windows Codex command budgets from the canonical scenario count and adds the same extra time to the enclosing case. All assertions and production hook limits remain intact. The cause of slower PowerShell launches remains unverified. Owners: `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `hookProofTimeoutMs`, `ROUND_TRIP_TIMEOUT_MS`), `src/cli/hooks-runtime-evidence.ts` (search: `MANAGED_CONFIGURED_PROBE_TIMEOUT_MS`, `selectHookScenarioResults`).
 
 ---
 
@@ -63,7 +83,7 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 **Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-09-03
 
-**Prevention:** Create a fresh temporary directory and one never-reused output path per proof command. Let the producer create its capture, then inspect the exit status and bytes; do not clear a capture with a null-command redirect or another truncation pattern, which the guard classifies as destructive. Evidence anchor: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Null-command (: / true) followed by redirect truncates the target`).
+**Prevention:** Create a fresh temporary directory and one never-reused output path per proof command. Let the producer create its capture, then inspect the exit status and bytes; do not clear a capture with a null-command redirect or another truncation pattern, which the guard classifies as destructive. Evidence anchor: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Null-command (: / true) followed by redirect truncates the target`).
 
 **What happened:** The whitespace-check wrapper initialised its `check.out` capture with a null-command redirect before running two no-index checks, so the deny hook blocked the entire command and no verification ran. The retry used separate new output paths and completed.
 
@@ -77,7 +97,7 @@ Evidence anchors: `type grep` in-session (search: `--ignore-files`), `workflow/s
 **Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-09-28
 
-**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only descriptor or shell redirection rather than the runner's `input` option. Capture hook stderr explicitly when the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runPayloadProcess`).
+**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only descriptor or shell redirection rather than the runner's `input` option. Capture hook stderr explicitly when the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `runHook`), `test/unit/hook-registrar.helpers.ts` (search: `runPayloadProcess`).
 
 **What happened:** A hook integration test repeatedly timed out when it invoked the hook through `spawnSync` with an `input` string. Tracing with `bash -x` showed the hook stalled at its `payload="$(cat)"` line: the child saw the payload bytes but never received EOF in this sandbox. The same sequence completed from a normal shell with file redirection and produced the expected exit codes.
 
@@ -97,7 +117,7 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 
 **Status:** active | **Created:** 2026-06-01
 
-**Prevention:** To prove a PostToolUse hook's behaviour changed, run it through the project's test harness and mirror its fixture setup exactly rather than writing an ad-hoc shell repro. If you must reproduce by hand, replicate the root resolution (git against pwd), the pinned `PATH` including `jq`, and the config and binary preconditions, and never discard stderr. Treat a silent hook run as inconclusive until every fail-soft early exit is ruled out. To prove a regression test guards a fix, run it against the pre-fix revision and confirm it fails. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `repo_root`), `workflow/hooks/gruff-code-quality.sh` (search: `no changed lines detected`), `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not discover binaries from the removed`).
+**Prevention:** To prove a PostToolUse hook's behaviour changed, run it through the project's test harness and mirror its fixture setup exactly rather than writing an ad-hoc shell repro. If you must reproduce by hand, replicate the root resolution (git against pwd), the pinned `PATH` including `jq`, and the config and binary preconditions, and never discard stderr. Treat a silent hook run as inconclusive until every fail-soft early exit is ruled out. To prove a regression test guards a fix, run it against the pre-fix revision and confirm it fails. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `repo_root`), `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `no changed lines detected`), `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not discover binaries from the removed`).
 
 **What happened:** Proving the hook no longer discovers binaries from a removed glob, ad-hoc bash repros ran the old and new hook against a planted binary and both printed nothing, so the before-and-after looked identical and the fix unprovable. The isolated discovery loop showed the old glob clearly resolved the binary, so the repros were wrong rather than the fix: they had run `git init` in the temp repo and discarded stderr.
 
@@ -127,8 +147,79 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 
 **Status:** active | **Created:** 2026-05-27
 
-**Prevention:** Redirect stdin from `/dev/null` in any self-test that deliberately runs a degraded hook or helper, and include the missing-helper branch in smoke mode so startup failures surface quickly. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `run_common_dependency_checks`).
+**Prevention:** Redirect stdin from `/dev/null` in any self-test that deliberately runs a degraded hook or helper, and include the missing-helper branch in smoke mode so startup failures surface quickly. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `run_common_dependency_checks`).
 
 **What happened:** The full deny-dangerous self-test hung on an interactive terminal while copying a thin hook into a temp directory without its shared helper. The copied hook reached the missing-helper branch before `--check` parsing and then read from the inherited terminal instead of receiving closed stdin.
 
 **Root cause:** The missing-dependency test proved fail-closed behaviour only when stdin was already closed, and an interactive terminal changed the control flow enough to hide the pass or fail line behind a blocked read.
+
+---
+
+## Lesson: Keep analyzer fixture programs outside the analyzed change set
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Store executable mock programs outside a fixture project when the tested hook inventories that project's changed files.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** Put Node analyzer programs in a separate disposable directory. Leave only the launcher required by the reference transport inside the project, and expose an explicit Node invocation for restricted consumers. Preserve the original behavior assertion when correcting fixture placement.
+
+**What happened:** During M07, converting a Bash Gruff mock to Node added `bin/gruff-ts.mjs` inside the fixture project. The Antigravity test without a file path failed: the hook inventoried that untracked source file and the mock returned an old finding. The focused run recorded 41 passes and one failure. Moving the program outside the analyzed project retained the assertion and produced 42 passes with no failures.
+
+**Root cause:** The mock's implementation became an input to the behavior under test. The old extensionless launcher had not entered the source-file inventory, so an apparently equivalent fixture conversion changed the test's scope.
+
+**Evidence:** `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `writeNodeAnalyzer`, `fixtureAnalyzerInvocation`); `test/integration/gruff-code-quality-smoke.test.ts` (search: `runs for Antigravity file-tool payloads without a file path`). The restricted clean control also invokes the Node analyzer directly and checks its finding payload in `test/integration/restricted-env-controls.test.ts` (search: `clean restricted consumer`).
+
+**Verification follow-up 2026-10-12:** The M07 full preflight then found six new warning identities across five edited fixture owners; the earlier scoped scans had omitted some owners. The generated child source also made argv and environment references appear inside parent file-writing calls. Separate source generators now make that boundary explicit. The process guard's executable resolution was extracted without changing PATH order, journal reads use caller-owned paths, and the executable-search catch documents why missing candidates continue. The complete warning ratchet returned zero accepted identities and occurrences; both Node 20.11.0 and 24.21.0 restriction/selector runs retained seven passes and zero failures or skips. Run the ratchet across the complete changed surface before the expensive suite. Evidence anchors: test/helpers/spawn-guard.mjs (search: resolveGuardExecutable), test/integration/restricted-env-controls.test.ts (search: negativeControlScript), and test/integration/post-turn-safety-hook.helpers.ts (search: commandFaultSource).
+
+## Lesson: Keep native dependencies local to each test platform
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Verify Node, shell and native dependencies use the intended host before replaying a test.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-11-02
+
+**Prevention:** Use dependencies installed for the executing platform. If a disposable JavaScript translation can isolate the failing contract, retain the original test and production source hashes, preserve assertions and fixtures, and identify that run as reduced proof rather than the original hosted reproduction.
+
+**What happened:** I invoked native Windows Node against `test/integration/preflight-progress.test.ts` and `test/integration/gruff-warning-ratchet.test.ts` in the WSL checkout. The loader failed before either suite ran because the installed `esbuild` binary was `linux-x64`, while Windows required `win32-x64`. A disposable TypeScript-erasure translation of the unchanged npm-timeout case then passed on local Windows Node 24.9.0 with a byte-identical copy of the production runner. The reduced case also passed on a native Windows temporary volume using the hosted job's Node 22.23.3/npm 10.9.9 versions; the temporary copy was removed afterward.
+
+**Evidence and limit:** `package-lock.json` (search: `node_modules/@esbuild/linux-x64`, `node_modules/@esbuild/win32-x64`) records separate native packages. `test/integration/preflight-progress.test.ts` (search: `times out installed npm with exit 124 and removes its script and worker`) owns the original contract. The local reduced pass does not explain or clear the [hosted Node 22 cleanup failure](https://github.com/blundergoat/goat-flow/actions/runs/38208889365/job/114678400808); retain that failure and capture the cleanup command's result before choosing a fix.
+
+**Recurrence 2026-11-02:** A WSL readiness run finished, but its TypeScript redactor loaded Windows esbuild and could not save the receipt. Its transcript had no assistant or tool records. A pinned, version-matched compiled CLI redactor passed native stdin checks. Probe artifact saving before a live run.
+
+**Recurrence 2026-11-02 (runner):** PowerShell resolved Bash to WSL, failing Gruff and 21 contracts on Windows paths. Explicit Git for Windows Bash passed without source changes. Verify both executable hosts.
+
+---
+
+## Lesson: Reproduce CI prerequisites before replaying its test command
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Reproduce the preceding install and build steps before treating a local replay as the hosted job's reproduction.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-10-13
+
+**Prevention:** Read the failing job's complete setup, then recreate its dependencies and generated artifacts before running the original command. Preserve an incomplete-setup failure separately; it cannot explain a different hosted assertion.
+
+**What happened:** I copied the current source into a disposable native Windows directory, installed its locked dependencies with Node 22.23.3/npm 10.9.9, and ran the original two-suite command before building. The npm cleanup case passed, but the installed analyzer smoke failed with `design.package-bin-missing` because the package binary was absent. CI had run `npm run build` first. After running that build and the unchanged warning ratchet, the original command reported `# pass 45`, `# fail 0`, `# skipped 2`.
+
+**Evidence and limit:** `.github/workflows/ci.yml` (search: `Build package binary`, `Verification launch contracts`) owns the preceding setup. `test/integration/gruff-warning-ratchet.test.ts` (search: `launches the installed analyzer through the production ratchet`) checks the built package. The original command remains `node --import tsx --test test/integration/preflight-progress.test.ts test/integration/gruff-warning-ratchet.test.ts`. This local pass does not explain or clear the hosted Windows npm-cleanup failure; its hosted result still needs a rerun.
+
+**Verification follow-up 2026-10-12:** Linting the extracted `WSL floor and LTS controls` body without an interpreter produced SC2148 because the inline CI script has no shebang. Its action already declares Bash. Running `shellcheck --shell=bash` on the same extracted bytes exited zero. Reproduce the workflow's interpreter as well as its install/build prerequisites when validating extracted shell blocks; this check-setup failure was not evidence of a workflow defect.
+
+**Recurrence 2026-10-13 (Windows replay setup):** I attempted the current registered-Windows-override case directly through a WSL UNC source path; native Node reported that the test file was not found. A disposable native copy then failed dependency-junction setup through cmd, and a later module load failed because that partial copy omitted scripts/check-hook-parity.mjs. The original test body never ran. Stop after repeated setup corrections, retain each failure, and inspect the full import/setup boundary before another replay. Evidence anchors: test/integration/hook-command-spawn-matrix.test.ts (search: "delivers allow and exit-2 deny results through Codex's registered Windows override") and test/integration/gruff-code-quality-smoke.helpers.ts (search: "check-hook-parity.mjs"). The native probe used Node 24.9.0; the CI contract uses 20.11.0, so it cannot clear the hosted timeout.
+
+---
+
+## Lesson: Keep frozen reference fixtures outside any parent Git repository
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Separate saved diagnostic logs from temporary reference projects, and verify Git-root isolation before replaying a hook.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Save scripts and logs in the requested plan directory, but create reference projects outside every Git checkout. Before executing a fixture, run `git -C <fixture> rev-parse --show-toplevel`; a returned parent root invalidates isolation. Record the temporary path separately and preserve failed diagnostic evidence.
+
+**What happened:** While investigating M07's hosted C.UTF-8 extraction timeout, I set TMPDIR beneath this workspace's plan logs to keep receipts together. The frozen smoke group reported two failures. Git queried from the generated reference project returned the controlling goat-flow root, so the run could select live policy dependencies. I stopped only the owned replay processes, retained its log and scratch state, then created an isolated reference directory outside Git. The unchanged smoke group then reported 49 captured assertions and zero failures. The full replay was still running at that checkpoint.
+
+**Evidence and limit:** ~~`scripts/check-hook-parity.mjs` (search: `materializeReference`, `tmpdir()`)~~ (retired at commit `2cc5b6d2`); `test/fixtures/hooks-bash/.goat-flow/hooks/deny-dangerous.sh` (search: `git rev-parse --show-toplevel`, `GOAT_FLOW_ROOT`). This proves a local reproduction setup error. It does not explain the separate hosted Bash timeout, identify its case, or establish complete hosted parity.

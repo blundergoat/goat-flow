@@ -1,5 +1,5 @@
 /**
- * Executes the registered Claude exec-form handlers exactly as the provider spawns them: benign and blocked
+ * Exercises registered provider handlers through their launch transports: benign and blocked
  * payloads from hostile-named projects, then every catchable managed-file failure mapped to its provider response.
  *
  * Windows CI runs this file at the package-minimum Node to lock ADR-053.
@@ -33,7 +33,10 @@ import {
   commandEntryReferencesSpec,
 } from "../../src/cli/server/agent-hook-command.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
-import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import {
+  getHookSpec,
+  listHookSpecs,
+} from "../../src/cli/server/hooks-registry.js";
 import {
   applyHookState,
   syncHookStates,
@@ -42,28 +45,19 @@ import {
   FINDING_GRUFF_CONTRACT_ENVELOPE,
   writeContractGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
+import {
+  assertPowerShellParses,
+  registerAntigravityWindowsArgvTests,
+  availablePowerShellHosts,
+  recordWindowsReplayStage,
+  registeredCopilotPowerShellCommands,
+  runWindowsDiagnosticControls,
+} from "./hook-command-spawn-matrix.helpers.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const WORKFLOW_HOOKS = join(PROJECT_ROOT, "workflow", "hooks");
 const SHARED_HOOK_FILES = [
-  "run-with-bash.mjs",
-  "hook-launch-runtime.mjs",
-  "hook-policy-state.cjs",
-  "vendor/js-yaml.cjs",
-  "gh-graphql-read.cjs",
-  "vendor/graphql.cjs",
-  "hook-provider-adapters.mjs",
-  "deny-dangerous.sh",
-  "deny-git-mutations.sh",
-  "gruff-code-quality.sh",
-  "post-turn-safety.sh",
-];
-const DENY_POLICY_FILES = [
-  "guard-runtime.sh",
-  "patterns-shell.sh",
-  "patterns-paths.sh",
-  "patterns-writes.sh",
-  "deny-dangerous-self-test.sh",
+  ...new Set(listHookSpecs().flatMap((spec) => spec.scriptFiles)),
 ];
 /** Secret canary that must never appear in any handler stream. */
 const ENV_CANARY = "goat-flow-canary";
@@ -140,13 +134,13 @@ interface RegisteredHandler {
 /**
  * Build a Git project whose name carries spaces and shell metacharacters, with
  *
- * the shipped hook files installed and all three selected-provider hooks registered.
+ * the shipped hook files installed and every managed hook the selected provider supports registered.
  * It writes one temporary tree, recorded for suite cleanup.
  *
  * @returns hostile-named project root ready for exact handler replay
  */
 function createRegisteredHostileProject(
-  agentId: "claude" | "codex" = "claude",
+  agentId: "claude" | "codex" | "copilot" = "claude",
 ): string {
   const disposableParent = mkdtempSync(
     join(tmpdir(), "goat-flow-spawn-matrix-"),
@@ -158,9 +152,11 @@ function createRegisteredHostileProject(
   if (agentId === "claude") {
     mkdirSync(join(projectRoot, ".claude"), { recursive: true });
     writeFileSync(join(projectRoot, ".claude", "settings.json"), "{}\n");
-  } else {
+  } else if (agentId === "codex") {
     mkdirSync(join(projectRoot, ".codex"), { recursive: true });
     writeFileSync(join(projectRoot, ".codex", "config.toml"), "\n");
+  } else {
+    mkdirSync(join(projectRoot, ".github", "hooks"), { recursive: true });
   }
   // A fake secret proves the block response without ever exposing real content.
   writeFileSync(join(projectRoot, ".env"), `${ENV_CANARY}\n`);
@@ -172,7 +168,8 @@ function createRegisteredHostileProject(
     "deny-dangerous",
     "deny-git-mutations",
     "gruff-code-quality",
-    "post-turn-safety",
+    // Copilot has no Stop registration adapter, so its users never receive this row.
+    ...(agentId === "copilot" ? [] : ["post-turn-safety"]),
   ]) {
     const hookSpec = getHookSpec(hookId);
     assert.ok(hookSpec);
@@ -188,32 +185,12 @@ function createRegisteredHostileProject(
  * @param projectRoot - existing project directory that receives `.goat-flow/hooks`
  */
 function installShippedHookFiles(projectRoot: string): void {
-  mkdirSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous"), {
-    recursive: true,
-  });
-  for (const sharedHookFile of SHARED_HOOK_FILES) {
-    const installedPath = join(
-      projectRoot,
-      ".goat-flow",
-      "hooks",
-      sharedHookFile,
-    );
+  for (const file of new Set(
+    listHookSpecs().flatMap((spec) => spec.scriptFiles),
+  )) {
+    const installedPath = join(projectRoot, ".goat-flow/hooks", file);
     mkdirSync(join(installedPath, ".."), { recursive: true });
-    cpSync(join(WORKFLOW_HOOKS, sharedHookFile), installedPath);
-    chmodSync(installedPath, 0o755);
-  }
-  // Install every shared policy module before replaying the provider's saved handler.
-  for (const denyPolicyFile of DENY_POLICY_FILES) {
-    cpSync(
-      join(WORKFLOW_HOOKS, "deny-dangerous", denyPolicyFile),
-      join(
-        projectRoot,
-        ".goat-flow",
-        "hooks",
-        "deny-dangerous",
-        denyPolicyFile,
-      ),
-    );
+    cpSync(join(WORKFLOW_HOOKS, file), installedPath);
   }
 }
 
@@ -292,7 +269,7 @@ function registeredCodexHandler(
   ).find(
     (entry) =>
       lifecycleEvent !== "PreToolUse" ||
-      entry.command?.includes(`${policyHookId}.sh`),
+      entry.command?.includes(`${policyHookId}.mjs`),
   )!;
   const command = registeredHook.command;
   const commandWindows = registeredHook.commandWindows;
@@ -395,7 +372,14 @@ function handlerDiagnostics(result: ReturnType<typeof spawnSync>): string {
   return `status=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
 }
 
+const POWERSHELL_HOSTS = availablePowerShellHosts();
+
 describe("hook command spawn matrix", () => {
+  registerAntigravityWindowsArgvTests(
+    disposableParents,
+    installShippedHookFiles,
+  );
+
   it("delivers benign and blocked payloads through the exact registered argv from a hostile-named root", () => {
     const projectRoot = createRegisteredHostileProject();
     const denyHandler = registeredHandler(projectRoot, "PreToolUse");
@@ -478,6 +462,12 @@ describe("hook command spawn matrix", () => {
       ];
       const blockedPayload = denyPayload("cat .env");
       const blockedReplays = replayVariants.map((variant) => {
+        recordWindowsReplayStage({
+          phase: "start",
+          probe: "registered-hook",
+          environment: variant.environment,
+          stdin: variant.stdin,
+        });
         const startedAt = performance.now();
         const result = runRegisteredCodexHandler(
           projectRoot,
@@ -491,11 +481,29 @@ describe("hook command spawn matrix", () => {
         );
         const errorCode =
           (result.error as NodeJS.ErrnoException | undefined)?.code ?? "none";
+        recordWindowsReplayStage({
+          phase: "end",
+          probe: "registered-hook",
+          environment: variant.environment,
+          stdin: variant.stdin,
+          duration_ms: durationMs,
+          status: result.status,
+          error: errorCode,
+        });
         testContext.diagnostic(
           `codex-windows-replay environment=${variant.environment} stdin=${variant.stdin} duration_ms=${durationMs} status=${String(result.status)} error=${errorCode}`,
         );
         return result;
       });
+
+      // Run controls after the original replays so they cannot warm the failing path.
+      runWindowsDiagnosticControls(
+        projectRoot,
+        denyHandler.command,
+        blockedPayload,
+        replayVariants,
+        runWithFileStreams,
+      );
 
       // Each blocked replay must retain the user's sensitive-file protection and actionable denial.
       for (const blocked of blockedReplays) {
@@ -612,6 +620,23 @@ describe("hook command spawn matrix", () => {
     },
   );
 
+  // Copilot runs its `powershell` field on Windows, and a failing preToolUse command denies every tool call.
+  it(
+    "registers Copilot PowerShell commands that every local PowerShell host can parse",
+    {
+      skip:
+        POWERSHELL_HOSTS.length === 0 && "no PowerShell host on this machine",
+    },
+    () => {
+      const codexRoot = createRegisteredHostileProject("codex");
+      const copilotRoot = createRegisteredHostileProject("copilot");
+      assertPowerShellParses(POWERSHELL_HOSTS, [
+        registeredCodexHandler(codexRoot, "PreToolUse").commandWindows,
+        ...registeredCopilotPowerShellCommands(copilotRoot),
+      ]);
+    },
+  );
+
   it("resolves the managed root from a nested working directory", () => {
     const projectRoot = createRegisteredHostileProject();
     const denyHandler = registeredHandler(projectRoot, "PreToolUse");
@@ -658,10 +683,10 @@ const DEGRADATION_CASES: DegradationCase[] = [
     payload: denyPayload("git status"),
     // Filesystem side effects: removes a disposable installed file to reproduce an absent launch dependency before provider replay.
     mutate: (projectRoot) =>
-      rmSync(join(projectRoot, ".goat-flow", "hooks", "run-with-bash.mjs")),
+      rmSync(join(projectRoot, ".goat-flow", "hooks", "run-hook.mjs")),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed root incomplete\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.mjs: managed root incomplete\./u,
   },
   {
     name: "corrupt launcher source becomes the policy could-not-start response",
@@ -670,12 +695,12 @@ const DEGRADATION_CASES: DegradationCase[] = [
     // Filesystem side effects: writes a disposable installed file to reproduce an invalid or incomplete launch dependency before provider replay.
     mutate: (projectRoot) =>
       writeFileSync(
-        join(projectRoot, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        join(projectRoot, ".goat-flow", "hooks", "run-hook.mjs"),
         CORRUPT_MODULE_SOURCE,
       ),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed launcher could not start\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.mjs: managed launcher could not start\./u,
   },
   {
     name: "launcher without the runHookWithBash API is an explicit mismatch",
@@ -684,12 +709,12 @@ const DEGRADATION_CASES: DegradationCase[] = [
     // Filesystem side effects: writes a disposable installed file to reproduce an invalid or incomplete launch dependency before provider replay.
     mutate: (projectRoot) =>
       writeFileSync(
-        join(projectRoot, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        join(projectRoot, ".goat-flow", "hooks", "run-hook.mjs"),
         "export const probeOnly = true;\n",
       ),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed launcher API mismatch\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.mjs: managed launcher API mismatch\./u,
   },
   {
     name: "missing launch runtime breaks the launcher import chain",
@@ -697,12 +722,10 @@ const DEGRADATION_CASES: DegradationCase[] = [
     payload: denyPayload("git status"),
     // Filesystem side effects: removes a disposable installed file to reproduce an absent launch dependency before provider replay.
     mutate: (projectRoot) =>
-      rmSync(
-        join(projectRoot, ".goat-flow", "hooks", "hook-launch-runtime.mjs"),
-      ),
+      rmSync(join(projectRoot, ".goat-flow", "hooks", "hook-launch.mjs")),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed launcher could not start\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.mjs: managed launcher could not start\./u,
   },
   {
     name: "corrupt launch runtime breaks the launcher import chain",
@@ -711,12 +734,12 @@ const DEGRADATION_CASES: DegradationCase[] = [
     // Filesystem side effects: writes a disposable installed file to reproduce an invalid or incomplete launch dependency before provider replay.
     mutate: (projectRoot) =>
       writeFileSync(
-        join(projectRoot, ".goat-flow", "hooks", "hook-launch-runtime.mjs"),
+        join(projectRoot, ".goat-flow", "hooks", "hook-launch.mjs"),
         CORRUPT_MODULE_SOURCE,
       ),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed launcher could not start\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.mjs: managed launcher could not start\./u,
   },
   {
     name: "missing hook script fails root classification with the policy response",
@@ -724,10 +747,10 @@ const DEGRADATION_CASES: DegradationCase[] = [
     payload: denyPayload("git status"),
     // Filesystem side effects: removes a disposable installed file to reproduce an absent launch dependency before provider replay.
     mutate: (projectRoot) =>
-      rmSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous.sh")),
+      rmSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous.mjs")),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed root incomplete\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.mjs: managed root incomplete\./u,
   },
   {
     name: "missing provider adapter keeps the Gruff soft-skip contract",
@@ -763,7 +786,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     // Filesystem side effects: writes a disposable installed file to reproduce an invalid or incomplete launch dependency before provider replay.
     mutate: (projectRoot) =>
       writeFileSync(
-        join(projectRoot, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        join(projectRoot, ".goat-flow", "hooks", "run-hook.mjs"),
         CORRUPT_MODULE_SOURCE,
       ),
     expectedStatus: 2,
@@ -801,7 +824,7 @@ describe("catchable managed-file failures keep provider responses", () => {
     const denyHandler = registeredHandler(projectRoot, "PreToolUse");
     // Shape checks pass for a regular file, so Bash itself rejects the content.
     writeFileSync(
-      join(projectRoot, ".goat-flow", "hooks", "deny-dangerous.sh"),
+      join(projectRoot, ".goat-flow", "hooks", "deny-dangerous.mjs"),
       ")((((\n",
     );
     const result = runRegisteredHandler(
@@ -886,7 +909,7 @@ describe("retained policy registrations", () => {
           assert.ok(
             readFileSync(configPath, "utf8").includes("preserved-user-hook"),
           );
-          assert.ok(readFileSync(configPath, "utf8").includes(`${hookId}.sh`));
+          assert.ok(readFileSync(configPath, "utf8").includes(`${hookId}.mjs`));
           assert.equal(replaySavedHandler(blockedCommand).status, 0);
           applyHookState(hookId, true, root);
           assert.equal(replaySavedHandler(blockedCommand).status, 2);
@@ -925,9 +948,9 @@ describe("retained policy registrations", () => {
       writeFileSync(config, `hooks: {${hookId}: {enabled: false}}`);
       // Break each launch dependency to verify an archived handler cannot silently skip protection.
       for (const dependency of [
-        "run-with-bash.mjs",
-        "hook-launch-runtime.mjs",
-        `${hookId}.sh`,
+        "run-hook.mjs",
+        "hook-launch.mjs",
+        `${hookId}.mjs`,
         "hook-policy-state.cjs",
         "vendor/js-yaml.cjs",
       ]) {
@@ -942,7 +965,7 @@ describe("retained policy registrations", () => {
         writeFileSync(installed, bytes);
       }
       // A complete off decision skips downstream policy code without requiring Bash.
-      rmSync(join(root, ".goat-flow/hooks/deny-dangerous/guard-runtime.sh"));
+      rmSync(join(root, ".goat-flow/hooks/policy-evaluation.mjs"));
       assert.equal(
         runRegisteredHandler(root, saved, denyPayload(blockedCommand)).status,
         0,
@@ -1074,8 +1097,8 @@ function createParentWithChildInstall(
     assert.ok(gruffSpec);
     writeAgentHookState(childRoot, PROFILES.claude, gruffSpec, true);
     writeFileSync(
-      join(childRoot, ".goat-flow", "hooks", "gruff-code-quality.sh"),
-      `#!/usr/bin/env bash\nprintf '${CHILD_RUNTIME_MARKER}\\n' >&2\n`,
+      join(childRoot, ".goat-flow", "hooks", "gruff-code-quality.mjs"),
+      `console.error(${JSON.stringify(CHILD_RUNTIME_MARKER)});\n`,
     );
   }
   return { parentRoot, childRoot };
@@ -1128,7 +1151,7 @@ describe("Gruff entry selection ignores the shell working directory", () => {
     assert.equal(blocked.status, 2, handlerDiagnostics(blocked));
     assert.match(
       String(blocked.stderr),
-      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed root incomplete\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.mjs: managed root incomplete\./u,
     );
   });
 });

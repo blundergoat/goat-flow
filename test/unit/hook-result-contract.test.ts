@@ -168,4 +168,38 @@ describe("hook result contract", () => {
       ),
     );
   });
+
+  // The binary-gap terminal reason never reads as a pass, a block or an infrastructure recovery.
+  it("accepts coverage-gap-reentry-ended only as an incomplete result without infrastructure recovery", () => {
+    const endedResult = completeHookResult({
+      outcome: "incomplete",
+      coverage: {
+        status: "none",
+        attemptedUnits: 1,
+        completedUnits: 0,
+        skippedUnits: 1,
+      },
+      reasonCode: "coverage-gap-reentry-ended",
+    });
+    assert.deepEqual(validateHookResultEnvelope(endedResult), []);
+
+    const infrastructure = {
+      ...endedResult.execution,
+      failureClass: "infrastructure" as const,
+    };
+    const recovery = {
+      state: "exhausted" as const,
+      failureCode: "coverage-incomplete",
+    };
+    for (const invalidResult of [
+      { ...endedResult, outcome: "block" as const },
+      { ...endedResult, execution: infrastructure },
+      { ...endedResult, execution: { ...infrastructure, recovery } },
+    ])
+      assert.ok(
+        validateHookResultEnvelope(invalidResult).includes(
+          "coverage-gap-reentry-ended requires an incomplete result without infrastructure recovery",
+        ),
+      );
+  });
 });

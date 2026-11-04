@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-10-11
+last_reviewed: 2026-11-02
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, coverage judged per behaviour rather than per file, evidence identity proved through the same bytes and resolver the product uses, and skill branches whose stop or skip rule needs its own contract. Changing text that tests already pin is [contract-pinned-wording.md](contract-pinned-wording.md); size limits crossed by added text are [verification-size-gates.md](verification-size-gates.md); ordering edits and gate runs during a change is [verification-gate-runs.md](verification-gate-runs.md); proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md); process-lifecycle and delegated-run tests are [verification-testing-process.md](verification-testing-process.md).
@@ -102,3 +102,15 @@ Related evidence moved intact to [platform-verification.md](platform-verificatio
 **Prevention:** Pair accepted project aliases with a foreign-project control. Restore evidence without changing saved admission. Check metadata alongside hashes.
 
 The change rejected an alias, hid restored evidence and admitted a capture without source identity. Each regression failed before correction and passed afterward. Requiring canonical JSON then broke three workspace cases; hashes already bind artifact bytes. Evidence: `test/integration/quality-history-diff.test.ts` (search: `project aliases`, `restored references`, `missing source identity`, `binds workspace static proof`).
+
+## Lesson: Assert Gruff hook stability on findings and coverage, not raw bytes
+
+**Status:** active | **Created:** 2026-11-02 | **Evidence:** ACTUAL_MEASURED
+**Trigger phase:** ACT | **Caught at:** VERIFY
+**Decision changed:** When a probe or test replays the Gruff hook repeatedly, compare the result's status, coverage and finding lines; never require byte-identical stdout or stderr.
+
+**Prevention:** Key a stability check on the envelope's outcome, coverage and finding rows, and strip the output-size line before comparing, because that line reports whatever stderr length the run produced. Keep the raw bytes as recorded evidence only. The envelope renderer is `workflow/hooks/hook-provider-adapters.mjs` (search: `const coverageSummary`).
+
+**What happened:** A timing probe replayed the registered Claude PostToolUse Gruff command 31 times on one unchanged fixture and asserted byte-identical output per cell. The first timed round failed against the warm-up round: both runs reported ADVISORY, complete coverage and the same three findings, but stderr was 1016 bytes in one run and 921 in the other, and the envelope's output-size line followed it. The guidance lines chosen in `src/hooks/gruff/feedback.mts` (search: `function reviewGuidance`) depend only on the finding codes, which matched, so the variation sits elsewhere in stderr; the varying segment was not isolated.
+
+**Root cause:** I treated a diagnostic stream that reports its own length as a stable contract instead of comparing the typed result.

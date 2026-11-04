@@ -21,7 +21,7 @@ import {
 import type { Command, ParsedCLI } from "./cli-types.js";
 import { handleHooksCommand } from "./hooks-command.js";
 import { handleInstallCommand } from "./install-command.js";
-import { handleReviewCommand } from "./review-validate.js";
+import { handleReviewCommand } from "./review-command.js";
 import { getPackageVersion } from "./paths.js";
 import { handleIndexCommand } from "./learning-loop-index/command.js";
 import { handleLearningLoopRecallCommand } from "./learning-loop-recall.js";

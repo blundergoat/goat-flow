@@ -316,7 +316,7 @@ function appendGroundingAndReadNext(
   // An agent profile without an on-disk deny hook gives the reviewer a clear no-probe message instead of an unusable command.
   lines.push(
     promptContext.denyHookFile
-      ? `bash ${promptContext.denyHookFile} --self-test=smoke\nbash ${promptContext.denyHookFile.replace(/deny-dangerous\.sh$/, "deny-git-mutations.sh")} --self-test=smoke`
+      ? `${promptContext.denyHookFile.endsWith(".mjs") ? "node" : "bash"} ${promptContext.denyHookFile} --self-test=smoke\n${promptContext.denyHookFile.endsWith(".mjs") ? "node" : "bash"} ${promptContext.denyHookFile.replace(/deny-dangerous(\.(?:mjs|sh))$/, "deny-git-mutations$1")} --self-test=smoke`
       : "#    This agent has no on-disk deny hook script to self-test.",
   );
   lines.push("");
@@ -490,7 +490,7 @@ function appendSetupQuality(
     `- Were hook scripts installed and registered in \`${promptContext.hookConfigFile}\`?`,
   );
   lines.push(
-    "- Did both deny-dangerous.sh and deny-git-mutations.sh pass their self-tests in Step 0? If not, which policy failed?",
+    "- Did both managed policy entrypoints pass their self-tests in Step 0? If not, which policy failed?",
   );
   lines.push("");
 }

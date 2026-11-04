@@ -3,7 +3,7 @@ category: dashboard-testing
 last_reviewed: 2026-09-21
 ---
 
-**Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md); proving a provider actually delivers hook feedback is [hook-testing.md](hook-testing.md).
+**Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md); proving a provider actually delivers hook feedback is [hook-support-evidence.md](hook-support-evidence.md).
 
 ## Lesson: Dashboard release QA should avoid real agent runners unless runner behavior is the target
 

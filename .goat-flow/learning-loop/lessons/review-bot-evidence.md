@@ -1,9 +1,17 @@
 ---
 category: review-bot-evidence
-last_reviewed: 2026-09-25
+last_reviewed: 2026-11-04
 ---
 
 **Scope:** Weighing an automated reviewer's output - sandbox reruns that reach different conclusions, position-independent ordering findings, an "addressed" marker that proves nothing, and a bot finding that contradicts a passing test. Human and multi-agent critique is [review-feedback.md](review-feedback.md).
+
+**Verification correction (2026-11-01):** Comment-only equivalence must include text used as test input, not just executable tokens.
+
+The PR #69 clarity pass changed two headings in `scripts/setup-initial.sh`; the ShellCheck fixture then extracted an empty section and failed.
+Restoring those headings preserved the fixture. Search the original text before editing; see
+[contract-pinned-wording.md](contract-pinned-wording.md).
+
+Evidence: `test/contract/documented-shellcheck-command.test.ts` (search: `setupScript.indexOf("# 5. Install shellcheck")`).
 
 ## Lesson: Reproduce review findings through the production parser before mutating parsed fixtures
 
@@ -11,15 +19,19 @@ last_reviewed: 2026-09-25
 **Severity:** CORRECTNESS
 **Decision changed:** Serialize suspect input and run the production parser before testing a downstream consumer's response to it.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-09-25
+**Incident count:** 4 | **Latest occurrence:** 2026-11-01
 
 **Prevention:** Trace validation before accepting an automated finding. A fixture changed after parsing can construct a state the application rejects and cannot deliver to the consumer. Test malformed source through the real parser and assert its acceptance status before interpreting downstream output.
 
 **What happened:** During PR #61 triage, an in-memory forecast mutation appeared to show invalid revisions inflating growth. Double-checking the authored Markdown through `src/cli/plans-export.ts` (search: `forecastContext.method = null`) showed that semantic validation disables the forecast first. The proposed runtime change was unnecessary and was removed. `test/unit/plans-check-growth.test.ts` (search: `invalid revisions`) retains the production-parser regression.
 
-**Verification correction:** The same response pass replaced shell-body extraction and initially lost ANSI-C quote handling. Full self-tests reported `FAIL: shell should block ansi-c bash-c recursive rm (exit=0)` and the equivalent Git publication failure. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `raw_shell_body`) now preserves that handling, while `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `shell forwarding with empty argv zero`) covers the adjacent positional-argument case. Run the full parser corpus after an extraction change; a passing incident-only probe is insufficient.
+**Verification correction:** The same response pass replaced shell-body extraction and initially lost ANSI-C quote handling. Full self-tests reported `FAIL: shell should block ansi-c bash-c recursive rm (exit=0)` and the equivalent Git publication failure. `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `raw_shell_body`) now preserves that handling, while `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `shell forwarding with empty argv zero`) covers the adjacent positional-argument case. Run the full parser corpus after an extraction change; a passing incident-only probe is insufficient.
 
 **Recurrence 2026-09-25:** A PR #61 goat-review confirmed a Codex claim that `learn new` could publish an entry into an unindexed bucket after a mid-run config edit. The confirmation rested on `src/cli/learn-scaffold.ts` (search: `function regenerateLearningLoopIndexes`) alone. A double-check traced the paths through `src/cli/config/reader.ts` (search: `old path overrides are ignored`), which always keeps the canonical learning-loop paths, and the re-issued report withdrew the finding. Trace how a consumer's input is produced before confirming a bot claim about that consumer.
+
+**Recurrence 2026-10-31:** The PR #69 feedback review promoted a mirror-equality claim to a merge blocker after comparing a frozen scanner with the live installed copy. The owning assertion actually calls `hookTreeRoot("installed")`: that argument selects the directory layout, while the default selection still follows `GOAT_FLOW_HOOK_UNDER_TEST=reference`. Replaying those exact helper calls resolved both files below `test/fixtures/hooks-bash` and returned `equal=true`; the blocker was withdrawn. Trace arguments, defaults and environment through the real producer before comparing downstream artifacts. Evidence: `test/helpers/hook-entrypoint.ts` (search: `layout: HookLayout`), `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `the installed mirror matches the workflow hook source`). A structural report-validation PASS did not validate the comparison or its severity.
+
+**Recurrence 2026-11-01:** A parity regression test tried to inject a launch failure by changing the reference root to a missing directory. Fixture materialization supplied a different working directory, so Bash started and returned a completed script error; the test failed with `Missing expected exception.` Setting the row's `setup.cwd` to a missing directory exercised the actual spawn failure and verified that report mode still throws. Follow the producer into the final process options before choosing fault injection. Evidence: ~~`scripts/hook-parity-reference-command.mjs` (search: `cwd: request.cwd`), `scripts/check-hook-parity.mjs` (search: `Frozen launch failed`), and `test/integration/hook-parity-reference.test.ts` (search: `setup: { ...changed.setup, cwd:`)~~ (retired at commit `2cc5b6d2`).
 
 ## Lesson: External code-review bots that re-run verification commands in their own sandbox produce false-positive Critical findings
 
@@ -65,7 +77,7 @@ All three were wrong. Locally: `npm run typecheck` exits 0, `npm test` passes 83
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
 
-**Prevention:** Before acting on any review finding, grep the test suite and self-test for the behaviour it wants changed. Run the full suite after each guard edit rather than at the end - the 22-failure spike localised both mistakes immediately. Prefer narrowing a fix to the unsafe input (`/dev`, `/proc`, `-`) over removing a whole capability; the codebase usually already owns that predicate. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `is_shell_name`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `stdin rcfile before bash script`).
+**Prevention:** Before acting on any review finding, grep the test suite and self-test for the behaviour it wants changed. Run the full suite after each guard edit rather than at the end - the 22-failure spike localised both mistakes immediately. Prefer narrowing a fix to the unsafe input (`/dev`, `/proc`, `-`) over removing a whole capability; the codebase usually already owns that predicate. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `is_shell_name`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `stdin rcfile before bash script`).
 
 **What happened:** Among 41 automated review comments triaged on PR #58, two Codex findings were mechanically correct about the code yet wrong to act on. Codex reported that the managed hook launcher walks past a nested Git root and adopts an enclosing project's install. The code confirmed it. Applying the suggested reorder (explicit host root before the ancestor walk, walk bounded at the Git root) turned 2 test failures into 22, because `test/unit/hook-registrar.test.ts` (search: `selects Git first, then the nearest complete managed ancestor`) creates a plain `git init` directory inside a managed root and asserts the launcher still resolves the outer install. The reported hazard and the asserted behaviour are the same behaviour. Separately, blanket-rejecting `--rcfile` in the shell exemption to close a real `bash --rcfile /dev/stdin -i script.sh` bypass also broke `printf payload | bash --rcfile scripts/bashrc scripts/import-data.sh`, a legitimate checked-in startup file the self-test already covered.
 

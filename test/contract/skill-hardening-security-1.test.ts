@@ -11,8 +11,8 @@ import { scoreArtifact } from "../../src/cli/quality/skill-quality-score.js";
 import {
   assertForEachTarget,
   assertMatchesAll,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readMarkdownSubsection,
   readPresetPrompt,
@@ -21,7 +21,7 @@ import {
 
 describe("skill hardening contracts: security (1/2)", () => {
   it("loads full-depth conventions and every configured security reference", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       assertMatchesAll(
         readMarkdownSection(skillPath, "Shared Conventions"),
         [/skill-preamble\.md/iu, /Full.*skill-conventions\.md/iu],
@@ -50,7 +50,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("keeps goat-security Quick Scan out of Full-only specialist work", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const quickScanPath = readMarkdownSection(skillPath, "Quick Scan Path");
       const fullAssessmentPath = readMarkdownSection(
         skillPath,
@@ -109,7 +109,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("admits an early target read only for trusted explicit-component Quick scans", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const earlyRead = intake.indexOf("**Proportional Quick:**");
       const exhaustiveInventory = intake.indexOf(
@@ -148,7 +148,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("allows only observed trusted-component Quick risks before exhaustive inventories", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const proportionalGate = intake.indexOf(
         "Proportional Quick finding gate",
@@ -176,7 +176,7 @@ describe("skill hardening contracts: security (1/2)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/common-threats.md",
       ),
@@ -213,7 +213,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("defines goat-security specialist admission and unavailable fallback", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const fullAssessmentPath = readMarkdownSection(
         skillPath,
         "Full Assessment Path",
@@ -245,7 +245,7 @@ describe("skill hardening contracts: security (1/2)", () => {
 
   it("binds goat-security policy exceptions and scanners to trusted authorities", () => {
     // A reviewer checks an accepted-risk exception against the policy reference before changing its disposition.
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assertMatchesAll(
         readMarkdownSection(skillPath, "Step 0 - Intake"),
@@ -297,7 +297,7 @@ describe("skill hardening contracts: security (1/2)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/project-policy-template.md",
       ),
@@ -399,7 +399,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("separates goat-security evidence, exploitability, type, disposition, and severity", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const fullAssessment = readMarkdownSection(
         skillPath,
         "Full Assessment Path",
@@ -533,7 +533,7 @@ describe("skill hardening contracts: security (1/2)", () => {
         .map((entry) => entry.token);
     };
 
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const rankedPostures = [
         ...readMarkdownSubsection(
           readMarkdownSection(skillPath, "Full Assessment Path"),
@@ -643,7 +643,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("covers versioned application and agentic threats plus every Git delta state", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const rootGuidance = readProjectFile(skillPath);
       // The root keeps the gates and loads each record owner at its consuming phase.
       assert.match(
@@ -697,7 +697,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/common-threats.md",
       ),
@@ -777,7 +777,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       },
     );
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/supply-chain-and-cicd.md",
       ),
@@ -800,7 +800,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       },
     );
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/supply-chain-and-cicd.md",
       ),
@@ -835,7 +835,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("covers project runtime classes and complementary LLM risks", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       assertMatchesAll(
         readMarkdownSection(skillPath, "Step 0 - Intake"),
         [
@@ -867,7 +867,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/common-threats.md",
       ),
@@ -885,7 +885,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       },
     );
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-security",
         "references/supply-chain-and-cicd.md",
       ),

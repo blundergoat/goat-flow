@@ -1,9 +1,24 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-10-03
+last_reviewed: 2026-11-04
 ---
 
-**Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
+**Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md). What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md).
+
+## Lesson: Typed hook boundaries must distinguish absent fields from explicit undefined
+
+**Status:** active | **Created:** 2026-10-16
+**Severity:** INTEGRATION
+**Decision changed:** Compare each typed boundary with its producer's absence contract before wiring callers.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** With exact optional property types, an optional field does not accept an explicit undefined value unless its type includes undefined. Match the producer and shared runtime: permit explicit undefined when supported, or omit the property when absent. Run the hooks typecheck after connecting the caller.
+
+**What happened:** The native result renderer forwarded CapturedHookProcessResult.output into NativeLauncherFailure.outputMeasurement. Three call sites failed with TS2379 because the producer permits undefined but the optional destination field did not. Adding undefined to the destination's type preserved runtime behavior and cleared the same typecheck.
+
+**Evidence:** src/hooks/hook-supervisor.mts (search: `output: HookOutputMeasurement | undefined`), src/hooks/hook-launch.mts (search: `outputMeasurement?: HookOutputMeasurement | undefined`) and tsconfig.json (search: `exactOptionalPropertyTypes`).
+
+---
 
 ## Lesson: Bash case patterns need syntax proof for template delimiters
 
@@ -12,7 +27,7 @@ last_reviewed: 2026-10-03
 **Decision changed:** Treat Bash glob literals as shell syntax, not inert pattern text; run both parser and static-analysis checks before copying a hook edit into its mirrors.
 **Incident count:** 2 | **Latest occurrence:** 2026-08-28
 
-**Prevention:** Use parser-safe spellings for glob metacharacters, then run `bash -n` and the repository's exact ShellCheck command before mirror fanout or behavior tests. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_reference_or_interpolation`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Plain command words are already normalized`), and `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `Only backslash-rooted Windows operands`).
+**Prevention:** Use parser-safe spellings for glob metacharacters, then run `bash -n` and the repository's exact ShellCheck command before mirror fanout or behavior tests. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `is_reference_or_interpolation`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Plain command words are already normalized`), and `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `Only backslash-rooted Windows operands`).
 
 **What happened:** While adding `post-turn-safety` false-positive coverage for Twig/Jinja/ERB interpolation delimiters, the first Bash `case` pattern used unescaped `<`, `>`, `{`, and `}` tokens. The focused runtime tests then failed with `syntax error near unexpected token '<'` before scanner logic ran, and ShellCheck flagged the brace literals once I fixed the parse error.
 
@@ -47,27 +62,27 @@ last_reviewed: 2026-10-03
 **Decision changed:** Treat every shell-quoted embedded program and its comments as part of the outer shell grammar; run syntax proof before mirror fanout.
 **Incident count:** 7 | **Latest occurrence:** 2026-10-03
 
-**Prevention:** In hook scripts, put EREs containing shell metacharacters or quote classes into named variables before matching. Run `bash -n` before mirror fanout, then run the central full self-test before treating behavior as restored. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `prepare_segment_context`), `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `redirect_append_re`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `bash -c chained rm`).
+**Prevention:** In hook scripts, put EREs containing shell metacharacters or quote classes into named variables before matching. Run `bash -n` before mirror fanout, then run the central full self-test before treating behavior as restored. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `prepare_segment_context`), `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `redirect_append_re`), and `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `bash -c chained rm`).
 
 **What happened:** While regenerating the self-contained split hooks, inline Bash EREs lost escaping for `>`, `|`, `<<<`, and quote classes. `bash -n` caught parse failures, and the full deny-dangerous self-test caught `bash -c "echo ok; rm -rf /"` returning exit 0 because the inline quote regex captured only `r` instead of the inner command.
 
 **Root cause:** I generated Bash through JavaScript strings and left complex regexes directly inside `[[ ... =~ ... ]]`, where shell parsing and string escaping both matter.
 
-**Recurrence 2026-08-10:** An apostrophe in embedded Node broke Bash parsing; a template literal then raised SC2016. Keep embedded comments quote-neutral and run `bash -n` plus ShellCheck before mirror fanout. Structural audits must recognize embedded `//` comments before reporting a missing Bash comment. Evidence: `workflow/hooks/post-turn-safety.sh` (search: `read_stop_context`).
+**Recurrence 2026-08-10:** An apostrophe in embedded Node broke Bash parsing; a template literal then raised SC2016. Keep embedded comments quote-neutral and run `bash -n` plus ShellCheck before mirror fanout. Structural audits must recognize embedded `//` comments before reporting a missing Bash comment. Evidence: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `read_stop_context`).
 
-**Recurrence 2026-08-10 (SC2016 directive):** Release ShellCheck flagged the provider-result Node program because its single quotes deliberately prevent shell expansion. A narrow SC2016 directive now records that invariant beside the command in both byte-identical mirrors. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `Literal JavaScript prevents shell expansion of user feedback`) and `.goat-flow/hooks/post-turn-safety.sh` (search: `Literal JavaScript prevents shell expansion of user feedback`).
+**Recurrence 2026-08-10 (SC2016 directive):** Release ShellCheck flagged the provider-result Node program because its single quotes deliberately prevent shell expansion. A narrow SC2016 directive now records that invariant beside the command in both byte-identical mirrors. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `Literal JavaScript prevents shell expansion of user feedback`) and `test/fixtures/hooks-bash/.goat-flow/hooks/post-turn-safety.sh` (search: `Literal JavaScript prevents shell expansion of user feedback`).
 
-**Recurrence 2026-08-16:** While making the Gruff contract filter span-aware, comments inside its Bash-single-quoted jq program used apostrophes. The edit hook immediately failed with `adapter-delivery-failed`, and `bash -n` located the prematurely terminated jq string before `.findings`. Rewriting those comments without single quotes restored syntax, after which the focused span regression passed. Embedded-program comments must remain neutral to the outer quote delimiter, and `bash -n` must run before treating a mirror edit as executable. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `def attributable_line_or_span`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `surfaces a symbol finding when its span overlaps`).
+**Recurrence 2026-08-16:** While making the Gruff contract filter span-aware, comments inside its Bash-single-quoted jq program used apostrophes. The edit hook immediately failed with `adapter-delivery-failed`, and `bash -n` located the prematurely terminated jq string before `.findings`. Rewriting those comments without single quotes restored syntax, after which the focused span regression passed. Embedded-program comments must remain neutral to the outer quote delimiter, and `bash -n` must run before treating a mirror edit as executable. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `def attributable_line_or_span`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `surfaces a symbol finding when its span overlaps`).
 
-**Recurrence 2026-08-29:** The deny hook's substitution-opener test matches the literal openers `$(`, `<(` and `>(` inside `[[ ... ]]`, so its single quotes are load-bearing. ShellCheck read them as a failed expansion and raised SC2016 in both byte-identical mirrors, which made the aggregate shell-lint command in the instruction files exit 1 as published - the documented command was untrue for every agent that ran it. A narrow directive beside the test (`workflow/hooks/deny-dangerous/guard-runtime.sh`, search: `_goat_subst_n=0`) restored exit 0 with no exclusions. At the time, CI and preflight hid this with the `SC2016` exclusion, and preflight's `manifest_eval hook-dirs` covered only `.goat-flow/hooks`; canonical `workflow/hooks/` regressions were invisible there. Current `scripts/preflight-checks.sh` also lints canonical hooks (search: `Framework development also checks canonical copies`). Since the 2026-09-30 consolidation, `test/contract/documented-shellcheck-command.test.ts` checks the complete published command and analyzer availability (search: `is published identically on every instruction surface`); preflight owns the actual lint run.
+**Recurrence 2026-08-29:** The deny hook's substitution-opener test matches the literal openers `$(`, `<(` and `>(` inside `[[ ... ]]`, so its single quotes are load-bearing. ShellCheck read them as a failed expansion and raised SC2016 in both byte-identical mirrors, which made the aggregate shell-lint command in the instruction files exit 1 as published - the documented command was untrue for every agent that ran it. A narrow directive beside the test (`test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh`, search: `_goat_subst_n=0`) restored exit 0 with no exclusions. At the time, CI and preflight hid this with the `SC2016` exclusion, and preflight's `manifest_eval hook-dirs` covered only `.goat-flow/hooks`; canonical `workflow/hooks/` regressions were invisible there. Current `scripts/preflight-checks.sh` also lints canonical hooks (search: `Framework development also checks canonical copies`). Since the 2026-09-30 consolidation, `test/contract/documented-shellcheck-command.test.ts` checks the complete published command and analyzer availability (search: `is published identically on every instruction surface`); preflight owns the actual lint run.
 
-**Recurrence 2026-09-26:** I mirrored a new `[[ ... =~ ... ]]` condition with a mismatched closing bracket before running `bash -n`. The installed PreToolUse guard failed closed and blocked Bash until the syntax was corrected. ShellCheck then found a `--` case arm hidden behind `-*`; putting the specific arm first restored lint. Run syntax and ShellCheck on the canonical edit before touching the installed mirror. Evidence: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `HOME|XDG_CONFIG_HOME|GIT_DIR`) and the full policy cases in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `HOME-selected saved publication alias`).
+**Recurrence 2026-09-26:** I mirrored a new `[[ ... =~ ... ]]` condition with a mismatched closing bracket before running `bash -n`. The installed PreToolUse guard failed closed and blocked Bash until the syntax was corrected. ShellCheck then found a `--` case arm hidden behind `-*`; putting the specific arm first restored lint. Run syntax and ShellCheck on the canonical edit before touching the installed mirror. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `HOME|XDG_CONFIG_HOME|GIT_DIR`) and the full policy cases in `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `HOME-selected saved publication alias`).
 
 **Recurrence 2026-10-03:** A controller comment used an apostrophe inside a Bash-single-quoted Node program, breaking shell syntax before scanning.
 Removing the apostrophe restored parsing; syntax and ShellCheck ran before the corrected scanner was copied to its installed mirror.
 
 Treat embedded comments as part of the outer shell grammar, including when the intended edit only explains user feedback.
-Evidence: `workflow/hooks/post-turn-safety.sh` (search: `captureHookProcessUntilDeadline`);
+Evidence: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `captureHookProcessUntilDeadline`);
 `test/integration/post-turn-launcher-recovery.test.ts` (search: `preserves controller child findings while draining ordinary diagnostic excess`).
 
 ## Lesson: Dynamic hook helpers need explicit ShellCheck handling
@@ -77,24 +92,24 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `captureHookProcessUntil
 **Decision changed:** Trace SC2329 callers before suppression and run the exact published lint command with the analyzer version under test.
 **Incident count:** 4 | **Latest occurrence:** 2026-09-21
 
-**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. For SC2329, trace traps and sourced callers before adding a function-scoped directive naming the call path. Verify the workflow and installed mirrors with the same no-`-x` ShellCheck command used by preflight. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
+**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. For SC2329, trace traps and sourced callers before adding a function-scoped directive naming the call path. When editing those hooks, verify the workflow and installed mirrors with the published no-`-x` ShellCheck command. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
 
 **What happened:** After extracting `deny-dangerous.sh`, I expected `# shellcheck source=deny-dangerous.sh` above the runtime-computed source line to satisfy linting. The repo's hook lint command does not run ShellCheck with `-x`, so ShellCheck failed or warned with SC1091/SC1090 on every mirrored policy hook before any behavior checks could matter.
 
 **Root cause:** I treated the source directive as enough without checking it against the exact lint invocation used by preflight and CI.
 
-**Recurrence 2026-09-21:** Native ShellCheck 0.11.0 reported six SC2329 findings in the published command: two EXIT-trap helpers in `scripts/preflight-checks.sh` (search: `_on_exit`) and (search: `_emit_footer`), plus two helpers in each `guard-runtime.sh` mirror. Their callers are in dynamically sourced `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `__goat_git_strip_globals`) and `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_unredirected_unpiped_read_only`). Local directives restored the published command without changing executable script bytes or its exclusion list. Verify command scope and analyzer availability with `test/contract/documented-shellcheck-command.test.ts` (search: `is published identically on every instruction surface`), then run the actual native lint through `scripts/preflight-checks.sh` (search: `Shellcheck (scripts)`); the earlier WSL 0.9.0 result did not establish 0.11.0 compatibility.
+**Recurrence 2026-09-21:** Native ShellCheck 0.11.0 reported six SC2329 findings in the published command: two EXIT-trap helpers in `scripts/preflight-checks.sh` (search: `_on_exit`) and (search: `_emit_footer`), plus two helpers in each `guard-runtime.sh` mirror. Their callers are in dynamically sourced `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `__goat_git_strip_globals`) and `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_unredirected_unpiped_read_only`). Local directives restored the published command without changing executable script bytes or its exclusion list. Verify command scope and analyzer availability with `test/contract/documented-shellcheck-command.test.ts` (search: `is published identically on every instruction surface`), then run the actual native lint through `scripts/preflight-checks.sh` (search: `Shellcheck (scripts)`); the earlier WSL 0.9.0 result did not establish 0.11.0 compatibility.
 
-**Recurrence 2026-08-07:** Release ShellCheck caught SC2016 because gruff guidance put Markdown backticks inside a single-quoted `printf` in both hook mirrors. Escape command backticks in a double-quoted string, then lint the full workflow and installed hook sets before treating the mirrors as ready. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`) and `.goat-flow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`).
+**Recurrence 2026-08-07:** Release ShellCheck caught SC2016 because gruff guidance put Markdown backticks inside a single-quoted `printf` in both hook mirrors. Escape command backticks in a double-quoted string, then lint the full workflow and installed hook sets before treating the mirrors as ready. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`) and `test/fixtures/hooks-bash/.goat-flow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`).
 
-**Recurrence 2026-05-27:** When git parsing moved into `deny-dangerous.sh`, ShellCheck still warned with SC2154 in thin hooks because helper-owned output variables (`__goat_git_rest`, `__goat_git_aliased_push`) were assigned dynamically in the sourced file. Initialize helper output variables in each thin hook before first reference so static analysis sees the contract. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_aliased_push=0`) and `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `__goat_git_rest=""`).
+**Recurrence 2026-05-27:** When git parsing moved into `deny-dangerous.sh`, ShellCheck still warned with SC2154 in thin hooks because helper-owned output variables (`__goat_git_rest`, `__goat_git_aliased_push`) were assigned dynamically in the sourced file. Initialize helper output variables in each thin hook before first reference so static analysis sees the contract. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_aliased_push=0`) and `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `__goat_git_rest=""`).
 
 ## Lesson: Shared hook helpers need missing-dependency runtime tests
 
 **Status:** active | **Created:** 2026-05-27
 **Severity:** INTEGRATION
 
-**Prevention:** Any Bash hook that sources a shared helper must guard the source path explicitly and include a self-test that runs the hook from a temp directory without the helper. The expected result is a fail-closed guardrail message, never exit 127. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `deny_dangerous_unavailable`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`).
+**Prevention:** Any Bash hook that sources a shared helper must guard the source path explicitly and include a self-test that runs the hook from a temp directory without the helper. The expected result is a fail-closed guardrail message, never exit 127. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous.sh` (search: `deny_dangerous_unavailable`) and `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`).
 
 **What happened:** After splitting the guard hooks through `deny-dangerous.sh`, PreToolUse started reporting hook failures with exit code 127 when a thin policy hook could not load the shared helper. The script used `set -uo pipefail`, so a failed `source` did not stop execution; the hook then reached `main "$@"` before `main` existed.
 
@@ -106,8 +121,40 @@ Evidence: `workflow/hooks/post-turn-safety.sh` (search: `captureHookProcessUntil
 
 **Status:** active | **Created:** 2026-07-03
 
-**Prevention:** When a hook self-test restricts PATH to hide one binary, first check which branch of the code under test can reach a PATH lookup for that binary. If the branch short-circuits earlier (env/config override present returns before the PATH search), append the real PATH - `PATH="$tmp/empty-bin:$PATH"` - so shell-out helpers keep working; keep the bare restricted PATH only for assertions that genuinely exercise PATH-based discovery. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `they never reach the PATH binary search`), (search: `config_binary_override`).
+**Prevention:** When a hook self-test restricts PATH to hide one binary, first check which branch of the code under test can reach a PATH lookup for that binary. If the branch short-circuits earlier (env/config override present returns before the PATH search), append the real PATH - `PATH="$tmp/empty-bin:$PATH"` - so shell-out helpers keep working; keep the bare restricted PATH only for assertions that genuinely exercise PATH-based discovery. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/gruff-code-quality.sh` (search: `they never reach the PATH binary search`), (search: `config_binary_override`).
 
 **What happened:** The gruff-code-quality self-test isolates binary discovery with `PATH="$tmp/empty-bin"` so a system-installed `gruff-py` cannot leak into assertions. The new repo-owned config override (`hooks.gruff-code-quality.binaries.<lang>`) parses `.goat-flow/config.yaml` with `awk`. Under the restricted PATH, `awk` was not found; the command substitution's `2>/dev/null || true` swallowed the failure, the parser returned empty, and the config-override self-test failed with an empty value while the production code path was actually correct.
 
 **Root cause:** Restricted-PATH fixtures constrain every external command in the function under test, not just the binary the fixture means to hide. A helper that shells out (`awk`, `sed`, `git`) silently degrades when the fixture PATH omits it, and fail-soft error handling converts the missing tool into a wrong answer instead of a visible error.
+
+---
+
+## Lesson: Generated Bash needs proof through each enclosing parser
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check both outer JavaScript and emitted Bash before running a generated extraction adapter.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Preserve Bash expansion literally across the outer language boundary. Run `node --check` on the generator, check the emitted script with `bash -n`, then execute one real smoke extraction before a full matrix.
+
+**What happened:** M01 embedded Bash parameter expansion in a JavaScript template. The initial Node syntax check failed with `Missing } in template expression`. Encoding the injected Bash as string-array elements corrected the outer syntax; the parser checks and the original 49-assertion smoke extraction then succeeded.
+
+**Evidence:** ~~`scripts/check-hook-parity.mjs` (search: `instrumentSelfTest`)~~ (retired at commit `2cc5b6d2`); `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `SELF_TEST_MODE`). The frozen Bash source stayed unchanged.
+
+---
+
+## Lesson: Prove literal inputs at the MSYS observer boundary
+
+**Status:** active | **Created:** 2026-10-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Check exact input bytes on both sides of the Windows observer before comparing frozen policy outcomes.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Prove literal bytes at both the Bash-to-Node observer and Node-to-Bash policy launch. Include a long command, an UNC path and the locale sentinel before the full matrix. Restore the frozen policy environment after observer-only MSYS overrides. Reporting may retain completed failed assertions as observations; acceptance must still reject them and every incomplete run.
+
+**What happened:** M01 used `MSYS_ARG_CONV_EXCL`, which did not stop Git Bash from changing literal `</dev/null rm -rf /etc` text to a Windows path inside the Node observer. A native probe preserved it with `MSYS2_ARG_CONV_EXCL`, matching the [MSYS2 documentation](https://www.msys2.org/docs/filesystem-paths/). The adapter confines that override to observer ingress and restores the frozen environment before policy launch. Its 49-assertion native smoke passed, but a later launch probe found a 17,014-byte command shortened to 8,186 bytes and a 37-byte UNC operand to 36. The C sentinel also allowed incorrectly. The run was stopped; its captures and apparent policy differences were invalidated. After approval, a shared NUL-delimited file transport replaced that launch path. Fresh native proof preserves all five boundary cases in both locales and all 49 producer assertions; full Windows comparison remains open. The earlier ten-minute timeout is diagnostic history; extraction now has a bounded twenty-minute deadline.
+
+A separate Windows Stop-prefix probe lost quotes from inline `node -e` source through PowerShell. Passing an owned script file verified the actual environment prefix without that extra quoting boundary. Use literal files for native Node diagnostic programs.
+
+**Evidence:** ~~`scripts/check-hook-parity.mjs` (search: `observeNode`, `spawnReferenceCommand`, `policyEnvironment`, `allowAssertionFailures`); `test/integration/hook-parity-reference.test.ts` (search: `divergence captures failed original assertions`, `frozen launches preserve long and UNC literal inputs`)~~ (retired at commit `2cc5b6d2`); `.codex/hooks.json` (search: `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES`). No frozen Bash source was changed.

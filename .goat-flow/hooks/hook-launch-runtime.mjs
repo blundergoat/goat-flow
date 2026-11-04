@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.18.0
+// goat-flow-hook-version: 1.19.0
 /**
  * Owns bounded execution and recovery for a managed hook.
  *
