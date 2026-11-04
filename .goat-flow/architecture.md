@@ -215,6 +215,7 @@ If recovery state cannot be read or safely persisted, return an unavailable warn
 
 These exceptions require validated Stop context and infrastructure classification; pass still requires complete declared coverage.
 Run the scan on every fresh invocation and preserve a known finding, declared coverage gap, malformed context or pre-tool denial.
+One coverage exception: when every gap is a binary whose path, bytes and staged blob match the same session's previous Stop, that session's continued Stop ends incomplete with `coverage-gap-reentry-ended` and a visible warning, never pass.
 The terminal response must preserve another matching hook's block; warning-only Codex output omits `continue: false`.
 Providers without a verified lifecycle retain the existing exact-repeat exception: `bounded-reentry-ended` stays incomplete.
 

@@ -1,8 +1,13 @@
-/** Keep installed and candidate Node routing separate from the frozen Bash reference. */
+/**
+ * Unit tests for `test/helpers/hook-entrypoint.ts`, which decides which hook copy every hook test runs.
+ *
+ * - A misspelled or retired `GOAT_FLOW_HOOK_UNDER_TEST` value must stop the test, never quietly run the installed hooks.
+ * - A missing Node entrypoint must fail, never fall back to a Bash file left beside it.
+ */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
 import {
   hookSelection,
@@ -10,49 +15,50 @@ import {
   selectedHookPath,
 } from "../helpers/hook-entrypoint.js";
 
+// A maintainer who exports `GOAT_FLOW_HOOK_UNDER_TEST=reference` from an old CI recipe must see an error, not a green run on other hooks.
 test("unknown selection refuses instead of using the shipped hook", () => {
   assert.equal(hookSelection(undefined), "installed");
-  for (const value of ["", "Reference", "typo"]) {
-    assert.throws(() => hookSelection(value), /unknown hook selection/u);
+  // The retired frozen-reference value is refused like any misspelling, and so is an empty value.
+  for (const rejected of ["", "Reference", "reference", "typo"]) {
+    assert.throws(
+      () => hookSelection(rejected),
+      /unknown hook selection/u,
+      `selection ${rejected}`,
+    );
+    assert.throws(
+      () => hookTreeRoot("workflow", rejected as never),
+      /unknown hook selection/u,
+      `tree ${rejected}`,
+    );
   }
 });
 
+// Writes a lone `.sh` file first, so a test naming an old Bash hook fails until the matching Node file exists beside it.
 test("missing candidate never falls back to an existing Bash entrypoint", () => {
   const project = mkdtempSync(join(tmpdir(), "goat-hook-selection-"));
-  const bash = join(project, "deny-dangerous.sh");
+  const bashEntrypoint = join(project, "deny-dangerous.sh");
   try {
-    writeFileSync(bash, "exit 0\n");
+    writeFileSync(bashEntrypoint, "exit 0\n");
     assert.throws(
-      () => selectedHookPath(bash, "candidate"),
+      () => selectedHookPath(bashEntrypoint, "candidate"),
       /candidate hook unavailable/u,
     );
     assert.throws(
-      () => selectedHookPath(bash, "installed"),
+      () => selectedHookPath(bashEntrypoint, "installed"),
       /installed hook unavailable/u,
     );
-    const node = join(project, "deny-dangerous.mjs");
-    writeFileSync(node, "process.exit(0);\n");
-    assert.equal(selectedHookPath(bash, "candidate"), node);
-    assert.equal(selectedHookPath(bash, "installed"), node);
-    assert.equal(selectedHookPath(node, "installed"), node);
-    const launcher = join(project, "run-with-bash.mjs");
-    const nativeLauncher = join(project, "run-hook.mjs");
-    writeFileSync(launcher, "process.exit(0);\n");
-    writeFileSync(nativeLauncher, "process.exit(0);\n");
-    assert.equal(selectedHookPath(launcher, "installed"), nativeLauncher);
-    assert.equal(selectedHookPath(launcher, "candidate"), nativeLauncher);
+    const nodeEntrypoint = join(project, "deny-dangerous.mjs");
+    writeFileSync(nodeEntrypoint, "process.exit(0);\n");
+    assert.equal(selectedHookPath(bashEntrypoint, "candidate"), nodeEntrypoint);
+    assert.equal(selectedHookPath(bashEntrypoint, "installed"), nodeEntrypoint);
+    assert.equal(selectedHookPath(nodeEntrypoint, "installed"), nodeEntrypoint);
+    const bashLauncher = join(project, "run-with-bash.mjs");
+    const nodeLauncher = join(project, "run-hook.mjs");
+    writeFileSync(bashLauncher, "process.exit(0);\n");
+    writeFileSync(nodeLauncher, "process.exit(0);\n");
+    assert.equal(selectedHookPath(bashLauncher, "installed"), nodeLauncher);
+    assert.equal(selectedHookPath(bashLauncher, "candidate"), nodeLauncher);
   } finally {
     rmSync(project, { recursive: true, force: true });
-  }
-});
-
-test("reference selects both frozen layouts and their transitive dependencies", () => {
-  const project = resolve(import.meta.dirname, "../..");
-  for (const layout of ["workflow", "installed"] as const) {
-    const source = hookTreeRoot(layout, "reference");
-    assert(source.startsWith(join(project, "test/fixtures/hooks-bash")));
-    const frozen = readFileSync(join(source, "vendor/graphql.cjs"));
-    assert(frozen.length > 0);
-    assert.notEqual(source, hookTreeRoot(layout, "installed"));
   }
 });

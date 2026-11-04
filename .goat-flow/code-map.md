@@ -322,9 +322,8 @@ scripts/                         = development, release, test, and maintenance s
 ├── check-gruff-warning-ratchet.mjs = reviewed Gruff warning-debt ratchet: launches the analyzer, prints the verdict
 ├── gruff-warning-ratchet-checks.mjs = ratchet comparison rules: manifest load/validate, scan shape, debt diff
 ├── ratchet-failure-report.mjs   = bounded per-category failure collector shared by the ratchet modules
-├── check-hook-parity.mjs        = frozen Bash policy extraction, corpus integrity and host divergence
-├── check-hook-parity-candidate.mjs = real Node policy entrypoint comparison with corpus expectations
-├── hook-parity-reference-command.mjs = literal Windows argument handoff for frozen reference commands
+├── check-hook-parity.mjs        = policy parity CLI (`--stage=candidate|installed`), shipped corpus validation, mirror and pack checks
+├── check-hook-parity-candidate.mjs = runs the canonical or installed Node policy entrypoints against corpus expectations
 ├── check-instruction-parity.mjs = instruction-file section/order parity
 ├── check-touched.mjs            = read-only checks selected from working-tree changes, including deletion and rename triggers
 ├── check-markdown-links.sh      = markdown link resolver
@@ -360,23 +359,22 @@ scripts/                         = development, release, test, and maintenance s
 
 ```text
 test/
-├── helpers/hook-entrypoint.ts                  = reference/candidate/installed test selection; complete dependency trees, missing-candidate refusal
+├── helpers/hook-entrypoint.ts                  = candidate/installed test selection; complete dependency trees, missing-candidate refusal
 ├── helpers/restricted-consumer-env.ts          = child-only executable allowlist and preload environment
 ├── helpers/spawn-guard.mjs                     = Node child-process instrumentation, propagation and launch journal; not an OS sandbox
 ├── helpers/check-installed-policy.ts          = selected policy transport; command inputs remain inert classifier data
 ├── integration/restricted-env-controls.test.ts = actual named/namespace/require denials, stripped-child propagation and clean Node/Git/analyzer control
-├── integration/hook-parity.test.ts             = Node corpus, frozen-hash and npm-pack inventory controls
-├── integration/hook-parity-reference.test.ts   = frozen Bash extraction, literal-input and dependency-isolation controls
+├── integration/hook-parity.test.ts             = corpus validation, candidate and installed stage, mirror and npm-pack inventory controls
 ├── integration/post-turn-safety-hook.helpers.ts = selected scanner transport and declared absolute command-fault fixtures
 ├── integration/gruff-code-quality-smoke.helpers.ts = selected Gruff transport and Node analyzer programs outside analyzed projects
 ├── integration/packaged-hook-install.test.ts   = archive consumer installation, including corpus byte identity
-├── unit/hook-entrypoint.test.ts                = selector refusal and frozen dependency-root controls
-└── fixtures/hooks-bash/                        = immutable M01 Bash trees, dependency hashes and per-ID reference outcomes; never packed
+├── unit/hook-entrypoint.test.ts                = selector refusal and no-fallback controls
+└── fixtures/hooks-bash/                        = retired Bash hook copies and reference outcomes kept as cited learning-loop evidence; nothing runs them; never packed
 ```
 
-`.github/workflows/ci.yml` owns native Linux/macOS/Windows floor/LTS controls, a separately identified WSL2 route, Linux reference tests with jq 1.6 in the C locale, and WSL divergence reports. Divergence reports do not accept candidates. The original Bash self-tests stay immutable; each port owns its candidate suite conversion.
+`.github/workflows/ci.yml` owns native Linux/macOS/Windows floor/LTS controls and a separately identified WSL2 route; both run the installed policy stage and the owning hook suites on Node 20.12.0 and 24.21.0.
 
-The shipped corpus lives at `workflow/hooks/deny-dangerous/corpus.json`, mirrored to `.goat-flow/hooks/deny-dangerous/corpus.json`. `workflow/manifest.json` declares ownership and required delivery; the Node installer copies it as data. The test-only reference outcomes stay under `test/fixtures/hooks-bash/`.
+The shipped corpus lives at `workflow/hooks/deny-dangerous/corpus.json`, mirrored to `.goat-flow/hooks/deny-dangerous/corpus.json`, and is the only policy oracle. `workflow/manifest.json` declares ownership and required delivery; the Node installer copies it as data.
 
 ## docs/ -- Documentation
 

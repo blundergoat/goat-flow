@@ -1,6 +1,6 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-11-03
+last_reviewed: 2026-11-04
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
@@ -222,4 +222,4 @@ The later quality-save and redaction fixtures stalled for 25 and 20 seconds resp
 
 **What happened:** While investigating M07's hosted C.UTF-8 extraction timeout, I set TMPDIR beneath this workspace's plan logs to keep receipts together. The frozen smoke group reported two failures. Git queried from the generated reference project returned the controlling goat-flow root, so the run could select live policy dependencies. I stopped only the owned replay processes, retained its log and scratch state, then created an isolated reference directory outside Git. The unchanged smoke group then reported 49 captured assertions and zero failures. The full replay was still running at that checkpoint.
 
-**Evidence and limit:** `scripts/check-hook-parity.mjs` (search: `materializeReference`, `tmpdir()`); `test/fixtures/hooks-bash/.goat-flow/hooks/deny-dangerous.sh` (search: `git rev-parse --show-toplevel`, `GOAT_FLOW_ROOT`). This proves a local reproduction setup error. It does not explain the separate hosted Bash timeout, identify its case, or establish complete hosted parity.
+**Evidence and limit:** ~~`scripts/check-hook-parity.mjs` (search: `materializeReference`, `tmpdir()`)~~ (retired at commit `2cc5b6d2`); `test/fixtures/hooks-bash/.goat-flow/hooks/deny-dangerous.sh` (search: `git rev-parse --show-toplevel`, `GOAT_FLOW_ROOT`). This proves a local reproduction setup error. It does not explain the separate hosted Bash timeout, identify its case, or establish complete hosted parity.

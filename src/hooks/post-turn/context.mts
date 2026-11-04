@@ -27,6 +27,8 @@ export interface PostTurnContext {
   coverageGap: boolean;
   recordError: boolean;
   boundedReentryEnded: boolean;
+  // Set only when the same session's active Stop replays unchanged binary gaps; absent means no release happened.
+  coverageGapReentryEnded?: boolean;
   infrastructureFailure: boolean;
   detail: string;
   reasonOverride: string;
@@ -48,6 +50,24 @@ export function recordPostTurnResultFinding(
     context.findings.push({ code, message, target });
 }
 
+// Name the terminal replay the scanner ended, if any; both leave coverage at none because the scan cannot vouch for every change.
+function endedReplay(context: PostTurnContext) {
+  if (context.boundedReentryEnded)
+    return {
+      reasonCode: "bounded-reentry-ended",
+      detail:
+        "The unchanged infrastructure failure ended its bounded provider re-entry; no clean scan was recorded",
+    };
+  // The binaries stay unscanned, and the user still sees each gap finding beside this reason.
+  if (context.coverageGapReentryEnded)
+    return {
+      reasonCode: "coverage-gap-reentry-ended",
+      detail:
+        "The unchanged binary coverage gap ended its repeated Stop; no clean scan was recorded",
+    };
+  return null;
+}
+
 function resolvePostTurnOutcome(
   context: PostTurnContext,
   scannerStatus: number,
@@ -57,15 +77,14 @@ function resolvePostTurnOutcome(
   let coverageStatus = "none";
   let completedUnits = 0;
   let detail = context.detail;
+  const replay = endedReplay(context);
   if (context.recordError) {
     outcome = context.detectedFindings > 0 ? "block" : "unavailable";
     reasonCode =
       context.detectedFindings > 0 ? "policy-blocked" : "hook-unavailable";
     detail = "Hook result details could not be retained for provider delivery";
-  } else if (context.boundedReentryEnded) {
-    reasonCode = "bounded-reentry-ended";
-    detail =
-      "The unchanged infrastructure failure ended its bounded provider re-entry; no clean scan was recorded";
+  } else if (replay !== null) {
+    ({ reasonCode, detail } = replay);
   } else if (context.detectedFindings > 0) {
     outcome = "block";
     reasonCode = "policy-blocked";

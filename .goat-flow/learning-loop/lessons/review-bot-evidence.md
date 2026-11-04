@@ -1,6 +1,6 @@
 ---
 category: review-bot-evidence
-last_reviewed: 2026-11-01
+last_reviewed: 2026-11-04
 ---
 
 **Scope:** Weighing an automated reviewer's output - sandbox reruns that reach different conclusions, position-independent ordering findings, an "addressed" marker that proves nothing, and a bot finding that contradicts a passing test. Human and multi-agent critique is [review-feedback.md](review-feedback.md).
@@ -31,7 +31,7 @@ Evidence: `test/contract/documented-shellcheck-command.test.ts` (search: `setupS
 
 **Recurrence 2026-10-31:** The PR #69 feedback review promoted a mirror-equality claim to a merge blocker after comparing a frozen scanner with the live installed copy. The owning assertion actually calls `hookTreeRoot("installed")`: that argument selects the directory layout, while the default selection still follows `GOAT_FLOW_HOOK_UNDER_TEST=reference`. Replaying those exact helper calls resolved both files below `test/fixtures/hooks-bash` and returned `equal=true`; the blocker was withdrawn. Trace arguments, defaults and environment through the real producer before comparing downstream artifacts. Evidence: `test/helpers/hook-entrypoint.ts` (search: `layout: HookLayout`), `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `the installed mirror matches the workflow hook source`). A structural report-validation PASS did not validate the comparison or its severity.
 
-**Recurrence 2026-11-01:** A parity regression test tried to inject a launch failure by changing the reference root to a missing directory. Fixture materialization supplied a different working directory, so Bash started and returned a completed script error; the test failed with `Missing expected exception.` Setting the row's `setup.cwd` to a missing directory exercised the actual spawn failure and verified that report mode still throws. Follow the producer into the final process options before choosing fault injection. Evidence: `scripts/hook-parity-reference-command.mjs` (search: `cwd: request.cwd`), `scripts/check-hook-parity.mjs` (search: `Frozen launch failed`), and `test/integration/hook-parity-reference.test.ts` (search: `setup: { ...changed.setup, cwd:`).
+**Recurrence 2026-11-01:** A parity regression test tried to inject a launch failure by changing the reference root to a missing directory. Fixture materialization supplied a different working directory, so Bash started and returned a completed script error; the test failed with `Missing expected exception.` Setting the row's `setup.cwd` to a missing directory exercised the actual spawn failure and verified that report mode still throws. Follow the producer into the final process options before choosing fault injection. Evidence: ~~`scripts/hook-parity-reference-command.mjs` (search: `cwd: request.cwd`), `scripts/check-hook-parity.mjs` (search: `Frozen launch failed`), and `test/integration/hook-parity-reference.test.ts` (search: `setup: { ...changed.setup, cwd:`)~~ (retired at commit `2cc5b6d2`).
 
 ## Lesson: External code-review bots that re-run verification commands in their own sandbox produce false-positive Critical findings
 

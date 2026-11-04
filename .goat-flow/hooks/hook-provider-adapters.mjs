@@ -30,6 +30,7 @@ const HOOK_OUTCOMES = new Set([
 const HOOK_REASON_CODES = new Set([
   "completed-clean",
   "bounded-reentry-ended",
+  "coverage-gap-reentry-ended",
   "policy-blocked",
   "findings-reported",
   "coverage-incomplete",
@@ -285,6 +286,22 @@ function executionFailureReason(candidateExecution) {
 }
 
 /**
+ * Keep an ended binary-gap replay incomplete and outside the infrastructure allowance.
+ *
+ * @param {Record<string, unknown>} candidateResult - decoded envelope whose execution fields are already valid
+ * @returns {string | null} contract failure, or null when the reason is absent or used as an incomplete result
+ */
+function coverageGapReentryFailureReason(candidateResult) {
+  if (candidateResult.reasonCode !== "coverage-gap-reentry-ended") return null;
+  const execution = candidateResult.execution;
+  return candidateResult.outcome === "incomplete" &&
+    execution.failureClass === undefined &&
+    execution.recovery === undefined
+    ? null
+    : "coverage-gap-reentry-ended requires an incomplete result without infrastructure recovery";
+}
+
+/**
  * Validate the decoded envelope fields that protect user-visible result meaning.
  * Use after JSON parsing and before provider-specific translation.
  *
@@ -334,8 +351,10 @@ function resultEnvelopeFailureReason(candidateResult) {
   const executionReason = executionFailureReason(candidateResult.execution);
   // A concrete execution failure prevents an unidentified adapter from claiming delivery.
   if (executionReason !== null) return executionReason;
-  const metadataReason = hookResultMetadataFailureReason(candidateResult);
-  // Invalid counters or recovery labels could make a skipped scan appear complete or exhausted.
+  const metadataReason =
+    hookResultMetadataFailureReason(candidateResult) ??
+    coverageGapReentryFailureReason(candidateResult);
+  // Invalid counters, recovery labels or terminal reasons could make a skipped scan appear complete or exhausted.
   if (metadataReason !== null) return metadataReason;
 
   const candidateCoverage = candidateResult.coverage;
@@ -649,6 +668,23 @@ function adaptStopResult(hookResult, providerIdentifier, userFacingMessage) {
     hookResult.reasonCode === "bounded-reentry-ended"
   ) {
     return adaptCleanResult(providerIdentifier, "turn-stop");
+  }
+  // Claude and Codex end an unchanged binary-gap replay with a warning and no continue override, so another hook's block survives.
+  // Antigravity and Copilot have no Stop registration for this reason and keep the ordinary block below.
+  if (
+    hookResult.outcome === "incomplete" &&
+    hookResult.reasonCode === "coverage-gap-reentry-ended" &&
+    (providerIdentifier === "codex" || providerIdentifier === "claude")
+  ) {
+    const gapCount = hookResult.findings.filter(
+      (finding) => finding.code === "coverage-gap",
+    ).length;
+    // The envelope keeps at most 20 findings, so a full list may hide more unscanned paths.
+    const countText =
+      gapCount >= HOOK_RESULT_FINDING_LIMIT ? `at least ${gapCount}` : `${gapCount}`;
+    return jsonProviderOutput({
+      systemMessage: `post-turn-safety: coverage-gap-reentry-ended; no clean scan was recorded; coverage ${hookResult.coverage.status}. Unscanned binary paths: ${countText}.`,
+    });
   }
   // An advisory at turn end has no shared non-blocking delivery contract across supported hosts.
   if (hookResult.outcome === "advisory") {

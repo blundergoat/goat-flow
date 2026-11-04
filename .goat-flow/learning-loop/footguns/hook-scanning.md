@@ -1,6 +1,6 @@
 ---
 category: hook-scanning
-last_reviewed: 2026-10-23
+last_reviewed: 2026-11-03
 ---
 
 **Scope:** What a hook-driven scanner can and cannot see: changed-file enumeration, diff and rename detection, gitignore and gitattribute interactions, and language or block parsing. Hook registration, launcher runtime, and policy-module behaviour live in `hooks.md`; execution cost lives in `hook-performance.md`; installation and per-agent config live in `hook-installation.md`.
@@ -102,6 +102,20 @@ last_reviewed: 2026-10-23
 **Why it happens:** The documentation rules ask whether a comment exists and whether a docblock's tag list matches its signature, never whether the prose describes the symbol below it. A docblock stacked directly above another still satisfies the presence rule for the symbol below, and `docs.missing-param-tag` and `docs.stale-param-tag` fire only on an `export function` that already carries a `/** */`.
 
 **Evidence:** Measured 2026-08-16 at HEAD `4bed4404`: `gruff-ts analyse src --format json` over 224 files returned 17 findings with no attribution or accuracy defect, while a direct scan found three docblocks above the wrong symbol (only one produced a finding, as a side-effect `docs.missing-internal-function-doc` on the orphaned function) and twelve copies of one `@param _warnings` line in `src/cli/config/reader-validators.ts`, seven naming a parameter that does not exist, none reported because those validators are internal; the rule fired once in `src/`, as a false positive on the exported `validateFindingLine`. All were corrected in the same session. Anchors: `src/cli/cli-parser.ts` (search: `Return whether a raw \`parseArgs\` boolean flag was explicitly set`), `src/cli/config/reader-validators.ts` (search: `accumulator this block's unrecognized nested keys are appended to`), `src/cli/review-validate-anchors.ts` (search: `export function validateFindingLine`), `.gruff-ts.yaml` (search: `docs.stale-param-tag`).
+
+## Footgun: A blocking Stop scanner loops on a gap the agent cannot fix
+
+**Status:** active | **Created:** 2026-11-03 | **Evidence:** OBSERVED
+**Decision changed:** Before a Stop scanner blocks on a coverage gap, decide how an unchanged gap the agent cannot repair ends its repeated Stop.
+**Trigger phase:** SCOPE
+
+**Prevention:** Release only a gap the agent cannot fix by editing, and only on the same session's continued Stop when its path, byte digest and staged blob are unchanged. End that Stop incomplete with a visible warning, never pass. Keep findings, unfinished scans and every other gap blocking, and make a new turn block first. Oversized and unavailable files still block on every Stop by design.
+
+**Symptoms:** A consumer project added two GLB model files. Every Stop reported `binary untracked path not scanned` and blocked again, fourteen times, with no change and no hazard. Staging the files only changed the message to `binary changed path not scanned`.
+
+**Why it happens:** A blocking Stop hook rescans on every continued Stop. A gap with a permanent cause, such as bytes the text detectors cannot read, blocks the same way each time, so the agent has no action that ends the turn.
+
+**Evidence:** Replayed with synthetic GLB headers in direct, Claude legacy, managed Claude and Codex modes and a two-root controller; every callback blocked before the fix. `src/hooks/post-turn/scanner.mts` (search: `hasOnlyBinaryGaps`) hands binary-only gaps to `src/hooks/post-turn/recovery.mts` (search: `finishCoverageGap`). `test/integration/post-turn-safety-hook.test.ts` (search: `ends every duplicate active callback in the same cycle`) and (search: `never releases a real finding beside a binary gap`) lock both sides.
 
 ## Resolved Entries
 

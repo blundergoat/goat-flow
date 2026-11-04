@@ -4,7 +4,8 @@
 
 ### Changed
 
-- **Windows/WSL hook evidence** - Reviewed captures cover all 18 delivery rows, including helper-free Antigravity 1.4.8 on Windows and renewed Claude and Codex Stop delivery through the current registrations on both hosts. Support gates are unchanged.
+- **Windows/WSL hook evidence** - Reviewed captures of the current hook runtime cover all 18 delivery rows, including Claude Code 2.1.317 and Codex CLI 0.166.0 on both hosts and helper-free Antigravity 1.4.8 on Windows. Support gates are unchanged.
+- **Hook policy checks no longer use the frozen Bash reference** - Release checks run the installed Node policy hooks against the shipped corpus on Linux, macOS, Windows and WSL; installs are unaffected.
 
 - **BREAKING: Node 20.12.0 minimum** - The minimum supported Node version rises from 20.11.0 to 20.12.0. Upgrade Node before installing or running goat-flow.
 - **Stop hooks default to a 4 MiB scan limit** - Claude and Codex hook registrations default `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES` to `4194304` while preserving an existing user value. The Codex Stop command text changes when registrations are synced.
@@ -33,6 +34,7 @@
 - **Antigravity hooks start on Windows** - Hook commands now survive cmd.exe parsing; run `goat-flow hooks sync` to repair existing installs.
 - **Node hook verification** - Native registration audits use the configured hook filename, and policy self-tests fail when no cases run or the declared case count is wrong.
 - **Copilot hooks start on Windows** - Copilot's PowerShell hook commands now parse, so goat-flow hooks run instead of failing on every tool call; run `goat-flow hooks sync` to repair existing installs.
+- **Unchanged binary files no longer block every Stop** - Post-turn safety still blocks the first Stop that skips a binary file, then ends that session's repeated Stop with a warning while the files stay unchanged; coverage stays incomplete, and findings or other skipped files still block. Run `goat-flow hooks sync` to update existing installs.
 
 ## v1.19.0 - 2026-10-23
 

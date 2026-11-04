@@ -4,7 +4,7 @@
 //
 // What each mode, and the --shard flag, gives the developer:
 // - fast (the default, behind `npm test`) skips the slow suite so ordinary local verification stays short.
-// - preflight also omits legacy Bash-hook execution suites during the Node runtime retirement.
+// - preflight runs the same files as fast; it is the suite `npm run test:preflight` gives scripts/preflight-checks.sh.
 // - coverage runs the same files as fast and adds Node's experimental coverage report.
 // - slow runs costly integration, installer, dashboard and audit tests one at a time; they share repo state such as .goat-flow/dashboard-state.json.
 // - --shard=<index>/<total> splits the chosen mode across separate CI machines; CI uses it to spread the slow suite over parallel jobs.
@@ -90,31 +90,22 @@ function isSlowTest(path) {
   );
 }
 
-// No mode selects these files, so `npm test` and the slow shards skip them; the hook-reference-linux CI job runs each one by name instead.
-//
-// hook-parity-reference.test.ts breaks when the frozen reference, its corpus.json or scripts/check-hook-parity.mjs changes, or the runner drifts.
-// That job runs only on weekly and manual runs, so start a manual run before merging such a change, for example `gh workflow run ci.yml --ref dev`.
-const REFERENCE_JOB_TESTS = ["test/integration/hook-parity-reference.test.ts"];
-
 /**
- * Keep only the tests the developer's chosen mode runs, before any --shard split; files in REFERENCE_JOB_TESTS are never kept.
+ * Keep only the tests the developer's chosen mode runs, before any --shard split.
  * An unknown mode writes the valid choices to stderr and exits with code 2 instead of running an unintended suite.
  *
  * @param allFiles - Every discovered test file (from {@link listTestFiles}).
  * @returns tests selected for this mode; an empty list produces the no-tests failure at launch
  */
 function filesForMode(allFiles) {
-  const modeCandidates = allFiles.filter(
-    (path) => !REFERENCE_JOB_TESTS.includes(path),
-  );
   switch (mode) {
     // Fast, preflight and coverage select the same files; coverage only adds the coverage report when the tests launch.
     case "fast":
     case "preflight":
     case "coverage":
-      return modeCandidates.filter((path) => !isSlowTest(path));
+      return allFiles.filter((path) => !isSlowTest(path));
     case "slow":
-      return modeCandidates.filter(isSlowTest);
+      return allFiles.filter(isSlowTest);
     // A typo such as `slwo`, or a flag typed first such as `node scripts/run-tests.mjs --shard=1/5`, lands here.
     default:
       console.error(
@@ -241,7 +232,13 @@ if (testFilesToRun.length === 0) {
   process.exit(1);
 }
 
-/** Pick a bounded file count from the CPUs available to this process; slow fixtures still run alone. */
+/**
+ * Choose how many test files run at once, so `npm test` uses the machine's CPUs while slow tests that share repo state run alone.
+ *
+ * @param selectedMode - the mode the developer asked for; `slow` always gets 1
+ * @param availableCpus - CPUs this process may use; 0 or fewer still runs one file at a time, and more than 16 is capped at 16
+ * @returns the `--test-concurrency` value passed to `node --test`; never below 1
+ */
 function testConcurrencyForMode(selectedMode, availableCpus) {
   return selectedMode === "slow" ? 1 : Math.min(16, Math.max(1, availableCpus));
 }

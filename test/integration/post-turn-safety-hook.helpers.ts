@@ -2,8 +2,7 @@
  * Shared fixtures for the post-turn-safety hook suites.
  * The hook scans a turn's changed content for secrets and conflict markers, so every case
  * needs the same scaffolding: a disposable git repo in a precise state, obviously fake
- * tokens shaped like real ones, and a runner that captures the hook's verdict on both the
- * selected Node scanner or the frozen Bash scanner and its Bash-3 fallback.
+ * tokens shaped like real ones, and a runner that captures the selected Node scanner's verdict.
  *
  * The tokens are assembled from fragments so this file never contains a string a secret
  * scanner - including the hook under test - would rightly flag.
@@ -11,16 +10,13 @@
 import assert from "node:assert/strict";
 import {
   copyHookTree,
-  hookSelection,
   hookTreeRoot,
   selectedHookPath,
   spawnSelectedHook,
 } from "../helpers/hook-entrypoint.js";
 import { basename, isAbsolute } from "node:path";
-import { bashPath } from "../../scripts/check-hook-parity.mjs";
 import { spawnSync } from "node:child_process";
 import {
-  chmodSync,
   closeSync,
   mkdirSync,
   mkdtempSync,
@@ -30,7 +26,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 export const HOOK_PATH = selectedHookPath(
@@ -39,39 +35,35 @@ export const HOOK_PATH = selectedHookPath(
 export const FORCE_BASH3_ENV_KEY =
   "GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK";
 
-/** Install and optionally instrument the scanner inside a disposable test project.
- * Side effects: writes the selected hook tree and may replace its scanner entrypoint.
- * @param root - Disposable project whose hook directory is replaced.
- * @param nodeChildCode - Node code to run only in a controller child.
- * @param bashChildCode - Equivalent code for the frozen Bash reference.
+/**
+ * Install the post-turn hook into a test project the way setup installs it for a consumer, optionally adding code to the scanner child.
+ *
+ * Writes the selected hook folder into `.goat-flow/hooks/`; with `nodeChildCode` it also rewrites the copied scanner entrypoint.
+ *
+ * @param root - temporary test project whose `.goat-flow/hooks/` folder is replaced
+ * @param nodeChildCode - Node code run only inside the controller's scanner child; empty installs the hook unchanged
+ * @returns nothing; the installed files are the result
  */
-export function installPostTurnHook(
-  root: string,
-  nodeChildCode = "",
-  bashChildCode = "",
-): void {
-  const hooks = join(root, ".goat-flow/hooks");
-  copyHookTree(hooks);
-  if (nodeChildCode === "" && bashChildCode === "") return;
-  const path = join(hooks, basename(HOOK_PATH));
-  const source = readFileSync(path, "utf8");
+export function installPostTurnHook(root: string, nodeChildCode = ""): void {
+  const hooksDirectory = join(root, ".goat-flow/hooks");
+  copyHookTree(hooksDirectory);
+  // No child code means the test runs the hook exactly as shipped.
+  if (nodeChildCode === "") return;
+  const scannerEntrypoint = join(hooksDirectory, basename(HOOK_PATH));
+  const shippedSource = readFileSync(scannerEntrypoint, "utf8");
+  // The injected code goes after any shebang line and runs only when the controller starts the scanner as its child.
   const nodeChildGuard =
     'if (process.env.GOAT_FLOW_POST_TURN_CONTROLLER_CHILD === "1") {\n';
-  const instrumented =
-    hookSelection() !== "reference"
-      ? source.replace(
-          /^(#![^\n]*\n)?/u,
-          (opening) => opening + `${nodeChildGuard}${nodeChildCode}\n}\n`,
-        )
-      : source.replace(
-          "SECONDS=0\n",
-          () =>
-            'SECONDS=0\nif [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then\n' +
-            bashChildCode +
-            "\nfi\n",
-        );
-  assert.notEqual(instrumented, source, "scanner instrumentation must apply");
-  writeFileSync(path, instrumented);
+  const instrumented = shippedSource.replace(
+    /^(#![^\n]*\n)?/u,
+    (opening) => opening + `${nodeChildGuard}${nodeChildCode}\n}\n`,
+  );
+  assert.notEqual(
+    instrumented,
+    shippedSource,
+    "scanner instrumentation must apply",
+  );
+  writeFileSync(scannerEntrypoint, instrumented);
 }
 export const TEST_AWS_ACCESS_KEY = `AKIA${"1234567890ABCDEF"}`;
 export const TEST_GITHUB_TOKEN = `ghp_${"abcdefghijklmnopqrsttestuvwxyzABCD"}`;
@@ -272,6 +264,45 @@ export function commitAll(root: string, message: string): void {
 }
 
 /**
+ * Writes and commits one tracked file, then appends a line to it, like a user editing a committed file without staging it.
+ *
+ * @param root - committed fixture repository
+ * @param path - repository-relative file to create, commit and edit
+ * @param line - text appended after the committed first line; a multi-line value appends several lines
+ * @returns nothing; the worktree holds the edit and the index still matches HEAD
+ */
+export function appendCommittedLine(
+  root: string,
+  path: string,
+  line: string,
+): void {
+  writeFile(root, path, "export const safe = 1;\n");
+  commitAll(root, `add ${path}`);
+  writeFile(root, path, `export const safe = 1;\n${line}\n`);
+}
+
+/**
+ * Writes, commits and stages an appended line, like a user running `git add`; optionally the worktree is then restored.
+ *
+ * @param root - committed fixture repository
+ * @param path - repository-relative file to create, commit, edit and stage
+ * @param line - text appended and staged
+ * @param isIndexOnly - true restores the committed worktree copy after staging; false leaves worktree and index equal
+ * @returns nothing; the index always holds the appended line
+ */
+export function stageAppendedLine(
+  root: string,
+  path: string,
+  line: string,
+  isIndexOnly: boolean,
+): void {
+  appendCommittedLine(root, path, line);
+  runGit(root, ["add", path]);
+  // Index-only is a user who staged the line and then reverted the file, so only `git diff --cached` still shows it.
+  if (isIndexOnly) writeFile(root, path, "export const safe = 1;\n");
+}
+
+/**
  * Run the real hook against a fixture repo and capture its verdict.
  * The scanner variant is chosen by env so the same case can prove both implementations.
  *
@@ -434,10 +465,15 @@ process.exit(fault.status ?? 2);
 }
 
 /**
- * Inject a declared command fault into a disposable reference PATH adapter.
- * The Node driver owns predicates/output; its POSIX adapter only invokes Node.
- * Node fixtures redirect the declared command through a child-only preload on every native host.
- * The absolute target is resolved by the caller, without shell lookup.
+ * Make one command misbehave inside the hook's child processes, so a test can check what the user sees when, say, `git` fails mid-scan.
+ *
+ * Writes a fault driver and a preload to a temporary directory; the preload sends only the declared command to the driver.
+ * The driver applies the fault's predicates, output and exit status the same way on every host, then the directory is removed.
+ *
+ * @param executable - absolute path of the command to fault, resolved by the caller without shell lookup
+ * @param fault - predicates, output and exit status the driver applies
+ * @param scenario - assertions run with the fault environment; NODE_OPTIONS loads the preload in each hook child
+ * @returns nothing; the temporary directory is removed even when the scenario throws
  */
 export function withCommandShim(
   executable: string,
@@ -451,41 +487,23 @@ export function withCommandShim(
   const declaration = { executable, ...fault };
   try {
     writeFileSync(driver, commandFaultSource(declaration));
-    const native = hookSelection() !== "reference";
-    const command = basename(executable).replace(/\.exe$/iu, "");
-    if (native) {
-      // Redirect only this declared command; the driver delegates by absolute path without recursion.
-      writeFileSync(
-        preload,
-        `const cp = require("node:child_process");
+    const shimmedCommandName = basename(executable).replace(/\.exe$/iu, "");
+    // Redirect only this declared command; the driver delegates by absolute path without recursion.
+    writeFileSync(
+      preload,
+      `const cp = require("node:child_process");
 const original = cp.spawnSync;
 cp.spawnSync = function(command, args = [], options = {}) {
-  return command === ${JSON.stringify(command)}
+  return command === ${JSON.stringify(shimmedCommandName)}
     ? original.call(this, process.execPath, [${JSON.stringify(driver)}, ...args], options)
     : original.call(this, command, args, options);
 };
 require("node:module").syncBuiltinESMExports();
 `,
-      );
-    }
-    const quote = (path: string) =>
-      "'" + bashPath(path).replaceAll("'", "'\\''") + "'";
-    const adapter = join(
-      shimRoot,
-      basename(executable).replace(/\.exe$/iu, ""),
     );
-    writeFileSync(
-      adapter,
-      `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(driver)} "$@"\n`,
-    );
-    chmodSync(adapter, 0o755);
     scenario({
-      ...(native
-        ? {
-            NODE_OPTIONS:
-              `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(preload)}`.trim(),
-          }
-        : { PATH: `${shimRoot}${delimiter}${process.env.PATH ?? ""}` }),
+      NODE_OPTIONS:
+        `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(preload)}`.trim(),
       GOAT_TEST_COMMAND_FAULT: JSON.stringify(declaration),
     });
   } finally {

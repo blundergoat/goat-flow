@@ -5,13 +5,21 @@
  * Every case runs the real hook against a real git repository, so a pass means the shipped
  * scanner behaves as asserted, not a reimplementation of it.
  */
+
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
+  existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
+  renameSync,
   rmSync,
+  statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +27,9 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  buildStopPayload,
+  installPostTurnHook,
+  withScannerFileFault,
   FORCE_BASH3_ENV_KEY,
   TEST_AWS_ACCESS_KEY,
   TEST_GITHUB_TOKEN,
@@ -697,6 +708,250 @@ describe("post-turn-safety hook: secret and marker detection", () => {
       );
 
       assertHookAllows(root);
+    });
+  });
+});
+
+// A GLB header: its NUL bytes make the scanner report each asset as an unscannable binary.
+const GLB_BYTES = Buffer.from([103, 108, 84, 70, 2, 0, 0, 0]);
+const CONFLICT_TEXT = "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> topic\n";
+const GAP_RELEASE = /ending repeated Stop after unchanged coverage gap/u;
+const SCRATCHPAD = ".goat-flow/scratchpad";
+
+/** Run Stop callbacks in order and require each listed exit status.
+ *
+ * @param root - disposable repository the user changed
+ * @param activeFlags - `stop_hook_active` for each callback, in order
+ * @param statuses - expected exit status for the callback at the same index
+ * @param sessionId - provider session shared by the callbacks; one cycle by default
+ * @param env - scanner overrides; empty keeps the default limits
+ * @returns each captured result, in callback order
+ */
+function assertStops(
+  root: string,
+  activeFlags: boolean[],
+  statuses: number[],
+  sessionId = "binary-gap",
+  env: Record<string, string> = {},
+) {
+  return activeFlags.map((isActive, index) => {
+    const result = runHook(root, env, buildStopPayload(sessionId, isActive));
+    assert.equal(result.status, statuses[index], `${index}: ${result.stderr}`);
+    return { stdout: String(result.stdout), stderr: String(result.stderr) };
+  });
+}
+
+/** List the scanner records in a project; an empty list means no replay state survives.
+ *
+ * @param root - disposable repository whose scratchpad holds the records
+ * @param prefix - record family to list; the scanner family by default
+ * @returns matching record names; empty when the scratchpad is missing
+ */
+function stateRecords(root: string, prefix = "post-turn-safety-reentry-v1-") {
+  const directory = join(root, SCRATCHPAD);
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory).filter((name) => name.startsWith(prefix));
+}
+
+describe("unchanged binary coverage gap", () => {
+  it("ends the active replay of unchanged untracked binaries with a warning and keeps coverage incomplete", () => {
+    withTempRepo((root) => {
+      writeFile(root, "models/a.glb", GLB_BYTES);
+      writeFile(root, "models/b.glb", GLB_BYTES);
+      const [initial, replay] = assertStops(root, [false, true], [2, 0]);
+      assert.doesNotMatch(initial?.stderr ?? "", GAP_RELEASE);
+      assert.match(replay?.stderr ?? "", GAP_RELEASE);
+      assert.match(replay?.stderr ?? "", /binary untracked path not scanned/u);
+      const managed = {
+        GOAT_FLOW_HOOK_PROVIDER: "codex",
+        GOAT_FLOW_HOOK_EVENT: "turn-stop",
+        GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+        GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
+        GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
+      };
+      const [output] = assertStops(root, [true], [0], "binary-gap", managed);
+      const envelope = JSON.parse(output?.stdout ?? "");
+      assert.equal(envelope.outcome, "incomplete");
+      assert.equal(envelope.reasonCode, "coverage-gap-reentry-ended");
+      assert.deepEqual(Object.values(envelope.coverage), ["none", 1, 0, 1]);
+      const targets = ["models/a.glb", "models/b.glb"];
+      assert.deepEqual(
+        envelope.findings.map((finding: { target: string }) => finding.target),
+        targets,
+      );
+      assert.equal(envelope.execution.failureClass, undefined);
+      assert.equal(envelope.execution.recovery, undefined);
+    });
+  });
+
+  it("ends every duplicate active callback in the same cycle and blocks again on a fresh turn", () => {
+    withTempRepo((root) => {
+      writeFile(root, "asset.glb", GLB_BYTES);
+      const flags = [false, true, true, true, false, true];
+      const results = assertStops(root, flags, [2, 0, 0, 0, 2, 0]);
+      assert.doesNotMatch(results[4]?.stderr ?? "", GAP_RELEASE);
+    });
+  });
+
+  it("blocks a same-size binary rewrite even when its mtime is restored", () => {
+    withTempRepo((root) => {
+      writeFile(root, "asset.glb", GLB_BYTES);
+      assertStops(root, [false], [2]);
+      const path = join(root, "asset.glb");
+      const { atime, mtime } = statSync(path);
+      writeFileSync(path, Buffer.from([103, 108, 84, 70, 3, 0, 0, 0]));
+      utimesSync(path, atime, mtime);
+      // The rewrite blocks and records the new bytes, so the next replay of those bytes ends.
+      assertStops(root, [true, true], [2, 0]);
+    });
+  });
+
+  it("blocks when a binary gap is added, removed or renamed, and passes once every gap is gone", () => {
+    withTempRepo((root) => {
+      writeFile(root, "a.glb", GLB_BYTES);
+      writeFile(root, "b.glb", GLB_BYTES);
+      assertStops(root, [false], [2]);
+      writeFile(root, "c.glb", GLB_BYTES);
+      assertStops(root, [true, true], [2, 0]);
+      rmSync(join(root, "c.glb"));
+      assertStops(root, [true, true], [2, 0]);
+      renameSync(join(root, "b.glb"), join(root, "d.glb"));
+      assertStops(root, [true, true], [2, 0]);
+      for (const name of ["a.glb", "d.glb"]) rmSync(join(root, name));
+      const [clean] = assertStops(root, [true], [0]);
+      assert.doesNotMatch(clean?.stderr ?? "", /incomplete|repeated Stop/u);
+      assert.deepEqual(stateRecords(root), []);
+    });
+  });
+
+  it("uses staged bytes for identity when the index and worktree differ", () => {
+    withTempRepo((root) => {
+      writeFile(root, "asset.glb", GLB_BYTES);
+      commitAll(root, "add asset");
+      const edited = Buffer.from([103, 108, 84, 70, 3, 0, 0, 0]);
+      writeFile(root, "asset.glb", edited);
+      runGit(root, ["add", "asset.glb"]);
+      const [initial] = assertStops(root, [false], [2]);
+      assert.match(initial?.stderr ?? "", /binary changed path not scanned/u);
+      // Stage different bytes, then restore the worktree copy, so only the index changed.
+      writeFile(root, "asset.glb", Buffer.from([103, 108, 84, 70, 4, 0, 0, 0]));
+      runGit(root, ["add", "asset.glb"]);
+      writeFile(root, "asset.glb", edited);
+      assertStops(root, [true, true], [2, 0]);
+    });
+  });
+
+  it("never releases a real finding beside a binary gap, before or after a release", () => {
+    withTempRepo((root) => {
+      writeFile(root, "asset.glb", GLB_BYTES);
+      writeFile(root, "conflict.txt", CONFLICT_TEXT);
+      for (const result of assertStops(root, [false, true], [2, 2]))
+        assert.match(result.stderr, /merge conflict marker/u);
+      rmSync(join(root, "conflict.txt"));
+      assertStops(root, [true, true], [2, 0]);
+      writeFile(root, "conflict.txt", CONFLICT_TEXT);
+      for (const result of assertStops(root, [true, true], [2, 2])) {
+        assert.match(result.stderr, /merge conflict marker/u);
+        assert.doesNotMatch(result.stderr, GAP_RELEASE);
+      }
+    });
+  });
+
+  it("keeps blocking when an oversized or unavailable gap accompanies the binary", () => {
+    withTempRepo((root) => {
+      writeFile(root, "asset.glb", GLB_BYTES);
+      writeFile(root, "notes.txt", "text longer than the lowered limit\n");
+      const lowLimit = { GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "16" };
+      const flags = [false, true, true];
+      for (const result of assertStops(root, flags, [2, 2, 2], "s", lowLimit))
+        assert.match(result.stderr, /oversized untracked text not scanned/u);
+      rmSync(join(root, "notes.txt"));
+      writeFile(root, "settings.env", "MODE=local\n");
+      withScannerFileFault("readSync", (fault) => {
+        for (const result of assertStops(root, flags, [2, 2, 2], "s", fault))
+          assert.match(result.stderr, /untracked path unavailable/u);
+      });
+    });
+  });
+
+  it("keeps blocking on a new session, a missing payload or unsafe state", () => {
+    withTempRepo((root) => {
+      writeFile(root, "asset.glb", GLB_BYTES);
+      assertStops(root, [false], [2]);
+      assertStops(root, [true], [2], "other-session");
+      const recordsBefore = stateRecords(root);
+      assert.equal(recordsBefore.length, 2);
+      for (const payload of [undefined, undefined, "not JSON"])
+        assert.equal(runHook(root, {}, payload).status, 2);
+      assert.deepEqual(stateRecords(root), recordsBefore);
+      // A directory where the record belongs is unsafe state, so every callback blocks and says why.
+      const key = createHash("sha256").update("unsafe").digest("hex");
+      const record = `post-turn-safety-reentry-v1-${key.slice(0, 32)}.state`;
+      mkdirSync(join(root, SCRATCHPAD, record));
+      for (const result of assertStops(root, [false, true], [2, 2], "unsafe"))
+        assert.match(result.stderr, /repeated-Stop state unavailable/u);
+    });
+  });
+
+  it("ends the registered Claude legacy and Codex managed replays without spending the infrastructure allowance", () => {
+    withTempRepo((root) => {
+      writeFile(root, ".gitignore", ".goat-flow/\n");
+      commitAll(root, "ignore local hook state");
+      installPostTurnHook(root);
+      writeFile(root, "asset.glb", GLB_BYTES);
+      // Inherited hook settings could select another provider mode, so each launch starts without them.
+      const env = Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([key]) => !key.startsWith("GOAT_FLOW_"),
+        ),
+      );
+      const hooks = join(root, ".goat-flow/hooks");
+      const launch = (mode: string, isActive: boolean) => {
+        // Each mode uses its own session so one replay record cannot serve the other.
+        const payload = {
+          session_id: mode,
+          turn_id: "turn",
+          hook_event_name: "Stop",
+          stop_hook_active: isActive,
+        };
+        const result = spawnSync(
+          process.execPath,
+          [
+            join(hooks, "run-hook.mjs"),
+            ".goat-flow/hooks/post-turn-safety.mjs",
+            mode,
+          ],
+          { cwd: root, encoding: "utf8", env, input: JSON.stringify(payload) },
+        );
+        assert.equal(result.error, undefined, String(result.error));
+        return result;
+      };
+
+      const legacy = [false, true, true].map((flag) =>
+        launch("post-turn", flag),
+      );
+      const legacyText = legacy.map((result) => result.stderr).join("\n");
+      assert.deepEqual(
+        legacy.map((result) => result.status),
+        [2, 0, 0],
+        legacyText,
+      );
+      assert.match(legacy[2]?.stderr ?? "", GAP_RELEASE);
+
+      const codexMode =
+        "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
+      const codex = [false, true, true].map((flag) => launch(codexMode, flag));
+      const replies = codex.map((result) => JSON.parse(result.stdout));
+      assert.equal(replies[0].decision, "block");
+      for (const reply of replies.slice(1))
+        assert.deepEqual(reply, {
+          systemMessage:
+            "post-turn-safety: coverage-gap-reentry-ended; no clean scan was recorded; coverage none. Unscanned binary paths: 1.",
+        });
+      assert.deepEqual(
+        stateRecords(root, "post-turn-launcher-recovery-v1-"),
+        [],
+      );
     });
   });
 });

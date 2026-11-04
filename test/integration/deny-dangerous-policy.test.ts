@@ -7,11 +7,7 @@
  * Use this suite when changing command grammar or policy boundaries.
  */
 import assert from "node:assert/strict";
-import {
-  copyHookTree,
-  hookSelection,
-  spawnSelectedHook,
-} from "../helpers/hook-entrypoint.js";
+import { copyHookTree, spawnSelectedHook } from "../helpers/hook-entrypoint.js";
 import {
   checkInstalledPolicy,
   runHookWithPayload,
@@ -161,14 +157,11 @@ describe("split policy partial installation", () => {
   // Exercise startup failures for both policy switches so missing setup cannot silently permit a request.
   for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
     // Break each declared dependency to verify the provider receives a useful denial rather than a partial guard.
-    const native = hookSelection() !== "reference";
-    const extension = native ? "mjs" : "sh";
-    const core = native ? "policy-evaluation" : "deny-dangerous/guard-runtime";
     for (const brokenDependency of [
-      `${core}.${extension}`,
-      `deny-dangerous/patterns-shell.${extension}`,
-      `deny-dangerous/patterns-paths.${extension}`,
-      `deny-dangerous/patterns-writes.${extension}`,
+      "policy-evaluation.mjs",
+      "deny-dangerous/patterns-shell.mjs",
+      "deny-dangerous/patterns-paths.mjs",
+      "deny-dangerous/patterns-writes.mjs",
       "pre-split-api",
     ]) {
       it(`${hook} fails closed with ${brokenDependency}`, () => {
@@ -180,15 +173,8 @@ describe("split policy partial installation", () => {
           // An earlier unsplit API reproduces a stale installed runtime that needs a setup refresh.
           if (brokenDependency === "pre-split-api") {
             writeFileSync(
-              resolve(
-                hooks,
-                native
-                  ? "policy-evaluation.mjs"
-                  : "deny-dangerous/patterns-writes.sh",
-              ),
-              native
-                ? "export {};\n"
-                : "check_repository_segment() { return 0; }\n",
+              resolve(hooks, "policy-evaluation.mjs"),
+              "export {};\n",
             );
           } else {
             rmSync(resolve(hooks, brokenDependency));
@@ -235,7 +221,7 @@ describe("split policy partial installation", () => {
             );
             assert.ok(
               (result.stdout + result.stderr).includes(
-                `${hook}.${extension} cannot start`,
+                `${hook}.mjs cannot start`,
               ),
             );
           }

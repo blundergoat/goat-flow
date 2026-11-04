@@ -19,13 +19,8 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
-import {
-  hookInvocation,
-  hookTreeRoot,
-  hookSelection,
-} from "../helpers/hook-entrypoint.js";
+import { hookInvocation, hookTreeRoot } from "../helpers/hook-entrypoint.js";
 import { pathToFileURL } from "node:url";
-import { bashPath } from "../../scripts/check-hook-parity.mjs";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
@@ -86,62 +81,21 @@ export function resolveTool(toolName: string): string {
 }
 
 /**
- * Convert a native PATH list into drive-mounted paths Git Bash accepts.
- * Use before hook launch so Windows users exercise the same fixture sandbox as POSIX users.
- *
- * @param nativePathList - host PATH text; empty remains empty and exposes missing-tool behavior
- * @returns Git Bash-compatible PATH text, or the original text on non-Windows hosts.
- */
-function convertToGitBashPathList(nativePathList: string): string {
-  // POSIX paths already use the spelling Bash expects, including an intentionally empty sandbox.
-  if (process.platform !== "win32") return nativePathList;
-  return nativePathList
-    .replace(
-      /(^|:)([A-Za-z]):[\\/]/gu,
-      (_matchedDrivePrefix, pathSeparatorPrefix: string, driveLetter: string) =>
-        `${pathSeparatorPrefix}/${driveLetter.toLowerCase()}/`,
-    )
-    .replaceAll("\\", "/");
-}
-
-/**
  * Build the hook PATH while preserving each fixture's analyzer sandbox.
- * Use when `/usr/bin` means system tools are allowed; custom paths that omit jq stay isolated.
+ * On Windows, the `/usr/bin` and `/bin` entries stand for the host's Git and Node folders; other hosts use the fixture PATH as given.
  *
  * @param pathPrefix - requested fixture PATH; empty deliberately prevents tool discovery
  * @returns Host-compatible PATH passed to the user's simulated hook process.
  */
 function buildHookSearchPath(pathPrefix: string): string {
-  if (hookSelection() !== "reference" && process.platform === "win32") {
-    const paths = pathPrefix.match(/(?:[A-Za-z]:[\\/])?[^:]+/gu) ?? [];
-    const nativePaths = paths.flatMap((path) =>
-      ["/usr/bin", "/bin"].includes(path)
-        ? [dirname(resolveTool("git")), dirname(process.execPath)]
-        : [path],
-    );
-    return [...new Set(nativePaths)].join(delimiter);
-  }
-  const normalizedPathPrefix = convertToGitBashPathList(pathPrefix);
-  // Only Windows needs native Git and jq folders added to the fixture's POSIX system-path sentinel.
-  if (
-    process.platform !== "win32" ||
-    !normalizedPathPrefix
-      .split(":")
-      .some((pathEntry) => pathEntry === "/usr/bin")
-  ) {
-    return normalizedPathPrefix;
-  }
-  const requiredHostToolDirectories = ["git", "jq"].map((toolName) =>
-    convertToGitBashPathList(dirname(resolveTool(toolName))),
+  if (process.platform !== "win32") return pathPrefix;
+  const paths = pathPrefix.match(/(?:[A-Za-z]:[\\/])?[^:]+/gu) ?? [];
+  const nativePaths = paths.flatMap((path) =>
+    ["/usr/bin", "/bin"].includes(path)
+      ? [dirname(resolveTool("git")), dirname(process.execPath)]
+      : [path],
   );
-  return [
-    ...new Set([
-      ...normalizedPathPrefix.split(":"),
-      ...requiredHostToolDirectories,
-    ]),
-  ]
-    .filter((pathEntry) => pathEntry.length > 0)
-    .join(":");
+  return [...new Set(nativePaths)].join(delimiter);
 }
 
 /**
@@ -178,10 +132,10 @@ function nodeAnalyzerSource(program: string): string {
 }
 
 /**
- * Write a Node analyzer plus a reference-only POSIX executable adapter.
+ * Write a Node analyzer plus an executable Node shim at the declared binary path.
  * Programs live outside analyzed projects, so installing a mock creates no source edits.
  * Native fixtures use Node with its absolute program path; restricted proof
- * never admits the adapter. Payload logic and timeouts live entirely in Node.
+ * never admits the shim. Payload logic and timeouts live entirely in Node.
  */
 function writeNodeAnalyzer(binary: string, program: string): void {
   mkdirSync(dirname(binary), { recursive: true });
@@ -190,19 +144,9 @@ function writeNodeAnalyzer(binary: string, program: string): void {
   const programPath = join(directory, "analyzer.mjs");
   analyzerPrograms.set(binary, programPath);
   writeFileSync(programPath, nodeAnalyzerSource(program));
-  if (hookSelection() !== "reference") {
-    writeFileSync(
-      binary,
-      `#!/usr/bin/env node\nimport(${JSON.stringify(pathToFileURL(programPath).href)});\n`,
-    );
-    chmodSync(binary, 0o755);
-    return;
-  }
-  const quote = (path: string) =>
-    "'" + bashPath(path).replaceAll("'", "'\\''") + "'";
   writeFileSync(
     binary,
-    `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(programPath)} "$@"\n`,
+    `#!/usr/bin/env node\nimport(${JSON.stringify(pathToFileURL(programPath).href)});\n`,
   );
   chmodSync(binary, 0o755);
 }

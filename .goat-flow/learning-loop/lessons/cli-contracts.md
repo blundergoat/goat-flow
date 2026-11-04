@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-10-20
+last_reviewed: 2026-11-04
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -59,7 +59,7 @@ last_reviewed: 2026-10-20
 
 **Prevention:** Do not await a dynamic import at module top level when the imported module needs exports from that same entrypoint. Start the asynchronous CLI dispatch after defining the module, and preserve a process-level success case alongside the direct API test.
 
-**What happened:** The candidate runner was extracted from `scripts/check-hook-parity.mjs` into `scripts/check-hook-parity-candidate.mjs`, which imports shared reference helpers from the original module. The direct parity suite passed, but the CLI's top-level `await import()` stalled module initialization and Node exited 13 with an unsettled-top-level-await warning. `scripts/check-hook-parity.mjs` (search: `async function runCli`) now starts the dispatch without a top-level wait. `test/integration/hook-parity.test.ts` (search: `assert.equal(cli.status, 0, cli.stderr)`) exercises the actual CLI before the direct API checks.
+**What happened:** The candidate runner was extracted from `scripts/check-hook-parity.mjs` into `scripts/check-hook-parity-candidate.mjs`, which imports shared reference helpers from the original module. The direct parity suite passed, but the CLI's top-level `await import()` stalled module initialization and Node exited 13 with an unsettled-top-level-await warning. `scripts/check-hook-parity.mjs` (search: `async function runCli`) now starts the dispatch without a top-level wait. `test/integration/hook-parity.test.ts` (search: `stage runs real entrypoints over fixture rows`) exercises the actual CLI before the direct API checks.
 
 ---
 

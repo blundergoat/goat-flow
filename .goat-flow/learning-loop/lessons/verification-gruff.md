@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-10-23
+last_reviewed: 2026-11-04
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-size-gates.md](verification-size-gates.md).
@@ -33,7 +33,7 @@ last_reviewed: 2026-10-23
 
 - **Recurrence 2026-10-16 (generator comments):** The generator's truthful `Errors:` and singular `throw` wording did not match Gruff's whole-word `throws` marker. Reading `hasErrorBehaviorMarker` before the second rewrite preserved the meaning and cleared the advisories. `scripts/generate-hook-runtime.mjs` (search: `Throws on`) documents the actual failures; the installed rule remains owned by `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
 
-- **Recurrence 2026-10-17 (candidate selection):** Rewriting selectedHookPath's routing comment dropped its missing-entry fallback consequence and introduced one error-behavior advisory. Restoring the explicit throws/no-fallback clause removed that identity; the sixteen baseline advisories remained unchanged. Preserve existing failure clauses when adding routing guidance. Evidence: `test/helpers/hook-entrypoint.ts` (search: `Throws for a missing selection`).
+- **Recurrence 2026-10-17 (candidate selection):** Rewriting selectedHookPath's routing comment dropped its missing-entry fallback consequence and introduced one error-behavior advisory. Restoring the explicit throws/no-fallback clause removed that identity; the sixteen baseline advisories remained unchanged. Preserve existing failure clauses when adding routing guidance. Evidence: `test/helpers/hook-entrypoint.ts` (search: `without falling back to another runtime`).
 
 - **Recurrence 2026-10-17 (CLI fixture data):** The production ratchet treated argv assertions inside a generated child-program template as external filesystem-path input. The destination was an owned temporary file; the flagged argument was its data. Named node:process imports kept the child assertions and cleared the warning. Check which argument the rule flagged before changing a fixture. Evidence: `test/unit/run-hook.test.ts` (search: `import { argv, env } from`) and `node_modules/@blundergoat/gruff-ts/src/security-flow-rules.ts` (search: `AST_FLOW_SINKS`).
 

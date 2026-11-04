@@ -2,16 +2,21 @@
 // goat-flow-hook-version: 1.19.0
 /** Scan the turn's committable changes for high-confidence secrets, literal credential assignments and conflict markers. */
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { closeSync, lstatSync, openSync, readFileSync, readSync, } from "node:fs";
 import { credentialAssignmentFamilies } from "./assignments.mjs";
 import { recordPostTurnResultFinding, } from "./context.mjs";
-import { clearStopReentryState, finishInfrastructureFailure, } from "./recovery.mjs";
+import { clearStopReentryState, finishCoverageGap, finishInfrastructureFailure, } from "./recovery.mjs";
 // Bounds each Git path list below the Windows command-line limit.
 const CHUNK_SIZE = 64;
 // Cap: a larger Git stream ends the scan incomplete instead of exhausting hook memory.
 const GIT_OUTPUT_LIMIT_BYTES = 268_435_456;
 // Cap: enough leading bytes to tell oversized text from binary without reading the whole file.
 const BINARY_PROBE_BYTES = 32_768;
+// Read size for binary digests; the scan time budget, not a byte cap, bounds large assets.
+const DIGEST_CHUNK_BYTES = 1_048_576;
+// The numstat inventory and whole-file admission name the only gaps an unchanged replay may end.
+const BINARY_GAP_MESSAGE = /^binary (changed|untracked|unborn worktree) path not scanned$/u;
 const AWS_TOKEN = /(AKIA|ASIA)[A-Z0-9]{16}/u;
 const GITHUB_LEGACY_TOKEN = /gh[pousr]_[A-Za-z0-9_]{30,}/u;
 const GITHUB_FINE_GRAINED_TOKEN = /github_pat_[A-Za-z0-9_]{20,}/u;
@@ -54,17 +59,22 @@ function markCoverageGap(state, path, message) {
     if (state.coverageGapReported.has(key))
         return;
     state.coverageGapReported.add(key);
+    state.coverageGaps.push({ path, message });
     const detail = message.startsWith("oversized")
         ? `${message} in ${path} (${state.fileSizes.get(path)} bytes; limit ${state.maxFileBytes}; review the file and raise GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES if appropriate)`
         : `${message} in ${path}`;
     state.coverageGapMessages.push(detail);
     recordPostTurnResultFinding(state.context, "coverage-gap", message.startsWith("oversized") ? detail : message, path);
 }
+// Report whether the user's configured scan time has run out, without changing the scan result.
+function isBudgetSpent(state) {
+    const elapsedSeconds = Math.floor((performance.now() - state.context.startedAt) / 1000);
+    return elapsedSeconds >= state.maxSeconds;
+}
 // Stop scanning when the user's time limit or a prior failure makes the result incomplete.
 function budgetCheck(state) {
-    const elapsedSeconds = Math.floor((performance.now() - state.context.startedAt) / 1000);
     // Reaching the configured limit leaves some user changes unverified.
-    if (!state.isBailed && elapsedSeconds >= state.maxSeconds)
+    if (!state.isBailed && isBudgetSpent(state))
         markScanIncomplete(state, "budget", `budget ${state.maxSeconds}s exceeded`);
     return !state.isBailed;
 }
@@ -448,6 +458,7 @@ function createScanState(context) {
         incompleteReason: "",
         coverageGapMessages: [],
         coverageGapReported: new Set(),
+        coverageGaps: [],
         diffFilesDone: 0,
         fileClasses: new Map(),
         fileSizes: new Map(),
@@ -504,7 +515,86 @@ function reportIncompleteScan(state) {
     for (const message of state.coverageGapMessages)
         process.stderr.write(`post-turn-safety: scan incomplete (${message}).\n`);
 }
-// Turn the scan state into the Stop status; findings always block, and only command failures may end a repeated Stop.
+// Digest one gap file and confirm it stayed the same binary while it was read; null leaves the identity unavailable.
+function digestBinaryFile(state, path) {
+    try {
+        const before = lstatSync(path);
+        if (!before.isFile())
+            return null;
+        const digest = createHash("sha256");
+        const buffer = Buffer.alloc(DIGEST_CHUNK_BYTES);
+        let total = 0;
+        let hasNulByte = false;
+        const descriptor = openSync(path, "r");
+        try {
+            for (let count = readSync(descriptor, buffer, 0, buffer.length, 0); count > 0; count = readSync(descriptor, buffer, 0, buffer.length, total)) {
+                // A spent budget cannot finish the digest, so the user's turn stays blocked.
+                if (isBudgetSpent(state))
+                    return null;
+                hasNulByte ||= buffer.subarray(0, count).includes(0);
+                digest.update(buffer.subarray(0, count));
+                total += count;
+            }
+        }
+        finally {
+            closeSync(descriptor);
+        }
+        const after = lstatSync(path);
+        // A file replaced or resized while it was read cannot inherit an earlier replay's identity.
+        if (!after.isFile() || after.size !== total || total !== before.size)
+            return null;
+        // Git also reports `-diff` text as binary; without a NUL byte the file keeps blocking every Stop.
+        return hasNulByte ? digest.digest("hex") : null;
+    }
+    catch {
+        // For example, the file vanished or lost read access after inventory; the turn stays blocked with the state warning.
+        return null;
+    }
+}
+// Map each gap path to its staged blob id, one Git call per batch; null means the index was unreadable or a path is unmerged.
+function stagedBlobIds(paths) {
+    const blobs = new Map();
+    for (const chunk of chunksOf(paths)) {
+        const result = spawnSync("git", ["--literal-pathspecs", "ls-files", "-s", "-z", "--", ...chunk], { maxBuffer: GIT_OUTPUT_LIMIT_BYTES, windowsHide: true });
+        if (result.error || result.status !== 0)
+            return null;
+        for (const record of result.stdout.toString("utf8").split("\0")) {
+            if (record === "")
+                continue;
+            // Example record: "100644 <blob> 0\tmodels/a.glb"; a conflict stage leaves the staged bytes ambiguous.
+            const fields = record.match(/^[0-7]+ ([0-9a-f]+) ([0-3])\t(.*)$/su);
+            if (fields === null || fields[2] !== "0")
+                return null;
+            blobs.set(fields[3], fields[1]);
+        }
+    }
+    return blobs;
+}
+// Identify every binary gap by root, path, message, worktree digest and staged blob; null keeps the turn blocked.
+function binaryGapIdentity(state, root) {
+    const blobs = stagedBlobIds([
+        ...new Set(state.coverageGaps.map((gap) => gap.path)),
+    ]);
+    if (blobs === null)
+        return null;
+    const entries = [];
+    for (const gap of state.coverageGaps) {
+        const digest = digestBinaryFile(state, gap.path);
+        if (digest === null)
+            return null;
+        // An untracked binary has no index entry, recorded as "-" so staging it later changes the identity.
+        const blob = blobs.get(gap.path) ?? "-";
+        entries.push(JSON.stringify([gap.path, gap.message, digest, blob]));
+    }
+    return ["coverage-gap:v1", root, ...entries.sort()].join("\n");
+}
+// True when the finished scan skipped only binary files; an unfinished scan or any other gap is never eligible for replay release.
+function hasOnlyBinaryGaps(state) {
+    return (!state.isBailed &&
+        state.coverageGaps.length > 0 &&
+        state.coverageGaps.every((gap) => BINARY_GAP_MESSAGE.test(gap.message)));
+}
+// Turn the scan state into the Stop status; findings always block, and only command failures or unchanged binary gaps may end a repeated Stop.
 function finishScan(state, root, variant) {
     const context = state.context;
     context.detectedFindings = state.findings;
@@ -521,7 +611,10 @@ function finishScan(state, root, variant) {
         process.stderr.write("post-turn-safety: fix or remove the flagged changed content before stopping.\n");
         return 2;
     }
-    // Incomplete content coverage must block every Stop replay, even when unchanged.
+    // Only binaries the detectors cannot read may end an unchanged active replay; any other gap or a bailed scan blocks.
+    if (hasOnlyBinaryGaps(state))
+        return finishCoverageGap(context, root, () => binaryGapIdentity(state, root));
+    // Every other incomplete content coverage blocks each Stop replay, even when unchanged.
     if (context.coverageGap ||
         (state.isBailed && state.incompleteKind !== "command")) {
         clearStopReentryState(context, root);

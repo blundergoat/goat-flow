@@ -51,7 +51,7 @@ const VERIFIED_RUNTIME_SHA256: Readonly<Record<string, string>> = {
   "hook-policy-state.cjs":
     "e2cc779a13fead674083a4bcc9267d842d24f16aafcaceeddb0f2a88e2fcfc95",
   "hook-provider-adapters.mjs":
-    "e197098ca2aae37b09bd2de5de8891b024af98a4896124b6fffc3ec2235374e6",
+    "bad6c9a600f361cbe770e2fb6ea8b08a661a40b721a0b9d140c87ea62b5a81fb",
   "hook-supervisor.mjs":
     "9ece8d082ecc4f53540b6da919ef97a973649f3718e038996c1c46f40ed46bb2",
   "policy-corpus.mjs":
@@ -79,13 +79,13 @@ const VERIFIED_RUNTIME_SHA256: Readonly<Record<string, string>> = {
   "post-turn/assignments.mjs":
     "d2ecb9410d52a3b50bbe9136f6c98373f34321eada4f4cc7c54a69816c3b64bd",
   "post-turn/context.mjs":
-    "6f61e64607c08e5bf83c6fc63d2d4895920b528c2f81ca3622c4d76433f62ec2",
+    "79b645ed2ead8f821fc0d9f07bfbc2c4af0ec09180c150cea8715addbcf97667",
   "post-turn/controller.mjs":
-    "d799e5277ad07ad50677a1ae9980c639bce728a4c8c87a3b2e563cf76296258a",
+    "debb178a4e166e46859b05a71a34844ea00f858a1d2cedfca752229a9a8b0e8d",
   "post-turn/recovery.mjs":
-    "27eb1b162f6a34731e6ab489df8367a882e7f39889e05938b39154f73ab642a0",
+    "df7298cbc23252aee95f90889c23fb647329ae30ac55f3adbce114ed73224346",
   "post-turn/scanner.mjs":
-    "95267f043bde4888508b25666801c4a5914a8e91f1510f1b908a1b563b0143d5",
+    "b5b59fc68ff6a1103b289af960672ac6875912a00a50e30928100a8b1efd084b",
   "process-tree.mjs":
     "2a6beb870594f8b1ab4e6484a22b9e8224a45905731dea1384d1f56076e1870c",
   "run-hook.mjs":
@@ -114,14 +114,14 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "2.1.312",
+        providerVersion: "2.1.317",
         providerMode: "interactive CLI, manual permission mode",
         hookVersion: "1.19.0",
         adapterVersion: "1",
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-10-29T09:33:20.193Z",
+        capturedAt: "2026-11-04T00:28:15.832Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -131,12 +131,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "635a71f979047dbdb67e9072d47f720e565b136fa00aefc592ef2c52c4e9f19c",
+          "02a66fa1261a4c5e4a0592ca5d3774d3c349a1f44888593701618c7a8bc591f5",
         approvalPacketSha256:
-          "ebd2b5874ea044795a2c16930a745cb9dd4937337bad78fba5c6c060ab77de55",
+          "f0213001b4058fc3b2c7b3d1462b53791a5e8d169e79d8599fe8a2ad0b5c84d4",
         producer: "claude native session output",
         reviewSha256:
-          "eb6ec6f1e2276b29f42f017c3021598f34db1c96388ece99edf2b77715efe2b5",
+          "564aca3854e030b0c96f11ea6358076b56fc25ae84a4fe67ace47a38939a3e10",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -154,14 +154,14 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "2.1.312",
+        providerVersion: "2.1.317",
         providerMode: "interactive CLI, manual permission mode",
         hookVersion: "1.19.0",
         adapterVersion: "1",
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-10-29T09:38:02.316Z",
+        capturedAt: "2026-11-04T02:07:03.414Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -171,12 +171,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "189c8148ecb7f2d020a48df9dcf8127f54005afb521107d9fe1d6349e3830cab",
+          "a0f2874e5c4fede162c3202f0a291924065dda23bf42b7a8bbf1869690690c2b",
         approvalPacketSha256:
-          "ebd2b5874ea044795a2c16930a745cb9dd4937337bad78fba5c6c060ab77de55",
+          "7b5a39ad78198aa6e31e873285a3d3647e5ee05661ffecc0b4400e0e365f754a",
         producer: "claude native session output",
         reviewSha256:
-          "c69b2fcd525c7c8775fb1bd8e7840b94994f7a3982f292ed37617a018421a8ed",
+          "6eefba40dca74ec4f01cfd90aead048ebacfd949bd25fe7ae66770826719be9c",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -191,12 +191,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Stop blocked a conflict marker, the model repaired it, and clean Stop completed.",
       limitations: [
         "The operator closed the client after the completed turn; natural provider exit is not claimed.",
-        "Claude Code 2.1.316 recorded the Stop block in the stop summary's hook errors rather than a separate stop-feedback record.",
+        "Claude Code 2.1.317 recorded the Stop block in the stop summary's hook errors rather than a separate stop-feedback record.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "2.1.316",
+        providerVersion: "2.1.317",
         providerMode:
           "interactive CLI, manual permission mode, project settings only",
         hookVersion: "1.19.0",
@@ -204,7 +204,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-01T23:44:35.209Z",
+        capturedAt: "2026-11-04T02:13:36.256Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -214,12 +214,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "09713221d2651c058dacd7f2f0096c83c560bafe91a9fa0bcf27ccf457222444",
+          "ad056a3432d72ad23db81ed6790fd68eed0fbd3ec05db398b013f4c63d2f3a52",
         approvalPacketSha256:
-          "f7deaa788f3885cc9244dc27901b153d90b55ec4f1e625bc8e528e291bd27252",
+          "dd09ffe422d645648c79c0fc1791bfdcc5127a35a56da7dbdea36b7e44c6022c",
         producer: "claude native session output",
         reviewSha256:
-          "28023c13b25ac38015de691a6fb15d9953209607277311800547898aeec384f1",
+          "5f90001a905c471b9dca5db36fc41876ca0a3049bf2eedf397fc402849f0299c",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -240,7 +240,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.164.0",
+        providerVersion: "0.166.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
@@ -248,7 +248,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-10-29T23:34:09.213Z",
+        capturedAt: "2026-11-03T22:21:24.663Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stderr", "model-context"],
@@ -258,12 +258,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "f5e067f71d6e21eb58ce2db5af737735409545be7cc47ada7193f328398fc425",
+          "2085612d4b73a1e996e9682835e92c4585bebe44147a9035d53fe87f72c0005c",
         approvalPacketSha256:
-          "6c3a1fc94707b68af7ff42469b4a00974ab02a85c44651958af9ac0f6f3f59b2",
+          "7320dd13b3aff23046a48f6dcef7c3aed82090a3217e7e7eb9a9e2bf52410724",
         producer: "codex native session output",
         reviewSha256:
-          "5096f7110530a1e3587fff3864dbae1b2dffa21898bf1a0b8a61b64810e641b3",
+          "f33d4c21ad394b8ba4b255a446a80e7b2a81de3f7a4f5fb5771cacba55191d6b",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -284,15 +284,15 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.164.0",
+        providerVersion: "0.166.0",
         providerMode:
-          "exec mode (codex exec --json), low reasoning, launched with --ask-for-approval on-request",
+          "exec mode (codex exec --json), low reasoning, workspace goat-flow permission profile, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
         adapterVersion: "1",
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-10-29T23:47:19.119Z",
+        capturedAt: "2026-11-03T22:22:52.728Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -302,12 +302,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "c0d7f97e2ab1485ca74354117f08f26da4cc6ce3f18bff73f33958d278302341",
+          "21a9adf538f221173f1504ecefa45288853ba8d886b2cd84963afda34fdb2ee0",
         approvalPacketSha256:
-          "6c3a1fc94707b68af7ff42469b4a00974ab02a85c44651958af9ac0f6f3f59b2",
+          "7320dd13b3aff23046a48f6dcef7c3aed82090a3217e7e7eb9a9e2bf52410724",
         producer: "codex native session output",
         reviewSha256:
-          "93b6361bde2235e5878cb47453dd65879d84481fce26a47ea48a125c20fe00c8",
+          "5c6dd2d2485b8cf8be006c105bf582704263bd4c76c819009491c90908d68619",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -324,7 +324,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Codex recorded no separate clean Stop message after the repair; a clean scan is inferred from the completed turn and matching final files.",
         "The JSON event stream carried no hook event; delivery was read from the bound session record.",
         "Readiness reported on-request, but codex exec recorded approval_policy=never; no escalation was requested.",
-        "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed. Connected tool bindings were visible, but the model used only the two controls and two patches.",
+        "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed. The model used only the three controls and three patches.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -337,7 +337,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-02T00:02:16.995Z",
+        capturedAt: "2026-11-03T22:22:52.728Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -347,12 +347,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "a913304e1fe422ba13299e364fa21f93daf4185486d88910a32c923f80582a86",
+          "21a9adf538f221173f1504ecefa45288853ba8d886b2cd84963afda34fdb2ee0",
         approvalPacketSha256:
-          "177ee7ba8a7eee4bc37fb709039ad1686bf7774b842bea0d3a230e89b0264632",
+          "7320dd13b3aff23046a48f6dcef7c3aed82090a3217e7e7eb9a9e2bf52410724",
         producer: "codex native session output",
         reviewSha256:
-          "f6d98edee50e6bb064a94d43a25186f7ce70c18260ac5d0676d695c9a03ec7e0",
+          "5c6dd2d2485b8cf8be006c105bf582704263bd4c76c819009491c90908d68619",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -378,7 +378,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-10-29T07:37:33.254Z",
+        capturedAt: "2026-11-03T22:52:24.086Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -388,12 +388,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "39678554b7b163573c4107bc92ec14aa62cab1f3b2022a2f4a41aa6eae4eaca7",
+          "3dc56bc99af1bde4dbfb837c58363f3a6b0679419dbf17272f5de26b4d91e201",
         approvalPacketSha256:
-          "907d2687eebebef296b87d8e3e747fdc375755a76510862148a623a5e9f3af60",
+          "9e54816f72815ce811006135b2dfefa01806d3bd4ecb39ce12774ab8b7664ae0",
         producer: "copilot native session output",
         reviewSha256:
-          "0cb7088b11ef1b53ada6db634cbef82777f7693f93b9217de35a3bb1bc00c5e6",
+          "e0f415a86c61ff42907d8f6ea70404c9df1314d4caf3e6912bc7cbe5e71eb50e",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -419,7 +419,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-10-29T07:38:38.730Z",
+        capturedAt: "2026-11-03T22:52:59.933Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -429,12 +429,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "2398efdd9d83c8d9e3e1446ac61b4eb95f26fa27fde3fd733b1cd4a8dd5dc3c0",
+          "cbb03788b5e178dc1180a1ac18ae3c7894ece39056a98f7041cf432bfa38039a",
         approvalPacketSha256:
-          "3b7997f9a531e7b935ebea1cf378c063a51f0507c6211feaa1bcbd63e1ee2e02",
+          "ef6ee1b0a0d20a986602f101af19a3bce2e7c8577e67dcf4c71f11832b3d5c37",
         producer: "copilot native session output",
         reviewSha256:
-          "4cdd5e06a830dc26813f8c9b77dd531bd64bd1eed2eb24a7e9ca5db43ce05ea9",
+          "8ce40f849073d031c9bf8ccc0c897ac3470a1e751e886491a6204191f5177121",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -467,7 +467,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".agents/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-01T22:50:08.273Z",
+        capturedAt: "2026-11-04T03:01:53.759Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -477,12 +477,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "22dd8dd4bcbcf438446b6b75a8b87c18be801912f59e19695164ddbf36d2b688",
+          "55370647ea01c81bdc573956632a36e996ddb5e0cbc6e253adcdc77ed2283986",
         approvalPacketSha256:
-          "8ee6fa9d7d875b695123e4ab06a6eac3a151432ada008d3fc44f7855b76adebc",
+          "80836442676b36949c9302e79fcb48ce9e4d2615e0974965f9d66da3d97fecf5",
         producer: "antigravity native session output",
         reviewSha256:
-          "c1825f735b78b68d34f41772c0a79cdd3eba2d22cddd1162d43c747437e8aa00",
+          "716fd2dcc296488a3b73a8b48ec31940e5b18702fe34934b0b59034904ba5466",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -498,11 +498,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       limitations: [
         "A Remote Control bridge was active; tool approvals are attributed to the operator by timing, because the record names no channel.",
         "The controller closed the client after the turn ended; natural provider exit is not claimed.",
+        "Claude Code 2.1.317 hook records name no script; policy attribution rests on the pinned code, the rehearsal and exact matches on the reason text.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "2.1.314",
+        providerVersion: "2.1.317",
         providerMode:
           "interactive CLI, manual permission mode, project settings only",
         hookVersion: "1.19.0",
@@ -510,7 +511,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-10-30T21:58:51.468Z",
+        capturedAt: "2026-11-03T22:41:42.140Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -520,12 +521,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "73901e86951616577b0ba6d04a2d9c8b686749d8b29bfbbb738ecd28e977be57",
+          "f390930a3f3f4b5b6d23284330a47ba5a1429093448a5235eda1489b257e8b42",
         approvalPacketSha256:
-          "ab8f950d4f36af9adcf8b4042d1e616e2a0fac172de7a58003709ee34331bc7b",
+          "93ae8f0af93c0a78cf2297cd5aade3b77ae1de356537a59d40f4cb5e93121c0f",
         producer: "claude native session output",
         reviewSha256:
-          "0a23e9c1ccc77dfc67f033d7e5b117e7cc07bb4ca979311ef4c5b7244c060342",
+          "4f69354774c8dca634199abdc989020d4b658a224ef93aeefae4c2761d957ba8",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -541,11 +542,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       limitations: [
         "A Remote Control bridge was active; tool approvals are attributed to the operator by timing, because the record names no channel.",
         "The controller closed the client after the turn ended; natural provider exit is not claimed.",
+        "Claude Code 2.1.317 hook records name no script; attribution rests on the hook's own output and its session-named health marker.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "2.1.314",
+        providerVersion: "2.1.317",
         providerMode:
           "interactive CLI, manual permission mode, project settings only",
         hookVersion: "1.19.0",
@@ -553,7 +555,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-10-30T22:01:09.632Z",
+        capturedAt: "2026-11-03T22:43:53.152Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -563,12 +565,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "babf35fe871dd6e276b143400db49ae407feaeabac450c01b7c1fa598d6fdfa4",
+          "c1b0e42152c2432bb1e921f5d89cec3c75605efeee0be0ba42d5fca54fc12d7d",
         approvalPacketSha256:
-          "ab8f950d4f36af9adcf8b4042d1e616e2a0fac172de7a58003709ee34331bc7b",
+          "93ae8f0af93c0a78cf2297cd5aade3b77ae1de356537a59d40f4cb5e93121c0f",
         producer: "claude native session output",
         reviewSha256:
-          "89c26c309f0b5d8e585134942ca7bbdde02d0978b03e6ae94f1667e6140a487e",
+          "cea918217d85e70515c984c3458381cb8b687fc8994f2fcd7b323efb3689a130",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -583,13 +585,14 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Stop blocked a conflict marker, the model repaired it, and clean Stop completed.",
       limitations: [
         "The operator closed the client after the completed turn; natural provider exit is not claimed.",
-        "Claude Code 2.1.316 recorded the Stop block in the stop summary's hook errors rather than a separate stop-feedback record.",
+        "Claude Code 2.1.317 recorded the Stop block in the stop summary's hook errors rather than a separate stop-feedback record.",
         "A Remote Control bridge was active; tool approvals are attributed to the operator by timing, because the record names no channel.",
+        "Claude Code 2.1.317 hook records name no script; attribution rests on the single registered Stop hook and the reason text.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "2.1.316",
+        providerVersion: "2.1.317",
         providerMode:
           "interactive CLI, manual permission mode, project settings only",
         hookVersion: "1.19.0",
@@ -597,7 +600,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-02T00:23:46.603Z",
+        capturedAt: "2026-11-03T22:48:50.044Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -607,12 +610,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "ebe8fb1d49b66ee7b1af97e2b443228562995a8a5e785591a5e63f71e74963ed",
+          "d16cba8aa1625807f313b181dae09c90778e42adcb80b6b709a3e1b18e6a945c",
         approvalPacketSha256:
-          "d7aaf1876fc8340852a4232bdd4b333c53c33977f0b2e58f0adfd09f610d26f3",
+          "3a331f7fd85c86f00d41a05eacbe35e4494d9a27c8ac0eab244b816cff0e1c9d",
         producer: "claude native session output",
         reviewSha256:
-          "b4774d14392310a06588fe4267bbf415329fb344ede36c57598a7616eb228ecc",
+          "111b0df5caa90e9ca4fa044c495796a624387b8b803cd0d54a0169b66423c6e4",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -634,7 +637,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.165.0",
+        providerVersion: "0.166.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, read-only goat-flow permission profile, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
@@ -642,7 +645,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-10-30T20:21:20.431Z",
+        capturedAt: "2026-11-03T21:04:49.485Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stderr", "model-context"],
@@ -652,12 +655,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "8a075e093937dd490793be46055f85e83754a61652420828be90fb9df4f54219",
+          "f961fdca44ee10083e4d70ea9182ee6eb242e28fdbcf9412c8c31dc608ada655",
         approvalPacketSha256:
-          "6d65cf85fc21578ae0bd1630e21366edc2fb623280484bcbcd1b4f098d885fff",
+          "953090102ccdee6e47472b9f35a0b1d05073a098ce8fa1af604e2f468de7556c",
         producer: "codex native session output",
         reviewSha256:
-          "349bb081d760f51d1e5be91621c45ad43c0488befd400cd09e2297508ea0a12e",
+          "13fe674cf60c0ba9780b8d55dcad7341d459bc017bc3b1c168f5e725c80aaf09",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -678,7 +681,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.165.0",
+        providerVersion: "0.166.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, workspace goat-flow permission profile, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
@@ -686,7 +689,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-10-30T20:21:56.207Z",
+        capturedAt: "2026-11-03T21:05:27.897Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -696,12 +699,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "c1b8e4550fbb633205d382ab323d4ddcf50c6d30cc14eda3543855c17f612fec",
+          "1ce5af4d84beb8e540035633afc704935345eb0856df9d4a46190843feb3c575",
         approvalPacketSha256:
-          "6d65cf85fc21578ae0bd1630e21366edc2fb623280484bcbcd1b4f098d885fff",
+          "953090102ccdee6e47472b9f35a0b1d05073a098ce8fa1af604e2f468de7556c",
         producer: "codex native session output",
         reviewSha256:
-          "04feb044af451dc7cfa93b47c192571338380686e5d16598b2f78d204d94071b",
+          "0cc8491639badfc997a78c65e33bac42d165035012b69df6ca09c9406557bba2",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -731,7 +734,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-02T00:44:47.548Z",
+        capturedAt: "2026-11-03T21:59:14.466Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -741,12 +744,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "75e924b119fea83c09fec8eb6ffce53c731d4f3cd0325da473583ff97bfd49b5",
+          "85c0e878be6c573f4e24ba532bd724a731b97a993abd270bfd03e75a7a1b8fdb",
         approvalPacketSha256:
-          "704378df4daaa470eefbfc8438f62c397328dd01a394bf32ed5722da38d1db5f",
+          "29328629e84ceef8c9479928ea2b17a084ccf40869b186864c932638e8f27783",
         producer: "codex native session output",
         reviewSha256:
-          "ab03e648553c1ba033987062ed14c058eedc31e7d097d4f83a65b0562f6f638c",
+          "572ba74d8e735ecb87781b8b46cda4d7583fdf6f12fafa38f63088f30fa96805",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -776,7 +779,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-10-31T00:49:56.205Z",
+        capturedAt: "2026-11-03T21:48:05.266Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -786,12 +789,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "af1a8ec69b25cac6a3ac01490fee16c12c12f313b4446d36bc939d8a7e654e4b",
+          "d7bc75d7d81886f297f166303f13a94914485545ea8fe962f4f882fc0856f704",
         approvalPacketSha256:
-          "66df311f7ffe512c612acd0be275f7ed6f5a0fbeb9764b81c150841b9d8c1cbc",
+          "1e7dc824f7f978083127c02a9b58d42fda496eceeaf65017eb277865bdd5db29",
         producer: "copilot native session output",
         reviewSha256:
-          "ad3600417e887a5dede91b9d3ac52164eb1d1d90f60795242063964c3e00189d",
+          "28ceee207d53efcbe152ae1d31959add0ceeb6776f5d3c27df59aafdd2e93cd0",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -820,7 +823,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-10-31T00:50:56.483Z",
+        capturedAt: "2026-11-03T21:49:11.316Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -830,12 +833,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "ff713aac1e6a9845f1c56cff6242ae0aa7be7623294533626dbca5cfd2f27ab8",
+          "95b271fa3c875296e48bb910f21bd6d1da8af439e62374cd3bccb9e15a23f0c8",
         approvalPacketSha256:
-          "66df311f7ffe512c612acd0be275f7ed6f5a0fbeb9764b81c150841b9d8c1cbc",
+          "1e7dc824f7f978083127c02a9b58d42fda496eceeaf65017eb277865bdd5db29",
         producer: "copilot native session output",
         reviewSha256:
-          "bd8d2eb6f8100556ce63f440ffa1b542a0ec1ef79d826d8c199f3802b80574d6",
+          "c7b751e421c2149d74e086ac85046d709af36bea54e6c06e560fce3182580da1",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -868,7 +871,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".agents/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-10-31T06:31:11.042Z",
+        capturedAt: "2026-11-03T21:52:29.035Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -878,12 +881,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "f28cbc80bcfca844b1513b148d06ebabef0eff9459d71837712e1be705bf6846",
+          "3afbebbedc9719b7b73fcdb85c5bde0809984be4ca9a2a2e7f3a387574369ca5",
         approvalPacketSha256:
-          "29bcb58ca9e46572e9b873e3635ecb3a37132d55854b6196b4817737bf298a11",
+          "63151acb029821adfe72b6e692aec6e1148fc42e0ca8a17a78ba95a18fecfa1c",
         producer: "antigravity native session output",
         reviewSha256:
-          "ce78b795191e96290102aaff1ef9b2ef0d4f7b486812f127a1423a8d4c15a25d",
+          "01cb977ee627d3838a0a9db1aa5fb1284ff415630bbd15e1d30d47f973c174eb",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },

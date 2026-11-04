@@ -35,12 +35,12 @@ All 18 Windows/WSL delivery rows have reviewed captures on the native PowerShell
 
 | Provider | Host | Version and mode | PreToolUse | PostToolUse | Stop |
 |---|---|---|---|---|---|
-| Claude Code | Windows | 2.1.312 Pre/Post; 2.1.316 Stop, interactive/manual | C1 verified | C2 verified | C3 verified |
-| Codex CLI | Windows | 0.164.0 Pre/Post; 0.166.0 Stop, exec/JSON | C4 verified | C5 verified | C6 verified |
+| Claude Code | Windows | 2.1.317, interactive/manual | C1 verified | C2 verified | C3 verified |
+| Codex CLI | Windows | 0.166.0, exec/JSON | C4 verified | C5 verified | C6 verified |
 | Copilot CLI | Windows | 1.0.103, prompt/JSON | C7 verified | C8 verified | No delivery claim |
 | Antigravity | Windows | 1.4.8, interactive/Request Review | C9 verified | No delivery claim | No delivery claim |
-| Claude Code | WSL | 2.1.314 Pre/Post; 2.1.316 Stop, interactive/manual | C10 verified | C11 verified | C12 verified |
-| Codex CLI | WSL | 0.165.0 Pre/Post; 0.166.0 Stop, exec/JSON | C13 verified | C14 verified | C15 verified |
+| Claude Code | WSL | 2.1.317, interactive/manual | C10 verified | C11 verified | C12 verified |
+| Codex CLI | WSL | 0.166.0, exec/JSON | C13 verified | C14 verified | C15 verified |
 | Copilot CLI | WSL | 1.0.91, interactive/manual | C16 verified | C17 verified | No delivery claim |
 | Antigravity | WSL | 1.4.12, interactive/Request Review | C18 verified | No delivery claim | No delivery claim |
 
@@ -172,9 +172,11 @@ Every listed path must be a contained Git top level. One invalid sibling invalid
 
 Tracked and staged text is scanned from added hunks, including files above the whole-file cap. Non-ignored untracked text above the cap and binary changed paths return explicit incomplete results. New content cannot authorize its own suppression: inline allow markers on a new finding still block. Move intentional scanner fixtures to split synthetic values, or leave a reviewed committed fixture unchanged.
 
+Unchanged binary files are the one gap that can end a repeated Stop. The first Stop that reports them blocks, so the agent sees each skipped path. If every gap is still a binary with the same path, bytes and staged blob on that session's continued Stop, the hook ends it with `post-turn-safety: ending repeated Stop after unchanged coverage gap; no clean scan was recorded.` and an incomplete `coverage-gap-reentry-ended` result. Claude and Codex managed modes receive that warning as a `systemMessage` with no `continue: false`. A new turn blocks first again, and a changed binary blocks once more while its new bytes are recorded. A finding, an oversized or unavailable file, an unfinished scan or unsafe replay state keeps every Stop blocked.
+
 The managed Codex Stop mode validates bounded input once and forwards its original bytes to the scanner. It keys one infrastructure retry by provider, selected project, session and explicit turn, with separate hashes for the failure. A new explicit turn receives a new allowance even when its prompt text is unchanged. Changed faults, clean rescans and duplicate deliveries cannot renew a spent allowance.
 
-After that retry, infrastructure ends with a visible warning and incomplete `bounded-reentry-ended` coverage. Unsafe or inaccessible state warns as unavailable without claiming exhaustion. The warning has no `continue: false` override, so another matching hook can still block. Every fresh delivery rescans content; known hazards, declared coverage gaps and malformed context remain blocking. Other modes retain their previous scanner-owned exact-repeat contract.
+After that retry, infrastructure ends with a visible warning and incomplete `bounded-reentry-ended` coverage. Unsafe or inaccessible state warns as unavailable without claiming exhaustion. The warning has no `continue: false` override, so another matching hook can still block. Every fresh delivery rescans content; known hazards, malformed context and every coverage gap except an unchanged binary remain blocking. Other modes retain their previous scanner-owned exact-repeat contract.
 
 Managed capture allows 65,536 stdout bytes, retains 4,096 stderr bytes while draining excess, and stops a stderr flood above 1,048,576 bytes. Only a normally completed, zero-status child with one valid UTF-8 envelope can supply a result. Final serialized provider replies, including JSON escaping and newline, stay within 10,000 bytes by condensing structured details while preserving the decision, coverage and separate omission counts. Legacy policy capture keeps its existing shared limit.
 

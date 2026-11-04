@@ -5,7 +5,7 @@
  * Harmless controls preserve investigation workflows that need to display those same words.
  */
 import assert from "node:assert/strict";
-import { copyHookTree, hookSelection } from "../helpers/hook-entrypoint.js";
+import { copyHookTree } from "../helpers/hook-entrypoint.js";
 import {
   checkInstalledPolicy,
   runHookWithPayload,
@@ -287,16 +287,12 @@ describe("Native shell conditionals", () => {
       const result = checkProposedCommand("deny-dangerous", command);
       assert.equal(result.status, 0, result.stderr);
     }
-    // PowerShell expands `$` inside double quotes before printing, so Node refuses the text; the frozen Bash reference allows it.
+    // PowerShell expands `$` inside double quotes before printing, so Node refuses the text.
     const expanded = checkProposedCommand(
       "deny-dangerous",
       `powershell -Command 'Write-Output "if ($true) { Remove-Item example }"'`,
     );
-    assert.equal(
-      expanded.status,
-      hookSelection() === "reference" ? 0 : 2,
-      expanded.stderr,
-    );
+    assert.equal(expanded.status, 2, expanded.stderr);
   });
   it("preserves provider denials for conditional deletions", () => {
     // Provider delivery must retain the same stop decision as the direct classifier interface.
@@ -322,34 +318,31 @@ describe("PowerShell executable script blocks", () => {
     "powershell -Command '1 | ForEach-Object { Write-Output Ready }; ACTION'",
   ];
   // Node refuses these forms whatever the body: it does not inspect the `foreach` alias, a parenthesised expression or a method
-  // call. The frozen Bash reference still reads their bodies.
+  // call.
   const dynamicBlockCommands = [
     "powershell -Command '1 | foreach -Begin { Write-Output Ready } -Process { Write-Output Ready } -End { ACTION }'",
     "powershell -Command 'Write-Output (& { ACTION })'",
     "powershell -Command '({ ACTION }).Invoke()'",
   ];
-  if (hookSelection() === "reference")
-    blockCommands.push(...dynamicBlockCommands);
-  else
-    for (const command of dynamicBlockCommands) {
-      it(`refuses uninspected script blocks in ${command}`, () => {
-        for (const policy of ["deny-dangerous", "deny-git-mutations"]) {
-          // The refusal comes before either policy reads the body, so a harmless body is refused too.
-          for (const action of [
-            "Remove-Item -Recurse -Force example",
-            "git.exe push origin main",
-            "Write-Output Ready",
-          ]) {
-            const result = checkProposedCommand(
-              policy,
-              command.replace("ACTION", action),
-            );
-            assert.equal(result.status, 2, result.stderr);
-            assert.match(result.stderr, /Cannot inspect native PowerShell/u);
-          }
+  for (const command of dynamicBlockCommands) {
+    it(`refuses uninspected script blocks in ${command}`, () => {
+      for (const policy of ["deny-dangerous", "deny-git-mutations"]) {
+        // The refusal comes before either policy reads the body, so a harmless body is refused too.
+        for (const action of [
+          "Remove-Item -Recurse -Force example",
+          "git.exe push origin main",
+          "Write-Output Ready",
+        ]) {
+          const result = checkProposedCommand(
+            policy,
+            command.replace("ACTION", action),
+          );
+          assert.equal(result.status, 2, result.stderr);
+          assert.match(result.stderr, /Cannot inspect native PowerShell/u);
         }
-      });
-    }
+      }
+    });
+  }
   // Script-block arguments execute inside the host and must retain each policy's own deny and allow decisions.
   for (const command of blockCommands) {
     it(`inspects executed script blocks in ${command}`, () => {
@@ -559,8 +552,7 @@ describe("Windows LFS executable lookup", () => {
 });
 
 describe("Unqualified native PowerShell tool", () => {
-  // Node inspects native PowerShell input and denies it with the owning policy's recovery route. The frozen Bash reference
-  // rejects the tool and names Bash as the route.
+  // Node inspects native PowerShell input and denies it with the owning policy's recovery route.
   for (const [policy, command, inspectedReason] of [
     [
       "deny-git-mutations",
@@ -576,73 +568,65 @@ describe("Unqualified native PowerShell tool", () => {
     it(`denies ${policy} PowerShell events with a recovery route`, () => {
       const result = checkProposedCommand(policy, command, "PowerShell");
       assert.equal(result.status, 2, result.stderr);
-      assert.match(
-        result.stderr,
-        hookSelection() !== "reference" ? inspectedReason : /PowerShell.*Bash/u,
-      );
+      assert.match(result.stderr, inspectedReason);
     });
   }
 });
 
 // Space/tab after a command word must not hide it; the sibling policy and read controls stay available.
-describe(
-  "cmd caret whitespace",
-  { skip: hookSelection() === "reference" },
-  () => {
-    const forms = [
-      [
-        "executable",
-        "git",
-        "push origin main",
-        "git",
-        "status --short",
-        "deny-git-mutations",
-      ],
-      [
-        "verb",
-        "git push",
-        "origin main",
-        "git status",
-        "--short",
-        "deny-git-mutations",
-      ],
-      [
-        "delete",
-        "rd",
-        "/s /q C:/goat-probe-target",
-        "echo",
-        "/s /q C:/goat-probe-target",
-        "deny-dangerous",
-      ],
-      ["github", "gh pr merge", "12", "gh pr view", "12", "deny-git-mutations"],
-    ];
-    for (const [
-      shape,
-      blockedWord,
-      blockedTail,
-      readWord,
-      readTail,
-      owner,
-    ] of forms) {
-      for (const [boundary, whitespace] of [
-        ["space", " "],
-        ["tab", "\t"],
-      ]) {
-        for (const control of [false, true]) {
-          const command = `cmd //c ${control ? readWord : blockedWord}^${whitespace}${control ? readTail : blockedTail}`;
-          for (const policy of ["deny-dangerous", "deny-git-mutations"]) {
-            it(`${shape}/${boundary}/${control ? "control" : "protection"}/${policy}`, () => {
-              const result = checkProposedCommand(policy, command);
-              const expected = !control && policy === owner ? 2 : 0;
-              assert.equal(result.status, expected, result.stderr);
-              assert.equal(result.stdout, "");
-              if (expected === 2)
-                assert.match(result.stderr, /BLOCKED: Policy/u);
-              else assert.equal(result.stderr, "");
-            });
-          }
+describe("cmd caret whitespace", () => {
+  const forms = [
+    [
+      "executable",
+      "git",
+      "push origin main",
+      "git",
+      "status --short",
+      "deny-git-mutations",
+    ],
+    [
+      "verb",
+      "git push",
+      "origin main",
+      "git status",
+      "--short",
+      "deny-git-mutations",
+    ],
+    [
+      "delete",
+      "rd",
+      "/s /q C:/goat-probe-target",
+      "echo",
+      "/s /q C:/goat-probe-target",
+      "deny-dangerous",
+    ],
+    ["github", "gh pr merge", "12", "gh pr view", "12", "deny-git-mutations"],
+  ];
+  for (const [
+    shape,
+    blockedWord,
+    blockedTail,
+    readWord,
+    readTail,
+    owner,
+  ] of forms) {
+    for (const [boundary, whitespace] of [
+      ["space", " "],
+      ["tab", "\t"],
+    ]) {
+      for (const control of [false, true]) {
+        const command = `cmd //c ${control ? readWord : blockedWord}^${whitespace}${control ? readTail : blockedTail}`;
+        for (const policy of ["deny-dangerous", "deny-git-mutations"]) {
+          it(`${shape}/${boundary}/${control ? "control" : "protection"}/${policy}`, () => {
+            const result = checkProposedCommand(policy, command);
+            const expected = !control && policy === owner ? 2 : 0;
+            assert.equal(result.status, expected, result.stderr);
+            assert.equal(result.stdout, "");
+            if (expected === 2) assert.match(result.stderr, /BLOCKED: Policy/u);
+            else assert.equal(result.stderr, "");
+          });
         }
       }
     }
-  },
-);
+  }
+});

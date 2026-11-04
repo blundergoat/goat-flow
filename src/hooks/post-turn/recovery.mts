@@ -22,6 +22,8 @@ import {
 // Windows has no uid, so ownership is not compared there; any other host without getuid rejects every existing state file.
 const ownerId =
   process.getuid?.() ?? (process.platform === "win32" ? null : undefined);
+const STATE_UNAVAILABLE_MESSAGE =
+  "post-turn-safety: repeated-Stop state unavailable; keeping the turn blocked.\n";
 
 function stopStateIsSafe(path: string, mayBeMissing = false): boolean {
   try {
@@ -146,9 +148,7 @@ export function finishInfrastructureFailure(
     return 2;
   const failure = hashStopFailure(identity);
   if (failure === null) {
-    process.stderr.write(
-      "post-turn-safety: repeated-Stop state unavailable; keeping the turn blocked.\n",
-    );
+    process.stderr.write(STATE_UNAVAILABLE_MESSAGE);
     return 2;
   }
   if (
@@ -163,9 +163,45 @@ export function finishInfrastructureFailure(
     return 0;
   }
   if (!writeStopReentryState(context, root, failure))
+    process.stderr.write(STATE_UNAVAILABLE_MESSAGE);
+  return 2;
+}
+
+/** Block a new or changed binary-only coverage gap; the same session's active replay of unchanged bytes ends incomplete.
+ *
+ * The record stays after a release, so duplicate callbacks in the cycle also end; a fresh turn rewrites it and blocks again.
+ * Side effects: writes the session record under `.goat-flow/scratchpad/` and prints the release or unavailable-state warning.
+ *
+ * @param context - Stop context; without a payload session nothing is recorded and the turn blocks
+ * @param root - scanned repository root that owns the record
+ * @param identity - builds the gap identity on demand; null means the bytes could not be identified, so the turn blocks
+ * @returns 0 when the unchanged replay ends, otherwise 2 to keep the turn blocked
+ */
+export function finishCoverageGap(
+  context: PostTurnContext,
+  root: string,
+  identity: () => string | null,
+): number {
+  if (!context.stopPayloadPresent || context.sessionFingerprint === "")
+    return 2;
+  const gapIdentity = identity();
+  const failure = gapIdentity === null ? null : hashStopFailure(gapIdentity);
+  if (failure === null) {
+    process.stderr.write(STATE_UNAVAILABLE_MESSAGE);
+    return 2;
+  }
+  if (
+    context.stopHookActive &&
+    stopReentryStateMatches(context, root, failure)
+  ) {
+    context.coverageGapReentryEnded = true;
     process.stderr.write(
-      "post-turn-safety: repeated-Stop state unavailable; keeping the turn blocked.\n",
+      "post-turn-safety: ending repeated Stop after unchanged coverage gap; no clean scan was recorded.\n",
     );
+    return 0;
+  }
+  if (!writeStopReentryState(context, root, failure))
+    process.stderr.write(STATE_UNAVAILABLE_MESSAGE);
   return 2;
 }
 

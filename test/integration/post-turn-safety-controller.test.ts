@@ -4,11 +4,7 @@
  * These cases use real independent Git repositories beneath one non-Git directory.
  * Use them to verify that a controller reports every configured project's findings without scanning unlisted workspaces.
  */
-import {
-  hookSelection,
-  selectedHookPath,
-  hookTreeRoot,
-} from "../helpers/hook-entrypoint.js";
+import { selectedHookPath, hookTreeRoot } from "../helpers/hook-entrypoint.js";
 import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import assert from "node:assert/strict";
@@ -53,24 +49,21 @@ function assertManagedEnvelope(result: ReturnType<typeof runHook>) {
 }
 
 describe("post-turn-safety hook: explicit non-Git controller roots", () => {
-  it(
-    "uses directory identity when an alias keeps a different physical spelling",
-    { skip: hookSelection() === "reference" },
-    () => {
-      withTempController(["child"], (controllerRoot, childRoots) => {
-        const alias = join(controllerRoot, "child-alias");
-        symlinkSync(
-          childRoots.child,
-          alias,
-          process.platform === "win32" ? "junction" : "dir",
-        );
-        const preloadPath = join(controllerRoot, "preserve-alias.mjs");
-        // Windows short paths can survive realpath while Git returns the long spelling.
-        // Preserve a real alias here so both lookups still use the directory's actual file ID.
-        writeFile(
-          controllerRoot,
-          "preserve-alias.mjs",
-          `
+  it("uses directory identity when an alias keeps a different physical spelling", () => {
+    withTempController(["child"], (controllerRoot, childRoots) => {
+      const alias = join(controllerRoot, "child-alias");
+      symlinkSync(
+        childRoots.child,
+        alias,
+        process.platform === "win32" ? "junction" : "dir",
+      );
+      const preloadPath = join(controllerRoot, "preserve-alias.mjs");
+      // Windows short paths can survive realpath while Git returns the long spelling.
+      // Preserve a real alias here so both lookups still use the directory's actual file ID.
+      writeFile(
+        controllerRoot,
+        "preserve-alias.mjs",
+        `
 import fs from "node:fs";
 import { resolve } from "node:path";
 import { syncBuiltinESMExports } from "node:module";
@@ -91,17 +84,17 @@ fs.statSync = (path, options) => {
 };
 syncBuiltinESMExports();
 `,
-        );
-        const nodeOptions = [
-          process.env.NODE_OPTIONS,
-          `--import=${pathToFileURL(preloadPath).href}`,
-        ]
-          .filter(Boolean)
-          .join(" ");
-        const controllerUrl = pathToFileURL(
-          join(hookTreeRoot(), "post-turn/controller.mjs"),
-        ).href;
-        const probe = `
+      );
+      const nodeOptions = [
+        process.env.NODE_OPTIONS,
+        `--import=${pathToFileURL(preloadPath).href}`,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const controllerUrl = pathToFileURL(
+        join(hookTreeRoot(), "post-turn/controller.mjs"),
+      ).href;
+      const probe = `
 import { isGitTopLevel } from ${JSON.stringify(controllerUrl)};
 console.log(JSON.stringify({
   alias: isGitTopLevel(${JSON.stringify(alias)}),
@@ -110,50 +103,49 @@ console.log(JSON.stringify({
   file: isGitTopLevel(${JSON.stringify(join(childRoots.child, "README.md"))}),
 }));
 `;
-        for (const [withoutIdentity, expectedAlias] of [
-          ["0", true],
-          ["1", false],
-        ] as const) {
-          const result = spawnSync(
-            process.execPath,
-            ["--input-type=module", "-e", probe],
-            {
-              cwd: childRoots.child,
-              encoding: "utf8",
-              timeout: 5000,
-              env: {
-                ...process.env,
-                NODE_OPTIONS:
-                  nodeOptions +
-                  (withoutIdentity === "1" ? "?without-identity" : ""),
-              },
+      for (const [withoutIdentity, expectedAlias] of [
+        ["0", true],
+        ["1", false],
+      ] as const) {
+        const result = spawnSync(
+          process.execPath,
+          ["--input-type=module", "-e", probe],
+          {
+            cwd: childRoots.child,
+            encoding: "utf8",
+            timeout: 5000,
+            env: {
+              ...process.env,
+              NODE_OPTIONS:
+                nodeOptions +
+                (withoutIdentity === "1" ? "?without-identity" : ""),
             },
-          );
-          assert.equal(result.status, 0, result.stderr);
-          assert.deepEqual(JSON.parse(result.stdout), {
-            alias: expectedAlias,
-            different: false,
-            missing: false,
-            file: false,
-          });
-        }
-        writePostTurnScanRoots(controllerRoot, ["child-alias"]);
-        const result = runHook(
-          controllerRoot,
-          { ...MANAGED_STOP_ENV, NODE_OPTIONS: nodeOptions },
-          buildStopPayload("controller-alias", false),
+          },
         );
-        const envelope = assertManagedEnvelope(result);
-        assert.equal(envelope.outcome, "pass");
-        assert.deepEqual(envelope.coverage, {
-          status: "complete",
-          attemptedUnits: 1,
-          completedUnits: 1,
-          skippedUnits: 0,
+        assert.equal(result.status, 0, result.stderr);
+        assert.deepEqual(JSON.parse(result.stdout), {
+          alias: expectedAlias,
+          different: false,
+          missing: false,
+          file: false,
         });
+      }
+      writePostTurnScanRoots(controllerRoot, ["child-alias"]);
+      const result = runHook(
+        controllerRoot,
+        { ...MANAGED_STOP_ENV, NODE_OPTIONS: nodeOptions },
+        buildStopPayload("controller-alias", false),
+      );
+      const envelope = assertManagedEnvelope(result);
+      assert.equal(envelope.outcome, "pass");
+      assert.deepEqual(envelope.coverage, {
+        status: "complete",
+        attemptedUnits: 1,
+        completedUnits: 1,
+        skippedUnits: 0,
       });
-    },
-  );
+    });
+  });
 
   it("identifies a started controller child result overflow without claiming startup failure", () => {
     withTempController(["child"], (controllerRoot, childRoots) => {
@@ -165,7 +157,6 @@ console.log(JSON.stringify({
       installPostTurnHook(
         controllerRoot,
         'process.stdout.write("x".repeat(70000));',
-        "node -e 'process.stdout.write(\"x\".repeat(70000))'",
       );
       // Launch only this disposable controller; its children and retry state remain inside the fixture tree.
       const launchController = (turnId: string) =>
@@ -175,7 +166,7 @@ console.log(JSON.stringify({
             selectedHookPath(
               join(controllerRoot, ".goat-flow/hooks/run-with-bash.mjs"),
             ),
-            `.goat-flow/hooks/post-turn-safety.${hookSelection() !== "reference" ? "mjs" : "sh"}`,
+            ".goat-flow/hooks/post-turn-safety.mjs",
             "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000",
           ],
           {
@@ -727,6 +718,98 @@ console.log(JSON.stringify({
       assert.match(
         envelope.findings[0].message,
         /Git repository root could not be opened/u,
+      );
+    });
+  });
+});
+
+describe("post-turn-safety hook: controller binary coverage gaps", () => {
+  // A GLB header: its NUL bytes make each child report the asset as an unscannable binary.
+  const glbBytes = Buffer.from([103, 108, 84, 70, 2, 0, 0, 0]);
+  const managedStop = (
+    controllerRoot: string,
+    sessionId: string,
+    isActive: boolean,
+  ) =>
+    assertManagedEnvelope(
+      runHook(
+        controllerRoot,
+        MANAGED_STOP_ENV,
+        buildStopPayload(sessionId, isActive),
+      ),
+    );
+
+  it("ends a controller replay only when every non-pass root is an unchanged binary gap", () => {
+    withTempController(["clean", "assets"], (controllerRoot, childRoots) => {
+      writeFile(childRoots.assets as string, "asset.glb", glbBytes);
+      const envelopes = [false, true, true].map((isActive) =>
+        managedStop(controllerRoot, "controller-binary", isActive),
+      );
+      assert.deepEqual(
+        envelopes.map((envelope) => envelope.reasonCode),
+        [
+          "coverage-incomplete",
+          "coverage-gap-reentry-ended",
+          "coverage-gap-reentry-ended",
+        ],
+      );
+      for (const envelope of envelopes) {
+        assert.equal(envelope.outcome, "incomplete");
+        assert.deepEqual(envelope.coverage, {
+          status: "partial",
+          attemptedUnits: 2,
+          completedUnits: 1,
+          skippedUnits: 1,
+        });
+      }
+
+      const direct = [false, true].map((isActive) =>
+        runHook(
+          controllerRoot,
+          {},
+          buildStopPayload("controller-direct", isActive),
+        ),
+      );
+      assert.deepEqual(
+        direct.map((result) => result.status),
+        [2, 0],
+        String(direct[1]?.stderr),
+      );
+      assert.match(
+        String(direct[1]?.stderr),
+        /assets\/asset\.glb: binary untracked path not scanned/u,
+      );
+      assert.match(
+        String(direct[1]?.stderr),
+        /ending repeated Stop after unchanged coverage gap/u,
+      );
+    });
+  });
+
+  it("keeps the controller blocking when another root has a finding or the root set changes", () => {
+    withTempController(["first", "second"], (controllerRoot, childRoots) => {
+      writeFile(childRoots.first as string, "asset.glb", glbBytes);
+      managedStop(controllerRoot, "controller-mixed", false);
+      writeFile(
+        childRoots.second as string,
+        "settings.env",
+        `API_KEY=${TEST_API_TOKEN}\n`,
+      );
+      const blocked = managedStop(controllerRoot, "controller-mixed", true);
+      assert.equal(blocked.outcome, "block");
+      assert.equal(blocked.reasonCode, "policy-blocked");
+
+      // A newly configured root has no replay record, so its gap blocks the whole aggregate once.
+      writeFile(childRoots.second as string, "settings.env", "MODE=local\n");
+      createCommittedRepo(join(controllerRoot, "third"));
+      writeFile(join(controllerRoot, "third"), "model.glb", glbBytes);
+      writePostTurnScanRoots(controllerRoot, ["first", "second", "third"]);
+      const changed = managedStop(controllerRoot, "controller-mixed", true);
+      assert.equal(changed.outcome, "incomplete");
+      assert.equal(changed.reasonCode, "coverage-incomplete");
+      assert.equal(
+        managedStop(controllerRoot, "controller-mixed", true).reasonCode,
+        "coverage-gap-reentry-ended",
       );
     });
   });

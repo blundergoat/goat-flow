@@ -9,22 +9,36 @@ export function recordPostTurnResultFinding(context, code, message, target) {
     if (context.managedResultMode && context.findings.length < 20)
         context.findings.push({ code, message, target });
 }
+// Name the terminal replay the scanner ended, if any; both leave coverage at none because the scan cannot vouch for every change.
+function endedReplay(context) {
+    if (context.boundedReentryEnded)
+        return {
+            reasonCode: "bounded-reentry-ended",
+            detail: "The unchanged infrastructure failure ended its bounded provider re-entry; no clean scan was recorded",
+        };
+    // The binaries stay unscanned, and the user still sees each gap finding beside this reason.
+    if (context.coverageGapReentryEnded)
+        return {
+            reasonCode: "coverage-gap-reentry-ended",
+            detail: "The unchanged binary coverage gap ended its repeated Stop; no clean scan was recorded",
+        };
+    return null;
+}
 function resolvePostTurnOutcome(context, scannerStatus) {
     let outcome = "incomplete";
     let reasonCode = "coverage-incomplete";
     let coverageStatus = "none";
     let completedUnits = 0;
     let detail = context.detail;
+    const replay = endedReplay(context);
     if (context.recordError) {
         outcome = context.detectedFindings > 0 ? "block" : "unavailable";
         reasonCode =
             context.detectedFindings > 0 ? "policy-blocked" : "hook-unavailable";
         detail = "Hook result details could not be retained for provider delivery";
     }
-    else if (context.boundedReentryEnded) {
-        reasonCode = "bounded-reentry-ended";
-        detail =
-            "The unchanged infrastructure failure ended its bounded provider re-entry; no clean scan was recorded";
+    else if (replay !== null) {
+        ({ reasonCode, detail } = replay);
     }
     else if (context.detectedFindings > 0) {
         outcome = "block";

@@ -1,4 +1,3 @@
-import { hookSelection } from "../helpers/hook-entrypoint.js";
 import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 /**
  * Locks provider documentation, live capture, trust, effective-state, and result contracts.
@@ -60,13 +59,11 @@ import {
   writeFile,
 } from "./post-turn-safety-hook.helpers.js";
 
-/** Fail the selected scanner's file read, keeping the Bash reference seam outside native proof. */
+/** Fail the scanner's file read through its in-process fault seam. */
 function withUnreadableScannerFile(
   scenario: (environment: Record<string, string>) => void,
 ): void {
-  if (hookSelection() === "reference")
-    withCommandShim(resolveExecutable("wc"), { status: 2 }, scenario);
-  else withScannerFileFault("readFileSync", scenario);
+  withScannerFileFault("readFileSync", scenario);
 }
 
 const SUPPORT_CHECK_DATE = new Date("2026-08-09T12:00:00.000Z");
@@ -78,17 +75,9 @@ const DELIVERED_RESPONSE_CHANNELS: HookProviderResponseChannel[] = [
   "stdout-json",
   "model-context",
 ];
-const STOP_SCANNER_VARIANTS = (
-  hookSelection() === "reference"
-    ? [
-        { displayName: "native scanner", forceBash3Fallback: "0" },
-        {
-          displayName: "Bash 3 compatibility scanner",
-          forceBash3Fallback: "1",
-        },
-      ]
-    : [{ displayName: "Node scanner", forceBash3Fallback: "0" }]
-) as readonly { displayName: string; forceBash3Fallback: string }[];
+const STOP_SCANNER_VARIANTS = [
+  { displayName: "Node scanner", forceBash3Fallback: "0" },
+] as const;
 const GRUFF_RESULT_FIXTURES = [
   {
     label: "clean analysis",
@@ -679,7 +668,7 @@ describe("hook provider contracts", () => {
 
         writeFile(
           projectRoot,
-          `.goat-flow/hooks/post-turn-safety.${hookSelection() === "reference" ? "sh" : "mjs"}`,
+          ".goat-flow/hooks/post-turn-safety.mjs",
           readFileSync(HOOK_PATH, "utf8"),
         );
 
@@ -723,75 +712,10 @@ describe("hook provider contracts", () => {
       });
     }
 
-    // Git Bash refuses `mkdir -p` on an absolute //wsl.localhost path even when the directory exists.
-    //
-    // A state directory created by absolute path therefore never stores the record that ends the repeated Stop.
-    // This case writes a managed hook copy and re-entry state while hook subprocesses run behind a mkdir shim.
-    it(
-      "bounds a managed non-Git Stop root when mkdir refuses absolute paths",
-      {
-        skip:
-          hookSelection() !== "reference"
-            ? "The native runtime does not invoke mkdir; this retains the frozen Bash transport regression."
-            : false,
-      },
-      () => {
-        const projectRoot = makeRoot();
-        const sessionIdentifier = "absolute-mkdir-refused-session";
-        const managedEnvironment = {
-          GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
-          GOAT_FLOW_HOOK_PROVIDER: "codex",
-          GOAT_FLOW_HOOK_EVENT: "turn-stop",
-          GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
-          GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
-        };
-
-        writeFile(
-          projectRoot,
-          `.goat-flow/hooks/post-turn-safety.${hookSelection() === "reference" ? "sh" : "mjs"}`,
-          readFileSync(HOOK_PATH, "utf8"),
-        );
-
-        withCommandShim(
-          resolveExecutable("mkdir"),
-          {
-            when: { absoluteOperand: true },
-            stderr:
-              "mkdir: cannot create directory '{{absolute}}': Read-only file system\n",
-            status: 1,
-          },
-          (commandShimEnvironment) => {
-            const firstResult = runHook(
-              projectRoot,
-              { ...managedEnvironment, ...commandShimEnvironment },
-              buildStopPayload(sessionIdentifier, false),
-            );
-            assert.equal(firstResult.status, 0, firstResult.stderr);
-            assert.equal(
-              JSON.parse(firstResult.stdout).reasonCode,
-              "coverage-incomplete",
-            );
-
-            const reentryResult = runHook(
-              projectRoot,
-              { ...managedEnvironment, ...commandShimEnvironment },
-              buildStopPayload(sessionIdentifier, true),
-            );
-            assert.equal(reentryResult.status, 0, reentryResult.stderr);
-            assert.equal(
-              JSON.parse(reentryResult.stdout).reasonCode,
-              "bounded-reentry-ended",
-              reentryResult.stderr,
-            );
-          },
-        );
-      },
-    );
-
     // Git refuses a checkout owned by another account, which Git for Windows reports for a \\wsl.localhost checkout by default.
     //
     // The generic root failure hid that cause from the agent, so the result names it and the remedy only the user can apply.
-    // Each scanner has its own root lookup, so both are run behind a git shim that refuses every lookup.
+    // The scanner runs behind a git shim that refuses every root lookup.
     for (const scannerVariant of STOP_SCANNER_VARIANTS) {
       // This case writes a managed hook copy and re-entry state while hook subprocesses run behind a git shim.
       it(`names dubious ownership when Git refuses the root with the ${scannerVariant.displayName}`, () => {
@@ -808,7 +732,7 @@ describe("hook provider contracts", () => {
 
         writeFile(
           projectRoot,
-          `.goat-flow/hooks/post-turn-safety.${hookSelection() === "reference" ? "sh" : "mjs"}`,
+          ".goat-flow/hooks/post-turn-safety.mjs",
           readFileSync(HOOK_PATH, "utf8"),
         );
 
@@ -847,7 +771,7 @@ describe("hook provider contracts", () => {
       });
     }
 
-    // Each named case creates a temporary Git repo and runs the selected shell scanner.
+    // Each named case creates a temporary Git repo and runs the Node scanner.
     for (const scannerVariant of STOP_SCANNER_VARIANTS) {
       // This case writes user files and re-entry state while hook subprocesses exercise recovery.
       it(`bounds repeated Stop failures with the ${scannerVariant.displayName}`, () => {
@@ -957,7 +881,7 @@ describe("hook provider contracts", () => {
       });
     }
 
-    // Each named case writes a token fixture and runs the provider-managed shell result path.
+    // Each named case writes a token fixture and runs the provider-managed Node result path.
     for (const scannerVariant of STOP_SCANNER_VARIANTS) {
       it(`emits neutral Stop results with the ${scannerVariant.displayName}`, () => {
         const forceBash3Fallback = scannerVariant.forceBash3Fallback;

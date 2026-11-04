@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
-import { copyHookTree, hookSelection } from "../helpers/hook-entrypoint.js";
+import { copyHookTree } from "../helpers/hook-entrypoint.js";
 import { checkInstalledPolicy } from "../helpers/check-installed-policy.js";
 
 const envDirectoryFiles = [
@@ -794,48 +794,44 @@ const cases = [
   },
 ] as const;
 
-describe(
-  "reviewed Node policy protections",
-  { skip: hookSelection() === "reference" },
-  () => {
-    const project = mkdtempSync(join(tmpdir(), "goat-reviewed-policy-"));
-    const hooks = join(project, ".goat-flow/hooks");
-    mkdirSync(hooks, { recursive: true });
-    copyHookTree(hooks);
-    const gitConfig = join(project, "global.gitconfig");
-    writeFileSync(gitConfig, "");
-    after(() => rmSync(project, { recursive: true, force: true }));
-    for (const fixture of cases) {
-      for (const [index, policy] of (
-        ["deny-dangerous", "deny-git-mutations"] as const
-      ).entries()) {
-        it(`${policy}: ${fixture.id}`, () => {
-          if ("files" in fixture) {
-            for (const file of fixture.files) {
-              const destination = join(project, file.path);
-              mkdirSync(dirname(destination), { recursive: true });
-              writeFileSync(destination, file.content);
-            }
+describe("reviewed Node policy protections", () => {
+  const project = mkdtempSync(join(tmpdir(), "goat-reviewed-policy-"));
+  const hooks = join(project, ".goat-flow/hooks");
+  mkdirSync(hooks, { recursive: true });
+  copyHookTree(hooks);
+  const gitConfig = join(project, "global.gitconfig");
+  writeFileSync(gitConfig, "");
+  after(() => rmSync(project, { recursive: true, force: true }));
+  for (const fixture of cases) {
+    for (const [index, policy] of (
+      ["deny-dangerous", "deny-git-mutations"] as const
+    ).entries()) {
+      it(`${policy}: ${fixture.id}`, () => {
+        if ("files" in fixture) {
+          for (const file of fixture.files) {
+            const destination = join(project, file.path);
+            mkdirSync(dirname(destination), { recursive: true });
+            writeFileSync(destination, file.content);
           }
-          const result = checkInstalledPolicy(
-            join(hooks, `${policy}.sh`),
-            project,
-            fixture.command,
-            {
-              ...process.env,
-              GIT_CONFIG_GLOBAL: gitConfig,
-              GIT_CONFIG_NOSYSTEM: "1",
-              ...("environment" in fixture ? fixture.environment : {}),
-            },
-          );
-          assert.equal(result.status, fixture.expected[index], result.stderr);
-          assert.equal(result.stdout, "");
-          assert.doesNotMatch(result.stderr, /Policy hook unavailable/u);
-          if (fixture.expected[index] === 2)
-            assert.match(result.stderr, /BLOCKED: Policy/u);
-          else assert.equal(result.stderr, "");
-        });
-      }
+        }
+        const result = checkInstalledPolicy(
+          join(hooks, `${policy}.sh`),
+          project,
+          fixture.command,
+          {
+            ...process.env,
+            GIT_CONFIG_GLOBAL: gitConfig,
+            GIT_CONFIG_NOSYSTEM: "1",
+            ...("environment" in fixture ? fixture.environment : {}),
+          },
+        );
+        assert.equal(result.status, fixture.expected[index], result.stderr);
+        assert.equal(result.stdout, "");
+        assert.doesNotMatch(result.stderr, /Policy hook unavailable/u);
+        if (fixture.expected[index] === 2)
+          assert.match(result.stderr, /BLOCKED: Policy/u);
+        else assert.equal(result.stderr, "");
+      });
     }
-  },
-);
+  }
+});

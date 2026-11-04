@@ -16,6 +16,11 @@ const allowedOutcomes = new Set([
     "unavailable",
 ]);
 const allowedCoverage = new Set(["complete", "partial", "none"]);
+// Terminal child reasons that may end a controller replay, mapped to the unchanged cause the warning names.
+const TERMINAL_REPLAY_CAUSES = {
+    "bounded-reentry-ended": "infrastructure failure",
+    "coverage-gap-reentry-ended": "coverage gap",
+};
 function isRecord(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -336,13 +341,13 @@ function aggregateDecision(childResults) {
         return { outcome: "unavailable", reasonCode: "hook-unavailable" };
     if (nonPassResults.length === 0)
         return { outcome: "pass", reasonCode: "completed-clean" };
-    // Remaining incomplete or advisory children retain their visible non-clean outcome and any bounded-recovery reason.
+    // Remaining incomplete or advisory children keep their non-clean outcome; a terminal reason survives only when every one shares it.
     const outcome = outcomes.includes("incomplete") ? "incomplete" : "advisory";
-    const isEveryNonPassBounded = nonPassResults.every((child) => child.result.outcome === "incomplete" &&
-        child.result.reasonCode === "bounded-reentry-ended");
+    const sharedTerminalReason = Object.keys(TERMINAL_REPLAY_CAUSES).find((terminalReason) => nonPassResults.every((child) => child.result.outcome === "incomplete" &&
+        child.result.reasonCode === terminalReason));
     let reasonCode = "coverage-incomplete";
-    if (isEveryNonPassBounded)
-        reasonCode = "bounded-reentry-ended";
+    if (sharedTerminalReason !== undefined)
+        reasonCode = sharedTerminalReason;
     else if (outcome === "advisory")
         reasonCode = "findings-reported";
     return { outcome, reasonCode };
@@ -443,10 +448,11 @@ function reportDirectResult(outcome, reasonCode, findings) {
         return 0;
     for (const finding of findings)
         process.stderr.write(`post-turn-safety: ${finding.target}: ${finding.message}\n`);
-    // End an exhausted legacy cycle here because this host has no structured-result adapter.
-    // The unchanged child failure remains incomplete; later Stop callbacks must not renew its retry.
-    if (reasonCode === "bounded-reentry-ended") {
-        process.stderr.write("post-turn-safety: ending repeated Stop after unchanged infrastructure failure; no clean scan was recorded.\n");
+    // End a terminal replay here because this legacy host has no structured-result adapter.
+    // The unchanged child failure or binary gap remains incomplete; the warning names which one ended the replay.
+    const terminalCause = TERMINAL_REPLAY_CAUSES[reasonCode];
+    if (terminalCause !== undefined) {
+        process.stderr.write(`post-turn-safety: ending repeated Stop after unchanged ${terminalCause}; no clean scan was recorded.\n`);
         return 0;
     }
     // A known hazard needs content repair; other non-clean outcomes keep their incomplete-scan explanation.

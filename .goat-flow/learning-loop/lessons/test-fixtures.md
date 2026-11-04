@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-04
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Parser-specific coverage and producer shapes are [test-fixtures-parsers.md](test-fixtures-parsers.md). Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -250,7 +250,7 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 
 **Recurrence 2026-10-23 (reference CI):** The mirror assertion compared frozen 1.18.0 source with the live 1.19.0 installation. Resolve both sides through the selected fixture tree. Evidence: `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `the installed mirror matches`); `test/helpers/hook-entrypoint.ts` (search: `hookTreeRoot`).
 
-**Recurrence 2026-10-23 (Gruff reference):** Four cases mixed current registration and diagnostics with frozen Bash. Keep current-registration replays native-only and assert the frozen config-path format. Evidence: `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `Current registered handlers`).
+**Recurrence 2026-10-23 (Gruff reference):** Four cases mixed current registration and diagnostics with frozen Bash. Keep current-registration replays native-only and assert the frozen config-path format. Evidence: `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `registerClaudeGruffHandler`).
 
 ---
 
@@ -295,4 +295,4 @@ Evidence: `test/integration/setup-install-agent-matrix.test.ts` (search: `reads 
 
 **What happened:** M31 appended generated caret rows after the sorted corpus. Classifier comparisons passed, but the coverage-integrity test removed the new final supplemental row instead of an original self-test row and no longer detected missing original coverage. Rebuilding the canonical order restored that control without changing any case value or weakening an assertion.
 
-**Evidence:** `scripts/check-hook-parity.mjs` (search: `buildCorpora`, `localeCompare`); `test/integration/hook-parity.test.ts` (search: `rejects`, `incomplete coverage`); [escaped-control incident](cli-contracts.md#lesson-preserve-escaped-controls-when-rewriting-saved-policy-evidence).
+**Evidence:** ~~`scripts/check-hook-parity.mjs` (search: `buildCorpora`, `localeCompare`)~~ (retired at commit `2cc5b6d2`); `test/integration/hook-parity.test.ts` (search: `rejects`, `incomplete coverage`); [escaped-control incident](cli-contracts.md#lesson-preserve-escaped-controls-when-rewriting-saved-policy-evidence).

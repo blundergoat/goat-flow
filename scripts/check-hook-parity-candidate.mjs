@@ -1,8 +1,15 @@
-// Compare the real Node policy entrypoints against the frozen corpus.
+/**
+ * The worker behind `node scripts/check-hook-parity.mjs`: it runs every selected corpus row through one hook copy and counts differences.
+ *
+ * - `candidate` runs `workflow/hooks/`, the generated hooks about to ship; `installed` runs `.goat-flow/hooks/`, the copy consumers get.
+ * - Each row gets fresh temporary fixtures and its own Node process; temporary paths in its output become corpus tokens before comparison.
+ * - A spawn guard records every process a hook starts, and any launch other than Node or Git fails the run.
+ */
 import assert from "node:assert/strict";
 import {
   copyFileSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -14,46 +21,76 @@ import { spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   assertOutcome,
-  loadArtifacts,
-  materializeReference,
-  referenceEnvironment,
+  loadCorpus,
+  policyEnvironment,
+  stages,
 } from "./check-hook-parity.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const hookTrees = {
+  candidate: join(repositoryRoot, "workflow/hooks"),
+  installed: join(repositoryRoot, ".goat-flow/hooks"),
+};
 
-// Candidate hooks may start only Node and Git. The test preload journals every
-// launch in each child so acceptance can require zero denials.
-function spawnGuardEnvironment(work, env) {
+/**
+ * Add the spawn guard to a locale's environment, so a hook that starts anything other than Node or Git fails the parity run.
+ *
+ * @param spawnJournalDirectory - temporary directory that receives `spawn-journal.jsonl`, one line per launch the guard saw
+ * @param environment - the locale environment the hooks will run in; its PATH decides which Git the guard allows
+ * @returns the extra variables that load the guard in every hook process; with no Git on PATH the check stops before any row runs
+ */
+function spawnGuardEnvironment(spawnJournalDirectory, environment) {
   const pathValue =
-    Object.entries(env).find(([key]) => key.toUpperCase() === "PATH")?.[1] ??
-    "";
-  const names =
+    Object.entries(environment).find(
+      ([key]) => key.toUpperCase() === "PATH",
+    )?.[1] ?? "";
+  const gitExecutableNames =
     process.platform === "win32"
       ? [".exe", ".com", ".cmd", ".bat"].map((suffix) => `git${suffix}`)
       : ["git"];
-  const git = pathValue
+  const gitPath = pathValue
     .split(delimiter)
     .filter(Boolean)
-    .flatMap((directory) => names.map((name) => join(directory, name)))
+    .flatMap((directory) =>
+      gitExecutableNames.map((name) => join(directory, name)),
+    )
     .find((candidate) => existsSync(candidate));
-  assert(git, "candidate parity requires git on PATH");
+  assert(gitPath, "policy parity requires git on PATH");
   const preload = pathToFileURL(
-    join(root, "test/helpers/spawn-guard.mjs"),
+    join(repositoryRoot, "test/helpers/spawn-guard.mjs"),
   ).href;
   return {
-    NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} --import=${preload}`.trim(),
+    NODE_OPTIONS:
+      `${environment.NODE_OPTIONS ?? ""} --import=${preload}`.trim(),
     GOAT_TEST_SPAWN_PRELOAD: preload,
     GOAT_TEST_SPAWN_ALLOWED: JSON.stringify([
       realpathSync(process.execPath),
-      realpathSync(git),
+      realpathSync(gitPath),
     ]),
-    GOAT_TEST_SPAWN_LOG: join(work, "spawn-journal.jsonl"),
+    GOAT_TEST_SPAWN_LOG: join(spawnJournalDirectory, "spawn-journal.jsonl"),
   };
 }
 
-// Turn a row's temporary paths, including resolved and forward-slash spellings,
-// back into its corpus tokens; longer paths go first so nested tokens survive.
-function tokenizer(tokens) {
+/**
+ * Create the empty project that the corpus token `$REFERENCE` points at, matching what the shipped self-test builds.
+ *
+ * @returns path of the temporary directory it writes, holding empty `.goat-flow/hooks` and `workflow/hooks` folders; the caller removes it
+ */
+function createReferenceStandIn() {
+  const standIn = mkdtempSync(join(tmpdir(), "goat-policy-reference-"));
+  mkdirSync(join(standIn, ".goat-flow/hooks"), { recursive: true });
+  mkdirSync(join(standIn, "workflow/hooks"), { recursive: true });
+  return standIn;
+}
+
+/**
+ * Build a replacer that turns one row's temporary fixture paths back into the corpus tokens its saved output uses.
+ * Longest paths are replaced first, so a nested fixture path is not half-replaced by its parent's token and the output stays deterministic.
+ *
+ * @param tokens - the row's `[token, temporary path]` pairs; resolved and forward-slash spellings of each path are covered too
+ * @returns a function from hook output text to tokenized text; empty text stays empty
+ */
+function createPathTokenReplacer(tokens) {
   const pairs = tokens.flatMap(([token, path]) =>
     [...new Set([path, realpathSync.native(path)])].flatMap((form) => [
       [form, token],
@@ -65,37 +102,58 @@ function tokenizer(tokens) {
     pairs.reduce((value, [from, to]) => value.split(from).join(to), text);
 }
 
-// Recreate an incomplete install with the native entrypoint beside the recorded
-// missing runtime. The fixture location, including outside-cwd cases, stays intact.
-function candidateEntrypoint(row, request) {
-  const source = join(root, "workflow/hooks", `${row.policy}.mjs`);
+/**
+ * Pick the hook file a row runs; a missing-runtime row runs a lone copy inside its fixture install, so the hook must fail closed.
+ *
+ * @param row - corpus row; `availabilityCase` marks the rows that simulate an install with the policy modules missing
+ * @param request - the materialized row, whose tokens map each fixture group to its temporary directory
+ * @param hookTree - the stage's hook folder, `workflow/hooks/` or `.goat-flow/hooks/`
+ * @returns path of the entrypoint to spawn; a missing-runtime row without its recorded fixture stops the check with the row ID
+ */
+function stageEntrypoint(row, request, hookTree) {
+  const source = join(hookTree, `${row.policy}.mjs`);
+  // Most rows run the stage's own entrypoint, beside the policy modules it imports.
   if (!row.availabilityCase) return source;
-  const relative = `.goat-flow/hooks/${row.policy}.sh`;
-  const group = row.setup.files.find((fixture) =>
+  const frozenEntrypointPath = `.goat-flow/hooks/${row.policy}.sh`;
+  const startupFixture = row.setup.files.find((fixture) =>
     fixture.files.some(
-      (file) => file.path === relative && file.kind === "frozen-runtime",
+      (file) =>
+        file.path === frozenEntrypointPath && file.kind === "frozen-runtime",
     ),
   );
-  assert(group, `missing startup fixture: ${row.id}`);
-  const token = request.tokens.find(([name]) => name === group.token);
-  assert(token, `missing startup fixture token: ${row.id}`);
-  const entrypoint = join(token[1], ".goat-flow/hooks", `${row.policy}.mjs`);
+  assert(startupFixture, `missing startup fixture: ${row.id}`);
+  const fixtureToken = request.tokens.find(
+    ([name]) => name === startupFixture.token,
+  );
+  assert(fixtureToken, `missing startup fixture token: ${row.id}`);
+  const entrypoint = join(
+    fixtureToken[1],
+    ".goat-flow/hooks",
+    `${row.policy}.mjs`,
+  );
   copyFileSync(source, entrypoint);
   return entrypoint;
 }
 
-// Run the real candidate entrypoint for one materialized row, as the launcher
-// would, and record its outcome in the corpus's token form.
-function runCandidateRow(row, request) {
-  const args =
+/**
+ * Run one materialized row the way an agent's hook launcher would, and save its outcome in the corpus's token form.
+ *
+ * @param row - corpus row; a self-test row passes `--self-test=<mode>` instead of the recorded arguments
+ * @param request - the materialized row: arguments, working directory, environment, stdin text and fixture tokens
+ * @param hookTree - the stage's hook folder, `workflow/hooks/` or `.goat-flow/hooks/`
+ * @returns the exit status and base64 output; rejects when the hook cannot spawn or is killed before it exits
+ */
+function runStageRow(row, request, hookTree) {
+  const hookArguments =
     row.input.kind === "self-test"
       ? [`--self-test=${row.input.mode}`]
       : request.argv;
-  const tokenize = tokenizer(request.tokens);
-  const entrypoint = candidateEntrypoint(row, request);
+  const replacePathsWithTokens = createPathTokenReplacer(request.tokens);
+  const entrypoint = stageEntrypoint(row, request, hookTree);
+  // A broken install's self-test must refuse without waiting for input, so stdin stays open and a hook that waits is killed after one second.
   const keepsStdinOpen = row.availabilityCase && row.input.kind === "self-test";
   return new Promise((resolveRow, rejectRow) => {
-    const child = spawn(process.execPath, [entrypoint, ...args], {
+    const child = spawn(process.execPath, [entrypoint, ...hookArguments], {
       cwd: request.cwd,
       env: request.environment,
       timeout: keepsStdinOpen ? 1_000 : 30_000,
@@ -104,38 +162,51 @@ function runCandidateRow(row, request) {
     const stderr = [];
     child.stdout.on("data", (chunk) => stdout.push(chunk));
     child.stderr.on("data", (chunk) => stderr.push(chunk));
-    // A hook deciding from argv may exit before it reads stdin.
+    // A hook that decides from its arguments, such as a self-test, can exit before reading stdin; the write's EPIPE is expected.
     child.stdin.on("error", () => {});
     child.on("error", rejectRow);
     child.on("close", (status) => {
+      // No exit status means a signal stopped the hook, for example the timeout above, so the row has no decision to compare.
       if (status === null) {
-        rejectRow(new Error(`Candidate launch incomplete: case=${row.id}`));
+        rejectRow(new Error(`Policy launch incomplete: case=${row.id}`));
         return;
       }
       resolveRow({
         status,
         stdoutBase64: Buffer.from(
-          tokenize(Buffer.concat(stdout).toString()),
+          replacePathsWithTokens(Buffer.concat(stdout).toString()),
         ).toString("base64"),
         stderrBase64: Buffer.from(
-          tokenize(Buffer.concat(stderr).toString()),
+          replacePathsWithTokens(Buffer.concat(stderr).toString()),
         ).toString("base64"),
       });
     });
+    // Every row except a broken-install self-test sends its recorded stdin, then closes the pipe like a real launcher.
     if (!keepsStdinOpen) child.stdin.end(request.stdin);
   });
 }
 
-// Compare one locale's selected rows with their approved expectations, a few at a time.
-async function compareCandidateLocale(rows, project, environment, comparison) {
-  const { materializePolicyRow, divergences, locale } = comparison;
-  let next = 0;
+/**
+ * Run one locale's rows, up to eight at a time; each row whose outcome differs from the corpus reports one difference.
+ *
+ * @param rows - the selected corpus rows; an empty list runs nothing and records nothing
+ * @param referenceRoot - the empty project from `createReferenceStandIn`, used for the `$REFERENCE` token
+ * @param environment - the locale environment with the spawn guard already added
+ * @param comparison - the stage's row materializer, the shared differences list, the locale name and the hook folder
+ * @returns a promise that resolves once every row has run; a hook that cannot launch rejects it
+ */
+async function compareLocale(rows, referenceRoot, environment, comparison) {
+  const { materializePolicyRow, divergences, locale, hookTree } = comparison;
+  let nextRowIndex = 0;
+  // Each worker takes the next unclaimed row until none remain, so at most eight hooks run at once.
+  // A different outcome reports one difference and the worker moves on; a launch failure throws once the row's fixtures are removed.
   const worker = async () => {
-    while (next < rows.length) {
-      const row = rows[next++];
-      const request = materializePolicyRow(row, project, environment);
+    // Claim rows one at a time; the shared index means two workers never run the same row.
+    while (nextRowIndex < rows.length) {
+      const row = rows[nextRowIndex++];
+      const request = materializePolicyRow(row, referenceRoot, environment);
       try {
-        const actual = await runCandidateRow(row, request);
+        const actual = await runStageRow(row, request, hookTree);
         try {
           assertOutcome(
             actual,
@@ -144,6 +215,7 @@ async function compareCandidateLocale(rows, project, environment, comparison) {
             row.id,
           );
         } catch (error) {
+          // For example a rule edit that now allows a command the corpus saved as blocked; it becomes one listed difference.
           divergences.push({
             id: row.id,
             locale,
@@ -162,46 +234,66 @@ async function compareCandidateLocale(rows, project, environment, comparison) {
   );
 }
 
-// Every selected row runs through the real candidate entrypoint in each pinned
-// locale and must meet the corpus's approved expectation, with zero spawn denials.
-export async function compareCandidate(options, artifacts = loadArtifacts()) {
-  assert.equal(options.stage, "candidate", "candidate stage");
+/**
+ * Run the parity check for one stage: every selected row, in each pinned locale, with zero spawn-guard denials.
+ * Spawns one Node process per row and locale, writes fixtures to temporary directories it removes, and prints one line per locale.
+ *
+ * @param options - parsed options: `candidate` or `installed`, selected row IDs (empty means all rows) and the report/acceptance mode
+ * @param corpus - the validated corpus; omitted loads the shipped corpus and checks the installed copy matches it
+ * @returns the row count and the differences found; an empty list means every row matched, and outside report mode any difference throws
+ */
+export async function compareCandidate(options, corpus = loadCorpus()) {
+  assert(stages.includes(options.stage), `known stage: ${options.stage}`);
+  const hookTree = hookTrees[options.stage];
+  // A mistyped `--case` ID stops the run instead of silently checking fewer rows.
   for (const id of options.cases)
     assert(
-      artifacts.corpus.rows.some((row) => row.id === id),
+      corpus.rows.some((row) => row.id === id),
       `unknown case: ${id}`,
     );
+  // No `--case` filter means the full corpus.
   const rows = options.cases.length
-    ? artifacts.corpus.rows.filter((row) => options.cases.includes(row.id))
-    : artifacts.corpus.rows;
+    ? corpus.rows.filter((row) => options.cases.includes(row.id))
+    : corpus.rows;
+  // A shell that exports LC_ALL=C or LC_ALL=C.UTF-8 runs only that locale; any other value runs both.
   const locales = ["C", "C.UTF-8"].includes(process.env.LC_ALL)
     ? [process.env.LC_ALL]
     : ["C", "C.UTF-8"];
   const { materializePolicyRow } = await import(
-    pathToFileURL(join(root, "workflow/hooks/policy-corpus.mjs")).href
+    pathToFileURL(join(hookTree, "policy-corpus.mjs")).href
   );
   console.log(
-    `Candidate host: ${JSON.stringify({ node: process.version, platform: process.platform, arch: process.arch, locales })}`,
+    `Policy host: ${JSON.stringify({ stage: options.stage, node: process.version, platform: process.platform, arch: process.arch, locales })}`,
   );
-  const project = materializeReference();
-  const work = mkdtempSync(join(tmpdir(), "goat-hook-candidate-"));
+  const referenceRoot = createReferenceStandIn();
+  const spawnJournalDirectory = mkdtempSync(
+    join(tmpdir(), "goat-hook-parity-"),
+  );
   const divergences = [];
   try {
+    // Each locale gets its own environment and a PASS or DIVERGENT line in the log.
     for (const locale of locales) {
-      const base = referenceEnvironment(project, locale);
-      const environment = { ...base, ...spawnGuardEnvironment(work, base) };
-      const before = divergences.length;
-      await compareCandidateLocale(rows, project, environment, {
+      const localeEnvironment = policyEnvironment(locale);
+      const environment = {
+        ...localeEnvironment,
+        ...spawnGuardEnvironment(spawnJournalDirectory, localeEnvironment),
+      };
+      const earlierDifferences = divergences.length;
+      await compareLocale(rows, referenceRoot, environment, {
         materializePolicyRow,
         divergences,
         locale,
+        hookTree,
       });
-      const found = divergences.length - before;
+      const localeDifferences = divergences.length - earlierDifferences;
       console.log(
-        `${found ? "DIVERGENT" : "PASS"}: candidate ${locale} cases=${rows.length} differences=${found}`,
+        `${localeDifferences ? "DIVERGENT" : "PASS"}: ${options.stage} ${locale} cases=${rows.length} differences=${localeDifferences}`,
       );
     }
-    const journal = readFileSync(join(work, "spawn-journal.jsonl"), "utf8")
+    const journal = readFileSync(
+      join(spawnJournalDirectory, "spawn-journal.jsonl"),
+      "utf8",
+    )
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
@@ -215,22 +307,23 @@ export async function compareCandidate(options, artifacts = loadArtifacts()) {
       "spawn-guard denials",
     );
   } finally {
-    rmSync(project, { recursive: true, force: true });
-    rmSync(work, { recursive: true, force: true });
+    rmSync(referenceRoot, { recursive: true, force: true });
+    rmSync(spawnJournalDirectory, { recursive: true, force: true });
   }
+  // `--list-divergent` prints every difference for investigation; otherwise any difference fails and names the first five.
   if (options.listDivergent)
     console.log(JSON.stringify({ divergences }, null, 2));
   else
     assert.equal(
       divergences.length,
       0,
-      `unapproved candidate differences: ${divergences.length}; first ${divergences
+      `unapproved ${options.stage} differences: ${divergences.length}; first ${divergences
         .slice(0, 5)
         .map(({ id, locale }) => `${id}/${locale}`)
         .join(", ")}`,
     );
   console.log(
-    `PASS: ${options.listDivergent ? "candidate divergence report" : "candidate parity"}; cases=${rows.length}; differences=${divergences.length}; spawn-denials=0`,
+    `PASS: ${options.listDivergent ? `${options.stage} divergence report` : `${options.stage} parity`}; cases=${rows.length}; differences=${divergences.length}; spawn-denials=0`,
   );
   return { cases: rows.length, divergences };
 }

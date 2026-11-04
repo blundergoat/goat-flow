@@ -1,6 +1,6 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-10-22
+last_reviewed: 2026-11-04
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md). What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md).
@@ -140,7 +140,7 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search:
 
 **What happened:** M01 embedded Bash parameter expansion in a JavaScript template. The initial Node syntax check failed with `Missing } in template expression`. Encoding the injected Bash as string-array elements corrected the outer syntax; the parser checks and the original 49-assertion smoke extraction then succeeded.
 
-**Evidence:** `scripts/check-hook-parity.mjs` (search: `instrumentSelfTest`); `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `SELF_TEST_MODE`). The frozen Bash source stayed unchanged.
+**Evidence:** ~~`scripts/check-hook-parity.mjs` (search: `instrumentSelfTest`)~~ (retired at commit `2cc5b6d2`); `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `SELF_TEST_MODE`). The frozen Bash source stayed unchanged.
 
 ---
 
@@ -157,4 +157,4 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search:
 
 A separate Windows Stop-prefix probe lost quotes from inline `node -e` source through PowerShell. Passing an owned script file verified the actual environment prefix without that extra quoting boundary. Use literal files for native Node diagnostic programs.
 
-**Evidence:** `scripts/check-hook-parity.mjs` (search: `observeNode`, `spawnReferenceCommand`, `policyEnvironment`, `allowAssertionFailures`); `test/integration/hook-parity-reference.test.ts` (search: `divergence captures failed original assertions`, `frozen launches preserve long and UNC literal inputs`); `.codex/hooks.json` (search: `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES`). No frozen Bash source was changed.
+**Evidence:** ~~`scripts/check-hook-parity.mjs` (search: `observeNode`, `spawnReferenceCommand`, `policyEnvironment`, `allowAssertionFailures`); `test/integration/hook-parity-reference.test.ts` (search: `divergence captures failed original assertions`, `frozen launches preserve long and UNC literal inputs`)~~ (retired at commit `2cc5b6d2`); `.codex/hooks.json` (search: `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES`). No frozen Bash source was changed.

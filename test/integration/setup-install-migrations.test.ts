@@ -5,7 +5,7 @@
  * Fixtures cover historical layouts, provider registrations, config aliases, and repeated installation.
  */
 import { before, describe, it } from "node:test";
-import { copyHookTree, hookSelection } from "../helpers/hook-entrypoint.js";
+import { copyHookTree } from "../helpers/hook-entrypoint.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -126,27 +126,10 @@ describe("setup --apply installer upgrade migrations", () => {
       );
       const shimDirectory = join(root, "interruption-tools");
       mkdirSync(shimDirectory);
-      let interruptionEnvironment: NodeJS.ProcessEnv;
-      if (hookSelection() === "reference") {
-        const realMv = spawnSync("bash", ["-c", "command -v mv"], {
-          encoding: "utf-8",
-        }).stdout.trim();
-        assert.ok(realMv);
-        writeFileSync(
-          join(shimDirectory, "mv"),
-          '#!/usr/bin/env bash\nif [[ "${!#}" == "$M20_INTERRUPT_PATH" ]]; then printf \'M20 interrupted replacement\\n\' >&2; exit 73; fi\nexec "$M20_REAL_MV" "$@"\n',
-          { mode: 0o755 },
-        );
-        interruptionEnvironment = {
-          PATH: `${shimDirectory}:${process.env.PATH ?? ""}`,
-          M20_REAL_MV: realMv,
-          M20_INTERRUPT_PATH: interruptedPath,
-        };
-      } else {
-        const preload = join(shimDirectory, "interrupt.cjs");
-        writeFileSync(
-          preload,
-          `const fs = require("node:fs");
+      const preload = join(shimDirectory, "interrupt.cjs");
+      writeFileSync(
+        preload,
+        `const fs = require("node:fs");
 const rename = fs.renameSync;
 fs.renameSync = (source, destination) => {
   if (destination === ${JSON.stringify(join(root, interruptedPath))}) throw new Error("injected interrupted replacement");
@@ -154,11 +137,10 @@ fs.renameSync = (source, destination) => {
 };
 require("node:module").syncBuiltinESMExports();
 `,
-        );
-        interruptionEnvironment = {
-          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(preload)}`,
-        };
-      }
+      );
+      const interruptionEnvironment: NodeJS.ProcessEnv = {
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(preload)}`,
+      };
       const interrupted = runInstallerWithEnvironment(
         root,
         interruptionEnvironment,

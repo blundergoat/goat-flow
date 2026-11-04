@@ -1,6 +1,13 @@
-/** Guards the frozen oracle, complete coverage and the shipped corpus boundary. */
+/**
+ * Tests for the policy parity check a maintainer runs with `node scripts/check-hook-parity.mjs`.
+ *
+ * - The shipped corpus must declare complete coverage, and each way an edit could quietly lose coverage must be rejected.
+ * - The CLI must refuse partial acceptance runs and unknown stages, including the retired extraction stage.
+ * - Both stages must run real hook entrypoints and fail when a saved outcome no longer matches.
+ * - The installed corpus copy must match byte for byte, and `npm pack` must ship the corpus without test fixtures.
+ */
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
@@ -8,124 +15,108 @@ import {
   assertOutcome,
   assertMirrorBytes,
   checkPackInventory,
-  loadArtifacts,
-  materializeReference,
+  loadCorpus,
   parseOptions,
-  validateCorpora,
-  validateSnapshot,
+  validateCorpus,
 } from "../../scripts/check-hook-parity.mjs";
 import { compareCandidate } from "../../scripts/check-hook-parity-candidate.mjs";
 
-const root = resolve(import.meta.dirname, "../..");
-// JSON-only mutations share this validated input; filesystem corruption is checked separately.
-const validatedArtifacts = loadArtifacts();
+const repositoryRoot = resolve(import.meta.dirname, "../..");
+// Every test damages its own clone of this validated corpus; the shipped file is never rewritten.
+const validatedCorpus = loadCorpus();
 
-// Mutations model distinct ways a port can silently lose reference coverage.
-// They affect cloned JSON only; no test can repair or rewrite the saved oracle.
-function damagePair(pair, kind: string) {
-  const row = pair.corpus.rows[0];
+/**
+ * Damage a cloned corpus in one named way that an edit could use to quietly lose policy coverage.
+ *
+ * @param corpus - a `structuredClone` of the validated corpus; the shipped file is never touched
+ * @param kind - the damage to apply, which is also the test title, such as `missing row` in `rejects missing row`
+ * @returns nothing; the clone is changed in place, and an unlisted kind throws so no test passes by damaging nothing
+ */
+function damageCorpus(corpus, kind: string) {
+  const firstRow = corpus.rows[0];
+  // Each case damages one field; the validator must name the matching problem when the test runs it.
   switch (kind) {
-    case "missing candidate":
-      pair.corpus.rows.pop();
-      break;
-    case "missing reference":
-      pair.reference.rows.pop();
+    case "missing row":
+      corpus.rows.pop();
       break;
     case "duplicate identity":
-      pair.corpus.rows[1].id = row.id;
+      corpus.rows[1].id = firstRow.id;
       break;
-    case "orphaned candidate":
-      row.id = "unrecorded-case";
+    case "unknown policy":
+      firstRow.policy = "deny-everything";
       break;
-    case "orphaned reference":
-      pair.reference.rows[0].id = "unrecorded-case";
+    case "unknown suite membership":
+      firstRow.membership = ["nightly"];
       break;
     case "input drift":
-      row.input.command = "echo changed";
-      break;
-    case "reference input drift":
-      pair.reference.rows[0].inputSha256 = "changed";
-      break;
-    case "candidate outcome drift":
-      row.expected.status = 123;
+      firstRow.input.command = "echo changed";
       break;
     case "unknown exception":
-      row.exceptionId = "approve-anything";
+      firstRow.exceptionId = "approve-anything";
       break;
     case "misplaced startup exception":
-      row.exceptionId = "native-startup";
-      pair.reference.rows[0].exceptionId = "native-startup";
+      firstRow.exceptionId = "native-startup";
       break;
-    case "missing locale":
-      delete pair.reference.rows[0].original.C;
+    case "availability predicate drift":
+      firstRow.predicates.requiresAvailable =
+        !firstRow.predicates.requiresAvailable;
       break;
+    // Drop every deny-dangerous self-test row but keep the declared count honest, so only the per-policy totals can catch it.
     case "incomplete coverage":
-      pair.corpus.rows.pop();
-      pair.reference.rows.pop();
-      pair.corpus.caseCount--;
-      pair.reference.caseCount--;
+      corpus.rows = corpus.rows.filter(
+        (corpusRow) =>
+          !(
+            corpusRow.policy === "deny-dangerous" &&
+            corpusRow.origin.kind === "self-test"
+          ),
+      );
+      corpus.caseCount = corpus.rows.length;
       break;
+    // A typo in the kind list below lands here, so a misspelled kind fails instead of testing an undamaged corpus.
     default:
       throw new Error(`unknown damage: ${kind}`);
   }
 }
 
-test("saved pair binds every original case and both mirror bytes", () => {
-  const pair = validatedArtifacts;
-  assert.deepEqual(
-    validateCorpora(pair.corpus, pair.reference, pair.snapshot),
-    {
-      cases: pair.corpus.caseCount,
-      policies: 2,
-    },
-  );
+// The corpus a maintainer ships must validate as-is, with both policies counted and its installed copy matching.
+test("shipped corpus declares complete coverage and matches its installed mirror", () => {
+  assert.deepEqual(validateCorpus(validatedCorpus), {
+    cases: validatedCorpus.caseCount,
+    policies: 2,
+  });
 });
 
+// Each damage kind is one way a corpus edit could hide lost coverage; the validator must reject every one.
 for (const kind of [
-  "missing candidate",
-  "missing reference",
+  "missing row",
   "duplicate identity",
-  "orphaned candidate",
-  "orphaned reference",
+  "unknown policy",
+  "unknown suite membership",
   "input drift",
-  "reference input drift",
-  "candidate outcome drift",
   "unknown exception",
   "misplaced startup exception",
-  "missing locale",
+  "availability predicate drift",
   "incomplete coverage",
 ]) {
   test(`rejects ${kind}`, () => {
-    const pair = structuredClone(validatedArtifacts);
-    damagePair(pair, kind);
-    assert.throws(() =>
-      validateCorpora(pair.corpus, pair.reference, pair.snapshot),
-    );
+    const corpus = structuredClone(validatedCorpus);
+    damageCorpus(corpus, kind);
+    assert.throws(() => validateCorpus(corpus), `${kind} must be rejected`);
   });
 }
 
+// A reviewed protection row may only check for the bounded denial text, and only under a reviewed gap label.
 test("reviewed protections require a named gap and a bounded denial message", () => {
+  // Builds a validator call for one cloned reviewed row given another exception name or denial message.
   const withException = (exceptionId: string, message = "BLOCKED: Policy") => {
-    const pair = structuredClone(validatedArtifacts);
-    const row = pair.corpus.rows.find(
-      (item) => item.exceptionId === "review-gap-11",
+    const corpus = structuredClone(validatedCorpus);
+    const reviewedRow = corpus.rows.find(
+      (candidateRow) => candidateRow.exceptionId === "review-gap-11",
     );
-    assert.ok(row);
-    const original = pair.reference.rows.find((item) => item.id === row.id);
-    assert.ok(original);
-    row.exceptionId = exceptionId;
-    original.exceptionId = exceptionId;
-    row.expected.stderrIncludes = message;
-    original.expected.stderrIncludes = message;
-    pair.reference.approvedDifferences = pair.reference.rows
-      .filter((item) => item.exceptionId)
-      .map(({ id, exceptionId: namedGap, original: outcomes, expected }) => ({
-        id,
-        exceptionId: namedGap,
-        original: outcomes,
-        expected,
-      }));
-    return () => validateCorpora(pair.corpus, pair.reference, pair.snapshot);
+    assert.ok(reviewedRow);
+    reviewedRow.exceptionId = exceptionId;
+    reviewedRow.expected.stderrIncludes = message;
+    return () => validateCorpus(corpus);
   };
   assert.doesNotThrow(withException("review-gap-11"));
   assert.throws(withException("review-gap-22"), /unknown exception/u);
@@ -133,8 +124,14 @@ test("reviewed protections require a named gap and a bounded denial message", ()
     withException("review-gap-11", "anything"),
     /unapproved message predicate/u,
   );
+  // An empty predicate would match any stderr, so it is refused like any other unapproved text.
+  assert.throws(
+    withException("review-gap-11", ""),
+    /unapproved message predicate/u,
+  );
 });
 
+// Two hooks that both failed to start must not count as agreeing, and broken provider JSON must not match a saved reply.
 test("ordinary allow and block cases reject unavailable instead of agreeing", () => {
   const unavailable = {
     status: 2,
@@ -166,95 +163,85 @@ test("ordinary allow and block cases reject unavailable instead of agreeing", ()
   );
 });
 
-test("acceptance filters and unavailable candidate stages fail through the CLI", () => {
-  const filtered = spawnSync(
+// Spawns the real CLI, so a maintainer who combines `--require-complete` with a filter, or types a retired stage, sees exit status 1.
+test("acceptance filters, report-mode acceptance and unknown stages fail through the CLI", () => {
+  const filteredRun = spawnSync(
     process.execPath,
     ["scripts/check-hook-parity.mjs", "--require-complete", "--case=anything"],
-    { cwd: root, encoding: "utf8" },
+    { cwd: repositoryRoot, encoding: "utf8" },
   );
-  assert.equal(filtered.status, 1);
-  assert.match(filtered.stderr, /complete acceptance rejects case filters/);
-  const installed = spawnSync(
+  assert.equal(filteredRun.status, 1);
+  assert.match(filteredRun.stderr, /complete acceptance rejects case filters/);
+  // The retired frozen extraction stage is now an unknown stage, not a silent fallback.
+  const extractionRun = spawnSync(
     process.execPath,
-    [
-      "scripts/check-hook-parity.mjs",
-      "--stage=installed",
-      "--require-complete",
-    ],
-    { cwd: root, encoding: "utf8" },
+    ["scripts/check-hook-parity.mjs", "--stage=extraction"],
+    { cwd: repositoryRoot, encoding: "utf8" },
   );
-  assert.equal(installed.status, 1);
-  assert.match(installed.stderr, /installed runtime unavailable/);
+  assert.equal(extractionRun.status, 1);
+  assert.match(extractionRun.stderr, /known stage: extraction/);
   assert.throws(
     () => parseOptions(["--require-complete", "--list-divergent"]),
     /not acceptance/,
   );
+  assert.equal(parseOptions([]).stage, "installed");
 });
 
-test("candidate stage runs real entrypoints over fixture rows and rejects outcome drift", async () => {
-  const cases = [
-    "selftest-deny-dangerous-05c6ef8113f35b5d-1",
-    // A file token for the global Git config, plus a selected repository whose captured fixture omits its object store.
-    "selftest-deny-git-mutations-6c04fb19b11edeb5-1",
-    // Missing modules must fail from the copied entrypoint, including open self-test stdin and provider JSON.
-    "selftest-deny-dangerous-aa999e6b4a9f641e-1",
-    "selftest-deny-dangerous-1b200cef4d0becea-1",
-    "selftest-deny-git-mutations-f048cf459ba093b1-1",
-  ];
-  const options = parseOptions([
-    "--stage=candidate",
-    ...cases.map((id) => `--case=${id}`),
-  ]);
-  const cli = spawnSync(
-    process.execPath,
-    [
-      "scripts/check-hook-parity.mjs",
-      "--stage=candidate",
-      ...cases.map((id) => `--case=${id}`),
-    ],
-    { cwd: root, encoding: "utf8" },
-  );
-  assert.equal(cli.status, 0, cli.stderr);
-  assert.match(cli.stdout, /PASS: candidate parity/);
-  const passed = await compareCandidate(options, validatedArtifacts);
-  assert.deepEqual(passed.divergences, []);
-  const drifted = structuredClone(validatedArtifacts);
-  const row = drifted.corpus.rows.find(
-    (candidate) => candidate.id === cases[1],
-  );
-  row.expected.status = 0;
-  await assert.rejects(
-    compareCandidate(options, drifted),
-    /unapproved candidate differences/,
-  );
-});
+const stageCases = [
+  "selftest-deny-dangerous-05c6ef8113f35b5d-1",
+  // A file token for the global Git config, plus a selected repository whose captured fixture omits its object store.
+  "selftest-deny-git-mutations-6c04fb19b11edeb5-1",
+  // Missing modules must fail from the copied entrypoint, including open self-test stdin and provider JSON.
+  "selftest-deny-dangerous-aa999e6b4a9f641e-1",
+  "selftest-deny-dangerous-1b200cef4d0becea-1",
+  "selftest-deny-git-mutations-f048cf459ba093b1-1",
+];
 
-test("mirror validation rejects byte drift and npm excludes frozen references", () => {
-  const bytes = readFileSync(
-    join(root, "workflow/hooks/deny-dangerous/corpus.json"),
+// Spawns each stage's real entrypoints over five fixture rows, then proves a changed expectation is reported as a difference.
+for (const stage of ["candidate", "installed"]) {
+  test(`${stage} stage runs real entrypoints over fixture rows and rejects outcome drift`, async () => {
+    const options = parseOptions([
+      `--stage=${stage}`,
+      ...stageCases.map((id) => `--case=${id}`),
+    ]);
+    const cliRun = spawnSync(
+      process.execPath,
+      [
+        "scripts/check-hook-parity.mjs",
+        `--stage=${stage}`,
+        ...stageCases.map((id) => `--case=${id}`),
+      ],
+      { cwd: repositoryRoot, encoding: "utf8" },
+    );
+    assert.equal(cliRun.status, 0, `${stage}: ${cliRun.stderr}`);
+    assert.match(cliRun.stdout, new RegExp(`PASS: ${stage} parity`));
+    const matchingRun = await compareCandidate(options, validatedCorpus);
+    assert.deepEqual(matchingRun.divergences, [], `${stage} divergences`);
+    const driftedCorpus = structuredClone(validatedCorpus);
+    const driftedRow = driftedCorpus.rows.find(
+      (candidateRow) => candidateRow.id === stageCases[1],
+    );
+    driftedRow.expected.status = 0;
+    await assert.rejects(
+      compareCandidate(options, driftedCorpus),
+      new RegExp(`unapproved ${stage} differences`),
+    );
+  });
+}
+
+// Spawns `npm pack --dry-run`, so a stale installed corpus or a package that ships test fixtures fails before release.
+test("mirror validation rejects byte drift and npm excludes test fixtures", () => {
+  const corpusBytes = readFileSync(
+    join(repositoryRoot, "workflow/hooks/deny-dangerous/corpus.json"),
   );
-  assertMirrorBytes(bytes, bytes);
+  assertMirrorBytes(corpusBytes, corpusBytes);
   assert.throws(
-    () => assertMirrorBytes(bytes, Buffer.concat([bytes, Buffer.from("\n")])),
+    () =>
+      assertMirrorBytes(
+        corpusBytes,
+        Buffer.concat([corpusBytes, Buffer.from("\n")]),
+      ),
     /mirror bytes/,
   );
   assert(checkPackInventory() > 0);
-});
-
-test("frozen hash validation rejects a changed dependency in a disposable copy", () => {
-  const project = materializeReference();
-  try {
-    writeFileSync(
-      join(project, "snapshot.json"),
-      readFileSync(join(root, "test/fixtures/hooks-bash/snapshot.json")),
-    );
-    validateSnapshot(project);
-    writeFileSync(
-      join(project, ".goat-flow/hooks/vendor/graphql.cjs"),
-      "changed",
-    );
-    assert.throws(() => validateSnapshot(project), /frozen length|frozen hash/);
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
 });

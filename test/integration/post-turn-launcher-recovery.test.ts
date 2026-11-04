@@ -4,11 +4,7 @@
  * Each test uses a disposable selected project and the shipped launcher, with no live provider or real user files.
  * Use this matrix to protect bounded retries, actionable findings and byte-safe delivery together.
  */
-import {
-  hookSelection,
-  hookTreeRoot,
-  selectedHookPath,
-} from "../helpers/hook-entrypoint.js";
+import { hookTreeRoot, selectedHookPath } from "../helpers/hook-entrypoint.js";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -29,7 +25,6 @@ import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { installPostTurnHook } from "./post-turn-safety-hook.helpers.js";
-import { bashPath } from "../../scripts/check-hook-parity.mjs";
 import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import {
@@ -52,7 +47,7 @@ const launcherPath = selectedHookPath(
   join(hookTreeRoot(), "run-with-bash.mjs"),
 );
 const stopMode = "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
-const scriptArgument = `.goat-flow/hooks/post-turn-safety.${hookSelection() !== "reference" ? "mjs" : "sh"}`;
+const scriptArgument = ".goat-flow/hooks/post-turn-safety.mjs";
 const invalidClaudeStopInputs = [
   '{"hook_event_name":"Stop","stop_hook_active":true}',
   '{"hook_event_name":"PostToolUse","session_id":"claude-session","stop_hook_active":true}',
@@ -162,17 +157,6 @@ function writeScanner(projectRoot: string, scriptBody: string) {
   mkdirSync(hooks, { recursive: true });
   const fixturePath = join(hooks, "post-turn-safety.mjs");
   writeFileSync(fixturePath, scriptBody + "\n");
-  if (hookSelection() === "reference") {
-    const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
-    writeFileSync(
-      join(projectRoot, scriptArgument),
-      "#!/usr/bin/env bash\nexec " +
-        quote(bashPath(process.execPath)) +
-        " " +
-        quote(bashPath(fixturePath)) +
-        ' "$@"\n',
-    );
-  }
 }
 
 /** Run a test with guaranteed cleanup of its selected project.
@@ -238,13 +222,9 @@ function recoveryPaths(projectRoot: string) {
 
 describe("continuation recovery", () => {
   for (const missingDependency of [
-    hookSelection() !== "reference"
-      ? "post-turn-safety.mjs"
-      : "post-turn-safety.sh",
-    hookSelection() !== "reference"
-      ? "hook-launch.mjs"
-      : "hook-launch-runtime.mjs",
-    hookSelection() !== "reference" ? "run-hook.mjs" : "run-with-bash.mjs",
+    "post-turn-safety.mjs",
+    "hook-launch.mjs",
+    "run-hook.mjs",
   ]) {
     it(`bounds the registered Claude Stop when ${missingDependency} is missing`, () =>
       withProject((projectRoot) => {
@@ -258,18 +238,16 @@ describe("continuation recovery", () => {
         const settings = JSON.parse(
           readFileSync(join(projectRoot, ".claude/settings.json"), "utf8"),
         );
-        if (hookSelection() !== "reference") {
-          const { form: _form, ...candidate } = buildAgentHookDescriptor(
-            "claude",
-            ".goat-flow/hooks",
-            spec,
-          );
-          settings.hooks.Stop[0].hooks[0] = { type: "command", ...candidate };
-          writeFileSync(
-            join(projectRoot, ".claude/settings.json"),
-            JSON.stringify(settings),
-          );
-        }
+        const { form: _form, ...candidate } = buildAgentHookDescriptor(
+          "claude",
+          ".goat-flow/hooks",
+          spec,
+        );
+        settings.hooks.Stop[0].hooks[0] = { type: "command", ...candidate };
+        writeFileSync(
+          join(projectRoot, ".claude/settings.json"),
+          JSON.stringify(settings),
+        );
         const handler = settings.hooks.Stop[0].hooks[0];
         const command = agentHookSpawnDescriptor({ form: "argv", ...handler });
         rmSync(join(projectRoot, ".goat-flow/hooks", missingDependency));
@@ -808,7 +786,6 @@ fs.writeFileSync('child.pid', String(process.pid));
 const sleeper = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
 fs.writeFileSync('sleeper.pid', String(sleeper.pid));
 await new Promise(() => {});`,
-          'printf "%s" "$$" > child.pid\nsleep 30 &\nprintf "%s" "$!" > sleeper.pid\nwait',
         );
         writeFileSync(
           join(projectRoot, ".goat-flow/config.yaml"),
@@ -891,7 +868,6 @@ await new Promise(() => {});`,
       installPostTurnHook(
         projectRoot,
         'process.stderr.write("x".repeat(70000));',
-        "node -e 'process.stderr.write(\"x\".repeat(70000))'",
       );
       writeFileSync(
         join(projectRoot, ".goat-flow/config.yaml"),
