@@ -436,7 +436,7 @@ jobs:
         env:
           GOAT_FLOW_HOOK_UNDER_TEST: installed
           GOAT_TEST_HOOK_SUITE_LOG: ${{ runner.temp }}/m16-scanner-spawn.jsonl
-        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
+        run: node ${{ runner.os == 'macOS' && format('"{0}/m07-observe-test-command.mjs"', runner.temp) || '' }} --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-binary-gap.test.ts test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
 
       - name: Native Gruff integration suites
         id: native-gruff
@@ -603,7 +603,7 @@ jobs:
               node --import tsx --test test/integration/hook-parity.test.ts
               (unset LC_ALL; node scripts/check-hook-parity.mjs --stage=installed --require-complete)
               GOAT_FLOW_HOOK_UNDER_TEST=installed node --import tsx --test test/integration/deny-dangerous-policy.test.ts test/integration/deny-native-shells.test.ts test/integration/deny-dangerous-operands.test.ts test/integration/deny-git-graphql.test.ts test/integration/deny-large-report-transport.test.ts
-              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-scanner-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
+              GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-scanner-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/post-turn-safety-binary-gap.test.ts test/integration/post-turn-safety-hook.test.ts test/integration/post-turn-safety-hook-scanning.test.ts test/integration/post-turn-safety-controller.test.ts test/integration/post-turn-launcher-recovery.test.ts
               GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-gruff-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/gruff-code-quality-contract.test.ts test/integration/gruff-code-quality-smoke.test.ts test/integration/gruff-code-quality-quiet-feedback.test.ts
               GOAT_FLOW_HOOK_UNDER_TEST=installed GOAT_TEST_HOOK_SUITE_LOG="$work_path/m16-replay-$version.jsonl" node --import tsx --import ./test/helpers/hook-suite-preload.mjs --test --test-reporter=tap --test-concurrency=1 test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-provider-contracts.test.ts test/integration/hook-effective-state.test.ts test/integration/hook-consumer-canary.test.ts
               node --input-type=module - "$work_path/m16-scanner-$version.jsonl" "$work_path/m16-gruff-$version.jsonl" "$work_path/m16-replay-$version.jsonl" <<'JS'

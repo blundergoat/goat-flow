@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-11-04
+last_reviewed: 2026-11-05
 ---
 
 **Scope:** Hook test coverage strategy - what a self-test or fixture actually exercises, which suites and CI jobs run a changed hook, fixtures that must not carry real secrets, and splits that only look like coverage. What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md); the script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -122,17 +122,19 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search:
 
 ## Lesson: A shipped-hook change needs every suite that runs the hook, and the pull request's CI
 
-**Status:** active | **Created:** 2026-09-20 | **Incident count:** 2 | **Latest occurrence:** 2026-10-30
+**Status:** active | **Created:** 2026-09-20 | **Incident count:** 3 | **Latest occurrence:** 2026-11-05
 **Severity:** INTEGRATION
 **Decision changed:** After changing a shipped hook's behaviour, search the tests for the hook's file name, run every matching suite, including slow-suite files, and read the pull request's CI result before the human gate.
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
 
-**Prevention:** Named hook suites, `npm test` and preflight do not run the slow suite, where the installer tests execute the installed hook against fixtures. Run `command grep -rln '<hook file name>' test/` and run every file it lists, or the whole slow suite. A shared policy module is reached through the entrypoints that load it, and a test can build the file name from a variable, so also search for each entrypoint's bare name (`deny-dangerous`, not `deny-dangerous.mjs`). When the work sits on a pull request, check its latest CI result (`gh pr checks <number>`) at each handoff: a job that has failed since the change is evidence even when every local gate passed. Evidence anchor: `test/integration/setup-install.test.ts` (search: `runs the installed Gruff hook through a configured binaries override`).
+**Prevention:** Before freezing the write allowlist, inspect the fixtures and assertions in every hook consumer for expectations the behavior change will affect. Include those files in scope before implementation. Named hook suites, `npm test` and preflight do not run the slow suite, where the installer tests execute the installed hook against fixtures. Run `command grep -rln '<hook file name>' test/` and run every file it lists, or the whole slow suite. A shared policy module is reached through the entrypoints that load it, and a test can build the file name from a variable, so also search for each entrypoint's bare name (`deny-dangerous`, not `deny-dangerous.mjs`). When the work sits on a pull request, check its latest CI result (`gh pr checks <number>`) at each handoff: a job that has failed since the change is evidence even when every local gate passed. Evidence anchor: `test/integration/setup-install.test.ts` (search: `runs the installed Gruff hook through a configured binaries override`).
 
 **What happened:** A milestone taught the Gruff hook to respect a project's saved `enabled: false`. An installer test ran the installed hook in a freshly installed project, whose saved choice is off by default, and still expected analysis. That milestone and the next three ran their named Gruff suites, `npm test` and preflight, all green, while CI's `test-slow (5/5)` job failed on every commit of the pull request. The final milestone's release gate hit the same failure, and the user reported the CI job. The test now enables Gruff before running the hook and proves the hook stays quiet while the choice is off.
 
 **Root cause:** Proof was chosen from the files the change was about, not from the files that run the changed script, and the pull request's own CI was never read.
+
+**Recurrence 2026-11-05:** A binary-gap secret-blocking change was scoped before reading an existing scanner fixture. Both owning-suite runs passed 97 tests, but the broader scanner/recovery run failed one of 116: the coverage-only binary fixture embedded an AWS-shaped value and required no hazard finding. The corrected scanner detected it. Work paused for approval to align that fixture and record the missed consumer inspection. Keep coverage-only binary fixtures free of detectable secrets and assert token blocking in the dedicated regression suite. Evidence: `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `reports unscannable untracked paths as incomplete`), whose token-bearing fixture is preserved at commit `d75152e8` and `test/integration/post-turn-safety-binary-gap.test.ts` (search: `binary coverage gaps cannot release secrets`).
 
 **Recurrence 2026-10-30:** Two policy changes made the Node runtime inspect the native PowerShell tool and refuse more PowerShell forms it cannot read. Both were verified with the fast suite, focused policy tests, the full self-tests and preflight. A search for the changed modules' file names does not list `test/integration/deny-native-shells.test.ts`, which reaches them through the `deny-dangerous` and `deny-git-mutations` entrypoints and, on a pull request, runs only in the slow suite. It still expected the native PowerShell tool to be refused with a supported-shell route, and harmless `foreach` blocks, call-operator expressions, `.Invoke()` calls and an expandable string to be allowed. CI's `test-slow (5/5)` job failed six cases after both changes were committed, and the user reported it. The test now asserts the Node refusals and the owning-policy denials, prints a non-expanding string in the quoted-text case, and kept the frozen Bash reference expectations until that reference was retired. Evidence anchor: `test/integration/deny-native-shells.test.ts` (search: `refuses uninspected script blocks`).
 
@@ -162,3 +164,18 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search:
 **What happened:** A review of the local-data-to-interpreter pipe fix found two gaps after the full self-test was green. `cat script.js | node --require ./package.json` returned exit 0 even though Node executed stdin as the program, because the classifier treated the path-shaped `--require` operand as a script file. `printf x | sed '1e echo SED_EXECUTED' | python3 -c ...` also returned exit 0 while the producer executed a command, because `sed`/`awk` were included in a "read-only producer" allowlist.
 
 **Root cause:** The added grammar matrix covered bare interpreters, `-`, `/dev/stdin`, `python -m`, non-path flag values, downloader latching, and script-file allows, but it did not include path-shaped interpreter flag operands or command-capable producer languages. The test corpus proved the intended examples, not the edges where "path-shaped" and "read-only" assumptions break.
+
+---
+
+## Lesson: Check disposable fixtures before deriving capture packets
+
+**Status:** active | **Created:** 2026-11-05 | **Evidence:** OBSERVED
+**Decision changed:** Before deriving a capture round, check every disposable fixture root, isolated provider copy and pinned input across all groups before saving the first packet.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+
+**Prevention:** Treat paths in a prior packet as historical claims until their current existence and hashes are checked. Inventory every group first. Missing temporary roots need a bounded restoration scope before packet checks or native readiness; never interpret them as an empty installed project. Include the global-install pin even when the capture runs from an isolated binary. Select validation by the packet protocol: a Stop-only readiness record can differ from an ordinary provider record. Check these inputs before constructing the new batch.
+
+**What happened:** Capture preparation saved seven provisional Windows child packets before reaching the first missing WSL root. All nine WSL fixture roots and one isolated provider copy had disappeared from temporary storage. The retained archived provider binary still matched its prior hash, but restoring the roots required new agent configurations outside the write allowlist. Work stopped before any live session or external write.
+
+**Evidence:** The source CLI dry run also refused the absent target with ENOENT. The guard is owned by `src/cli/install-command.ts` (search: `Policy choices or ownership files could not be read safely`); its dry-run branch returns before installer side effects (search: `A dry-run reports the exact managed-template result`).

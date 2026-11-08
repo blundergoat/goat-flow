@@ -1,6 +1,6 @@
 ---
 category: verification-environment
-last_reviewed: 2026-10-10
+last_reviewed: 2026-11-08
 ---
 
 **Scope:** Whether the build, tree, or sandbox that produced the evidence is the one the claim is about - a published package standing in for local source, a mutation sandbox that is not the checkout, and suite results taken while another session writes the tree. What counts as proof in general is [verification.md](verification.md); what a test must establish is [verification-testing.md](verification-testing.md).
@@ -55,12 +55,18 @@ last_reviewed: 2026-10-10
 ## Lesson: Parallel sessions need concurrency-safe file patterns
 
 **Status:** active | **Created:** 2026-04-05
-**Decision changed:** Before appending to a shared learning-loop bucket, check whether another session already has it dirty, and treat the append as a read-modify-write that must be re-read immediately beforehand.
+**Severity:** INTEGRATION
+**Incident count:** 2 | **Latest occurrence:** 2026-11-06
+**Decision changed:** Before overlapping operations, compare their write sets and snapshot read sets. Serialize work on a shared file, and re-read immediately before a read-modify-write.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
 **Prevention:** Run `git status --short` over the target directory before writing a learning-loop bucket. If the bucket is already modified by another session, do not append: record the entry in a bucket you own, or wait and re-read. Re-read the file immediately before each append rather than writing from a copy read earlier in the session, keep the append to one entry, and run the entry-order contract and `stats --check` afterwards so a clobbered or duplicated entry surfaces immediately. Per-entry files were considered and rejected: ADR-033 keeps category buckets, so the mitigation is sequencing, not file layout. Evidence anchors: `.goat-flow/learning-loop/lessons/README.md` (search: `Bucket Size`), `.goat-flow/learning-loop/footguns/learning-loop-extraction.md` (search: `Bulk learning-loop rewrites can duplicate entries`).
 
+Treat a helper that snapshots a shared control record as owning that record until the helper exits. Finish and inspect a phase before a transport recorder or another writer updates its gate. A successful inner process does not prove that its wrapper accepted the phase.
+
 **What happened:** Two agents wrote the same learning-loop file during parallel Claude sessions. The buckets under `.goat-flow/logs/`, `.goat-flow/learning-loop/lessons/`, and `.goat-flow/learning-loop/footguns/` are append-only by convention, but nothing prevents concurrent writes; session logs use date-slug filenames that reduce collisions, while category buckets are shared write targets.
 
 **Root cause:** goat-flow was designed for single-agent sessions, so nothing serialises two appends to one bucket and a whole-file write from a stale read silently discards the other session's entry.
+
+**Recurrence 2026-11-06:** An offline hook rehearsal matched all five checks, but the host started a transport recorder before the rehearsal wrapper exited. Both used the same capture record. The recorder changed it between the wrapper's snapshots, and the wrapper rejected the phase with `Capture record changed during the phase`. No provider task ran and no one-use claim was spent. Preserve the failed receipt and require a fresh serialized rehearsal rather than granting the gate from the inner result. `AGENTS.md` (search: `Stop-the-line`) owns the recovery rule.

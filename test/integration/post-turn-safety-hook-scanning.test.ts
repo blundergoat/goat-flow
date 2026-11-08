@@ -294,7 +294,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     const fixtures = [
       {
         path: "binary.dat",
-        content: Buffer.from([0, 1, 2, ...Buffer.from(TEST_AWS_ACCESS_KEY)]),
+        content: Buffer.from([0, 1, 2]),
       },
       {
         path: "large.txt",

@@ -1,7 +1,8 @@
 /**
- * Retains reviewed Windows and WSL delivery observations for the 1.19.0 runtime.
- * Use these host-specific records when reviewing capture applicability; registry gates remain separate.
- * Digests preserve capture provenance without publishing transcripts or raw payload values.
+ * Reviewed Windows and WSL observations of each provider delivering hook results to the model, for the 1.19.0 runtime.
+ *
+ * The hooks registry attaches each row to its provider's evidence; support gates are still decided separately.
+ * Digests point back to the reviewed receipts without publishing transcripts or raw payload values.
  */
 import type { HookProviderHostEvidence } from "./hook-contracts.js";
 
@@ -81,11 +82,11 @@ const VERIFIED_RUNTIME_SHA256: Readonly<Record<string, string>> = {
   "post-turn/context.mjs":
     "79b645ed2ead8f821fc0d9f07bfbc2c4af0ec09180c150cea8715addbcf97667",
   "post-turn/controller.mjs":
-    "debb178a4e166e46859b05a71a34844ea00f858a1d2cedfca752229a9a8b0e8d",
+    "7a8ce839ee128c602d13bb905a4accaa0693049dbe12a316c1bf062dec1e5e3a",
   "post-turn/recovery.mjs":
-    "df7298cbc23252aee95f90889c23fb647329ae30ac55f3adbce114ed73224346",
+    "2c5e0481ecf737b9be6e75ae851cd254be9aa13cad9e3009af6b3b8070888968",
   "post-turn/scanner.mjs":
-    "b5b59fc68ff6a1103b289af960672ac6875912a00a50e30928100a8b1efd084b",
+    "b6d0b002732d25baccbba0bb48abeb4da2aeafecb5cbf42dfdfc6d71a628c013",
   "process-tree.mjs":
     "2a6beb870594f8b1ab4e6484a22b9e8224a45905731dea1384d1f56076e1870c",
   "run-hook.mjs":
@@ -96,7 +97,7 @@ const VERIFIED_RUNTIME_SHA256: Readonly<Record<string, string>> = {
     "d7fdf1c03e3f58cb290e067efb8ced57a72e3c441af014be9bbf379078a5ef07",
 };
 
-/** Reviewed observations, including incomplete rows that must not become support claims. */
+/** Reviewed host observations; a row marked incomplete or security-hold must never become a support claim. */
 export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
   [
     {
@@ -109,7 +110,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       summary:
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
-        "The capture ended on its controller timeout after every required record was in the transcript; the user accepted this variance.",
+        "The operator closed the client after the completed turn; natural provider exit is not claimed.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -121,7 +122,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-04T00:28:15.832Z",
+        capturedAt: "2026-11-05T08:40:46.924Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -131,12 +132,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "02a66fa1261a4c5e4a0592ca5d3774d3c349a1f44888593701618c7a8bc591f5",
+          "7c358388184b75cc084fb866ac1b1987a80ba29ef00d14b1c3937bc1aad008e5",
         approvalPacketSha256:
-          "f0213001b4058fc3b2c7b3d1462b53791a5e8d169e79d8599fe8a2ad0b5c84d4",
+          "ff48b6553e9475ea91caee124de57d2cf3caa60c74d7b5ce6f79a59d1fbce903",
         producer: "claude native session output",
         reviewSha256:
-          "564aca3854e030b0c96f11ea6358076b56fc25ae84a4fe67ace47a38939a3e10",
+          "28b1d2487592eb935c6a7cbc48f6d6b6b83ce43b60aeb4316b0c0fcdb6d5d439",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -150,6 +151,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       summary:
         "The native edit callback delivered Gruff findings to the model.",
       limitations: [
+        "The capture ended on its controller timeout 0.473 seconds after the deadline, about 25 seconds after the final answer and clean Stop; the user accepted this variance.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -161,7 +163,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-04T02:07:03.414Z",
+        capturedAt: "2026-11-05T08:47:45.212Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -171,12 +173,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "a0f2874e5c4fede162c3202f0a291924065dda23bf42b7a8bbf1869690690c2b",
+          "d67fbf4d470a0d4e2e64171604011e27b0e056ab1036136e0d2acbb0b50c18d7",
         approvalPacketSha256:
-          "7b5a39ad78198aa6e31e873285a3d3647e5ee05661ffecc0b4400e0e365f754a",
+          "0fe7398f5e3be02ed331a1e85cc88fde71e9832975102a2ef2b6c498ccf7132a",
         producer: "claude native session output",
         reviewSha256:
-          "6eefba40dca74ec4f01cfd90aead048ebacfd949bd25fe7ae66770826719be9c",
+          "28b1d2487592eb935c6a7cbc48f6d6b6b83ce43b60aeb4316b0c0fcdb6d5d439",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -204,7 +206,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-04T02:13:36.256Z",
+        capturedAt: "2026-11-05T19:24:39.459Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -214,12 +216,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "ad056a3432d72ad23db81ed6790fd68eed0fbd3ec05db398b013f4c63d2f3a52",
+          "7f75f1bb1bcbd5e0889f79c9252a51f7bc9fb0598bb6b534e0bb19d387289fa8",
         approvalPacketSha256:
-          "dd09ffe422d645648c79c0fc1791bfdcc5127a35a56da7dbdea36b7e44c6022c",
+          "9000a3424f00d167828ebbb3b83821be3bd8d475fb2fe0b0e0dadb44cff92df1",
         producer: "claude native session output",
         reviewSha256:
-          "5f90001a905c471b9dca5db36fc41876ca0a3049bf2eedf397fc402849f0299c",
+          "adc1058139ce4f9fd232b71a7dea6b1fd13c2199b93cafd6990b1ae07f7b7abb",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -248,7 +250,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T22:21:24.663Z",
+        capturedAt: "2026-11-05T19:34:34.982Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stderr", "model-context"],
@@ -258,12 +260,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "2085612d4b73a1e996e9682835e92c4585bebe44147a9035d53fe87f72c0005c",
+          "3ac8b309996cd9b0d91341551b57bc9bfbeb316b95a036de4e54a9545dc33d8b",
         approvalPacketSha256:
-          "7320dd13b3aff23046a48f6dcef7c3aed82090a3217e7e7eb9a9e2bf52410724",
+          "b46e35b3f7f56db3165892fa90ad8a6a968f91d574deff0bd5dac90292570745",
         producer: "codex native session output",
         reviewSha256:
-          "f33d4c21ad394b8ba4b255a446a80e7b2a81de3f7a4f5fb5771cacba55191d6b",
+          "6190e6bce7f4d7b178d44990867443772dfb3cf7b69de0c3ed2b1f77433e1a98",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -292,7 +294,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T22:22:52.728Z",
+        capturedAt: "2026-11-05T19:36:07.224Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -302,12 +304,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "21a9adf538f221173f1504ecefa45288853ba8d886b2cd84963afda34fdb2ee0",
+          "c2386d5345049ffb57468b9a89af6bd16d079323d9e0ceb01aa9a95df4755fa5",
         approvalPacketSha256:
-          "7320dd13b3aff23046a48f6dcef7c3aed82090a3217e7e7eb9a9e2bf52410724",
+          "b46e35b3f7f56db3165892fa90ad8a6a968f91d574deff0bd5dac90292570745",
         producer: "codex native session output",
         reviewSha256:
-          "5c6dd2d2485b8cf8be006c105bf582704263bd4c76c819009491c90908d68619",
+          "6190e6bce7f4d7b178d44990867443772dfb3cf7b69de0c3ed2b1f77433e1a98",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -337,7 +339,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T22:22:52.728Z",
+        capturedAt: "2026-11-05T19:36:07.224Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -347,12 +349,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "21a9adf538f221173f1504ecefa45288853ba8d886b2cd84963afda34fdb2ee0",
+          "c2386d5345049ffb57468b9a89af6bd16d079323d9e0ceb01aa9a95df4755fa5",
         approvalPacketSha256:
-          "7320dd13b3aff23046a48f6dcef7c3aed82090a3217e7e7eb9a9e2bf52410724",
+          "b46e35b3f7f56db3165892fa90ad8a6a968f91d574deff0bd5dac90292570745",
         producer: "codex native session output",
         reviewSha256:
-          "5c6dd2d2485b8cf8be006c105bf582704263bd4c76c819009491c90908d68619",
+          "6190e6bce7f4d7b178d44990867443772dfb3cf7b69de0c3ed2b1f77433e1a98",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -378,7 +380,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T22:52:24.086Z",
+        capturedAt: "2026-11-05T20:10:33.087Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -388,12 +390,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "3dc56bc99af1bde4dbfb837c58363f3a6b0679419dbf17272f5de26b4d91e201",
+          "1b0a29c8379eb14d26eba89d15e294bb52147225309690c87ee86934efbb4ba6",
         approvalPacketSha256:
-          "9e54816f72815ce811006135b2dfefa01806d3bd4ecb39ce12774ab8b7664ae0",
+          "741a976f88cd8891c0af352f8f03ef161264b52aad0272f42c9b1a3f5897b733",
         producer: "copilot native session output",
         reviewSha256:
-          "e0f415a86c61ff42907d8f6ea70404c9df1314d4caf3e6912bc7cbe5e71eb50e",
+          "4858a7e7bddcf10c517040b027f93d8260cdad85282bba7ba917facb5ab3ec6e",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -419,7 +421,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T22:52:59.933Z",
+        capturedAt: "2026-11-05T20:14:22.587Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -429,12 +431,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "cbb03788b5e178dc1180a1ac18ae3c7894ece39056a98f7041cf432bfa38039a",
+          "506b822c1c25dddf867f42af4bc7e2d2ab31eaa71bff1a10695b8bbc418f507a",
         approvalPacketSha256:
-          "ef6ee1b0a0d20a986602f101af19a3bce2e7c8577e67dcf4c71f11832b3d5c37",
+          "959e47b7d014301703b39f631a176ea3df02928de7c6f16bd96d19305fc9fb66",
         producer: "copilot native session output",
         reviewSha256:
-          "8ce40f849073d031c9bf8ccc0c897ac3470a1e751e886491a6204191f5177121",
+          "4858a7e7bddcf10c517040b027f93d8260cdad85282bba7ba917facb5ab3ec6e",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -467,7 +469,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".agents/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-04T03:01:53.759Z",
+        capturedAt: "2026-11-05T20:43:06.660Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -477,12 +479,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "55370647ea01c81bdc573956632a36e996ddb5e0cbc6e253adcdc77ed2283986",
+          "2651de194841c4e94bf95d47084dbe5e20e8821ca2cee58fc56705ad7881ba93",
         approvalPacketSha256:
-          "80836442676b36949c9302e79fcb48ce9e4d2615e0974965f9d66da3d97fecf5",
+          "0e825751cff3ee731f261adfefdd81a149db857635028cb56e472c120e40c2ab",
         producer: "antigravity native session output",
         reviewSha256:
-          "716fd2dcc296488a3b73a8b48ec31940e5b18702fe34934b0b59034904ba5466",
+          "eec2550d038c300ff287fd8e02db7ff75cc74d9b8dd54389e767b3194973ccc9",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -511,7 +513,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T22:41:42.140Z",
+        capturedAt: "2026-11-05T20:56:06.087Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -521,12 +523,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "f390930a3f3f4b5b6d23284330a47ba5a1429093448a5235eda1489b257e8b42",
+          "68f8420fe9099770ad5787f8c287e0fcefe5f6f5478405c100f50742e01d3352",
         approvalPacketSha256:
-          "93ae8f0af93c0a78cf2297cd5aade3b77ae1de356537a59d40f4cb5e93121c0f",
+          "3a4b22198f64b217bb8d87a811441eaf7c968238410df2f2d447d2e2be31db0f",
         producer: "claude native session output",
         reviewSha256:
-          "4f69354774c8dca634199abdc989020d4b658a224ef93aeefae4c2761d957ba8",
+          "279ccf8622e273544841fa15f0d849f639468b48dabebe43aa072265429d9eaa",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -555,7 +557,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T22:43:53.152Z",
+        capturedAt: "2026-11-05T20:58:34.257Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -565,12 +567,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "c1b0e42152c2432bb1e921f5d89cec3c75605efeee0be0ba42d5fca54fc12d7d",
+          "030e744056b1fac8f57ded8854d50a1a4eb2f5d48ca4154cf623d6a9c18d1a70",
         approvalPacketSha256:
-          "93ae8f0af93c0a78cf2297cd5aade3b77ae1de356537a59d40f4cb5e93121c0f",
+          "3a4b22198f64b217bb8d87a811441eaf7c968238410df2f2d447d2e2be31db0f",
         producer: "claude native session output",
         reviewSha256:
-          "cea918217d85e70515c984c3458381cb8b687fc8994f2fcd7b323efb3689a130",
+          "279ccf8622e273544841fa15f0d849f639468b48dabebe43aa072265429d9eaa",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -600,7 +602,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T22:48:50.044Z",
+        capturedAt: "2026-11-05T21:06:29.573Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -610,12 +612,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "d16cba8aa1625807f313b181dae09c90778e42adcb80b6b709a3e1b18e6a945c",
+          "50fa89641e40c7e983c17d5b220375b628565b725c14ae6ec60177a127631fcd",
         approvalPacketSha256:
-          "3a331f7fd85c86f00d41a05eacbe35e4494d9a27c8ac0eab244b816cff0e1c9d",
+          "e94696410f25d488ea0ff2b36973a7ac57a99eea30b0565e9e811c176b4d6a75",
         producer: "claude native session output",
         reviewSha256:
-          "111b0df5caa90e9ca4fa044c495796a624387b8b803cd0d54a0169b66423c6e4",
+          "279ccf8622e273544841fa15f0d849f639468b48dabebe43aa072265429d9eaa",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -645,7 +647,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T21:04:49.485Z",
+        capturedAt: "2026-11-05T21:54:30.664Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stderr", "model-context"],
@@ -655,12 +657,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "f961fdca44ee10083e4d70ea9182ee6eb242e28fdbcf9412c8c31dc608ada655",
+          "0adb4cd31511e45b2f0fc0be69ee09e489cf5d48d0ed938a0d3b402d18a98b4b",
         approvalPacketSha256:
-          "953090102ccdee6e47472b9f35a0b1d05073a098ce8fa1af604e2f468de7556c",
+          "60dc4d19ecefc3b71c69a988808789dc68bfae3b2b03886e24e1d3e90844e52f",
         producer: "codex native session output",
         reviewSha256:
-          "13fe674cf60c0ba9780b8d55dcad7341d459bc017bc3b1c168f5e725c80aaf09",
+          "cf3c22700381bd7d3a2d31967a7db7974a6c2901aa057cf2508756fc6031f4d2",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -689,7 +691,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T21:05:27.897Z",
+        capturedAt: "2026-11-05T21:55:24.983Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -699,12 +701,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "1ce5af4d84beb8e540035633afc704935345eb0856df9d4a46190843feb3c575",
+          "cb55f56bddbeebf54276e15bbab84fa30295eea2d1a7bffa0b06cec9eff6650f",
         approvalPacketSha256:
-          "953090102ccdee6e47472b9f35a0b1d05073a098ce8fa1af604e2f468de7556c",
+          "60dc4d19ecefc3b71c69a988808789dc68bfae3b2b03886e24e1d3e90844e52f",
         producer: "codex native session output",
         reviewSha256:
-          "0cc8491639badfc997a78c65e33bac42d165035012b69df6ca09c9406557bba2",
+          "cf3c22700381bd7d3a2d31967a7db7974a6c2901aa057cf2508756fc6031f4d2",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -721,7 +723,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Codex recorded no separate clean Stop message after the repair; a clean scan is inferred from the completed turn and matching final files.",
         "The JSON event stream carried no hook event; delivery was read from the bound session record.",
         "Readiness reported on-request, but codex exec recorded approval_policy=never; no escalation was requested.",
-        "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed. Connected tool bindings were visible, but the model used only the two controls and two patches.",
+        "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed. The model used only the two controls and two patches.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -734,7 +736,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T21:59:14.466Z",
+        capturedAt: "2026-11-05T22:08:59.404Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -744,12 +746,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "85c0e878be6c573f4e24ba532bd724a731b97a993abd270bfd03e75a7a1b8fdb",
+          "10ac43cf600bdbd6827dff610009dd80c931cb75e4e5977bc4570527926f1aef",
         approvalPacketSha256:
-          "29328629e84ceef8c9479928ea2b17a084ccf40869b186864c932638e8f27783",
+          "3c89890aaa761f96d503a14888650c5ed7e59c4fadd0c5a096943cc26747442a",
         producer: "codex native session output",
         reviewSha256:
-          "572ba74d8e735ecb87781b8b46cda4d7583fdf6f12fafa38f63088f30fa96805",
+          "cf3c22700381bd7d3a2d31967a7db7974a6c2901aa057cf2508756fc6031f4d2",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -764,9 +766,10 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
         "Hook records name no owner; policy attribution rests on the pinned code, the rehearsal and exact matches on the reason text.",
-        "A gpt-4o-mini side call also received the prompt; every assistant message recorded claude-sonnet-5.5.",
+        "One zero-priced gpt-4o-mini call generated the session title; every agent turn recorded claude-sonnet-5.5.",
         "The package file beside the pinned executable reads 1.0.2; --version, the banner and the session log read 1.0.91, and the cached 1.0.91 package is not pinned.",
         "The controller closed the client after the turn ended; natural provider exit is not claimed.",
+        "The model was also offered extensions_reload and extensions_manage; it called neither.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -779,7 +782,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T21:48:05.266Z",
+        capturedAt: "2026-11-08T03:14:46.801Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -789,12 +792,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "d7bc75d7d81886f297f166303f13a94914485545ea8fe962f4f882fc0856f704",
+          "9fc416eec895064d267ac3e1c66c02386cec341be100aa1473c6712986aeb141",
         approvalPacketSha256:
-          "1e7dc824f7f978083127c02a9b58d42fda496eceeaf65017eb277865bdd5db29",
+          "3863488f8066d9e192ba2c8b53e119f0da992aa55b3a12735ca7c27ba6bb81f1",
         producer: "copilot native session output",
         reviewSha256:
-          "28ceee207d53efcbe152ae1d31959add0ceeb6776f5d3c27df59aafdd2e93cd0",
+          "6fbbdce39418e0b8817be3659a4b1d342bbb066c9ef1ce98fedc31a48a0d5456",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -808,9 +811,10 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       summary:
         "The native edit callback delivered Gruff findings to the model.",
       limitations: [
-        "A gpt-4o-mini side call also received the prompt; every assistant message recorded claude-sonnet-5.5.",
+        "One zero-priced gpt-4o-mini call generated the session title; every agent turn recorded claude-sonnet-5.5.",
         "The package file beside the pinned executable reads 1.0.2; --version, the banner and the session log read 1.0.91, and the cached 1.0.91 package is not pinned.",
         "The controller closed the client after the turn ended; natural provider exit is not claimed.",
+        "The model was also offered extensions_reload and extensions_manage; it called neither.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -823,7 +827,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T21:49:11.316Z",
+        capturedAt: "2026-11-08T03:17:19.221Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -833,12 +837,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "95b271fa3c875296e48bb910f21bd6d1da8af439e62374cd3bccb9e15a23f0c8",
+          "145f546eadf6ce3b35b5ad5e26e48709a7cca8906829aa2811938683dccec489",
         approvalPacketSha256:
-          "1e7dc824f7f978083127c02a9b58d42fda496eceeaf65017eb277865bdd5db29",
+          "3863488f8066d9e192ba2c8b53e119f0da992aa55b3a12735ca7c27ba6bb81f1",
         producer: "copilot native session output",
         reviewSha256:
-          "c7b751e421c2149d74e086ac85046d709af36bea54e6c06e560fce3182580da1",
+          "6fbbdce39418e0b8817be3659a4b1d342bbb066c9ef1ce98fedc31a48a0d5456",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -852,7 +856,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       summary:
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
-        "The session ran a private read-only copy of the installed binary, whose hash equals the install's.",
+        "The session ran an isolated copy restored from the approved archived 1.4.12 binary, not the current global install; readiness confirmed the version natively.",
         "Hook decisions name no owner; policy attribution rests on the pinned code, the rehearsal and exact matches on the reason text.",
         "Allowed calls record one more allow than there are matching handlers; what writes it is not established.",
         "The final response quotes the GitHub reason without its Policy repository label; the full reason is in the error text.",
@@ -871,7 +875,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".agents/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-03T21:52:29.035Z",
+        capturedAt: "2026-11-08T03:36:22.676Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -881,12 +885,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "3afbebbedc9719b7b73fcdb85c5bde0809984be4ca9a2a2e7f3a387574369ca5",
+          "258c15999aa90c371a714a3752ae8df128cdfe205ed6c44474e671f1433da943",
         approvalPacketSha256:
-          "63151acb029821adfe72b6e692aec6e1148fc42e0ca8a17a78ba95a18fecfa1c",
+          "59c5f57a7845f1cea6cfbe7fade8bc0e07d22534908f64e80692ebbdc59b31c0",
         producer: "antigravity native session output",
         reviewSha256:
-          "01cb977ee627d3838a0a9db1aa5fb1284ff415630bbd15e1d30d47f973c174eb",
+          "c344cfd0809683051519b99290d214c706f85eec16ca7c25c7f17a944ef64d9f",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },

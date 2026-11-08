@@ -1,6 +1,6 @@
 ---
 category: evidence-attribution
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-08
 ---
 
 **Scope:** Attributing guarantees to the implementation that supplies them, attributing readiness and run details to the host row or command output that recorded them, checking whether reused evidence still describes current bytes, and keeping committed incident evidence readable from a fresh clone. General guidance remains in [agent-evidence-claims.md](agent-evidence-claims.md).
@@ -153,7 +153,7 @@ A PTY's name does not establish the child's `TERM` environment. Pin and verify t
 **Decision changed:** Before a packet says a launch option keeps a client feature out of a session, run that client version with the option and search for the feature's actual screen and transcript signals; until then, report the feature as unknown.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-10-31
+**Incident count:** 3 | **Latest occurrence:** 2026-11-08
 
 **Prevention:** Earlier runs that differ in both a setting and a feature do not show that the setting controls the feature. Find out how the feature appears in each place it can appear, then search for those exact signals during no-task readiness. A readiness field named for a feature proves only the text it matches, so confirm the match is the feature's own row and not other text on screen. If the feature cannot be excluded, tell the user before spending a one-use claim, and state in the row how any affected claim is attributed. Evidence anchor: `src/cli/hook-provider-captures.ts` (search: `A Remote Control bridge was active`).
 
@@ -162,6 +162,8 @@ A PTY's name does not establish the child's `TERM` environment. Pin and verify t
 **Root cause:** A correlation across earlier receipts was written down as a fact about what controls the bridge, and the readiness field matched words the footer does not use.
 
 **Recurrence 2026-10-31:** A Copilot 1.0.91 readiness driver had to show that no MCP server was connected. `/env` draws only the rows in view, so the first run never showed its MCP section. A scroll loop was added, but the second run's search matched "MCP servers" in the slash menu's help text, so the loop never ran and the check looked satisfied. The run's step list showed no scroll. Anchoring the search at the start of a line found the real section, where both servers were disabled, and only that third run's screens were recorded.
+
+**Recurrence 2026-11-08:** While syncing renewed Claude Code 2.1.317 WSL captures into the source rows, the agent deleted the Remote Control limitation from all three rows because the new packet loaded project settings only. No reviewer had mentioned the bridge, and the agent read that silence as absence. `stats --check` then failed on this lesson's evidence anchor. The new receipts' screens show the `/rc` footer connecting, so the line was restored. Removing a row limitation needs the same positive evidence as adding a claim.
 
 ---
 

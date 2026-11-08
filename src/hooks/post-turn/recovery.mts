@@ -185,7 +185,15 @@ export function finishCoverageGap(
   if (!context.stopPayloadPresent || context.sessionFingerprint === "")
     return 2;
   const gapIdentity = identity();
-  const failure = gapIdentity === null ? null : hashStopFailure(gapIdentity);
+  if (gapIdentity === null) {
+    clearStopReentryState(context, root);
+    context.detail = "Binary coverage-gap identity unavailable";
+    process.stderr.write(
+      "post-turn-safety: binary coverage-gap identity unavailable; keeping the turn blocked.\n",
+    );
+    return 2;
+  }
+  const failure = hashStopFailure(gapIdentity);
   if (failure === null) {
     process.stderr.write(STATE_UNAVAILABLE_MESSAGE);
     return 2;

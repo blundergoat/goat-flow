@@ -511,12 +511,20 @@ require("node:module").syncBuiltinESMExports();
   }
 }
 
-/** Inject a file-operation failure into a Node scanner child, without production test switches.
- * @param operation - Existing filesystem boundary to fail for settings.env only.
+/** Make the scanner child fail to read settings.env, or change it mid-digest, without production test switches.
+ * Writes a temporary preload file that the scanner child loads, and deletes it when the scenario ends.
+ *
+ * @param operation - Fault applied only to settings.env; the two `-during-digest` faults keep its bytes and size the same.
  * @param scenario - Assertions run with the disposable preload; the helper removes it afterward.
  */
 export function withScannerFileFault(
-  operation: "readFileSync" | "readSync" | "lstatSync" | "vanish",
+  operation:
+    | "readFileSync"
+    | "readSync"
+    | "lstatSync"
+    | "vanish"
+    | "replace-during-digest"
+    | "touch-during-digest",
   scenario: (environment: Record<string, string>) => void,
 ): void {
   const root = mkdtempSync(join(tmpdir(), "goat-scanner-fault-"));
@@ -531,23 +539,40 @@ const { syncBuiltinESMExports } = require('node:module');
 const operation = ${JSON.stringify(operation)};
 const matches = (path) => typeof path === 'string' && /(?:^|[\\\\/])settings\\.env$/.test(path);
 const handles = new Set();
+const paths = new Map();
+const mutated = new Set();
 const fail = () => { throw Object.assign(new Error('injected scanner file failure'), { code: 'EACCES' }); };
 for (const name of ['openSync', 'readFileSync', 'lstatSync']) {
   const original = fs[name];
   fs[name] = function(path, ...args) {
     if (matches(path) && name === operation) fail();
     const result = original.call(fs, path, ...args);
-    if (matches(path) && name === 'openSync') handles.add(result);
+    if (matches(path) && name === 'openSync') { handles.add(result); paths.set(result, path); }
     if (matches(path) && name === 'lstatSync' && operation === 'vanish') fs.unlinkSync(path);
     return result;
   };
 }
 const close = fs.closeSync;
-fs.closeSync = function(fd) { handles.delete(fd); return close.call(fs, fd); };
+fs.closeSync = function(fd) { handles.delete(fd); paths.delete(fd); return close.call(fs, fd); };
 const read = fs.readSync;
 fs.readSync = function(fd, ...args) {
   if (operation === 'readSync' && handles.has(fd)) fail();
-  return read.call(fs, fd, ...args);
+  const count = read.call(fs, fd, ...args);
+  // 1048576 matches the scanner's digest chunk size, so only the binary digest read triggers the change, once per open file.
+  if (handles.has(fd) && args[2] === 1048576 && !mutated.has(fd)) {
+    mutated.add(fd);
+    const path = paths.get(fd);
+    const before = fs.statSync(path);
+    if (operation === 'replace-during-digest') {
+      const replacement = path + '.replacement';
+      fs.writeFileSync(replacement, fs.readFileSync(path));
+      fs.utimesSync(replacement, before.atime, before.mtime);
+      fs.renameSync(replacement, path);
+    } else if (operation === 'touch-during-digest') {
+      fs.utimesSync(path, before.atime, new Date(before.mtimeMs + 2000));
+    }
+  }
+  return count;
 };
 syncBuiltinESMExports();
 `,

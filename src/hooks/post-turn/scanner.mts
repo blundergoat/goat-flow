@@ -3,10 +3,12 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   closeSync,
+  fstatSync,
   lstatSync,
   openSync,
   readFileSync,
   readSync,
+  type Stats,
 } from "node:fs";
 import { credentialAssignmentFamilies } from "./assignments.mjs";
 import {
@@ -663,39 +665,85 @@ function reportIncompleteScan(state: ScanState) {
     process.stderr.write(`post-turn-safety: scan incomplete (${message}).\n`);
 }
 
-// Digest one gap file and confirm it stayed the same binary while it was read; null leaves the identity unavailable.
+// Inspect skipped bytes with the existing high-confidence detectors; limits still leave the turn blocked.
+function scanBinaryTokens(state: ScanState, path: string, bytes: Buffer): void {
+  for (const line of bytes.toString("latin1").split(/[\n\0]/u)) {
+    if (!budgetCheck(state)) return;
+    scanTokens(state, path, line);
+  }
+}
+
+// A changed path or descriptor cannot inherit an earlier replay's identity, even when its bytes and size match.
+function isSameBinaryFile(before: Stats, after: Stats): boolean {
+  return (
+    after.isFile() &&
+    after.size === before.size &&
+    after.dev === before.dev &&
+    after.ino === before.ino &&
+    after.mtimeMs === before.mtimeMs &&
+    after.ctimeMs === before.ctimeMs
+  );
+}
+
+// Scan and hash one open file without retaining the entire asset; null means its complete bytes could not be checked.
+function digestBinaryDescriptor(
+  state: ScanState,
+  path: string,
+  descriptor: number,
+) {
+  const digest = createHash("sha256");
+  const buffer = Buffer.alloc(DIGEST_CHUNK_BYTES);
+  let pendingLine = "";
+  let total = 0;
+  let hasNulByte = false;
+  for (
+    let count = readSync(descriptor, buffer, 0, buffer.length, 0);
+    count > 0;
+    count = readSync(descriptor, buffer, 0, buffer.length, total)
+  ) {
+    if (!budgetCheck(state)) return null;
+    hasNulByte ||= buffer.subarray(0, count).includes(0);
+    digest.update(buffer.subarray(0, count));
+    total += count;
+    // Keep tokens that cross read boundaries intact without retaining the entire asset.
+    if (pendingLine.length + count > GIT_OUTPUT_LIMIT_BYTES) return null;
+    const lines = (
+      pendingLine + buffer.subarray(0, count).toString("latin1")
+    ).split(/[\n\0]/u);
+    pendingLine = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!budgetCheck(state)) return null;
+      scanTokens(state, path, line);
+    }
+  }
+  if (!budgetCheck(state)) return null;
+  scanTokens(state, path, pendingLine);
+  return { hash: digest.digest("hex"), total, hasNulByte };
+}
+
+// Scan and digest the same stable gap bytes; null leaves the identity unavailable and the turn blocked.
 function digestBinaryFile(state: ScanState, path: string): string | null {
   try {
     const before = lstatSync(path);
     if (!before.isFile()) return null;
-    const digest = createHash("sha256");
-    const buffer = Buffer.alloc(DIGEST_CHUNK_BYTES);
-    let total = 0;
-    let hasNulByte = false;
     const descriptor = openSync(path, "r");
+    let result;
     try {
-      for (
-        let count = readSync(descriptor, buffer, 0, buffer.length, 0);
-        count > 0;
-        count = readSync(descriptor, buffer, 0, buffer.length, total)
-      ) {
-        // A spent budget cannot finish the digest, so the user's turn stays blocked.
-        if (isBudgetSpent(state)) return null;
-        hasNulByte ||= buffer.subarray(0, count).includes(0);
-        digest.update(buffer.subarray(0, count));
-        total += count;
-      }
+      if (!isSameBinaryFile(before, fstatSync(descriptor))) return null;
+      result = digestBinaryDescriptor(state, path, descriptor);
     } finally {
       closeSync(descriptor);
     }
-    const after = lstatSync(path);
-    // A file replaced or resized while it was read cannot inherit an earlier replay's identity.
-    if (!after.isFile() || after.size !== total || total !== before.size)
+    if (
+      result === null ||
+      result.total !== before.size ||
+      !isSameBinaryFile(before, lstatSync(path))
+    )
       return null;
     // Git also reports `-diff` text as binary; without a NUL byte the file keeps blocking every Stop.
-    return hasNulByte ? digest.digest("hex") : null;
+    return result.hasNulByte ? result.hash : null;
   } catch {
-    // For example, the file vanished or lost read access after inventory; the turn stays blocked with the state warning.
+    // A vanished or unreadable file has no trustworthy identity, so the turn stays blocked.
     return null;
   }
 }
@@ -723,6 +771,7 @@ function stagedBlobIds(paths: string[]): Map<string, string> | null {
 
 // Identify every binary gap by root, path, message, worktree digest and staged blob; null keeps the turn blocked.
 function binaryGapIdentity(state: ScanState, root: string): string | null {
+  if (state.findings > 0 || !hasOnlyBinaryGaps(state)) return null;
   const blobs = stagedBlobIds([
     ...new Set(state.coverageGaps.map((gap) => gap.path)),
   ]);
@@ -733,6 +782,16 @@ function binaryGapIdentity(state: ScanState, root: string): string | null {
     if (digest === null) return null;
     // An untracked binary has no index entry, recorded as "-" so staging it later changes the identity.
     const blob = blobs.get(gap.path) ?? "-";
+    if (blob !== "-") {
+      const staged = runGit(
+        state,
+        ["cat-file", "blob", blob],
+        "Git binary blob read failed",
+      );
+      if (staged === null) return null;
+      scanBinaryTokens(state, gap.path, staged);
+      if (state.isBailed) return null;
+    }
     entries.push(JSON.stringify([gap.path, gap.message, digest, blob]));
   }
   return ["coverage-gap:v1", root, ...entries.sort()].join("\n");
@@ -749,6 +808,8 @@ function hasOnlyBinaryGaps(state: ScanState): boolean {
 
 // Turn the scan state into the Stop status; findings always block, and only command failures or unchanged binary gaps may end a repeated Stop.
 function finishScan(state: ScanState, root: string, variant: string): number {
+  // Binary classification is only a coverage warning; both committable views must be checked before any release.
+  const gapIdentity = binaryGapIdentity(state, root);
   const context = state.context;
   context.detectedFindings = state.findings;
   context.incomplete = state.isBailed;
@@ -767,11 +828,9 @@ function finishScan(state: ScanState, root: string, variant: string): number {
     );
     return 2;
   }
-  // Only binaries the detectors cannot read may end an unchanged active replay; any other gap or a bailed scan blocks.
+  // Only stable binary gaps with no high-confidence secret may end an unchanged replay; all other gaps remain blocking.
   if (hasOnlyBinaryGaps(state))
-    return finishCoverageGap(context, root, () =>
-      binaryGapIdentity(state, root),
-    );
+    return finishCoverageGap(context, root, () => gapIdentity);
   // Every other incomplete content coverage blocks each Stop replay, even when unchanged.
   if (
     context.coverageGap ||

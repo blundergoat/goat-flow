@@ -1,5 +1,6 @@
 /** Scan only the explicit Git roots a managed non-Git controller lists, using native Node children. */
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -108,6 +109,7 @@ interface NamedResult {
 interface ControllerRun {
   status: number;
   stdout: string;
+  resetCoverageGapRoots?: string[];
 }
 
 export interface ControllerOptions {
@@ -587,11 +589,7 @@ function childOutputSummary(
 
 // Keep outcome-deciding findings first so the user sees why the aggregate blocks; preserve declared order for all remaining details.
 function aggregateFindings(childResults: NamedResult[], outcome: string) {
-  const findingChildren =
-    outcome === "block"
-      ? childResults.filter((child) => child.result.outcome === "block")
-      : childResults;
-  const collected = findingChildren.flatMap((child) =>
+  const collected = childResults.flatMap((child) =>
     child.result.findings.map((finding) => ({
       isDecisive: child.result.outcome === outcome,
       finding: {
@@ -608,7 +606,7 @@ function aggregateFindings(childResults: NamedResult[], outcome: string) {
     .slice(0, 20)
     .map((entry) => entry.finding);
   const summary = {
-    detectedFindings: findingChildren.reduce(
+    detectedFindings: childResults.reduce(
       (total, child) =>
         total +
         (child.result.summary?.detectedFindings ??
@@ -616,7 +614,7 @@ function aggregateFindings(childResults: NamedResult[], outcome: string) {
       0,
     ),
     envelopeOmittedFindings:
-      findingChildren.reduce(
+      childResults.reduce(
         (total, child) =>
           total + (child.result.summary?.envelopeOmittedFindings ?? 0),
         0,
@@ -748,11 +746,25 @@ export async function runControllerProgram(
       result: await scanControllerChild(settings, scanUnit),
     });
   const aggregate = aggregateResult(childResults, settings);
+  // A sibling finding must not pre-arm a binary release; after that finding is fixed, the gap must block once itself.
+  const resetCoverageGapRoots =
+    aggregate.outcome === "block"
+      ? scanUnits
+          .filter((_, index) =>
+            childResults[index]?.result.findings.some(
+              (finding) =>
+                finding.code === "coverage-gap" &&
+                finding.message.startsWith("binary "),
+            ),
+          )
+          .map((unit) => unit.root)
+      : [];
   // Managed callers receive one structured aggregate for the provider adapter.
   if (settings.managed !== null)
     return {
       status: 0,
       stdout: `${JSON.stringify(settings.managed.runtime.compactHookResultEnvelope(aggregate))}\n`,
+      resetCoverageGapRoots,
     };
   return {
     status: reportDirectResult(
@@ -761,6 +773,7 @@ export async function runControllerProgram(
       aggregate.findings,
     ),
     stdout: "",
+    resetCoverageGapRoots,
   };
 }
 
@@ -806,6 +819,16 @@ export async function runControllerChildScans(
     run = { status: 2, stdout: "" };
   }
   if (run.status === 3) return 3;
+  // Children hash the parent's fingerprint as their session id, so clear only that derived session's regular owned record.
+  const childContext = {
+    ...context,
+    sessionFingerprint: createHash("sha256")
+      .update(context.sessionFingerprint)
+      .digest("hex"),
+    statePaths: null,
+  };
+  for (const root of run.resetCoverageGapRoots ?? [])
+    clearStopReentryState(childContext, root);
   // Once child scope is established, stale single-root failure state cannot affect this topology.
   clearStopReentryState(context, controllerRoot);
   if (run.stdout !== "") process.stdout.write(run.stdout);

@@ -20,6 +20,8 @@
 
 ### Security
 
+- **Binary files cannot hide secrets from Stop hooks** - Post-turn safety keeps blocking when skipped worktree or staged content holds a token or private key. Run `goat-flow hooks sync` to update existing installs.
+
 - **Native PowerShell policy inspection** - Literal commands reach both owning policies; unresolved dynamic execution and session-state changes remain blocked. Run `goat-flow hooks sync` to refresh existing installations.
 
 - **Windows GitHub CLI paths stay protected** - GitHub write protection recognizes Windows executable names and paths while preserving read and comment exceptions.

@@ -726,6 +726,7 @@ console.log(JSON.stringify({
 describe("post-turn-safety hook: controller binary coverage gaps", () => {
   // A GLB header: its NUL bytes make each child report the asset as an unscannable binary.
   const glbBytes = Buffer.from([103, 108, 84, 70, 2, 0, 0, 0]);
+  // Require a managed envelope so replay assertions cannot mistake an empty successful exit for a clean result.
   const managedStop = (
     controllerRoot: string,
     sessionId: string,
@@ -782,6 +783,37 @@ describe("post-turn-safety hook: controller binary coverage gaps", () => {
       assert.match(
         String(direct[1]?.stderr),
         /ending repeated Stop after unchanged coverage gap/u,
+      );
+    });
+  });
+
+  it("reports a sibling binary gap and requires its own block after repairing the finding", () => {
+    withTempController(["assets", "blocked"], (controllerRoot, childRoots) => {
+      writeFile(childRoots.assets as string, "asset.glb", glbBytes);
+      writeFile(
+        childRoots.blocked as string,
+        "settings.env",
+        `API_KEY=${TEST_API_TOKEN}\n`,
+      );
+      const blocked = managedStop(controllerRoot, "controller-sibling", false);
+      assert.equal(blocked.outcome, "block");
+      assert.equal(blocked.findings[0].target, "blocked/settings.env");
+      assert.ok(
+        blocked.findings.some(
+          (finding: { target: string; code: string }) =>
+            finding.target === "assets/asset.glb" &&
+            finding.code === "coverage-gap",
+        ),
+      );
+      // The agent fixes the token; the binary must now block once on its own before an unchanged retry may release it.
+      writeFile(childRoots.blocked as string, "settings.env", "MODE=local\n");
+      assert.equal(
+        managedStop(controllerRoot, "controller-sibling", true).reasonCode,
+        "coverage-incomplete",
+      );
+      assert.equal(
+        managedStop(controllerRoot, "controller-sibling", true).reasonCode,
+        "coverage-gap-reentry-ended",
       );
     });
   });
