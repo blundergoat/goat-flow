@@ -542,12 +542,16 @@ const handles = new Set();
 const paths = new Map();
 const mutated = new Set();
 const fail = () => { throw Object.assign(new Error('injected scanner file failure'), { code: 'EACCES' }); };
+// Wrap each call the scanner uses to open or inspect settings.env, so a test can break it the way a locked or deleted file would.
 for (const name of ['openSync', 'readFileSync', 'lstatSync']) {
   const original = fs[name];
   fs[name] = function(path, ...args) {
+    // The chosen call fails as if the user had locked settings.env, for example by removing read permission mid-turn.
     if (matches(path) && name === operation) fail();
     const result = original.call(fs, path, ...args);
+    // Remember every open settings.env handle, so later reads can be faulted or changed.
     if (matches(path) && name === 'openSync') { handles.add(result); paths.set(result, path); }
+    // The file disappears right after the scanner looks at it, as if the agent deleted it during the scan.
     if (matches(path) && name === 'lstatSync' && operation === 'vanish') fs.unlinkSync(path);
     return result;
   };
@@ -556,6 +560,7 @@ const close = fs.closeSync;
 fs.closeSync = function(fd) { handles.delete(fd); paths.delete(fd); return close.call(fs, fd); };
 const read = fs.readSync;
 fs.readSync = function(fd, ...args) {
+  // Reading settings.env fails part-way, as if the disk or a permission change interrupted the scan.
   if (operation === 'readSync' && handles.has(fd)) fail();
   const count = read.call(fs, fd, ...args);
   // 1048576 matches the scanner's digest chunk size, so only the binary digest read triggers the change, once per open file.
@@ -563,12 +568,14 @@ fs.readSync = function(fd, ...args) {
     mutated.add(fd);
     const path = paths.get(fd);
     const before = fs.statSync(path);
+    // Swap in an identical copy with the same timestamps, as if an editor saved the file by replacing it mid-scan.
     if (operation === 'replace-during-digest') {
       const replacement = path + '.replacement';
       fs.writeFileSync(replacement, fs.readFileSync(path));
       fs.utimesSync(replacement, before.atime, before.mtime);
       fs.renameSync(replacement, path);
     } else if (operation === 'touch-during-digest') {
+      // Leave the bytes alone but move the modified time, as if a tool touched the file mid-scan.
       fs.utimesSync(path, before.atime, new Date(before.mtimeMs + 2000));
     }
   }
@@ -577,6 +584,7 @@ fs.readSync = function(fd, ...args) {
 syncBuiltinESMExports();
 `,
     );
+    // Keep any NODE_OPTIONS the test run already set; when none is set, only the fault preload is added.
     scenario({
       NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(preload)}`,
     });

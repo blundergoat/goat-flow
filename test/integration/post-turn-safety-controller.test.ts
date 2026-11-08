@@ -798,6 +798,7 @@ describe("post-turn-safety hook: controller binary coverage gaps", () => {
       const blocked = managedStop(controllerRoot, "controller-sibling", false);
       assert.equal(blocked.outcome, "block");
       assert.equal(blocked.findings[0].target, "blocked/settings.env");
+      // The user must also see the binary asset in the other root listed, not only the token that caused the block.
       assert.ok(
         blocked.findings.some(
           (finding: { target: string; code: string }) =>

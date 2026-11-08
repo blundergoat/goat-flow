@@ -114,6 +114,7 @@ describe("binary coverage gaps cannot release secrets", () => {
         // A `-diff` attribute makes Git report even a text file as binary.
         if (baseline === "attribute")
           writeFile(root, ".gitattributes", "settings.env -diff\n");
+        // The committed baseline is either a real binary or harmless text that the attribute makes Git treat as binary.
         writeFile(
           root,
           "settings.env",
