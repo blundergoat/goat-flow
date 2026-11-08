@@ -5,11 +5,21 @@
  * A secret must block every replay, and a binary that changes identity must not inherit an earlier release.
  */
 import assert from "node:assert/strict";
-import { existsSync, readdirSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   TEST_API_TOKEN,
+  TEST_GITHUB_TOKEN,
   TEST_PRIVATE_KEY_HEADER,
   buildStopPayload,
   commitAll,
@@ -77,15 +87,39 @@ describe("binary coverage gaps cannot release secrets", () => {
       "API token",
     ],
     [
-      "private key beside NUL",
+      "private key with key data beside NUL",
       "asset.bin",
-      `${TEST_PRIVATE_KEY_HEADER}\0\n`,
+      `${TEST_PRIVATE_KEY_HEADER}\n${"b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAAB".repeat(2)}\n\0`,
       "private key block",
     ],
     [
       "token beyond the digest chunk",
       "asset.bin",
       `\0${"a".repeat(1_048_560)}\n${TEST_API_TOKEN}\n`,
+      "API token",
+    ],
+    [
+      "label far before a token glued to a word character",
+      "asset.bin",
+      `\0API_KEY=${"a".repeat(3 * 1_048_576)}Z${TEST_API_TOKEN}\n`,
+      "API token",
+    ],
+    [
+      "placeholder token before a real one",
+      "asset.bin",
+      `\0sk-${"x".repeat(40)} ${TEST_API_TOKEN}\n`,
+      "API token",
+    ],
+    [
+      "UTF-16LE token",
+      "notes.bin",
+      Buffer.from(`API_KEY=${TEST_API_TOKEN}\n`, "utf16le"),
+      "API token",
+    ],
+    [
+      "UTF-16BE token",
+      "notes.bin",
+      Buffer.from(`\0API_KEY=${TEST_API_TOKEN}\n`, "utf16le").swap16(),
       "API token",
     ],
   ] as const) {
@@ -190,4 +224,113 @@ describe("binary coverage gaps cannot release secrets", () => {
       });
     });
   }
+});
+
+/**
+ * Build a binary just over the scanner's old 256 MiB Git output cap: a NUL byte, then one long run with no line break.
+ *
+ * @param tail - text after the run; empty means the asset holds no secret
+ * @returns asset bytes larger than 256 MiB
+ */
+function largeBinary(tail: string): Buffer {
+  return Buffer.concat([
+    BINARY_GLB_HEADER,
+    Buffer.alloc(257 * 1_048_576, 0x61),
+    Buffer.from(tail),
+  ]);
+}
+
+describe("large binary gaps are scanned, not stuck", () => {
+  it("releases a clean staged binary over 256 MiB after one block", () => {
+    withTempRepo((root) => {
+      // The user staged a large asset, such as an exported 3D scene, with nothing secret inside.
+      writeFile(root, "scene.glb", largeBinary(""));
+      runGit(root, ["add", "scene.glb"]);
+      assert.equal(runStop(root, false).status, 2);
+      // An unchanged retry may end the turn, because both copies were fully scanned.
+      const retry = runStop(root, true);
+      assert.equal(retry.status, 0, retry.stderr);
+    });
+  });
+
+  it("blocks a token at the end of a staged binary over 256 MiB on every Stop", () => {
+    withTempRepo((root) => {
+      writeFile(root, "scene.glb", largeBinary(`\n${TEST_API_TOKEN}\n`));
+      runGit(root, ["add", "scene.glb"]);
+      // The worktree copy is clean, so only a full scan of the staged copy can find the token.
+      writeFile(root, "scene.glb", largeBinary(""));
+      // The first Stop and both retries must block, because a commit would publish the staged token.
+      for (const isReplay of [false, true, true]) {
+        const result = runStop(root, isReplay);
+        assert.equal(result.status, 2, result.stderr);
+        assert.match(String(result.stderr), /blocked API token/u);
+      }
+      assert.deepEqual(replayRecords(root), []);
+    });
+  });
+
+  it("releases a program that only contains key-header text", () => {
+    withTempRepo((root) => {
+      // Like ssh or a TLS library: the header string sits in a string table, followed by text and an uppercase hex constant, not key data.
+      writeFile(
+        root,
+        "ssh-tool",
+        `\0${TEST_PRIVATE_KEY_HEADER}\0usage: ssh-tool [options] destination\0${"9292758453063D803DD603D5E777D788".repeat(2)}\n`,
+      );
+      const first = runStop(root, false);
+      assert.equal(first.status, 2, first.stderr);
+      assert.doesNotMatch(String(first.stderr), /blocked private key block/u);
+      // Header text alone is not key material, so the unchanged retry may end the turn.
+      assert.equal(runStop(root, true).status, 0);
+    });
+  });
+
+  it("does not read every other byte of plain binary text as a token", () => {
+    withTempRepo((root) => {
+      // Like a library symbol table: ASCII with no NUL beside each character, whose every other byte spells a token shape.
+      const interleaved = Array.from(
+        TEST_GITHUB_TOKEN,
+        (character) => `${character}x`,
+      ).join("");
+      writeFile(root, "libexample.so", `\0${interleaved}\n`);
+      const first = runStop(root, false);
+      assert.equal(first.status, 2, first.stderr);
+      assert.doesNotMatch(String(first.stderr), /blocked GitHub token/u);
+      // Without a real finding, the unchanged retry may end the turn as for any clean binary.
+      assert.equal(runStop(root, true).status, 0);
+    });
+  });
+
+  it("checks a long run of label words quickly", () => {
+    withTempRepo((root) => {
+      // A run of repeated label words with no token once made the labelled-token pattern take minutes per window.
+      writeFile(root, "labels.bin", `\0${"TOKEN".repeat(209_715)}\n`);
+      const started = performance.now();
+      const result = runStop(root, false);
+      assert.equal(result.status, 2, result.stderr);
+      assert.doesNotMatch(String(result.stderr), /budget/u);
+      assert.ok(performance.now() - started < 15_000, "the Stop took too long");
+    });
+  });
+
+  it("removes staged copies left behind by a killed earlier Stop", () => {
+    withTempRepo((root) => {
+      const scratch = mkdtempSync(join(tmpdir(), "goat-flow-staged-sweep-"));
+      try {
+        // An earlier hook was killed mid-scan (for example by a provider timeout), so its private copy stayed in the temp folder.
+        const stale = join(scratch, "goat-flow-staged-blob-stale");
+        mkdirSync(stale);
+        writeFileSync(join(stale, "blob"), "stale staged copy\n");
+        const hourAgo = new Date(Date.now() - 2 * 3_600_000);
+        utimesSync(stale, hourAgo, hourAgo);
+        writeFile(root, "scene.glb", BINARY_GLB_HEADER);
+        runGit(root, ["add", "scene.glb"]);
+        const environment = { TMPDIR: scratch, TMP: scratch, TEMP: scratch };
+        assert.equal(runStop(root, false, environment).status, 2);
+        assert.equal(existsSync(stale), false);
+      } finally {
+        rmSync(scratch, { recursive: true, force: true });
+      }
+    });
+  });
 });

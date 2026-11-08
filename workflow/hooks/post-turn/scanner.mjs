@@ -3,7 +3,9 @@
 /** Scan the turn's committable changes for high-confidence secrets, literal credential assignments and conflict markers. */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, fstatSync, lstatSync, openSync, readFileSync, readSync, } from "node:fs";
+import { closeSync, fstatSync, lstatSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { credentialAssignmentFamilies } from "./assignments.mjs";
 import { recordPostTurnResultFinding, } from "./context.mjs";
 import { clearStopReentryState, finishCoverageGap, finishInfrastructureFailure, } from "./recovery.mjs";
@@ -15,15 +17,34 @@ const GIT_OUTPUT_LIMIT_BYTES = 268_435_456;
 const BINARY_PROBE_BYTES = 32_768;
 // Read size for binary digests; the scan time budget, not a byte cap, bounds large assets.
 const DIGEST_CHUNK_BYTES = 1_048_576;
+// Longest unbroken binary run held in memory; a longer run is scanned, then trimmed to its tail.
+const BINARY_LINE_WINDOW_CHARS = 1_048_576;
+// Tail kept after a trim; longer than any detector needs, so a token cut by the trim still matches.
+const BINARY_LINE_OVERLAP_CHARS = 4_096;
+// Key data after a private-key header: a base64 line (PEM or OpenSSH) or the legacy encrypted-PEM marker; a CRLF ending is allowed.
+// A base64 line must contain a lowercase letter, so uppercase hex constants that libraries print near header text are not key data.
+const PRIVATE_KEY_BODY = /^(?:(?=[A-Za-z0-9+/]*[a-z])[A-Za-z0-9+/]{40,}={0,2}|Proc-Type: 4,ENCRYPTED)\r?$/u;
+// Runs after a header that may still hold its key data, enough to pass PGP "Version:" and "Comment:" lines.
+const KEY_BODY_SEARCH_RUNS = 3;
+// Temp-folder prefix for private staged copies, also used to find copies a killed Stop left behind.
+const STAGED_COPY_PREFIX = "goat-flow-staged-blob-";
+// A staged copy older than this was left by a killed Stop; live scans finish within their budget.
+const STALE_STAGED_COPY_MS = 3_600_000;
+// One line of binary text worth checking: a run of at least 20 bytes between newlines or NUL bytes.
+// Shorter runs cannot hold a finding, because the shortest detectable secret (an AWS access key) is 20 characters.
+const BINARY_TEXT_RUN = /[^\n\0]{20,}/gu;
 // The numstat inventory and whole-file admission name the only gaps an unchanged replay may end.
 const BINARY_GAP_MESSAGE = /^binary (changed|untracked|unborn worktree) path not scanned$/u;
-const AWS_TOKEN = /(AKIA|ASIA)[A-Z0-9]{16}/u;
-const GITHUB_LEGACY_TOKEN = /gh[pousr]_[A-Za-z0-9_]{30,}/u;
-const GITHUB_FINE_GRAINED_TOKEN = /github_pat_[A-Za-z0-9_]{20,}/u;
-const NPM_TOKEN = /npm_[A-Za-z0-9]{36,}/u;
-const SLACK_TOKEN = /xox[baprs]-[A-Za-z0-9-]{20,}/u;
-const LABELLED_API_TOKEN = /(OPENAI|ANTHROPIC|API_KEY|TOKEN).*(sk-[A-Za-z0-9][A-Za-z0-9_-]{31,})/su;
-const BARE_API_TOKEN = /(^|[^A-Za-z0-9_])(sk-[A-Za-z0-9][A-Za-z0-9_-]{31,})([^A-Za-z0-9_]|$)/u;
+// Global patterns: every match on a line is checked, so a placeholder earlier on the line cannot hide a real token.
+const AWS_TOKEN = /(AKIA|ASIA)[A-Z0-9]{16}/gu;
+const GITHUB_TOKEN = /gh[pousr]_[A-Za-z0-9_]{30,}|github_pat_[A-Za-z0-9_]{20,}/gu;
+const NPM_TOKEN = /npm_[A-Za-z0-9]{36,}/gu;
+const SLACK_TOKEN = /xox[baprs]-[A-Za-z0-9-]{20,}/gu;
+const API_TOKEN = /sk-[A-Za-z0-9][A-Za-z0-9_-]{31,}/gu;
+// A provider label anywhere before an `sk-` token marks it as an API key, even when the token is glued to other text.
+const API_TOKEN_LABEL = /OPENAI|ANTHROPIC|API_KEY|TOKEN/u;
+// A character that makes an unlabelled `sk-` match part of a longer word rather than a standalone token.
+const WORD_CHARACTER = /[A-Za-z0-9_]/u;
 // Encrypted PKCS#8 and PGP key blocks expose key material too, so they block like the other private-key headers.
 const PRIVATE_KEY = /-----BEGIN[ \t\n\v\f\r](RSA[ \t\n\v\f\r]|DSA[ \t\n\v\f\r]|EC[ \t\n\v\f\r]|OPENSSH[ \t\n\v\f\r]|ENCRYPTED[ \t\n\v\f\r])?PRIVATE[ \t\n\v\f\r]KEY-----|-----BEGIN[ \t\n\v\f\r]PGP[ \t\n\v\f\r]PRIVATE[ \t\n\v\f\r]KEY[ \t\n\v\f\r]BLOCK-----/u;
 const PLACEHOLDER_ALL_X = /^(gh[pousr]_|github_pat_|npm_|sk-)?x+$/u;
@@ -199,11 +220,6 @@ function reportFinding(state, path, family) {
     if (!state.context.managedResultMode && state.findings <= state.maxFindings)
         process.stderr.write(`post-turn-safety: blocked ${family} in ${path}\n`);
 }
-// Report a raw token unless the matched value is an obvious placeholder.
-function reportTokenIfReal(state, path, family, token) {
-    if (!isPlaceholderToken(token ?? ""))
-        reportFinding(state, path, family);
-}
 // Reset ordered conflict-marker state when scanning moves to another file.
 function resetMergeConflictScan(state, path) {
     state.conflictPath = path;
@@ -237,28 +253,63 @@ function scanLine(state, path, rawLine) {
         for (const family of credentialAssignmentFamilies(path, line, isPlaceholderToken))
             reportFinding(state, path, family);
 }
-// Report private-key headers and provider token shapes, skipping obvious placeholders.
-function scanTokens(state, path, line) {
-    // A private-key header means the changed file can expose a complete key block.
-    if (PRIVATE_KEY.test(line))
+/**
+ * Report private-key headers and provider token shapes in one line, skipping obvious placeholders.
+ *
+ * @param state - scan state that records findings for the user
+ * @param path - repository path named in any finding
+ * @param line - one line of changed content; empty finds nothing
+ * @param options - binary-run context; empty means an ordinary text line, where a key header alone blocks
+ */
+function scanTokens(state, path, line, options = {}) {
+    // In text a private-key header means the file can expose a key block; binary runs also need key data (see scanBinaryRun).
+    if (!options.isBinaryRun && PRIVATE_KEY.test(line))
         reportFinding(state, path, "private key block");
-    const aws = AWS_TOKEN.exec(line);
-    if (aws)
-        reportTokenIfReal(state, path, "AWS access key", aws[0]);
+    reportFirstRealToken(state, path, "AWS access key", AWS_TOKEN, line);
     // Both legacy and fine-grained GitHub tokens share one user-facing family.
-    const github = GITHUB_LEGACY_TOKEN.exec(line) ?? GITHUB_FINE_GRAINED_TOKEN.exec(line);
-    if (github)
-        reportTokenIfReal(state, path, "GitHub token", github[0]);
-    const npm = NPM_TOKEN.exec(line);
-    if (npm)
-        reportTokenIfReal(state, path, "npm token", npm[0]);
-    const slack = SLACK_TOKEN.exec(line);
-    if (slack)
-        reportTokenIfReal(state, path, "Slack token", slack[0]);
-    // A labelled provider token takes priority so it is reported only once; a bare token still blocks.
-    const apiToken = LABELLED_API_TOKEN.exec(line) ?? BARE_API_TOKEN.exec(line);
-    if (apiToken)
-        reportTokenIfReal(state, path, "API token", apiToken[2]);
+    reportFirstRealToken(state, path, "GitHub token", GITHUB_TOKEN, line);
+    reportFirstRealToken(state, path, "npm token", NPM_TOKEN, line);
+    reportFirstRealToken(state, path, "Slack token", SLACK_TOKEN, line);
+    reportFirstRealApiToken(state, path, line, options.isLabelEarlier ?? false);
+}
+/**
+ * Report an `sk-` API key that is labelled earlier in the line or stands alone, skipping obvious placeholders.
+ *
+ * @param state - scan state that records findings for the user
+ * @param path - repository path named in the finding
+ * @param line - one line of changed content; empty finds nothing
+ * @param isLabelEarlier - true when a provider label was trimmed out of this line before the scanned text
+ */
+function reportFirstRealApiToken(state, path, line, isLabelEarlier) {
+    const labelAt = API_TOKEN_LABEL.exec(line)?.index ?? -1;
+    // Each `sk-` match is an API key when a label came earlier in the line or when it stands alone, not glued to a word.
+    for (const match of line.matchAll(API_TOKEN)) {
+        const isLabelled = isLabelEarlier || (labelAt >= 0 && labelAt < match.index);
+        const isStandalone = match.index === 0 || !WORD_CHARACTER.test(line.charAt(match.index - 1));
+        // The first real labelled or standalone key blocks the Stop; one finding per family is enough.
+        if ((isLabelled || isStandalone) && !isPlaceholderToken(match[0])) {
+            reportFinding(state, path, "API token");
+            return;
+        }
+    }
+}
+/**
+ * Report a token family when any match on the line is real, so an example value earlier on the line cannot hide a real secret.
+ *
+ * @param state - scan state that records findings for the user
+ * @param path - repository path named in the finding
+ * @param family - user-facing token family, such as "GitHub token"
+ * @param pattern - global token pattern for this family
+ * @param line - one line of changed content; empty finds nothing
+ */
+function reportFirstRealToken(state, path, family, pattern, line) {
+    // The first match that is not an obvious placeholder is enough to block the Stop.
+    for (const match of line.matchAll(pattern)) {
+        if (!isPlaceholderToken(match[0])) {
+            reportFinding(state, path, family);
+            return;
+        }
+    }
 }
 // Decode a Git-quoted path so findings show the actual filename, including non-ASCII names and escapes.
 function unquoteGitPath(encoded) {
@@ -515,12 +566,259 @@ function reportIncompleteScan(state) {
     for (const message of state.coverageGapMessages)
         process.stderr.write(`post-turn-safety: scan incomplete (${message}).\n`);
 }
-// Inspect skipped bytes with the existing high-confidence detectors; limits still leave the turn blocked.
-function scanBinaryTokens(state, path, bytes) {
-    for (const line of bytes.toString("latin1").split(/[\n\0]/u)) {
+/**
+ * Check one run of binary text, reporting a private key only when key data follows its header.
+ * Example: a TLS library or the ssh program embeds header text with no key after it, so staging that program does not block every Stop.
+ *
+ * @param state - scan state that records findings for the user
+ * @param path - repository path named in any finding
+ * @param view - text view that remembers an open key header between runs
+ * @param run - one run of at least 20 characters between newlines or NUL bytes
+ * @param isLabelEarlier - true when a provider label was trimmed out of this run's line
+ */
+function scanBinaryRun(state, path, view, run, isLabelEarlier) {
+    // A run shortly after a key header that looks like key data means a real key block was saved in the file.
+    if (view.keyHeaderRunsLeft > 0) {
+        if (PRIVATE_KEY_BODY.test(run))
+            reportFinding(state, path, "private key block");
+        view.keyHeaderRunsLeft -= 1;
+    }
+    // A header opens a short search for its key data; header text in a program's string table never finds any.
+    if (PRIVATE_KEY.test(run))
+        view.keyHeaderRunsLeft = KEY_BODY_SEARCH_RUNS;
+    scanTokens(state, path, run, { isLabelEarlier, isBinaryRun: true });
+}
+/**
+ * Scan one chunk of a binary text view line by line, keeping an unfinished line for the next chunk.
+ * Used while a skipped binary file is checked for secrets before an unchanged Stop retry may end the agent's turn.
+ *
+ * @param state - scan state that records findings and the time budget
+ * @param path - repository path named in any finding the user sees
+ * @param view - text view whose unfinished line carries across chunks
+ * @param text - next chunk of this view as latin1 text; empty adds nothing
+ * @returns false when the time budget ran out, which leaves the turn blocked
+ */
+function scanBinaryView(state, path, view, text) {
+    const combined = view.pending + text;
+    const lastBreak = Math.max(combined.lastIndexOf("\n"), combined.lastIndexOf("\0"));
+    const carriedLabel = view.isLabelEarlier;
+    view.pending = combined.slice(lastBreak + 1);
+    // Only runs long enough to hold a secret are visited, so zero-padded assets and short binary fragments scan quickly.
+    for (const match of combined
+        .slice(0, Math.max(lastBreak, 0))
+        .matchAll(BINARY_TEXT_RUN)) {
+        // A spent budget stops here, and the user's turn stays blocked.
         if (!budgetCheck(state))
-            return;
-        scanTokens(state, path, line);
+            return false;
+        // Only the run that finishes the carried line inherits a label trimmed from that line.
+        scanBinaryRun(state, path, view, match[0], carriedLabel && match.index === 0);
+    }
+    // A line break ended the carried line, so its trimmed label no longer applies.
+    if (lastBreak >= 0)
+        view.isLabelEarlier = false;
+    // A huge run with no line break is scanned in windows, so a large asset is neither skipped nor held whole in memory.
+    if (view.pending.length > BINARY_LINE_WINDOW_CHARS) {
+        scanBinaryRun(state, path, view, view.pending, view.isLabelEarlier);
+        // Remember a label about to be trimmed; the slice reaches a little into the kept tail, so a label cut in half still counts.
+        view.isLabelEarlier ||= API_TOKEN_LABEL.test(view.pending.slice(0, -BINARY_LINE_OVERLAP_CHARS + 16));
+        view.pending = view.pending.slice(-BINARY_LINE_OVERLAP_CHARS);
+    }
+    return true;
+}
+/**
+ * Split bytes into even-position and odd-position views that keep only UTF-16 characters, for example a token saved by a Windows tool.
+ *
+ * A byte counts as a character only when a NUL sits next to it, as in "A\0B\0".
+ * Plain binary text, such as a library symbol table, has no NUL beside each character, so it becomes separators and cannot spell a fake token.
+ *
+ * @param bytes - bytes to split; the byte after the last emitted one serves only as lookahead
+ * @param offset - file position of `bytes[0]`; it keeps both views aligned across chunks
+ * @param previousByte - the file byte just before `bytes`; -1 at the start of the file
+ * @param end - number of leading bytes to emit; 0 emits nothing
+ * @returns even-position and odd-position text, with NUL characters as separators
+ */
+function utf16Views(bytes, offset, previousByte, end) {
+    const evenBytes = Buffer.allocUnsafe(Math.ceil(end / 2) + 1);
+    const oddBytes = Buffer.allocUnsafe(Math.ceil(end / 2) + 1);
+    let evenLength = 0;
+    let oddLength = 0;
+    // Each emitted byte goes to the view that matches its position in the whole file, not just in this chunk.
+    for (let index = 0; index < end; index += 1) {
+        const byte = bytes[index];
+        const before = index > 0 ? bytes[index - 1] : previousByte;
+        const after = index + 1 < bytes.length ? bytes[index + 1] : -1;
+        // Only a non-NUL byte with a NUL neighbour is a UTF-16 character; anything else becomes a separator.
+        const value = byte !== 0 && (before === 0 || after === 0) ? byte : 0;
+        // Even file positions carry UTF-16LE text that starts on an even byte, or UTF-16BE text that starts one byte later.
+        if ((offset + index) % 2 === 0)
+            evenBytes[evenLength++] = value;
+        else
+            oddBytes[oddLength++] = value;
+    }
+    return [
+        evenBytes.toString("latin1", 0, evenLength),
+        oddBytes.toString("latin1", 0, oddLength),
+    ];
+}
+/**
+ * Check one binary byte stream for secrets as raw text and as UTF-16 in either byte order.
+ * Feed it each chunk in file order, then finish it; any false result leaves the agent's turn blocked.
+ *
+ * @param state - scan state that records findings and the time budget
+ * @param path - repository path named in any finding the user sees
+ * @returns feed and finish steps that report false when the time budget ran out
+ */
+function createBinaryTextScan(state, path) {
+    const raw = {
+        pending: "",
+        isLabelEarlier: false,
+        keyHeaderRunsLeft: 0,
+    };
+    const even = {
+        pending: "",
+        isLabelEarlier: false,
+        keyHeaderRunsLeft: 0,
+    };
+    const odd = {
+        pending: "",
+        isLabelEarlier: false,
+        keyHeaderRunsLeft: 0,
+    };
+    // The last byte of each chunk waits for the next chunk, because its UTF-16 status depends on the byte after it.
+    let heldBytes = Buffer.alloc(0);
+    let previousByte = -1;
+    let offset = 0;
+    // Emit the UTF-16 views for `block`, all but its last byte unless this is the end of the file.
+    const scanUtf16 = (block, isEnd) => {
+        const end = isEnd ? block.length : Math.max(block.length - 1, 0);
+        const [evenText, oddText] = utf16Views(block, offset, previousByte, end);
+        offset += end;
+        // Remember the byte before the held one, so the next chunk can judge it.
+        if (end > 0)
+            previousByte = block[end - 1];
+        heldBytes = block.subarray(end);
+        return (scanBinaryView(state, path, even, evenText) &&
+            scanBinaryView(state, path, odd, oddText));
+    };
+    return {
+        feed(bytes) {
+            // The caller reuses its read buffer, so the held byte is copied before the next read overwrites it.
+            const block = Buffer.concat([heldBytes, bytes]);
+            return (scanBinaryView(state, path, raw, bytes.toString("latin1")) &&
+                scanUtf16(block, false));
+        },
+        finish() {
+            // The held last byte of the file has no byte after it, so it is judged here.
+            if (!scanUtf16(heldBytes, true))
+                return false;
+            // A spent budget means the last lines were never checked, so the turn stays blocked.
+            if (!budgetCheck(state))
+                return false;
+            // The file's last line has no terminator, so each view checks it here.
+            for (const view of [raw, even, odd])
+                scanBinaryRun(state, path, view, view.pending, view.isLabelEarlier);
+            return true;
+        },
+    };
+}
+/**
+ * Copy one staged blob to a private temp file and scan it there, so an asset the user staged is checked whatever its size.
+ * Example: the user staged a 300 MiB scene export; an in-memory Git read would fail and block every Stop.
+ *
+ * @param state - scan state that records findings, failures and the time budget
+ * @param path - repository path named in any finding the user sees
+ * @param blob - staged blob id from the index; never empty
+ * @returns false when the copy failed or the budget ran out, which leaves the turn blocked
+ */
+function scanStagedBlob(state, path, blob) {
+    let directory = null;
+    try {
+        removeStaleStagedCopies(state);
+        directory = mkdtempSync(join(tmpdir(), STAGED_COPY_PREFIX));
+        const descriptor = openSync(join(directory, "blob"), "w+", 0o600);
+        try {
+            const copied = spawnSync("git", ["cat-file", "blob", blob], {
+                stdio: ["ignore", descriptor, "pipe"],
+                timeout: remainingBudgetMs(state),
+                windowsHide: true,
+            });
+            // The copy ran past the scan budget, for example a multi-gigabyte asset on a slow disk; the turn stays blocked.
+            if (!budgetCheck(state))
+                return false;
+            // Git could not write the staged copy, for example after the user unstaged or garbage-collected it mid-scan.
+            if (copied.error || copied.status !== 0) {
+                markScanIncomplete(state, "command", "Git binary blob read failed");
+                return false;
+            }
+            const textScan = createBinaryTextScan(state, path);
+            const buffer = Buffer.alloc(DIGEST_CHUNK_BYTES);
+            let total = 0;
+            // Read the copy chunk by chunk, so memory stays small however large the staged asset is.
+            for (let count = readSync(descriptor, buffer, 0, buffer.length, 0); count > 0; count = readSync(descriptor, buffer, 0, buffer.length, total)) {
+                // A spent budget leaves part of the staged copy unread, so the turn stays blocked.
+                if (!budgetCheck(state) || !textScan.feed(buffer.subarray(0, count)))
+                    return false;
+                total += count;
+            }
+            return textScan.finish();
+        }
+        finally {
+            closeSync(descriptor);
+        }
+    }
+    catch {
+        // Example: the temp folder is full or read-only, so the staged copy stays unchecked and the turn stays blocked.
+        markScanIncomplete(state, "command", "Git binary blob read failed");
+        return false;
+    }
+    finally {
+        // Only a created temp folder needs removing.
+        if (directory !== null)
+            removeStagedCopy(directory);
+    }
+}
+/**
+ * Milliseconds left in the scan budget, used to stop a slow staged copy; at least 1 so Node applies the limit.
+ *
+ * @param state - scan state that holds the budget and the hook start time
+ * @returns remaining budget in milliseconds; 1 when the budget is already spent
+ */
+function remainingBudgetMs(state) {
+    const elapsedMs = performance.now() - state.context.startedAt;
+    return Math.max(1, Math.floor(state.maxSeconds * 1000 - elapsedMs));
+}
+/**
+ * Delete private staged copies that an earlier Stop left behind when it was killed mid-scan, for example by a provider timeout.
+ * A copy counts as stale only when it is far older than any scan budget, so a parallel session's live copy is never touched.
+ *
+ * @param state - scan state that holds the budget used to judge staleness
+ */
+function removeStaleStagedCopies(state) {
+    const staleAfterMs = Math.max(STALE_STAGED_COPY_MS, state.maxSeconds * 2000);
+    // Every leftover copy folder in the temp directory is checked; other files are ignored.
+    for (const name of readdirSync(tmpdir())) {
+        // Only folders this hook created are candidates.
+        if (!name.startsWith(STAGED_COPY_PREFIX))
+            continue;
+        const folder = join(tmpdir(), name);
+        const stats = lstatSync(folder, { throwIfNoEntry: false });
+        // A folder already removed by another Stop, or still young enough to be a live scan, is left alone.
+        if (stats?.isDirectory() && Date.now() - stats.mtimeMs > staleAfterMs)
+            removeStagedCopy(folder);
+    }
+}
+/**
+ * Delete the private staged copy once it has been scanned; if that fails, warn the user on stderr where it was left.
+ *
+ * @param directory - temp folder made for one staged blob; never empty
+ */
+function removeStagedCopy(directory) {
+    try {
+        rmSync(directory, { recursive: true, force: true });
+    }
+    catch {
+        // Example: antivirus briefly locks the file on Windows; the scan result stands, but the user is told where the copy remains.
+        process.stderr.write(`post-turn-safety: could not remove the temporary staged copy in ${directory}; delete it manually.\n`);
     }
 }
 // A changed path or descriptor cannot inherit an earlier replay's identity, even when its bytes and size match.
@@ -536,29 +834,25 @@ function isSameBinaryFile(before, after) {
 function digestBinaryDescriptor(state, path, descriptor) {
     const digest = createHash("sha256");
     const buffer = Buffer.alloc(DIGEST_CHUNK_BYTES);
-    let pendingLine = "";
+    const textScan = createBinaryTextScan(state, path);
     let total = 0;
     let hasNulByte = false;
+    // Hash and scan the file chunk by chunk, so memory stays small however large the asset is.
     for (let count = readSync(descriptor, buffer, 0, buffer.length, 0); count > 0; count = readSync(descriptor, buffer, 0, buffer.length, total)) {
+        // A spent budget means the file was not fully checked, so it gets no identity and the turn stays blocked.
         if (!budgetCheck(state))
             return null;
-        hasNulByte ||= buffer.subarray(0, count).includes(0);
-        digest.update(buffer.subarray(0, count));
+        const bytes = buffer.subarray(0, count);
+        hasNulByte ||= bytes.includes(0);
+        digest.update(bytes);
         total += count;
-        // Keep tokens that cross read boundaries intact without retaining the entire asset.
-        if (pendingLine.length + count > GIT_OUTPUT_LIMIT_BYTES)
+        // The text scan also ran out of budget part-way through this chunk.
+        if (!textScan.feed(bytes))
             return null;
-        const lines = (pendingLine + buffer.subarray(0, count).toString("latin1")).split(/[\n\0]/u);
-        pendingLine = lines.pop() ?? "";
-        for (const line of lines) {
-            if (!budgetCheck(state))
-                return null;
-            scanTokens(state, path, line);
-        }
     }
-    if (!budgetCheck(state))
+    // The final unfinished lines could not be checked in time.
+    if (!textScan.finish())
         return null;
-    scanTokens(state, path, pendingLine);
     return { hash: digest.digest("hex"), total, hasNulByte };
 }
 // Scan and digest the same stable gap bytes; null leaves the identity unavailable and the turn blocked.
@@ -624,14 +918,9 @@ function binaryGapIdentity(state, root) {
             return null;
         // An untracked binary has no index entry, recorded as "-" so staging it later changes the identity.
         const blob = blobs.get(gap.path) ?? "-";
-        if (blob !== "-") {
-            const staged = runGit(state, ["cat-file", "blob", blob], "Git binary blob read failed");
-            if (staged === null)
-                return null;
-            scanBinaryTokens(state, gap.path, staged);
-            if (state.isBailed)
-                return null;
-        }
+        // The staged copy is what a commit would publish, so it is scanned in full even when the worktree copy is clean.
+        if (blob !== "-" && !scanStagedBlob(state, gap.path, blob))
+            return null;
         entries.push(JSON.stringify([gap.path, gap.message, digest, blob]));
     }
     return ["coverage-gap:v1", root, ...entries.sort()].join("\n");
