@@ -424,7 +424,7 @@ Area enumeration excludes ignored untracked trees, symlink traversal, and nested
 A standalone folder uses the repository filesystem adapter's build/tool directory exclusions.
 Standalone areas containing ignore rules require explicit paths or a Git repository; capture refuses to guess their membership.
 Explicit paths may select an ignored regular file. An absent selected file stays in the inventory and cannot support an anchor.
-Symlinks, submodules, unmerged/intent-to-add/sparse indexes, and live comparisons needing content conversion are unsupported.
+Symlinks, submodules, unmerged/intent-to-add/sparse indexes, and live comparisons needing content conversion are unsupported; a conversion refusal names the first converting path and attribute, or the effective `core.autocrlf` value.
 Multiple merge bases require an explicit two-dot comparison. These refusals never fall back to HEAD or live bytes.
 
 The response has two members:

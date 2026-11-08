@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-10-29
+last_reviewed: 2026-11-09
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
@@ -176,12 +176,12 @@ Evidence anchor: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-r
 **Status:** active | **Created:** 2026-10-03
 **Severity:** INTEGRATION
 
-**Incident count:** 10 | **Latest occurrence:** 2026-10-28
+**Incident count:** 11 | **Latest occurrence:** 2026-11-09
 **Decision changed:** Before adding tests, assertions or validation branches to a large file, compare its substantive line count with Gruff's 1,000-line `size.file-length` limit and leave room for Prettier wrapping.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Run `bash scripts/gruff-ts.sh analyse <file>` before editing a test file near 950 substantive lines. Comments do not count, but a one-line assertion that gains a message wraps to five lines once it passes Prettier's print width; prefer a short existing variable as the label, or put a new test in the smaller suite that owns the same contract. Evidence anchors: `test/unit/hooks-runtime-evidence.test.ts` (search: `fails a Codex Stop hook that never delivers a scan`) and `test/unit/review-validate.test.ts` (search: `validateReviewReport(short, root).violations, [], flag`).
+**Prevention:** Run `bash scripts/gruff-ts.sh analyse <file>` before editing a source or test file near 950 substantive lines. Comments do not count, but a one-line assertion that gains a message wraps to five lines once it passes Prettier's print width; prefer a short existing variable as the label, or put a new test in the smaller suite that owns the same contract. Evidence anchors: `test/unit/hooks-runtime-evidence.test.ts` (search: `fails a Codex Stop hook that never delivers a scan`) and `test/unit/review-validate.test.ts` (search: `validateReviewReport(short, root).violations, [], flag`).
 
 **What happened:** Two edits on 2026-10-03 pushed test files past Gruff's 1,000-line limit, an error-level finding that fails the warning ratchet. A new Codex Stop test pushed `test/integration/hook-effective-state.test.ts` to 1,017 substantive lines, so the test moved to the smaller hooks runtime evidence suite. Case labels on loop assertions then pushed `test/unit/review-validate.test.ts` to 1,006, and one-line labels brought it back under the limit.
 
@@ -206,6 +206,8 @@ The same batch put the controller YAML bundle in every temporary project, which 
 - **Recurrence 2026-10-23 (M04 native Gruff):** Adding the runtime selector pushed `test/integration/gruff-code-quality-contract.test.ts` to 1,004 substantive lines. Reusing `selectedHookPath` for the scanner path removed the extra import and long inline conditional while retaining every assertion. Check formatted headroom before adding selection logic, even when no test case is added. Anchor: `runProviderLauncher`.
 
 - **Recurrence 2026-10-28 (provider capture metadata):** The approved patch added two cases to `test/integration/hook-provider-contracts.test.ts` and reached 1,013 substantive lines. Both owning suites passed, but the ratchet rejected file size. Shortening the cases exposed five new non-null-assertion warnings. The correction isolates the cases in `test/integration/hook-provider-captures.test.ts` (search: `host-specific hook provider captures`) and uses an asserted host lookup. Check both file size and warning identities before approving a test-file addition.
+
+- **Recurrence 2026-11-09 (source file):** Adding a cause-naming refusal to `requireRawComparison` in `src/cli/review-validate-anchors.ts` took the file from exactly 1,000 to 1,004 substantive lines; it was already at the limit before the edit. Naming the attribute list as `CONVERTING_ATTRS` collapsed an eight-line argument array and left 997 lines with the owning integration suite still passing 29 of 29. The rule covers source files as well as tests: measure the touched file's headroom before the first edit. Anchor: `src/cli/review-validate-anchors.ts` (search: `CONVERTING_ATTRS`).
 
 ## Lesson: Check each Gruff-driven comment against the code it describes
 

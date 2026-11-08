@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-11-04
+last_reviewed: 2026-11-09
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -252,7 +252,7 @@ array without changing the plan's effort state.
 
 **Evidence:** `src/hooks/deny-dangerous/patterns-paths.mts` (search: `keyMaterialPathTouch`) preserves dotAll for that filename rule. `test/unit/hook-policy-paths.test.ts` (search: `private\nname.key`) retains both reproduced operands beside ordinary key files and query-data controls.
 
-**Recurrence 2026-10-21:** The post-turn scanner port copied three `grep -E` patterns without dotAll. A carriage return before a tracked AWS key or private-key header, or between an untracked credential label and its `_sk-` token, was blocked by Bash and passed by Node. Two code reviews caught the tracked-token case before commit, and differential probes found the other two. All three patterns now carry the `s` flag. Evidence: `src/hooks/post-turn/scanner.mts` (search: `LABELLED_API_TOKEN`) and `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `after a carriage return`).
+**Recurrence 2026-10-21:** The post-turn scanner port copied three `grep -E` patterns without dotAll. A carriage return before a tracked AWS key or private-key header, or between an untracked credential label and its `_sk-` token, was blocked by Bash and passed by Node. Two code reviews caught the tracked-token case before commit, and differential probes found the other two. All three patterns carried the `s` flag at the time. The 2026-11-08 scanner rewrite removed the labelled-token regex: content splits on `\n` only, so a carriage return stays inside the line, the API-token label check is positional in `src/hooks/post-turn/scanner.mts` (search: `reportFirstRealApiToken`), and the private-key header matches explicit `\r` separators (search: `const PRIVATE_KEY =`). The three carriage-return cases in `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `after a carriage return`) still pass.
 
 ---
 

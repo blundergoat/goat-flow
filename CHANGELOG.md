@@ -11,6 +11,7 @@
 - **Stop hooks default to a 4 MiB scan limit** - Claude and Codex hook registrations default `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES` to `4194304` while preserving an existing user value. The Codex Stop command text changes when registrations are synced.
 
 - **Issue briefs show likely minutes and per-task benefits** - Each `ISSUE.md` task ends in one likely figure, a total line and the headline sum them in hours, two new sections say what each task gives the user before and after the change, and the worked sample ships beside the format.
+- **Commit guide defines each type and names more weak words** - The shipped `git-commit-message.md` says when each of the ten types applies, adds *align*, *adjust*, *revise* and *extend* to the weak verbs, rejects work-category nouns such as *coverage*, and shows a body that lists files beside one that states the defect; new installs receive it and existing guides are left alone.
 
 ### Removed
 
@@ -37,6 +38,7 @@
 - **Node hook verification** - Native registration audits use the configured hook filename, and policy self-tests fail when no cases run or the declared case count is wrong.
 - **Copilot hooks start on Windows** - Copilot's PowerShell hook commands now parse, so goat-flow hooks run instead of failing on every tool call; run `goat-flow hooks sync` to repair existing installs.
 - **Unchanged binary files no longer block every Stop** - Post-turn safety still blocks the first Stop that skips a binary file, then ends that session's repeated Stop with a warning while the files stay unchanged; coverage stays incomplete, and findings or other skipped files still block. Run `goat-flow hooks sync` to update existing installs.
+- **goat-review continues when a `worktree` snapshot is refused** - On Git LFS or `text=auto` repositories, or Git for Windows with `core.autocrlf` set, the skill re-selects `staged` or explicit paths instead of stopping for a waiver, and the `review snapshot` refusal names the converting path and attribute or the `core.autocrlf` value.
 
 ## v1.19.0 - 2026-10-23
 

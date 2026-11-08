@@ -1,6 +1,6 @@
 ---
 category: skill-guidance
-last_reviewed: 2026-10-17
+last_reviewed: 2026-11-09
 ---
 
 **Scope:** Editing shipped skill and playbook guidance: behavioural wording, authority alignment, contract caps, and load-budget signals. Skill candidacy and runtime authoring traps live in [skill-authoring.md](skill-authoring.md); mirror sync lives in [skills.md](skills.md).
@@ -172,3 +172,18 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 **Why it happens:** `src/cli/audit/resource-references.ts` (search: `references missing canonical resource`) extracts reference tokens from shared guidance and requires each resolved path to exist in the canonical workflow package. A token that reads to an agent as "the goat-plan reference" is a relative path to the checker.
 
 **Evidence:** 2026-09-11: the first shared-conventions pointer read `references/milestone-examples.md` → Status reason and produced `workflow/skills/reference/skill-conventions.md references missing canonical resource workflow/skills/reference/references/milestone-examples.md`; rewording to `its milestone-examples reference → Status reason` returned the audit to `drift: pass, findings: 0, checked: 250`. The accepted wording is pinned by `test/contract/skill-hardening-plan-2.test.ts` (search: `its milestone-examples reference`).
+
+## Footgun: The review snapshot refuses `worktree` capture when any tracked path converts content
+
+**Status:** active | **Created:** 2026-11-09 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Treat a content-conversion refusal of `worktree` or `unstaged` as re-selection to `staged` or `paths`, never as a stop or a waiver request.
+**Trigger phase:** SCOPE
+**Caught at:** ACT
+
+**Prevention:** `requireRawComparison` in `src/cli/review-validate-anchors.ts` runs `git check-attr` over every tracked path, not only the changed ones, and refuses any effective `core.autocrlf` other than `false`. One `filter=lfs` asset, a `* text=auto` line, or the Git for Windows installer default is enough to refuse `worktree` and `unstaged` in a repository whose changed files are plain source. Read the refusal as a selection error: the message names the path and attribute, or the `core.autocrlf` value, and `workflow/skills/goat-review/references/examples.md` (search: `not drift or a waiver request`) gives the `staged` and `paths` re-selection. Do not ask the user for a waiver, and do not add a degradation token for it.
+
+**Symptoms:** `goat-flow review snapshot` exits 2 with `authority-unsupported: live comparison requires unsupported content conversion` on the first `worktree` request and the reviewer reports the review as blocked before Pass 1, while `staged` and `paths` requests on the same tree succeed.
+
+**Why it happens:** The raw-byte check guards every live-versus-Git comparison, so it covers the whole index: a filter on an unchanged binary still means Git would rewrite bytes somewhere in the comparison set. The skill presented `worktree` as the capture for a dirty tree and gave no route out of the refusal, while `docs/cli.md` states that these refusals never fall back to HEAD or live bytes. A reviewer holding both sentences stopped instead of re-selecting.
+
+**Evidence:** 2026-11-09: a Codex session on Windows reviewing a consumer Git LFS repository received the refusal on `{"kind":"worktree","base":"HEAD","untracked":{"mode":"all-nonignored"}}` and asked the user for a waiver; that repository's review log held eight earlier `paths` captures and one `staged` capture. Reproduced on this repository's clean `dev` tree, where `.gitattributes` sets `* text=auto eol=lf`: `worktree` exits 2 while `staged` and `paths` exit 0. Reproduced on the LFS repository from WSL with `core.autocrlf` unset, which isolates its 65 `filter=lfs` paths as sufficient cause. `test/integration/review-validate-authority.test.ts` pins the attribute refusal (search: `does not run Git content filters`) and the `core.autocrlf` refusal (search: `uses Git's effective autocrlf setting`).

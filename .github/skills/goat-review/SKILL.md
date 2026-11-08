@@ -28,7 +28,7 @@ Select diff (Quick), PR (Quick default), or area audit (Full).
 
 **Pass 0 gates:** with explicit current-session consent, run non-fixing instruction/CI gates once; never fix/rerun. Use `references/examples.md` → `Pass 0 Automated Gates`; only host-proven changed-code is a defect. Emit `Gates: run | skipped (<reason>) | unavailable`; non-run adds `gates-not-run`; tracked mutation stops.
 
-**State authority:** `goat-flow review snapshot` binds the diff and Pass 2 files to one declared authority. Controlling CLI uses `--project <reviewed-root> --expected-version <installed-skill-version>`; ledger rejects --project. With no version-matched producer, use the controlling package source; else stop and report authority unavailable. Never invent a schema. Follow `references/examples.md` → `State Authority Matrix`; drift stops. Raw bytes stay transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
+**State authority:** `goat-flow review snapshot` binds the diff and Pass 2 files to one declared authority. Controlling CLI uses `--project <reviewed-root> --expected-version <installed-skill-version>`; ledger rejects --project. With no version-matched producer, use the controlling package source; else stop and report authority unavailable. Never invent a schema. Follow `references/examples.md` → `State Authority Matrix`; drift stops. On a content-conversion refusal of `worktree`/`unstaged`, re-select per that matrix; never ask for a waiver. Raw bytes stay transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
 
 **Artifacts:** random-suffixed `.txt`/`.json`/`.diff`/`.md` in `.goat-flow/logs/review/`.
 

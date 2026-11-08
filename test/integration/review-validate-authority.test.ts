@@ -667,9 +667,10 @@ describe("review authority across real repository state", () => {
     const marker = join(root, "filter-ran");
     git(root, ["config", "filter.review.clean", `touch ${marker}`]);
     writeFileSync(join(root, ".gitattributes"), "src/*.ts filter=review\n");
+    // The refusal names the converting path and attribute so the reviewer can re-select without reading every attribute.
     assert.throws(
       () => capture(root, { kind: "unstaged" }),
-      /unsupported content conversion/u,
+      /unsupported content conversion: src\/example\.ts has filter=review; select staged or explicit raw paths/u,
     );
     assert.equal(existsSync(marker), false);
     writeFileSync(join(root, ".gitignore"), "src/ignored/\n");
@@ -714,13 +715,16 @@ describe("review authority across real repository state", () => {
 
   it("uses Git's effective autocrlf setting and boolean spellings for live comparisons", (test) => {
     const { root } = repository(test);
-    // Each true spelling enables conversion in Git and must produce the same raw-comparison refusal.
-    for (const value of ["true", "TRUE", "yes", "on", "1", "input"]) {
-      git(root, ["config", "core.autocrlf", value]);
+    // Each true spelling enables conversion in Git and must produce the same raw-comparison refusal, naming the spelling Git holds.
+    for (const spelling of ["true", "TRUE", "yes", "on", "1", "input"]) {
+      git(root, ["config", "core.autocrlf", spelling]);
       assert.throws(
         () => capture(root, { kind: "unstaged" }),
-        /unsupported content conversion/u,
-        value,
+        new RegExp(
+          `unsupported content conversion: core\\.autocrlf=${spelling}; select staged or explicit raw paths`,
+          "u",
+        ),
+        spelling,
       );
     }
     // Later configuration wins; an earlier true value cannot block the operator's effective false setting.

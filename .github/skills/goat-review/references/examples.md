@@ -93,6 +93,8 @@ Before Pass 1, send a `goat-review-request/v1` JSON request to the version-match
 | `worktree` | Pinned base versus live tracked bytes plus the declared untracked membership rule; capture combined state once. |
 | `paths` / `area` | Explicit paths declare each live/index/Git view; area freezes live paths or a named sample. No surrounding-area coverage claim follows from a sample. |
 
+A content-conversion refusal (Git LFS, `text=auto`, Windows `core.autocrlf`) names its cause and means re-selection, not drift or a waiver request: `staged` when nothing is unstaged or untracked, else `paths` with changed, added, and untracked files `from: live` and deleted files `from: git` at the base `revision`.
+
 Every record includes escaped literal paths, absence, regular-file modes, raw-byte SHA-256, relevant Git blob/revision IDs, index identity, and a tagged review fingerprint. Git IDs follow the repository's object format; hashes are not Git IDs. No `authority=n/a`, free-text authority, implicit mixed paths, duplicate/unsafe paths, or unsupported file kinds.
 
 Snapshot and validation share canonical serialization; never hand-build hashes. Recompute before/after passes and final output; live reads use hash-before → read → hash-after. Validation never refreshes the baseline. No raw content, tree write, filter execution, or Git mutation is part of capture. The redacted bundle is a durable receipt, not the review authority.
