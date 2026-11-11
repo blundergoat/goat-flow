@@ -1,6 +1,6 @@
 ---
 category: hook-support-evidence
-last_reviewed: 2026-11-03
+last_reviewed: 2026-11-11
 ---
 
 **Scope:** What a hook run proves about a provider - separating payload extraction, local availability, result delivery and model visibility before choosing a support label, keeping manual matrices clear of the live guard that inspects them, and the command shape a provider can execute. Test coverage strategy for hook changes is [hook-testing.md](hook-testing.md); driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -159,8 +159,8 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
 
-**Prevention:** Live host captures pin the hashes of every shipped hook runtime file in one shared map. Search `src/cli/hook-provider-captures.ts` (search: `VERIFIED_RUNTIME_SHA256`) for each file the plan edits, and schedule the recapture, or the hold before commit, in the same plan. Changing the shared provider adapter invalidates every provider's captures, not only the event being fixed.
+**Prevention:** A live host capture row must match the current bytes of every runtime file its own hook loads; the other hashes it records stay as captured. For each file the plan edits, find the hooks whose registered list includes it in `src/cli/server/hooks-registry.ts` (search: `scriptFiles`), then schedule the recapture of those hooks' rows, or the hold before commit, in the same plan. The row constants are in `src/cli/hook-provider-captures.ts` (search: `VERIFIED_RUNTIME_SHA256`). Every hook loads the launcher and provider adapter files, so changing one of those still invalidates every provider's captures, not only the event being fixed.
 
 **What happened:** A post-turn repair planned its owning tests, generation and replay proof, but not the capture pins. Its focused suites passed, then the fast suite failed `retains runtime hashes for all required host captures` because 5 of the 41 pinned files changed, invalidating all 18 verified Windows and WSL captures. Preflight failed on the same test.
 
-**Related source contract:** `test/integration/hook-provider-captures.test.ts` (search: `recapture after changing`) compares each pinned hash with the current `workflow/hooks` bytes.
+**Related source contract:** `test/integration/hook-provider-captures.test.ts` (search: `recapture the rows whose hook loads a changed runtime file`) compares the hashes each row pins for its own hook's files with the current `workflow/hooks` bytes. When this incident happened the guard compared every recorded hash, which is why all 18 rows were invalidated.

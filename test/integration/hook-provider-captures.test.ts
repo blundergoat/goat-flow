@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { describe, it } from "node:test";
 import type { HookProviderHostEvidence } from "../../src/cli/hook-contracts.js";
 import { HOOK_PROVIDER_HOST_EVIDENCE } from "../../src/cli/hook-provider-captures.js";
@@ -15,8 +15,53 @@ import {
   listHookSpecs,
 } from "../../src/cli/server/hooks-registry.js";
 
-/** Files a capture hashes, as `workflow/hooks/README.md` states; adding one means recapturing every verified row. */
+/** Files a capture hashes, as `workflow/hooks/README.md` states; every verified row records all of them as captured. */
 const CAPTURED_RUNTIME_FILE_COUNT = 41;
+
+/**
+ * Hash one shipped runtime file as it is in the working tree now.
+ *
+ * @param file - path relative to `workflow/hooks`, such as `post-turn/scanner.mjs`
+ * @returns lowercase SHA256 of the file's current bytes
+ */
+function runtimeFileHash(file: string): string {
+  return createHash("sha256")
+    .update(readFileSync(join(process.cwd(), "workflow", "hooks", file)))
+    .digest("hex");
+}
+
+/**
+ * List the runtime files a hook loads, following relative specifiers from its launcher and its entry file.
+ * The walk reads from, import, require, createRequire and new URL forms; a specifier built at run time is not seen.
+ *
+ * @param entries - files to start from, relative to `workflow/hooks`, such as the launcher and the hook entry
+ * @returns paths relative to `workflow/hooks` in deterministic sorted order; never empty
+ */
+function loadedRuntimeFiles(entries: readonly string[]): string[] {
+  const loaded = new Set<string>();
+  const pending = [...entries];
+  // Each newly found file is read once for its own specifiers until no unread file remains.
+  while (pending.length > 0) {
+    const file = pending.pop() as string;
+    // A file reached through two importers is read only the first time.
+    if (loaded.has(file)) continue;
+    loaded.add(file);
+    // Data files such as the policy corpus are loaded but hold no specifiers of their own.
+    if (!/\.[cm]js$/u.test(file)) continue;
+    const source = readFileSync(
+      join(process.cwd(), "workflow", "hooks", file),
+      "utf8",
+    );
+    // A quoted specifier that starts with a dot names a sibling runtime file in each of these call forms.
+    for (const match of source.matchAll(
+      /(?:from\s*|import\s*\(?\s*|require\s*\(\s*|\)\s*\(\s*|new URL\(\s*)["'](\.{1,2}\/[^"']+)["']/gu,
+    ))
+      pending.push(
+        posix.normalize(posix.join(dirname(file), match[1] as string)),
+      );
+  }
+  return [...loaded].sort();
+}
 
 /** Find the reviewed row or fail before asserting its host-specific outcome. */
 function hostEvidence(
@@ -57,18 +102,45 @@ describe("host-specific hook provider captures", () => {
         CAPTURED_RUNTIME_FILE_COUNT,
         row.caseId + ": a capture records every runtime hash",
       );
-      for (const [file, expectedHash] of Object.entries(
-        row.capture.runtimeSha256,
-      )) {
-        const actualHash = createHash("sha256")
-          .update(readFileSync(join(process.cwd(), "workflow", "hooks", file)))
-          .digest("hex");
-        assert.equal(
-          actualHash,
-          expectedHash,
-          row.caseId + ": recapture after changing " + file,
-        );
+    }
+    // A row must match the current bytes of the files its own hook loads; its other hashes stay as captured (ADR-069).
+    const staleRows: string[] = [];
+    for (const hook of listHookSpecs()) {
+      // Rows from every provider are gathered; a hook with no provider evidence, or a provider with no host captures, adds none.
+      const hookCaptures = Object.values(hook.providerEvidence ?? {}).flatMap(
+        (evidence) => evidence.hostCaptures ?? [],
+      );
+      // Each row is checked only against its own hook's files, so a change to a file this hook does not load leaves the row valid.
+      for (const row of hookCaptures) {
+        // A row without a capture claims no runtime bytes.
+        if (!row.capture) continue;
+        // Changing any file this hook loads means recapturing this hook's rows.
+        for (const file of hook.scriptFiles) {
+          // Every stale row is collected, so one failure names all the rows to recapture.
+          if (row.capture.runtimeSha256[file] !== runtimeFileHash(file))
+            staleRows.push(`${row.caseId}: ${file} changed (${hook.id})`);
+        }
       }
+    }
+    assert.deepEqual(
+      staleRows.sort(),
+      [],
+      "recapture the rows whose hook loads a changed runtime file",
+    );
+  });
+
+  it("registers every runtime file a hook entry loads", () => {
+    // The per-hook rule above is only sound when a hook's registered list covers everything its launcher and entry load.
+    for (const hook of listHookSpecs()) {
+      // The walk starts from the shared launcher and this hook's entry, so a file only the launcher loads must be registered too.
+      for (const file of loadedRuntimeFiles([
+        "run-hook.mjs",
+        hook.primaryScript,
+      ]))
+        assert.ok(
+          hook.scriptFiles.includes(file),
+          `${hook.id}: ${file} is loaded but not registered, so no capture would pin it`,
+        );
     }
   });
 

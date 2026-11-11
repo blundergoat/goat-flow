@@ -21,7 +21,7 @@
 
 ### Security
 
-- **Binary files cannot hide secrets from Stop hooks** - Post-turn safety keeps blocking when skipped worktree or staged content holds a token or private key, including UTF-16 text, and a staged asset over 256 MiB no longer blocks every Stop. Run `goat-flow hooks sync` to update existing installs.
+- **Binary files cannot hide secrets from Stop hooks** - Post-turn safety keeps blocking when skipped worktree or staged content holds a token or private key, including UTF-16 text. A private-key header alone blocks in any binary file except a compiled program, where key data must follow it. A staged asset over 256 MiB no longer blocks every Stop. Run `goat-flow hooks sync` to update existing installs.
 
 - **Native PowerShell policy inspection** - Literal commands reach both owning policies; unresolved dynamic execution and session-state changes remain blocked. Run `goat-flow hooks sync` to refresh existing installations.
 

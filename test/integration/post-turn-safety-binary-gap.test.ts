@@ -21,6 +21,7 @@ import {
   TEST_API_TOKEN,
   TEST_GITHUB_TOKEN,
   TEST_PRIVATE_KEY_HEADER,
+  TEST_RSA_PRIVATE_KEY_HEADER,
   buildStopPayload,
   commitAll,
   runGit,
@@ -32,6 +33,36 @@ import {
 
 // A minimal GLB header: its NUL bytes make Git and the scanner treat the file as binary.
 const BINARY_GLB_HEADER = Buffer.from([103, 108, 84, 70, 2, 0, 0, 0]);
+// Text shaped like OpenSSH key data: base64 with upper-case letters, lower-case letters and digits that begins the way an encoded OpenSSH key does.
+const TEST_PRIVATE_KEY_DATA =
+  "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAAB".repeat(2);
+// The same shape with the two letters every PEM-encoded key begins with, and with a letter a PGP key begins with.
+const TEST_PEM_KEY_DATA =
+  "MIIEtestKeyData0123456789ABCDEFGHIJKLMNOPabcdefghijklmnop";
+const TEST_PGP_KEY_DATA =
+  "lQOYtestKeyData0123456789ABCDEFGHIJKLMNOPabcdefghijklmnop";
+// A PGP private-key header, joined from parts so this file never holds the literal marker.
+const TEST_PGP_PRIVATE_KEY_HEADER = [
+  "-----BEGIN",
+  "PGP PRIVATE KEY BLOCK-----",
+].join(" ");
+// A key the way JSON credential files store it: header, data and footer on one line, joined by escaped newlines.
+const ONE_LINE_KEY_JSON = `{"private_key": "${TEST_PRIVATE_KEY_HEADER}\\n${TEST_PRIVATE_KEY_DATA}\\n${TEST_PRIVATE_KEY_HEADER.replace("BEGIN", "END")}\\n"}\n`;
+// The first bytes of a Linux program. The scanner treats a file that starts with a program signature as a compiled program.
+const PROGRAM_START = "\x7fELF\x02\x01\x01\0";
+
+/**
+ * Build the first bytes of a Windows program: "MZ", then the position of the "PE" signature stored at byte 60.
+ *
+ * @returns 68 bytes that the scanner reads as the start of a Windows program
+ */
+function windowsProgramStart(): Buffer {
+  const start = Buffer.alloc(68);
+  start.write("MZ", 0, "latin1");
+  start.writeUInt32LE(64, 60);
+  start.write("PE", 64, "latin1");
+  return start;
+}
 
 /**
  * Run one Stop for the shared fixture session, as if the agent ended its turn.
@@ -67,6 +98,7 @@ function replayRecords(root: string) {
 
 describe("binary coverage gaps cannot release secrets", () => {
   // Each row is a file an agent might leave behind that Git calls binary but still holds a detectable secret.
+  // A private-key header alone counts, as in a text file, unless the file is a compiled program; a program needs key data too.
   for (const [name, path, content, blockedFinding] of [
     [
       "NUL beside a token",
@@ -121,6 +153,116 @@ describe("binary coverage gaps cannot release secrets", () => {
       "notes.bin",
       Buffer.from(`\0API_KEY=${TEST_API_TOKEN}\n`, "utf16le").swap16(),
       "API token",
+    ],
+    [
+      "one-line private key in JSON beside NUL",
+      "asset.bin",
+      `\0${ONE_LINE_KEY_JSON}`,
+      "private key block",
+    ],
+    [
+      "one-line private key in UTF-16LE JSON",
+      "key.json",
+      Buffer.from(ONE_LINE_KEY_JSON, "utf16le"),
+      "private key block",
+    ],
+    [
+      "one-line private key in UTF-16BE JSON",
+      "key.json",
+      Buffer.from(ONE_LINE_KEY_JSON, "utf16le").swap16(),
+      "private key block",
+    ],
+    [
+      "a private-key header with no key data beside NUL",
+      "asset.bin",
+      `\0${TEST_PRIVATE_KEY_HEADER}\nthe key itself was removed from this export\n`,
+      "private key block",
+    ],
+    [
+      "a private-key header alone in UTF-16LE text",
+      "notes.txt",
+      Buffer.from(
+        `Paste the key under ${TEST_PRIVATE_KEY_HEADER} and save.\n`,
+        "utf16le",
+      ),
+      "private key block",
+    ],
+    [
+      "private key lines behind log timestamps in UTF-16LE",
+      "signer.log",
+      Buffer.from(
+        [TEST_PRIVATE_KEY_HEADER, TEST_PRIVATE_KEY_DATA, TEST_PRIVATE_KEY_DATA]
+          .map(
+            (line, index) => `2026-01-02T03:04:0${index}.000000000Z ${line}\n`,
+          )
+          .join(""),
+        "utf16le",
+      ),
+      "private key block",
+    ],
+    [
+      "a private-key header in a file that only starts like a Windows program",
+      "notes.bin",
+      Buffer.concat([
+        Buffer.from("MZ", "latin1"),
+        Buffer.alloc(70),
+        Buffer.from(`${TEST_PRIVATE_KEY_HEADER}\n`, "latin1"),
+      ]),
+      "private key block",
+    ],
+    [
+      "OpenSSH private key lines built into a program",
+      "signer",
+      `${PROGRAM_START}${TEST_PRIVATE_KEY_HEADER}\n${TEST_PRIVATE_KEY_DATA}\n${TEST_PRIVATE_KEY_DATA}\n\0`,
+      "private key block",
+    ],
+    [
+      "PEM private key lines built into a program",
+      "signer",
+      `${PROGRAM_START}${TEST_RSA_PRIVATE_KEY_HEADER}\n${TEST_PEM_KEY_DATA}\n${TEST_PEM_KEY_DATA}\n\0`,
+      "private key block",
+    ],
+    [
+      "PGP private key lines built into a program",
+      "signer",
+      `${PROGRAM_START}${TEST_PGP_PRIVATE_KEY_HEADER}\n${TEST_PGP_KEY_DATA}\n${TEST_PGP_KEY_DATA}\n\0`,
+      "private key block",
+    ],
+    [
+      "an encrypted private key built into a program",
+      "signer",
+      `${PROGRAM_START}${TEST_RSA_PRIVATE_KEY_HEADER}\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,0123456789ABCDEF0123456789ABCDEF\n\0`,
+      "private key block",
+    ],
+    [
+      "one-line private key in JSON built into a program",
+      "signer",
+      `${PROGRAM_START}${ONE_LINE_KEY_JSON}`,
+      "private key block",
+    ],
+    [
+      "one-line private key after bare header text on the same line of a program",
+      "signer",
+      `${PROGRAM_START}{"note": "${TEST_PRIVATE_KEY_HEADER} marks the start of a key", ${ONE_LINE_KEY_JSON.slice(1)}`,
+      "private key block",
+    ],
+    [
+      "quoted private key lines embedded in a program",
+      "signer",
+      `${PROGRAM_START}${[TEST_RSA_PRIVATE_KEY_HEADER, TEST_PEM_KEY_DATA, TEST_PEM_KEY_DATA].map((line) => `  "${line}\\n" +\n`).join("")}\0`,
+      "private key block",
+    ],
+    [
+      "one-line private key with PowerShell line breaks embedded in a program",
+      "signer",
+      `${PROGRAM_START}$pem = "${TEST_RSA_PRIVATE_KEY_HEADER}\`n${TEST_PEM_KEY_DATA}\`n"\n\0`,
+      "private key block",
+    ],
+    [
+      "PGP private key lines after three comment lines in a program",
+      "signer",
+      `${PROGRAM_START}${TEST_PGP_PRIVATE_KEY_HEADER}\n${["Comment: 7A7B 2C3D 4E5F 6A7B 8C9D", "Comment: Build Signing <build@example.invalid>", "Comment: Release Signing <release@example.invalid>"].join("\n")}\n\n${TEST_PGP_KEY_DATA}\n\0`,
+      "private key block",
     ],
   ] as const) {
     it(`blocks ${name} on every Stop`, () => {
@@ -275,15 +417,88 @@ describe("large binary gaps are scanned, not stuck", () => {
       writeFile(
         root,
         "ssh-tool",
-        `\0${TEST_PRIVATE_KEY_HEADER}\0usage: ssh-tool [options] destination\0${"9292758453063D803DD603D5E777D788".repeat(2)}\n`,
+        `${PROGRAM_START}${TEST_PRIVATE_KEY_HEADER}\0usage: ssh-tool [options] destination\0${"9292758453063D803DD603D5E777D788".repeat(2)}\n`,
       );
       const first = runStop(root, false);
       assert.equal(first.status, 2, first.stderr);
       assert.doesNotMatch(String(first.stderr), /blocked private key block/u);
-      // Header text alone is not key material, so the unchanged retry may end the turn.
+      // Header text alone in a compiled program is not key material, so the unchanged retry may end the turn.
       assert.equal(runStop(root, true).status, 0);
     });
   });
+
+  it("releases a program whose key-header text is followed by prose on the same line", () => {
+    withTempRepo((root) => {
+      // Like an error message in a program: the header is quoted mid-sentence, and no key data follows it.
+      writeFile(
+        root,
+        "key-tool",
+        `${PROGRAM_START}error: expected ${TEST_PRIVATE_KEY_HEADER} at the start of the key file, found something else\n`,
+      );
+      const first = runStop(root, false);
+      assert.equal(first.status, 2, first.stderr);
+      assert.doesNotMatch(String(first.stderr), /blocked private key block/u);
+      // No key data follows the header on its line or on a later one, so the unchanged retry may end the turn.
+      assert.equal(runStop(root, true).status, 0);
+    });
+  });
+
+  // Each row is a program whose header text sits beside long text that is not key data; both layouts once blocked a real build.
+  for (const [name, content] of [
+    [
+      "packed program strings on the header's line",
+      `${PROGRAM_START}${TEST_PRIVATE_KEY_HEADER}Look for hardcoded credentialsAudit use of command executionDetect the usage of weak ciphersnode2273736754432320594787597656MapIter.Value called before Next\n`,
+    ],
+    [
+      "a build path right after the header",
+      `${PROGRAM_START}${TEST_PRIVATE_KEY_HEADER}\0/home/runner/work/Signer2/Signer2/src/PemKeyReader.c\0`,
+    ],
+  ] as const) {
+    it(`releases a program with key-header text beside ${name}`, () => {
+      withTempRepo((root) => {
+        writeFile(root, "key-tool", content);
+        const first = runStop(root, false);
+        assert.equal(first.status, 2, first.stderr);
+        assert.doesNotMatch(String(first.stderr), /blocked private key block/u);
+        // Neither row holds text that begins like an encoded key where the scanner looks, so the unchanged retry may end the turn.
+        assert.equal(runStop(root, true).status, 0);
+      });
+    });
+  }
+
+  // Each row is the start of another kind of compiled program; a build output of any kind may hold header text with no key.
+  for (const [kind, start] of [
+    ["Windows program", windowsProgramStart()],
+    ["macOS program", Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 7, 0, 0, 1])],
+    [
+      "Java class or macOS universal binary",
+      Buffer.from([0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 0x41]),
+    ],
+    ["WebAssembly module", Buffer.from([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0])],
+    ["static library", Buffer.from("!<arch>\n", "latin1")],
+    ["Python bytecode file", Buffer.from([0xcb, 0x0d, 0x0d, 0x0a, 0, 0, 0, 0])],
+  ] as const) {
+    it(`releases a ${kind} that only contains key-header text`, () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "tool.bin",
+          Buffer.concat([
+            start,
+            Buffer.from(
+              `\0${TEST_PRIVATE_KEY_HEADER}\0usage: tool [options]\0`,
+              "latin1",
+            ),
+          ]),
+        );
+        const first = runStop(root, false);
+        assert.equal(first.status, 2, first.stderr);
+        assert.doesNotMatch(String(first.stderr), /blocked private key block/u);
+        // Header text alone in a compiled program is not key material, so the unchanged retry may end the turn.
+        assert.equal(runStop(root, true).status, 0);
+      });
+    });
+  }
 
   it("does not read every other byte of plain binary text as a token", () => {
     withTempRepo((root) => {

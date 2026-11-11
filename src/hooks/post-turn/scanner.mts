@@ -38,15 +38,18 @@ const DIGEST_CHUNK_BYTES = 1_048_576;
 const BINARY_LINE_WINDOW_CHARS = 1_048_576;
 // Tail kept after a trim; longer than any detector needs, so a token cut by the trim still matches.
 const BINARY_LINE_OVERLAP_CHARS = 4_096;
-// Key data after a private-key header: a base64 line (PEM or OpenSSH) or the legacy encrypted-PEM marker; a CRLF ending is allowed.
-// A base64 line must contain a lowercase letter, so uppercase hex constants that libraries print near header text are not key data.
-const PRIVATE_KEY_BODY =
-  /^(?:(?=[A-Za-z0-9+/]*[a-z])[A-Za-z0-9+/]{40,}={0,2}|Proc-Type: 4,ENCRYPTED)\r?$/u;
-// Runs after a header that may still hold its key data, enough to pass PGP "Version:" and "Comment:" lines.
-const KEY_BODY_SEARCH_RUNS = 3;
+// Key data near a private-key header inside a compiled program; one pattern serves the header's own line and the lines after it.
+//
+// - Shape: 32 or more base64 characters with an upper-case letter, a lower-case letter and a digit, or the legacy encrypted-PEM marker.
+// - Start: the way encoded key bytes begin: "M" then "A" to "P" (PEM), "b3Blbn" (OpenSSH), or "l" or "x" (PGP). A build path rarely begins so.
+// - Position: at the start of a stretch of base64 text, or right after a line break written as an escape: \n, `n, %0A, \u000a, \x0a or \012.
+const KEY_DATA_NEAR_HEADER =
+  /(?:(?<![A-Za-z0-9+/])|(?<=\\[nr]|`[nr]|%0[AaDd]|\\u000[AaDd]|\\x0[AaDd]|\\01[25]))(?:(?=[A-Za-z0-9+/]*[a-z])(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[0-9])(?=M[A-P]|b3Blbn|[lx])[A-Za-z0-9+/]{32,}|Proc-Type: 4,ENCRYPTED)/u;
+// Lines after a bare header in a compiled program that may still hold its key data, enough to pass several PGP "Comment:" lines.
+const KEY_BODY_SEARCH_RUNS = 8;
 // Temp-folder prefix for private staged copies, also used to find copies a killed Stop left behind.
 const STAGED_COPY_PREFIX = "goat-flow-staged-blob-";
-// A staged copy older than this was left by a killed Stop; live scans finish within their budget.
+// A staged copy must be at least this old to be treated as left by a killed Stop, since a live scan normally finishes within its budget.
 const STALE_STAGED_COPY_MS = 3_600_000;
 // One line of binary text worth checking: a run of at least 20 bytes between newlines or NUL bytes.
 // Shorter runs cannot hold a finding, because the shortest detectable secret (an AWS access key) is 20 characters.
@@ -69,6 +72,13 @@ const WORD_CHARACTER = /[A-Za-z0-9_]/u;
 // Encrypted PKCS#8 and PGP key blocks expose key material too, so they block like the other private-key headers.
 const PRIVATE_KEY =
   /-----BEGIN[ \t\n\v\f\r](RSA[ \t\n\v\f\r]|DSA[ \t\n\v\f\r]|EC[ \t\n\v\f\r]|OPENSSH[ \t\n\v\f\r]|ENCRYPTED[ \t\n\v\f\r])?PRIVATE[ \t\n\v\f\r]KEY-----|-----BEGIN[ \t\n\v\f\r]PGP[ \t\n\v\f\r]PRIVATE[ \t\n\v\f\r]KEY[ \t\n\v\f\r]BLOCK-----/u;
+// Text examined for key data after a header and at the start of each later line; it bounds the cost of one check on hostile input.
+const KEY_DATA_SEARCH_CHARS = 1_024;
+// First four bytes of an ELF, Mach-O, Java class or WebAssembly file, read as one big-endian number.
+const PROGRAM_SIGNATURES = new Set([
+  0x7f454c46, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe,
+  0x0061736d,
+]);
 const PLACEHOLDER_ALL_X = /^(gh[pousr]_|github_pat_|npm_|sk-)?x+$/u;
 const PLACEHOLDER_MARKER =
   /(^|[_-])(example|placeholder|changeme|change-me|change_me|dummy|fake|sample|test|redacted|xxxx|your-token|your_token|your-key|your_key|your-api-key|your_api_key|not-a-secret)([_-]|$)/u;
@@ -366,7 +376,7 @@ function scanTokens(
   line: string,
   options: TokenScanOptions = {},
 ) {
-  // In text a private-key header means the file can expose a key block; binary runs also need key data (see scanBinaryRun).
+  // In text a private-key header means the file can expose a key block; a binary run is judged by its file kind in scanBinaryRun.
   if (!options.isBinaryRun && PRIVATE_KEY.test(line))
     reportFinding(state, path, "private key block");
   reportFirstRealToken(state, path, "AWS access key", AWS_TOKEN, line);
@@ -374,6 +384,7 @@ function scanTokens(
   reportFirstRealToken(state, path, "GitHub token", GITHUB_TOKEN, line);
   reportFirstRealToken(state, path, "npm token", NPM_TOKEN, line);
   reportFirstRealToken(state, path, "Slack token", SLACK_TOKEN, line);
+  // Without binary-run context no label was trimmed away, so a label counts only when it is on this line.
   reportFirstRealApiToken(state, path, line, options.isLabelEarlier ?? false);
 }
 
@@ -391,6 +402,7 @@ function reportFirstRealApiToken(
   line: string,
   isLabelEarlier: boolean,
 ): void {
+  // A line with no provider label leaves -1, so only a trimmed-away label or a standalone key can match.
   const labelAt = API_TOKEN_LABEL.exec(line)?.index ?? -1;
   // Each `sk-` match is an API key when a label came earlier in the line or when it stands alone, not glued to a word.
   for (const match of line.matchAll(API_TOKEN)) {
@@ -424,6 +436,7 @@ function reportFirstRealToken(
 ): void {
   // The first match that is not an obvious placeholder is enough to block the Stop.
   for (const match of line.matchAll(pattern)) {
+    // A placeholder or example value is skipped, so a real token later on the line still reports.
     if (!isPlaceholderToken(match[0])) {
       reportFinding(state, path, family);
       return;
@@ -751,22 +764,97 @@ interface TokenScanOptions {
  *
  * - `pending` holds the line still waiting for its newline or NUL.
  * - `isLabelEarlier` remembers a provider label that a window trim removed from that line.
- * - `keyHeaderRunsLeft` counts how many more runs may still hold key data after a private-key header; 0 means none is open.
+ * - `keyHeaderRunsLeft` counts how many more runs may still hold key data after a bare header in a compiled program; 0 means none is open.
+ * - `isProgram` is true when the file is a compiled program, where a header needs key data before it is reported.
  */
 interface BinaryTextView {
   pending: string;
   isLabelEarlier: boolean;
   keyHeaderRunsLeft: number;
+  isProgram: boolean;
 }
 
 /**
- * Check one run of binary text, reporting a private key only when key data follows its header.
- * Example: a TLS library or the ssh program embeds header text with no key after it, so staging that program does not block every Stop.
+ * Tell whether bytes start a Python bytecode file: a two-byte version, CR LF, then a flags word that uses only its two lowest bits.
+ *
+ * @param bytes - the first bytes of the file; at least 8
+ * @returns true when the bytes carry that header
+ */
+function isPythonBytecode(bytes: Buffer): boolean {
+  return bytes.readUInt16BE(2) === 0x0d0a && bytes.readUInt32LE(4) <= 3;
+}
+
+/**
+ * Tell whether bytes start a Windows program: "MZ", with the position of a "PE" signature stored at byte 60.
+ *
+ * @param bytes - the first bytes of the file; fewer than 64 means not a Windows program
+ * @returns true when the stored position holds the signature inside these bytes
+ */
+function isWindowsProgram(bytes: Buffer): boolean {
+  // An "MZ" start alone is two ordinary letters, so the signature it points to must be present too.
+  if (bytes.length < 64 || bytes.readUInt16BE(0) !== 0x4d5a) return false;
+  const signatureAt = bytes.readUInt32LE(60);
+  return (
+    signatureAt + 4 <= bytes.length &&
+    bytes.readUInt32BE(signatureAt) === 0x50450000
+  );
+}
+
+/**
+ * Tell whether a file is a compiled program, library or bytecode file, judged by the signature in its first bytes.
+ *
+ * Such a file often holds key-header text in its string table with no key, so its headers need key data before they are reported.
+ * Every other binary file is treated like text, where a header alone is reported.
+ *
+ * @param bytes - the first bytes of the file; fewer than 8 means not a program
+ * @returns true for an ELF, Windows PE, Mach-O, static library, Java class, WebAssembly or Python bytecode file
+ */
+function isCompiledProgram(bytes: Buffer): boolean {
+  // A file too short to hold a signature is not a program.
+  if (bytes.length < 8) return false;
+  return (
+    // ELF, Mach-O, Java class and WebAssembly files start with a fixed four-byte number.
+    PROGRAM_SIGNATURES.has(bytes.readUInt32BE(0)) ||
+    // A static library is an ar archive, which starts with this text.
+    bytes.toString("latin1", 0, 8) === "!<arch>\n" ||
+    isPythonBytecode(bytes) ||
+    isWindowsProgram(bytes)
+  );
+}
+
+/**
+ * Tell whether a run in a compiled program holds a key on one line: a header with key data within reach after it.
+ *
+ * Example: a Go program embeds a JSON credential, which stores the whole key in one string with escaped newlines.
+ * Example: a Go program packs unrelated strings onto the header's run, and that text does not begin like key data.
+ *
+ * @param run - one run of binary text that contains at least one key header
+ * @returns true when key data follows some header on this run; false when no header on it is followed by key data
+ */
+function hasKeyDataOnHeaderRun(run: string): boolean {
+  let rest = run;
+  let header = PRIVATE_KEY.exec(rest);
+  // Every header on the run is checked, so bare header text earlier on the line cannot hide a real key after it.
+  while (header !== null) {
+    rest = rest.slice(header.index + header[0].length);
+    // Key data within reach of this header means a real key block was saved on the line.
+    if (KEY_DATA_NEAR_HEADER.test(rest.slice(0, KEY_DATA_SEARCH_CHARS)))
+      return true;
+    header = PRIVATE_KEY.exec(rest);
+  }
+  return false;
+}
+
+/**
+ * Check one run of binary text for secrets, reporting a private-key header the way its file kind calls for.
+ *
+ * Outside a compiled program a header alone is reported, as in a text file. In a compiled program it needs key data on its run or soon after:
+ * a TLS library or the ssh program embeds header text with no key, and building one into the repository must not block every Stop.
  *
  * @param state - scan state that records findings for the user
  * @param path - repository path named in any finding
  * @param view - text view that remembers an open key header between runs
- * @param run - one run of at least 20 characters between newlines or NUL bytes
+ * @param run - a run of binary text: a line of 20 or more characters, a window of a longer line, or the last line, which may be short or empty
  * @param isLabelEarlier - true when a provider label was trimmed out of this run's line
  */
 function scanBinaryRun(
@@ -776,14 +864,23 @@ function scanBinaryRun(
   run: string,
   isLabelEarlier: boolean,
 ): void {
-  // A run shortly after a key header that looks like key data means a real key block was saved in the file.
+  // A bare header on an earlier run of a compiled program is still waiting for its key data.
   if (view.keyHeaderRunsLeft > 0) {
-    if (PRIVATE_KEY_BODY.test(run))
+    // A run that holds key data shortly after a header means a real key block was built into the program.
+    if (KEY_DATA_NEAR_HEADER.test(run.slice(0, KEY_DATA_SEARCH_CHARS)))
       reportFinding(state, path, "private key block");
     view.keyHeaderRunsLeft -= 1;
   }
-  // A header opens a short search for its key data; header text in a program's string table never finds any.
-  if (PRIVATE_KEY.test(run)) view.keyHeaderRunsLeft = KEY_BODY_SEARCH_RUNS;
+  // This run holds a key header.
+  if (PRIVATE_KEY.test(run)) {
+    // Outside a compiled program a header alone is reported, as in text; in a program a one-line key carries its data on the header's run.
+    if (!view.isProgram || hasKeyDataOnHeaderRun(run)) {
+      reportFinding(state, path, "private key block");
+    } else {
+      // A bare header in a program opens a short search for its key data; header text in a string table normally has none.
+      view.keyHeaderRunsLeft = KEY_BODY_SEARCH_RUNS;
+    }
+  }
   scanTokens(state, path, run, { isLabelEarlier, isBinaryRun: true });
 }
 
@@ -891,17 +988,21 @@ function createBinaryTextScan(state: ScanState, path: string) {
     pending: "",
     isLabelEarlier: false,
     keyHeaderRunsLeft: 0,
+    isProgram: false,
   };
   const even: BinaryTextView = {
     pending: "",
     isLabelEarlier: false,
     keyHeaderRunsLeft: 0,
+    isProgram: false,
   };
   const odd: BinaryTextView = {
     pending: "",
     isLabelEarlier: false,
     keyHeaderRunsLeft: 0,
+    isProgram: false,
   };
+  let isFirstChunk = true;
   // The last byte of each chunk waits for the next chunk, because its UTF-16 status depends on the byte after it.
   let heldBytes: Buffer = Buffer.alloc(0);
   let previousByte = -1;
@@ -921,6 +1022,13 @@ function createBinaryTextScan(state: ScanState, path: string) {
   };
   return {
     feed(bytes: Buffer): boolean {
+      // The first chunk starts the file, so its leading bytes tell whether this is a compiled program.
+      if (isFirstChunk) {
+        isFirstChunk = false;
+        const isProgram = isCompiledProgram(bytes);
+        // All three readings of the file share the answer.
+        for (const view of [raw, even, odd]) view.isProgram = isProgram;
+      }
       // The caller reuses its read buffer, so the held byte is copied before the next read overwrites it.
       const block = Buffer.concat([heldBytes, bytes]);
       return (
@@ -964,7 +1072,7 @@ function scanStagedBlob(state: ScanState, path: string, blob: string): boolean {
       });
       // The copy ran past the scan budget, for example a multi-gigabyte asset on a slow disk; the turn stays blocked.
       if (!budgetCheck(state)) return false;
-      // Git could not write the staged copy, for example after the user unstaged or garbage-collected it mid-scan.
+      // Git could not write the staged copy, for example because the temp disk filled up or the blob object was pruned mid-scan.
       if (copied.error || copied.status !== 0) {
         markScanIncomplete(state, "command", "Git binary blob read failed");
         return false;
@@ -1010,7 +1118,9 @@ function remainingBudgetMs(state: ScanState): number {
 
 /**
  * Delete private staged copies that an earlier Stop left behind when it was killed mid-scan, for example by a provider timeout.
- * A copy counts as stale only when it is far older than any scan budget, so a parallel session's live copy is never touched.
+ *
+ * A copy counts as stale only when it is at least an hour old and older than twice this session's scan budget.
+ * A parallel session's live copy is therefore left alone unless that session runs with a far longer budget.
  *
  * @param state - scan state that holds the budget used to judge staleness
  */
@@ -1029,7 +1139,7 @@ function removeStaleStagedCopies(state: ScanState): void {
 }
 
 /**
- * Delete the private staged copy once it has been scanned; if that fails, warn the user on stderr where it was left.
+ * Delete one private staged-copy folder, whether just scanned or left by an earlier Stop; if that fails, warn the user on stderr where it was left.
  *
  * @param directory - temp folder made for one staged blob; never empty
  */

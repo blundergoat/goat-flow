@@ -7,12 +7,12 @@
 import type { HookProviderHostEvidence } from "./hook-contracts.js";
 
 /**
- * SHA256 of the runtime files behind every verified row below, keyed by path relative to workflow/hooks.
+ * SHA256 of the 41 runtime files as captured for the rows whose hooks do not load the scanner, keyed by path relative to workflow/hooks.
  *
- * Changing one of these files invalidates the captures, so recapture the rows instead of editing a value here.
- * A row captured on different bytes needs its own constant.
+ * These values stay as captured. A row must match the current bytes of every file its own hook loads, so changing such a file
+ * means recapturing that hook's rows instead of editing a value here. A row captured on different bytes needs its own constant.
  */
-const VERIFIED_RUNTIME_SHA256: Readonly<Record<string, string>> = {
+const RUNTIME_SHA256_WITH_EARLIER_SCANNER: Readonly<Record<string, string>> = {
   "antigravity-hook-bootstrap.cjs":
     "0e21ac9851c8b3ae0e6230ae2945415655333b9cde1644777dfd97c64084edb1",
   "deny-dangerous.mjs":
@@ -97,6 +97,17 @@ const VERIFIED_RUNTIME_SHA256: Readonly<Record<string, string>> = {
     "d7fdf1c03e3f58cb290e067efb8ced57a72e3c441af014be9bbf379078a5ef07",
 };
 
+/**
+ * Runtime hashes for the rows recaptured whenever the scanner changes: the Stop rows, and C5, which shares C6's session and is renewed with it.
+ *
+ * Only the scanner entry may differ from the as-captured map above; a recapture of these rows records the new scanner hash here.
+ */
+const VERIFIED_RUNTIME_SHA256: Readonly<Record<string, string>> = {
+  ...RUNTIME_SHA256_WITH_EARLIER_SCANNER,
+  "post-turn/scanner.mjs":
+    "2a80ef642c513e6f1da80d76c9cb576ec062a5b594a92da2bd035baa81da9164",
+};
+
 /** Reviewed host observations; a row marked incomplete or security-hold must never become a support claim. */
 export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
   [
@@ -140,7 +151,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "claude native session output",
         reviewSha256:
           "f7787ec4e2568580f3548cf0933898ae3072a998f4e07f9c94e7b26150cf347a",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -183,7 +194,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "claude native session output",
         reviewSha256:
           "f7787ec4e2568580f3548cf0933898ae3072a998f4e07f9c94e7b26150cf347a",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -272,7 +283,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "codex native session output",
         reviewSha256:
           "c7904b4250bac7f486847e47b75c51d7fe9587dfa798ab0d35a77d10f7fc6f17",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -405,7 +416,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "copilot native session output",
         reviewSha256:
           "2b8eed31ce7904beae1f2e5e6653e61905038c92e2ba7cae900ec28ce4f0717d",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -446,7 +457,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "copilot native session output",
         reviewSha256:
           "2b8eed31ce7904beae1f2e5e6653e61905038c92e2ba7cae900ec28ce4f0717d",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -495,7 +506,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "antigravity native session output",
         reviewSha256:
           "6be581d12592602c6a21637b28bcc3af3615cf84bf5441ac7ddb99c5daea1cc4",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -541,7 +552,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "claude native session output",
         reviewSha256:
           "50f5a4f7da6f9ed5705ad627b05485276b19bdf0ee91770907e2d7a0b36cbc8c",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -587,7 +598,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "claude native session output",
         reviewSha256:
           "50f5a4f7da6f9ed5705ad627b05485276b19bdf0ee91770907e2d7a0b36cbc8c",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -680,7 +691,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "codex native session output",
         reviewSha256:
           "fe9b9f26e0e9a948bd31b4b718d8b58ff4d6576dfb1c8a04eacd8e878e9e1396",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -726,7 +737,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "codex native session output",
         reviewSha256:
           "fe9b9f26e0e9a948bd31b4b718d8b58ff4d6576dfb1c8a04eacd8e878e9e1396",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -820,7 +831,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "copilot native session output",
         reviewSha256:
           "dc4408b0b7b1695408eda1983f6537672e902a76272f40f43ab0aa50740cdfef",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -865,7 +876,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "copilot native session output",
         reviewSha256:
           "dc4408b0b7b1695408eda1983f6537672e902a76272f40f43ab0aa50740cdfef",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
     {
@@ -913,7 +924,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         producer: "antigravity native session output",
         reviewSha256:
           "0738ce4089f3aba8d48142ac2bff8f3ddc85e866e1b10d794d409852a3b6d793",
-        runtimeSha256: VERIFIED_RUNTIME_SHA256,
+        runtimeSha256: RUNTIME_SHA256_WITH_EARLIER_SCANNER,
       },
     },
   ];

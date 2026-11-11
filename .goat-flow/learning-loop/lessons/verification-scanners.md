@@ -1,6 +1,6 @@
 ---
 category: verification-scanners
-last_reviewed: 2026-09-30
+last_reviewed: 2026-11-11
 ---
 
 **Scope:** Proving a guard, scanner, or parser actually guards - block-and-allow pairs, false-positive probes, parser-shape fixtures per claimed file family, and self-test fanout. What a test must assert generally is [verification-testing.md](verification-testing.md); Gruff specifics are [verification-gruff.md](verification-gruff.md); Markdown formatting reaching a shell argument is [verification-preflight.md](verification-preflight.md).
@@ -131,3 +131,18 @@ last_reviewed: 2026-09-30
 **Root cause:** The path gate was verified broadly without pairing each newly claimed file family and naming convention with a syntax-shaped fixture, so the gate said "Dockerfile" while the parser understood only shell assignment syntax.
 
 **Recurrence 2026-08-24:** The first code-spanned path matcher treated `n/a` as an internal file path; the focused block fixtures passed and only the archived-plan allow case exposed the false positive. The matcher now requires a known file extension, with `n/a` kept as a negative control. `test/unit/plans-check-structure.test.ts` (search: `slash shorthand such as \`n/a\` stays clean`).
+
+---
+
+## Lesson: A release rule keyed on how a secret is laid out is rebuilt after every review
+
+**Status:** active | **Created:** 2026-11-11
+**Severity:** SECURITY
+**Trigger phase:** SCOPE | **Caught at:** VERIFY
+**Decision changed:** Before narrowing a scanner so one kind of file stops blocking, name that kind of file and test for it directly instead of describing the secret's surroundings. Rewind after the second failed correction.
+
+**Prevention:** When a scanner must stop blocking one kind of file, write the exception as a test for that kind of file and leave every other file on the strict rule. Do not write it as a description of what real secrets look like nearby: each layout the description misses is a release. Measure each candidate on must-block and must-release files through the real hook, one file per repository, because a finding in a text file ends the Stop before its binary neighbours are scanned. After two corrections to the same approach, stop and choose a different one. Evidence anchors: `src/hooks/post-turn/scanner.mts` (search: `function isCompiledProgram`), `src/hooks/post-turn/scanner.mts` (search: `if (!view.isProgram || hasKeyDataOnHeaderRun(run))`), `test/integration/post-turn-safety-binary-gap.test.ts` (search: `private key lines behind log timestamps in UTF-16LE`), `test/integration/post-turn-safety-binary-gap.test.ts` (search: `a build path right after the header`).
+
+**What happened:** The binary scan had stopped reporting a private-key header on its own, so that ssh and TLS programs would not block every Stop. A key saved on one line then slipped through. Three successive rules tried to say where key data sits after a header: later on the line, any base64-shaped text nearby, then a fixed set of line prefixes. Independent reviews broke each one: first indented and quoted lines, then a Go program with unrelated strings packed beside the header, and finally about thirty layouts such as a PowerShell one-line string and a log with a timestamp on every line, 77 of 122 measured key files. The fourth rule asks only whether the file is a compiled program. Any other binary file reports a header alone, as text does.
+
+**Root cause:** The exception was written around the secret's layout when its only purpose was to spare compiled programs. The agent also kept refining the same approach after two reviews had broken it, instead of rewinding.
