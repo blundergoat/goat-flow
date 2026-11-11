@@ -86,7 +86,7 @@ const VERIFIED_RUNTIME_SHA256: Readonly<Record<string, string>> = {
   "post-turn/recovery.mjs":
     "2c5e0481ecf737b9be6e75ae851cd254be9aa13cad9e3009af6b3b8070888968",
   "post-turn/scanner.mjs":
-    "b6d0b002732d25baccbba0bb48abeb4da2aeafecb5cbf42dfdfc6d71a628c013",
+    "2a80ef642c513e6f1da80d76c9cb576ec062a5b594a92da2bd035baa81da9164",
   "process-tree.mjs":
     "2a6beb870594f8b1ab4e6484a22b9e8224a45905731dea1384d1f56076e1870c",
   "run-hook.mjs":
@@ -111,6 +111,8 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
         "The operator closed the client after the completed turn; natural provider exit is not claimed.",
+        "Claude Code wrapped each refusal in a hook-error frame that also carried the launcher's source text to the model.",
+        "The session used the account default model, claude-fable-5-1; the row pins no model.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -122,7 +124,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T08:40:46.924Z",
+        capturedAt: "2026-11-08T09:59:26.908Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -132,12 +134,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "7c358388184b75cc084fb866ac1b1987a80ba29ef00d14b1c3937bc1aad008e5",
+          "aec240de2c60b674a7439baea2abb8b35c1867f7e4cb26c002d7c0bbc6367f5c",
         approvalPacketSha256:
-          "ff48b6553e9475ea91caee124de57d2cf3caa60c74d7b5ce6f79a59d1fbce903",
+          "d054de86c5f93975a46f1d734068dc03aa88c4ec5e7e9af736fb73830f2a72f8",
         producer: "claude native session output",
         reviewSha256:
-          "28b1d2487592eb935c6a7cbc48f6d6b6b83ce43b60aeb4316b0c0fcdb6d5d439",
+          "f7787ec4e2568580f3548cf0933898ae3072a998f4e07f9c94e7b26150cf347a",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -151,7 +153,9 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       summary:
         "The native edit callback delivered Gruff findings to the model.",
       limitations: [
-        "The capture ended on its controller timeout 0.473 seconds after the deadline, about 25 seconds after the final answer and clean Stop; the user accepted this variance.",
+        "The operator closed the client after the completed turn; natural provider exit is not claimed.",
+        "A safety classifier withheld the first response before any tool call and Claude Code fell back to Opus 4.8 for the session; the capture packet disclosed this model variance in advance.",
+        "The fixture file already held the expected bytes, so the Write left it unchanged; delivery rests on the transcript's Write and hook records.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -163,7 +167,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T08:47:45.212Z",
+        capturedAt: "2026-11-08T10:01:28.168Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -173,12 +177,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "d67fbf4d470a0d4e2e64171604011e27b0e056ab1036136e0d2acbb0b50c18d7",
+          "43f33edff8bda0acaeb369c23295505ff6ad09bd6fbf0cd2a60bb408c5588179",
         approvalPacketSha256:
-          "0fe7398f5e3be02ed331a1e85cc88fde71e9832975102a2ef2b6c498ccf7132a",
+          "b9b894eacb80327857659c715109b4ef9630551b677d97b095cc113ccba56eb4",
         producer: "claude native session output",
         reviewSha256:
-          "28b1d2487592eb935c6a7cbc48f6d6b6b83ce43b60aeb4316b0c0fcdb6d5d439",
+          "f7787ec4e2568580f3548cf0933898ae3072a998f4e07f9c94e7b26150cf347a",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -194,6 +198,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       limitations: [
         "The operator closed the client after the completed turn; natural provider exit is not claimed.",
         "Claude Code 2.1.317 recorded the Stop block in the stop summary's hook errors rather than a separate stop-feedback record.",
+        "The fixture file already held its final bytes before the session; the block and repair rest on the transcript's Write and Stop records, not on final-file equality.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -206,7 +211,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T19:24:39.459Z",
+        capturedAt: "2026-11-08T10:05:30.127Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -216,12 +221,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "7f75f1bb1bcbd5e0889f79c9252a51f7bc9fb0598bb6b534e0bb19d387289fa8",
+          "7412c3efddebd2c71e9d5b13eb6ca701062110c5e72825c8a54a57a17e35728e",
         approvalPacketSha256:
-          "9000a3424f00d167828ebbb3b83821be3bd8d475fb2fe0b0e0dadb44cff92df1",
+          "201761634fc6a4f3947c54ebacf3d7e82b4523325eea87db7dfdbf2a186f62fe",
         producer: "claude native session output",
         reviewSha256:
-          "adc1058139ce4f9fd232b71a7dea6b1fd13c2199b93cafd6990b1ae07f7b7abb",
+          "f7787ec4e2568580f3548cf0933898ae3072a998f4e07f9c94e7b26150cf347a",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -238,11 +243,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "The JSON event stream carried no hook event; delivery was read from the bound session record and native stderr.",
         "Codex recorded its approval policy as never although launched with --ask-for-approval on-request; no approval was needed.",
         "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed.",
+        "The session record offered collaboration and cua tools although the launch disabled multi_agent; the model called none.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.166.0",
+        providerVersion: "0.167.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
@@ -250,7 +256,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T19:34:34.982Z",
+        capturedAt: "2026-11-08T10:11:46.751Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stderr", "model-context"],
@@ -260,12 +266,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "3ac8b309996cd9b0d91341551b57bc9bfbeb316b95a036de4e54a9545dc33d8b",
+          "00cddb15bdcc3ea0c942761b076052bb32fe9da044bcbb2c7ee9c3d23711fbb9",
         approvalPacketSha256:
-          "b46e35b3f7f56db3165892fa90ad8a6a968f91d574deff0bd5dac90292570745",
+          "2e9659ba68ddd5d681a3004daa3fb3d95541c9263d0fc53386ca139c69b26939",
         producer: "codex native session output",
         reviewSha256:
-          "6190e6bce7f4d7b178d44990867443772dfb3cf7b69de0c3ed2b1f77433e1a98",
+          "c7904b4250bac7f486847e47b75c51d7fe9587dfa798ab0d35a77d10f7fc6f17",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -282,11 +288,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "The JSON event stream carried no hook event; delivery was read from the bound session record.",
         "Codex recorded its approval policy as never although launched with --ask-for-approval on-request; no approval was needed.",
         "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed.",
+        "The session record offered collaboration and cua tools although the launch disabled multi_agent; the model called none.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.166.0",
+        providerVersion: "0.167.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, workspace goat-flow permission profile, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
@@ -294,7 +301,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T19:36:07.224Z",
+        capturedAt: "2026-11-08T10:12:46.150Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -304,12 +311,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "c2386d5345049ffb57468b9a89af6bd16d079323d9e0ceb01aa9a95df4755fa5",
+          "7e862a9741439f209eea22ba80139a51b33831f4ec9dc3343f4e574ec515dc3f",
         approvalPacketSha256:
-          "b46e35b3f7f56db3165892fa90ad8a6a968f91d574deff0bd5dac90292570745",
+          "2e9659ba68ddd5d681a3004daa3fb3d95541c9263d0fc53386ca139c69b26939",
         producer: "codex native session output",
         reviewSha256:
-          "6190e6bce7f4d7b178d44990867443772dfb3cf7b69de0c3ed2b1f77433e1a98",
+          "c7904b4250bac7f486847e47b75c51d7fe9587dfa798ab0d35a77d10f7fc6f17",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -327,11 +334,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "The JSON event stream carried no hook event; delivery was read from the bound session record.",
         "Readiness reported on-request, but codex exec recorded approval_policy=never; no escalation was requested.",
         "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed. The model used only the three controls and three patches.",
+        "The session record offered collaboration and cua tools although the launch disabled multi_agent; the model called none.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.166.0",
+        providerVersion: "0.167.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, workspace goat-flow permission profile, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
@@ -339,7 +347,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T19:36:07.224Z",
+        capturedAt: "2026-11-08T10:12:46.150Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -349,12 +357,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "c2386d5345049ffb57468b9a89af6bd16d079323d9e0ceb01aa9a95df4755fa5",
+          "7e862a9741439f209eea22ba80139a51b33831f4ec9dc3343f4e574ec515dc3f",
         approvalPacketSha256:
-          "b46e35b3f7f56db3165892fa90ad8a6a968f91d574deff0bd5dac90292570745",
+          "2e9659ba68ddd5d681a3004daa3fb3d95541c9263d0fc53386ca139c69b26939",
         producer: "codex native session output",
         reviewSha256:
-          "6190e6bce7f4d7b178d44990867443772dfb3cf7b69de0c3ed2b1f77433e1a98",
+          "c7904b4250bac7f486847e47b75c51d7fe9587dfa798ab0d35a77d10f7fc6f17",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -368,6 +376,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       summary:
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
+        "The secret-file denial text shows the Windows path without its backslashes; the decision is unaffected.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -380,7 +389,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T20:10:33.087Z",
+        capturedAt: "2026-11-08T10:16:30.038Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -390,12 +399,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "1b0a29c8379eb14d26eba89d15e294bb52147225309690c87ee86934efbb4ba6",
+          "76837f9ccdaad2964f98da5a16365fc564e653b445b0f192f982bf60951ba9d9",
         approvalPacketSha256:
-          "741a976f88cd8891c0af352f8f03ef161264b52aad0272f42c9b1a3f5897b733",
+          "f6f4542af41900f45bafc429a7f2334f0854f953f7c17876a91268eb7611b963",
         producer: "copilot native session output",
         reviewSha256:
-          "4858a7e7bddcf10c517040b027f93d8260cdad85282bba7ba917facb5ab3ec6e",
+          "2b8eed31ce7904beae1f2e5e6653e61905038c92e2ba7cae900ec28ce4f0717d",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -421,7 +430,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T20:14:22.587Z",
+        capturedAt: "2026-11-08T10:16:52.089Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -431,12 +440,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "506b822c1c25dddf867f42af4bc7e2d2ab31eaa71bff1a10695b8bbc418f507a",
+          "0347f18e25e65ed3be1df848725332957555ad8a6b979a3b38ef6dc103c04e82",
         approvalPacketSha256:
-          "959e47b7d014301703b39f631a176ea3df02928de7c6f16bd96d19305fc9fb66",
+          "b6218cb6b61d17a85f6a001ae1bc90b06cedf4e59dbd7e4bf3a461e715f08143",
         producer: "copilot native session output",
         reviewSha256:
-          "4858a7e7bddcf10c517040b027f93d8260cdad85282bba7ba917facb5ab3ec6e",
+          "2b8eed31ce7904beae1f2e5e6653e61905038c92e2ba7cae900ec28ce4f0717d",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -457,6 +466,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "The record names no approval channel, so approvals are attributed to the operator by timing; the session's log reports remote control off.",
         "Actual model identity is limited to the native display and an unmapped but consistent enum.",
         "The controller closed the client after the turn ended; natural provider exit is not claimed.",
+        "The secret-file denial text shows the Windows path without its backslashes; the decision is unaffected.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -469,7 +479,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".agents/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T20:43:06.660Z",
+        capturedAt: "2026-11-08T10:21:35.780Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -479,12 +489,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "24.21.0",
         artifactSha256:
-          "2651de194841c4e94bf95d47084dbe5e20e8821ca2cee58fc56705ad7881ba93",
+          "feef7ce3717ed43f18a34f993e325eff33c0d2129d92209218366aa6f903d194",
         approvalPacketSha256:
-          "0e825751cff3ee731f261adfefdd81a149db857635028cb56e472c120e40c2ab",
+          "284d3f7868d406962a196a73e1194f66252f9a4251e90d9346a052d1b7507a37",
         producer: "antigravity native session output",
         reviewSha256:
-          "eec2550d038c300ff287fd8e02db7ff75cc74d9b8dd54389e767b3194973ccc9",
+          "6be581d12592602c6a21637b28bcc3af3615cf84bf5441ac7ddb99c5daea1cc4",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -501,6 +511,8 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "A Remote Control bridge was active; tool approvals are attributed to the operator by timing, because the record names no channel.",
         "The controller closed the client after the turn ended; natural provider exit is not claimed.",
         "Claude Code 2.1.317 hook records name no script; policy attribution rests on the pinned code, the rehearsal and exact matches on the reason text.",
+        "The session used the account default model, claude-fable-5-1; the row pins no model.",
+        "The transcript labels the permission mode default although the launch arguments request manual.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -513,7 +525,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T20:56:06.087Z",
+        capturedAt: "2026-11-08T10:27:00.381Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -523,12 +535,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "68f8420fe9099770ad5787f8c287e0fcefe5f6f5478405c100f50742e01d3352",
+          "32fa09a515b7c374a321df8bf866cd76d85b11b5e1626abad18d3ef9ef7fef20",
         approvalPacketSha256:
-          "3a4b22198f64b217bb8d87a811441eaf7c968238410df2f2d447d2e2be31db0f",
+          "6fc9245ec3f5c83a2d4316651ba1b770cf076b352804d53b6995fe2c6a71f278",
         producer: "claude native session output",
         reviewSha256:
-          "279ccf8622e273544841fa15f0d849f639468b48dabebe43aa072265429d9eaa",
+          "50f5a4f7da6f9ed5705ad627b05485276b19bdf0ee91770907e2d7a0b36cbc8c",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -545,6 +557,8 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "A Remote Control bridge was active; tool approvals are attributed to the operator by timing, because the record names no channel.",
         "The controller closed the client after the turn ended; natural provider exit is not claimed.",
         "Claude Code 2.1.317 hook records name no script; attribution rests on the hook's own output and its session-named health marker.",
+        "The session used the account default model, claude-fable-5-1; the row pins no model.",
+        "The transcript labels the permission mode default although the launch arguments request manual.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -557,7 +571,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T20:58:34.257Z",
+        capturedAt: "2026-11-08T10:30:18.804Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -567,12 +581,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "030e744056b1fac8f57ded8854d50a1a4eb2f5d48ca4154cf623d6a9c18d1a70",
+          "d482e39d69e65aaa3297ac8fb40554484b330078500bba97fac97ea1c92114d8",
         approvalPacketSha256:
-          "3a4b22198f64b217bb8d87a811441eaf7c968238410df2f2d447d2e2be31db0f",
+          "6fc9245ec3f5c83a2d4316651ba1b770cf076b352804d53b6995fe2c6a71f278",
         producer: "claude native session output",
         reviewSha256:
-          "279ccf8622e273544841fa15f0d849f639468b48dabebe43aa072265429d9eaa",
+          "50f5a4f7da6f9ed5705ad627b05485276b19bdf0ee91770907e2d7a0b36cbc8c",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -590,6 +604,8 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Claude Code 2.1.317 recorded the Stop block in the stop summary's hook errors rather than a separate stop-feedback record.",
         "A Remote Control bridge was active; tool approvals are attributed to the operator by timing, because the record names no channel.",
         "Claude Code 2.1.317 hook records name no script; attribution rests on the single registered Stop hook and the reason text.",
+        "This row is the approved replacement session; the first session ended on its controller timeout before the repair Write was approved and supplies no evidence.",
+        "The transcript labels the permission mode default although the launch arguments request manual; the readiness screen showed manual mode.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -602,7 +618,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".claude/settings.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T21:06:29.573Z",
+        capturedAt: "2026-11-10T19:15:21.690Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["provider-ui", "model-context"],
@@ -612,12 +628,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "50fa89641e40c7e983c17d5b220375b628565b725c14ae6ec60177a127631fcd",
+          "9510d291df7234c1efc3440756391e54f5efa107c56b6fb61350c4f7bcc838a5",
         approvalPacketSha256:
-          "e94696410f25d488ea0ff2b36973a7ac57a99eea30b0565e9e811c176b4d6a75",
+          "c716b8d8f08b21edd131d932d7d85dd04fb5ab12c9033434e521e256495b3efe",
         producer: "claude native session output",
         reviewSha256:
-          "279ccf8622e273544841fa15f0d849f639468b48dabebe43aa072265429d9eaa",
+          "50f5a4f7da6f9ed5705ad627b05485276b19bdf0ee91770907e2d7a0b36cbc8c",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -635,11 +651,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "Codex recorded its approval policy as never although launched with --ask-for-approval on-request; no approval was needed.",
         "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed.",
         "The JSONL does not expose actual model identity.",
+        "The session record offered collaboration tools although the launch disabled multi_agent; the model called none.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.166.0",
+        providerVersion: "0.167.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, read-only goat-flow permission profile, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
@@ -647,7 +664,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T21:54:30.664Z",
+        capturedAt: "2026-11-10T19:26:50.530Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stderr", "model-context"],
@@ -657,12 +674,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "0adb4cd31511e45b2f0fc0be69ee09e489cf5d48d0ed938a0d3b402d18a98b4b",
+          "8d75364b1a9fc1413175f81f9abc2e1729fb5682b4460ac75f45a935c1aee12b",
         approvalPacketSha256:
-          "60dc4d19ecefc3b71c69a988808789dc68bfae3b2b03886e24e1d3e90844e52f",
+          "3a31759b342f7a0fc634c0c8364b2899bed47ba7e042f7d7a35a0e7b08467ea8",
         producer: "codex native session output",
         reviewSha256:
-          "cf3c22700381bd7d3a2d31967a7db7974a6c2901aa057cf2508756fc6031f4d2",
+          "fe9b9f26e0e9a948bd31b4b718d8b58ff4d6576dfb1c8a04eacd8e878e9e1396",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -679,11 +696,13 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "The JSON event stream carried no hook event; delivery was read from the bound session record.",
         "Codex recorded its approval policy as never although launched with --ask-for-approval on-request; no approval was needed.",
         "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed.",
+        "The Gruff finding reached the model in a developer message; the patch call's own return was empty.",
+        "The session record offered collaboration tools although the launch disabled multi_agent; the model called none.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.166.0",
+        providerVersion: "0.167.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, workspace goat-flow permission profile, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
@@ -691,7 +710,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T21:55:24.983Z",
+        capturedAt: "2026-11-10T19:27:15.974Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -701,12 +720,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "cb55f56bddbeebf54276e15bbab84fa30295eea2d1a7bffa0b06cec9eff6650f",
+          "4e1a5ec667c6e87a9dd67e4e5445bad793474220044e3c171fb1fc9ff8b21ac1",
         approvalPacketSha256:
-          "60dc4d19ecefc3b71c69a988808789dc68bfae3b2b03886e24e1d3e90844e52f",
+          "3a31759b342f7a0fc634c0c8364b2899bed47ba7e042f7d7a35a0e7b08467ea8",
         producer: "codex native session output",
         reviewSha256:
-          "cf3c22700381bd7d3a2d31967a7db7974a6c2901aa057cf2508756fc6031f4d2",
+          "fe9b9f26e0e9a948bd31b4b718d8b58ff4d6576dfb1c8a04eacd8e878e9e1396",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -724,11 +743,13 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "The JSON event stream carried no hook event; delivery was read from the bound session record.",
         "Readiness reported on-request, but codex exec recorded approval_policy=never; no escalation was requested.",
         "Tool calls ran through Codex's nested exec tool; direct tool routing is not claimed. The model used only the two controls and two patches.",
+        "The session record offered collaboration tools although the launch disabled multi_agent; the model called none.",
+        "The final answer quotes the finding sentence without the post-turn-safety header or coverage lines; the full reason is in the hook prompt record.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
       capture: {
-        providerVersion: "0.166.0",
+        providerVersion: "0.167.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, workspace goat-flow permission profile, launched with --ask-for-approval on-request",
         hookVersion: "1.19.0",
@@ -736,7 +757,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".codex/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-05T22:08:59.404Z",
+        capturedAt: "2026-11-11T07:43:00.137Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["model-context"],
@@ -746,12 +767,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "10ac43cf600bdbd6827dff610009dd80c931cb75e4e5977bc4570527926f1aef",
+          "db6b75f22e046b6d94af9b2a03e5c5c9a6903837cbe5562a2086f20a952eca56",
         approvalPacketSha256:
-          "3c89890aaa761f96d503a14888650c5ed7e59c4fadd0c5a096943cc26747442a",
+          "c184b2da52b7f452e283aa43d6e21bc06619f5e58e3daae2b7130e5ae3ae408d",
         producer: "codex native session output",
         reviewSha256:
-          "cf3c22700381bd7d3a2d31967a7db7974a6c2901aa057cf2508756fc6031f4d2",
+          "50d0a8ac3589aec2139a5aad0416c911309953664be2f108034e91846f275562",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -770,6 +791,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "The package file beside the pinned executable reads 1.0.2; --version, the banner and the session log read 1.0.91, and the cached 1.0.91 package is not pinned.",
         "The controller closed the client after the turn ended; natural provider exit is not claimed.",
         "The model was also offered extensions_reload and extensions_manage; it called neither.",
+        "This row is the approved replacement session; the first attempt was interrupted by a host reboot and supplies no evidence.",
         "Raw hook stdin was not retained; input-field coverage is not claimed.",
         "Forced timeout behavior was not tested.",
       ],
@@ -782,7 +804,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-08T03:14:46.801Z",
+        capturedAt: "2026-11-10T19:26:18.954Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -792,12 +814,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "9fc416eec895064d267ac3e1c66c02386cec341be100aa1473c6712986aeb141",
+          "aba645fbea7b9cc1d49771bf3e11ab351f2c90b09d5ef47224c4f62acdf940e6",
         approvalPacketSha256:
-          "3863488f8066d9e192ba2c8b53e119f0da992aa55b3a12735ca7c27ba6bb81f1",
+          "f0f7e0d49e68bced3a8c34abd6ed7daafd36f9a2f86e33bcc2c85d95c35908d1",
         producer: "copilot native session output",
         reviewSha256:
-          "6fbbdce39418e0b8817be3659a4b1d342bbb066c9ef1ce98fedc31a48a0d5456",
+          "dc4408b0b7b1695408eda1983f6537672e902a76272f40f43ab0aa50740cdfef",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -827,7 +849,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".github/hooks/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-08T03:17:19.221Z",
+        capturedAt: "2026-11-10T19:26:54.292Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -837,12 +859,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "145f546eadf6ce3b35b5ad5e26e48709a7cca8906829aa2811938683dccec489",
+          "f06687942f154856483e1b3fa0411a1119f809d229a941a8ed7c737923579a21",
         approvalPacketSha256:
-          "3863488f8066d9e192ba2c8b53e119f0da992aa55b3a12735ca7c27ba6bb81f1",
+          "f0f7e0d49e68bced3a8c34abd6ed7daafd36f9a2f86e33bcc2c85d95c35908d1",
         producer: "copilot native session output",
         reviewSha256:
-          "6fbbdce39418e0b8817be3659a4b1d342bbb066c9ef1ce98fedc31a48a0d5456",
+          "dc4408b0b7b1695408eda1983f6537672e902a76272f40f43ab0aa50740cdfef",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },
@@ -859,7 +881,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         "The session ran an isolated copy restored from the approved archived 1.4.12 binary, not the current global install; readiness confirmed the version natively.",
         "Hook decisions name no owner; policy attribution rests on the pinned code, the rehearsal and exact matches on the reason text.",
         "Allowed calls record one more allow than there are matching handlers; what writes it is not established.",
-        "The final response quotes the GitHub reason without its Policy repository label; the full reason is in the error text.",
+        "The final response abbreviates the secret-file reason with an ellipsis; the full reason is in the error text.",
         "The record names no approval channel, so approvals are attributed to the operator by timing; the session's log reports remote control off.",
         "Actual model identity is limited to the native display and an unmapped but consistent enum.",
         "The controller closed the client after the turn ended; natural provider exit is not claimed.",
@@ -875,7 +897,7 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         configurationSource: "project",
         configurationPath: ".agents/hooks.json",
         trustState: "trusted",
-        capturedAt: "2026-11-08T03:36:22.676Z",
+        capturedAt: "2026-11-10T19:19:15.689Z",
         supportOutcome: "supported",
         observedPayloadFields: [],
         responseChannels: ["stdout-json", "model-context"],
@@ -885,12 +907,12 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
         modelResultVisibility: "visible",
         nodeVersion: "22.22.1",
         artifactSha256:
-          "258c15999aa90c371a714a3752ae8df128cdfe205ed6c44474e671f1433da943",
+          "43c5a58a352c486b8ff6d0d9f9f72f392260b91c5cc514b5e0211c2ed10ced87",
         approvalPacketSha256:
-          "59c5f57a7845f1cea6cfbe7fade8bc0e07d22534908f64e80692ebbdc59b31c0",
+          "0a623edd5d93392b3528c15e240b0c42af0ef0bcee48b8eb02605b97f6d4af4c",
         producer: "antigravity native session output",
         reviewSha256:
-          "c344cfd0809683051519b99290d214c706f85eec16ca7c25c7f17a944ef64d9f",
+          "0738ce4089f3aba8d48142ac2bff8f3ddc85e866e1b10d794d409852a3b6d793",
         runtimeSha256: VERIFIED_RUNTIME_SHA256,
       },
     },

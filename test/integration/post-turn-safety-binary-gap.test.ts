@@ -1,7 +1,7 @@
 /**
  * Real-Git regressions for secrets and stale identities behind binary coverage-gap releases.
  *
- * Each case stops the same fixture session more than once, the way an agent retries after a blocked Stop.
+ * Most cases stop the same fixture session more than once, the way an agent retries after a blocked Stop.
  * A secret must block every replay, and a binary that changes identity must not inherit an earlier release.
  */
 import assert from "node:assert/strict";
@@ -227,7 +227,7 @@ describe("binary coverage gaps cannot release secrets", () => {
 });
 
 /**
- * Build a binary just over the scanner's old 256 MiB Git output cap: a NUL byte, then one long run with no line break.
+ * Build a binary just over the scanner's 256 MiB Git output cap: a GLB header with NUL bytes, then one long run with no line break.
  *
  * @param tail - text after the run; empty means the asset holds no secret
  * @returns asset bytes larger than 256 MiB
@@ -303,7 +303,7 @@ describe("large binary gaps are scanned, not stuck", () => {
 
   it("checks a long run of label words quickly", () => {
     withTempRepo((root) => {
-      // A run of repeated label words with no token once made the labelled-token pattern take minutes per window.
+      // A megabyte run of repeated label words with no token must finish well inside the scan budget.
       writeFile(root, "labels.bin", `\0${"TOKEN".repeat(209_715)}\n`);
       const started = performance.now();
       const result = runStop(root, false);
@@ -321,8 +321,8 @@ describe("large binary gaps are scanned, not stuck", () => {
         const stale = join(scratch, "goat-flow-staged-blob-stale");
         mkdirSync(stale);
         writeFileSync(join(stale, "blob"), "stale staged copy\n");
-        const hourAgo = new Date(Date.now() - 2 * 3_600_000);
-        utimesSync(stale, hourAgo, hourAgo);
+        const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000);
+        utimesSync(stale, twoHoursAgo, twoHoursAgo);
         writeFile(root, "scene.glb", BINARY_GLB_HEADER);
         runGit(root, ["add", "scene.glb"]);
         const environment = { TMPDIR: scratch, TMP: scratch, TEMP: scratch };

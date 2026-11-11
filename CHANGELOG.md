@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Windows/WSL hook evidence** - Reviewed captures of the current hook runtime cover all 18 delivery rows, including Claude Code 2.1.317 and Codex CLI 0.166.0 on both hosts and helper-free Antigravity 1.4.8 on Windows. Support gates are unchanged.
+- **Windows/WSL hook evidence** - Reviewed captures of the current hook runtime cover all 18 delivery rows, including Claude Code 2.1.317 and Codex CLI 0.167.0 on both hosts and helper-free Antigravity 1.4.8 on Windows. Support gates are unchanged.
 - **Hook policy checks no longer use the frozen Bash reference** - Release checks run the installed Node policy hooks against the shipped corpus on Linux, macOS, Windows and WSL; installs are unaffected.
 
 - **BREAKING: Node 20.12.0 minimum** - The minimum supported Node version rises from 20.11.0 to 20.12.0. Upgrade Node before installing or running goat-flow.

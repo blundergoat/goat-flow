@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-11
 ---
 
 **Scope:** Hook test coverage strategy - what a self-test or fixture actually exercises, which suites and CI jobs run a changed hook, fixtures that must not carry real secrets, and splits that only look like coverage. What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md); the script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -170,12 +170,31 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search:
 ## Lesson: Check disposable fixtures before deriving capture packets
 
 **Status:** active | **Created:** 2026-11-05 | **Evidence:** OBSERVED
+**Incident count:** 2 | **Latest occurrence:** 2026-11-11
 **Decision changed:** Before deriving a capture round, check every disposable fixture root, isolated provider copy and pinned input across all groups before saving the first packet.
 **Trigger phase:** READ
 **Caught at:** VERIFY
 
 **Prevention:** Treat paths in a prior packet as historical claims until their current existence and hashes are checked. Inventory every group first. Missing temporary roots need a bounded restoration scope before packet checks or native readiness; never interpret them as an empty installed project. Include the global-install pin even when the capture runs from an isolated binary. Select validation by the packet protocol: a Stop-only readiness record can differ from an ordinary provider record. Check these inputs before constructing the new batch.
 
+An inventory goes stale. Repeat it for every pending group immediately before each session, run a screen parser against a saved screen from the pinned provider version before relying on it, and choose the check that matches the fixture's current stage.
+
 **What happened:** Capture preparation saved seven provisional Windows child packets before reaching the first missing WSL root. All nine WSL fixture roots and one isolated provider copy had disappeared from temporary storage. The retained archived provider binary still matched its prior hash, but restoring the roots required new agent configurations outside the write allowlist. Work stopped before any live session or external write.
 
 **Evidence:** The source CLI dry run also refused the absent target with ENOENT. The guard is owned by `src/cli/install-command.ts` (search: `Policy choices or ownership files could not be read safely`); its dry-run branch returns before installer side effects (search: `A dry-run reports the exact managed-template result`).
+
+**Recurrence 2026-11-11:** Three days after a recapture round's packets were built, the remaining WSL sessions stopped on inputs the first inventory had covered but nothing had rechecked. A later commit changed a review module, so four generated CLI files no longer matched the pins in every pending packet. Codex had updated to 0.167.0, which stopped three rows at the version check. One provider's status screen printed a model label its readiness parser could not read. They took two approved metadata updates before the sessions could start. A pre-preparation host check was also run against a fixture that was already prepared, and it reported the approved scanner as drift. The synced rows record the version finally captured: `src/cli/hook-provider-captures.ts` (search: `providerVersion: "0.167.0"`).
+
+## Lesson: Derive capture operator inputs from the packet, not from memory
+
+**Status:** active | **Created:** 2026-11-11 | **Evidence:** OBSERVED
+**Incident count:** 3 | **Latest occurrence:** 2026-11-11
+**Decision changed:** Before sending a digest or attestation to a capture controller, compute it from the bound packet with a checked helper, and start the dependent command only after that check reports success.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** A capture controller validates operator input against its packet: the bundle digest, model descriptor, hook counts and hook owners must match exactly. Values typed from memory fail on the first field that differs, and a failed no-task readiness session still uses up its evidence path. Read digests from the approved artifact. Build an attestation with a helper that checks the rendered screens against the packet and then derives every field from it. Rehearse an input driver against saved screens before the live session. When commands run as separate tool calls, a failed call does not stop the next one, so confirm each result before issuing the command that depends on it.
+
+**What happened:** During a Codex Stop recapture on WSL, a read-only command was first issued with a remembered bundle digest and was refused. Two no-task readiness sessions then failed their attestations: the first sent the model name without its reasoning-effort suffix, and the second left out the hook owners. Neither submitted a task and the single live attempt stayed unused, but each failure needed a new evidence path and a new approval. A helper that derives the attestation from the packet, and a driver rehearsed against the saved screens, completed readiness on the next attempt.
+
+**Evidence:** The row captured after the helper replaced hand-typed input is `src/cli/hook-provider-captures.ts` (search: `capturedAt: "2026-11-11T07:43:00.137Z"`).

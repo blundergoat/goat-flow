@@ -181,9 +181,9 @@ describe("host-specific hook provider captures", () => {
   it("keeps renewed Stop versions separate from earlier event captures", () => {
     for (const [caseId, provider, host, version] of [
       ["C3", "claude", "windows", "2.1.317"],
-      ["C6", "codex", "windows", "0.166.0"],
+      ["C6", "codex", "windows", "0.167.0"],
       ["C12", "claude", "wsl", "2.1.317"],
-      ["C15", "codex", "wsl", "0.166.0"],
+      ["C15", "codex", "wsl", "0.167.0"],
     ] as const) {
       const stop = getHookSpec("post-turn-safety")?.providerEvidence?.[
         provider
@@ -224,11 +224,11 @@ describe("host-specific hook provider captures", () => {
     const windowsCodex = hostEvidence("codex", "windows");
     assert.equal(windowsCodex.caseId, "C4");
     assert.equal(windowsCodex.verification, "verified");
-    assert.equal(windowsCodex.capture?.providerVersion, "0.166.0");
+    assert.equal(windowsCodex.capture?.providerVersion, "0.167.0");
     const wslCodex = hostEvidence("codex", "wsl");
     assert.equal(wslCodex.caseId, "C13");
     assert.equal(wslCodex.verification, "verified");
-    assert.equal(wslCodex.capture?.providerVersion, "0.166.0");
+    assert.equal(wslCodex.capture?.providerVersion, "0.167.0");
     const wslAntigravity = hostEvidence("antigravity", "wsl");
     assert.equal(wslAntigravity.caseId, "C18");
     assert.equal(wslAntigravity.verification, "verified");
