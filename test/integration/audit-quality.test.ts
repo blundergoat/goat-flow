@@ -483,18 +483,52 @@ describe("deny-hook-registered harness check", () => {
 // Zero footguns/lessons passes harness (fresh install regression)
 // ---------------------------------------------------------------------------
 describe("zero-entry fresh install", () => {
-  it("a project with zero footguns and lessons passes harness", () => {
-    const report = getRepoAudit({ agentFilter: "claude", harness: true });
-
-    assertExists(report.concerns);
-    // feedback_loop concern should pass even with zero entries
-    // (the real project has entries, but the check only requires directories to exist)
-    const feedbackLoop = report.concerns.feedback_loop;
-    assert.equal(
-      feedbackLoop.status,
-      "pass",
-      `feedback_loop should pass: ${JSON.stringify(feedbackLoop)}`,
+  // Create, audit, then remove an empty temporary project so repository review dates cannot affect this case.
+  it("a project with zero footguns and lessons passes harness", async () => {
+    const projectRoot = await mkdtemp(
+      join(tmpdir(), "goat-flow-empty-learning-loop-"),
     );
+    try {
+      await mkdir(
+        join(projectRoot, ".goat-flow", "learning-loop", "footguns"),
+        {
+          recursive: true,
+        },
+      );
+      await mkdir(join(projectRoot, ".goat-flow", "learning-loop", "lessons"), {
+        recursive: true,
+      });
+      await mkdir(
+        join(projectRoot, ".goat-flow", "learning-loop", "decisions"),
+        {
+          recursive: true,
+        },
+      );
+      const report = runAudit(createFS(projectRoot), projectRoot, {
+        agentFilter: "claude",
+        harness: true,
+      });
+
+      assertExists(report.concerns);
+      const feedbackLoop = report.concerns.feedback_loop;
+      assert.ok(
+        feedbackLoop.findings.includes(
+          "Footguns directory exists (0 entries across 0 files)",
+        ),
+      );
+      assert.ok(
+        feedbackLoop.findings.includes(
+          "Lessons directory exists (0 entries across 0 files)",
+        ),
+      );
+      assert.equal(
+        feedbackLoop.status,
+        "pass",
+        `feedback_loop should pass: ${JSON.stringify(feedbackLoop)}`,
+      );
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
   });
 
   // A fresh consumer has valid learning-loop directories before its first real incident is recorded.

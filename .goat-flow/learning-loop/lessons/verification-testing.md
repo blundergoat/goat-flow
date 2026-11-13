@@ -1,11 +1,21 @@
 ---
 category: verification-testing
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-14
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, coverage judged per behaviour rather than per file, evidence identity proved through the same bytes and resolver the product uses, and skill branches whose stop or skip rule needs its own contract. Changing text that tests already pin is [contract-pinned-wording.md](contract-pinned-wording.md); size limits crossed by added text are [verification-size-gates.md](verification-size-gates.md); ordering edits and gate runs during a change is [verification-gate-runs.md](verification-gate-runs.md); proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md); process-lifecycle and delegated-run tests are [verification-testing-process.md](verification-testing-process.md).
 
 Related evidence moved intact to [platform-verification.md](platform-verification.md).
+
+## Lesson: Overlapping exclusion rules need independent controls
+
+**Status:** active | **Created:** 2026-11-14 | **Evidence:** ACTUAL_MEASURED
+**Trigger phase:** ACT | **Caught at:** VERIFY
+**Decision changed:** When multiple flags exclude the same fixture, disable the unrelated flag before claiming coverage of either rule.
+
+**Prevention:** Keep the shipped-data assertion, then isolate the rule being tested with one controlled input change.
+
+**What happened:** Both quality presets also carried the Internal flag. Removing the quality filter in memory left every original assertion passing. Clearing only `internalOnly` on a decoded preset exposed the missing rule; the added assertion passes against production and fails against that mutation. Evidence: `test/unit/dashboard-preset-flags.test.ts` (search: `must stay hidden independently of the Internal flag`) and `src/dashboard/dashboard-prompts.ts` (search: `!p.qualityWorkflow && !p.internalOnly`).
 
 ## Lesson: Cache-behaviour tests need observable contracts
 

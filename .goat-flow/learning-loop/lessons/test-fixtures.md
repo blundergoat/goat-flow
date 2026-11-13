@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-11-04
+last_reviewed: 2026-11-13
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Parser-specific coverage and producer shapes are [test-fixtures-parsers.md](test-fixtures-parsers.md). Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -155,9 +155,13 @@ last_reviewed: 2026-11-04
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 33 | **Latest occurrence:** 2026-11-02
+**Incident count:** 35 | **Latest occurrence:** 2026-11-13
 
-**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the system under test or the assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behaviour, run the fixture through the unchanged strict baseline so unrelated errors are absent, and keep every non-target value inside its passing bounds. Assert that every text substitution changed its fixture before using the result as simulated input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. For an invalid-state case, name and trigger the exact production predicate; arbitrary content is not invalid when the implementation treats its bytes as opaque. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+**Prevention:** Create every file, global and transitive helper an assertion reaches. Verify the unchanged strict baseline and each substituted input; keep unrelated values valid. Temporary projects must not borrow checkout state. Exercise the actual failure predicate, not arbitrary opaque bytes. Stats fixtures cite their own files: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+
+**Recurrence 2026-11-13 (live checkout):** An empty-project audit test used this repository and failed when its lessons aged. It now creates its own empty project. Evidence: `test/integration/audit-quality.test.ts` (search: `goat-flow-empty-learning-loop-`).
+
+**Recurrence 2026-11-13:** A preset-badge VM test loaded the readers and prompt helpers but omitted their global-safety dependency. It failed with `dashboardGlobalSafeAllowed is not defined`. Loading the real custom-prompt module made the unchanged production behavior pass. Evidence: `test/unit/dashboard-preset-flags.test.ts` (search: `"dashboard-custom-prompts.ts"`).
 
 **Recurrence 2026-10-23 (shallow CI history):** PR #69's slow shard failed four retirement cases because the fixture read `v1.18.0`, while CI fetched only its commit with `--no-tags`. The same fetch reproduced the missing tag in a disposable shallow clone. Enumerate both object and named-ref consumers, fetch the required tag explicitly, and verify with shallow history. Evidence: `.github/workflows/ci.yml` (search: `Fetch pinned upgrade fixture`); `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `released`); `test/integration/packaged-hook-install.test.ts` (search: `upgrades a complete pinned 1.18.0 install`).
 
