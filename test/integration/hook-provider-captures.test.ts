@@ -252,10 +252,10 @@ describe("host-specific hook provider captures", () => {
 
   it("keeps renewed Stop versions separate from earlier event captures", () => {
     for (const [caseId, provider, host, version] of [
-      ["C3", "claude", "windows", "2.1.317"],
-      ["C6", "codex", "windows", "0.167.0"],
-      ["C12", "claude", "wsl", "2.1.317"],
-      ["C15", "codex", "wsl", "0.167.0"],
+      ["C3", "claude", "windows", "2.1.322"],
+      ["C6", "codex", "windows", "0.168.0"],
+      ["C12", "claude", "wsl", "2.1.322"],
+      ["C15", "codex", "wsl", "0.169.0"],
     ] as const) {
       const stop = getHookSpec("post-turn-safety")?.providerEvidence?.[
         provider

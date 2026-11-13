@@ -1,6 +1,6 @@
 ---
 category: hook-support-evidence
-last_reviewed: 2026-11-11
+last_reviewed: 2026-11-13
 ---
 
 **Scope:** What a hook run proves about a provider - separating payload extraction, local availability, result delivery and model visibility before choosing a support label, keeping manual matrices clear of the live guard that inspects them, and the command shape a provider can execute. Test coverage strategy for hook changes is [hook-testing.md](hook-testing.md); driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -142,6 +142,8 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.
 ## Lesson: Keep operator input open before launching an interactive capture
 
 **Status:** active | **Created:** 2026-10-28 | **Evidence:** OBSERVED
+**Severity:** INTEGRATION
+**Incident count:** 2 | **Latest occurrence:** 2026-11-13
 **Decision changed:** Verify persistent input on the outer execution surface before consuming a live capture claim.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -149,6 +151,8 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.
 **Prevention:** An inner provider PTY does not keep its controller's stdin open. When the controller reads incremental operator actions, launch it with `exec_command` and `tty: true`, then use `write_stdin`. First run an inert child through that same outer surface, send a line and await its normal exit. An inner PTY rehearsal alone does not verify this input path.
 
 **What happened:** A Claude Code 2.1.311 hook-capture controller launched through plain pipes. Its `readline` close handler stopped the provider with `operator-input-closed` before any terminal output or task submission. A paired inert reproduction observed immediate input closure through plain pipes; the PTY launch stayed open, received the test line and exited zero. The consumed claim and empty capture were preserved.
+
+**Recurrence 2026-11-13:** A Windows readiness bridge was again launched without `tty: true`. Its input-close handler ended the controller's stdin, which started cleanup before the terminal was ready. Windows node-pty then reported `Signals not supported on windows.` No usable readiness screen or live capture was recorded. A plain-pipe inert probe had closed stdin; the same probe through a TTY accepted its line and exited zero. The failed directory was retained, and another readiness session was held for the user's retry approval.
 
 **Related source contract:** `src/cli/server/terminal-spawn.ts` (search: "ignored stdin reads as end of input") deliberately closes input for a version probe. A controller awaiting operator actions requires a persistent input surface.
 

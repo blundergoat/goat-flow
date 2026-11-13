@@ -1,6 +1,6 @@
 ---
 category: evidence-attribution
-last_reviewed: 2026-11-11
+last_reviewed: 2026-11-13
 ---
 
 **Scope:** Attributing guarantees to the implementation that supplies them, attributing readiness and run details to the host row or command output that recorded them, checking whether reused evidence still describes current bytes, and keeping committed incident evidence readable from a fresh clone. General guidance remains in [agent-evidence-claims.md](agent-evidence-claims.md).
@@ -101,7 +101,7 @@ A recorded state is a snapshot. Before giving an approval hash, replay the consu
 
 **Recurrence 2026-11-02:** Codex 0.166.0 readiness inherited `TERM=dumb`, warned that its interactive TUI might not work, and stopped at `Continue anyway? [y/N]`. The approved input protocol could not answer that startup prompt. The provider exited without a model task. With `TERM=xterm-256color` pinned, native Windows and WSL stand-ins both printed `TERM=xterm-256color` despite inheriting `dumb`. This verifies environment delivery; it does not prove live Codex startup or hook delivery.
 
-**Recurrence 2026-11-11:** A staged metadata proposal for a Codex Stop capture on WSL was recommended for approval after checking only the hashes an earlier status note listed: the proposal, its helper and the before and after digests. A read-only replay of the capture controller's prepared-state checks then failed one of nine external pins. The user's Codex configuration had changed one minute after that note was saved, so the staged bundle carried a stale hash and readiness would have stopped before launch. The recommendation was withdrawn, and a replacement proposal re-pinned the file before the session ran. The row captured afterwards is `src/cli/hook-provider-captures.ts` (search: `capturedAt: "2026-11-11T07:43:00.137Z"`).
+**Recurrence 2026-11-11:** A staged metadata proposal for a Codex Stop capture on WSL was recommended for approval after checking only the hashes an earlier status note listed: the proposal, its helper and the before and after digests. A read-only replay of the capture controller's prepared-state checks then failed one of nine external pins. The user's Codex configuration had changed one minute after that note was saved, so the staged bundle carried a stale hash and readiness would have stopped before launch. The recommendation was withdrawn, and a replacement proposal re-pinned the file before the session ran. The Codex WSL Stop row is maintained in `src/cli/hook-provider-captures.ts` (search: `caseId: "C15"`); later recaptures replace its timestamp and receipt hashes.
 
 ---
 

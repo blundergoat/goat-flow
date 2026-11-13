@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-10-22
+last_reviewed: 2026-11-13
 ---
 
 **Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
@@ -160,7 +160,7 @@ The full gates then caught an unsupported standalone `Evidence` metadata label a
 **Severity:** INTEGRATION
 **Decision changed:** Run the documented capture shape and inspect the produced fields before prescribing it or asserting its terminal labels.
 **Trigger phase:** ACT | **Caught at:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-10-01
+**Incident count:** 5 | **Latest occurrence:** 2026-11-13
 
 **Prevention:** Use the existing command contract against the actual project before embedding it in an assessment prompt. For live hooks, map each required observation to a capture channel before requesting launch approval: event input, production output and exit, and the subsequent model response need separate evidence. A sibling observer cannot supply the production result. Read the exact provider clean-result contract before asserting a JSON shape; empty output with exit zero is valid for Codex Stop. Send terminal shortcuts separately from Enter, then inspect the native state before prompts. Distinguish unsupported capture from failed assessment, and use explicit named fields at TypeScript boundaries instead of assuming array indexes exist. For compiler-backed consumer checks, use each source project's own TypeScript configuration and derive removed declarations from the compared source bytes before asserting their count.
 
@@ -175,3 +175,5 @@ The full gates then caught an unsupported standalone `Evidence` metadata label a
 
 
 **Recurrence 2026-10-01 (review helper):** The consumer helper combined dashboard files with CLI compiler settings, so classic browser globals appeared to have only local references. A revised helper then asserted five removed functions, but the compared source contained four; a follow-up diagnostic also failed to parse. The agent stopped patching that helper, reread the two compiler configurations and the actual declaration diff, then reran separate native programs with import-alias and awaited-import destructuring resolution. The completed receipt includes the live dashboard decoder caller and both CLI/server history callers. Evidence: `tsconfig.json` (search: `src/dashboard`), `tsconfig.dashboard.json` (search: `isolatedModules`), `src/dashboard/dashboard-setup-quality.ts` (search: `.map((row) => readQualityHistoryRow(row))`). The final preflight then rejected the added gitignored receipt citation as a durable evidence anchor. The entry now cites the tracked configuration and decoder caller; task-local execution receipts remain in the milestone. These were helper-evidence failures; no product behavior changed.
+
+**Recurrence 2026-11-13 (capture checks):** Two local checks imposed a different contract on valid capture inputs. A Python text read normalized a Windows fixture's CRLF bytes before comparing them with the packet. A review-index builder then assumed that Windows and WSL transcript extracts put their raw-source hash in the same field. Both checks stopped before their dependent writes. Reading the fixture without newline conversion and inspecting both extract shapes corrected the checks; the approved packets and capture evidence did not change. Preserve bytes when checking a digest-bound fixture, and inspect each producer's actual fields before aggregating its output. The capture metadata contract is `src/cli/hook-provider-captures.ts` (search: `artifactSha256`).

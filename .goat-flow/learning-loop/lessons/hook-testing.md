@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-11-11
+last_reviewed: 2026-11-13
 ---
 
 **Scope:** Hook test coverage strategy - what a self-test or fixture actually exercises, which suites and CI jobs run a changed hook, fixtures that must not carry real secrets, and splits that only look like coverage. What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md); the script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -197,4 +197,4 @@ An inventory goes stale. Repeat it for every pending group immediately before ea
 
 **What happened:** During a Codex Stop recapture on WSL, a read-only command was first issued with a remembered bundle digest and was refused. Two no-task readiness sessions then failed their attestations: the first sent the model name without its reasoning-effort suffix, and the second left out the hook owners. Neither submitted a task and the single live attempt stayed unused, but each failure needed a new evidence path and a new approval. A helper that derives the attestation from the packet, and a driver rehearsed against the saved screens, completed readiness on the next attempt.
 
-**Evidence:** The row captured after the helper replaced hand-typed input is `src/cli/hook-provider-captures.ts` (search: `capturedAt: "2026-11-11T07:43:00.137Z"`).
+**Evidence:** The Codex WSL Stop row is maintained in `src/cli/hook-provider-captures.ts` (search: `caseId: "C15"`). Later recaptures replace its timestamp and receipt hashes, so use the case ID when citing the maintained row.
