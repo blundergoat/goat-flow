@@ -757,11 +757,17 @@ describe("preflight Tests-phase progress", () => {
     };
     const allFiles = Array.from(selection.all);
     const fast = Array.from(selection.select(allFiles));
-    // Local preflight and coverage must retain the same test files as the PR fast job.
+    // Local preflight and coverage must retain the same test files as the combined PR fast shards.
     for (const mode of ["preflight", "coverage"]) {
       runnerContext.mode = mode;
       assert.deepEqual(Array.from(selection.select(allFiles)), fast);
     }
+    // Both fast jobs together must retain every fast test exactly once, with work assigned to each runner.
+    const fastShards = Array.from({ length: 2 }, (_, index) =>
+      Array.from(selection.shard(fast, { index: index + 1, total: 2 })),
+    );
+    assert.ok(fastShards.every((files) => files.length > 0));
+    assert.deepEqual(fastShards.flat().sort(), [...fast].sort());
     runnerContext.mode = "slow";
     const slow = Array.from(selection.select(allFiles));
     assert.deepEqual([...fast, ...slow].sort(), [...allFiles].sort());

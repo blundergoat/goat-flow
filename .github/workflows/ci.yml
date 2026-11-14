@@ -1,8 +1,8 @@
 # The CI workflow a developer sees as checks on every pull request to main or dev, and again after each merge to main.
 #
-# Every run includes three Ubuntu jobs; the platform jobs join only on the weekly schedule or a manual run:
+# Every run includes eight Ubuntu jobs; the platform jobs join only on the weekly schedule or a manual run:
 # - checks: preflight without its test suite, the shell syntax check and the version-stamp check.
-# - test-fast: every test file outside the slow set.
+# - test-fast: every test file outside the slow set, split across two shards.
 # - test-slow: the subprocess-heavy suite, one file at a time per runner, split across five shards.
 # - Platform jobs: Windows hook contracts, hook port controls (Linux, macOS, Windows and WSL2), the Windows ratchet.
 name: CI
@@ -74,9 +74,15 @@ jobs:
       - name: Version consistency (shared script)
         run: npm run check-versions
 
-  # Every file outside the slow set (scripts/run-tests.mjs), with concurrency bounded by available CPUs up to 16; the same `npm run test:fast` a developer runs.
+  # Every file outside the slow set runs on one of two independent fast shards, each with its own checkout.
+  # Local npm run test:fast still runs the complete fast set; CI selects one half with --shard.
   test-fast:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    name: test-fast (${{ matrix.shard }}/2)
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -95,8 +101,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Test (fast)
-        run: npm run test:fast
+      - name: Test (fast shard ${{ matrix.shard }}/2)
+        run: npm run test:fast -- --shard=${{ matrix.shard }}/2
 
   # The subprocess-heavy suite, split across five runners that a PR lists as test-slow (1/5) through test-slow (5/5).
   #

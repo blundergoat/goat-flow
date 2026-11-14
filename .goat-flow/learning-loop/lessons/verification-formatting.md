@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-11-14
+last_reviewed: 2026-11-15
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and the static gates a touched TypeScript file must pass before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -11,7 +11,7 @@ last_reviewed: 2026-11-14
 **Severity:** INTEGRATION
 **Decision changed:** Use the review validator's exact receipt names, scope labels and canonical JSON before persisting a report.
 **Trigger phase:** ACT | **Caught at:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-11-14
+**Incident count:** 4 | **Latest occurrence:** 2026-11-15
 
 **Prevention:** Run draft validation before writing review receipts. An explicit path selection uses `uncommitted=n/a`; its receipt names require the literal `goat-review-bundle.` and `goat-review-refutations.` prefixes. Infer neither rule from the files' working-tree status or a similar-looking example name. Reuse the producer's canonical JSON or `canonicalReviewJson` for integrity fields; ordinary JSON serialization does not preserve the required ordering, spacing and Markdown escapes. Choose pipe-free anchors for refutation records because pipes delimit their fields.
 
@@ -22,6 +22,8 @@ last_reviewed: 2026-11-14
 **Recurrence 2026-11-14:** The M56 review draft used ordinary JSON serialization for integrity fields. Draft validation rejected seven format/authority checks before persistence. Canonical field serialization made draft and final validation pass without changing source files. Evidence: `src/cli/review-validate-common.ts` (search: `canonicalReviewJson`, `authority evidence must use canonical JSON from review snapshot`).
 
 **Recurrence 2026-11-14:** The full uncommitted review used an anchor containing a logical-OR operator. Ledger validation treated its pipes as field separators and rejected the record before persistence. Use another literal anchor from the same guard. Evidence: `src/cli/review-validate-common.ts` (search: `REFUTATION_LEDGER_RECORD`).
+
+**Recurrence 2026-11-15:** The M57 fast-shard review chose generic bundle and ledger filenames. Draft validation rejected three receipt-format checks before persistence. Using the required prefixes made draft and final validation pass; the CI patch stayed unchanged. Evidence: `src/cli/review-validate-common.ts` (search: `REFUTATION_LEDGER_PATH`, `REVIEW_BUNDLE_PATH`).
 
 ---
 
