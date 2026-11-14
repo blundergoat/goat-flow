@@ -3,6 +3,7 @@
  * Use these readers when a user needs to know whether local hook files, registrations, and executable policy rules provide the claimed coverage.
  */
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
+import { getHookSpec } from "../../server/hooks-registry.js";
 import {
   buildDenyRegistration,
   buildHookRegistration,
@@ -93,10 +94,12 @@ function analyzeDenyScript(denyContent: string): {
     blocksChmod: /chmod.*777/.test(denyContent),
     blocksPipeToShell:
       /(curl|wget)[^|]*\|\s*(ba)?sh/i.test(denyContent) ||
-      /pipe-to-shell/i.test(denyContent),
+      /pipe-to-shell/i.test(denyContent) ||
+      (denyContent.includes("function checkPipelineShellConsumers(") &&
+        denyContent.includes("function isDownloaderPipeSource(")),
     blocksCloudDestructive:
       /docker\s+push|terraform\s+(destroy|apply.*-auto-approve)|aws\s+(s3\s+rm|ec2\s+terminate)/i.test(
-        denyContent,
+        denyContent.replaceAll("[ \\t\\n\\v\\f\\r]+", " "),
       ),
   };
 }
@@ -211,21 +214,20 @@ function resolveDenyHookPath(
   fs: ReadonlyFS,
   agent: AgentProfile,
 ): string | null {
-  const singleDispatcher = agent.hooksDir
-    ? `${agent.hooksDir}/deny-dangerous.sh`
-    : null;
-  if (singleDispatcher && fs.exists(singleDispatcher)) return singleDispatcher;
-
-  const explicitHook =
-    agent.denyHookFile && fs.exists(agent.denyHookFile)
-      ? agent.denyHookFile
-      : null;
-  if (explicitHook) return explicitHook;
-
-  const splitGuardrail = agent.hooksDir
-    ? `${agent.hooksDir}/guard-repository-writes.sh`
-    : null;
-  if (splitGuardrail && fs.exists(splitGuardrail)) return splitGuardrail;
+  const primary = agent.hooksDir
+    ? [
+        `${agent.hooksDir}/deny-dangerous.mjs`,
+        `${agent.hooksDir}/deny-dangerous.sh`,
+      ]
+    : [];
+  const candidates = [
+    ...primary,
+    agent.denyHookFile,
+    agent.hooksDir ? `${agent.hooksDir}/guard-repository-writes.sh` : null,
+  ];
+  for (const path of candidates) {
+    if (path && fs.exists(path)) return path;
+  }
 
   return resolveDenyMechanismPath(agent);
 }
@@ -254,6 +256,15 @@ function siblingGuardrailPaths(
 ): string[] {
   // Nothing registered, so there are no supporting files to report either way.
   if (!denyHookPath) return [];
+  if (/\/deny-(?:dangerous|git-mutations)\.mjs$/u.test(denyHookPath)) {
+    const hookId = denyHookPath.slice(denyHookPath.lastIndexOf("/") + 1, -4);
+    const paths =
+      getHookSpec(hookId)?.scriptFiles.map(
+        (file) =>
+          `${denyHookPath.slice(0, denyHookPath.lastIndexOf("/"))}/${file}`,
+      ) ?? [];
+    return paths.every((path) => fs.exists(path)) ? paths : [];
+  }
   // The current deny hook keeps its policy files at fixed paths shared by every agent.
   if (/\/deny-(?:dangerous|git-mutations)\.sh$/u.test(denyHookPath)) {
     return SHARED_POLICY_FILES.every((path) => fs.exists(path))
@@ -302,12 +313,19 @@ function analyzeDenyHookPath(
 
   const requiredPaths = siblingGuardrailPaths(fs, denyHookPath);
   if (
-    /\/deny-(?:dangerous|git-mutations)\.sh$/u.test(denyHookPath) &&
+    /\/deny-(?:dangerous|git-mutations)\.(?:mjs|sh)$/u.test(denyHookPath) &&
     requiredPaths.length === 0
   ) {
     return createEmptyDenyFacts(false);
   }
   const guardrailContents = requiredPaths
+    // Corpus examples and vendored text cannot establish active policy coverage.
+    .filter(
+      (path) =>
+        !path.includes("/vendor/") &&
+        !path.endsWith("/corpus.json") &&
+        !path.endsWith("/policy-corpus.mjs"),
+    )
     .map((path) => fs.readFile(path))
     .filter((content): content is string => typeof content === "string");
   const analysis = analyzeDenyScript(
@@ -316,11 +334,12 @@ function analyzeDenyHookPath(
   return {
     ...hook,
     denyHasBlocks: analysis.hasBlocks,
-    denyUsesJq: analysis.usesJq,
+    denyUsesJq: !denyHookPath.endsWith(".mjs") && analysis.usesJq,
     denyHandlesChaining: analysis.handlesChaining,
     denyBlocksRmRf: analysis.blocksRmRf,
     denyBlocksGitPush:
-      denyHookPath.endsWith("/deny-git-mutations.sh") && analysis.blocksGitPush,
+      /\/deny-git-mutations\.(?:mjs|sh)$/u.test(denyHookPath) &&
+      analysis.blocksGitPush,
     denyBlocksChmod: analysis.blocksChmod,
     denyBlocksPipeToShell: analysis.blocksPipeToShell,
     denyBlocksCloudDestructive: analysis.blocksCloudDestructive,
@@ -332,7 +351,14 @@ function denyHookHasActiveSecretRule(content: string): boolean {
   const hasSecretFunction = /\bis_secret_path_touch\s*\(\)/.test(content);
   const hasSecretFlag = /\btouches_secret\b/.test(content);
   const hasSecretBlock = /block\s+["']Secret-file access/.test(content);
-  return [hasSecretFunction, hasSecretFlag].every(Boolean) || hasSecretBlock;
+  const hasNativeRule =
+    /export async function checkSecretSegment\b/u.test(content) &&
+    content.includes('scope: "secret"');
+  return (
+    [hasSecretFunction, hasSecretFlag].every(Boolean) ||
+    hasSecretBlock ||
+    hasNativeRule
+  );
 }
 
 /** Detect relative/home root normalization for secret path checks. */
@@ -346,7 +372,15 @@ function denyHookHasNormalizedSecretRoots(content: string): boolean {
     "cat ../.env",
     "cat ~/.ssh/id_rsa",
   ].every((marker) => content.includes(marker));
-  return hasRootMatcher || hasBoundaryAwareDirectoryMatcher || hasSelfTestRoots;
+  const hasNativeRootMatcher =
+    content.includes("function isSecretPathTouch(") &&
+    content.includes("stripPolicyShellQuotesForPathScan(");
+  return (
+    hasRootMatcher ||
+    hasBoundaryAwareDirectoryMatcher ||
+    hasSelfTestRoots ||
+    hasNativeRootMatcher
+  );
 }
 
 /**
@@ -390,9 +424,12 @@ function detectBashDenyCoversSecrets(
   const secretSibling = siblingGuardrailPaths(fs, denyHookPath).find(
     (path) =>
       path.endsWith("/patterns-paths.sh") ||
+      path.endsWith("/patterns-paths.mjs") ||
       path.endsWith("/guard-secret-paths.sh"),
   );
-  const content = fs.readFile(secretSibling ?? denyHookPath);
+  const content = fs
+    .readFile(secretSibling ?? denyHookPath)
+    ?.replaceAll("\\/", "/");
   if (!content) return false;
   return (
     denyHookHasActiveSecretRule(content) &&
@@ -419,7 +456,7 @@ function findAbsolutePathHooks(
   const absolutePathHooks: string[] = [];
 
   for (const hookFile of fs.listDir(hooksDir)) {
-    if (!hookFile.endsWith(".sh")) continue;
+    if (!/\.(?:mjs|sh)$/u.test(hookFile)) continue;
     const hookContent = fs.readFile(`${hooksDir}/${hookFile}`);
     if (!hookContent) continue;
     if (hookContent.split("\n").some(lineHasAbsolutePath)) {
@@ -463,9 +500,15 @@ export function extractHookFacts(
     hookConfig.parsed,
     "deny-git-mutations",
   );
-  const gitPath = agent.hooksDir
-    ? `${agent.hooksDir}/deny-git-mutations.sh`
+  const nativeGitPath = agent.hooksDir
+    ? `${agent.hooksDir}/deny-git-mutations.mjs`
     : null;
+  const gitPath =
+    nativeGitPath && fs.exists(nativeGitPath)
+      ? nativeGitPath
+      : agent.hooksDir
+        ? `${agent.hooksDir}/deny-git-mutations.sh`
+        : null;
   const gitHook = analyzeDenyHookPath(fs, gitPath);
   const bashDenyCoversSecrets = detectBashDenyCoversSecrets(fs, denyHookPath);
 
@@ -523,7 +566,8 @@ function extractCodexPostTurnFacts(
     postTurnRegisteredPath !== null &&
     fs.exists(postTurnRegisteredPath);
   const postTurnExecutable = postTurnExists
-    ? fs.isExecutable(postTurnRegisteredPath)
+    ? postTurnRegisteredPath.endsWith(".mjs") ||
+      fs.isExecutable(postTurnRegisteredPath)
     : false;
 
   return {
@@ -552,7 +596,8 @@ function extractDirectoryPostTurnFacts(
     postTurnRegisteredPath !== null &&
     fs.exists(postTurnRegisteredPath);
   const postTurnExecutable = postTurnExists
-    ? fs.isExecutable(postTurnRegisteredPath)
+    ? postTurnRegisteredPath.endsWith(".mjs") ||
+      fs.isExecutable(postTurnRegisteredPath)
     : false;
 
   return {

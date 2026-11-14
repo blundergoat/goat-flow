@@ -1,9 +1,12 @@
 /**
- * How the command behaves at the filesystem boundary: redacted previews by default, writes
- * only on explicit output, force required to regenerate, and symlinked or hardlinked
- * destinations refused outright.
- * Runs the real CLI and parser against written fixtures, so failures read as the author's
- * terminal output rather than as internals.
+ * Tests what `goat-flow plans export` does at the filesystem boundary, from the first preview to a saved bundle the plan author can share.
+ * Most cases run the export in-process so failures read like terminal output; the JSON preview and JSON file-write cases spawn the real CLI.
+ *
+ * What a plan author running the command can rely on:
+ * - With no `--output`, it prints a redacted JSON or Markdown preview to stdout and writes no files.
+ * - With `--output`, it writes the export; replacing an export that already exists needs `--force`.
+ * - Even with `--force`, it refuses to overwrite a source milestone or to write through a symlinked or hardlinked destination.
+ * - Every refusal exits 2 with a message on stderr and writes no export file.
  */
 import { describe, it } from "node:test";
 import type { TestContext } from "node:test";
@@ -23,12 +26,20 @@ import {
   completeMilestoneBody,
   writePlanFixture,
   runPlansExport,
+  runPlansExportCli,
   symlinkOrSkip,
   hardlinkOrSkip,
 } from "./plans-export.helpers.js";
 
+/**
+ * Follows a plan author from previewing a plan export to saving it, regenerating it, and hitting each refusal.
+ * Each file-based case writes a throwaway plan in the OS temp folder and removes it in `finally`, so that a failed assertion leaves nothing behind.
+ */
 describe("plans export: CLI previews and protected writes", () => {
-  // CLI parsing keeps the plan path distinct from the export subcommand users invoked.
+  /**
+   * An author types `goat-flow plans export <plan> --format json` to see what the export would contain before saving anything.
+   * The parser must route that to the export subcommand and keep the plan folder as the path to read.
+   */
   it("parses plans export as a first-class CLI command", () => {
     const planPath = resolve(".goat-flow/plans/1.15.0");
     const parsed = parseCLIArgs([
@@ -42,18 +53,20 @@ describe("plans export: CLI previews and protected writes", () => {
     assert.equal(parsed.command, "plans");
     assert.equal(parsed.plansSubcommand, "export");
     assert.equal(parsed.projectPath, planPath);
+    // No `--output` was typed, so output stays null and the command previews to stdout instead of writing files.
     assert.equal(parsed.output, null);
   });
 
   /**
-   * Fixture purpose: reproduce a user previewing a sensitive plan before choosing an output path.
-   * Process/filesystem side effects: spawns the CLI and writes only the temporary source milestone.
+   * An author previews a plan before choosing where to save it, but a token was pasted into the objective and the milestone filename.
+   * Spawns the real CLI and writes only the temp source milestone; the preview must be redacted and no `exports/` folder may appear.
    */
   it("prints redacted JSON preview without creating export files", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-preview-"),
     );
     const planPath = join(temporaryRoot, "1.15.0");
+    // Built from parts so this source never holds a whole token-shaped string that the repo's secret scan would block.
     const fakeToken = ["ghp", "p".repeat(36)].join("_");
     writePlanFixture(
       planPath,
@@ -62,14 +75,16 @@ describe("plans export: CLI previews and protected writes", () => {
     );
 
     try {
-      const result = runPlansExport(planPath, "--format", "json");
+      const result = runPlansExportCli(planPath, "--format", "json");
 
       assert.equal(result.status, 0, result.stderr);
       const records = JSON.parse(result.stdout) as Array<{
         objective: string;
       }>;
+      // An empty preview leaves `records[0]` undefined and fails here; otherwise the objective shows the redaction marker, not the token.
       assert.equal(records[0]?.objective, "[REDACTED:token]");
       assert.doesNotMatch(result.stdout, new RegExp(fakeToken, "u"));
+      // Previewing must not create an `exports/` folder; files appear only once the author passes `--output`.
       assert.equal(existsSync(join(planPath, "exports")), false);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
@@ -77,8 +92,8 @@ describe("plans export: CLI previews and protected writes", () => {
   });
 
   /**
-   * Fixture purpose: prove an exceptional-status explanation survives both portable formats without leaking pasted credentials.
-   * Process/filesystem side effects: spawns two previews and writes only the temporary source milestone.
+   * An author abandons a milestone and explains why, but the status reason and the Lane value both quote a pasted token.
+   * Runs JSON and Markdown previews in-process and writes only the temp source milestone; both must keep the reason's wording and mask the token.
    */
   it("redacts status reasons and Lane values in JSON and Markdown previews", () => {
     const temporaryRoot = mkdtempSync(
@@ -106,8 +121,10 @@ describe("plans export: CLI previews and protected writes", () => {
         statusReason: string;
         lane: string;
       }>;
+      // With no record this reads undefined and fails; with one, the Lane value is masked whole because it held only the token.
       assert.equal(records[0]?.lane, "[REDACTED:token]");
       assert.match(markdownPreview.stdout, /\*\*Lane:\*\* \[REDACTED:token\]/u);
+      // Only the token is masked, so a reader of the export still learns why the milestone stopped; a missing record fails as undefined.
       assert.equal(
         records[0]?.statusReason,
         "Human stopped after [REDACTED:token] appeared in evidence.",
@@ -123,23 +140,34 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
+  // One test per Lane value, so a failure names the shape that broke: empty (a bare `**Lane:**` header, titled "an empty lane") and `php`.
   for (const lane of ["", "php"]) {
     /**
-     * Fixture purpose: preserve explicit Lane metadata without changing other exported bytes.
-     * Process/filesystem side effects: spawns CLI previews and writes then removes a temporary plan.
+     * An author adds a `**Lane:**` line under "Depends on" in a plan that already exports cleanly.
+     * Runs previews in-process and writes then removes a temp plan; the export must gain the Lane field and change nothing else.
      */
     it(`adds only declared Lane metadata to previews for ${lane || "an empty lane"}`, () => {
       const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-lane-"));
       const planPath = join(temporaryRoot, "plan");
       try {
         writePlanFixture(planPath, completeMilestoneBody());
-        const legacyJson = runPlansExport(planPath, "--format", "json");
-        const legacyMarkdown = runPlansExport(planPath, "--format", "markdown");
-        assert.equal(legacyJson.status, 0, legacyJson.stderr);
-        assert.equal(legacyMarkdown.status, 0, legacyMarkdown.stderr);
-        const legacy = JSON.parse(legacyJson.stdout);
-        assert.equal(Object.hasOwn(legacy[0], "lane"), false);
-        assert.doesNotMatch(legacyMarkdown.stdout, /\*\*Lane:\*\*/u);
+        const noLaneJsonPreview = runPlansExport(planPath, "--format", "json");
+        const noLaneMarkdownPreview = runPlansExport(
+          planPath,
+          "--format",
+          "markdown",
+        );
+        assert.equal(noLaneJsonPreview.status, 0, noLaneJsonPreview.stderr);
+        assert.equal(
+          noLaneMarkdownPreview.status,
+          0,
+          noLaneMarkdownPreview.stderr,
+        );
+        const noLaneRecords = JSON.parse(noLaneJsonPreview.stdout);
+        // A plan with no Lane line must not gain a `lane` key in JSON or a Lane line in Markdown.
+        assert.equal(Object.hasOwn(noLaneRecords[0], "lane"), false);
+        assert.doesNotMatch(noLaneMarkdownPreview.stdout, /\*\*Lane:\*\*/u);
+        // Example: the author edits the same milestone file and adds a Lane line directly under "Depends on".
         writePlanFixture(
           planPath,
           completeMilestoneBody().replace(
@@ -156,12 +184,13 @@ describe("plans export: CLI previews and protected writes", () => {
         assert.equal(jsonPreview.status, 0, jsonPreview.stderr);
         assert.equal(markdownPreview.status, 0, markdownPreview.stderr);
         assert.deepEqual(JSON.parse(jsonPreview.stdout), [
-          { ...legacy[0], lane },
+          { ...noLaneRecords[0], lane },
         ]);
+        // An empty Lane renders as a bare `**Lane:**` header with no trailing space; a named Lane follows the label.
         const laneHeader = lane === "" ? "**Lane:**" : `**Lane:** ${lane}`;
         assert.equal(
           markdownPreview.stdout,
-          legacyMarkdown.stdout.replace(
+          noLaneMarkdownPreview.stdout.replace(
             "**Depends on:** M08; M07\n",
             `**Depends on:** M08; M07\n${laneHeader}\n`,
           ),
@@ -173,8 +202,8 @@ describe("plans export: CLI previews and protected writes", () => {
   }
 
   /**
-   * Fixture purpose: cover the JSON persistence adapter rather than only its stdout preview.
-   * Process/filesystem side effects: spawns the CLI and writes one bundle inside a temp directory.
+   * An author passes a `.json` file path to `--output` to save the export for sharing outside the repo.
+   * Spawns the real CLI and writes one bundle inside a temp folder; stderr must confirm the saved path and the file must hold the milestone.
    */
   it("writes a redacted JSON record bundle to an explicit output file", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-json-"));
@@ -183,7 +212,7 @@ describe("plans export: CLI previews and protected writes", () => {
     writePlanFixture(planPath, completeMilestoneBody());
 
     try {
-      const result = runPlansExport(
+      const result = runPlansExportCli(
         planPath,
         "--format",
         "json",
@@ -192,10 +221,13 @@ describe("plans export: CLI previews and protected writes", () => {
       );
 
       assert.equal(result.status, 0, result.stderr);
+      // The saved path goes to stderr, so stdout stays clean for scripts that pipe the command.
+      assert.equal(result.stderr, `Written to ${outputPath}\n`);
       const records = JSON.parse(readFileSync(outputPath, "utf-8")) as Array<{
         title: string;
         verificationMarkdown: string;
       }>;
+      // A file with no milestones leaves `records[0]` undefined and both checks fail; otherwise the title and verification steps must survive.
       assert.equal(records[0]?.title, "M42: Portable plan");
       assert.match(records[0]?.verificationMarkdown ?? "", /focused tests/u);
     } finally {
@@ -204,15 +236,17 @@ describe("plans export: CLI previews and protected writes", () => {
   });
 
   /**
-   * Fixture purpose: cover generated Markdown output and the explicit overwrite contract.
-   * Process/filesystem side effects: spawns three CLI runs and writes only inside one temp directory.
+   * An author saves Markdown exports, edits one by hand, then runs the same export again.
+   *
+   * Runs three in-process exports and writes only inside one temp folder.
+   * The rerun must exit 2 and keep the edit until the author adds `--force`.
    */
   it("writes redacted Markdown and requires force before regeneration", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-markdown-"),
     );
     const planPath = join(temporaryRoot, "1.15.0");
-    const outputPath = join(temporaryRoot, "exports");
+    const outputDirectory = join(temporaryRoot, "exports");
     const fakeToken = ["npm", "q".repeat(36)].join("_");
     writePlanFixture(planPath, completeMilestoneBody(fakeToken));
 
@@ -222,22 +256,23 @@ describe("plans export: CLI previews and protected writes", () => {
         "--format",
         "markdown",
         "--output",
-        outputPath,
+        outputDirectory,
       );
       assert.equal(firstWrite.status, 0, firstWrite.stderr);
-      const milestoneOutputPath = join(outputPath, "M42-portable-plan.md");
+      const milestoneOutputPath = join(outputDirectory, "M42-portable-plan.md");
       const firstBody = readFileSync(milestoneOutputPath, "utf-8");
       assert.match(firstBody, /## Proof/u);
       assert.match(firstBody, /\[REDACTED:token\]/u);
       assert.doesNotMatch(firstBody, new RegExp(fakeToken, "u"));
 
+      // Example: the author hand-edits the generated file; a plain rerun must not overwrite that edit.
       writeFileSync(milestoneOutputPath, "user-owned replacement\n", "utf-8");
       const refusedWrite = runPlansExport(
         planPath,
         "--format",
         "markdown",
         "--output",
-        outputPath,
+        outputDirectory,
       );
       assert.equal(refusedWrite.status, 2);
       assert.match(refusedWrite.stderr, /already exists.*--force/iu);
@@ -246,12 +281,13 @@ describe("plans export: CLI previews and protected writes", () => {
         "user-owned replacement\n",
       );
 
+      // With `--force` the author opts in, so the regenerated export replaces the hand edit.
       const forcedWrite = runPlansExport(
         planPath,
         "--format",
         "markdown",
         "--output",
-        outputPath,
+        outputDirectory,
         "--force",
       );
       assert.equal(forcedWrite.status, 0, forcedWrite.stderr);
@@ -262,8 +298,8 @@ describe("plans export: CLI previews and protected writes", () => {
   });
 
   /**
-   * Fixture purpose: prove force never converts a source milestone into its generated export.
-   * Process/filesystem side effects: spawns the CLI and reads one unchanged temp source file.
+   * An author points Markdown `--output` at the plan folder itself and adds `--force`, which would overwrite the milestones being exported.
+   * Runs the export in-process and reads the temp source file back; it must exit 2 and leave the source unchanged.
    */
   it("refuses forced Markdown output that aliases a source milestone", () => {
     const temporaryRoot = mkdtempSync(
@@ -293,8 +329,10 @@ describe("plans export: CLI previews and protected writes", () => {
   });
 
   /**
-   * Fixture purpose: mirror source protection for the single-file JSON export path.
-   * Process/filesystem side effects: spawns the CLI and reads one unchanged temp source file.
+   * An author selects the plan through a symlinked folder and names the real source milestone as the JSON `--output`, with `--force`.
+   * Runs the export in-process and reads the source back; the export must see through the symlink, exit 2, and leave the milestone unchanged.
+   *
+   * @param testContext - the running test, so a host that blocks unprivileged symlinks skips this case instead of failing it
    */
   it("refuses forced JSON output that aliases a source through the selected plan path", (testContext) => {
     const temporaryRoot = mkdtempSync(
@@ -304,6 +342,7 @@ describe("plans export: CLI previews and protected writes", () => {
     const selectedPlanPath = join(temporaryRoot, "selected-plan");
     const sourcePath = join(planPath, "M42-portable-plan.md");
     writePlanFixture(planPath, completeMilestoneBody());
+    // Example: on Windows without Developer Mode the symlink is refused, so the case is skipped and its temp folder removed before `try` starts.
     if (!symlinkOrSkip(testContext, planPath, selectedPlanPath)) {
       rmSync(temporaryRoot, { recursive: true, force: true });
       return;
@@ -329,15 +368,15 @@ describe("plans export: CLI previews and protected writes", () => {
   });
 
   /**
-   * Fixture purpose: prove two source names cannot silently overwrite one generated Markdown file.
-   * Process/filesystem side effects: spawns the CLI and writes only temporary source milestones.
+   * An author has two milestones, `M01-a!.md` and `M01-a#.md`, that both become `M01-a-.md` once unsafe filename characters are replaced.
+   * Runs the export in-process and writes only the temp sources; even with `--force` it must exit 2 and ask the author to rename one.
    */
   it("rejects sanitized Markdown filename collisions before writing", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-filename-collision-"),
     );
     const planPath = join(temporaryRoot, "1.15.0");
-    const outputPath = join(temporaryRoot, "exports");
+    const outputDirectory = join(temporaryRoot, "exports");
     writePlanFixture(planPath, completeMilestoneBody(), "M01-a!.md");
     writePlanFixture(planPath, completeMilestoneBody(), "M01-a#.md");
 
@@ -347,28 +386,29 @@ describe("plans export: CLI previews and protected writes", () => {
         "--format",
         "markdown",
         "--output",
-        outputPath,
+        outputDirectory,
         "--force",
       );
 
       assert.equal(result.status, 2);
       assert.match(result.stderr, /same export filename.*rename/iu);
-      assert.equal(existsSync(outputPath), false);
+      // The collision is caught before any write, so not even the export folder is created.
+      assert.equal(existsSync(outputDirectory), false);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
 
   /**
-   * Fixture purpose: prove redaction cannot collapse distinct secret-bearing names into one destination.
-   * Process/filesystem side effects: spawns the CLI and writes only temporary source milestones.
+   * Two milestone filenames differ only by the token pasted into them, so after redaction both would get the same export filename.
+   * Runs the export in-process and writes only the temp sources; it must exit 2 and keep both tokens out of the error message.
    */
   it("rejects redaction-induced Markdown filename collisions", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-redaction-collision-"),
     );
     const planPath = join(temporaryRoot, "1.15.0");
-    const outputPath = join(temporaryRoot, "exports");
+    const outputDirectory = join(temporaryRoot, "exports");
     const firstToken = ["ghp", "a".repeat(36)].join("_");
     const secondToken = ["ghp", "b".repeat(36)].join("_");
     writePlanFixture(planPath, completeMilestoneBody(), `M01-${firstToken}.md`);
@@ -384,12 +424,13 @@ describe("plans export: CLI previews and protected writes", () => {
         "--format",
         "markdown",
         "--output",
-        outputPath,
+        outputDirectory,
       );
 
       assert.equal(result.status, 2);
       assert.match(result.stderr, /same export filename.*redaction/iu);
-      assert.equal(existsSync(outputPath), false);
+      // Refused before writing, so the export folder the author named never appears.
+      assert.equal(existsSync(outputDirectory), false);
       assert.doesNotMatch(result.stderr, new RegExp(firstToken, "u"));
       assert.doesNotMatch(result.stderr, new RegExp(secondToken, "u"));
     } finally {
@@ -398,8 +439,8 @@ describe("plans export: CLI previews and protected writes", () => {
   });
 
   /**
-   * Fixture purpose: keep a directory-shaped JSON destination on the user-facing usage path.
-   * Process/filesystem side effects: spawns the CLI and creates only temporary directories.
+   * An author passes an existing folder as the JSON `--output`, with `--force`, where a single bundle file is expected.
+   * Runs the export in-process and writes only a temp plan and that folder; it must exit 2 with a usage message, not a raw `EISDIR` error.
    */
   it("rejects a JSON output directory even with force", () => {
     const temporaryRoot = mkdtempSync(
@@ -428,7 +469,12 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
-  // Fixture: writes an output parent that is a symlink to another directory, so a JSON export would land outside the folder the author named.
+  /**
+   * An author names `out/bundle.json`, but `out` is a symlink to another folder, so the bundle would land outside the folder they named.
+   * Writes the symlink and a temp plan; the export must exit 2 and write nothing into the symlink's target.
+   *
+   * @param testContext - the running test, so a host that blocks unprivileged symlinks skips this case instead of failing it
+   */
   it("refuses JSON export through a symlinked parent directory", (testContext: TestContext) => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
@@ -438,6 +484,7 @@ describe("plans export: CLI previews and protected writes", () => {
     mkdirSync(redirectedDirectory, { recursive: true });
 
     try {
+      // If the host refuses the symlink (EPERM), the case is skipped here; `finally` still removes the temp folder.
       if (!symlinkOrSkip(testContext, redirectedDirectory, outputParent)) {
         return;
       }
@@ -457,7 +504,12 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
-  // Fixture: writes a symlink above the output directory, so checking only the final path would miss the escape.
+  /**
+   * The same escape one level higher: `linked-ancestor` is a symlink and the author names `linked-ancestor/nested/bundle.json`.
+   * Writes the symlink and a temp plan; checking only the final folder would miss it, so every existing parent must be a real folder.
+   *
+   * @param testContext - the running test, so a host that blocks unprivileged symlinks skips this case instead of failing it
+   */
   it("refuses JSON export through a symlinked intermediate ancestor", (testContext: TestContext) => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
@@ -467,6 +519,7 @@ describe("plans export: CLI previews and protected writes", () => {
     mkdirSync(join(redirectedDirectory, "nested"), { recursive: true });
 
     try {
+      // Without symlink permission the case skips here, and the export never runs against an unlinked path.
       if (!symlinkOrSkip(testContext, redirectedDirectory, linkedAncestor)) {
         return;
       }
@@ -489,17 +542,23 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
-  // Fixture: writes a destination that is a hardlink to an unrelated file, so the export would overwrite content the author never named.
+  /**
+   * The author's chosen `bundle.json` is a hardlink to an unrelated file, so writing the bundle would also overwrite that file's content.
+   * Writes the hardlink and a temp plan; even with `--force` the export must exit 2 and leave the unrelated file reading "keep".
+   *
+   * @param testContext - the running test, so a filesystem that blocks hardlinks skips this case instead of failing it
+   */
   it("refuses a hardlinked JSON destination even with force", (testContext: TestContext) => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
     const outputPath = join(temporaryRoot, "bundle.json");
-    const victimPath = join(temporaryRoot, "victim.txt");
+    const unrelatedFilePath = join(temporaryRoot, "victim.txt");
     writePlanFixture(planPath, completeMilestoneBody());
-    writeFileSync(victimPath, "keep\n", "utf-8");
+    writeFileSync(unrelatedFilePath, "keep\n", "utf-8");
 
     try {
-      if (!hardlinkOrSkip(testContext, victimPath, outputPath)) return;
+      // Example: a temp folder on a filesystem that blocks hardlinks (EACCES, EPERM or EXDEV) skips this case; `finally` still cleans up.
+      if (!hardlinkOrSkip(testContext, unrelatedFilePath, outputPath)) return;
       const result = runPlansExport(
         planPath,
         "--format",
@@ -511,15 +570,18 @@ describe("plans export: CLI previews and protected writes", () => {
 
       assert.equal(result.status, 2);
       assert.match(result.stderr, /single-link regular file or absent/u);
-      assert.equal(readFileSync(victimPath, "utf-8"), "keep\n");
+      assert.equal(readFileSync(unrelatedFilePath, "utf-8"), "keep\n");
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
 
-  // A directory shadowing one generated filename must fail before ANY milestone
-  // is written; a forced regeneration must never leave a partial bundle. Writes a
-  // disposable plan plus the shadowing directory, then removes the whole root.
+  /**
+   * An author exports a two-milestone plan with `--force`, but a folder already sits where `M43-second.md` would be written.
+   *
+   * Writes a temp plan plus that folder, then removes the whole temp root.
+   * The export must exit 2 before writing any milestone, so the author never gets a partial bundle.
+   */
   it("fails atomically when a forced Markdown destination is a directory", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
@@ -550,23 +612,27 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
-  // A symlinked generated filename must never be followed to an outside file,
-  // even when the user authorized replacement with --force. Writes a disposable
-  // plan and the symlink, then removes the whole root.
+  /**
+   * The generated `M42-portable-plan.md` in the output folder is a symlink to an unrelated file, and the author passes `--force`.
+   * Writes a temp plan and the symlink; the export must exit 2 rather than follow the link, so the unrelated file still reads "keep".
+   *
+   * @param testContext - the running test, so a host that blocks unprivileged symlinks skips this case instead of failing it
+   */
   it("refuses symlinked Markdown destinations even with force", (testContext: TestContext) => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
     const outputDirectory = join(temporaryRoot, "out");
-    const victimPath = join(temporaryRoot, "victim.txt");
+    const unrelatedFilePath = join(temporaryRoot, "victim.txt");
     writePlanFixture(planPath, completeMilestoneBody());
     mkdirSync(outputDirectory, { recursive: true });
-    writeFileSync(victimPath, "keep\n", "utf-8");
+    writeFileSync(unrelatedFilePath, "keep\n", "utf-8");
 
     try {
+      // A host that blocks the symlink skips the case here, since it cannot stage a link for the export to follow.
       if (
         !symlinkOrSkip(
           testContext,
-          victimPath,
+          unrelatedFilePath,
           join(outputDirectory, "M42-portable-plan.md"),
         )
       ) {
@@ -584,7 +650,7 @@ describe("plans export: CLI previews and protected writes", () => {
       assert.equal(result.status, 2);
       assert.match(result.stderr, /regular file or absent/u);
       assert.equal(
-        readFileSync(victimPath, "utf-8"),
+        readFileSync(unrelatedFilePath, "utf-8"),
         "keep\n",
         "the symlink target must remain untouched",
       );
@@ -593,10 +659,13 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
-  // Fixture: writes an output directory that is itself a symlink, so a forced export would land outside the directory the author named.
+  /**
+   * An author names `out` as the Markdown `--output`, but `out` is a symlink, so the export would land outside the folder they named.
+   * Writes the symlink and a temp plan; the export must exit 2 and write no milestone into the symlink's target.
+   *
+   * @param testContext - the running test, so a host that blocks unprivileged symlinks skips this case instead of failing it
+   */
   it("refuses a symlinked Markdown output directory", (testContext: TestContext) => {
-    // Fixture: an output directory that is itself a symlink to elsewhere, so a forced export
-    // would silently write outside the directory the author named.
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
     const redirectedDirectory = join(temporaryRoot, "outside");
@@ -605,6 +674,7 @@ describe("plans export: CLI previews and protected writes", () => {
     mkdirSync(redirectedDirectory, { recursive: true });
 
     try {
+      // Without a symlink there is nothing to escape through, so the case is skipped instead of run against an ordinary folder.
       if (!symlinkOrSkip(testContext, redirectedDirectory, outputDirectory)) {
         return;
       }
@@ -627,10 +697,13 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
-  // Fixture: writes the symlink one level above the output directory, so a naive check of the final path would pass while the write escapes.
+  /**
+   * The symlink sits two levels above the Markdown output folder: the author names `linked-ancestor/nested/exports`, and only `linked-ancestor` is a link.
+   * Writes the symlink and a temp plan; a check of only the final folder would pass, so the export must inspect every existing parent and exit 2.
+   *
+   * @param testContext - the running test, so a host that blocks unprivileged symlinks skips this case instead of failing it
+   */
   it("refuses Markdown export through a symlinked intermediate ancestor", (testContext: TestContext) => {
-    // Fixture: the symlink sits one level above the output directory, so a naive check of the
-    // final path would pass while the write still escapes the tree the author chose.
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
     const redirectedDirectory = join(temporaryRoot, "outside");
@@ -639,6 +712,7 @@ describe("plans export: CLI previews and protected writes", () => {
     mkdirSync(join(redirectedDirectory, "nested"), { recursive: true });
 
     try {
+      // If the host blocks symlinks the case stops here as skipped; the temp folder is still removed in `finally`.
       if (!symlinkOrSkip(testContext, redirectedDirectory, linkedAncestor)) {
         return;
       }

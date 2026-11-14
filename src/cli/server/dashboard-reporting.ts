@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+import { listHookSpecs } from "./hooks-registry.js";
 import { AGENT_PROFILE_MAP } from "./dashboard-route-types.js";
 import type {
   DashboardAuditProfileSpan,
@@ -627,6 +628,11 @@ export function buildAuditCacheSignature(
     ".codex/hooks.json",
     ".agents/hooks.json",
     ".github/hooks/hooks.json",
+    ...new Set(
+      listHookSpecs().flatMap((spec) =>
+        spec.scriptFiles.map((file) => `.goat-flow/hooks/${file}`),
+      ),
+    ),
     ".goat-flow/hooks/deny-dangerous.sh",
     ".goat-flow/hooks/deny-git-mutations.sh",
     ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",

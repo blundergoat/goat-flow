@@ -53,7 +53,9 @@ export const SUPPORTED_PROVIDER_HOOK_CASES = [
   {
     agent: PROFILES.claude,
     hookId: "deny-git-mutations",
-    registrationTargets: [{ event: "PreToolUse", matcher: "Bash|PowerShell" }],
+    registrationTargets: [
+      { event: "PreToolUse", matcher: "Bash|PowerShell|Monitor" },
+    ],
   },
   {
     agent: PROFILES.codex,
@@ -73,7 +75,9 @@ export const SUPPORTED_PROVIDER_HOOK_CASES = [
   {
     agent: PROFILES.claude,
     hookId: "deny-dangerous",
-    registrationTargets: [{ event: "PreToolUse", matcher: "Bash|PowerShell" }],
+    registrationTargets: [
+      { event: "PreToolUse", matcher: "Bash|PowerShell|Monitor" },
+    ],
   },
   {
     agent: PROFILES.claude,
@@ -111,7 +115,7 @@ export const SUPPORTED_PROVIDER_HOOK_CASES = [
       {
         event: "PreToolUse",
         matcher:
-          "run_command|view_file|write_to_file|replace_file_content|multi_replace_file_content",
+          "run_command|view_file|read_file|grep_search|write_to_file|replace_file_content|multi_replace_file_content",
       },
     ],
   },
@@ -182,18 +186,18 @@ export const HOOK_TIMEOUT_MODES = [
 
 export const GENERATED_AGENT_SURFACES = [
   ".claude/settings.json",
-  ".goat-flow/hooks/run-with-bash.mjs",
-  ".goat-flow/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/run-hook.mjs",
+  ".goat-flow/hooks/deny-dangerous.mjs",
   ".codex/hooks.json",
-  ".goat-flow/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/deny-dangerous.mjs",
   ".agents/hooks.json",
-  ".goat-flow/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/deny-dangerous.mjs",
   ".github/hooks/hooks.json",
-  ".goat-flow/hooks/deny-dangerous.sh",
-  ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
-  ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
-  ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
-  ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
+  ".goat-flow/hooks/deny-dangerous.mjs",
+  ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs",
+  ".goat-flow/hooks/deny-dangerous/patterns-paths.mjs",
+  ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs",
+  ".goat-flow/hooks/policy-corpus.mjs",
 ];
 
 /**
@@ -278,10 +282,14 @@ function assertManagedHookRegistration(
   commandEntry: Record<string, unknown>,
   expectedDescriptor: AgentHookHandlerDescriptor,
 ): void {
-  // Copilot users need the same portable launcher in both supported shell fields.
+  // Copilot users need the JSON-quoted launcher under Bash and the literal PowerShell override on Windows.
   if (agentProfile.id === "copilot") {
+    if (expectedDescriptor.form !== "shell") {
+      assert.fail("Copilot registers a shell handler");
+    }
+    assert.equal(typeof expectedDescriptor.commandWindows, "string");
     assert.equal(commandEntry.bash, expectedDescriptor.command);
-    assert.equal(commandEntry.powershell, expectedDescriptor.command);
+    assert.equal(commandEntry.powershell, expectedDescriptor.commandWindows);
     assert.equal(commandEntry.timeoutSec, hookSpec.timeoutSec);
     return;
   }
@@ -331,7 +339,20 @@ function assertHookUnavailableResponse(
   }
   // Antigravity users receive a deny decision object on standard output.
   if (agentProfile.id === "antigravity") {
-    assert.match(installedCommand, /decision:'deny'/u);
+    assert.match(
+      installedCommand,
+      /^node \.\.\/\.goat-flow\/hooks\/antigravity-hook-bootstrap\.cjs /u,
+    );
+    assert.match(
+      readFileSync(
+        join(
+          import.meta.dirname,
+          "../../workflow/hooks/antigravity-hook-bootstrap.cjs",
+        ),
+        "utf8",
+      ),
+      /decision:'deny'/u,
+    );
     return;
   }
   // Copilot users receive its permission-decision response object.
@@ -340,6 +361,23 @@ function assertHookUnavailableResponse(
     return;
   }
   assert.match(installedCommand, /BLOCKED: Policy hook unavailable/u);
+}
+
+/** Keep Antigravity's startup response checks attached to the managed file its registration names. */
+export function assertAntigravityPolicyStartupCopy(registration: string): void {
+  assert.match(registration, /antigravity-hook-bootstrap\.cjs/u);
+  const bootstrap = readFileSync(
+    join(
+      import.meta.dirname,
+      "../../workflow/hooks/antigravity-hook-bootstrap.cjs",
+    ),
+    "utf8",
+  );
+  assert.match(bootstrap, /Policy hook unavailable:/u);
+  assert.match(bootstrap, /managed root unavailable/u);
+  assert.doesNotMatch(registration, /gruff-code-quality/u);
+  assert.doesNotMatch(registration, /Guard.*git repository root/u);
+  assert.match(registration, /"timeout": 30/u);
 }
 
 /**
@@ -454,10 +492,11 @@ export function assertProviderDenyDescriptorsMatchInstallerContract(): void {
   ).hooks.PreToolUse[0]!.hooks[0]!;
   assert.equal(codexContractRow.command, codexDescriptor.command);
   assert.equal(codexContractRow.commandWindows, codexDescriptor.commandWindows);
-  assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "linux"), {
-    command: "bash",
-    args: ["-c", codexDescriptor.command],
-  });
+  const nativeReplay = agentHookSpawnDescriptor(codexDescriptor, "linux");
+  assert.equal(nativeReplay.command, "node");
+  assert.equal(nativeReplay.args[0], "-e");
+  assert.equal(nativeReplay.args[2], ".goat-flow/hooks/deny-dangerous.mjs");
+  assert.equal(nativeReplay.args[6], ".goat-flow/hooks/run-hook.mjs");
   assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "win32"), {
     command: "powershell.exe",
     args: [
@@ -485,7 +524,7 @@ export function assertProviderDenyDescriptorsMatchInstallerContract(): void {
   )[HOOK_IDENTIFIER].PreToolUse[0]!.hooks[0]!;
   assert.equal(antigravityContractRow.command, antigravityDescriptor.command);
 
-  // Copilot keeps the same deferred command in both shell fields.
+  // Copilot keeps the deferred command for Bash and the literal PowerShell override for Windows.
   const copilotDescriptor = managedAgentHookDescriptor(
     PROFILES.copilot,
     denySpec,
@@ -500,8 +539,9 @@ export function assertProviderDenyDescriptorsMatchInstallerContract(): void {
       };
     }
   ).hooks.preToolUse[0]!;
+  assert.equal(typeof copilotDescriptor.commandWindows, "string");
   assert.equal(copilotContractRow.bash, copilotDescriptor.command);
-  assert.equal(copilotContractRow.powershell, copilotDescriptor.command);
+  assert.equal(copilotContractRow.powershell, copilotDescriptor.commandWindows);
 
   // Claude's approved handler remains the provider-native argv form.
   const claudeDescriptor = managedAgentHookDescriptor(
@@ -540,7 +580,28 @@ export function withTempProject(scenario: (root: string) => void): void {
   try {
     scenario(root);
   } finally {
-    rmSync(root, { force: true, recursive: true });
+    // Node 20.12.0 skips rmSync's retries when the initial rmdir reports EBUSY.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        rmSync(root, {
+          force: true,
+          recursive: true,
+          maxRetries: process.platform === "win32" ? 5 : 0,
+          retryDelay: 100,
+        });
+        break;
+      } catch (error) {
+        // Retry only a briefly held Windows directory; other failures still propagate.
+        if (
+          process.platform !== "win32" ||
+          (error as NodeJS.ErrnoException).code !== "EBUSY" ||
+          attempt === 5
+        ) {
+          throw error;
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+      }
+    }
   }
 }
 
@@ -639,7 +700,7 @@ export function readClaudeDenyLauncher(root: string): ClaudeReplayHandler {
   const registeredHook = settings.hooks.PreToolUse.flatMap(
     (group) => group.hooks,
   ).find((entry) =>
-    entry.args?.some((arg) => arg.endsWith("/deny-dangerous.sh")),
+    entry.args?.some((arg) => arg.endsWith("/deny-dangerous.mjs")),
   );
   assert.ok(registeredHook);
   assert.equal(typeof registeredHook.command, "string");
@@ -674,7 +735,7 @@ export function readCodexDenyLauncher(root: string): CodexReplayHandler {
   };
   const registeredHook = settings.hooks?.PreToolUse?.flatMap(
     (group) => group.hooks ?? [],
-  ).find((entry) => entry.command?.includes("deny-dangerous.sh"));
+  ).find((entry) => entry.command?.includes("deny-dangerous.mjs"));
   assert.equal(typeof registeredHook?.command, "string");
   assert.equal(typeof registeredHook?.commandWindows, "string");
   return {
@@ -712,11 +773,11 @@ export function assertCodexPreToolUseOnly(root: string): void {
     ["PreToolUse"],
     `Codex goat-flow output should be PreToolUse-only; got ${hooksJson}`,
   );
-  assert.match(hooksJson, /deny-dangerous\.sh/u);
+  assert.match(hooksJson, /deny-dangerous\.mjs/u);
   assert.doesNotMatch(hooksJson, /PostToolUse/u);
   assert.doesNotMatch(hooksJson, /Stop/u);
-  assert.doesNotMatch(hooksJson, /gruff-code-quality\.sh/u);
-  assert.doesNotMatch(hooksJson, /post-turn-safety\.sh/u);
+  assert.doesNotMatch(hooksJson, /gruff-code-quality\.mjs/u);
+  assert.doesNotMatch(hooksJson, /post-turn-safety\.mjs/u);
 }
 
 /** Writes a Claude hook-capable fixture and return the generated deny handler.
@@ -833,7 +894,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
     name: "symlinked launcher",
     skipOnEperm: true,
     mutate: (root) => {
-      const launcher = join(root, ".goat-flow", "hooks", "run-with-bash.mjs");
+      const launcher = join(root, ".goat-flow", "hooks", "run-hook.mjs");
       const target = join(root, "launcher-target.mjs");
       writeFileSync(target, readFileSync(launcher));
       rmSync(launcher);
@@ -845,19 +906,18 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
     skipOnEperm: true,
     mutate: (root) =>
       linkSync(
-        join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        join(root, ".goat-flow", "hooks", "run-hook.mjs"),
         join(root, "launcher-second-name.mjs"),
       ),
   },
   {
     name: "missing launcher",
-    mutate: (root) =>
-      rmSync(join(root, ".goat-flow", "hooks", "run-with-bash.mjs")),
+    mutate: (root) => rmSync(join(root, ".goat-flow", "hooks", "run-hook.mjs")),
   },
   {
     name: "non-regular launcher",
     mutate: (root) => {
-      const launcher = join(root, ".goat-flow", "hooks", "run-with-bash.mjs");
+      const launcher = join(root, ".goat-flow", "hooks", "run-hook.mjs");
       rmSync(launcher);
       mkdirSync(launcher);
     },
@@ -866,7 +926,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
     name: "symlinked requested script",
     skipOnEperm: true,
     mutate: (root) => {
-      const script = join(root, ".goat-flow", "hooks", "deny-dangerous.sh");
+      const script = join(root, ".goat-flow", "hooks", "deny-dangerous.mjs");
       const target = join(root, "script-target.sh");
       writeFileSync(target, readFileSync(script));
       rmSync(script);
@@ -878,19 +938,19 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
     skipOnEperm: true,
     mutate: (root) =>
       linkSync(
-        join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        join(root, ".goat-flow", "hooks", "deny-dangerous.mjs"),
         join(root, "script-second-name.sh"),
       ),
   },
   {
     name: "missing requested script",
     mutate: (root) =>
-      rmSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh")),
+      rmSync(join(root, ".goat-flow", "hooks", "deny-dangerous.mjs")),
   },
   {
     name: "non-regular requested script",
     mutate: (root) => {
-      const script = join(root, ".goat-flow", "hooks", "deny-dangerous.sh");
+      const script = join(root, ".goat-flow", "hooks", "deny-dangerous.mjs");
       rmSync(script);
       mkdirSync(script);
     },

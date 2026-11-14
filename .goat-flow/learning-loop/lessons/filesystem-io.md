@@ -1,9 +1,26 @@
 ---
 category: filesystem-io
-last_reviewed: 2026-09-26
+last_reviewed: 2026-10-17
 ---
 
 **Scope:** File paths and I/O across runtimes - Unicode text replacement, Windows extended paths, non-fatal IO contracts, and Node wrapper typing. Fixtures that create the files a test asserts are [test-fixtures.md](test-fixtures.md).
+
+## Lesson: Repeated documentation rows need section-scoped replacements
+
+**Status:** active | **Created:** 2026-10-17
+**Severity:** INTEGRATION
+**Decision changed:** Bind repeated documentation rows to their owning sections and verify each section's inventory after edits.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-10-17
+
+**Prevention:** Transform an unchanged source once, or replace within explicit section bounds. Count the expected entries in each section; a whole-file count cannot prove placement.
+
+**What happened:** Repeated first-match replacements added `policy-segments.mjs` twice under the workflow hook tree and omitted the installed hook tree. Isolated preflight rejected the installed inventory. A single pass over the original lines placed one entry in each of the three source/runtime trees.
+
+**Evidence:** `.goat-flow/code-map.md` (search: `## workflow/`, `## .goat-flow/`) and `scripts/preflight-checks.sh` (search: `listed_hook_members`).
+
+---
 
 ## Lesson: Probe WSL registry paths before choosing PowerShell path helpers
 

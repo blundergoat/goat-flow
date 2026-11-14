@@ -57,15 +57,6 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       ),
       true,
     );
-    const installerSource = readFileSync(
-      join(import.meta.dirname, "..", "..", "workflow", "install-goat-flow.sh"),
-      "utf-8",
-    );
-    assert.match(
-      installerSource,
-      /function filesystemPathsAreEquivalent[\s\S]*pathModule\.relative\(leftDirectory, rightDirectory\)[\s\S]*pathModule\.relative\(rightDirectory, leftDirectory\)/u,
-    );
-    assert.doesNotMatch(installerSource, /gitTopLevel\([^\n]+\) === [^\n]+/u);
   });
 
   it("uses directory identity when Windows aliases have different spellings", () => {
@@ -96,19 +87,6 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       ),
       false,
     );
-
-    const installerSource = readFileSync(
-      join(import.meta.dirname, "..", "..", "workflow", "install-goat-flow.sh"),
-      "utf-8",
-    );
-    assert.match(
-      installerSource,
-      /function filesystemDirectoryIdentity[\s\S]*fs\.statSync\(directoryPath, \{ bigint: true \}\)[\s\S]*stats\.ino === 0n/u,
-    );
-    assert.match(
-      installerSource,
-      /leftIdentity\.device === rightIdentity\.device[\s\S]*leftIdentity\.inode === rightIdentity\.inode/u,
-    );
   });
 
   it("publishes cleanup metadata for hooks unsupported by one provider", () => {
@@ -116,12 +94,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       readFileSync(
         join(
           import.meta.dirname,
-          "..",
-          "..",
-          "workflow",
-          "hooks",
-          "agent-config",
-          "managed-hook-desired-state.json",
+          "../../workflow/hooks/agent-config/managed-hook-desired-state.json",
         ),
         "utf-8",
       ),
@@ -148,7 +121,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       supported: false,
       cleanup: {
         hookIds: ["gruff-code-quality"],
-        commandScriptNames: ["gruff-code-quality.sh"],
+        commandScriptNames: ["gruff-code-quality.mjs", "gruff-code-quality.sh"],
       },
     });
   });
@@ -395,11 +368,11 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
 
       assertPresent(root, [
         ".codex/hooks.json",
-        ".goat-flow/hooks/deny-dangerous.sh",
-        ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
-        ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
-        ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
-        ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
+        ".goat-flow/hooks/deny-dangerous.mjs",
+        ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs",
+        ".goat-flow/hooks/deny-dangerous/patterns-paths.mjs",
+        ".goat-flow/hooks/deny-dangerous/patterns-writes.mjs",
+        ".goat-flow/hooks/policy-corpus.mjs",
       ]);
       assertMissing(root, [
         ".claude/settings.json",
@@ -408,7 +381,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       ]);
       assert.match(
         readFileSync(join(root, ".codex", "hooks.json"), "utf-8"),
-        /deny-dangerous\.sh/u,
+        /deny-dangerous\.mjs/u,
       );
       assertCodexPreToolUseOnly(root);
     });
@@ -583,11 +556,11 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         join(root, ".codex", "hooks.json"),
         "utf-8",
       );
-      assert.match(hooksJson, /gruff-code-quality\.sh/u);
-      assert.match(hooksJson, /post-turn-safety\.sh/u);
+      assert.match(hooksJson, /gruff-code-quality\.mjs/u);
+      assert.match(hooksJson, /post-turn-safety\.mjs/u);
       assert.match(hooksJson, /"matcher": "\^apply_patch\$"/u);
       assert.match(hooksJson, /"timeout": 90/u);
-      assert.match(hooksJson, /deny-dangerous\.sh/u);
+      assert.match(hooksJson, /deny-dangerous\.mjs/u);
       assert.match(hooksJson, /custom-user-post-tool\.sh/u);
       assert.match(hooksJson, /custom-user-stop\.sh/u);
     });
@@ -692,7 +665,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         ".claude/settings.json",
         ".codex/hooks.json",
         ".agents/hooks.json",
-        ".goat-flow/hooks/post-turn-safety.sh",
+        ".goat-flow/hooks/post-turn-safety.mjs",
       ]);
       assertMissing(root, [
         ".goat-flow/hooks/post-turn-validate.sh",
@@ -713,11 +686,11 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       );
       assert.match(
         readStopHookCommands(claudeSettings).join("\n"),
-        /post-turn-safety\.sh/u,
+        /post-turn-safety\.mjs/u,
       );
       assert.match(
         readStopHookCommands(codexHooks).join("\n"),
-        /post-turn-safety\.sh/u,
+        /post-turn-safety\.mjs/u,
       );
       assert.equal(readAntigravitySafetyCommand(antigravityHooks), "");
       assert.doesNotMatch(claudeSettings, /post-turn-validate\.sh/u);
@@ -732,10 +705,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       runGit(root, ["init", "-q"]);
       writePostTurnCapableSurfaces(root);
       mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
-      writeFileSync(
-        join(root, ".goat-flow", "hooks", "plan-checkbox-guard.sh"),
-        "",
-      );
+      writeFileSync(join(root, ".goat-flow/hooks/plan-checkbox-guard.sh"), "");
       writeFileSync(
         join(root, ".goat-flow", ".gitignore"),
         "*\n!.gitignore\nlogs/plan-guard-state.json\n",
@@ -875,8 +845,14 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       assert.doesNotMatch(copilotHooks, /plan-checkbox-guard\.sh/u);
       assert.doesNotMatch(config, /plan-checkbox-guard|plan-guard/u);
       assert.doesNotMatch(gitignore, /plan-guard-state/u);
-      assertMissing(root, [".goat-flow/hooks/plan-checkbox-guard.sh"]);
-      assert.match(codexHooks, /post-turn-safety\.sh/u);
+      assert.equal(
+        readFileSync(
+          join(root, ".goat-flow/hooks/plan-checkbox-guard.sh"),
+          "utf8",
+        ),
+        "",
+      );
+      assert.match(codexHooks, /post-turn-safety\.mjs/u);
       assert.equal(readAntigravitySafetyCommand(antigravityHooks), "");
     });
   });
@@ -887,10 +863,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       runGit(root, ["init", "-q"]);
       writePostTurnCapableSurfaces(root);
       mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
-      writeFileSync(
-        join(root, ".goat-flow", "hooks", "plan-checkbox-guard.sh"),
-        "",
-      );
+      writeFileSync(join(root, ".goat-flow/hooks/plan-checkbox-guard.sh"), "");
       writeFileSync(
         join(root, ".goat-flow", "config.yaml"),
         [
@@ -935,10 +908,16 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         "utf-8",
       );
       assert.equal(safetyState.id, "post-turn-safety");
-      assert.match(claudeSettings, /post-turn-safety\.sh/u);
+      assert.match(claudeSettings, /post-turn-safety\.mjs/u);
       assert.doesNotMatch(claudeSettings, /plan-checkbox-guard\.sh/u);
       assert.doesNotMatch(config, /plan-checkbox-guard|plan-guard/u);
-      assertMissing(root, [".goat-flow/hooks/plan-checkbox-guard.sh"]);
+      assert.equal(
+        readFileSync(
+          join(root, ".goat-flow/hooks/plan-checkbox-guard.sh"),
+          "utf8",
+        ),
+        "",
+      );
     });
   });
 
@@ -951,9 +930,9 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
 
       assertMissing(root, [
         ".codex/hooks.json",
-        ".goat-flow/hooks/deny-dangerous.sh",
+        ".goat-flow/hooks/deny-dangerous.mjs",
         ".agents/hooks.json",
-        ".goat-flow/hooks/deny-dangerous.sh",
+        ".goat-flow/hooks/deny-dangerous.mjs",
       ]);
     });
   });
@@ -967,7 +946,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       const state = applyHookState("gruff-code-quality", true, root);
       assertPresent(root, [".agents/hooks.json"]);
       assertMissing(root, [
-        ".goat-flow/hooks/gruff-code-quality.sh",
+        ".goat-flow/hooks/gruff-code-quality.mjs",
         ".goat-flow/hooks/hook-provider-adapters.mjs",
       ]);
       const config = JSON.parse(
@@ -1000,7 +979,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   });
 
-  it("cleans existing script residue without creating missing hook config", () => {
+  it("preserves unowned script residue without creating missing hook config", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".claude", "hooks"), { recursive: true });
       writeFileSync(join(root, ".claude", "hooks", "guard-common.sh"), "");
@@ -1011,11 +990,13 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
 
       applyHookState(HOOK_IDENTIFIER, false, root);
 
-      assertMissing(root, [
-        ".claude/settings.json",
-        ".claude/hooks/guard-common.sh",
-        ".claude/hooks/guard-secret-paths.sh",
-      ]);
+      assertMissing(root, [".claude/settings.json"]);
+      for (const file of ["guard-common.sh", "guard-secret-paths.sh"]) {
+        assert.equal(
+          readFileSync(join(root, ".claude/hooks", file), "utf8"),
+          "",
+        );
+      }
     });
   });
 });

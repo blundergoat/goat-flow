@@ -1,10 +1,8 @@
 /**
- * Exercises the command runner that keeps preflight users informed during long Tests phases.
- * Use when changing timeout, capture, or heartbeat behavior so interactive progress
- * remains visible without contaminating the deterministic CI report.
+ * Verify the progress and failure messages developers see while preflight runs commands.
  *
- * Other groups run production preflight sections and the test runner's shard parser on captured output or temporary fixtures.
- * The fixtures execute harmless child processes and never run the repository test suite.
+ * Use when changing timeout cleanup, output capture, shell syntax checks or test selection.
+ * Fixtures launch harmless child processes; selection checks inspect the runner without executing the repository suite.
  */
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
@@ -13,11 +11,12 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import type { Readable } from "node:stream";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -112,14 +111,16 @@ function runPreflightRunnerFixture(
     let hasRequestedParentStop = false;
     let parentStopPoll: NodeJS.Timeout | null = null;
 
-    // A readiness file proves the buffered child reached its active state before parent cleanup begins.
     const parentStopAfterFile = fixture.parentStopAfterFile;
+    // Closing preflight must stop a running child; the readiness file prevents cancellation before the child starts.
     if (parentStopAfterFile !== undefined) {
       parentStopPoll = setInterval(() => {
+        // Wait for the child to become active, and request cancellation only once.
         if (hasRequestedParentStop || !existsSync(parentStopAfterFile)) {
           return;
         }
         hasRequestedParentStop = true;
+        // Stop polling after cancellation is queued so the fixture cannot repeatedly signal the runner.
         if (parentStopPoll !== null) {
           clearInterval(parentStopPoll);
           parentStopPoll = null;
@@ -143,6 +144,7 @@ function runPreflightRunnerFixture(
       // The first heartbeat proves the user sees liveness before the child closes.
       if (firstProgressAfterMs === null) {
         firstProgressAfterMs = Date.now() - fixtureStartedAt;
+        // Release a child waiting for visible progress only after the operator's first heartbeat arrives.
         if (fixture.progressReadyFile !== undefined) {
           writeFileSync(fixture.progressReadyFile, "ready");
         }
@@ -150,12 +152,14 @@ function runPreflightRunnerFixture(
       operatorProgress += chunk;
     });
     runnerProcess.once("error", (error) => {
+      // A launch failure, such as an unavailable Node executable, leaves no running child for the readiness poll to watch.
       if (parentStopPoll !== null) {
         clearInterval(parentStopPoll);
       }
       rejectFixture(error);
     });
     runnerProcess.once("close", (status, signal) => {
+      // A finished command must leave no polling timer that could keep the test process alive.
       if (parentStopPoll !== null) {
         clearInterval(parentStopPoll);
       }
@@ -174,8 +178,9 @@ function runPreflightRunnerFixture(
 
 /**
  * Report whether a fixture process is still alive after the runner claims cleanup.
+ *
  * A missing process means the user can safely rerun preflight without leaked work.
- * It throws unexpected process errors instead of misreporting successful cleanup.
+ * The check throws unexpected process errors rather than reporting successful cleanup.
  *
  * @param processId - fixture PID; zero or absent is never registered by these tests
  * @returns true while the process exists; false after cleanup removes it
@@ -195,7 +200,7 @@ function fixtureProcessIsAlive(processId: number): boolean {
 
 /**
  * Wait a bounded time for process-group cleanup after timeout or parent termination.
- * Empty cleanup never waits forever; false tells the test exactly which process leaked.
+ * Use after stopping preflight; false identifies a worker still running after the cleanup deadline.
  *
  * @param processId - child or grandchild PID shown by the fixture output
  * @param cleanupTimeoutMs - maximum wait; zero means perform one immediate check
@@ -253,6 +258,7 @@ afterEach(() => {
     }
   }
   fixtureProcessIds.clear();
+  // Remove temporary projects even when an assertion failed, so rerunning preflight starts from a clean fixture.
   for (const temporaryDirectory of fixtureTemporaryDirectories) {
     rmSync(temporaryDirectory, { force: true, recursive: true });
   }
@@ -629,6 +635,50 @@ describe("preflight Tests-phase progress", () => {
       preflightSource,
       /warning_label="warning"[\s\S]+warnings" -ne 1[\s\S]+warning_label="warnings"[\s\S]+"\$warnings" "\$warning_label"/u,
     );
+
+    const memoryStart = preflightSource.indexOf("check_memory() {");
+    const memoryEnd = preflightSource.indexOf(
+      "\ncheck_content() {",
+      memoryStart,
+    );
+    assert.ok(memoryStart >= 0 && memoryEnd > memoryStart);
+    const directory = mkdtempSync(join(tmpdir(), "goat-flow-stats-receipt-"));
+    fixtureTemporaryDirectories.add(directory);
+    mkdirSync(join(directory, "dist", "cli"), { recursive: true });
+    writeFileSync(join(directory, "dist", "cli", "cli.js"), "");
+    // Force the reproduced pipe-close race without relying on scheduler timing.
+    writeFileSync(
+      join(directory, "stats-receipt.txt"),
+      [
+        "stats --check: PASS (3 warnings)",
+        ...Array.from({ length: 3 }, () => "advisory ".repeat(16_384)),
+        "",
+      ].join("\n"),
+    );
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        `set -euo pipefail
+        warnings=0
+        section() { :; }
+        node() { cat stats-receipt.txt; }
+        warn() { warnings=$((warnings + 1)); printf 'WARN %s\\n' "$1"; }
+        pass() { printf 'PASS %s\\n' "$1"; }
+        fail() { printf 'FAIL %s\\n' "$1"; exit 1; }
+        details_pipe() { cat >/dev/null; }
+        ${preflightSource.slice(memoryStart, memoryEnd)}
+        check_memory
+        printf 'WARNINGS %s\\n' "$warnings"`,
+      ],
+      { cwd: directory, encoding: "utf8", timeout: 10_000 },
+    );
+    assert.equal(result.status, 0, `${result.error ?? ""}${result.stderr}`);
+    assert.match(
+      result.stdout,
+      /WARN Footgun\/lesson schema passes \(3 warnings\)/u,
+    );
+    assert.match(result.stdout, /WARNINGS 3/u);
   });
 
   it("keeps Knip failure guidance on the heap-safe preflight invocation", () => {
@@ -646,73 +696,112 @@ describe("preflight Tests-phase progress", () => {
     assert.doesNotMatch(preflightSource, /run npx knip for details/u);
   });
 
-  it("selects Codex's Windows override for native configured-hook smokes", () => {
-    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
-    const functionStart = preflightSource.indexOf("function runCommand(");
-    const functionEnd = preflightSource.indexOf(
-      "\nfunction spawnFailureMessage(",
-      functionStart,
-    );
-    assert.ok(functionStart >= 0 && functionEnd > functionStart);
-    const runCommandSource = preflightSource.slice(functionStart, functionEnd);
-    const calls: unknown[][] = [];
-    const runCommand = runInNewContext(`${runCommandSource}\nrunCommand`, {
-      process: { platform: "win32", env: {} },
-      spawnSync: (...args: unknown[]) => {
-        calls.push(args);
-        return { status: 0 };
+  it("includes native hook execution in the preflight selection", () => {
+    const source = readFileSync(TEST_RUNNER_PATH, "utf8");
+    const start = source.indexOf("function isSlowTest(");
+    const end = source.indexOf("// Measured seconds per slow test file", start);
+    assert.ok(start >= 0 && end > start);
+    const files = [
+      "test/integration/deny-large-report-transport.test.ts",
+      "test/integration/post-turn-safety-hook.test.ts",
+      "test/unit/audit-command/agent-deny-hooks.test.ts",
+      "test/unit/hook-registrar-surfaces.test.ts",
+      "test/unit/hooks-runtime-evidence.test.ts",
+      "test/unit/quality-report-contract.test.ts",
+      "test/integration/hook-policy-node.test.ts",
+      "test/unit/hook-policy-primitives.test.ts",
+      "test/integration/deny-dangerous-policy.test.ts",
+    ];
+    // Select production runner modes for the declared contract files without launching tests.
+    const select = (mode: string) =>
+      Array.from(
+        runInNewContext(`${source.slice(start, end)}\nfilesForMode(files)`, {
+          mode,
+          files,
+        }) as string[],
+      );
+    assert.deepEqual(select("preflight"), files.slice(0, 8));
+    assert.deepEqual(select("fast"), files.slice(0, 8));
+    assert.deepEqual(select("coverage"), files.slice(0, 8));
+    assert.deepEqual(select("slow"), files.slice(8));
+  });
+
+  it("keeps every test in PR coverage exactly once across fast and slow shards", () => {
+    const source = readFileSync(TEST_RUNNER_PATH, "utf8");
+    const start = source.indexOf("function toPosixPath(");
+    const end = source.indexOf("// Check --shard before the mode:");
+    assert.ok(start >= 0 && end > start);
+    const runnerContext = {
+      mode: "fast",
+      // A developer can launch this test from a subdirectory; discovery must still use the project's test tree.
+      readdirSync: (directory: string, options: { withFileTypes: true }) =>
+        readdirSync(join(PROJECT_ROOT, directory), options),
+      join,
+      sep,
+      console: {
+        // Shard summaries are not the result under test, so keep this discovery-only check quiet.
+        error() {},
       },
-    }) as (
-      entry: { command: string; commandWindows?: string; args?: string[] },
-      input: string,
-      cwd: string,
-    ) => unknown;
-
-    assert.match(preflightSource, /typeof value\.commandWindows === "string"/u);
-    assert.match(
-      preflightSource,
-      /process\.platform === "win32" && entry\.commandWindows !== undefined/u,
-    );
-    assert.match(
-      preflightSource,
-      /\["-NoProfile", "-NonInteractive", "-Command", entry\.commandWindows\]/u,
-    );
-    assert.match(preflightSource, /entry\.commandWindows \?\? ""/u);
-
-    runCommand(
-      { command: "echo default", commandWindows: "" },
-      "payload",
-      "C:\\fixture",
-    );
-    assert.equal(calls[0]?.[0], "powershell.exe");
-    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      "",
-    ]);
-
-    calls.length = 0;
-    runCommand({ command: "echo default" }, "payload", "C:\\fixture");
-    assert.equal(calls[0]?.[0], "bash");
-    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
-      "--noprofile",
-      "--norc",
-      "-s",
-    ]);
+    };
+    const selection = runInNewContext(
+      `${source.slice(start, end)}
+      ({ all: listTestFiles(), select: filesForMode, shard: filesForShard })`,
+      runnerContext,
+    ) as {
+      all: string[];
+      select: (files: string[]) => string[];
+      shard: (
+        files: string[],
+        shard: { index: number; total: number },
+      ) => string[];
+    };
+    const allFiles = Array.from(selection.all);
+    const fast = Array.from(selection.select(allFiles));
+    // Local preflight and coverage must retain the same test files as the PR fast job.
+    for (const mode of ["preflight", "coverage"]) {
+      runnerContext.mode = mode;
+      assert.deepEqual(Array.from(selection.select(allFiles)), fast);
+    }
+    runnerContext.mode = "slow";
+    const slow = Array.from(selection.select(allFiles));
+    assert.deepEqual([...fast, ...slow].sort(), [...allFiles].sort());
     assert.equal(
-      (calls[0]?.[2] as { input: string }).input,
-      'printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { echo default; }\n',
+      fast.some((file) => slow.includes(file)),
+      false,
     );
+    // These subprocess-heavy controls must remain in PR coverage even though the fast job no longer runs them.
+    for (const file of [
+      "test/integration/post-turn-safety-binary-gap.test.ts",
+      "test/integration/hook-command-spawn-matrix.test.ts",
+      "test/integration/deny-reviewed-protections.test.ts",
+      "test/integration/review-validate-authority.test.ts",
+    ]) {
+      assert.ok(
+        slow.includes(file),
+        `${file} must run in the serial slow pool`,
+      );
+    }
+    const shards = Array.from({ length: 5 }, (_, index) =>
+      Array.from(selection.shard(slow, { index: index + 1, total: 5 })),
+    );
+    assert.ok(shards.every((files) => files.length > 0));
+    assert.deepEqual(shards.flat().sort(), [...slow].sort());
   });
 
   it("keeps fast concurrency bounded and isolates observed subprocess-heavy suites", () => {
     const runnerSource = readFileSync(TEST_RUNNER_PATH, "utf-8");
 
-    assert.match(
-      runnerSource,
-      /mode === "slow" \? "1" : mode === "fast" \? "8" : "8"/u,
-    );
+    const start = runnerSource.indexOf("function testConcurrencyForMode(");
+    const end = runnerSource.indexOf("\n}", start) + 2;
+    assert.ok(start >= 0 && end > start);
+    const concurrency = runInNewContext(
+      `${runnerSource.slice(start, end)}; testConcurrencyForMode`,
+    ) as (mode: string, cpus: number) => number;
+    // A 24-CPU host exceeds the fast-pool cap, while slow mode must still run one file at a time.
+    assert.equal(concurrency("slow", 24), 1);
+    assert.equal(concurrency("fast", 24), 16);
+    assert.equal(concurrency("fast", 8), 8);
+    assert.equal(concurrency("coverage", 2), 2);
     assert.match(
       runnerSource,
       /test\/integration\/hook-effective-state\.test\.ts/u,
@@ -727,21 +816,22 @@ describe("preflight Tests-phase progress", () => {
 describe("preflight shell syntax", () => {
   // One file in every required group catches directory omissions; whitespace must remain one argument.
   const fixtureScripts = [
-    "workflow/install-goat-flow.sh",
     "scripts/a-valid.sh",
     SHELL_SYNTAX_HELPER,
     "scripts/installers/a-valid.sh",
-    "workflow/hooks/a-valid.sh",
-    "workflow/hooks/deny-dangerous/a-valid.sh",
-    ".goat-flow/hooks/a-valid.sh",
-    ".goat-flow/hooks/deny-dangerous/a-valid.sh",
-    ".goat-flow/hooks/deny-dangerous/z later.sh",
+    "scripts/installers/z later.sh",
   ];
 
-  /** Writes temporary shell fixtures and copies the real helper; registers every file's directory for cleanup. */
+  /**
+   * The fixture writes shell scripts and copies the real syntax helper into a disposable project.
+   * Use before changing one script; cleanup tracks the whole project even if the check fails.
+   *
+   * @returns the temporary project directory containing a valid script in every required group
+   */
   function createSyntaxFixture(): string {
     const directory = mkdtempSync(join(tmpdir(), "goat-flow-shell-syntax-"));
     fixtureTemporaryDirectories.add(directory);
+    // Put a valid script in every required folder so each scenario changes only the failure it intends to test.
     for (const script of fixtureScripts) {
       const destination = join(directory, script);
       mkdirSync(dirname(destination), { recursive: true });
@@ -757,7 +847,13 @@ describe("preflight shell syntax", () => {
     return directory;
   }
 
-  /** Spawns Bash on the actual syntax section, replacing only preflight's report renderer to capture its verdict. */
+  /**
+   * The check spawns Bash to run preflight's shell-syntax section and capture its user-facing verdict.
+   * Use to check failure propagation; only the report renderer is replaced, leaving the production checks intact.
+   *
+   * @param directory - temporary project containing the syntax helper and scripts under test
+   * @returns captured Bash output and status; a nonzero status means at least one syntax check failed
+   */
   function runSyntaxSection(directory: string) {
     const source = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf8");
     const start = source.indexOf('section "Shell Scripts"');
@@ -800,13 +896,13 @@ describe("preflight shell syntax", () => {
 
   it("reports a malformed later whitespace path through the preflight gate", () => {
     const directory = createSyntaxFixture();
-    const invalid = ".goat-flow/hooks/deny-dangerous/z later.sh";
+    const invalid = "scripts/installers/z later.sh";
     writeFileSync(join(directory, invalid), "if then\n");
     const result = runSyntaxSection(directory);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.ok(result.stdout.includes(`FAIL Bash syntax: ${invalid}`));
     assert.ok(
-      result.stdout.indexOf("PASS Bash syntax: workflow/install-goat-flow.sh") <
+      result.stdout.indexOf("PASS Bash syntax: scripts/a-valid.sh") <
         result.stdout.indexOf(`FAIL Bash syntax: ${invalid}`),
     );
     assert.match(result.stdout, /syntax error/u);
@@ -814,35 +910,36 @@ describe("preflight shell syntax", () => {
 
   it("reports multiple malformed files and still parses later valid groups", () => {
     const directory = createSyntaxFixture();
-    const invalidFiles = ["scripts/a-valid.sh", "workflow/hooks/a-valid.sh"];
+    const invalidFiles = [
+      "scripts/a-valid.sh",
+      "scripts/installers/a-valid.sh",
+    ];
+    // Break separate script groups to prove preflight still reports all failures and reaches later valid files.
     for (const script of invalidFiles)
       writeFileSync(join(directory, script), "if then\n");
     const result = runSyntaxSection(directory);
     assert.equal(result.status, 1, result.stdout + result.stderr);
+    // Name each malformed file so a developer receives actionable syntax errors rather than one aggregate failure.
     for (const script of invalidFiles)
       assert.ok(result.stdout.includes(`FAIL Bash syntax: ${script}`), script);
     assert.match(
       result.stdout,
-      /PASS Bash syntax: \.goat-flow\/hooks\/deny-dangerous\/z later\.sh/u,
+      /PASS Bash syntax: scripts\/installers\/z later\.sh/u,
     );
-    assert.match(result.stdout, /9 files checked; 2 failures/u);
+    assert.match(result.stdout, /4 files checked; 2 failures/u);
   });
 
-  it("fails for an absent required installer and an empty required script group", () => {
+  it("fails for an empty required script group", () => {
     const directory = createSyntaxFixture();
-    rmSync(join(directory, "workflow/install-goat-flow.sh"));
     rmSync(join(directory, "scripts/installers/a-valid.sh"));
+    rmSync(join(directory, "scripts/installers/z later.sh"));
     const result = runSyntaxSection(directory);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(
       result.stdout,
-      /FAIL Bash syntax: workflow\/install-goat-flow\.sh/u,
-    );
-    assert.match(
-      result.stdout,
       /FAIL required shell group: scripts\/installers\/\*\.sh/u,
     );
-    assert.match(result.stdout, /2 failures/u);
+    assert.match(result.stdout, /1 failures/u);
   });
 
   // Writes valid and malformed fixtures, then spawns each published command to prove failure propagation.
@@ -898,8 +995,11 @@ describe("preflight shell syntax", () => {
 
 describe("run-tests --shard grammar", () => {
   /**
-   * Spawns the real runner with an unknown mode: a shard value that passes the parser stops at mode dispatch with a different
-   * error, so the probe can tell "accepted" from "rejected" without ever running a test file.
+   * The probe spawns the real runner to check a shard argument without launching tests.
+   * An unknown mode stops accepted arguments at mode selection, giving a different error from malformed shard requests.
+   *
+   * @param shardValue - literal index/total input; an empty string must be rejected with the shard usage message
+   * @returns captured status and streams; stderr distinguishes an invalid shard from the deliberate unknown mode
    */
   function probeShard(shardValue: string) {
     const result = spawnSync(
@@ -927,6 +1027,7 @@ describe("run-tests --shard grammar", () => {
       "6/5",
       "1/0",
     ];
+    // Reject each malformed request before tests run, so a typo cannot silently select a different shard.
     for (const shardValue of malformed) {
       const result = probeShard(shardValue);
       assert.equal(result.status, 2, shardValue);
@@ -942,6 +1043,7 @@ describe("run-tests --shard grammar", () => {
   });
 
   it("still hands a well-formed shard to mode selection", () => {
+    // Valid shard boundaries must reach mode selection rather than being rejected by the argument parser.
     for (const shardValue of ["1/5", "5/5", "1/1"]) {
       const result = probeShard(shardValue);
       assert.equal(result.status, 2, shardValue);

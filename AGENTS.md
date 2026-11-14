@@ -1,4 +1,4 @@
-# AGENTS.md - v1.18.0 (2026-10-11)
+# AGENTS.md - v1.19.0 (2026-10-23)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash validation scripts + TypeScript CLI/dashboard.
 
 goat-flow is a harness - guardrails, memory, and workflows for AI coding agents. Five concerns drive every design decision: **Context** (what you read), **Constraints** (what you may never do), **Verification** (how work is checked), **Recovery** (how state survives failure), **Feedback loop** (how mistakes become permanent fixes).
@@ -43,14 +43,14 @@ Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs no
 
 ## Essential Commands
 ```bash
-shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
 bash scripts/maintenance/check-shell-syntax.sh
 npm run typecheck && npm run check:touched # Working-tree content; additions, edits, deletions and both rename paths select checks. Preflight and owning test suites remain required.
 npm test
 bash scripts/preflight-checks.sh
 ```
 
-On Windows, run Bash commands in Git Bash. Situational: `bash scripts/bump-version.sh <ver>` (release), `npm run test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop). Hook availability: run both `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke` and `bash .goat-flow/hooks/deny-git-mutations.sh --self-test=smoke`; after policy changes or pre-release, use `--self-test=full` and follow `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
+On Windows, run Bash commands in Git Bash. Situational: `bash scripts/bump-version.sh <ver>` (release), `npm run test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop). Hook availability: run both `node .goat-flow/hooks/deny-dangerous.mjs --self-test=smoke` and `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=smoke`; after policy changes or pre-release, use `--self-test=full` and follow `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
@@ -68,9 +68,9 @@ BAD: "The CLI has 30 audit checks" (guessed without reading); GOOD: Read the sou
 Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity class: Hotfix / Small Feature / Standard / System / Infrastructure, with a declared checkpoint proportionate to the class. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human. Reaching the declared checkpoint = report evidence and re-classify before continuing; competent review may need broader coverage. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
 
 ### ACT
-MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
+MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition] | Milestone: [path or none] | Receipt: [open, stopped or none]`
 
-For milestone work, load `goat-plan`; start timing before the first source edit, stop its timer at human gates, resume after release, and finalize it at exit.
+For milestone work, load `goat-plan`; run `goat-flow plans time start <milestone-file> --category <product|proof|other>` before the first source edit, `goat-flow plans time stop <milestone-file>` at human gates, and add `--finalize` at exit. Resume with start after release. The CLI writes measured `Actual`; never invent it.
 If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.
 
 | Mode | Behaviour |
@@ -82,7 +82,7 @@ If a milestone changes source, run `goat-clarity` once before exit on the explic
 | Review | Investigate first. Never blindly apply suggestions |
 
 ### VERIFY
-MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end. Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it.
+MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. Milestone ticks are Definition of Done gate (7). Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it. Preserve other writers' hunks in approved files. Diagnose failure causes before calling them external; an untouched consumer may depend on changed code. Keep mandatory failures visible; touched checks never replace a failed required gate.
 
 **Hallucination red-flags:**
 1. **Checks passed.** Do not claim tests pass or any check passed (shellcheck, typecheck, preflight, audit) without showing the literal pass/fail line copied verbatim from this session's run. Paraphrase, cached output, or prior-session results do not count.
@@ -99,7 +99,7 @@ The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-f
 If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/learning-loop/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/learning-loop/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>` (measured locally, read directly, or cited external incident with local applicability), significant technical decisions go in `.goat-flow/learning-loop/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
 
 ## Definition of Done
-MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts; changed `test/` files are excluded from typecheck and lint, so run their owning suite instead) (2) no broken cross-references introduced (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames. If working from a milestone file, tick `- [x]` on each completed task immediately - not at the end. After context compaction or 15+ turns, checkpoint current state; before unrelated work, recommend a fresh thread to the user.
+MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts; changed `test/` files are excluded from typecheck and lint, so run their owning suite instead) (2) no broken cross-references introduced (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames (7) tick each completed milestone task `- [x]` before starting the next; `goat-flow plans check <plan-path> --strict` refuses handoff with open tasks but does not enforce earlier ticking. After context compaction or 15+ turns, checkpoint current state; before unrelated work, recommend a fresh thread to the user.
 
 ## Artifact Routing
 When asked to add, create, or update a goat-flow artifact, route it to the artifact directory, not runtime code: footguns -> `.goat-flow/learning-loop/footguns/<category>.md`; lessons -> `.goat-flow/learning-loop/lessons/<category>.md`; decisions -> `.goat-flow/learning-loop/decisions/ADR-NNN.md`; patterns -> `.goat-flow/learning-loop/patterns/<category>.md`. Before editing, read the target directory's `README.md`; do not treat artifact requests as runtime-code requests unless the user explicitly asks for code too.

@@ -89,7 +89,7 @@ function readPreset(rawPreset: unknown): Preset | null {
     source: readString(rawPreset.source) || undefined,
     globalSafe: readOptionalBoolean(rawPreset, "globalSafe"),
     internalOnly: readOptionalBoolean(rawPreset, "internalOnly"),
-    qualityMode: readOptionalBoolean(rawPreset, "qualityMode"),
+    qualityWorkflow: readOptionalBoolean(rawPreset, "qualityWorkflow"),
     requiresGh: readOptionalBoolean(rawPreset, "requiresGh"),
     requiresPrOrIssue: readOptionalBoolean(rawPreset, "requiresPrOrIssue"),
     requiresLocalDiff: readOptionalBoolean(rawPreset, "requiresLocalDiff"),

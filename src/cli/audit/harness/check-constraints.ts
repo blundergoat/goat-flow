@@ -454,7 +454,7 @@ function classifyDenyRegistration(agents: AuditContext["agents"]): {
       const gitActual = agentFacts.hooks.gitDenyRegisteredPath;
       if (
         (expected && actual && !actual.endsWith(expected)) ||
-        !gitActual?.endsWith(".goat-flow/hooks/deny-git-mutations.sh")
+        !gitActual?.endsWith(".goat-flow/hooks/deny-git-mutations.mjs")
       ) {
         pathMismatch.push(agentFacts.agent.id);
       }
@@ -491,7 +491,7 @@ function buildDenyRegistrationFailure(
       ),
     ...pathMismatch.map((id) => {
       const agentFacts = findAgent(agents, id);
-      return `${id}: registered policy hook paths "${agentFacts?.hooks.denyRegisteredPath}" and "${agentFacts?.hooks.gitDenyRegisteredPath}" must match "${agentFacts?.agent.denyHookFile}" and ".goat-flow/hooks/deny-git-mutations.sh"`;
+      return `${id}: registered policy hook paths "${agentFacts?.hooks.denyRegisteredPath}" and "${agentFacts?.hooks.gitDenyRegisteredPath}" must match "${agentFacts?.agent.denyHookFile}" and ".goat-flow/hooks/deny-git-mutations.mjs"`;
     }),
     ...unregistered.map(
       (id) =>
@@ -505,7 +505,7 @@ function buildDenyRegistrationFailure(
     ),
     ...pathMismatch.map(
       (id) =>
-        `Fix ${id} registrations to point at ${findAgent(agents, id)?.agent.denyHookFile} and .goat-flow/hooks/deny-git-mutations.sh`,
+        `Fix ${id} registrations to point at ${findAgent(agents, id)?.agent.denyHookFile} and .goat-flow/hooks/deny-git-mutations.mjs`,
     ),
   ];
   return fail(
@@ -514,11 +514,11 @@ function buildDenyRegistrationFailure(
     [
       ...unregistered.map(
         (id) =>
-          `Add ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hook entries in ${id} agent settings that run deny-dangerous.sh and deny-git-mutations.sh.`,
+          `Add ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hook entries in ${id} agent settings that run deny-dangerous.mjs and deny-git-mutations.mjs.`,
       ),
       ...pathMismatch.map(
         (id) =>
-          `Update the ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hooks in ${id} to reference ${findAgent(agents, id)?.agent.denyHookFile} and .goat-flow/hooks/deny-git-mutations.sh.`,
+          `Update the ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hooks in ${id} to reference ${findAgent(agents, id)?.agent.denyHookFile} and .goat-flow/hooks/deny-git-mutations.mjs.`,
       ),
     ],
     denyRegistrationDetails(agents, unregistered, noDeny, pathMismatch),

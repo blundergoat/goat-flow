@@ -1,24 +1,24 @@
 /**
  * Exercise the shipped writing-playbook cleanup against disposable project files.
- * Focused cases run the exact production block; one public install proves that cleanup retains legacy baseline rows.
+ * Writer cases use disposable files; public install also proves that cleanup retains legacy baseline rows.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { checkArtifactIntegrity } from "../../src/cli/audit/check-artifact-integrity.js";
 import { createFS } from "../../src/cli/facts/fs.js";
 import {
   makeTempProject,
   PROJECT_ROOT,
   runCliInstaller,
-  spawnSync,
+  runNodeInstaller,
 } from "./setup-install.helpers.js";
 
 const PLAYBOOK_ROOT = ".goat-flow/skill-docs/playbooks";
-/** Child-only copy failure used to prove cleanup cannot follow an unsuccessful replacement. */
-const COPY_FAILURE_EXIT = 63;
 const RENAMES = [
   ["writing-for-agents.md", "writing-agent-facing-instructions.md"],
   ["writing-style.md", "writing-human-facing-prose.md"],
@@ -31,52 +31,35 @@ function writeTarget(root: string, path: string, text: string): void {
 }
 
 /**
- * Execute the real playbook block with a filesystem copy primitive and removal counter.
- * A named failed copy proves production ordering without running unrelated installer stages.
+ * Run the Node installer with an optional failure at the named playbook copy.
+ * The failure proves replacements are copied before their old paths are removed.
  */
-function runPlaybookBlock(root: string, failedCopy = "") {
-  const source = readFileSync(
-    join(PROJECT_ROOT, "workflow/install-goat-flow.sh"),
-    "utf-8",
-  );
-  const start = source.indexOf('echo "Standalone playbooks');
-  const end = source.indexOf(
-    'copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md"',
-    start,
-  );
-  assert.ok(
-    start >= 0 && end > start,
-    "production playbook block must resolve",
-  );
-  return spawnSync(
-    "bash",
-    [
-      "-c",
-      [
-        "set -euo pipefail",
-        "REMOVED=0",
-        "copy_file() {",
-        '  local src="$1" dst="$2"',
-        `  if [[ -n "$FAILED_COPY" && "$dst" == "$FAILED_COPY" ]]; then return ${COPY_FAILURE_EXIT}; fi`,
-        '  mkdir -p "$(dirname "$dst")"',
-        '  cp "$src" "$dst"',
-        "}",
-        source.slice(start, end),
-        'printf "RENAMED_REMOVED:%s\\n" "$REMOVED"',
-      ].join("\n"),
-    ],
-    {
-      cwd: root,
-      encoding: "utf-8",
-      timeout: 10_000,
-      env: {
-        ...process.env,
-        GOAT_FLOW_ROOT: PROJECT_ROOT,
-        MANIFEST_PATH: join(PROJECT_ROOT, "workflow/manifest.json"),
-        FAILED_COPY: failedCopy,
+function runPlaybookInstaller(root: string, failedCopy = "") {
+  const copyFile = fs.copyFileSync;
+  if (failedCopy) {
+    mock.method(
+      fs,
+      "copyFileSync",
+      (source: fs.PathLike, destination: fs.PathLike, mode?: number) => {
+        if (
+          String(source)
+            .replaceAll("\\", "/")
+            .endsWith(
+              failedCopy.replace(PLAYBOOK_ROOT, "workflow/skills/playbooks"),
+            )
+        )
+          throw new Error("injected Node copy failure");
+        copyFile(source, destination, mode);
       },
-    },
-  );
+    );
+    syncBuiltinESMExports();
+  }
+  try {
+    return runNodeInstaller(root, {}, "--agent", "codex");
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+  }
 }
 
 /** Read the audit's actual stale-file advice against this project's installed copies. */
@@ -109,9 +92,12 @@ describe("renamed writing playbook cleanup", () => {
       `${PLAYBOOK_ROOT}/retired.md`,
       "# Unrelated local file\n",
     );
-    const result = runPlaybookBlock(root);
+    const result = runPlaybookInstaller(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /RENAMED_REMOVED:2/u);
+    assert.equal(
+      (result.stdout.match(/removed renamed playbook/gu) ?? []).length,
+      2,
+    );
     for (const [oldName, newName] of RENAMES) {
       assert.equal(existsSync(join(root, PLAYBOOK_ROOT, oldName)), false);
       assert.equal(
@@ -122,7 +108,9 @@ describe("renamed writing playbook cleanup", () => {
         ),
       );
       assert.ok(
-        result.stdout.includes(`${oldName} → ${PLAYBOOK_ROOT}/${newName}`),
+        result.stdout.includes(
+          `${oldName} (removed renamed playbook; use ${PLAYBOOK_ROOT}/${newName}`,
+        ),
       );
     }
     for (const [path, text] of instructions) {
@@ -131,9 +119,8 @@ describe("renamed writing playbook cleanup", () => {
     }
     assert.equal((result.stdout.match(/AGENTS\.md:1:/gu) ?? []).length, 1);
     assert.equal(existsSync(join(root, PLAYBOOK_ROOT, "retired.md")), true);
-    const repeat = runPlaybookBlock(root);
+    const repeat = runCliInstaller(root, "--agent", "codex");
     assert.equal(repeat.status, 0, repeat.stderr || repeat.stdout);
-    assert.match(repeat.stdout, /RENAMED_REMOVED:0/u);
     assert.doesNotMatch(repeat.stdout, /removed renamed playbook/u);
     assert.ok(
       artifactFindings(root).some(
@@ -161,7 +148,7 @@ describe("renamed writing playbook cleanup", () => {
       artifactFindings(root).some((finding) => finding.path === ownedPath),
       false,
     );
-    const result = runPlaybookBlock(root);
+    const result = runPlaybookInstaller(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(readFileSync(join(root, ownedPath), "utf-8"), owned);
     assert.equal(
@@ -172,7 +159,10 @@ describe("renamed writing playbook cleanup", () => {
       result.stdout,
       /writing-style\.md \(kept user-owned playbook; use/u,
     );
-    assert.match(result.stdout, /RENAMED_REMOVED:1/u);
+    assert.equal(
+      (result.stdout.match(/removed renamed playbook/gu) ?? []).length,
+      1,
+    );
     assert.equal(
       artifactFindings(root).some((finding) => finding.path === ownedPath),
       false,
@@ -184,15 +174,11 @@ describe("renamed writing playbook cleanup", () => {
     const root = makeTempProject();
     for (const [oldName] of RENAMES)
       writeTarget(root, `${PLAYBOOK_ROOT}/${oldName}`, "# Old guidance\n");
-    const result = runPlaybookBlock(
+    const result = runPlaybookInstaller(
       root,
       `${PLAYBOOK_ROOT}/writing-human-facing-prose.md`,
     );
-    assert.equal(
-      result.status,
-      COPY_FAILURE_EXIT,
-      result.stderr || result.stdout,
-    );
+    assert.equal(result.status, 1, result.stderr || result.stdout);
     for (const [oldName] of RENAMES)
       assert.equal(
         readFileSync(join(root, PLAYBOOK_ROOT, oldName), "utf-8"),

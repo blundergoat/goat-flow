@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-10-10
+last_reviewed: 2026-11-09
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
@@ -153,9 +153,9 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 
 **Status:** active | **Created:** 2026-05-31
 **Severity:** INTEGRATION
-**Incident count:** 3 | **Latest occurrence:** 2026-09-05
+**Incident count:** 4 | **Latest occurrence:** 2026-10-28
 
-**Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
+**Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
 
 **What happened:** During the gruff size cleanup, several long inline Node shell snippets were blocked by the guardrail hook before they could run. The commands were meant to perform mechanical test-file edits, but their length and nested shell shape crossed the safety rules and slowed the cleanup.
 
@@ -163,33 +163,51 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 
 **Recurrence 2026-08-24:** While verifying `learn new`, two ripgrep commands put literal backticks inside a double-quoted shell command.
 The deny-dangerous hook correctly treated them as command substitution and blocked both attempts before execution.
-Using a single-quoted plain search pattern let the read-only check run safely. Evidence anchor: `.goat-flow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`).
+Using a single-quoted plain search pattern let the read-only check run safely. Evidence anchor: `test/fixtures/hooks-bash/.goat-flow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Recurrence 2026-09-05:** Clarity-pass commands containing serialized source exceeded the hook's 16 KB command limit and were rejected before writes.
 Smaller patches and verification commands that read the selected files directly completed the work within the enforced limit.
-Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `16384`).
+Evidence anchor: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `16384`).
+
+**Recurrence 2026-10-28:** Capture-packet generation exceeded the 16,384-byte command inspection limit and was refused before writes. Splitting generation into bounded commands preserved the guard and produced the proposal. Current owner: `workflow/hooks/policy-input.mjs` (search: `Command exceeds the 16384-byte policy inspection limit`).
 
 ## Lesson: Check Gruff file-length headroom before growing a large test file
 
 **Status:** active | **Created:** 2026-10-03
 **Severity:** INTEGRATION
 
-**Incident count:** 4 | **Latest occurrence:** 2026-10-10
-**Decision changed:** Before adding a test or assertion messages to a large test file, compare its substantive line count with Gruff's 1,000-line `size.file-length` limit and leave room for Prettier wrapping.
+**Incident count:** 11 | **Latest occurrence:** 2026-11-09
+**Decision changed:** Before adding tests, assertions or validation branches to a large file, compare its substantive line count with Gruff's 1,000-line `size.file-length` limit and leave room for Prettier wrapping.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Run `bash scripts/gruff-ts.sh analyse <file>` before editing a test file near 950 substantive lines. Comments do not count, but a one-line assertion that gains a message wraps to five lines once it passes Prettier's print width; prefer a short existing variable as the label, or put a new test in the smaller suite that owns the same contract. Evidence anchors: `test/unit/hooks-runtime-evidence.test.ts` (search: `fails a Codex Stop hook that never delivers a scan`) and `test/unit/review-validate.test.ts` (search: `validateReviewReport(short, root).violations, [], flag`).
+**Prevention:** Run `bash scripts/gruff-ts.sh analyse <file>` before editing a source or test file near 950 substantive lines. Comments do not count, but a one-line assertion that gains a message wraps to five lines once it passes Prettier's print width; prefer a short existing variable as the label, or put a new test in the smaller suite that owns the same contract. Evidence anchors: `test/unit/hooks-runtime-evidence.test.ts` (search: `fails a Codex Stop hook that never delivers a scan`) and `test/unit/review-validate.test.ts` (search: `validateReviewReport(short, root).violations, [], flag`).
 
 **What happened:** Two edits on 2026-10-03 pushed test files past Gruff's 1,000-line limit, an error-level finding that fails the warning ratchet. A new Codex Stop test pushed `test/integration/hook-effective-state.test.ts` to 1,017 substantive lines, so the test moved to the smaller hooks runtime evidence suite. Case labels on loop assertions then pushed `test/unit/review-validate.test.ts` to 1,006, and one-line labels brought it back under the limit.
 
-**Root cause:** I sized each edit by its intent rather than by the lines Prettier would produce.
+**Root cause:** I sized edits by intent or reviewed only the small entrypoints, rather than checking the formatted size and complexity of every changed source and test file.
 
-**Recurrence 2026-10-10:** The PR #67 response added a real-child Git-root regression to `test/unit/hook-registrar.test.ts` (search: `resolves a Git root when it contains the temporary directory`) without checking its headroom. Gruff reported 1,004 substantive lines. Replacing the child fixture with the real Git reader and a scoped `tmpdir` mock retained the path-containment assertion within the file limit. The child fixture also created tsx cache files inside its selected temp root; the separate `test/unit/check-touched.test.ts` regression (search: `runs with the temporary directory inside the repository`) now disables tool caches to isolate capture writes. Check formatted size and fixture-owned side effects before broad verification.
+**Incident ledger:**
+
+- **Recurrence 2026-10-10:** The PR #67 response added a real-child Git-root regression to `test/unit/hook-registrar.test.ts` (search: `resolves a Git root when it contains the temporary directory`) without checking its headroom. Gruff reported 1,004 substantive lines. Replacing the child fixture with the real Git reader and a scoped `tmpdir` mock retained the path-containment assertion within the file limit. The child fixture also created tsx cache files inside its selected temp root; the separate `test/unit/check-touched.test.ts` regression (search: `runs with the temporary directory inside the repository`) now disables tool caches to isolate capture writes. Check formatted size and fixture-owned side effects before broad verification.
 
 The same batch put the controller YAML bundle in every temporary project, which populated the linked-project negative control before the hook ran. Install scanner dependencies in `test/integration/post-turn-launcher-recovery.test.ts` (search: `writeScanner`), and leave `withProject` empty; the unchanged `refuses linked state directories without writing into the linked project` assertion then passed. Fixture setup must preserve the absence that a negative control measures.
 
-**Recurrence 2026-10-10 (installer fixtures):** Adding version prerequisites to `test/integration/setup-install-agent-matrix.test.ts` expanded a constants import and pushed the file to 1,004 substantive lines. Reusing the existing test facade for `AUDIT_VERSION` and keeping the serialized version/header together retained the fixture behavior; the formatted targeted scan cleared `size.file-length`. Check formatted headroom before launching the full ratchet, even when the change adds no test cases. Anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `legacyHookChoices`).
+- **Recurrence 2026-10-10 (installer fixtures):** Adding version prerequisites to `test/integration/setup-install-agent-matrix.test.ts` expanded a constants import and pushed the file to 1,004 substantive lines. Reusing the existing test facade for `AUDIT_VERSION` and keeping the serialized version/header together retained the fixture behavior; the formatted targeted scan cleared `size.file-length`. Check formatted headroom before launching the full ratchet, even when the change adds no test cases. Anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `legacyHookChoices`).
+
+- **Recurrence 2026-10-17:** Three native-replay integration cases made `test/integration/hook-command-spawn-matrix.test.ts` reach 1,199 substantive lines. All 39 runnable cases passed, but the production ratchet rejected `size.file-length`. The draft now places the native cases and their disposable fixtures in `test/integration/hook-command-native-replay.test.ts` (search: `managed Node registered policy replay`), preserving the original suite byte for byte. Check the formatted file's headroom before adding a test family; a passing behavioral suite does not clear the size gate.
+
+- **Recurrence 2026-10-17 (policy transport):** Adding thirty large-report cases to `test/integration/deny-dangerous-policy.test.ts` passed behavioral checks but reached 1,101 substantive lines. Gruff and preflight rejected `size.file-length`. The isolated correction places that family in `test/integration/deny-large-report-transport.test.ts` (search: `bounded large-report heredoc transport`) and restores the existing suite byte for byte. Measure formatted headroom before choosing an existing test owner.
+
+- **Recurrence 2026-10-20 (M13 startup integration):** The prepared startup patch passed its behavioral suites, but whole-tree verification found 1,004 substantive lines in `scripts/check-hook-parity.mjs` and 1,008 in `test/integration/deny-dangerous-policy.test.ts`. Consolidating identity checks and fixture runtime selection cleared file size; a separate exception predicate then cleared the validator's cognitive-complexity warning. The full ratchet returned zero warning/error identities. Check all touched scripts and test owners before presenting a patch, not only the small runtime entrypoints. Anchors: `validateCorpora`, `isApprovedException`, and `split policy partial installation`.
+
+- **Recurrence 2026-10-23 (M03 scanner fixtures):** Converting launcher fixtures to Node pushed the recovery suite over the file-length limit. Removing dependency-copy loops already covered by `installPostTurnHook` preserved its assertions and brought it below the limit. Anchors: `test/integration/post-turn-launcher-recovery.test.ts` (search: `writeScanner`) and `test/integration/post-turn-safety-hook.helpers.ts` (search: `installPostTurnHook`). Run touched-file checks before the full runtime matrix.
+
+- **Recurrence 2026-10-23 (M04 native Gruff):** Adding the runtime selector pushed `test/integration/gruff-code-quality-contract.test.ts` to 1,004 substantive lines. Reusing `selectedHookPath` for the scanner path removed the extra import and long inline conditional while retaining every assertion. Check formatted headroom before adding selection logic, even when no test case is added. Anchor: `runProviderLauncher`.
+
+- **Recurrence 2026-10-28 (provider capture metadata):** The approved patch added two cases to `test/integration/hook-provider-contracts.test.ts` and reached 1,013 substantive lines. Both owning suites passed, but the ratchet rejected file size. Shortening the cases exposed five new non-null-assertion warnings. The correction isolates the cases in `test/integration/hook-provider-captures.test.ts` (search: `host-specific hook provider captures`) and uses an asserted host lookup. Check both file size and warning identities before approving a test-file addition.
+
+- **Recurrence 2026-11-09 (source file):** Adding a cause-naming refusal to `requireRawComparison` in `src/cli/review-validate-anchors.ts` took the file from exactly 1,000 to 1,004 substantive lines; it was already at the limit before the edit. Naming the attribute list as `CONVERTING_ATTRS` collapsed an eight-line argument array and left 997 lines with the owning integration suite still passing 29 of 29. The rule covers source files as well as tests: measure the touched file's headroom before the first edit. Anchor: `src/cli/review-validate-anchors.ts` (search: `CONVERTING_ATTRS`).
 
 ## Lesson: Check each Gruff-driven comment against the code it describes
 

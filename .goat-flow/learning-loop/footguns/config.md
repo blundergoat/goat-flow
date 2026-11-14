@@ -1,7 +1,20 @@
 ---
 category: config
-last_reviewed: 2026-09-05
+last_reviewed: 2026-11-03
 ---
+
+## Footgun: Ordinary hook persistence can inherit an off choice from a different policy
+
+**Status:** active | **Created:** 2026-09-18 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Ordinary hook writes preserve a missing policy's default; only explicit upgrade migration records inherited choices.
+**Trigger phase:** ACT
+**hallucination-risk:** high
+
+**Prevention:** Keep inheritance in explicit migration and installer upgrade preparation. Generic `setHookEnabled` and `prepareHookConfig` must preserve missing/default-on and explicit Git choices, even when another policy is off. Verify current-installed Sync and an unrelated toggle with the Git key absent; an ownership-byte review is not a substitute for this persistence check.
+
+**What happened:** With current trusted policy files, `deny-dangerous: {enabled: false}` and no Git choice, reads reported Git protection on. An unrelated toggle and Sync saved `deny-git-mutations: {enabled: false}` and disabled protection without a policy review. The preparation code inherited the sibling's off choice; unchanged ownership bytes bypassed upgrade review.
+
+**Evidence:** `src/cli/config/writer.ts` (search: `setHookEnabled`, `prepareHookConfig`, `migrateGitHookChoice`), `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`, `insertHookEntry`) and `test/integration/hook-effective-state.test.ts` (search: `preserves a missing Git choice during current-installed`). The five fresh persistence regressions failed before inheritance was removed from generic actions and passed afterward; explicit migration and later independent toggles remain covered in `test/unit/config-writer.test.ts` (search: `inherits the Git choice once`).
 
 ## Resolved Entries
 

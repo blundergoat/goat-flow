@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.18.0"
+goat-flow-reference-version: "1.19.0"
 ---
 # goat-review Reference Examples
 
@@ -92,6 +92,8 @@ Before Pass 1, send a `goat-review-request/v1` JSON request to the version-match
 | `unstaged` | Frozen index versus live tracked bytes; exclude untracked files. |
 | `worktree` | Pinned base versus live tracked bytes plus the declared untracked membership rule; capture combined state once. |
 | `paths` / `area` | Explicit paths declare each live/index/Git view; area freezes live paths or a named sample. No surrounding-area coverage claim follows from a sample. |
+
+A content-conversion refusal (Git LFS, `text=auto`, Windows `core.autocrlf`) names its cause and means re-selection, not drift or a waiver request: `staged` when nothing is unstaged or untracked, else `paths` with changed, added, and untracked files `from: live` and deleted files `from: git` at the base `revision`.
 
 Every record includes escaped literal paths, absence, regular-file modes, raw-byte SHA-256, relevant Git blob/revision IDs, index identity, and a tagged review fingerprint. Git IDs follow the repository's object format; hashes are not Git IDs. No `authority=n/a`, free-text authority, implicit mixed paths, duplicate/unsafe paths, or unsupported file kinds.
 

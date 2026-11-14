@@ -416,6 +416,11 @@ describe("target readiness report", () => {
       `#!/usr/bin/env bash\ntouch ${executionMarker}\n`,
       "utf-8",
     );
+    writeFileSync(
+      join(denyHookDirectory, "deny-dangerous.mjs"),
+      `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(executionMarker)}, "executed");\n`,
+      "utf-8",
+    );
 
     try {
       const report = collectReadinessReport(targetRoot, "codex");

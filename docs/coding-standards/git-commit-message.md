@@ -1,101 +1,52 @@
-# Git commit message standard
+You are a Git commit message generation expert. Analyse the following code changes and
+generate one commit message in {language} that meets every requirement below. Default to English if no language is supplied.
 
-## Requirements for the commit message
+Code changes:
+{diff}
 
-### Branch-derived prefix
+If the diff contains unrelated changes, ask which logical change to draft first.
 
-Read the branch with `git branch --show-current` and match the output against:
+## Header
 
-```
-^(feat|fix|chore|refactor|docs|test|perf|build|ci|security)/([0-9]+)([-_].*)?$
-```
+Use `type(scope): subject`, or `type(scope)!: subject` for a breaking public contract.
+The scope names the subsystem holding the largest change (`installer`, `parser`), never `core`, `misc` or a file kind.
+Prefix the header with `#<github issue number> `, as in `#123 feat(audit): add drift cache`, only when the current branch
+(`git branch --show-current`) matches `^(feat|fix|chore|refactor|docs|test|perf|build|ci|security)/([0-9]+)([-_].*)?$`.
+Its digits are the issue number. On any other or unknown branch, use no prefix; never infer one from history or the diff.
 
-| Branch output | Action |
-| ------------- | ------ |
-| Matches the pattern (`feat/123`, `fix/482-quote-paths`, `feat/91_drift_cache`) | Prefix the subject: `#<digits> type(scope): subject` |
-| Does not match (`main`, `feat/no-number`, `feat/123abc`, `release/1.4`) | No prefix |
-| Empty (detached HEAD: rebase, bisect, CI checkout) | No prefix |
+| Type | Use for (judge the largest change's effect, not file extensions or earlier commits) |
+| --- | --- |
+| `feat` | A new capability |
+| `fix` | Behaviour that was wrong before this commit, including errors and instructions an agent follows |
+| `perf` | Measured speed or resource gains without changing results |
+| `refactor` | Restructuring, including moved or extracted code, that preserves externally observable behaviour |
+| `security` | Closing a vulnerability or tightening a safety control |
+| `docs` | Documentation-only changes without changed product or agent behaviour |
+| `test` | Tests for behaviour that already shipped; tests added or tightened with a fix belong to that `fix` |
+| `build`, `ci`, `chore` | Dependency, runtime or toolchain version changes, packaging, pipelines or other maintenance |
 
-Empty output means no prefix. Do not infer one from history, recent commits, or the diff.
+## Subject
 
-### Message shape
+- Use imperative mood with a concrete verb: add, remove, replace, rename, extract, move, deny, allow, cache, retry or bump.
+- Name the largest change and the identifier, setting, value or version it touches, so the subject fits no other diff.
+- One change per subject; never longer than 72 characters, including the prefix and `!`.
+- Lowercase after the colon except proper nouns or identifiers; backticks permitted; no trailing period.
+- Avoid vague verbs (enhance, improve, update, adjust, revise, align, refresh) and nouns like handling or coverage:
+  `test(review): add authority validation coverage` -> `fix(review): name the converting path in snapshot refusals`.
 
-```
-#123 type(scope): subject
+## Body and breaking changes
 
-Body explaining why the change is needed.
-- one fact per bullet, naming real files, behaviours, APIs, commands, or versions
-```
+- Add a body for several changes, an unclear reason, or compatibility, security, migration or performance impact.
+- Blank line, then up to six `- ` bullets, one per distinct change, largest first; do not repeat the subject or narrate your work.
+- Each bullet names what changed, with `<old> -> <new>` for values and the reason when shown; never just a file or folder name.
+- Wrap at 72 columns; indent continued bullet lines two spaces; keep paths, identifiers and URLs unbroken.
+- State only what the diff shows; moved code is not new. Never invent motivation, issue numbers, benchmarks or test results.
+- Illustrative placeholder bullet: `- The installer failed on paths with spaces because $TARGET was unquoted`
+- For a breaking public contract, add a blank line and a `BREAKING CHANGE:` footer naming the contract, impact and migration.
 
-### Subject rules
+## Output
 
-Subject lines are optimised for `git log`, changelogs, and bisect notes.
-
-- Imperative mood. Test: the subject must complete the sentence "If applied, this commit will
-  ___".
-- One line, as short as it can be while still naming the observable change, and never longer
-  than 72 characters including any `#<digits> ` prefix.
-- Lowercase after the colon unless the word is a proper noun, identifier, or API name.
-- No trailing period.
-- Name the observable change, not the quality aspiration.
-- One observable change per subject; secondary axes go in the body.
-- Backticks around identifiers are permitted.
-
-A verb is too weak when it only reports that something changed: *enhance, improve, streamline,
-clarify, polish, tweak*. Use a verb that names the actual edit: *add, remove, replace, rename,
-fix, deny, allow, gate, skip, cache, invalidate, log, retry, bump*. `update` earns its
-place only when the change is literally the update of a pinned value, and `bump` usually says
-that better.
-
-## Body rules
-
-Write a body when the subject alone does not explain the decision. Common cases:
-
-- The motivation is not obvious from the diff.
-- The change touches multiple behaviours under one scope.
-- Compatibility, security, migration, platform, or performance context matters.
-- A version bump, dependency change, or rename would be hard to understand from the subject
-  alone.
-
-The body explains why the change exists and names the real affected surfaces. Do not restate the
-diff mechanically.
-
-- Wrap body prose at 72 columns.
-- Open with the reason or constraint, not an announcement: no "This commit", "This change",
-  "This PR".
-- The weak-verb rule applies to bodies too.
-- Match claims to evidence: no "significantly improves robustness" padding, no hedging verified
-  facts with "should", and never claim a check passed unless it ran.
-- One fact per bullet. Cut bullets that restate the subject or the diff.
-- Quote the essential line of an error message, not the whole dump.
-
-```
-BAD:  This commit significantly improves installer reliability by enhancing path handling
-      and making various robustness improvements.
-
-GOOD: The installer failed on paths with spaces because $TARGET was unquoted.
-      - quote all path expansions in the hook installer
-      - add a regression test using a spaced tmpdir
-```
-
-## Never include
-
-- Secrets, tokens, credentials, or connection strings - in any line, including examples.
-- Machine-local absolute paths (`/home/...`, `C:\Users\...`). Repository-relative paths are
-  encouraged.
-- Agent self-narration: "as requested", "per the instructions", "I have updated".
-- Tool advertisements, generated-by footers, or co-author lines, unless the project's agent
-  instructions declare them.
-- Em dashes (U+2014), typographic quotes, emoji, or gitmoji. Use a spaced hyphen (` - `),
-  straight quotes, and plain ASCII punctuation.
-
-## Worked example
-
-```
-fix(installer): quote path expansions in the hook installer
-
-The installer failed on paths containing spaces because $TARGET was
-expanded unquoted at three call sites.
-- quote all path expansions in workflow/install-hooks.sh
-- add a regression test using a spaced tmpdir
-```
+- Never include milestone numbers such as `M01`, gitignored plan references, session labels, secrets, credentials or machine-local paths.
+- Never include tool advertisements or co-author lines unless project instructions require them.
+- Use plain ASCII punctuation: no em dashes (use ` - ` instead), typographic quotes, emoji or gitmoji.
+- Draft only: output the commit message alone, without Markdown fences or commentary; never run `git commit` or `git push`.

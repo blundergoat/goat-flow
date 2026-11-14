@@ -196,4 +196,62 @@ const sessionLogs: HarnessCheck = {
   },
 };
 
-export const RECOVERY_CHECKS: HarnessCheck[] = [milestoneTracking, sessionLogs];
+/** Instruction presence is a score-only signal; it does not establish milestone execution. */
+const milestoneCommandsNamed: HarnessCheck = {
+  id: "milestone-commands-named",
+  name: "Milestone commands named",
+  concern: "recovery",
+  type: "metric",
+  evidenceKind: "structural",
+  provenance: {
+    ...recoveryProvenance("metric", ["docs/harness-audit.md"]),
+    verified_on: "2026-11-13",
+  },
+  run: (ctx) => {
+    const paths = new Set<string>();
+    for (const agent of Object.values(ctx.structure.agents)) {
+      if (agent.instruction_file) paths.add(agent.instruction_file);
+    }
+    for (const agent of ctx.agents) paths.add(agent.agent.instructionFile);
+    const clauses = [
+      ["plans time start", /\bplans\s+time\s+start\b/u],
+      ["plans time stop", /\bplans\s+time\s+stop\b/u],
+      ["--finalize", /--finalize\b/u],
+      [
+        "immediate milestone tick rule",
+        /\btick\b[^\n]*-\s*\[[xX]\][^\n]*(?:before\b[^\n]*(?:next|another)\b|immediately\b|as\b[^\n]*complet)/iu,
+      ],
+    ] as const;
+    const findings: string[] = [];
+    let present = 0;
+    for (const path of paths) {
+      const content = ctx.fs.readFile(path);
+      if (content === null) continue;
+      present++;
+      const missing = clauses
+        .filter(([, pattern]) => !pattern.test(content))
+        .map(([name]) => name);
+      if (missing.length)
+        findings.push(`${path}: missing ${missing.join(", ")}`);
+    }
+    if (findings.length) {
+      return fail(findings, [
+        "Name the milestone start, stop/finalize commands and immediate tick rule in each present agent instruction file.",
+      ]);
+    }
+    return limitedRecoveryPass(
+      [
+        present
+          ? `${present} present instruction file(s) name milestone commands and immediate ticking`
+          : "No agent instruction files present for milestone command coverage",
+      ],
+      {},
+    );
+  },
+};
+
+export const RECOVERY_CHECKS: HarnessCheck[] = [
+  milestoneTracking,
+  sessionLogs,
+  milestoneCommandsNamed,
+];

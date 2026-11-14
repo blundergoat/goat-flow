@@ -31,6 +31,19 @@ assert.equal(
 const REAL_NPM = npmLookup.stdout.trim();
 const MOCK_HEAD = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
 const CI_PASSED = '[{"status":"completed","conclusion":"success"}]';
+// Bash startup can reorder PATH; select fixture tools after startup so release checks stay isolated.
+const PUBLISH_FIXTURE_BASH_ARGS = [
+  "-c",
+  [
+    "set -euo pipefail",
+    'fixture_bin=$(cd -- "$1" && pwd)',
+    'export PATH="$fixture_bin:$PATH"',
+    "script_path=$2",
+    "shift 2",
+    'source "$script_path" "$@"',
+  ].join("\n"),
+  "npm-publish-fixture",
+];
 const workspaces: string[] = [];
 
 after(() => {
@@ -159,6 +172,7 @@ esac
   writeFileSync(
     gitCommand,
     `#!/usr/bin/env bash
+printf 'git:%s\\n' "$*" >> "$MOCK_NPM_LOG"
 case "$1" in
   rev-parse) if [[ -f "$MOCK_GIT_HEAD_FILE" ]]; then cat "$MOCK_GIT_HEAD_FILE"; else printf '%s\\n' "$MOCK_GIT_HEAD"; fi ;;
   status) if [[ -f "$MOCK_GIT_STATUS_FILE" ]]; then cat "$MOCK_GIT_STATUS_FILE"; elif [[ -n "$MOCK_GIT_STATUS" ]]; then printf '%s\\n' "$MOCK_GIT_STATUS"; fi ;;
@@ -181,49 +195,54 @@ fi
 `,
   );
   chmodSync(ghCommand, 0o755);
-  const result = spawnSync("bash", [SCRIPT, ...(runConfig.args ?? [])], {
-    cwd: PROJECT_ROOT,
-    encoding: "utf8",
-    input,
-    env: {
-      PATH: `${workspace}:${process.env.PATH ?? ""}`,
-      HOME: workspace,
-      NPM_TOKEN: runConfig.token ?? "",
-      NODE_AUTH_TOKEN: runConfig.nodeAuthToken ?? "",
-      NPM_CONFIG_USERCONFIG: npmUserConfig,
-      NPM_CONFIG_GLOBALCONFIG: join(workspace, "npm-global-config"),
-      ...(runConfig.inheritedUserConfig
-        ? { npm_config_userconfig: npmUserConfig }
-        : {}),
-      ...(runConfig.inheritedDryRun
-        ? { npm_config_dry_run: "true", NPM_CONFIG_DRY_RUN: "true" }
-        : {}),
-      ...(runConfig.inheritedOtp
-        ? {
-            npm_config_otp: runConfig.inheritedOtp,
-            NPM_CONFIG_OTP: runConfig.inheritedOtp,
-          }
-        : {}),
-      MOCK_NPM_LOG: npmLog,
-      MOCK_REAL_NPM: REAL_NPM,
-      MOCK_WORKSPACE: workspace,
-      MOCK_AUTHENTICATED: runConfig.authenticated === false ? "0" : "1",
-      MOCK_PUBLISHED: runConfig.published ? "1" : "0",
-      MOCK_GIT_HEAD: MOCK_HEAD,
-      MOCK_GIT_STATUS: runConfig.gitStatus ?? "",
-      MOCK_GIT_HEAD_FILE: join(workspace, "git-head"),
-      MOCK_GIT_STATUS_FILE: join(workspace, "git-status"),
-      MOCK_CHANGE_HEAD: runConfig.changeDuringCheck?.head ?? "",
-      MOCK_CHANGE_STATUS: runConfig.changeDuringCheck?.gitStatus ?? "",
-      MOCK_CI_RUNS: runConfig.ciRuns ?? "[]",
-      MOCK_LOGIN_SUCCEEDS: runConfig.loginSucceeds === false ? "0" : "1",
-      MOCK_LOGIN_MARKER: join(workspace, "logged-in"),
-      MOCK_FAIL_FIRST_PUBLISH: runConfig.firstAttempt === "reject" ? "1" : "0",
-      MOCK_FIRST_PUBLISH_MARKER: join(workspace, "first-publish"),
-      MOCK_PACK_MODE: runConfig.packMode ?? "stable",
-      MOCK_PACK_COUNT: join(workspace, "pack-count"),
+  const result = spawnSync(
+    "bash",
+    PUBLISH_FIXTURE_BASH_ARGS.concat(workspace, SCRIPT, runConfig.args ?? []),
+    {
+      cwd: PROJECT_ROOT,
+      encoding: "utf8",
+      input,
+      env: {
+        PATH: `${workspace}:${process.env.PATH ?? ""}`,
+        HOME: workspace,
+        NPM_TOKEN: runConfig.token ?? "",
+        NODE_AUTH_TOKEN: runConfig.nodeAuthToken ?? "",
+        NPM_CONFIG_USERCONFIG: npmUserConfig,
+        NPM_CONFIG_GLOBALCONFIG: join(workspace, "npm-global-config"),
+        ...(runConfig.inheritedUserConfig
+          ? { npm_config_userconfig: npmUserConfig }
+          : {}),
+        ...(runConfig.inheritedDryRun
+          ? { npm_config_dry_run: "true", NPM_CONFIG_DRY_RUN: "true" }
+          : {}),
+        ...(runConfig.inheritedOtp
+          ? {
+              npm_config_otp: runConfig.inheritedOtp,
+              NPM_CONFIG_OTP: runConfig.inheritedOtp,
+            }
+          : {}),
+        MOCK_NPM_LOG: npmLog,
+        MOCK_REAL_NPM: REAL_NPM,
+        MOCK_WORKSPACE: workspace,
+        MOCK_AUTHENTICATED: runConfig.authenticated === false ? "0" : "1",
+        MOCK_PUBLISHED: runConfig.published ? "1" : "0",
+        MOCK_GIT_HEAD: MOCK_HEAD,
+        MOCK_GIT_STATUS: runConfig.gitStatus ?? "",
+        MOCK_GIT_HEAD_FILE: join(workspace, "git-head"),
+        MOCK_GIT_STATUS_FILE: join(workspace, "git-status"),
+        MOCK_CHANGE_HEAD: runConfig.changeDuringCheck?.head ?? "",
+        MOCK_CHANGE_STATUS: runConfig.changeDuringCheck?.gitStatus ?? "",
+        MOCK_CI_RUNS: runConfig.ciRuns ?? "[]",
+        MOCK_LOGIN_SUCCEEDS: runConfig.loginSucceeds === false ? "0" : "1",
+        MOCK_LOGIN_MARKER: join(workspace, "logged-in"),
+        MOCK_FAIL_FIRST_PUBLISH:
+          runConfig.firstAttempt === "reject" ? "1" : "0",
+        MOCK_FIRST_PUBLISH_MARKER: join(workspace, "first-publish"),
+        MOCK_PACK_MODE: runConfig.packMode ?? "stable",
+        MOCK_PACK_COUNT: join(workspace, "pack-count"),
+      },
     },
-  });
+  );
   return {
     result,
     log: existsSync(npmLog) ? readFileSync(npmLog, "utf8") : "",
@@ -290,6 +309,8 @@ describe("npm publish helper", () => {
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(log, /command:run publish:check:quick\n/u);
+    assert.match(log, /git:rev-parse HEAD\n/u);
+    assert.match(log, /gh:run list --commit /u);
     assert.doesNotMatch(log, /command:run publish:check\n/u);
     assert.match(log, /publish-otp:\n/u);
   });

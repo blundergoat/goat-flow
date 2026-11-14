@@ -9,11 +9,11 @@ import assert from "node:assert/strict";
 import {
   assertForEachTarget,
   assertMatchesAll,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readProjectFile,
-  INSTALLED_SKILL_ROOTS,
+  CANONICAL_SKILL_ROOT,
 } from "./skill-hardening.helpers.js";
 
 // Users can finish goat-qa through five output variants, and each one must show what the agent disproved.
@@ -22,7 +22,7 @@ const GOAT_QA_FINAL_OUTPUT_VARIANT_COUNT = 5;
 describe("skill hardening contracts: debug, qa, critique, security, dispatcher (1/2)", () => {
   it("keeps goat-debug bisect reporting-only until explicit approval", () => {
     // Example: a user asks for a regression diagnosis while unrelated edits remain open.
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -68,7 +68,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("keeps goat-debug lifecycle gates explicit and conditional", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
 
       assert.match(
@@ -147,7 +147,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("requires a hit or miss for every goat-debug footgun retrieval", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const retrievalLines = readProjectFile(skillPath)
         .split(/\r?\n/u)
         .filter((line) => line.includes("Footgun retrieval:"));
@@ -163,7 +163,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   // The debug closure step must require cleanup and the original reproduction before an agent declares the reported bug fixed.
 
   it("closes goat-debug only on the original reproduction with diagnostics cleaned", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
 
       assert.match(
@@ -208,7 +208,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("separates symptom reproduction from goat-debug causal confidence", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
 
       assert.match(
@@ -249,7 +249,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("applies repository authority to goat-debug diagnostic mutations", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
 
       assert.match(
@@ -281,7 +281,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("keeps goat-debug evidence states honest without burdening Investigate", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       const investigateMode = readMarkdownSection(
         skillPath,
@@ -312,7 +312,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
 
   // A code tour can use Investigate without a bug report; diagnosis-only requirements must stay outside that path.
   it("scopes goat-debug diagnosis requirements away from Investigate mode", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const boundaryCommands = readMarkdownSection(
         skillPath,
         "Boundary Commands",
@@ -353,7 +353,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("keeps goat-debug ADJUSTED disposition countable in its root output", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -399,7 +399,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       "references/diagnostic-techniques.md",
     ]);
 
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       assert.match(
         readProjectFile(skillPath),
         /`references\/diagnostic-techniques\.md`/u,
@@ -414,7 +414,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-debug",
         "references/diagnostic-techniques.md",
       ),
@@ -460,7 +460,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("selects goat-debug reduction by failure shape instead of universal binary search", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       assert.doesNotMatch(
         readProjectFile(skillPath),
         /Binary-search each variable/u,
@@ -469,7 +469,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-debug",
         "references/diagnostic-techniques.md",
       ),
@@ -500,7 +500,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("uses decision signal rather than a fixed goat-debug read count", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.doesNotMatch(
         skillGuidance,
@@ -517,7 +517,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
 
   // Ranking decides which hypotheses to test first, so it must appear before tracing rather than after minimisation.
   it("ranks goat-debug hypotheses before expensive tracing", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const diagnoseMode = readMarkdownSection(skillPath, "Diagnose Mode");
       const rankingIndex = diagnoseMode.indexOf("**Hypothesis ranking:**");
       const tracingIndex = diagnoseMode.indexOf("After tracing, mark each");
@@ -552,7 +552,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
 
   it("does not eliminate intermittent goat-debug hypotheses after one pass", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-debug",
         "references/diagnostic-techniques.md",
       ),
@@ -574,7 +574,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
 
   it("preserves the triggering workload during goat-debug performance reduction", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-debug",
         "references/diagnostic-techniques.md",
       ),
@@ -600,7 +600,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("requires goat-qa Standard-mode gap output to include Verification Integrity", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -614,7 +614,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      canonicalSkillReferencePaths("goat-qa", "references/output-templates.md"),
       (referencePath) => {
         const outputTemplates = readProjectFile(referencePath);
         assert.match(
@@ -632,8 +632,8 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     );
   });
 
-  it("loads goat-qa output templates progressively from mirrored references", () => {
-    assertForEachTarget(INSTALLED_SKILL_ROOTS, (skillRoot) => {
+  it("loads goat-qa output templates progressively from canonical references", () => {
+    assertForEachTarget([CANONICAL_SKILL_ROOT], (skillRoot) => {
       const skillPath = `${skillRoot}/goat-qa/SKILL.md`;
       const referencePath = `${skillRoot}/goat-qa/references/output-templates.md`;
       const outputTemplates = readProjectFile(referencePath);
@@ -665,7 +665,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("gives goat-qa Regression Guard users a mode-specific intake checkpoint", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       assert.match(
         intake,
@@ -698,7 +698,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   });
 
   it("routes goat-qa by evidence scope before generic gap vocabulary", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const recentChangeRoute =
         /Explicit diff, PR, branch, changed-file, or recent-change scope[^\n]+Standard mode[^\n]+even when[^\n]+"audit", "coverage", or "gaps"/u;
@@ -731,7 +731,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
   // A user receiving no findings still needs the same assessment and coverage evidence as a user receiving a list of defects.
   it("gives goat-critique one result envelope for clean and non-clean returns", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-critique",
         "references/sub-agent-directives.md",
       ),

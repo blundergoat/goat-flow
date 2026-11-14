@@ -253,7 +253,7 @@ interface Preset {
   source?: string | undefined;
   globalSafe?: boolean | undefined;
   internalOnly?: boolean | undefined;
-  qualityMode?: boolean | undefined;
+  qualityWorkflow?: boolean | undefined;
   requiresGh?: boolean | undefined;
   requiresPrOrIssue?: boolean | undefined;
   requiresLocalDiff?: boolean | undefined;

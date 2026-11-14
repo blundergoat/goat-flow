@@ -8,8 +8,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertForEachTarget,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readProjectFile,
 } from "./skill-hardening.helpers.js";
@@ -28,7 +28,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     ];
 
     assertForEachTarget(canonicalSkills, (skillName) => {
-      assertForEachTarget(installedSkillPaths(skillName), (skillPath) => {
+      assertForEachTarget(canonicalSkillPaths(skillName), (skillPath) => {
         const boundaryCommands = readMarkdownSection(
           skillPath,
           "Boundary Commands",
@@ -75,7 +75,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("carries explicit build intent through planning into ordinary ACT", () => {
-    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat"), (skillPath) => {
       const routeMap = readMarkdownSection(skillPath, "Route Map");
       const constraints = readMarkdownSection(skillPath, "Constraints");
 
@@ -91,7 +91,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
       );
     });
 
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       const delivery = readMarkdownSection(
         skillPath,
         "Phase 2 - Deliver Milestones",
@@ -130,7 +130,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("forces Full depth for one material-risk class regardless of size", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const scope = readMarkdownSection(
         skillPath,
         "Step 0 - Scope, Size, Spec",
@@ -140,7 +140,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      canonicalSkillReferencePaths("goat-review", "references/examples.md"),
       (referencePath) => {
         const reference = readMarkdownSection(
           referencePath,
@@ -172,7 +172,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("classifies gate evidence without inventing changed-code causality", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const scope = readMarkdownSection(
         skillPath,
         "Step 0 - Scope, Size, Spec",
@@ -194,7 +194,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      canonicalSkillReferencePaths("goat-review", "references/examples.md"),
       (referencePath) => {
         const reference = readMarkdownSection(
           referencePath,
@@ -236,7 +236,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
 
   it("teaches compact clean output and provenance without real-incident claims", () => {
     assertForEachTarget(
-      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      canonicalSkillReferencePaths("goat-review", "references/examples.md"),
       (referencePath) => {
         const examples = readMarkdownSection(
           referencePath,
@@ -275,7 +275,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("defines two evidence-producing area audit passes", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const areaAudit = readMarkdownSection(skillPath, "Area Audit (Full)");
       const passOneIndex = areaAudit.indexOf(
         "### Area Pass 1 - Inventory and Risk Hypotheses",
@@ -427,7 +427,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("assigns learning-loop retrieval to exactly one route owner", () => {
-    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat"), (skillPath) => {
       const routingFlow = readMarkdownSection(skillPath, "How It Works");
       assert.match(
         routingFlow,
@@ -448,7 +448,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("records routing depth and direct-execution learnings in the Route Snapshot", () => {
-    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat"), (skillPath) => {
       const routingFlow = readMarkdownSection(skillPath, "How It Works");
       assert.match(
         routingFlow,

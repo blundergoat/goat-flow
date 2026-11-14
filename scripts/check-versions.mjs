@@ -9,7 +9,8 @@
  * Each mismatch prints one line and the script exits 1; otherwise it prints a single success line.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { generateHookRuntime } from "./generate-hook-runtime.mjs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const version = pkg.version;
@@ -57,14 +58,11 @@ const referenceTemplates = [
     path.includes("/references/"),
   ),
 ];
-// Every top-level .sh and .mjs hook runtime must carry the stamp, so a new runtime added without one fails here.
+// Every top-level .mjs hook runtime must carry the stamp, so a new runtime added without one fails here.
 const hookRuntimeTemplates = readdirSync("workflow/hooks")
-  .filter(
-    (runtimeName) =>
-      runtimeName.endsWith(".sh") || runtimeName.endsWith(".mjs"),
-  )
+  .filter((runtimeName) => runtimeName.endsWith(".mjs"))
   .map((runtimeName) => join("workflow/hooks", runtimeName));
-// Nested modules such as deny-dangerous/guard-runtime.sh opt in by carrying the stamp, which the audit compares on install.
+// Nested modules such as deny-dangerous/patterns-shell.mjs opt in by carrying the stamp, which the audit compares on install.
 const nestedStampedHookTemplates = readdirSync("workflow/hooks", {
   recursive: true,
 })
@@ -78,6 +76,13 @@ const nestedStampedHookTemplates = readdirSync("workflow/hooks", {
   );
 
 let isVersionSetConsistent = true;
+// A correct stamp cannot certify stale generated code or a stale installed mirror.
+try {
+  generateHookRuntime(resolve("."), "--check");
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  isVersionSetConsistent = false;
+}
 // Each skill entry point must advertise the package version users requested.
 for (const skillTemplate of skillTemplates) {
   const content = readFileSync(skillTemplate, "utf8");
@@ -102,7 +107,7 @@ for (const referenceTemplate of referenceTemplates) {
   }
 }
 
-// Each top-level .sh/.mjs runtime and each stamped nested module must name the release that shipped its bytes.
+// Each top-level .mjs runtime and each stamped nested module must name the release that shipped its bytes.
 for (const hookRuntimeTemplate of [
   ...hookRuntimeTemplates,
   ...nestedStampedHookTemplates,

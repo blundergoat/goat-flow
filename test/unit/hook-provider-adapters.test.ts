@@ -401,6 +401,67 @@ describe("hook provider adapters", () => {
     assert.equal(providerOutput.stdout, "");
   });
 
+  // An unchanged binary gap ends its replay with a visible warning that cannot override another hook's block.
+  it("delivers the coverage-gap terminal warning as a Codex system message without continue false", () => {
+    const gapFinding = {
+      code: "coverage-gap",
+      message: "binary untracked path not scanned",
+      target: "a.glb",
+    };
+    for (const providerIdentifier of ["codex", "claude"] as const) {
+      const result: HookResultEnvelope = {
+        ...providerHookResult(providerIdentifier, "turn-stop", "incomplete"),
+        coverage: {
+          status: "none",
+          attemptedUnits: 1,
+          completedUnits: 0,
+          skippedUnits: 1,
+        },
+        reasonCode: "coverage-gap-reentry-ended",
+        findings: [gapFinding, { ...gapFinding, target: "b.glb" }],
+      };
+      const providerOutput = adaptHookResultForProvider(
+        decodeFixtureResult(result),
+        providerIdentifier,
+        "turn-stop",
+      );
+      assert.equal(providerOutput.state, "adapted");
+      assert.equal(providerOutput.exitCode, 0);
+      assert.deepEqual(JSON.parse(providerOutput.stdout ?? ""), {
+        systemMessage:
+          "post-turn-safety: coverage-gap-reentry-ended; no clean scan was recorded; coverage none. Unscanned binary paths: 2.",
+      });
+      assert.deepEqual(
+        decodeHookResultOutput(JSON.stringify({ ...result, outcome: "block" })),
+        {
+          state: "invalid",
+          reason:
+            "coverage-gap-reentry-ended requires an incomplete result without infrastructure recovery",
+        },
+      );
+    }
+  });
+
+  // Hosts without a Stop registration keep the ordinary block, so no support claim changes.
+  it("keeps Antigravity and Copilot coverage-gap results blocking", () => {
+    for (const [providerIdentifier, decision] of [
+      ["antigravity", "continue"],
+      ["copilot", "block"],
+    ] as const) {
+      const result: HookResultEnvelope = {
+        ...providerHookResult(providerIdentifier, "turn-stop", "incomplete"),
+        reasonCode: "coverage-gap-reentry-ended",
+      };
+      const providerOutput = adaptHookResultForProvider(
+        decodeFixtureResult(result),
+        providerIdentifier,
+        "turn-stop",
+      );
+      assert.equal(providerOutput.state, "adapted");
+      assert.equal(JSON.parse(providerOutput.stdout ?? "").decision, decision);
+    }
+  });
+
   // A fixture cannot claim one host while being delivered through another user's config.
   it("rejects provider and lifecycle mismatches", () => {
     const claudeResult = decodeFixtureResult(

@@ -760,7 +760,8 @@ export function fixtureGate(
 }
 
 /**
- * Bind a full-report control to the actual selected source and its authority fingerprint before introducing a report defect.
+ * Bind a one-finding report to the actual selected source before introducing an authority or gate defect.
+ * Multi-finding and systemic-pattern grammar stays in reviewReportTemplate and its validator unit tests.
  *
  * @param snapshot - captured inventory and identity; its selected paths remain the coverage denominator
  * @param search - literal source anchor; omitted uses the fixture's loadConfig marker
@@ -776,10 +777,15 @@ export function report(
 ): string {
   const labels = reviewScopeLabels(snapshot);
   const scope = `- Scope snapshot: source=${labels.source}, base=${labels.base}, head=${labels.head}, authority=${snapshot.fingerprint}, drift=verified, uncommitted=${labels.uncommitted}, signals=1, bundle=.goat-flow/logs/review/goat-review-bundle.fixture.diff, chunking=none`;
-  let text = reviewReportTemplate(path, search).replace(
-    /^- Scope snapshot:.*$/mu,
-    `${scope}\n- Authority snapshot: ${canonicalReviewJson(snapshot)}\n- Gate authority: ${canonicalReviewJson(noGates(snapshot))}`,
-  );
+  let text = reviewReportTemplate(path, search)
+    .replace(/\n- R-002[\s\S]*?(?=\n## Spec Drift)/u, "")
+    .replace(/^- Refuter (?:pass|outcomes):.*\n/gmu, "")
+    .replace("- Evidence: 4 OBSERVED", "- Evidence: 1 OBSERVED")
+    .replace("- Verdicts: 4/0/0/0", "- Verdicts: 1/0/0/0")
+    .replace(
+      /^- Scope snapshot:.*$/mu,
+      `${scope}\n- Authority snapshot: ${canonicalReviewJson(snapshot)}\n- Gate authority: ${canonicalReviewJson(noGates(snapshot))}`,
+    );
   const selectedPaths = snapshot.inventory.map((member) => member.path);
   text = text
     .replace(
@@ -831,8 +837,8 @@ export function zeroFindingReport(snapshot: ReviewAuthoritySnapshot): string {
       /\n## Findings\n[\s\S]*?(?=\n## Ship Verdict)/u,
       "\n## Findings\n\nNo findings in this fixture.\n",
     )
-    .replace("- Evidence: 4 OBSERVED", "- Evidence: 0 OBSERVED")
-    .replace("- Verdicts: 4/0/0/0", "- Verdicts: 0/0/0/0")
+    .replace("- Evidence: 1 OBSERVED", "- Evidence: 0 OBSERVED")
+    .replace("- Verdicts: 1/0/0/0", "- Verdicts: 0/0/0/0")
     .replace(/^- Refuter (?:pass|outcomes):.*\n/gmu, "")
     .replace("Decision: **PARTIAL**", "Decision: **YES WITH CONDITIONS**")
     .replace(

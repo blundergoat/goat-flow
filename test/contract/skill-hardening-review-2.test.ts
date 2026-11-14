@@ -8,8 +8,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertForEachTarget,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readMarkdownSubsection,
   readProjectFile,
@@ -18,7 +18,7 @@ import {
 
 describe("skill hardening contracts: goat-review (2/3)", () => {
   it("calibrates goat-review severity from evidence before labels", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const skill = readProjectFile(skillPath);
       const crossCheck = readMarkdownSection(
         skillPath,
@@ -50,7 +50,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("checks goat-review findings for tension and non-convergence", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const skill = readProjectFile(skillPath);
       assert.match(skill, /Self-consistency check/u, skillPath);
       assert.match(skill, /\{R-id, file, anchor, action\}/u, skillPath);
@@ -71,7 +71,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("keeps goat-review Pass 2.5 inline and admission-gated", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const skill = readProjectFile(skillPath);
       assert.match(skill, /Pass 2\.5 - Inline Re-framings/u, skillPath);
       assert.match(
@@ -110,7 +110,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("renders goat-review sections only when they carry review signal", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const output = readMarkdownSection(skillPath, "Output Format");
       assert.match(
         output,
@@ -180,7 +180,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("emits only resolved goat-review integrity fields", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const integrity = readMarkdownSection(
         skillPath,
         "Review Integrity (confidence signal)",
@@ -263,7 +263,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("pins one severity vocabulary and canonical integrity field shapes", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const diffReview = readMarkdownSection(
         skillPath,
         "Diff Review - Quick and Full",
@@ -351,7 +351,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("keeps goat-review bound to the universal skill constraints", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       assert.match(
         readMarkdownSection(skillPath, "Shared Conventions"),
         /Read `\.goat-flow\/skill-docs\/skill-preamble\.md`/u,
@@ -362,7 +362,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
 
   it("reconciles automated review with four-way provenance", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-review",
         "references/automated-review.md",
       ),
@@ -435,7 +435,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       },
     );
 
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const integrity = readMarkdownSection(
         skillPath,
         "Review Integrity (confidence signal)",
@@ -464,7 +464,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("requires positive evidence for goat-review verdicts", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const diffReview = readMarkdownSection(
         skillPath,
         "Diff Review - Quick and Full",
@@ -493,7 +493,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("gives goat-review findings stable IDs, harm, and distinct evidence axes", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const diffReview = readMarkdownSection(
         skillPath,
         "Diff Review - Quick and Full",
@@ -528,7 +528,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
 
   it("keeps goat-review finding examples on the validator-ready grammar", () => {
     assertForEachTarget(
-      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      canonicalSkillReferencePaths("goat-review", "references/examples.md"),
       (referencePath) => {
         const examples = readMarkdownSection(
           referencePath,
@@ -578,7 +578,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("routes goat-review durable artifacts through host-owned redaction", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const skill = readProjectFile(skillPath);
       const diffReview = readMarkdownSection(
         skillPath,
@@ -611,7 +611,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      canonicalSkillReferencePaths("goat-review", "references/examples.md"),
       (referencePath) => {
         const scopeProcedure = readMarkdownSection(
           referencePath,
@@ -651,7 +651,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
     );
 
     assertForEachTarget(
-      installedSkillReferencePaths("goat-review", "references/refuter-spec.md"),
+      canonicalSkillReferencePaths("goat-review", "references/refuter-spec.md"),
       (referencePath) => {
         const reference = readProjectFile(referencePath);
         assert.match(
@@ -680,7 +680,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("documents validator-ready anchors, REFUTED-only ledgers, and resumable chunks", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const skill = readProjectFile(skillPath);
       const diffReview = readMarkdownSection(
         skillPath,
@@ -746,7 +746,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
   });
 
   it("aligns goat-review persistence and validator status across output surfaces", () => {
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const scope = readMarkdownSection(
         skillPath,
         "Step 0 - Scope, Size, Spec",
@@ -806,7 +806,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      canonicalSkillReferencePaths("goat-review", "references/examples.md"),
       (referencePath) => {
         const examples = readMarkdownSection(
           referencePath,

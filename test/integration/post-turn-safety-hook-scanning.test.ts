@@ -5,14 +5,23 @@
  * Every case runs the real hook against a real git repository, so a pass means the shipped
  * scanner behaves as asserted, not a reimplementation of it.
  */
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { hookTreeRoot } from "../helpers/hook-entrypoint.js";
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
-  PROJECT_ROOT,
   HOOK_PATH,
   FORCE_BASH3_ENV_KEY,
   TEST_AWS_ACCESS_KEY,
@@ -22,12 +31,13 @@ import {
   TEST_SLACK_TOKEN,
   TEST_API_TOKEN,
   withTempRepo,
+  buildStopPayload,
   writeFile,
   runGit,
   commitAll,
   runHook,
-  hookFindingSignatures,
   withCommandShim,
+  withScannerFileFault,
   assertHookIncomplete,
   assertHookAllows,
   assertHookBlocks,
@@ -35,33 +45,100 @@ import {
   TEST_INI_PASSWORD,
   TEST_PRIVATE_KEY_HEADER,
   TEST_DOCUMENTED_SLACK_PLACEHOLDER,
+  TEST_NPM_TOKEN,
+  TEST_RSA_PRIVATE_KEY_BODY,
+  TEST_RSA_PRIVATE_KEY_FOOTER,
+  appendCommittedLine,
+  stageAppendedLine,
 } from "./post-turn-safety-hook.helpers.js";
 
+let nonUtf8NameSkipReason: string | false | undefined;
+
+/**
+ * Write and remove one probe file to learn whether this filesystem accepts a name that is not valid UTF-8.
+ *
+ * @returns skip=false when such names work; otherwise the capability reason, such as APFS refusing the name
+ * @throws Unexpected filesystem errors, such as a full temporary drive, rather than hiding them as capability skips
+ */
+function nonUtf8NameTestOptions(): { skip: string | false } {
+  // Undefined means this runner has not probed yet; later cases reuse the result.
+  if (nonUtf8NameSkipReason !== undefined)
+    return { skip: nonUtf8NameSkipReason };
+  // Native Windows paths are Unicode; byte names cannot represent this POSIX-only input.
+  if (process.platform === "win32")
+    return { skip: "Windows cannot represent non-UTF-8 byte file names" };
+  const probeRoot = mkdtempSync(join(tmpdir(), "goat-non-utf8-name-"));
+  try {
+    writeFileSync(
+      Buffer.concat([Buffer.from(`${probeRoot}/name`), Buffer.from([0xff])]),
+      "probe\n",
+    );
+    nonUtf8NameSkipReason = false;
+  } catch (error) {
+    // Filesystems that require UTF-8 names refuse with EILSEQ or EINVAL; any other error is a real failure.
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EILSEQ" && code !== "EINVAL") throw error;
+    nonUtf8NameSkipReason = `filesystem refuses non-UTF-8 file names (${code})`;
+  } finally {
+    rmSync(probeRoot, { recursive: true, force: true });
+  }
+  return { skip: nonUtf8NameSkipReason };
+}
+
 describe("post-turn-safety hook: git states and batched scanning", () => {
-  /** Confirm both scanner paths tell the user that declared coverage is incomplete.
+  it("scans raw added content when a textconv driver hides the secret", () => {
+    for (const staged of [false, true]) {
+      withTempRepo((root) => {
+        writeFile(root, ".gitattributes", "settings.env diff=hidden\n");
+        writeFile(root, "settings.env", "safe=1\n");
+        runGit(root, [
+          "config",
+          "diff.hidden.textconv",
+          `${JSON.stringify(process.execPath)} -e "process.stdout.write('safe')"`,
+        ]);
+        commitAll(root, "textconv fixture");
+        writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+        if (staged) runGit(root, ["add", "settings.env"]);
+        assertHookBlocks(root, /API token in settings\.env/u);
+      });
+    }
+  });
+
+  it(
+    "scans a regular file replacing a tracked symlink",
+    symlinkTestOptions(),
+    () => {
+      for (const staged of [false, true]) {
+        withTempRepo((root) => {
+          writeFile(root, "target.txt", "safe\n");
+          symlinkSync("target.txt", join(root, "settings.env"));
+          commitAll(root, "symlink fixture");
+          unlinkSync(join(root, "settings.env"));
+          writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+          if (staged) runGit(root, ["add", "settings.env"]);
+          assertHookBlocks(root, /API token in settings\.env/u);
+        });
+      }
+    },
+  );
+  /** Confirm the scanner tells the user that declared coverage is incomplete.
    *
    * @param root - fixture repository with a path the hook cannot fully scan
    * @param env - optional fault controls; empty uses normal user commands
-   * @returns nothing; either scanner allowing the turn fails the user contract
+   * @returns nothing; a scanner that allows the turn fails the user contract
    */
-  function assertIncompleteOnBothScanners(
+  function assertIncompleteScan(
     root: string,
     env: Record<string, string> = {},
   ): void {
-    // Native and compatibility scanners must show the same blocking result to the user.
-    for (const forceFallback of ["0", "1"]) {
-      assertHookIncomplete(root, {
-        ...env,
-        [FORCE_BASH3_ENV_KEY]: forceFallback,
-      });
-    }
+    assertHookIncomplete(root, { ...env, [FORCE_BASH3_ENV_KEY]: "0" });
   }
 
   describe("incomplete scan failures", () => {
-    it("blocks when the repository root is unavailable on both paths", () => {
+    it("blocks when the repository root is unavailable", () => {
       const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-no-git-"));
       try {
-        assertIncompleteOnBothScanners(root);
+        assertIncompleteScan(root);
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
@@ -70,15 +147,14 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when the reported repository root cannot be entered", () => {
       withTempRepo((root) => {
         withCommandShim(
-          "git",
-          [
-            'if [ "$1" = "rev-parse" ] && [ "${2:-}" = "--show-toplevel" ]; then',
-            '  printf "%s\\n" "$GOAT_FLOW_TEST_MISSING_ROOT"',
-            "  exit 0",
-            "fi",
-          ].join("\n"),
+          resolveExecutable("git"),
+          {
+            when: { prefix: ["rev-parse", "--show-toplevel"] },
+            stdoutEnvironment: "GOAT_FLOW_TEST_MISSING_ROOT",
+            status: 0,
+          },
           (shimEnv) => {
-            assertIncompleteOnBothScanners(root, {
+            assertIncompleteScan(root, {
               ...shimEnv,
               GOAT_FLOW_TEST_MISSING_ROOT: join(root, "missing-root"),
             });
@@ -87,23 +163,19 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       });
     });
 
-    it("blocks when the scan workspace cannot be created", () => {
-      withTempRepo((root) => {
-        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
-        withCommandShim("mktemp", "exit 2", (shimEnv) => {
-          assertIncompleteOnBothScanners(root, shimEnv);
-        });
-      });
-    });
-
     it("blocks when Git cannot inventory untracked files", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
         withCommandShim(
-          "git",
-          'case " $* " in *" ls-files --others --exclude-standard -z "*) exit 2 ;; esac',
+          resolveExecutable("git"),
+          {
+            when: {
+              includes: ["ls-files", "--others", "--exclude-standard", "-z"],
+            },
+            status: 2,
+          },
           (shimEnv) => {
-            assertIncompleteOnBothScanners(root, shimEnv);
+            assertIncompleteScan(root, shimEnv);
           },
         );
       });
@@ -115,10 +187,10 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         commitAll(root, "add tracked diff fixture");
         writeFile(root, "settings.env", "safe=2\n");
         withCommandShim(
-          "git",
-          'case " $* " in *" diff "*" --unified=0 "*) exit 2 ;; esac',
+          resolveExecutable("git"),
+          { when: { includes: ["diff", "--unified=0"] }, status: 2 },
           (shimEnv) => {
-            assertIncompleteOnBothScanners(root, shimEnv);
+            assertIncompleteScan(root, shimEnv);
           },
         );
       });
@@ -127,79 +199,43 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     it("blocks when a native candidate grep fails", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
-        withCommandShim(
-          "grep",
-          'case " $* " in *" -aUHnZE "*|*" -iaUHnZE "*) exit 2 ;; esac',
-          (shimEnv) => {
-            assertHookIncomplete(root, {
-              ...shimEnv,
-              [FORCE_BASH3_ENV_KEY]: "0",
-            });
-          },
+        withScannerFileFault("readFileSync", (environment) =>
+          assertIncompleteScan(root, environment),
         );
       });
     });
 
-    it("blocks when the binary-content gate fails on both paths", () => {
+    it("blocks when the binary-content gate fails", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
-        withCommandShim(
-          "grep",
-          'case " $* " in *" -IlZ "*|*" -Iq "*) exit 2 ;; esac',
-          (shimEnv) => {
-            assertIncompleteOnBothScanners(root, shimEnv);
-          },
+        withScannerFileFault("readSync", (environment) =>
+          assertIncompleteScan(root, environment),
         );
       });
     });
 
-    it("blocks when byte counting fails on both paths", () => {
+    it("blocks when byte counting fails", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
-        withCommandShim("wc", "exit 2", (shimEnv) => {
-          assertIncompleteOnBothScanners(root, shimEnv);
-        });
+        withScannerFileFault("lstatSync", (environment) =>
+          assertIncompleteScan(root, environment),
+        );
       });
     });
 
     it("blocks when selected content disappears after byte counting", () => {
       withTempRepo((root) => {
-        withCommandShim(
-          "wc",
-          [
-            'PATH="$GOAT_FLOW_TEST_ORIGINAL_PATH" wc "$@"',
-            "status=$?",
-            'rm -f -- "$GOAT_FLOW_TEST_VANISH_PATH"',
-            'exit "$status"',
-          ].join("\n"),
-          (shimEnv) => {
-            // Recreate the user's file because each scanner sees the shim delete it once.
-            for (const forceFallback of ["0", "1"]) {
-              writeFile(root, "settings.env", "safe=1\n");
-              assertHookIncomplete(root, {
-                ...shimEnv,
-                GOAT_FLOW_TEST_VANISH_PATH: join(root, "settings.env"),
-                [FORCE_BASH3_ENV_KEY]: forceFallback,
-              });
-            }
-          },
-        );
-      });
-    });
-
-    it("blocks when fallback text normalization fails", () => {
-      withTempRepo((root) => {
-        writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
-        withCommandShim("tr", "exit 2", (shimEnv) => {
+        withScannerFileFault("vanish", (environment) => {
+          writeFile(root, "settings.env", "safe=1\n");
           assertHookIncomplete(root, {
-            ...shimEnv,
-            [FORCE_BASH3_ENV_KEY]: "1",
+            ...environment,
+            [FORCE_BASH3_ENV_KEY]: "0",
           });
         });
       });
     });
 
-    it("blocks when changed-content coverage inventory fails on both paths", () => {
+    it("blocks when changed-content coverage inventory fails", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
         commitAll(root, "add staged size fixture");
@@ -208,10 +244,10 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         writeFile(root, "settings.env", "safe=1\n");
         // A failed Git coverage inventory means the user cannot be told every changed path was checked.
         withCommandShim(
-          "git",
-          'case " $* " in *" --numstat "*) exit 2 ;; esac',
+          resolveExecutable("git"),
+          { when: { includes: ["--numstat"] }, status: 2 },
           (shimEnv) => {
-            assertIncompleteOnBothScanners(root, shimEnv);
+            assertIncompleteScan(root, shimEnv);
           },
         );
       });
@@ -258,7 +294,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     const fixtures = [
       {
         path: "binary.dat",
-        content: Buffer.from([0, 1, 2, ...Buffer.from(TEST_AWS_ACCESS_KEY)]),
+        content: Buffer.from([0, 1, 2]),
       },
       {
         path: "large.txt",
@@ -269,7 +305,31 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     for (const fixture of fixtures) {
       withTempRepo((root) => {
         writeFile(root, fixture.path, fixture.content);
-        assertIncompleteOnBothScanners(root);
+        assertIncompleteScan(root);
+        if (fixture.path === "large.txt") {
+          const first = runHook(
+            root,
+            {},
+            buildStopPayload("large-file", false),
+          );
+          const repeated = runHook(
+            root,
+            {},
+            buildStopPayload("large-file", true),
+          );
+          for (const result of [first, repeated]) {
+            assert.equal(result.status, 2, result.stderr);
+            assert.match(
+              result.stderr,
+              /large\.txt \(\d+ bytes; limit 1048576;/u,
+            );
+            assert.match(
+              result.stderr,
+              /review the file and raise GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES if appropriate/u,
+            );
+            assert.doesNotMatch(result.stderr, /ending repeated Stop/u);
+          }
+        }
       });
     }
   });
@@ -379,60 +439,38 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     });
   });
 
-  describe("Bash 3 compatibility scan", () => {
-    const compatibilityEnv = {
-      GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "1",
-    };
+  describe("scanner finding rules", () => {
+    // Selects the scanner's native result variant, not the "fallback" label the switch can still request.
+    const nativeScannerEnv = { [FORCE_BASH3_ENV_KEY]: "0" };
 
     /**
-     * Confirms that stock macOS Bash and newer Bash give the user one Stop result.
+     * Confirms the Stop result and explanation the user receives for one fixture.
      *
-     * @param root - non-empty fixture root both scanners inspect
+     * @param root - non-empty fixture root the scanner inspects
      * @param expectedStatus - 0 allows the turn; 2 means the user sees a block
-     * @param expectedPattern - optional explanation; absent compares outcome and findings only
+     * @param expectedPattern - optional explanation; absent checks the outcome only
      * @param env - optional scanner controls; empty uses normal user commands
-     * @returns nothing; any user-visible scanner difference fails the active test
+     * @returns nothing; an unexpected outcome or explanation fails the active test
      */
-    function assertScannerParity(
+    function assertScannerResult(
       root: string,
       expectedStatus: 0 | 2,
       expectedPattern?: RegExp,
       env: Record<string, string> = {},
     ): void {
-      const nativeResult = runHook(root, {
+      const result = runHook(root, {
         ...env,
         GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "0",
       });
-      const compatibilityResult = runHook(root, {
-        ...env,
-        ...compatibilityEnv,
-      });
-      const diagnostics = [
-        `native status=${nativeResult.status}`,
-        `native stderr:\n${nativeResult.stderr}`,
-        `fallback status=${compatibilityResult.status}`,
-        `fallback stderr:\n${compatibilityResult.stderr}`,
-      ].join("\n");
+      const diagnostics = `status=${result.status}\nstderr:\n${result.stderr}`;
 
-      assert.equal(nativeResult.status, expectedStatus, diagnostics);
-      assert.equal(
-        compatibilityResult.status,
-        nativeResult.status,
-        diagnostics,
-      );
-      assert.deepStrictEqual(
-        hookFindingSignatures(compatibilityResult.stderr),
-        hookFindingSignatures(nativeResult.stderr),
-        diagnostics,
-      );
-      // A supplied warning pattern confirms both paths explain the same user action.
+      assert.equal(result.status, expectedStatus, diagnostics);
       if (expectedPattern) {
-        assert.match(nativeResult.stderr, expectedPattern, diagnostics);
-        assert.match(compatibilityResult.stderr, expectedPattern, diagnostics);
+        assert.match(result.stderr, expectedPattern, diagnostics);
       }
     }
 
-    it("blocks fine-grained GitHub tokens on both paths", () => {
+    it("blocks fine-grained GitHub tokens", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -440,11 +478,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           `GITHUB_TOKEN=${TEST_FINE_GRAINED_GITHUB_TOKEN}\n`,
         );
 
-        assertScannerParity(root, 2, /GitHub token/u);
+        assertScannerResult(root, 2, /GitHub token/u);
       });
     });
 
-    it("blocks a double-quoted credential terminated by a semicolon on both paths", () => {
+    it("blocks a double-quoted credential terminated by a semicolon", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -452,11 +490,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           'export DB_PASSWORD="correct-horse-battery-staple";\n',
         );
 
-        assertScannerParity(root, 2, /credential assignment/u);
+        assertScannerResult(root, 2, /credential assignment/u);
       });
     });
 
-    it("blocks a single-quoted credential terminated by a semicolon on both paths", () => {
+    it("blocks a single-quoted credential terminated by a semicolon", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -464,35 +502,37 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           "export DB_PASSWORD='correct-horse-battery-staple';\n",
         );
 
-        assertScannerParity(root, 2, /credential assignment/u);
+        assertScannerResult(root, 2, /credential assignment/u);
       });
     });
 
     // Both common Git path shapes must decode to the file name the user recognizes.
     for (const path of ["space name.env", "café.env"]) {
-      it(`decodes the Git diff header for ${path} on both paths`, () => {
+      it(`decodes the Git diff header for ${path}`, () => {
         withTempRepo((root) => {
           writeFile(root, path, "safe=1\n");
           commitAll(root, `add ${path}`);
           writeFile(root, path, `OPENAI_API_KEY=${TEST_API_TOKEN}\n`);
 
-          assertHookBlocks(root, new RegExp(`API token in ${path}`, "u"));
+          assertHookBlocks(root, new RegExp(`API token in ${path}`, "u"), {
+            [FORCE_BASH3_ENV_KEY]: "0",
+          });
         });
       });
     }
 
-    it("pins mnemonic Git diff prefixes on both paths", () => {
+    it("pins mnemonic Git diff prefixes", () => {
       withTempRepo((root) => {
         writeFile(root, "mnemonic.env", "safe=1\n");
         commitAll(root, "add mnemonic prefix fixture");
         runGit(root, ["config", "diff.mnemonicPrefix", "true"]);
         writeFile(root, "mnemonic.env", `API_KEY=${TEST_API_TOKEN}\n`);
 
-        assertScannerParity(root, 2, /API token in mnemonic\.env/u);
+        assertScannerResult(root, 2, /API token in mnemonic\.env/u);
       });
     });
 
-    it("pins custom Git diff source and destination prefixes on both paths", () => {
+    it("pins custom Git diff source and destination prefixes", () => {
       withTempRepo((root) => {
         writeFile(root, "custom.env", "safe=1\n");
         commitAll(root, "add custom prefix fixture");
@@ -500,11 +540,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         runGit(root, ["config", "diff.dstPrefix", "after/"]);
         writeFile(root, "custom.env", `API_KEY=${TEST_API_TOKEN}\n`);
 
-        assertScannerParity(root, 2, /API token in custom\.env/u);
+        assertScannerResult(root, 2, /API token in custom\.env/u);
       });
     });
 
-    it("combines staged and unstaged conflict-marker state on both paths", () => {
+    it("combines staged and unstaged conflict-marker state", () => {
       withTempRepo((root) => {
         writeFile(root, "conflict.txt", "safe\n");
         commitAll(root, "add conflict fixture");
@@ -516,11 +556,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> branch\n",
         );
 
-        assertScannerParity(root, 2, /merge conflict marker/u);
+        assertScannerResult(root, 2, /merge conflict marker/u);
       });
     });
 
-    it("does not let added content impersonate a fallback diff header", () => {
+    it("does not let added content impersonate a diff header", () => {
       withTempRepo((root) => {
         writeFile(root, "conflict.txt", "safe\n");
         commitAll(root, "add fallback frame fixture");
@@ -539,11 +579,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           ].join("\n"),
         );
 
-        assertScannerParity(root, 2, /merge conflict marker/u);
+        assertScannerResult(root, 2, /merge conflict marker/u);
       });
     });
 
-    it("blocks a leading-plus token assignment on both paths and allows its placeholder control", () => {
+    it("blocks a leading-plus token assignment and allows its placeholder control", () => {
       withTempRepo((root) => {
         writeFile(root, "leading-plus.env", "+API_KEY=your_api_key_here\n");
         commitAll(root, "add leading plus placeholder");
@@ -553,19 +593,19 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           `+API_KEY=${TEST_API_TOKEN}\n+API_KEY=your_api_key_here\n`,
         );
 
-        assertScannerParity(root, 2, /API token/u);
+        assertScannerResult(root, 2, /API token/u);
       });
     });
 
-    it("allows source assignments on both paths", () => {
+    it("allows source assignments", () => {
       withTempRepo((root) => {
         writeFile(root, "app.py", `API_TOKEN = "${TEST_CLIENT_SECRET}"\n`);
 
-        assertScannerParity(root, 0);
+        assertScannerResult(root, 0);
       });
     });
 
-    it("uses the optimized token thresholds on both paths", () => {
+    it("uses the optimized token thresholds", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -573,7 +613,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           [TEST_SHORT_GITHUB_TOKEN, TEST_SHORT_NPM_TOKEN, ""].join("\n"),
         );
 
-        assertScannerParity(root, 0);
+        assertScannerResult(root, 0);
       });
     });
 
@@ -590,7 +630,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           ].join("\n"),
         );
 
-        assertScannerParity(root, 2, /AWS access key/u);
+        assertScannerResult(root, 2, /AWS access key/u);
       });
     });
 
@@ -598,7 +638,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       withTempRepo((root) => {
         writeFile(root, ".env.example", "API_KEY=your_api_key_here\n");
 
-        assertHookAllows(root, compatibilityEnv);
+        assertHookAllows(root, nativeScannerEnv);
       });
     });
 
@@ -610,7 +650,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         runGit(root, ["add", "settings.env"]);
         writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
 
-        assertHookBlocks(root, /API token/u, compatibilityEnv);
+        assertHookBlocks(root, /API token/u, nativeScannerEnv);
       });
     });
 
@@ -620,7 +660,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         commitAll(root, "add key fixture");
         writeFile(root, "key.pem", `${TEST_PRIVATE_KEY_HEADER}\nbody\n`);
 
-        assertHookBlocks(root, /private key block/u, compatibilityEnv);
+        assertHookBlocks(root, /private key block/u, nativeScannerEnv);
       });
     });
 
@@ -632,7 +672,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> branch\n",
         );
 
-        assertHookBlocks(root, /merge conflict marker/u, compatibilityEnv);
+        assertHookBlocks(root, /merge conflict marker/u, nativeScannerEnv);
       });
     });
 
@@ -643,12 +683,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         assertHookBlocks(
           root,
           /credential assignment \(password\)/u,
-          compatibilityEnv,
+          nativeScannerEnv,
         );
       });
     });
 
-    // Writes three commented credentials so both scanners must block the same user edit.
+    // Writes three commented credentials so the scanner must block each one.
     it("matches literal assignments followed by trailing comments", () => {
       withTempRepo((root) => {
         writeFile(
@@ -662,20 +702,20 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           ].join("\n"),
         );
 
-        assertScannerParity(root, 2, /credential assignment/u);
+        assertScannerResult(root, 2, /credential assignment/u);
       });
     });
 
-    // Writes a bare-dollar expression so both scanners leave the user's turn unblocked.
+    // Writes a bare-dollar expression so the scanner leaves the user's turn unblocked.
     it("allows a bare dollar inside a double-quoted assignment", () => {
       withTempRepo((root) => {
         writeFile(root, "config.env", `API_KEY="${TEST_CLIENT_SECRET}$"\n`);
 
-        assertScannerParity(root, 0);
+        assertScannerResult(root, 0);
       });
     });
 
-    // Writes and commits an oversized tracked file so both scanners honor the user's byte cap.
+    // Writes and commits an oversized tracked file so the scanner honors the user's byte cap.
     it("applies the byte cap to tracked worktree diffs", () => {
       withTempRepo((root) => {
         writeFile(root, "large.env", "safe=1\n");
@@ -686,7 +726,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           `safe=${"x".repeat(80)}\nAPI_KEY=${TEST_CLIENT_SECRET}\n`,
         );
 
-        assertScannerParity(root, 2, /credential assignment/u, {
+        assertScannerResult(root, 2, /credential assignment/u, {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "64",
         });
       });
@@ -705,9 +745,102 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         runGit(root, ["add", "large.env"]);
         writeFile(root, "large.env", "safe=1\n");
 
-        assertScannerParity(root, 2, /credential assignment/u, {
+        assertScannerResult(root, 2, /credential assignment/u, {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "64",
         });
+      });
+    });
+
+    // Writes and commits a fixture, then adds a line whose token follows a carriage return the candidate filters must cross.
+    it("blocks a tracked token after a carriage return", () => {
+      withTempRepo((root) => {
+        writeFile(root, "notes.txt", "base\n");
+        commitAll(root, "add notes");
+        writeFile(
+          root,
+          "notes.txt",
+          `base\nsafe\rkey ${TEST_AWS_ACCESS_KEY}\n`,
+        );
+
+        assertScannerResult(root, 2, /AWS access key in notes\.txt/u);
+      });
+    });
+
+    // Writes and commits a fixture, then adds a private-key header that starts after a carriage return.
+    it("blocks a tracked private-key header after a carriage return", () => {
+      withTempRepo((root) => {
+        writeFile(root, "notes.txt", "base\n");
+        commitAll(root, "add notes");
+        writeFile(root, "notes.txt", `base\n\r${TEST_PRIVATE_KEY_HEADER}\n`);
+
+        assertScannerResult(root, 2, /private key block in notes\.txt/u);
+      });
+    });
+
+    // Writes an untracked file where only the labelled API-token form can match, because an underscore precedes the token.
+    it("blocks a labelled API token after a carriage return in an untracked file", () => {
+      withTempRepo((root) => {
+        writeFile(root, "new.txt", `OPENAI_KEY=\rprefix_${TEST_API_TOKEN}\n`);
+
+        assertScannerResult(root, 2, /API token in new\.txt/u);
+      });
+    });
+
+    // Writes an untracked file whose only NUL byte lies beyond the first 32 KiB, so the scanner must still call it binary.
+    it("reports a binary gap when the first NUL byte follows the first 32 KiB", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "bundle.dat",
+          Buffer.concat([
+            Buffer.alloc(35_000, "a"),
+            Buffer.from([0]),
+            Buffer.alloc(4999, "b"),
+          ]),
+        );
+
+        assertScannerResult(
+          root,
+          2,
+          /binary untracked path not scanned in bundle\.dat/u,
+        );
+      });
+    });
+
+    // Writes, commits and then deletes a non-UTF-8 name beside a staged clean edit; staged deduplication must not report it.
+    it(
+      "ignores an unstaged deletion of a non-UTF-8 tracked name",
+      nonUtf8NameTestOptions(),
+      () => {
+        withTempRepo((root) => {
+          const invalidName = Buffer.concat([
+            Buffer.from(`${root}/old`),
+            Buffer.from([0xff]),
+            Buffer.from(".txt"),
+          ]);
+          writeFileSync(invalidName, "old\n");
+          commitAll(root, "add non-UTF-8 name");
+          writeFile(root, "README.md", "# fixture\nmore\n");
+          runGit(root, ["add", "README.md"]);
+          rmSync(invalidName);
+
+          assertScannerResult(root, 0);
+        });
+      },
+    );
+
+    // Writes three untracked files with findings so a leading-zero limit must still cap direct output at two.
+    it("caps direct-mode findings when MAX_FINDINGS has a leading zero", () => {
+      withTempRepo((root) => {
+        for (const name of ["a.txt", "b.txt", "c.txt"])
+          writeFile(root, name, `key ${TEST_AWS_ACCESS_KEY}\n`);
+
+        assertScannerResult(
+          root,
+          2,
+          /1 additional finding\(s\) hidden by output cap/u,
+          { GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS: "02" },
+        );
       });
     });
   });
@@ -724,18 +857,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "0",
           [FORCE_BASH3_ENV_KEY]: "0",
         });
-        const compatibilityResult = runHook(root, {
-          GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "0",
-          [FORCE_BASH3_ENV_KEY]: "1",
-        });
 
         assert.equal(result.status, 2);
-        assert.equal(compatibilityResult.status, 2);
         assert.match(
           result.stderr,
           /post-turn-safety: scan incomplete, \d+ file\(s\) unscanned/u,
         );
-        assert.match(compatibilityResult.stderr, /scan incomplete/u);
       });
     });
 
@@ -753,10 +880,282 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
   it("the installed mirror matches the workflow hook source", () => {
     assert.equal(
       readFileSync(
-        resolve(PROJECT_ROOT, ".goat-flow/hooks/post-turn-safety.sh"),
+        join(hookTreeRoot("installed"), basename(HOOK_PATH)),
         "utf8",
       ),
       readFileSync(HOOK_PATH, "utf8"),
     );
   });
+});
+
+/**
+ * One recorded scanner scenario: the change a user made, optional scanner limits, and whether the Stop must block or allow it.
+ *
+ * Keep each `id` and `label` stable: together they form the test title that ties the row to the old scenario it replays.
+ */
+interface HistoricalScannerRow {
+  id: string;
+  label: string;
+  // Writes the user's change into the fresh fixture repository before the hook runs.
+  write: (root: string) => void;
+  // A finding pattern that names the changed file; absent means the turn must be allowed.
+  blocks?: RegExp;
+  // Scanner limit settings for this run, such as `GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS`; absent uses the defaults.
+  env?: Record<string, string>;
+  // Why this platform skips the row, such as Windows refusing a double quote in a file name; false or absent runs it.
+  skip?: string | false;
+}
+
+// Each row replays one scenario first proven by a Bash reproduction script that no longer ships; ids keep that script's numbering.
+//
+// - A row without `blocks` records a shape the scanner allows today; most sit beside a `control:` row showing the same detector still fires.
+// - `assertHookBlocks` and `assertHookAllows` run both scanner result variants and require them to agree.
+// - Token-shaped values are assembled at runtime, so this file holds no literal the hook under test would flag.
+describe("historical scanner regressions", () => {
+  const awsKey = TEST_AWS_ACCESS_KEY;
+  const awsLine = 'const probeKey = "' + awsKey + '";';
+  const password = ["Xk9mQ2vR", "7tLp4Wz8"].join("");
+  const dollarPassword = ["Xk9m", "Q2vR7tLp4Wz8"].join("$");
+  const legacyNpmToken = ["6f1c2b7e-4d3a", "4b8f-9c21-7e5d0a9b3f46"].join("-");
+  const stripeKey = ["sk", "live", "4eC39HqLyjWDarjtT1zdp7dc"].join("_");
+  const propertiesPath = "probe/app.properties";
+  const yamlPath = "probe/config.yml";
+  const envFilePath = "probe/app.env";
+  const quoteNamedPath = 'probe/quote"name.txt';
+  // Windows cannot create the quote-named file, so rows 7a and 7b skip there and run everywhere else.
+  const quoteNameSkip =
+    process.platform === "win32"
+      ? "Windows file names cannot contain a double quote"
+      : false;
+  const awsKeyInSource = /AWS access key in src\/cli\.ts/u;
+  const privateKeyInSource = /private key block in src\/cli\.ts/u;
+  const awsKeyInQuoteName = /AWS access key in probe\/quote"name\.txt/u;
+  // Builds a commented private-key header at runtime, so no complete header literal sits in this file.
+  const privateKeyHeader = (kind: string) =>
+    "// " + ["-----BEGIN", kind + "-----"].join(" ");
+  // Builds the credential-assignment finding the scanner reports for one key in one file.
+  const assignmentFinding = (key: string, path: string) =>
+    new RegExp(
+      "credential assignment \\(" +
+        key +
+        "\\) in " +
+        path.replaceAll(".", "\\."),
+      "u",
+    );
+  // Builds one npm registry login line for a `.npmrc` file.
+  const npmrcLoginLine = (token: string) =>
+    "//registry.npmjs.org/:_authToken=" + token + "\n";
+
+  // Writes the line as an unstaged edit to the fixture's committed source file.
+  const edit = (line: string) => (root: string) =>
+    appendCommittedLine(root, "src/cli.ts", line);
+  // Writes and stages the line in that source file; isIndexOnly then restores the worktree copy.
+  const stage = (line: string, isIndexOnly: boolean) => (root: string) =>
+    stageAppendedLine(root, "src/cli.ts", line, isIndexOnly);
+  // Writes a new untracked file with the given content.
+  const create = (path: string, content: string) => (root: string) =>
+    writeFile(root, path, content);
+  // Builds one table row; an absent pattern means the turn must be allowed.
+  const row = (
+    id: string,
+    label: string,
+    write: (root: string) => void,
+    blocks?: RegExp,
+  ): HistoricalScannerRow => ({
+    id,
+    label,
+    write,
+    blocks,
+  });
+  // Builds one limit row: a real token finding plus a malformed limit setting that must not hide it.
+  const limit = (
+    id: string,
+    setting: string,
+    limitValue: string,
+  ): HistoricalScannerRow => ({
+    ...row(
+      id,
+      `GOAT_FLOW_POST_TURN_SAFETY_${setting}=${limitValue}`,
+      edit(awsLine),
+      awsKeyInSource,
+    ),
+    env: { ["GOAT_FLOW_POST_TURN_SAFETY_" + setting]: limitValue },
+  });
+  const pemBody = [
+    TEST_RSA_PRIVATE_KEY_BODY,
+    TEST_RSA_PRIVATE_KEY_BODY,
+    TEST_RSA_PRIVATE_KEY_FOOTER,
+  ];
+
+  const rows: readonly HistoricalScannerRow[] = [
+    // 1-3: an added line starting `++` shows in the diff as `+++`, the same prefix as a file header, and must still be scanned.
+    row("1b", "added line '++<token>'", edit("++" + awsKey), awsKeyInSource),
+    row("1c", "added line '++ <token>'", edit("++ " + awsKey), awsKeyInSource),
+    row(
+      "2a",
+      "staged '++<token>', worktree equals index",
+      stage("++" + awsKey, false),
+      awsKeyInSource,
+    ),
+    row(
+      "2b",
+      "staged '++ <token>', worktree equals index",
+      stage("++ " + awsKey, false),
+      awsKeyInSource,
+    ),
+    row(
+      "2c",
+      "staged '++<token>', line only in the index",
+      stage("++" + awsKey, true),
+      awsKeyInSource,
+    ),
+    row(
+      "2d",
+      "staged '++ <token>', line only in the index",
+      stage("++ " + awsKey, true),
+      awsKeyInSource,
+    ),
+    row(
+      "3",
+      "untracked file with both '++' lines",
+      create("probe/plusplus.txt", `++${awsKey}\n++ ${awsKey}\n`),
+      /AWS access key in probe\/plusplus\.txt/u,
+    ),
+    // 4: each private-key header form must block, even with no key body after it.
+    row(
+      "4",
+      "PKCS#8 unencrypted header",
+      edit(privateKeyHeader("PRIVATE KEY")),
+      privateKeyInSource,
+    ),
+    row(
+      "4",
+      "PKCS#8 ENCRYPTED header",
+      edit(privateKeyHeader("ENCRYPTED PRIVATE KEY")),
+      privateKeyInSource,
+    ),
+    row(
+      "4",
+      "PGP PRIVATE KEY BLOCK header",
+      edit(privateKeyHeader("PGP PRIVATE KEY BLOCK")),
+      privateKeyInSource,
+    ),
+    // 5: credentials in config and source files; if the scanner starts catching an allow row, update that row on purpose.
+    row(
+      "5a",
+      "control: password=<value> in .properties",
+      create(propertiesPath, `password=${password}\n`),
+      assignmentFinding("password", propertiesPath),
+    ),
+    row(
+      "5b",
+      "whitespace-delimited 'password <value>' in .properties",
+      create(propertiesPath, `password ${password}\n`),
+    ),
+    row(
+      "5c",
+      "colon-delimited 'password: <value>' in .properties",
+      create(propertiesPath, `password: ${password}\n`),
+      assignmentFinding("password", propertiesPath),
+    ),
+    row(
+      "5d",
+      "control: inline YAML 'password: <value>'",
+      create(yamlPath, `db:\n  password: ${password}\n`),
+      assignmentFinding("password", yamlPath),
+    ),
+    row(
+      "5e",
+      "YAML block scalar 'password: |' + value line",
+      create(yamlPath, `db:\n  password: |\n    ${password}\n`),
+    ),
+    row(
+      "5g",
+      "PEM body + footer hunk without its header",
+      edit(pemBody.map((line) => "// " + line).join("\n")),
+    ),
+    row(
+      "5j",
+      "single-quoted value containing '$' in .env",
+      create(envFilePath, `DB_PASSWORD='${dollarPassword}'\n`),
+      assignmentFinding("DB_PASSWORD", envFilePath),
+    ),
+    row(
+      "5k",
+      "control: spring_datasource_password=<value>",
+      create(propertiesPath, `spring_datasource_password=${password}\n`),
+      assignmentFinding("spring_datasource_password", propertiesPath),
+    ),
+    row(
+      "5l",
+      "dotted key spring.datasource.password=<value>",
+      create(propertiesPath, `spring.datasource.password=${password}\n`),
+    ),
+    row(
+      "5m",
+      ".npmrc _authToken=npm_<36 chars>",
+      create(".npmrc", npmrcLoginLine(TEST_NPM_TOKEN)),
+      /npm token in \.npmrc/u,
+    ),
+    row(
+      "5n",
+      ".npmrc _authToken=<legacy UUID-shaped token>",
+      create(".npmrc", npmrcLoginLine(legacyNpmToken)),
+    ),
+    row(
+      "5o",
+      "Stripe sk_live_ value in source",
+      edit('const stripeKey = "' + stripeKey + '";'),
+    ),
+    row(
+      "5p",
+      "Stripe sk_live_ value under STRIPE_SECRET_KEY in .env",
+      create(envFilePath, `STRIPE_SECRET_KEY=${stripeKey}\n`),
+      assignmentFinding("STRIPE_SECRET_KEY", envFilePath),
+    ),
+    // 6: a malformed limit setting, such as a leading-zero seconds value, must not hide a real token.
+    limit("6a", "MAX_FINDINGS", "invalid"),
+    limit("6b", "MAX_SECONDS", "08"),
+    limit("6c", "MAX_SECONDS", "010"),
+    // 7: a token in a file whose name contains a double quote must still be found and named.
+    {
+      ...row(
+        "7a",
+        "staged quote-named file, token added in the worktree",
+        (root) => {
+          writeFile(root, quoteNamedPath, "benign first line\n");
+          runGit(root, ["add", "--", quoteNamedPath]);
+          writeFile(root, quoteNamedPath, `benign first line\n${awsLine}\n`);
+        },
+        awsKeyInQuoteName,
+      ),
+      skip: quoteNameSkip,
+    },
+    {
+      ...row(
+        "7b",
+        "the same file untracked (whole-file path)",
+        create(quoteNamedPath, `benign first line\n${awsLine}\n`),
+        awsKeyInQuoteName,
+      ),
+      skip: quoteNameSkip,
+    },
+  ];
+
+  // Writes each row's change into a fresh repository and spawns the hook; a block must name the changed file.
+  for (const historicalRow of rows) {
+    it(
+      `historical scanner ${historicalRow.id}: ${historicalRow.label}`,
+      { skip: historicalRow.skip ?? false },
+      () => {
+        withTempRepo((root) => {
+          historicalRow.write(root);
+          // A row with a finding pattern expects a blocked Stop that names the file; a row without one expects the turn to pass.
+          if (historicalRow.blocks)
+            assertHookBlocks(root, historicalRow.blocks, historicalRow.env);
+          else assertHookAllows(root, historicalRow.env);
+        });
+      },
+    );
+  }
 });

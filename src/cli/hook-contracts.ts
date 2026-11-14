@@ -50,6 +50,29 @@ export interface HookProviderCaptureEvidence {
     "visible" | "not-visible" | "not-applicable" | "not-tested";
 }
 
+/** Host-specific delivery observations retained separately from effective support gates. */
+export interface HookProviderHostEvidence {
+  caseId: string;
+  host: "windows" | "wsl";
+  provider: AgentId;
+  canonicalEvent: HookLifecycleEvent;
+  providerEventName: string;
+  verification: "verified" | "incomplete" | "security-hold";
+  summary: string;
+  limitations: readonly string[];
+  /** Absent when no current-runtime capture is available; never infer delivery from the row. */
+  capture?: HookProviderCaptureEvidence & {
+    configurationPath: string;
+    nodeVersion: string;
+    artifactSha256: string;
+    approvalPacketSha256: string;
+    producer: string;
+    reviewSha256?: string;
+    /** SHA256 values keyed by paths relative to workflow/hooks; retained as captured. */
+    runtimeSha256: Readonly<Record<string, string>>;
+  };
+}
+
 /** Versioned evidence record for one provider, mode, event, and canonical tool combination. */
 export interface HookProviderEvidenceRecord {
   schema: typeof HOOK_PROVIDER_EVIDENCE_SCHEMA;
@@ -377,6 +400,7 @@ export type HookResultOutcome =
 export type HookResultReasonCode =
   | "completed-clean"
   | "bounded-reentry-ended"
+  | "coverage-gap-reentry-ended"
   | "policy-blocked"
   | "findings-reported"
   | "coverage-incomplete"
@@ -566,8 +590,29 @@ export function validateHookResultEnvelope(
   // Invalid optional facts cannot authorize release or misstate omitted findings.
   if (metadataReason !== null) validationMessages.push(metadataReason);
 
+  const reentryReason = coverageGapReentryFailureReason(hookResult);
+  // A misused binary-gap terminal reason could present a block or an infrastructure retry as an ended replay.
+  if (reentryReason !== null) validationMessages.push(reentryReason);
+
   // An empty list lets the final adapter preserve this result for the user.
   return validationMessages;
+}
+
+/** Keep an ended binary-gap replay incomplete and outside the infrastructure allowance, as the runtime decoder does.
+ *
+ * @param hookResult - Neutral result; any other reason code passes this check unchanged.
+ * @returns Rejection reason, or null when the reason is absent or used as an incomplete result.
+ */
+function coverageGapReentryFailureReason(
+  hookResult: HookResultEnvelope,
+): string | null {
+  if (hookResult.reasonCode !== "coverage-gap-reentry-ended") return null;
+  const execution = hookResult.execution;
+  return hookResult.outcome === "incomplete" &&
+    execution.failureClass === undefined &&
+    execution.recovery === undefined
+    ? null
+    : "coverage-gap-reentry-ended requires an incomplete result without infrastructure recovery";
 }
 
 /** Validate supplied output and recovery facts with the same meaning as the managed runtime.

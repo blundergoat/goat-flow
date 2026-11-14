@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.18.0"
+goat-flow-reference-version: "1.19.0"
 ---
 # Skill Conventions
 
@@ -97,6 +97,8 @@ Use the active skill's output contract. Otherwise, present user-facing tasks, fi
 ## Milestone Lifecycle (goat-plan)
 
 `goat-plan` owns milestone status, lanes, receipts, human gates, and the final join: read its Phase 3 and Phase 4, plus its milestone-examples reference → Status reason, Lane lifecycle, and Timing receipts. Another skill that resumes an interrupted milestone task ticks only that task under Task Tracking and Recovery; it never changes a status, lane, receipt, or another lane's work.
+
+An invoking milestone owns authorized repairs and any status transition after review; reviewers retain their report-only scope. Reuse unchanged checks only while their inputs remain valid, refresh affected evidence and revisit changed review conclusions before human handoff.
 
 ## Orchestration Admission
 

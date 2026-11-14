@@ -1,7 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["scripts/*.mjs", "test/**/*.test.ts"],
-  "project": ["src/**/*.ts", "scripts/**/*.mjs", "test/**/*.ts"],
+  "entry": ["scripts/*.mjs", "test/**/*.test.ts", "src/hooks/**/*.mts"],
+  "project": [
+    "src/**/*.ts",
+    "scripts/**/*.mjs",
+    "test/**/*.ts",
+    "src/hooks/**/*.mts"
+  ],
   "ignore": [
     "src/dashboard/app.ts",
     "src/dashboard/dashboard-app-data-loading-fragments.ts",

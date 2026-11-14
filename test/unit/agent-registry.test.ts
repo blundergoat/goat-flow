@@ -28,7 +28,7 @@ describe("agent registry", () => {
     const codex = getAgentProfile("codex");
     assert.equal(codex.settingsFile, ".codex/config.toml");
     assert.equal(codex.hookConfigFile, ".codex/hooks.json");
-    assert.equal(codex.denyHookFile, ".goat-flow/hooks/deny-dangerous.sh");
+    assert.equal(codex.denyHookFile, ".goat-flow/hooks/deny-dangerous.mjs");
     assert.equal(codex.hookEvents.postTurn, "Stop");
   });
 
@@ -36,7 +36,7 @@ describe("agent registry", () => {
     const copilot = getAgentProfile("copilot");
     assert.equal(copilot.settingsFile, null);
     assert.equal(copilot.hookConfigFile, ".github/hooks/hooks.json");
-    assert.equal(copilot.denyHookFile, ".goat-flow/hooks/deny-dangerous.sh");
+    assert.equal(copilot.denyHookFile, ".goat-flow/hooks/deny-dangerous.mjs");
     assert.equal(copilot.skillsDir, ".github/skills");
   });
 
@@ -47,7 +47,7 @@ describe("agent registry", () => {
     assert.equal(antigravity.hooksDir, ".goat-flow/hooks");
     assert.equal(
       antigravity.denyHookFile,
-      ".goat-flow/hooks/deny-dangerous.sh",
+      ".goat-flow/hooks/deny-dangerous.mjs",
     );
     assert.equal(antigravity.hookEvents?.preTool, "PreToolUse");
   });
@@ -57,20 +57,20 @@ describe("agent registry", () => {
     assert.deepEqual(claude.denyMechanism, {
       type: "both",
       settingsPath: ".claude/settings.json",
-      scriptPath: ".goat-flow/hooks/deny-dangerous.sh",
+      scriptPath: ".goat-flow/hooks/deny-dangerous.mjs",
     });
 
     const codex = getAgentProfile("codex");
     assert.deepEqual(codex.denyMechanism, {
       type: "both",
       settingsPath: ".codex/config.toml",
-      scriptPath: ".goat-flow/hooks/deny-dangerous.sh",
+      scriptPath: ".goat-flow/hooks/deny-dangerous.mjs",
     });
 
     const antigravity = getAgentProfile("antigravity");
     assert.deepEqual(antigravity.denyMechanism, {
       type: "deny-script",
-      path: ".goat-flow/hooks/deny-dangerous.sh",
+      path: ".goat-flow/hooks/deny-dangerous.mjs",
     });
   });
 

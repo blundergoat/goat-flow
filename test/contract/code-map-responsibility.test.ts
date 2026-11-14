@@ -39,7 +39,7 @@ const REQUIRED_FAMILIES = [
 
 // Launch modules tracked in BOTH `workflow/hooks/` and `.goat-flow/hooks/`; the map carries a block for each.
 const HOOK_LAUNCH_MODULES = [
-  "run-with-bash.mjs",
+  "run-hook.mjs",
   "hook-launch-runtime.mjs",
   "hook-provider-adapters.mjs",
 ] as const;

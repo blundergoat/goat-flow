@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-09-05
+last_reviewed: 2026-11-14
 ---
 
 ## Pattern: Cross-runner quality-report triage by convergence
@@ -65,6 +65,8 @@ throw new Error("Condition X did not become true within 5 seconds");
 **Approach:** Lint the whole file before declaring the pass complete. One extracted function can leave sibling offenders, and helper rewrites can introduce small follow-up mistakes. The file, not the original function, is the verification unit.
 
 **Evidence (OBSERVED, 2026-09-13):** Quality-report persistence regressions and typecheck passed, but preflight found complexity 12 in `src/cli/quality/schema-assessment.ts` (search: `parseAssessmentContext`) and 11 in `src/cli/quality/schema-parser.ts` (search: `parseFindingEvidence`), above the limit of 10. Extracting snapshot-context and evidence-method parsing cleared file-level ESLint; the same 72-test regression set still passed.
+
+**Evidence (OBSERVED, 2026-11-14):** M33's peer-context default parameter raised ESLint complexity to 11 in `src/cli/prompt/compose-quality-common.ts` (search: `renderPriorReportContext`). Moving the default into `renderOtherAgentClaims` restored the limit; all 19 prompt-contract tests passed.
 
 ## Pattern: Refactors need typecheck before preflight
 

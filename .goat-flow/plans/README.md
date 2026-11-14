@@ -17,19 +17,29 @@ See `goat-plan` SKILL.md for milestone file conventions.
 
 ## Investigation notes
 
-New Small and Standard plans create an `investigation-notes` directory inside the selected plan, honouring an explicit destination. Leave it empty when no substantive investigation exists; do not create filler files.
+New plans create an `investigation-notes` directory inside the selected plan, honouring an explicit destination. Leave it empty when no substantive investigation exists; do not create filler files. Existing plans adopt this layout only on explicit request. A missing notes directory is not a setup defect.
 
-Organise substantive findings by topic. Each note records the question, inspected evidence with source paths and semantic anchors, findings, uncertainties and next action. Link relevant notes and anchors from milestone Context; keep executable tasks and proof in milestones. Read other notes only when needed.
+Index substantive notes in `investigation-notes/README.md` with the columns `Note`, `What it answers` and `Read when`. Each note answers one question and records inspected evidence with source paths and semantic anchors, findings, uncertainties and the next action. Keep notes stable; dated outcomes belong in the progress log and raw output in evidence. Do not append checkpoint sections. Milestones retain executable tasks and proof.
 
-Existing plans adopt this layout only on explicit request. A missing notes directory is not a setup defect.
+For material in another plan, link to it; copy only when the source plan is being deleted. A self-contained sub-investigation may use a subdirectory only with its own README. Read other notes only when needed.
+
+## Evidence and scripts
+
+New plans create empty `evidence` and `scripts` directories beside `investigation-notes`; existing plans adopt them only on explicit request.
+
+Put each evidence run in `<milestone>-<purpose>-<YYYYMMDDTHHMMZ>`, using `date -u '+%Y%m%dT%H%MZ'` for the stamp. Runs cited by a milestone's Proof or Results require `meta.json` with `milestone`, `purpose`, `commit`, `started`, `finished` and `verdict`; record the actual revision, times and observed result. Scratch runs not cited there need no metadata.
+
+Evidence contains outputs such as logs, JSON results and patches, not input trees or executable helpers. Put narrative Markdown in `investigation-notes` or a redacted session log, following the shared preamble. Link a milestone's proof to its script and run folder; a progress entry's `Checks:` may name that folder.
+
+Prefix each helper with its milestone ID and a verb-object name. Its header states the purpose, task or proof it serves, usage with arguments, and output location. Write results to `evidence`, not beside the script. Promote a helper still needed after the plan to the repository's `scripts/` or `test/` through a separate milestone task and its tests; local scripts are gitignored.
 
 ## Progress summaries
 
-New Small and Standard plans create `_PROGRESS.md` directly inside the selected plan, initially containing only `# Plan and implementation progress`. Existing plans adopt it only on explicit request.
+New plans create `_PROGRESS.md` directly inside the selected plan, initially containing only `# Plan and implementation progress`. Existing plans adopt it only on explicit request.
 
-After meaningful planning or implementation batches and at handoff, prepend a dated entry with a short subject, outcome bullets, actual checks and gaps, and a final `Next:` action. Distinguish planned, implemented, verified and accepted work. Preserve earlier entries; skip unchanged resumes and add brief material status corrections.
+After meaningful planning or implementation batches and at handoff, prepend `## YYYY-MM-DD HH:MM +HH:MM: <short subject>` using the date command. Follow brief outcome notes with one `Agent time for this update:` line, then `Checks:` and a final `Next:` action and owner. Report active time for the described work from attributable milestone receipts, excluding waits, idle periods, unrelated work and time already reported. Use `unmeasured` with a reason when attribution is unreliable. Preserve earlier entries verbatim; never backfill them. Skip unchanged resumes and add brief material status corrections.
 
-Follow goat-plan's `references/issue-format.md` → Plan progress updates for completion meanings, required decisions, preferred bullet length, punctuation and safe saving. Always run scoped `goat-clarity` for concise, natural wording before delivering new or revised entries. The human posts the update.
+Follow goat-plan's `references/issue-format.md` → Plan progress updates for completion meanings, time attribution, preferred bullet length, punctuation and safe saving. Always run scoped `goat-clarity` for concise, natural wording before delivering new or revised entries. The human posts the update.
 
 ## Data Boundary
 

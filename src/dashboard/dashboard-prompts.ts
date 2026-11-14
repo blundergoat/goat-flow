@@ -108,7 +108,7 @@ function dashboardAllPresets(ctx: DashboardPromptsContext): Preset[] {
 // Presets visible in normal browsing; quality prompts live only on the Quality page.
 function dashboardBrowsablePresets(ctx: DashboardPromptsContext): Preset[] {
   const list = dashboardAllPresets(ctx);
-  return list.filter((p) => !p.qualityMode && !p.internalOnly);
+  return list.filter((p) => !p.qualityWorkflow && !p.internalOnly);
 }
 
 // Build filters from browsable prompt categories; All and Favorites remain available even when there are no category rows.
@@ -149,7 +149,7 @@ function presetFlagBadgeRules(preset: Preset): PresetBadge[] {
       },
     },
     {
-      enabled: preset.qualityMode,
+      enabled: preset.qualityWorkflow,
       badge: {
         label: "Quality",
         title: "Quality or skill-assessment workflow",

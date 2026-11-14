@@ -162,6 +162,8 @@ const RED_FLAGS_METRIC_LIMIT =
   "Instruction-file evidence-before-claims red-flags coverage is metric-only; gaps lower the Verification score but do not fail audit status.";
 const RECOVERY_RESUMABILITY_LIMIT =
   "Recovery storage is available, but this audit did not validate the current objective, completed work, last verification, next action, or end-to-end resumability.";
+const MILESTONE_COMMANDS_METRIC_LIMIT =
+  "Milestone command coverage is metric-only; instruction text does not prove that timing, ticking or handoff checks ran.";
 
 /**
  * Add a caveat once so users do not see repeated limits from overlapping checks.
@@ -199,6 +201,7 @@ export function addStructuralAssuranceLimits(
   if (concerns.recovery.status === "pass") {
     addUniqueConcernLimit(concerns.recovery, RECOVERY_RESUMABILITY_LIMIT);
   }
+  addUniqueConcernLimit(concerns.recovery, MILESTONE_COMMANDS_METRIC_LIMIT);
 }
 
 /** Copy user actions from a failed check into the concern summary shown after the audit. */

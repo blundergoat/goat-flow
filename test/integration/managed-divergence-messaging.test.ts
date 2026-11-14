@@ -136,7 +136,7 @@ function writeLegacyBaseline(
       {
         schemaVersion: "goat-flow.install-state.v1",
         agent,
-        goatFlowVersion: "1.15.0",
+        goatFlowVersion: "1.16.0",
         files: [
           {
             path: managedPath,
@@ -195,7 +195,7 @@ function createClaudeProject(): string {
   mkdirSync(join(projectPath, ".claude"), { recursive: true });
   writeFileSync(
     join(projectPath, ".goat-flow", "config.yaml"),
-    'version: "1.15.0"\n',
+    'version: "1.16.0"\n',
   );
   writeFileSync(join(projectPath, ".claude", "settings.json"), "{}\n");
   const gitInitialization = spawnSync("git", ["init", "--quiet"], {
@@ -218,7 +218,7 @@ describe("managed divergence messaging", () => {
     const projectPath = setupFixture();
     try {
       writeHookFixtures(projectPath);
-      const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
+      const managedPath = ".goat-flow/hooks/deny-dangerous.mjs";
       const installedPath = join(projectPath, managedPath);
       const previousTemplate =
         "#!/usr/bin/env bash\n# previous managed hook version\n";
@@ -259,7 +259,7 @@ describe("managed divergence messaging", () => {
     const projectPath = setupFixture();
     try {
       writeHookFixtures(projectPath);
-      const managedPath = ".goat-flow/hooks/post-turn-safety.sh";
+      const managedPath = ".goat-flow/hooks/post-turn-safety.mjs";
       writeLegacyBaseline(projectPath, "claude", managedPath, "claude bytes\n");
       writeLegacyBaseline(
         projectPath,
@@ -324,7 +324,7 @@ describe("managed divergence messaging", () => {
     const hookProjectPath = createClaudeProject();
     try {
       writeHookFixtures(auditProjectPath);
-      const auditManagedPath = ".goat-flow/hooks/post-turn-safety.sh";
+      const auditManagedPath = ".goat-flow/hooks/post-turn-safety.mjs";
       const auditInstalledPath = join(auditProjectPath, auditManagedPath);
       const previousTemplate =
         "#!/usr/bin/env bash\n# previous managed hook version\n";
@@ -363,7 +363,7 @@ describe("managed divergence messaging", () => {
       );
       assert.doesNotMatch(divergedFinding.message, /run goat-flow hooks sync/u);
 
-      const hookManagedPath = ".goat-flow/hooks/post-turn-safety.sh";
+      const hookManagedPath = ".goat-flow/hooks/post-turn-safety.mjs";
       const hookInstalledPath = join(hookProjectPath, hookManagedPath);
       const currentTemplate = readFileSync(hookInstalledPath, "utf-8");
       writeCanonicalBaseline(hookProjectPath, hookManagedPath, currentTemplate);
@@ -553,7 +553,7 @@ describe("guarded hook admission", () => {
         // This fixture represents a user's differing hook file whose installation history is missing.
         if (blocker === "unknown-content") {
           writeFileSync(
-            join(root, ".goat-flow/hooks/deny-dangerous.sh"),
+            join(root, ".goat-flow/hooks/deny-dangerous.mjs"),
             "local hook with no baseline\n",
           );
         }
@@ -566,7 +566,7 @@ describe("guarded hook admission", () => {
         // Stop is prepared after the policy hooks, so a late blocker must preserve their earlier queued changes too.
         if (blocker === "newer-late-file") {
           writeFileSync(
-            join(root, ".goat-flow/hooks/post-turn-safety.sh"),
+            join(root, ".goat-flow/hooks/post-turn-safety.mjs"),
             "#!/usr/bin/env bash\n# goat-flow-hook-version: 999.0.0\n",
           );
         }
@@ -576,7 +576,7 @@ describe("guarded hook admission", () => {
           writeFileSync(localCopy, "local hook bytes\n");
           linkSync(
             localCopy,
-            join(root, ".goat-flow/hooks/post-turn-safety.sh"),
+            join(root, ".goat-flow/hooks/post-turn-safety.mjs"),
           );
         }
         const before = hookDestinationSnapshot(root);
@@ -614,7 +614,7 @@ describe("guarded hook sync", () => {
     try {
       const hookPath = join(
         projectPath,
-        ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+        ".goat-flow/hooks/policy-evaluation.mjs",
       );
       const official = readFileSync(hookPath, "utf-8");
       writeFileSync(hookPath, `${official}\n# local change\n`);
@@ -704,7 +704,7 @@ describe("guarded hook sync", () => {
       });
       const hookPath = join(
         projectPath,
-        ".goat-flow/hooks/post-turn-safety.sh",
+        ".goat-flow/hooks/post-turn-safety.mjs",
       );
       const official = readFileSync(hookPath, "utf-8");
       writeFileSync(hookPath, `${official}\n# unknown local content\n`);
@@ -798,8 +798,8 @@ describe("guarded hook sync", () => {
   ] as const) {
     it(`reports partial changes after ${failurePoint} fails and recovers on retry`, (context) => {
       const projectPath = createClaudeProject();
-      const scriptPath = ".goat-flow/hooks/deny-dangerous.sh";
-      const otherPath = ".goat-flow/hooks/deny-git-mutations.sh";
+      const scriptPath = ".goat-flow/hooks/deny-dangerous.mjs";
+      const otherPath = ".goat-flow/hooks/deny-git-mutations.mjs";
       const baselinePath = join(
         projectPath,
         ".goat-flow/state/install/managed.json",
@@ -902,7 +902,7 @@ describe("hook operation recovery boundaries", () => {
   it("reviews non-UTF-8 local hook bytes without mistaking their encoding for an editor race", () => {
     const projectPath = createClaudeProject();
     try {
-      const path = join(projectPath, ".goat-flow/hooks/deny-dangerous.sh");
+      const path = join(projectPath, ".goat-flow/hooks/deny-dangerous.mjs");
       const official = readFileSync(path);
       const edited = Buffer.concat([
         official,

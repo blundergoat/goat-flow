@@ -60,7 +60,7 @@ GOOD: Read the relevant source, config, or generated instruction file before sta
 Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity class: Hotfix / Small Feature / Standard / System / Infrastructure, with a declared checkpoint proportionate to the class. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human. Reaching the declared checkpoint = report evidence and re-classify before continuing; competent review may need broader coverage. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
 
 ### ACT
-MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
+MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition] | Milestone: [path or none] | Receipt: [open, stopped or none]`
 
 | Mode | Behaviour |
 |------|-----------|
@@ -70,13 +70,13 @@ MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 | Debug | Diagnosis with file + semantic anchor first. Fixes after human reviews |
 | Review | Investigate first. Never blindly apply suggestions |
 
-For milestone work, load `goat-plan`; start timing before the first source edit, stop its timer at human gates, resume after release, and finalize it at exit.
+For milestone work, load `goat-plan`; run `goat-flow plans time start <milestone-file> --category <product|proof|other>` before the first source edit, `goat-flow plans time stop <milestone-file>` at human gates, and add `--finalize` at exit. Resume with start after release. The CLI writes measured `Actual`; never invent it.
 If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.
 
 For Copilot setup, ACT means updating only Copilot-owned surfaces from the shared skeleton and adapting commands, boundaries, and Router Table rows to the target project.
 
 ### VERIFY
-MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end. Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it.
+MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. Milestone ticks are Definition of Done gate (7). Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it. Preserve other writers' hunks in approved files. Diagnose failure causes before calling them external; an untouched consumer may depend on changed code. Keep mandatory failures visible; touched checks never replace a failed required gate.
 
 **Hallucination red-flags:**
 1. **Checks passed.** Do not claim tests pass or any check passed (shellcheck, typecheck, preflight, audit) without showing the literal pass/fail line copied verbatim from this session's run. Paraphrase, cached output, or prior-session results do not count.
@@ -91,6 +91,8 @@ MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
 If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/learning-loop/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/learning-loop/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>` (measured locally, read directly, or cited external incident with local applicability), significant technical decisions go in `.goat-flow/learning-loop/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
 
 ## Definition of Done
+
+MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts; changed `test/` files are excluded from typecheck and lint, so run their owning suite instead) (2) no broken cross-references introduced (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames (7) tick each completed milestone task `- [x]` before starting the next; `goat-flow plans check <plan-path> --strict` refuses handoff with open tasks but does not enforce earlier ticking. After context compaction or 15+ turns, checkpoint current state; before unrelated work, recommend a fresh thread to the user.
 - `.github/copilot-instructions.md` exists, follows the canonical section order, and stays within the 150-line hard limit.
 - Commit guidance matches target applicability: a Git target has the preferred guide and Copilot bridge unless `skipped-references` preserves the former guide and valid bridge; a non-Git target has neither; safe former-only guides are renamed and pre-existing dual guides are preserved.
 - Essential Commands list only real target-project commands.

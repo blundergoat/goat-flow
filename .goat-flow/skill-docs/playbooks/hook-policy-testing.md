@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.18.0"
+goat-flow-reference-version: "1.19.0"
 ---
 # Hook Policy Testing
 
@@ -13,8 +13,8 @@ From the selected project's root, run the bounded installed-policy check:
 
 ```bash
 for policy_hook in deny-dangerous deny-git-mutations; do
-  test -x ".goat-flow/hooks/$policy_hook.sh" || exit 1
-  bash ".goat-flow/hooks/$policy_hook.sh" --self-test=smoke || exit
+  test -f ".goat-flow/hooks/$policy_hook.mjs" || exit 1
+  node ".goat-flow/hooks/$policy_hook.mjs" --self-test=smoke || exit
 done
 ```
 
@@ -60,8 +60,8 @@ classify text and does not execute that command.
 Run the Availability Check before editing. Then run the complete corpus:
 
 ```bash
-bash .goat-flow/hooks/deny-dangerous.sh --self-test=full
-bash .goat-flow/hooks/deny-git-mutations.sh --self-test=full
+node .goat-flow/hooks/deny-dangerous.mjs --self-test=full
+node .goat-flow/hooks/deny-git-mutations.mjs --self-test=full
 ```
 
 Record the literal summary line and exit status. A failing baseline is an
@@ -82,10 +82,10 @@ attribution boundary. Treat the payload as a temporary machine diagnostic, not d
 no secrets, retain only the exit and sanitized result, and remove the payload after the probe.
 
 ```bash
-bash .goat-flow/hooks/deny-dangerous.sh < .goat-flow/scratchpad/payload.json
+node .goat-flow/hooks/deny-dangerous.mjs < .goat-flow/scratchpad/payload.json
 ```
 
-Use `deny-git-mutations.sh` for Git or GitHub payloads and `deny-dangerous.sh` for shell or secret policy. The redirect leaves the guarded phrase in the file, so the command line stays clear of
+Use `deny-git-mutations.mjs` for Git or GitHub payloads and `deny-dangerous.mjs` for shell or secret policy. The redirect leaves the guarded phrase in the file, so the command line stays clear of
 provider-matched text. Read the exit and stream against the event shape your provider sends:
 
 | Provider shape | Event key | Expected result |
@@ -101,8 +101,8 @@ operand; where it denies first, route the same shapes through the stdin
 probe above.
 
 ```bash
-bash .goat-flow/hooks/deny-git-mutations.sh --check="bash -lc 'git push'"
-bash .goat-flow/hooks/deny-git-mutations.sh --check="git status"
+node .goat-flow/hooks/deny-git-mutations.mjs --check="bash -lc 'git push'"
+node .goat-flow/hooks/deny-git-mutations.mjs --check="git status"
 ```
 
 Expected results:
@@ -126,7 +126,7 @@ for command_shape in \
   "if true; then git push; fi" \
   'f(){ git push; }; f'
 do
-  bash .goat-flow/hooks/deny-git-mutations.sh --check="$command_shape"
+  node .goat-flow/hooks/deny-git-mutations.mjs --check="$command_shape"
   printf 'exit=%s\n' "$?"
 done
 ```
@@ -143,7 +143,7 @@ classified rather than trusted as inert wrapper text.
 
 ### Windows host grammar and state paths
 
-Read the native-host rows in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` when available; consumers use the installed counterpart. The measured caret regression and its controls are anchored by `cmd caret-obfuscated publication` and `cmd escaped ampersand stays literal after word normalization`.
+Read the native-host rows in `workflow/hooks/deny-dangerous/corpus.json` when available; consumers use the installed counterpart. The measured caret regression and its controls are anchored by `cmd caret-obfuscated publication` and `cmd escaped ampersand stays literal after word normalization`.
 
 | Surface | Required paired checks |
 | --- | --- |
@@ -161,26 +161,25 @@ installable runtime unit. Prove available source/install parity first, then run 
 full corpus once:
 
 ```bash
-# Framework maintainers compare the complete runtime future consumers will install.
+# Framework maintainers compare the complete native runtime consumers install.
 if test -d workflow/hooks; then
-  diff -q workflow/hooks/deny-dangerous.sh .goat-flow/hooks/deny-dangerous.sh || exit
-  diff -q workflow/hooks/deny-git-mutations.sh .goat-flow/hooks/deny-git-mutations.sh || exit
-  diff -qr workflow/hooks/deny-dangerous .goat-flow/hooks/deny-dangerous || exit
-  diff -q workflow/hooks/gh-graphql-read.cjs .goat-flow/hooks/gh-graphql-read.cjs || exit
-  diff -q workflow/hooks/vendor/graphql.cjs .goat-flow/hooks/vendor/graphql.cjs || exit
+  diff -q workflow/hooks/deny-dangerous.mjs .goat-flow/hooks/deny-dangerous.mjs || exit
+  diff -q workflow/hooks/deny-git-mutations.mjs .goat-flow/hooks/deny-git-mutations.mjs || exit
+  while IFS= read -r runtime_file; do
+    diff -q "$runtime_file" ".goat-flow/hooks/${runtime_file#workflow/hooks/}" || exit
+  done < <(find workflow/hooks -type f \( -name '*.mjs' -o -name '*.cjs' -o -name 'corpus.json' \))
 fi
 
-bash .goat-flow/hooks/deny-dangerous.sh --self-test=full || exit
-bash .goat-flow/hooks/deny-git-mutations.sh --self-test=full || exit
+node .goat-flow/hooks/deny-dangerous.mjs --self-test=full || exit
+node .goat-flow/hooks/deny-git-mutations.mjs --self-test=full || exit
 ```
 
-In the controlling workspace, either dispatcher resolves policy modules from
-the installed `.goat-flow/hooks/deny-dangerous/` store. Therefore dispatcher
+Both dispatchers depend on the installed shared policy modules and corpus. Dispatcher
 parity alone is insufficient. A mismatch fails verification; identical complete runtimes need only
-one full run per policy. `scripts/preflight-checks.sh` enforces this in the framework checkout.
+one full run per policy. Run this gate separately from `scripts/preflight-checks.sh`, which does not run the full policy corpus.
 Keep configured-launcher probes for each provider and working directory: identical policy bytes do
 not prove registrations, payload formats or root discovery. Before live rollout of a parser change,
-create a disposable Git root with the complete candidate `.goat-flow/hooks/` store and run both corpora there.
+create a disposable Git root with the complete `.goat-flow/hooks/` store and run both corpora there.
 
 ### 5. Verify agent registration
 
@@ -212,10 +211,10 @@ fi
 # Ripgrep is not installed on every consumer machine; POSIX grep always is.
 if command -v rg >/dev/null 2>&1; then
   rg -n --with-filename \
-    '\.goat-flow/hooks/deny-(dangerous|git-mutations)\.sh' "${registration_files[@]}"
+    '\.goat-flow/hooks/deny-(dangerous|git-mutations)\.mjs' "${registration_files[@]}"
 else
   grep -nHE \
-    '\.goat-flow/hooks/deny-(dangerous|git-mutations)\.sh' "${registration_files[@]}"
+    '\.goat-flow/hooks/deny-(dangerous|git-mutations)\.mjs' "${registration_files[@]}"
 fi
 ```
 

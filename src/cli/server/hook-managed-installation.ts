@@ -24,8 +24,13 @@ import type { PreparedHookChange } from "./hook-operation.js";
 
 /** These files must understand explicit off before a retained policy can be disabled. */
 const POLICY_CHOICE_FILES = new Set([
-  "run-with-bash.mjs",
+  "run-hook.mjs",
+  "hook-launch.mjs",
+  "hook-output.mjs",
+  "hook-supervisor.mjs",
+  "process-tree.mjs",
   "hook-launch-runtime.mjs",
+  "hook-provider-adapters.mjs",
   "hook-policy-state.cjs",
   "vendor/js-yaml.cjs",
 ]);
@@ -602,10 +607,13 @@ function hookScriptResidueExists(
   hookSpec: HookSpec,
   agentProfiles: AgentProfile[],
 ): boolean {
-  const managedScriptNames =
-    hookSpec.id === "deny-dangerous"
-      ? [...hookSpec.scriptFiles, ...LEGACY_DENY_DANGEROUS_SCRIPT_NAMES]
-      : hookSpec.scriptFiles;
+  const managedScriptNames = [
+    ...hookSpec.scriptFiles,
+    hookSpec.primaryScript.replace(/\.mjs$/u, ".sh"),
+    ...(hookSpec.id === "deny-dangerous"
+      ? LEGACY_DENY_DANGEROUS_SCRIPT_NAMES
+      : []),
+  ];
 
   // An agent-owned current hook folder with managed bytes is an upgrade surface.
   if (
@@ -684,12 +692,16 @@ function removeLegacyAgentHookScripts(
 ): void {
   const legacyNames = [
     ...hookSpec.scriptFiles,
+    hookSpec.primaryScript.replace(/\.mjs$/u, ".sh"),
     ...(hookSpec.id === "deny-dangerous"
       ? LEGACY_DENY_DANGEROUS_SCRIPT_NAMES
       : []),
   ];
   // Every former provider folder can contain an owned copy, even when that provider is no longer installed.
   for (const legacyDirectory of Object.values(LEGACY_AGENT_HOOK_DIRECTORIES)) {
+    // Mixed policy choices still require migration review when only Bash entrypoints remain.
+    if (["deny-dangerous", "deny-git-mutations"].includes(hookSpec.id))
+      change.readText(`${legacyDirectory}/${hookSpec.id}.sh`);
     // Cleanup never expands to a wildcard or a user-authored hook name.
     for (const scriptName of legacyNames)
       change.removeOwned(`${legacyDirectory}/${scriptName}`);
@@ -817,6 +829,8 @@ export function copyHookScripts(
 ): void {
   // A provider with no hook surface cannot receive managed scripts.
   if (!agent.hooksDir) return;
+  if (["deny-dangerous", "deny-git-mutations"].includes(hookSpec.id))
+    change.readText(`${agent.hooksDir}/${hookSpec.id}.sh`);
   // Retain the version guard beside copy preparation; replacement confirmation never authorizes a downgrade.
   if (shouldOverwriteExisting)
     assertNoNewerManagedHookFiles(change.projectPath, agent, hookSpec);

@@ -18,16 +18,12 @@ broken=0
 checked=0
 
 # Find markdown files in shipped directories.
-# Skip: _archived, tasks/logs (local working state), scratchpad source
-# material, node_modules, .git
+# Prune local working state and dependency trees before descending into them.
 files_with_links=$(find docs/ workflow/setup/ workflow/skills/ .goat-flow/ \
-  -name '*.md' \
-  -not -path '.goat-flow/plans/*' \
-  -not -path '.goat-flow/logs/*' \
-  -not -path '.goat-flow/scratchpad/*' \
-  -not -path '*/_archived/*' \
-  -not -path '*/node_modules/*' \
-  -not -path '*/.git/*' \
+  \( -path '.goat-flow/plans' -o -path '.goat-flow/logs' \
+     -o -path '.goat-flow/scratchpad' -o -name '_archived' \
+     -o -name 'node_modules' -o -name '.git' \) -prune -o \
+  -name '*.md' -print \
   2>/dev/null | sort)
 
 for file in $files_with_links; do

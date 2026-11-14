@@ -1,7 +1,7 @@
 ---
 name: goat-clarity
 description: "Use when a developer asks to improve code comments, documentation, naming, or private placement for a GitHub pull request, uncommitted files, or any repository folders and files."
-goat-flow-skill-version: "1.18.0"
+goat-flow-skill-version: "1.19.0"
 ---
 # /goat-clarity
 
@@ -55,9 +55,7 @@ and source. Project authority and the request outrank defaults. Record each auth
 and baseline. Semantic authority drift fails closed until controlling bytes and provenance are explicit; never silently
 choose working or committed rules. Missing authority=`NOT_CHECKED`; never import other conventions.
 
-Read `references/target-scope-and-evidence.md` by section: the `Selector Inventory` subsection for the
-accepted selector only; `Snapshot Records`, `Formatter Capability`, `Status and Claim Evidence`, and
-`Like-unit Receipt Ledgers` on every run; every other section at the step that calls for it.
+On every run, read `references/target-scope-and-evidence.md` → selected `Selector Inventory` subsection, `Snapshot Records` and `Formatter Capability`, plus `references/receipt-evidence.md`. Read other sections when their step calls.
 
 ### 0.2 Classify selected units
 
@@ -105,6 +103,7 @@ Do not diagnose names or comments while collecting the inventory; accounting com
 | A PR or uncommitted selector changes test cases, or a folder or file selector includes test source | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Decision Route`) |
 | Verification needs a focused test choice | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Revalidate before mutation`) |
 | An eligible selected human-documentation unit needs prose diagnosis, whether read-only or writable | `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` (`Scope Gate`) and any surface owner it routes |
+| Human prose undergoes substantive recomposition or derivation with distinct claims, or has unresolved fidelity | `.goat-flow/skill-docs/playbooks/writing-fidelity-audit.md` |
 | A candidate depends on project vocabulary or a domain term | `.goat-flow/glossary.md` |
 
 No matrix match means no owner load or broader-discipline claim. Project authority may add an owner
@@ -259,8 +258,10 @@ verification results, command status, and separate claim verdicts. Failure/unava
 
 ## Clarity Remediation Receipt
 
-Use the reference's selected-unit, changed-span, and command-evidence ledgers: every selected unit gets one class/outcome;
+Use `references/receipt-evidence.md`'s selected-unit, changed-span, and command-evidence ledgers: every selected unit gets one class/outcome;
 every changed span maps to its finding or formatter reflow.
+
+`Meaning audit:` maps each qualifying modified human-prose unit once to source-linked dropped/changed/added claims; otherwise `none`.
 
 Build the receipt on every run; the final reply's reader decides where it goes:
 
@@ -288,6 +289,7 @@ NOT_CHECKED: <claims; missing proof>
 Test-selection record: <dispositions and evidence per test-selection.md; or not applicable>
 Formatter proof: <capability/discovery; baseline/final command records; or omission reason>
 Verification: <command-evidence ledger>
+Meaning audit: <source-linked claims; or none>
 Summary: <paste-ready pull-request summary when requested or needed for headless/sub-agent handoff; otherwise not requested>
 ```
 

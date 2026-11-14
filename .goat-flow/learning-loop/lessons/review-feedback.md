@@ -1,6 +1,6 @@
 ---
 category: review-feedback
-last_reviewed: 2026-08-11
+last_reviewed: 2026-11-14
 ---
 
 **Scope:** Weighing human and multi-agent critique - why synthesis is the expensive half, not applying findings before verifying them, and what repeated review rounds still miss. Automated reviewer output is [review-bot-evidence.md](review-bot-evidence.md).
@@ -18,7 +18,7 @@ last_reviewed: 2026-08-11
 2. Model diversity matters more than reviewer count. Different model families have different systematic blind spots - one family may under-weight documentation surfaces, another may miss integration glue. Mixing families covers more ground than stacking instances of one.
 3. The synthesis + verification layer is where the value is captured. A non-trivial share of raw multi-agent claims will be wrong or need active verification. Unverified multi-agent output is noisier, not more reliable.
 4. Sweet spot: several reviews from different model families for a framework/architecture audit; fewer for a feature or module.
-5. Score convergence across reviewers is the signal that coverage is adequate - not review count. High score variance means some reviewer missed a major category.
+5. Check verified findings and coverage of the requested scope before commissioning another review. Similar reviewer scores do not prove that coverage is adequate.
 
 ---
 ## Lesson: Blindly applying review feedback without verifying findings
@@ -28,7 +28,7 @@ last_reviewed: 2026-08-11
 **Incident count:** 2 | **Latest occurrence:** 2026-07-19
 
 **Prevention:**
-1. Before acting on any review finding, verify the cited evidence is still current: read the actual file at the cited line
+1. Before acting on any review finding, verify the cited evidence is still current: read the actual file at its semantic anchor.
 2. Batch-verify all findings first (`grep`, `sed -n`, `head`), then fix only what's actually broken
 3. Reviews from agents that didn't run the latest code are particularly likely to cite stale evidence
 4. "8 critics agree" does not mean "8 critics are right" - they may all be reading the same stale state

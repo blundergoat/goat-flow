@@ -8,7 +8,7 @@ Documentation framework for AI coding agent workflows. Four parts:
 - **Markdown docs** (`docs/`, `workflow/`, `workflow/setup/`): framework documentation and agent templates
 - **Shell scripts** (`scripts/`, `workflow/hooks/`, `.goat-flow/hooks/`): maintenance, preflight checks, and guardrail hooks
 
-Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-yaml`, `ws`; optional runtime dependency: `node-pty`.
+Package: `@blundergoat/goat-flow`. Node >= 20.12.0. Runtime dependencies: `js-yaml`, `ws`; optional runtime dependency: `node-pty`.
 
 ## Architecture
 
@@ -38,7 +38,6 @@ src/cli/
                       #   setup-detect.ts, terminal.ts, types.ts
 src/dashboard/        # Dashboard UI (views/, static assets)
 workflow/
-  install-goat-flow.sh        # Install workflow assets into a target project
   setup/                      # Agent setup docs and shared setup references
   hooks/                      # Runtime guardrails and hook config templates
 scripts/
@@ -62,7 +61,7 @@ npm run test           # runs test:fast (node --test; excludes slow/dashboard/pe
 npm run typecheck      # tsc --noEmit
 npm run audit          # node dist/cli/cli.js audit .
 
-shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
 bash scripts/maintenance/check-shell-syntax.sh
 bash scripts/preflight-checks.sh         # Full preflight gate
 

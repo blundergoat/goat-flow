@@ -439,7 +439,7 @@ function dashboardCustomPromptToPreset(custom: CustomPrompt): Preset {
     source: "custom",
     globalSafe: custom.globalSafe,
     internalOnly: false,
-    qualityMode: false,
+    qualityWorkflow: false,
     requiresGh: custom.requiresGh,
     requiresPrOrIssue: custom.requiresPrOrIssue,
     requiresLocalDiff: custom.requiresLocalDiff,

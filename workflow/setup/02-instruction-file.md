@@ -100,6 +100,9 @@ After writing/updating the instruction file:
 - [ ] Router table includes the canonical `.goat-flow/skill-docs/playbooks/` tool playbooks row
 - [ ] Router table keeps `.goat-flow/skill-docs/skill-quality-testing/` as the sibling skill-authoring methodology path
 - [ ] Commit guidance matches target applicability: without `.git`, neither guide nor a `## Commit Messages` bridge is required; with `.git`, the preferred guide and bridge exist unless `skipped-references` preserved the former guide and its still-valid references, a safe former-only guide was renamed only after the peer-reference preflight passed, and pre-existing dual guides were preserved
+- [ ] Scan the finished instruction file for `git stash`, `git commit`, `git push`, `commit or stash` and `first read`; reconcile actionable directives with the Never tier and READ rule, preserving prohibitions and useful existing content.
+- [ ] Timing, tick and commit rules each have one owner; VERIFY points to Definition of Done gate (7) instead of restating the tick rule.
+- [ ] Workflow MUST rules name their command or checker where one exists and distinguish prose obligations from mechanical enforcement; timing reminders must not be described as hook-enforced.
 - [ ] Every line fits the Quality Bar: behavioral rule, scope boundary, command, verification gate, router pointer, or composition rule. Domain knowledge and project history are routed to cold-path files, not inlined.
 - [ ] If Path B: no useful existing content was lost
 - [ ] If Path B: Execution Loop is the four-step v1.2 version; `rg 'CLASSIFY|→\s*LOG|->\s*LOG' <instruction-file>` returns zero hits

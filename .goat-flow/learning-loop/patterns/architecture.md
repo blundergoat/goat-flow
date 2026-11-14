@@ -1,6 +1,6 @@
 ---
 category: architecture
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-23
 ---
 
 ## Pattern: UNSET sentinel + recursive merge for layered CLI overlays
@@ -17,7 +17,7 @@ last_reviewed: 2026-10-11
 
 **Context:** Every top-level import of a CLI entry module loads on every invocation, including `--help` and fast subcommands, so a heavy dependency needed by one subcommand taxes all of them.
 
-**Approach:** Import heavy modules inside the handler that needs them. Goat-flow already does this: `src/cli/cli.ts` keeps only lightweight parser, help, dispatch, error, and version imports at module scope, and `src/cli/cli-handlers.ts` loads audit, setup, and evidence code per command (search: `await import("./audit/audit.js")`). The same rule applies to hook launchers, because the Claude PreToolUse registration starts a Node process on every Bash tool call (`workflow/hooks/agent-config/claude.json`, search: `run-with-bash.mjs`). Time `node dist/cli/cli.js --help` before and after a deferral and keep only the ones that move the number; a sub-10ms import adds noise without payoff.
+**Approach:** Import heavy modules inside the handler that needs them. Goat-flow already does this: `src/cli/cli.ts` keeps only lightweight parser, help, dispatch, error, and version imports at module scope, and `src/cli/cli-handlers.ts` loads audit, setup, and evidence code per command (search: `await import("./audit/audit.js")`). The same rule applies to hook launchers, because the Claude PreToolUse registration starts a Node process on every Bash tool call (`workflow/hooks/agent-config/claude.json`, search: `run-hook.mjs`). Time `node dist/cli/cli.js --help` before and after a deferral and keep only the ones that move the number; a sub-10ms import adds noise without payoff.
 
 **Evidence (EXTERNAL_REFERENCE):** mini-swe-agent PR #749 (merged 2026-02-19) moved the `prompt_toolkit` import from module scope in `src/minisweagent/run/utilities/config.py` into the `prompt()` function, so only interactive subcommands pay its startup cost.
 
@@ -43,7 +43,7 @@ last_reviewed: 2026-10-11
 
 **Context:** A safety hook grows policy categories with different risk profiles and self-test corpora.
 
-**Approach:** Give an independently managed policy its own registry identity and fixed entrypoint while keeping parser and transport code shared. In goat-flow, `deny-git-mutations` owns native Git commit, publication, destructive operations and GitHub write policy; `deny-dangerous` retains destructive shell and secret-path protection. Both require the complete shared runtime, preserve the routed corpus and declare shared file ownership independently of registration ownership. Repairing a shared file can invalidate both hooks' installation and proof states. Architecture owns this contract; the earlier coverage-loss incident remains in `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `Splitting a monolithic guardrail`). Implementation anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Parse once per segment`) and `src/cli/server/hooks-registry.ts` (search: `deny-git-mutations`).
+**Approach:** Give an independently managed policy its own registry identity and fixed entrypoint while keeping parser and transport code shared. In goat-flow, `deny-git-mutations` owns native Git commit, publication, destructive operations and GitHub write policy; `deny-dangerous` retains destructive shell and secret-path protection. Both require the complete shared runtime, preserve the routed corpus and declare shared file ownership independently of registration ownership. Repairing a shared file can invalidate both hooks' installation and proof states. Architecture owns this contract; the earlier coverage-loss incident remains in `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `Splitting a monolithic guardrail`). Implementation anchors: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Parse once per segment`) and `src/cli/server/hooks-registry.ts` (search: `deny-git-mutations`).
 
 ## Pattern: Asymmetric trust - set state from output, clear state from input
 

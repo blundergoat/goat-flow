@@ -31,6 +31,11 @@ export function completeInstruction(title: string): string {
   return [
     `# ${title}`,
     "",
+    "### ACT",
+    "Run `goat-flow plans time start <milestone-file> --category product`.",
+    "Run `goat-flow plans time stop <milestone-file>` and use `--finalize` at exit.",
+    "Tick each completed milestone task `- [x]` before starting the next task.",
+    "",
     "**Hallucination red-flags:**",
     "1. **Checks passed.** Do not claim tests pass without literal evidence.",
     "2. **Completion.** Do not claim completion without listing files changed.",

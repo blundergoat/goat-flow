@@ -25,6 +25,30 @@ import {
   getKnownAgentIds,
 } from "../../src/cli/agents/registry.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
+import { PROFILES } from "../../src/cli/detect/agents.js";
+
+/** Read the current native policy closure for disposable dashboard projects. */
+async function nativePolicyFixtureFiles(): Promise<Map<string, string>> {
+  const files = new Set<string>();
+  for (const id of ["deny-dangerous", "deny-git-mutations"]) {
+    const spec = getHookSpec(id);
+    assert.ok(spec);
+    for (const file of spec.scriptFiles) files.add(file);
+  }
+  return new Map(
+    await Promise.all(
+      [...files].map(
+        async (file) =>
+          [
+            file,
+            await readFile(join(PROJECT_PATH, "workflow/hooks", file), "utf8"),
+          ] as const,
+      ),
+    ),
+  );
+}
 import {
   validateEvidenceEnvelope,
   type EvidenceEnvelope,
@@ -465,25 +489,7 @@ export async function makeDashboardCacheProject(): Promise<{
   cleanup: () => Promise<void>;
 }> {
   const root = await mkdtemp(join(tmpdir(), "goat-flow-cache-tests-"));
-  const denyHook = await readFile(
-    join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous.sh"),
-    "utf-8",
-  );
-  const hookLibFiles = new Map<string, string>();
-  for (const file of [
-    "patterns-shell.sh",
-    "patterns-paths.sh",
-    "patterns-writes.sh",
-    "deny-dangerous-self-test.sh",
-  ]) {
-    hookLibFiles.set(
-      file,
-      await readFile(
-        join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous", file),
-        "utf-8",
-      ),
-    );
-  }
+  const hookFiles = await nativePolicyFixtureFiles();
   await writeProjectFile(
     root,
     ".goat-flow/.gitignore",
@@ -516,13 +522,13 @@ export async function makeDashboardCacheProject(): Promise<{
     ".codex/hooks.json",
     '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".goat-flow/hooks/deny-dangerous.sh"}]}]}}\n',
   );
-  await writeProjectFile(root, ".goat-flow/hooks/deny-dangerous.sh", denyHook);
-  for (const [file, content] of hookLibFiles) {
-    await writeProjectFile(
-      root,
-      `.goat-flow/hooks/deny-dangerous/${file}`,
-      content,
-    );
+  for (const [file, content] of hookFiles) {
+    await writeProjectFile(root, `.goat-flow/hooks/${file}`, content);
+  }
+  for (const id of ["deny-dangerous", "deny-git-mutations"]) {
+    const spec = getHookSpec(id);
+    assert.ok(spec);
+    writeAgentHookState(root, PROFILES.codex, spec, true);
   }
   return {
     root,
@@ -586,25 +592,7 @@ export async function makeDashboardSetupPromptProject(options: {
   installSkills?: boolean;
 }): Promise<{ root: string; cleanup: () => Promise<void> }> {
   const root = await mkdtemp(join(tmpdir(), "goat-flow-setup-prompt-tests-"));
-  const denyHook = await readFile(
-    join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous.sh"),
-    "utf-8",
-  );
-  const hookLibFiles = new Map<string, string>();
-  for (const file of [
-    "patterns-shell.sh",
-    "patterns-paths.sh",
-    "patterns-writes.sh",
-    "deny-dangerous-self-test.sh",
-  ]) {
-    hookLibFiles.set(
-      file,
-      await readFile(
-        join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous", file),
-        "utf-8",
-      ),
-    );
-  }
+  const hookFiles = await nativePolicyFixtureFiles();
   const commonDirs = [
     ".goat-flow/learning-loop/footguns",
     ".goat-flow/learning-loop/lessons",
@@ -689,13 +677,13 @@ skills:
       2,
     ),
   );
-  await writeProjectFile(root, ".goat-flow/hooks/deny-dangerous.sh", denyHook);
-  for (const [file, content] of hookLibFiles) {
-    await writeProjectFile(
-      root,
-      `.goat-flow/hooks/deny-dangerous/${file}`,
-      content,
-    );
+  for (const [file, content] of hookFiles) {
+    await writeProjectFile(root, `.goat-flow/hooks/${file}`, content);
+  }
+  for (const id of ["deny-dangerous", "deny-git-mutations"]) {
+    const spec = getHookSpec(id);
+    assert.ok(spec);
+    writeAgentHookState(root, PROFILES.codex, spec, true);
   }
   if (options.installSkills) {
     for (const skill of [

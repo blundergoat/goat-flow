@@ -10,6 +10,10 @@
 import { closeSync, lstatSync, openSync } from "node:fs";
 import { join, posix } from "node:path";
 
+import type {
+  ManagedSetupFileState,
+  ManagedSetupChangeDirection,
+} from "./managed-setup-preview.js";
 import { loadConfig } from "./config/reader.js";
 import {
   INDEX_BUCKETS,
@@ -329,4 +333,24 @@ export function collectProjectWriteDefinitions(
   return [...definitions.values()].sort((left, right) =>
     left.path.localeCompare(right.path),
   );
+}
+
+/**
+ * Translate the shared file comparison into the same repair direction for Install, Audit and Hooks.
+ *
+ * @param state - canonical three-way state; non-content states have no proven drift direction
+ * @returns current, safely behind, locally diverged, or unclassified repair evidence
+ */
+export function managedSetupChangeDirection(
+  state: ManagedSetupFileState,
+): ManagedSetupChangeDirection {
+  // Matching installed and bundled bytes let the user leave this file alone.
+  if (state === "unchanged") return "current";
+  // Only the bundle changed, so the user's pristine installed copy can safely advance.
+  if (state === "template-changed") return "behind";
+  // Locally changed bytes need review before the user replaces them with bundled content.
+  if (state === "both-changed" || state === "local-preserved") {
+    return "diverged";
+  }
+  return "unclassified";
 }
