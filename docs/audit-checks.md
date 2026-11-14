@@ -1,9 +1,9 @@
 # Deterministic Audit Checks
 
-`npx @blundergoat/goat-flow@latest audit` currently has 38 executed check rows and 37 unique stable check ids:
+`npx @blundergoat/goat-flow@latest audit` currently has 39 executed check rows and 38 unique stable check ids:
 
 - **20 build checks**: 16 setup-scope checks plus 4 agent-scope checks
-- **18 harness checks**: additional checks enabled by `--harness`
+- **19 harness checks**: additional checks enabled by `--harness`
 
 The totals differ because `session-logs` runs once in setup scope and once in the Recovery harness concern. The duplicate id intentionally represents the same invariant in two execution scopes; changing it would change downstream SARIF rule identity.
 
@@ -70,7 +70,7 @@ Removed top-level commands are matched only when written as a code-span or shell
 
 ## Harness Checks
 
-`npx @blundergoat/goat-flow@latest audit . --harness` adds **18** deterministic harness-completeness checks on top of the 20 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
+`npx @blundergoat/goat-flow@latest audit . --harness` adds **19** deterministic harness-completeness checks on top of the 20 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
 
 | Concern | Check id | Type | What it validates |
 |---------|----------|------|-------------------|
@@ -90,6 +90,7 @@ Removed top-level commands are matched only when written as a code-span or shell
 | Verification | `post-turn-hook-integrity` | `metric` | For agents with a manifest-backed post-turn event, reports whether the registered post-turn hook is the universal safety guard or a custom hook with literal validation commands and whether it swallows failures; absence or masking is no hook evidence, not proof. Agents with `supportsPostTurnHook=false` are skipped as not applicable instead of penalized. |
 | Recovery | `milestone-tracking` | `integrity` | `.goat-flow/plans/` exists; task count, checkbox completion, milestone status, and roadmap progress are optional local workflow state |
 | Recovery | `session-logs` | `integrity` | `.goat-flow/logs/sessions/` exists |
+| Recovery | `milestone-commands-named` | `metric` | Present instruction files name milestone start, stop/finalize and immediate ticking; missing clauses lower the score without failing audit status |
 | Feedback loop | `feedback-loop-active` | `integrity` | The lessons and footguns directories exist, with valid metadata and non-stale evidence references |
 | Feedback loop | `decisions-tracked` | `integrity` | `.goat-flow/learning-loop/decisions/` exists |
 
@@ -101,6 +102,8 @@ Removed top-level commands are matched only when written as a code-span or shell
 | `npx @blundergoat/goat-flow@latest audit . --agent <id>` | Same 20 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
 | `npx @blundergoat/goat-flow@latest audit . --check-drift` | 20 build checks + artifact and instruction drift | Validates canonical sources, installed mirrors, IDs, frontmatter, referenced resources, and sibling instruction parity |
 | `npx @blundergoat/goat-flow@latest audit . --check-content` | 20 build checks + content scans | Checks selected Markdown, supported framework claims and release counts against available snapshots |
-| `npx @blundergoat/goat-flow@latest audit . --harness` | 20 build + 18 harness = 38 checks | Adds harness completeness, still deterministic |
+| `npx @blundergoat/goat-flow@latest audit . --harness` | 20 build + 19 harness = 39 checks | Adds harness completeness, still deterministic |
+
+The Recovery metric `milestone-commands-named` checks instruction text for start, stop/finalize and immediate ticking. Missing clauses affect its score, not audit status; local plan files are never read.
 
 Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx @blundergoat/goat-flow@latest quality`.

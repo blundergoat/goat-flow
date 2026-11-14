@@ -49,7 +49,7 @@ const WRITE_SCOPE_RECONCILIATION_PATHS = [
   ".github/copilot-instructions.md",
 ] as const;
 const MILESTONE_TIMING_RULE =
-  "For milestone work, load `goat-plan`; start timing before the first source edit, stop its timer at human gates, resume after release, and finalize it at exit.";
+  "For milestone work, load `goat-plan`; run `goat-flow plans time start <milestone-file> --category <product|proof|other>` before the first source edit, `goat-flow plans time stop <milestone-file>` at human gates, and add `--finalize` at exit. Resume with start after release. The CLI writes measured `Actual`; never invent it.";
 const MILESTONE_CLARITY_RULE =
   "If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.";
 const WRITE_SCOPE_CAPTURE_RULE =
@@ -860,6 +860,24 @@ describe("end-of-run write-scope reconciliation", () => {
       assert.ok(
         instructionText.includes(WRITE_SCOPE_RECONCILIATION_RULE),
         `${relativePath} must reconcile the user's final changed-file view before delivery`,
+      );
+      assert.ok(
+        instructionText.includes(
+          "Preserve other writers' hunks in approved files.",
+        ),
+        `${relativePath} must preserve unrelated changes inside allowed files`,
+      );
+      assert.ok(
+        instructionText.includes(
+          "Diagnose failure causes before calling them external; an untouched consumer may depend on changed code.",
+        ),
+        `${relativePath} must diagnose dependency effects before excluding failures`,
+      );
+      assert.ok(
+        instructionText.includes(
+          "Keep mandatory failures visible; touched checks never replace a failed required gate.",
+        ),
+        `${relativePath} must preserve mandatory verification failures`,
       );
     });
 

@@ -14,14 +14,14 @@ The menu can start the dashboard, copy/update goat-flow system files, generate a
 
 ### `goat-flow audit [path] [flags]`
 
-Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (18 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status. Audit JSON/text also includes an advisory per-agent enforcement matrix; it explains hard, limited, soft, missing, and unknown enforcement evidence without changing pass/fail status.
+Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (19 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status. Audit JSON/text also includes an advisory per-agent enforcement matrix; it explains hard, limited, soft, missing, and unknown enforcement evidence without changing pass/fail status.
 
 | Flag | Description |
 |------|-------------|
 | `--agent <id>` | Filter to one manifest-backed agent id. Run `npx @blundergoat/goat-flow@latest manifest` to inspect the current registry. |
-| `--harness` | Add AI Harness Completeness scope (18 checks, installed/not-installed per concern) |
+| `--harness` | Add AI Harness Completeness scope (19 checks, classified by concern and impact) |
 | `--check-drift` | Add managed-artifact and peer-instruction drift detection |
-| `--check-content` | Add selected Markdown, framework-claim and release-snapshot checks |
+| `--check-content` | Add selected Markdown, instruction-rule, retired-command, framework-claim and release-snapshot checks |
 | `--trusted-target` | Execute the selected checkout's configured deny-hook handler and managed script for runtime proof. Omit this flag for static inspection. |
 | `--untrusted-target` | Deprecated compatibility alias for the static, non-executing default. It remains accepted throughout v1.16.x and will not be removed before v1.17.0. It cannot be combined with `--trusted-target`. |
 | `--format <type>` | Output: json, text, markdown, sarif (default: auto) |
@@ -64,7 +64,7 @@ npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness
 npx @blundergoat/goat-flow@latest quality . --agent codex          # Quality prompt for Codex
 ```
 
-The saver derives the date/time and a random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
+The saver derives the date/time and a random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`. Every mode also includes up to five serious claims from each other agent's latest valid same-mode report, without scores or detail text, and asks for a quiescent checkout with any snapshot drift recorded as a grounding limit.
 
 The CLI command composes the prompt with fresh, static audit context by default; add `--trusted-target` only after confirming the selected checkout may execute local hook code. The dashboard
 Quality page may use cached audit enrichment for passive page loads, but its
@@ -178,6 +178,10 @@ npx @blundergoat/goat-flow@latest quality validate .goat-flow/logs/quality/2026-
 ### `goat-flow quality save <project>`
 
 Persist one current quality report supplied as JSON on stdin. The command strictly accepts the report shape in memory, scrubs accepted string values, revalidates the report, verifies its project, current goat-flow version and mode-specific rubric id, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. Current reports include `assessment_context` for run comparability, `score_rationale` with evidence and deduction for all eight score axes, and a required `refuted_candidates` array that records the suspected findings the assessor ruled out. The array may be empty. Historical reports that predate these fields remain loadable through validate, history, and diff; a missing legacy refutation ledger is exposed as `[]`. The saver rejects caller-selected output paths and redirected report directories.
+
+Keep the complete report in memory until the saver prints `OK <absolute-report-path>`; do not trim findings to fit a transport limit. A tool or hook rejection before the saver runs means that attempt saved nothing. Do not repeat the unchanged rejected command or stage a raw file. Use a supported transport to a version-compatible saver, or report `persist-skipped: transport-unavailable`. If the saver reports a JSON, schema or ownership error, correct that error while retaining every finding and retry. For other save failures, report the error and keep the report unsaved until a supported retry succeeds.
+
+Enforced dashboard sessions retain their separate staged-draft contract: write the one permitted draft with the file tool and wait for the dashboard's receipt. Do not switch those sessions to a Bash saver or another destination.
 
 Each score axis accepts an integer from 0 through 25. Each setup/system total must equal its four axes and remains out of 100. Intermediate integers refine the existing rating bands; they do not imply one-point measurement accuracy.
 

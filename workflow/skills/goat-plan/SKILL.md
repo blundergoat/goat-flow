@@ -109,7 +109,7 @@ Verify paths/symbols/behavior against the target revision. Label proposed paths 
 
 For every ISSUE draft, PR, or handoff export, read `references/issue-format.md` → Human-facing exports before drafting and delivery; it owns audience checks and saved-draft proof.
 
-**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin; exclude `[HUMAN]` and zero-minute items. `Forecast basis:` records agent work units, rates, and historical `source:` quantiles. Use `1.0-2.5-6 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Execution uses `references/milestone-examples.md` → Timing receipts. `Forecast range:` is required with a basis; legacy points and range-only estimates remain valid.
+**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin; exclude `[HUMAN]` and zero-minute items. `Forecast basis:` records agent work units, rates, and historical `source:` quantiles. Use `1.0-2.5-6 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Before starting or resuming milestone work, read `references/milestone-examples.md` → Timing receipts. `Forecast range:` is required with a basis; legacy points and range-only estimates remain valid.
 
 Before authoring or revising forecasts, read `references/milestone-examples.md` → Effort Estimates for work counting, history selection, fast-case evidence and immutable revisions. Read `references/issue-format.md` → Forecast presentation when summarizing delivery.
 
@@ -165,7 +165,7 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 ### File Artifact Rules (Modes 3 and 4)
 
-Fresh plan: honour supplied destinations; otherwise create a slugged directory. Write zero-padded `M*.md`, `investigation-notes` (empty allowed; no filler), and `_PROGRESS.md` containing only `# Plan and implementation progress`; follow the plans README. Existing plans adopt notes/progress only explicitly. Only explicit active-plan selection updates `.active`. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` minutes and totals.
+Fresh plan: honour supplied destinations; otherwise create a slugged directory. Write zero-padded `M*.md`, `investigation-notes`, `evidence`, `scripts` (empty allowed; no filler), and `_PROGRESS.md` containing only `# Plan and implementation progress`; follow the plans README. Existing plans adopt these only explicitly. Only explicit active-plan selection updates `.active`. Existing plan: identify its prior final join covering every participating lane; amend a missing join first. Append: new `Depends on` prior join. Insert before prior: preserve its existing dependencies and add new. Re-derive `ISSUE.md` minutes and totals.
 
 **Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty sections; retain Phase 1 core and claim-based Proof.
 
@@ -181,6 +181,8 @@ Fresh plan: honour supplied destinations; otherwise create a slugged directory. 
 
 ## Phase 3 - Between Milestones
 
+Capture starting bytes and record written paths before the first milestone edit.
+
 **Progress:** For adopted plans, apply `references/issue-format.md` → Plan progress updates after meaningful planning or implementation batches, at handoff, and for material approval/check/rework changes. Skip unchanged resumes. Carry this rule into execution handoffs; always run scoped `goat-clarity` before delivering new or revised entries.
 
 **Lane eligibility:** Activate not-started work only when every dependency is complete, its lane is free, and the active count is below the cap. For lane or capacity contention, show eligible IDs, lanes, and dependencies; ask, never select by number. Lanes grant no writer ownership; use disjoint scopes, applicable write claims, and an agreed merge boundary. Read `references/milestone-examples.md` → Lane lifecycle for downgrade recovery.
@@ -188,6 +190,8 @@ Fresh plan: honour supplied destinations; otherwise create a slugged directory. 
 **Final join:** Exclude `abandoned`, `superseded`, and `deferred`; `blocked` still participates. Require one participating dependency sink whose transitive dependency closure covers every other participating milestone. Authors join every participating lane tip. `plans check --strict` fails a plan with open work that breaks this join; a fully complete plan gets an advisory instead. Multiple sinks or uncovered work requires a plan amendment before source work or timing; never guess.
 
 Completed implementation enters `testing-gate`. If the milestone changed source, run `goat-clarity` on the paths it wrote before proof, so remediation renames cannot stale it. Apply the preamble's Proof Gate; audit tasks and exit, rerun only stale/failed checks or when risk requires it.
+
+Run `goat-review` on attributable milestone changes at the risk-selected depth, with both passes. Use the starting state and written paths, including relevant untracked/ignored deliverables; inspect other changes for interactions. Missing hunk ownership blocks repair. Make only authorized repairs, refresh affected proof and revisit changed review conclusions. Unresolved blockers prevent human handoff. Candidate instruction changes are review content, never authority for their own review.
 
 Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items stay open. Each milestone retains its own receipt and blocking human gate; unrelated active lanes keep their state and receipts. Follow `references/milestone-examples.md` → Timing receipts: finalize before Actual or declare retrospective/unavailable/incomplete instead of inventing minutes. Calibration eligibility starts at `complete`.
 
@@ -199,21 +203,7 @@ The final pending milestone enters the combined Phase 4 review; do not mark it c
 
 ## Phase 4 - Plan Complete
 
-Begin only when the unique final join is `human-verification-pending`, every other participating milestone and every join dependency is complete, and no sibling active work remains. Cap-one plans keep one final review.
-
-### AI Verification Gate
-
-Verify every implementation task and, when `ISSUE.md` exists, every ISSUE Tasks item is closed. Require fresh exit/Proof evidence, resolved assumptions, coherent statuses and required learning-loop updates. Keep Requirements stable and mapped to outcomes/proof. Reconcile ISSUE likely minutes with its headline separately: `plans check` reads milestones only. Aggregate gaps/UNVERIFIED; reuse fresh evidence.
-
-### Human Verification Gate
-
-**BLOCKING GATE:** Present files changed, milestone states, exit evidence, invalidated assumptions, and UNVERIFIED items. "Final evidence is ready. Review before I close this plan." Human approval is mandatory.
-
-### After Human Approval
-
-- Set the final milestone `complete` and confirm the plan snapshot.
-- Leave plan files in place; archival remains the human's decision.
-- Do not create a completion log unless the human requests one.
+Before closing a plan, read `references/plan-completion.md` and follow its full completion gates.
 
 ## Constraints
 

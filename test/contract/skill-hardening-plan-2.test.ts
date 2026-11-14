@@ -16,6 +16,48 @@ import {
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: goat-plan (2/2)", () => {
+  it("names the next permitted action and current proof at handoff", () => {
+    assertForEachTarget(
+      canonicalSkillReferencePaths("goat-plan", "references/issue-format.md"),
+      (referencePath) => {
+        const guidance = readProjectFile(referencePath);
+        assert.match(
+          guidance,
+          /next permitted action, target and current proof/u,
+        );
+        assert.match(
+          guidance,
+          /resumable work, verified-awaiting-acceptance and completion/u,
+        );
+        assert.match(guidance, /Unresolved review blockers prevent handoff/u);
+      },
+    );
+  });
+
+  it("requires attributable milestone review before the human gate", () => {
+    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
+      const lifecycle = readMarkdownSection(
+        skillPath,
+        "Phase 3 - Between Milestones",
+      );
+      assert.match(lifecycle, /goat-review/u, skillPath);
+      assert.match(
+        lifecycle,
+        /Capture starting bytes and record written paths before the first milestone edit/u,
+        skillPath,
+      );
+      assert.match(lifecycle, /both passes|two-pass/iu, skillPath);
+      assert.match(lifecycle, /starting (?:state|bytes)/iu, skillPath);
+      assert.match(lifecycle, /untracked.*ignored/iu, skillPath);
+      assert.match(lifecycle, /unresolved blockers/iu, skillPath);
+      assert.match(
+        lifecycle,
+        /authorized repairs|repairs.*authority/iu,
+        skillPath,
+      );
+    });
+  });
+
   it("uses plan mode selection as the shared depth decision", () => {
     assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
       assert.match(
@@ -635,5 +677,72 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         playbookPath,
       );
     }
+  });
+
+  it("defines one new-plan layout with metadata only for cited runs", () => {
+    const skill = readProjectFile("workflow/skills/goat-plan/SKILL.md");
+    const readme = readProjectFile("workflow/setup/reference/plans-readme.md");
+    assert.match(
+      skill,
+      /Fresh plan:.*`investigation-notes`.*`evidence`.*`scripts`.*`_PROGRESS\.md`.*adopt these only explicitly/u,
+    );
+    assert.doesNotMatch(readme, /New Small and Standard plans/u);
+    assert.match(readme, /Existing plans adopt.*only on explicit request/u);
+    assert.match(readme, /Note.*What it answers.*Read when/u);
+    assert.match(readme, /notes.*stable.*dated.*progress/is);
+    assert.match(
+      readme,
+      /another plan.*link.*copy.*source plan is being deleted/is,
+    );
+    assert.match(readme, /subdirectory.*own README/isu);
+    assert.match(readme, /<milestone>-<purpose>-<YYYYMMDDTHHMMZ>/u);
+    assert.match(readme, /cited.*Proof.*Results.*meta\.json/isu);
+    assert.match(
+      readme,
+      /milestone.*purpose.*commit.*started.*finished.*verdict/u,
+    );
+    assert.match(readme, /Scratch.*not cited.*no metadata/isu);
+    assert.match(readme, /outputs.*not.*input|results.*not.*input/isu);
+    assert.match(readme, /narrative Markdown.*investigation-notes/isu);
+    assert.match(readme, /header.*purpose.*task.*usage.*output/isu);
+    assert.match(readme, /after the plan.*scripts\/.*test\/.*milestone/isu);
+  });
+
+  it("attributes timed progress entries to their reported work without backfilling", () => {
+    const reference = readProjectFile(
+      "workflow/skills/goat-plan/references/issue-format.md",
+    );
+    const progress = reference.slice(
+      reference.indexOf("### Plan progress updates"),
+      reference.indexOf("The headings below"),
+    );
+    const readme = readProjectFile("workflow/setup/reference/plans-readme.md");
+    assert.match(progress, /## YYYY-MM-DD HH:MM \+HH:MM: <short subject>/u);
+    assert.match(progress, /date command/u);
+    assert.match(
+      progress,
+      /outcome notes.*`Agent time for this update:`.*`Checks:`.*`Next:`/su,
+    );
+    assert.match(
+      progress,
+      /underlying work.*investigation.*implementation.*verification.*administration/su,
+    );
+    assert.match(progress, /not.*writing.*summary/isu);
+    assert.match(progress, /recorded.*non-overlapping.*intervals.*once/su);
+    assert.match(
+      progress,
+      /Exclude.*approval waits.*paused.*idle.*unrelated/su,
+    );
+    assert.match(progress, /delegated.*separate/isu);
+    assert.match(progress, /unmeasured.*missing.*mixed.*coverage/su);
+    assert.match(progress, /Never infer.*timestamps.*gaps.*estimates/su);
+    assert.match(
+      progress,
+      /without requiring.*level tokens.*owner tags.*`Milestone:`/su,
+    );
+    assert.match(progress, /Preserve earlier entries verbatim/u);
+    assert.match(progress, /do not backfill/u);
+    assert.match(progress, /Preserve literal.*checks/isu);
+    assert.match(readme, /Agent time for this update:/u);
   });
 });

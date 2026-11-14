@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-11-13
+last_reviewed: 2026-11-14
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Parser-specific coverage and producer shapes are [test-fixtures-parsers.md](test-fixtures-parsers.md). Runner behaviour is [test-execution-environment.md](test-execution-environment.md); fixtures for skill-evaluation trials are [test-fixtures-evaluators.md](test-fixtures-evaluators.md).
@@ -155,9 +155,11 @@ last_reviewed: 2026-11-13
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 35 | **Latest occurrence:** 2026-11-13
+**Incident count:** 36 | **Latest occurrence:** 2026-11-14
 
-**Prevention:** Create every file, global and transitive helper an assertion reaches. Verify the unchanged strict baseline and each substituted input; keep unrelated values valid. Temporary projects must not borrow checkout state. Exercise the actual failure predicate, not arbitrary opaque bytes. Stats fixtures cite their own files: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+**Prevention:** Create every fixture file, global and transitive helper. Check strict baselines and substitutions; keep other inputs valid and never borrow checkout state. Exercise the real failure predicate. Stats: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+
+**Recurrence 2026-11-14:** M54 trials lacked required plan sections. Validate fixtures before delegation. Evidence: `src/cli/plans-check.ts` (search: `missing scope`).
 
 **Recurrence 2026-11-13 (live checkout):** An empty-project audit test used this repository and failed when its lessons aged. It now creates its own empty project. Evidence: `test/integration/audit-quality.test.ts` (search: `goat-flow-empty-learning-loop-`).
 

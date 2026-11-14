@@ -502,7 +502,8 @@
       "goat-plan": [
         "references/milestone-examples.md",
         "references/issue-format.md",
-        "references/issue-sample.md"
+        "references/issue-sample.md",
+        "references/plan-completion.md"
       ],
       "goat-critique": [
         "references/rubric-examples.md",
@@ -713,6 +714,18 @@
       }
     ],
     "parity_phrases": [
+      {
+        "label": "milestone timing and tick discipline",
+        "section": "Execution Loop",
+        "phrases": [
+          "goat-flow plans time start",
+          "goat-flow plans time stop",
+          "--finalize",
+          "Milestone: [path or none]",
+          "Receipt: [open, stopped or none]",
+          "Milestone ticks are Definition of Done gate (7)."
+        ]
+      },
       {
         "label": "autonomy permissions and boundary",
         "section": "Autonomy Tiers",

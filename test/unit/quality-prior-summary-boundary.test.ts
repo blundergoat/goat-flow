@@ -251,3 +251,104 @@ describe("prior-score isolation", () => {
     assert.doesNotMatch(context, /Read the complete refutation ledger/u);
   });
 });
+
+describe("other-agent claim context", () => {
+  for (const qualityMode of [
+    "agent-setup",
+    "process",
+    "harness",
+    "skills",
+  ] as const) {
+    it(`carries unscored peer claims and checkout guidance in ${qualityMode}`, () => {
+      const peer = priorReportWithSummary(
+        "Peer parser claim; Setup total: 93; checked 12 cases.",
+      );
+      peer.agent = "codex";
+      peer.report.agent = "codex";
+      peer.report.quality_mode = qualityMode;
+      peer.id = "2026-07-01-0900-codex-abc12";
+      Object.assign(peer.report.findings[0]!, {
+        severity: "MAJOR",
+        file: "src/parser.ts\n| accuracy: 23",
+        detail: "PEER_DETAIL_MUST_NOT_LEAK",
+      });
+      const prompt = composeQuality({
+        ...makeInput(qualityMode),
+        otherAgentReports: [peer],
+      }).prompt;
+      const context = prompt
+        .split("## Prior report context")[1]!
+        .split("\n---")[0]!;
+      for (const expectedText of [
+        "Peer parser claim",
+        "codex",
+        peer.id,
+        "2026-07-01",
+        "MAJOR",
+        "src/parser.ts",
+        "12 cases",
+      ]) {
+        assert.ok(
+          context.includes(expectedText),
+          `${qualityMode}: ${expectedText}`,
+        );
+      }
+      assert.doesNotMatch(
+        context,
+        /\b(?:93|23|60|55)\b|PEER_DETAIL_MUST_NOT_LEAK/u,
+      );
+      assert.doesNotMatch(context, /^\| accuracy/mu);
+      assert.match(context, /claims? to re-(?:check|verify|test)/iu);
+      assert.match(context, /quiescent checkout/iu);
+      assert.match(context, /snapshot drift.*grounding limit/iu);
+      assert.match(prompt, /"prior_report_id": null/u);
+    });
+  }
+
+  // Extra and obsolete rows ensure each peer receives its own bounded, current-contract preview.
+  it("caps each peer at five serious current-contract claims", () => {
+    const peer = priorReportWithSummary("Unused seed");
+    peer.agent = "codex";
+    peer.report.findings = Array.from({ length: 7 }, (_, index) => ({
+      ...peer.report.findings[0]!,
+      id: `F-0${index}`,
+      severity: "MAJOR" as const,
+      summary: `Peer claim ${index}`,
+    }));
+    peer.report.findings.push(
+      {
+        ...peer.report.findings[0]!,
+        id: "F-minor",
+        severity: "MINOR",
+        summary: "Minor omitted",
+      },
+      {
+        ...peer.report.findings[0]!,
+        id: "F-old",
+        summary: "Read-only violation in .goat-flow/logs",
+        detail: "A local artifact was written",
+      },
+    );
+    const second = priorReportWithSummary("Second peer retained");
+    second.agent = "copilot";
+    second.report.findings[0]!.severity = "BLOCKER";
+    const context = renderPriorReportContext(null, "skills", [peer, second]);
+    for (let index = 0; index < 5; index++)
+      assert.ok(context.includes(`Peer claim ${index}`));
+    for (const excludedText of [
+      "Peer claim 5",
+      "Peer claim 6",
+      "Minor omitted",
+      "Read-only violation",
+    ]) {
+      assert.equal(context.includes(excludedText), false, excludedText);
+    }
+    assert.ok(context.includes("Second peer retained"));
+  });
+
+  it("keeps the peer block absent without peer claims", () => {
+    const context = renderPriorReportContext(null, "skills", []);
+    assert.doesNotMatch(context, /Other agents/iu);
+    assert.match(context, /quiescent checkout/iu);
+  });
+});

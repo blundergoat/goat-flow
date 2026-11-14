@@ -58,7 +58,7 @@ describe("content-audit coverage", () => {
       assert.equal(content.status, scenario.status);
       assert.equal(content.warnings, scenario.warnings);
       assert.equal(content.infos, scenario.infos);
-      assert.equal(content.filesScanned, 1);
+      assert.equal(content.filesScanned, 2);
       assertExists(content.coverage);
       assert.equal(content.coverage.scanners.length, 3);
       assert.match(

@@ -195,7 +195,9 @@ export function composeFocusedQuality(
     "- Keep this assessment read-only unless the user explicitly asks for edits.",
   );
   lines.push("");
-  lines.push(renderPriorReportContext(priorReport, qualityMode));
+  lines.push(
+    renderPriorReportContext(priorReport, qualityMode, input.otherAgentReports),
+  );
   lines.push("");
   const learningLoopPromptBlock = renderBoundedLearningLoopContext(
     input.sharedFacts,

@@ -207,6 +207,10 @@ Never emit a whole field for `n/a` except failed PR ingestion; subvalues may.
 - **Ship Verdict (diff/PR or release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. Ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` lowers one rung.
 - **Zero-findings HALT:** Name checked surfaces and why none surfaced.
 
+## Return to a milestone
+
+Standalone review remains report-only. An invoking milestone may resume already-authorized implementation after this review. Findings grant no new write or boundary authority; the milestone owns authorized repairs, affected rechecks and revisiting changed conclusions.
+
 ## Output Format
 
 Emit `## Top 5 Risks` only above five surfaced findings. Render only populated `Systemic Patterns`, `Spec Drift`, `Pre-existing Nearby`, `Pre-existing Issues`, and `Breaking Changes`. `What's Good` needs substantive evidence, never generic praise. Clean PR: `references/examples.md` (search: `Clean review compact surface`).

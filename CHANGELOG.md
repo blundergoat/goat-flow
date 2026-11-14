@@ -2,7 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- **Instruction audit** - Flags ambiguous tick reminders, agent Git directives and retired commands; missing milestone steps affect scores only.
+
 ### Changed
+
+- **Quality save recovery** - Prompts retain every finding after a rejected save and distinguish transport rejection from saver validation errors.
+
+- **Quality prompts** - Show other agents' serious claims for independent re-checking, without their scores, and request a quiescent checkout.
+
+- **Milestone reviews** - Milestone work runs review before acceptance; repairs keep their approved scope and refresh affected evidence.
+
+- **Milestone commands** - Instructions name timing and tick steps, preserve other writers' edits and require causal failure diagnosis.
+
+- **Plan layout and progress** - New plans separate notes, evidence and scripts; progress entries show timestamps and work time. Existing plans opt in.
 
 - **Windows/WSL hook evidence** - Reviewed captures of the current hook runtime cover all 18 delivery rows, including Claude Code 2.1.317 and Codex CLI 0.167.0 on both hosts and helper-free Antigravity 1.4.8 on Windows. Support gates are unchanged.
 - **Hook policy checks no longer use the frozen Bash reference** - Release checks run the installed Node policy hooks against the shipped corpus on Linux, macOS, Windows and WSL; installs are unaffected.
@@ -12,6 +26,10 @@
 
 - **Issue briefs show likely minutes and per-task benefits** - Each `ISSUE.md` task ends in one likely figure, a total line and the headline sum them in hours, two new sections say what each task gives the user before and after the change, and the worked sample ships beside the format.
 - **Commit guide defines each type and names more weak words** - The shipped `git-commit-message.md` says when each of the ten types applies, adds *align*, *adjust*, *revise* and *extend* to the weak verbs, rejects work-category nouns such as *coverage*, and shows a body that lists files beside one that states the defect; new installs receive it and existing guides are left alone.
+
+### Deprecated
+
+- **Prompts and Workspace** - [Share how you use these dashboard pages](https://github.com/blundergoat/goat-flow/issues/70) before a removal decision.
 
 ### Removed
 

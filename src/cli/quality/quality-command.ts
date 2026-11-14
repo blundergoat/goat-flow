@@ -912,7 +912,8 @@ async function handleQualityPromptSubcommand(
   const { createFS } = await import("../facts/fs.js");
   const { runAudit } = await import("../audit/audit.js");
   const { composeQuality } = await import("../prompt/compose-quality.js");
-  const { findLatestQualityReport } = await import("./history.js");
+  const { findLatestQualityReport, findLatestOtherAgentQualityReports } =
+    await import("./history.js");
   const { loadConfig } = await import("../config/reader.js");
   const { extractSharedFacts } = await import("../facts/shared/index.js");
 
@@ -934,7 +935,13 @@ async function handleQualityPromptSubcommand(
   const qualityMode = options.qualityMode ?? "agent-setup";
   const { entry: priorReport, warnings: historyWarnings } =
     findLatestQualityReport(options.projectPath, options.agent, qualityMode);
-  for (const warning of historyWarnings) {
+  const { entries: otherAgentReports, warnings: peerWarnings } =
+    findLatestOtherAgentQualityReports(
+      options.projectPath,
+      options.agent,
+      qualityMode,
+    );
+  for (const warning of [...historyWarnings, ...peerWarnings]) {
     console.error(warning);
   }
   const sharedFacts = extractSharedFacts(
@@ -947,6 +954,7 @@ async function handleQualityPromptSubcommand(
     projectPath: options.projectPath,
     auditReport,
     priorReport,
+    otherAgentReports,
     qualityMode,
     sharedFacts,
   });

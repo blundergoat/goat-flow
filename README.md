@@ -57,8 +57,8 @@ The local dashboard keeps project and runner selection available while you move 
 |---|---|
 | **Home** | Compare setup and harness results across supported agents, then follow the highest-priority repair |
 | **Setup** | Detect the project, install deterministic files, and generate project-specific setup prompts |
-| **Prompts** | Search 24 visible presets across critique, debug, plan, QA, review, and security |
-| **Workspace** | Run up to 10 PTY-backed terminal sessions and attach images to prompts |
+| **Prompts** ([deprecated](https://github.com/blundergoat/goat-flow/issues/70)) | Search 24 visible presets across critique, debug, plan, QA, review, and security |
+| **Workspace** ([deprecated](https://github.com/blundergoat/goat-flow/issues/70)) | Run up to 10 PTY-backed terminal sessions and attach images to prompts |
 | **Plans** | Inspect local milestones, checkbox progress, and the active-plan pointer |
 | **Projects** | Register projects, compare audit status, and switch the dashboard target |
 | **Skills** | Audit installed skills or evaluate draft Markdown without installing it |

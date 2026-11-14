@@ -494,6 +494,7 @@ function scanLine(
   // Current guidance receives vague-word warnings; incident prose omits them.
   if (mode === "full") {
     applyVagueTerms(line, lineNumber, path, findings);
+    scanInstructionRules(line, lineNumber, path, findings);
   }
   applyPatternRules(GENERIC_INSTRUCTIONS, line, lineNumber, path, findings);
   applyPatternRules(NON_ACTIONABLE, line, lineNumber, path, findings);
@@ -511,6 +512,53 @@ function scanLine(
   // Setup references can describe retired loops as migration guidance; other surfaces receive obsolete-loop warnings.
   if (!path.startsWith("workflow/setup/")) {
     applyPatternRules(LEGACY_EXECUTION_LOOP, line, lineNumber, path, findings);
+  }
+}
+
+/** Warn on high-confidence instruction defects, preserving prohibitions and ordinary user documentation. */
+function scanInstructionRules(
+  line: string,
+  lineNumber: number,
+  path: string,
+  findings: ContentFinding[],
+): void {
+  const instructionSurface =
+    /(?:^|\/)(?:AGENTS(?:\.override)?|CLAUDE)\.md$/u.test(path) ||
+    path === ".github/copilot-instructions.md" ||
+    path.startsWith(".github/instructions/") ||
+    path.startsWith("workflow/setup/agents/") ||
+    path === "workflow/setup/reference/execution-loop.md";
+  if (!instructionSurface) return;
+  if (
+    /\b(?:must|remember to|do not forget to)\s+tick\b/iu.test(line) &&
+    !/prose[- ]only|not (?:hook[- ])?enforced|plans\s+check|enforcement limit/iu.test(
+      line,
+    )
+  ) {
+    findings.push({
+      severity: "warning",
+      rule: "reminder-without-enforcement",
+      path,
+      line: lineNumber,
+      message: "Milestone tick reminder does not name its enforcement limit.",
+      suggestion:
+        "Name the handoff check and explain that earlier ticking is a prose obligation, not hook-enforced.",
+    });
+  }
+  if (
+    /^\s*(?:[-*]\s+|\d+[.)]\s+)?(?:please\s+)?(?:run\s+)?`?(?:git\s+(?:commit|push|stash)\b|commit\s+or\s+stash\b)/iu.test(
+      line,
+    )
+  ) {
+    findings.push({
+      severity: "warning",
+      rule: "agent-git-mutation-directive",
+      path,
+      line: lineNumber,
+      message: "Instruction directs the agent to mutate Git state.",
+      suggestion:
+        "Keep the agent's work in the working tree and leave commit, push and stash decisions to the user.",
+    });
   }
 }
 

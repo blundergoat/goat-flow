@@ -723,6 +723,22 @@ describe("quality report contract: CLI surfaces", () => {
   for (const qualityMode of QUALITY_MODES) {
     it(`redacts completed ${qualityMode} JSON before it reaches disk`, () => {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
+      for (const guidance of [
+        "Preserve the complete report in memory",
+        "never trim findings to make a save fit",
+        "If a tool or hook rejects the command before the saver runs",
+        "Do not repeat an unchanged rejected command",
+        "supported transport to a compatible saver",
+        "persist-skipped: transport-unavailable",
+        "If the saver runs and reports a JSON, schema or ownership error",
+        "retain every finding while correcting that error",
+        "For other save failures, report the error and keep the report unsaved",
+      ]) {
+        assert.ok(
+          prompt.includes(guidance),
+          `${qualityMode}: missing ${guidance}`,
+        );
+      }
       const writeBlock = extractReportWriteBlock(prompt);
       assert.match(
         writeBlock,

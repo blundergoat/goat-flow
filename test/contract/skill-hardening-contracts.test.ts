@@ -179,6 +179,7 @@ describe("ADR-023 word budget tiers", () => {
         "references/milestone-examples.md",
         "references/issue-format.md",
         "references/issue-sample.md",
+        "references/plan-completion.md",
       ].flatMap((referencePath) =>
         canonicalSkillReferencePaths("goat-plan", referencePath),
       ),

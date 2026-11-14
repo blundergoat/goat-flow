@@ -51,6 +51,8 @@ Multi-project browser. Lists immediate non-hidden folders beside the launch proj
 
 ### Prompts
 
+Deprecated: this page may be removed. [Share how you use it](https://github.com/blundergoat/goat-flow/issues/70) before a removal decision.
+
 Dedicated prompt library. Two-pane layout: left pane is the list with search, category filters, favorites strip, and grouped-by-category rendering; right pane is the full prompt preview with search-match highlighting. Primary actions are `Copy`, `Launch in new terminal`, and `Send to active terminal`. The last one is project-scoped and only appears when the current project has at least one active session; multiple sessions show a picker. Keyboard: `/` focuses search, `↑` / `↓` navigate, `Enter` launches the selected prompt, `Esc` clears the search or selection.
 
 Good default presets to start with:
@@ -64,6 +66,8 @@ Good default presets to start with:
 - `Security Assessment` runs a full `/goat-security` threat assessment across the repo, runtime surface, and dependencies.
 
 ### Workspace
+
+Deprecated: this page may be removed. [Share how you use it](https://github.com/blundergoat/goat-flow/issues/70) before a removal decision.
 
 Split layout focused on terminal work. The left **Sessions rail** lists all running terminal sessions (up to 10) grouped by current project first then other projects, with single-click session switching, runner/age/idle/detached indicators, inline-confirm `End`, an `End all` footer, and a `+ New session` shortcut that jumps to Prompts. The right pane is the active xterm.js terminal. The rail uses `x-transition` on collapse/expand, supports collapsed-state tooltips, and exposes per-agent class hooks plus an active-session pip with status tone for accessibility. Drag and drop images onto the terminal pane to attach them to the next prompt (uploads go through `/api/terminal/:id/upload-image`).
 

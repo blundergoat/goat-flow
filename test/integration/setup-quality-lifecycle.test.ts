@@ -165,6 +165,9 @@ Name the selected target and allowed files.
 ### ACT
 
 Make only approved target changes.
+Run \`goat-flow plans time start <milestone-file> --category product\` before editing.
+Run \`goat-flow plans time stop <milestone-file>\` at human gates and with \`--finalize\` at exit.
+Tick completed milestone tasks \`- [x]\` before starting the next task.
 
 ### VERIFY
 

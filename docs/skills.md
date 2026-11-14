@@ -195,7 +195,7 @@ flowchart TD
     P1 --> P2["Phase 2: Emit the proportional plan\nor report read-only analysis"]
     P2 -->|"Plan/design only"| Planned["Stop after plan handoff"]
     P2 -->|"return-to-implement"| ACT["Ordinary ACT implementation"]
-    ACT --> P3["Phase 3: Fresh proof\nHuman verification gate"]
+    ACT --> P3["Phase 3: Clarity, proof, review and repair\nHuman verification gate"]
     P3 -->|"BLOCKING GATE"| Next{"Next milestone?"}
     Next -->|Yes| P3
     Next -->|No| P4["Phase 4: Final proof\nHuman completion gate"]
@@ -213,6 +213,8 @@ flowchart TD
 **Experimental history:** `contextual-v1` remains opt-in. It matches registered earlier measurements by known work state, scope kind and rubric; sparse or missing context retains the selected-plan numerical fallback. Broad pooling is diagnostic, and short valid receipts remain valid without establishing fresh-work comparability. Behavior tests and saved context do not qualify default promotion; prospective accuracy evidence is still required.
 
 **Execution and recovery:** Authorized build/change requests may return to ordinary ACT without another implementation-approval pause. Every milestone still stops on invalidated assumptions, kill criteria, changed scope, or conflicting evidence. Fresh proof records actual effort before the blocking human gate. Reconciliation without requested edits remains read-only, and plan state remains local workflow context. Naming a creation destination or editing another plan leaves a valid active marker unchanged; explicitly selecting a fresh active plan permits the switch.
+
+**Milestone review:** Capture the starting state and owned changes before editing. After scoped clarity and required checks, run both review passes at the selected risk depth. Make only authorized repairs, refresh affected proof and revisit changed conclusions before human handoff. Standalone review remains report-only; progress names the next permitted action and current proof.
 
 **Completion:** Final closure requires current evidence and human approval. `/goat-plan` never infers approval, silently weakens requirements, auto-runs `/goat-critique`, or writes self-deletion instructions.
 

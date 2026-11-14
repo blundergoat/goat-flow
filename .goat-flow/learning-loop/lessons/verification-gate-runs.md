@@ -50,7 +50,7 @@ last_reviewed: 2026-11-13
 **Severity:** CORRECTNESS
 **Decision changed:** Stop dependent tool calls at the first failed admission or patch, then inspect every target; neither a patch nor an orchestrated batch is atomic.
 **Trigger phase:** ACT
-**Incident count:** 8 | **Latest occurrence:** 2026-11-13
+**Incident count:** 9 | **Latest occurrence:** 2026-11-14
 **Merged:** 2026-10-11 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split to recover its headroom.
 
 **Prevention:** For dependent tool calls, check each exit status and throw or exit before the next mutation; awaiting a call does not make a nonzero result fatal. Prefer one file, or one independently recoverable hunk group, per patch when source is changing concurrently. After any patch failure, inspect timestamps and exact semantic anchors across every target before retrying, then build the retry from current bytes. The affected artifacts were gitignored milestone files, so they are not cited as durable anchors; the evidence was the failed patch result and the same-session target-by-target read.
@@ -74,6 +74,8 @@ last_reviewed: 2026-11-13
 
 
 **Recurrence 2026-11-13:** A rename script changed six files, then stopped because three HTML filters contained four references rather than the asserted three. The orchestration still marked the task complete and ran a build. Reading the return code and the template exposed the partial state; the remaining template rename was applied and the build repeated. Count occurrences separately from expressions, and stop dependent bookkeeping when a write command fails. Evidence: `src/dashboard/views/prompts.html` (search: `cat.id === 'all' ?`).
+
+**Recurrence 2026-11-14:** A milestone edit helper treated a semicolon inside a quoted timing rule as the declaration boundary, leaving invalid TypeScript. Later guards rejected an incorrect fixture match count and a changelog edit that matched historical headings. The guards stopped those writes; recovery used the complete declaration, exact current matches and the bounded Unreleased section. Read syntax boundaries before replacement, check each result before dependent work, and split a rejected batch into independently checked edits. Evidence: `test/contract/command-phrases.test.ts` (search: `MILESTONE_TIMING_RULE`) and `CHANGELOG.md` (search: `## Unreleased`).
 
 ## Lesson: Preserve repository-owned verification flags
 

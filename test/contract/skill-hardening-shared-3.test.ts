@@ -6,6 +6,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { AGENT_CHECKS, HARNESS_CHECKS, SETUP_CHECKS } from "../src.js";
 import {
   assertForEachTarget,
   canonicalSkillPaths,
@@ -16,6 +17,22 @@ import {
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: shared surfaces (3/3)", () => {
+  it("keeps post-review repairs and refreshed proof owned by the milestone", () => {
+    for (const referencePath of [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ]) {
+      const guidance = readMarkdownSection(
+        referencePath,
+        "Milestone Lifecycle (goat-plan)",
+      );
+      assert.match(guidance, /invoking milestone owns authorized repairs/u);
+      assert.match(guidance, /inputs remain valid/u);
+      assert.match(guidance, /refresh affected evidence/u);
+      assert.match(guidance, /revisit changed review conclusions/u);
+    }
+  });
+
   it("requires an evidence budget before optional orchestration", () => {
     const preamblePaths = [
       "workflow/skills/reference/skill-preamble.md",
@@ -515,9 +532,14 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
 
   it("explains audit execution rows versus stable check ids", () => {
     const auditGuide = readProjectFile("docs/audit-checks.md");
+    const checks = [...SETUP_CHECKS, ...AGENT_CHECKS, ...HARNESS_CHECKS];
+    const uniqueIds = new Set(checks.map((check) => check.id)).size;
     assert.match(
       auditGuide,
-      /38 executed check rows and 37 unique stable check ids/,
+      new RegExp(
+        `${checks.length} executed check rows and ${uniqueIds} unique stable check ids`,
+        "u",
+      ),
     );
     assert.match(
       auditGuide,

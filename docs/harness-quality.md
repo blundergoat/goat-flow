@@ -78,7 +78,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 ### 4. Recovery
 
-**Audit checks:** plans directory exists, session logs directory exists.
+**Audit checks:** plans directory exists, session logs directory exists, and present instruction files name the milestone start, stop/finalize commands and immediate tick rule. The command check is score-only and cannot establish that the agent followed the instructions.
 
 **Quality evaluates:**
 - Are recovery instructions clear about optional task files versus session logs?

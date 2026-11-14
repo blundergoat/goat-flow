@@ -34,7 +34,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
 
       assert.match(
         breakdown,
-        /Execution uses `references\/milestone-examples\.md` → Timing receipts/u,
+        /Before starting or resuming milestone work, read `references\/milestone-examples\.md` → Timing receipts/u,
         skillPath,
       );
       assert.match(
@@ -332,8 +332,12 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       "Phase 3 - Between Milestones",
     );
     const completion = readMarkdownSection(
-      skillPath,
+      "workflow/skills/goat-plan/references/plan-completion.md",
       "Phase 4 - Plan Complete",
+    );
+    assert.match(
+      readMarkdownSection(skillPath, "Phase 4 - Plan Complete"),
+      /Before closing a plan, read `references\/plan-completion\.md`/u,
     );
     assert.match(
       lifecycle,
@@ -425,7 +429,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       "Phase 3 - Between Milestones",
     );
     const planComplete = readMarkdownSection(
-      skillPath,
+      "workflow/skills/goat-plan/references/plan-completion.md",
       "Phase 4 - Plan Complete",
     );
     assert.match(
@@ -749,33 +753,39 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       },
     );
 
-    assertForEachTarget(canonicalSkillPaths("goat-plan"), (skillPath) => {
-      const completionGate = readMarkdownSection(
-        skillPath,
-        "Phase 4 - Plan Complete",
-      );
+    assertForEachTarget(
+      canonicalSkillReferencePaths(
+        "goat-plan",
+        "references/plan-completion.md",
+      ),
+      (skillPath) => {
+        const completionGate = readMarkdownSection(
+          skillPath,
+          "Phase 4 - Plan Complete",
+        );
 
-      assert.match(
-        completionGate,
-        new RegExp(
-          `when \`ISSUE\\.md\` exists, every ISSUE ${tickedSectionName} item`,
-          "u",
-        ),
-        skillPath,
-      );
-      assert.match(
-        completionGate,
-        new RegExp(`Keep ${stableSectionName} stable`, "u"),
-        skillPath,
-      );
+        assert.match(
+          completionGate,
+          new RegExp(
+            `when \`ISSUE\\.md\` exists, every ISSUE ${tickedSectionName} item`,
+            "u",
+          ),
+          skillPath,
+        );
+        assert.match(
+          completionGate,
+          new RegExp(`Keep ${stableSectionName} stable`, "u"),
+          skillPath,
+        );
 
-      // How and What are not ISSUE sections; naming them sends close-out to a heading the format owner does not define.
-      assert.doesNotMatch(
-        completionGate,
-        /ISSUE How item|Keep What as/u,
-        skillPath,
-      );
-    });
+        // How and What are not ISSUE sections; naming them sends close-out to a heading the format owner does not define.
+        assert.doesNotMatch(
+          completionGate,
+          /ISSUE How item|Keep What as/u,
+          skillPath,
+        );
+      },
+    );
   });
 
   // Effort guidance exists to change agent behaviour; pin it so compaction cannot silently drop it.

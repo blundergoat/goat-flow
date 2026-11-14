@@ -1,6 +1,6 @@
 # AI Harness Audit
 
-`npx @blundergoat/goat-flow@latest audit . --harness` adds 18 deterministic harness checks to the standard build audit. They inspect required files, registrations, deny patterns, and other local evidence without an LLM. Harness failures contribute to the overall audit status. Platform limits remain explicit: a runtime can pass with limited assurance where broader enforcement is unavailable.
+`npx @blundergoat/goat-flow@latest audit . --harness` adds 19 deterministic harness checks to the standard build audit. They inspect required files, registrations, deny patterns, and other local evidence without an LLM. Harness failures contribute to the overall audit status. Platform limits remain explicit: a runtime can pass with limited assurance where broader enforcement is unavailable.
 
 | Mode | Command | Question |
 |------|---------|----------|
@@ -70,11 +70,11 @@ Every registered build and harness check now carries machine-readable `provenanc
 
 Provenance remains JSON-only. Terminal and Markdown output stays focused on status and remediation; inspect each check's `provenance` object for its justification trail.
 
-### The 18 checks by type
+### The 19 checks by type
 
 - **integrity (9):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
 - **advisory (7):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `deny-blocks-pipe-to-shell`, `settings-rules-matched`, `commit-guidance`
-- **metric (2):** `evidence-before-claims`, `post-turn-hook-integrity`
+- **metric (3):** `evidence-before-claims`, `post-turn-hook-integrity`, `milestone-commands-named`
 
 ---
 
@@ -137,10 +137,11 @@ Verification turns an agent's completion claim into inspectable evidence. The au
 
 Agents that run for minutes or hours need durable state. Without recovery mechanisms, a crashed session means starting from scratch.
 
-**Recovery checks (2):**
+**Recovery checks (3):**
 
 - `milestone-tracking` - `.goat-flow/plans/` exists as a readable directory. Does not score task count, checkbox completion, milestone status, testing gates, roadmap progress, or recency. Empty, planned, active, and long-term roadmap files are valid local workflow state.
 - `session-logs` - `.goat-flow/logs/sessions/` exists as a readable directory. The JSON details expose the top-level Markdown file count for orientation, but that count does not affect status or score.
+- `milestone-commands-named` - metric. Present agent instruction files name the milestone start, stop/finalize commands and immediate tick rule. Missing clauses lower the Recovery score without failing audit status. It reads instruction text, not plan files, and cannot prove those actions ran.
 
 **Not checked here:** whether entry counts are sufficient, recency, content quality of task or session files, current objective, completed work, last verification, next action, or end-to-end resumability. A fresh install passes with the Recovery evidence limit.
 

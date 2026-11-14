@@ -266,6 +266,7 @@ function appendAuditAndPriorEvidence(
     renderPriorReportContext(
       promptContext.priorReport,
       promptContext.qualityMode,
+      promptContext.input.otherAgentReports,
     ),
   );
   lines.push("");

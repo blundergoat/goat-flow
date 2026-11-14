@@ -13,7 +13,10 @@ import { loadConfig } from "../config/reader.js";
 import { redactEvidenceText } from "../evidence/redaction.js";
 import { createFS } from "../facts/fs.js";
 import { extractSharedFacts } from "../facts/shared/index.js";
-import { findLatestQualityReport } from "../quality/history.js";
+import {
+  findLatestQualityReport,
+  findLatestOtherAgentQualityReports,
+} from "../quality/history.js";
 import { QUALITY_MODES, type QualityMode } from "../quality/schema.js";
 import { composeQuality } from "../prompt/compose-quality.js";
 import type { AgentId } from "../types.js";
@@ -293,6 +296,11 @@ function handleQualityRequest(
       params.agent,
       params.qualityMode,
     );
+    const { entries: otherAgentReports } = findLatestOtherAgentQualityReports(
+      projectPath,
+      params.agent,
+      params.qualityMode,
+    );
     const composeInput = {
       agent: params.agent,
       projectPath,
@@ -302,6 +310,7 @@ function handleQualityRequest(
           ? ("fast-cache-only" as const)
           : undefined,
       priorReport,
+      otherAgentReports,
       qualityMode: params.qualityMode,
       selectedProjectPath,
       sharedFacts,

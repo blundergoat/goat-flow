@@ -16,6 +16,23 @@ import {
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: goat-review (3/3)", () => {
+  it("keeps milestone repairs separate from standalone review authority", () => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
+      const guidance = readProjectFile(skillPath);
+      assert.match(guidance, /Standalone review remains report-only/u);
+      assert.match(guidance, /resume already-authorized implementation/u);
+      assert.match(
+        guidance,
+        /Findings grant no new write or boundary authority/u,
+      );
+      assert.match(guidance, /milestone owns authorized repairs/u);
+      assert.match(
+        readMarkdownSection(skillPath, "Boundary Commands"),
+        /NEVER.*Auto-edit/u,
+      );
+    });
+  });
+
   it("wires optional review validation into the goat-review proof gate", () => {
     assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const skill = readProjectFile(skillPath);

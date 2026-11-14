@@ -715,6 +715,7 @@ describe("Audit scoring model", () => {
       }),
     });
     const { scope, concerns } = computeHarness(ctx);
+    assert.equal(concerns.recovery.metrics, 1);
     const recoveryCheckIds = new Set(["milestone-tracking", "session-logs"]);
     const recoveryChecks = scope.checks.filter((check) =>
       recoveryCheckIds.has(check.id),

@@ -77,6 +77,43 @@ function currentQualityReport(projectRoot: string) {
 }
 
 describe("quality save safety", () => {
+  it("preserves every finding in a valid report above 16 KiB", () => {
+    const projectRoot = mkdtempSync(resolve(tmpdir(), "quality-large-report-"));
+    try {
+      execFileSync("git", ["-C", projectRoot, "init", "--quiet"], {
+        stdio: "ignore",
+      });
+      writeFileSync(
+        resolve(projectRoot, ".gitignore"),
+        ".goat-flow/logs/quality/*.json\n",
+      );
+      const report = makeCurrentQualityReport(
+        projectRoot,
+        "Observed evidence. ".repeat(100),
+      );
+      report.findings = Array.from({ length: 12 }, (_, index) => ({
+        ...report.findings[0],
+        summary: `Persistence fixture ${index + 1}`,
+      }));
+      const rawText = JSON.stringify(report);
+      assert.ok(Buffer.byteLength(rawText, "utf8") > 16 * 1024);
+      const expected = parseQualityReport(report);
+      assert.ok(expected.ok, "large fixture must satisfy the current schema");
+      const reportPath = persistQualityReportText(
+        { projectPath: projectRoot, rawText },
+        { CLIError },
+      );
+      const saved = parseQualityReport(
+        JSON.parse(readFileSync(reportPath, "utf8")),
+      );
+      assert.ok(saved.ok, "saved report must satisfy the current schema");
+      assert.deepEqual(saved.report.findings, expected.report.findings);
+      assert.equal(saved.report.findings.length, 12);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   /**
    * Fixture purpose: relocates the allocated parent during descriptor-bound writing and proves the post-write identity gate rejects it.
    * Filesystem side effects: renames and replaces paths only inside the temporary project root.
