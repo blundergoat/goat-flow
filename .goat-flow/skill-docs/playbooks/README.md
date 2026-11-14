@@ -36,6 +36,7 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 | [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) | After the writing core identifies sentence-level reader cost: actor choice, reader knowledge, assistant voice, residue, punctuation, social meaning, and non-authorizing lexical or rhythm signals | n/a (sentence-diagnostic discipline) |
 | [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) | After the writing core identifies document-level assembly defects: duplicate representations, append seams, compound entries, parallel lists, causal order, padded triads, and chronology | n/a (structure-diagnostic discipline) |
 | [`writing-agent-facing-instructions.md`](./writing-agent-facing-instructions.md) | Creating or editing text an agent executes from: a skill, playbook, shared preamble or conventions file, instruction file, hook message, or README discovery row. Owns the two loads, pointer wording, the information ladder, completion criteria, leading words, negation, and pruning; the agent-read complement to `writing-human-facing-prose.md`'s exemption | n/a (agent-document authoring discipline) |
+| [`writing-fidelity-audit.md`](./writing-fidelity-audit.md) | Substantive recomposition or derivation with distinct claims, or unresolved fidelity: source-visible two-way meaning review; routine corrections and unchanged prose do not automatically trigger it | n/a (fidelity discipline) |
 
 ## Adding a new playbook
 

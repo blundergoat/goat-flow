@@ -1366,6 +1366,7 @@ const files = [
       "skill-playbook-authoring-sync.md",
       "test-selection.md",
       "writing-agent-facing-instructions.md",
+      "writing-fidelity-audit.md",
       "writing-sentence-diagnostics.md",
       "writing-structure-diagnostics.md",
       "writing-human-facing-prose.md",
@@ -2437,6 +2438,16 @@ if [[ -f workflow/skills/playbooks/writing-human-facing-prose.md ]] && [[ -f .go
     fi
 else
     skip "writing-human-facing-prose.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/writing-fidelity-audit.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-fidelity-audit.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
+    if diff -q workflow/skills/playbooks/writing-fidelity-audit.md .goat-flow/skill-docs/playbooks/writing-fidelity-audit.md >/dev/null 2>&1; then
+        pass "writing-fidelity-audit.md: template and installed copy match"
+    else
+        fail "writing-fidelity-audit.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-fidelity-audit.md sync (one or both files missing)"
 fi
 # Hook maintainers need the same policy-test workflow that consumer agents receive.
 if [[ -f workflow/skills/playbooks/hook-policy-testing.md ]] && [[ -f .goat-flow/skill-docs/playbooks/hook-policy-testing.md ]]; then

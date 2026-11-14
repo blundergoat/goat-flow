@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Fidelity audit guidance** - Adds a source-visible meaning check for substantial prose rewrites, conditional writing routes and a clarity receipt field. Improved agent behavior remains unverified.
+
 - **Instruction audit** - Flags ambiguous tick reminders, agent Git directives and retired commands; missing milestone steps affect scores only.
 
 ### Changed

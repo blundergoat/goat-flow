@@ -36,6 +36,7 @@ describe("ADR-023 word budget tiers", () => {
     "skill-playbook-authoring-sync.md",
     "test-selection.md",
     "writing-agent-facing-instructions.md",
+    "writing-fidelity-audit.md",
     "writing-sentence-diagnostics.md",
     "writing-structure-diagnostics.md",
     "writing-human-facing-prose.md",
@@ -174,6 +175,10 @@ describe("ADR-023 word budget tiers", () => {
       ...canonicalSkillReferencePaths(
         "goat-clarity",
         "references/target-scope-and-evidence.md",
+      ),
+      ...canonicalSkillReferencePaths(
+        "goat-clarity",
+        "references/receipt-evidence.md",
       ),
       ...[
         "references/milestone-examples.md",

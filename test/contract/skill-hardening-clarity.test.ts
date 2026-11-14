@@ -18,6 +18,8 @@ import {
 const SKILL_PATH = "workflow/skills/goat-clarity/SKILL.md";
 const SCOPE_REFERENCE_PATH =
   "workflow/skills/goat-clarity/references/target-scope-and-evidence.md";
+const RECEIPT_REFERENCE_PATH =
+  "workflow/skills/goat-clarity/references/receipt-evidence.md";
 const SHARED_PREAMBLE_PATH = "workflow/skills/reference/skill-preamble.md";
 // Both shared axes enumerate exactly four tokens: OBSERVED/INFERRED/UNVERIFIED/HUMAN-PENDING and RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED.
 const SHARED_VOCABULARY_TOKEN_COUNT = 4;
@@ -390,7 +392,10 @@ describe("skill hardening contracts: goat-clarity", () => {
       "Pre-existing dirty paths:",
     ]);
 
-    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    const targetEvidence = [
+      readProjectFile(SCOPE_REFERENCE_PATH),
+      readProjectFile(RECEIPT_REFERENCE_PATH),
+    ].join("\n");
     assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
       "committed, modified, untracked, or absent",
       "current authority bytes",
@@ -759,7 +764,10 @@ describe("skill hardening contracts: goat-clarity", () => {
   });
 
   it("discovers formatter capability without executing discovery candidates", () => {
-    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    const targetEvidence = [
+      readProjectFile(SCOPE_REFERENCE_PATH),
+      readProjectFile(RECEIPT_REFERENCE_PATH),
+    ].join("\n");
     assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
       "formatter discovery is read-only",
       "never execute a package resolver, package manager, formatter, or project script merely to discover a command",
@@ -777,8 +785,8 @@ describe("skill hardening contracts: goat-clarity", () => {
   });
 
   it("separates command status from claim verdict", () => {
-    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
-    assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
+    const targetEvidence = readProjectFile(RECEIPT_REFERENCE_PATH);
+    assertGuidanceIncludesAll(targetEvidence, RECEIPT_REFERENCE_PATH, [
       "Command status",
       "PASS | FAIL | NOT_RUN | UNAVAILABLE",
       "Claim verdict",
@@ -837,7 +845,7 @@ describe("skill hardening contracts: goat-clarity", () => {
     assertForEachTarget(
       canonicalSkillReferencePaths(
         "goat-clarity",
-        "references/target-scope-and-evidence.md",
+        "references/receipt-evidence.md",
       ),
       (referencePath) => {
         const statusAndClaimEvidence = readMarkdownSection(
@@ -870,10 +878,10 @@ describe("skill hardening contracts: goat-clarity", () => {
 
   it("attributes every mechanical check against an equivalent bound baseline", () => {
     const statusAndClaimEvidence = readMarkdownSection(
-      SCOPE_REFERENCE_PATH,
+      RECEIPT_REFERENCE_PATH,
       "Status and Claim Evidence",
     );
-    assertGuidanceIncludesAll(statusAndClaimEvidence, SCOPE_REFERENCE_PATH, [
+    assertGuidanceIncludesAll(statusAndClaimEvidence, RECEIPT_REFERENCE_PATH, [
       "Baseline attribution applies to every mechanical check",
       "exact same check",
       "bound comparison baseline bytes",
@@ -886,7 +894,10 @@ describe("skill hardening contracts: goat-clarity", () => {
   });
 
   it("reconciles separate like-unit ledgers without fixing presentation", () => {
-    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    const targetEvidence = [
+      readProjectFile(SCOPE_REFERENCE_PATH),
+      readProjectFile(RECEIPT_REFERENCE_PATH),
+    ].join("\n");
     assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
       "selected-unit ledger",
       "changed-span ledger",
@@ -923,6 +934,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "NOT_CHECKED:",
       "Formatter proof:",
       "Verification:",
+      "Meaning audit:",
       "Summary:",
     ]) {
       assert.match(clarityGuidance, new RegExp(receiptLabel, "u"), SKILL_PATH);
@@ -955,12 +967,47 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("maps the Meaning audit to qualifying prose in the existing receipt", () => {
+    assertForEachTarget(canonicalSkillPaths("goat-clarity"), (skillPath) => {
+      const guidance = readProjectFile(skillPath);
+      assert.match(
+        guidance,
+        /On every run, read[^\n]+references\/receipt-evidence\.md/u,
+      );
+      assert.match(
+        guidance,
+        /Human prose undergoes substantive recomposition or derivation with distinct claims, or has unresolved fidelity[^\n]+writing-fidelity-audit\.md/u,
+      );
+      assert.match(
+        guidance,
+        /`Meaning audit:` maps each qualifying modified human-prose unit once[^\n]+otherwise `none`/u,
+      );
+    });
+    assertForEachTarget(
+      canonicalSkillReferencePaths(
+        "goat-clarity",
+        "references/receipt-evidence.md",
+      ),
+      (referencePath) => {
+        assert.match(
+          readProjectFile(referencePath),
+          /Qualifying modified human-prose units map once[^\n]+existing `Meaning audit:` field/u,
+        );
+        assert.match(
+          readProjectFile(referencePath),
+          /Minimal edits and unchanged prose require no detailed audit/u,
+        );
+      },
+    );
+  });
+
   it("keeps the reference manifest and public documentation aligned", () => {
     const manifest = JSON.parse(readProjectFile("workflow/manifest.json")) as {
       skills: { references: Record<string, string[]> };
     };
     assert.deepEqual(manifest.skills.references["goat-clarity"], [
       "references/target-scope-and-evidence.md",
+      "references/receipt-evidence.md",
     ]);
 
     const publicGuidance = readMarkdownSection(

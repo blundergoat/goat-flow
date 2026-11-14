@@ -155,9 +155,11 @@ last_reviewed: 2026-11-14
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 36 | **Latest occurrence:** 2026-11-14
+**Incident count:** 37 | **Latest occurrence:** 2026-11-14
 
 **Prevention:** Create every fixture file, global and transitive helper. Check strict baselines and substitutions; keep other inputs valid and never borrow checkout state. Exercise the real failure predicate. Stats: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+
+**Recurrence 2026-11-14:** M57 exposed four drift failures: `test/integration/audit-drift.helpers.ts` omitted the new playbook (search: `SHARED_PLAYBOOK_FILENAMES`).
 
 **Recurrence 2026-11-14:** M54 trials lacked required plan sections. Validate fixtures before delegation. Evidence: `src/cli/plans-check.ts` (search: `missing scope`).
 
@@ -181,9 +183,9 @@ last_reviewed: 2026-11-14
 
 **Recurrence 2026-10-17 (packaged candidates):** Adding native entrypoints made a missing-policy fixture valid; its saved opt-out correctly returned zero, breaking the expected missing-path refusal. Remove the candidate only inside that fixture before asserting the refusal, preserving production opt-out behavior. A reused CI verifier also expected an ignored workspace receipt absent from the copy; explicit command/suite inputs removed that dependency. `test/unit/run-hook.test.ts` (search: `native CLI rejects missing, escaped and non-file scripts before an opt-out`).
 
-**What happened:** The first ADR-024 enforcement test for `stats --check` used `package.json` with a line suffix to trigger an `invalid-line-ref` finding, but the temp fixture repo had no `package.json`, so the checker correctly reported a stale ref and the test failed with "expected an invalid-line-ref finding".
+**What happened:** The first ADR-024 `stats --check` fixture cited absent `package.json` with a line suffix. Stats returned a stale ref, failing "expected an invalid-line-ref finding".
 
-**Root cause:** A familiar root file path was reused without checking the isolated fixture filesystem; the stats extractor validates refs against the temp repo, not the real checkout.
+**Root cause:** The fixture reused a root path without checking its temp filesystem; stats validates refs there, not in the checkout.
 
 **Recurrence 2026-11-02:** Windows fixtures used a POSIX command, and recursive copy/removal silently missed emoji-containing paths. Gate transport by host, copy declared files, and verify readiness or absence. Evidence: `test/unit/agent-hook-command.test.ts` (search: `Stop scan budget inheritance`); `test/integration/hook-command-native-replay.test.ts` (search: `createNativePolicyFixture`); `test/unit/run-hook.test.ts` (search: `function fixture`).
 

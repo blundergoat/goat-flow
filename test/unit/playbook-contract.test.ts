@@ -37,6 +37,7 @@ const standalonePlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/playbooks/test-selection.md",
   ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
+  ".goat-flow/skill-docs/playbooks/writing-fidelity-audit.md",
   ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
@@ -352,6 +353,26 @@ describe("standalone playbook audit contract", () => {
           ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
       ),
       "writing-human-facing-prose.md must be registered before users can discover it",
+    );
+  });
+
+  it("registers the fidelity audit and receipt reference for consumer delivery", () => {
+    const installedPath =
+      ".goat-flow/skill-docs/playbooks/writing-fidelity-audit.md";
+    assert.ok(
+      STANDALONE_PLAYBOOK_FILES.some((path) => path === installedPath),
+      "the fidelity audit must be discoverable independently of registry-driven checks",
+    );
+    const manifest = JSON.parse(readFileSync("workflow/manifest.json", "utf8"));
+    assert.ok(manifest.required_files.includes(installedPath));
+    assert.deepEqual(manifest.file_ownership[installedPath], {
+      ownership: "system-owned",
+      source: "workflow/skills/playbooks/writing-fidelity-audit.md",
+    });
+    assert.ok(
+      manifest.skills.references["goat-clarity"].includes(
+        "references/receipt-evidence.md",
+      ),
     );
   });
 

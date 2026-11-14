@@ -52,13 +52,15 @@ If an exempt control surface conflicts with a source of truth, report the discre
 
 ## Diagnostic Router
 
-Run the core gates in this file first. Load one sibling only when the draft shows its objective trigger:
+Run core gates first; load a sibling only on its stated trigger:
+
+- Load [`writing-fidelity-audit.md`](./writing-fidelity-audit.md) for substantive recomposition or derivation with distinct claims, or unresolved fidelity; routine corrections and unchanged prose alone do not trigger it.
 
 - Load [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) when a sentence-level reader cost remains after correctness: assistant framing, vague inflation, unclear actors, leaked scaffolding, repeated cadence, punctuation residue, or a mismatch between the prose and the reader's knowledge.
 - Load [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) when a document-level assembly defect remains: duplicated representations, append seams, compound list entries, fragmented arguments, non-parallel lists, padded triads, irrelevant chronology, or an order that hides causality and action.
 - Load `changelog.md` or `release-notes.md` before either diagnostic when that surface owns audience, version, release state, or output shape. Surface policy decides what belongs; diagnostics may only refine prose already admitted by that owner.
 
-Do not load either diagnostic playbook for a small edit that passes the minimum core checks. Counts, detector scores, or a wish to make prose feel less generated are not objective triggers. If both triggers exist, repair structure before sentences.
+Small edits passing the core checks skip diagnostics; counts, detector scores and a wish for less generated prose are not triggers. Repair structure before sentences when both apply.
 
 The router grants no rewrite authority. Keep scope and apply the lightest effective edit.
 

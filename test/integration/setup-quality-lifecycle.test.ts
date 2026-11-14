@@ -446,6 +446,23 @@ describe("consumer setup to quality-report lifecycle", () => {
         );
       }
 
+      for (const [installedPath, sourcePath] of [
+        [
+          ".goat-flow/skill-docs/playbooks/writing-fidelity-audit.md",
+          "workflow/skills/playbooks/writing-fidelity-audit.md",
+        ],
+        [
+          ".agents/skills/goat-clarity/references/receipt-evidence.md",
+          "workflow/skills/goat-clarity/references/receipt-evidence.md",
+        ],
+      ]) {
+        assert.deepEqual(
+          readFileSync(join(consumerTargetPath, installedPath)),
+          readFileSync(join(CONTROLLING_WORKSPACE, sourcePath)),
+          `${installedPath} must reach the consumer unchanged`,
+        );
+      }
+
       // Setup remains prompt-driven, so this verifies its target before the fixture supplies adapted outputs.
       const setupPromptResult = runPublicCli([
         "setup",

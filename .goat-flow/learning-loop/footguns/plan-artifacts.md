@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-14
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts: evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -126,12 +126,12 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 
 **Status:** active | **Created:** 2026-08-19 | **Evidence:** ACTUAL_MEASURED
 **Severity:** INTEGRATION
-**Decision changed:** Reforecast every estimate line together, then reconcile the derived `ISSUE.md` bands the checker never reads; when the advice says the likely is floored at 1.00 min/unit, copy the floored rates and name the measured rate in `source:`.
+**Decision changed:** Reforecast positive agent-owned estimates together; preserve zero-minute and human-owned items. Reconcile derived `ISSUE.md` bands, copy stated floored rates, and name measured rates in `source:`.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 11 | **Latest occurrence:** 2026-09-14
+**Incident count:** 12 | **Latest occurrence:** 2026-11-14
 
-**Prevention:** Treat a reforecast as one atomic edit to basis, range, headline, split, and every `(est: ...)` entry, then run strict validation before starting the timing receipt. A clean strict result is not consistency: recompute the `ISSUE.md` At a glance row, task band and Forecast summary rows from the milestone headers, because no checker validates them. After appending receipt time, reconcile measured-plus-remaining overview totals too; preserve the issued estimate instead of replacing it with Actual. When history runs under one minute per unit, the checker floors the advised likely at 1.00 min/unit and says so; copy those rates. Preserve planning-time estimates only when the advice still cannot be allocated: a `reforecast required` line whose likely rate is under 1.00 with no floor note, or `forecast advice` that says `issued values retained`. Derive bounds with floor, nearest, and ceiling, and never rescale an in-progress or completed milestone to newer calibration data.
+**Prevention:** Reforecast basis, range, headline, category split and every positive agent-owned `(est: ...)` allocation atomically; preserve zero-minute and human-owned items. Validate before timing. Derive ISSUE headline/task bands and forecast rows from saved headers; strict does not check ISSUE. After receipts, reconcile measured-plus-remaining totals; retain issued estimates beside Actual. Copy stated floored rates; keep measured rates in `source:`. Owner: `src/cli/plans-effort.ts` (search: `function floorUnallocatableLikely`). Preserve issued allocations only when advice leaves a likely below one minute without a floor note, or says `issued values retained`. Use floor/nearest/ceiling for low/likely/high. Never reforecast in-progress or completed milestones to newer calibration.
 
 **Symptoms:** `plans check --strict` printed the advisory `reforecast required: ... use 0.61-0.93-1.04 min/unit before implementation`. Updating only `**Forecast basis:**` and `**Forecast range:**`, as a handoff note suggested, flipped the plan to exit 1 with `forecast range likely (8 min) must equal the Effort estimate total (22 min)`. Measured 2026-08-19 on two release-verification tasks with 9 and 8 units.
 
@@ -147,6 +147,7 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 - **Recurrence 2026-08-28:** Activation moved the derived likely value to 36 minutes while `Effort estimate` stayed at 34, failing `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`).
 - **Recurrence 2026-09-13 (forecast-accuracy):** Expanding repeated skill trials and adding default activation changed the counted work to 35 and 14 units, but a header replacement without multiline matching left the bases at 18 and 13. Strict validation caught both, including `forecast basis declares 18 agent work units but the plan contains 35`; the independent overview check also rejected the stale unit total. Correcting both bases restored 103 units and 277 likely minutes. `src/cli/plans-effort.ts` (search: `forecast basis declares`) owns the reproduced diagnostic. After scripted reforecasts, assert that every intended field was replaced and derive the overview from parsed saved headers before delivery.
 - **Recurrence 2026-09-07:** The loud half failed first, `forecast range likely (30 min) must equal the Effort estimate total (33 min)`, and was fixed by cutting three task estimates. Strict validation then passed while four `ISSUE.md` figures stayed stale, because `src/cli/plans-check-summary.ts` (search: `renderRequiredReforecasts`) advises rates without reading any ISSUE band, and the plan's own reconciliation milestone owns that check only at the end of the plan. Recomputing all sixty milestone headers matched every band except the three affected bands: `Whole plan` 1907/913, `Remaining work` 1166/504 and `Shared, disclosure and hooks` 229/103 each needed minus 3 likely and minus 3 product. The same pass exposed an older stale headline claiming 37 unfinished milestones after three tasks completed.
+- **Recurrence 2026-11-14:** M29's helper changed a zero-minute human gate to one; strict rejected proof 18 versus 17. Restoring zero resolved it. Evidence: `src/cli/plans-check.ts` (search: `counted work (`).
 
 ---
 

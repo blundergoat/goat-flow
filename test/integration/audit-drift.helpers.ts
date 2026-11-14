@@ -1,8 +1,8 @@
 /**
- * Builds temporary projects for `goat-flow audit --check-drift` tests.
- * Use these helpers when a managed skill, playbook, hook, or mirror changes.
- * Canonical and installed fixtures stay parallel so failures model user drift.
- * Live-root checks also protect the maintained repository's current state.
+ * Build temporary projects for the CLI's audit --check-drift flow.
+ *
+ * Use when changing installed skills, playbooks or hooks; matching fixture copies isolate the user's edits from missing setup.
+ * Round-trip helpers also exercise installation in a disposable Git project, separate from the developer's checkout.
  */
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -48,9 +48,8 @@ export const INSTALL_FIXTURE_FILES = [
 ] as const;
 
 /**
- * Build a minimal but valid skill file for drift fixtures.
- *
- * Drift tests care about whether a file matches its template, not what the skill says, so the body is deliberately trivial.
+ * Supply a minimal skill for tests that compare installed files with their shipped templates.
+ * Use matching source and installed stubs so content differences describe drift, rather than skill behavior.
  *
  * @param name - skill name written into both the frontmatter and the heading
  * @returns the stub skill markdown
@@ -73,6 +72,7 @@ const SHARED_PLAYBOOK_FILENAMES = [
   "skill-playbook-authoring-sync.md",
   "test-selection.md",
   "writing-agent-facing-instructions.md",
+  "writing-fidelity-audit.md",
   "writing-sentence-diagnostics.md",
   "writing-structure-diagnostics.md",
   "writing-human-facing-prose.md",
@@ -110,9 +110,8 @@ export interface CommandResult {
 }
 
 /**
- * Write canonical skill stubs (SKILL.md plus shared reference files) for one skill into a
- * template or installed mirror under the fixture root, so drift comparison sees matching copies.
- * It writes only inside the fixture root, so a drift fixture can never touch the real project.
+ * Write canonical skill stubs and references into the fixture filesystem so drift checks start from matching copies.
+ * Use matching copies to prove that audit reports edited files rather than incomplete setup.
  *
  * @param root - the temp fixture root the files are written beneath
  * @param baseDir - skills directory relative to root (e.g. "workflow/skills" or an installed dir)
@@ -147,8 +146,8 @@ function writeSharedPlaybookFixtures(playbookDirectory: string): void {
 }
 
 /**
- * Build a complete filesystem drift fixture: workflow template references, playbooks, and skill
- * sources, plus their installed mirrors under .goat-flow, so checkDrift sees a fully-parity tree.
+ * Create a temporary filesystem whose shipped templates and installed files match.
+ * Use before changing one fixture file to model what a user edited, removed or added after setup.
  *
  * @returns the temp fixture root path; the caller is responsible for cleaning it up
  */
@@ -200,8 +199,7 @@ export function setupFixture(): string {
   for (const name of getSkillNames()) {
     writeSkillFiles(root, join("workflow", "skills"), name);
   }
-  // Project installed copies of skill files
-  // Each supported agent receives the same user-facing skill pack.
+  // Each supported agent starts with the complete installed skill pack before a test introduces drift.
   for (const agentDir of getInstalledSkillRoots()) {
     // Every skill must exist under each selected agent directory.
     for (const name of getSkillNames()) {
@@ -261,9 +259,8 @@ export function setupFixture(): string {
 }
 
 /**
- * Write managed hook fixtures - workflow source hooks plus the installed central hooks
- * under .goat-flow/hooks - so drift checks that compare launch and adapter files find parity.
- * Writes files and creates directories on the filesystem under root.
+ * Write matching source and installed hook files to the temporary filesystem for audit drift checks.
+ * Use when checking registrations or file parity; these stubs model installed files without running production policies.
  *
  * @param root - the temp fixture root the hook source and installed copies are written beneath
  */
@@ -351,6 +348,7 @@ export function writeHookFixtures(root: string): void {
   );
   // Drift fixtures compare bytes without executing hooks; every native dependency needs a paired source and installed file.
   for (const directory of ["workflow/hooks", ".goat-flow/hooks"]) {
+    // Include every runtime dependency so a complete installation does not produce an unrelated missing-file finding.
     for (const file of new Set(
       listHookSpecs().flatMap((spec) => spec.scriptFiles),
     )) {
@@ -375,10 +373,10 @@ export function writeHookFixtures(root: string): void {
 }
 
 /**
- * Clone this repo into a temp fixture and git-init it, so install-then-drift round trips run
- * against a real tree. Writes the copied tree to the filesystem without repository metadata,
- * dependencies, local working contents, session logs, or install receipts; symlinks node_modules back to the source
- * to avoid a slow copy; and spawns git init. Asserts git init succeeds.
+ * Copy maintained source and built CLI files into a disposable Git project for install-to-audit checks.
+ *
+ * Use when a test needs real checkout boundaries; dependencies are linked and local session state is excluded.
+ * The fixture spawns Git; copy or initialization failures abort the test instead of producing a misleading audit result.
  *
  * @param sourceRoot - Git checkout whose maintained working-tree files and current dist outputs become fixture inputs
  * @returns the cloned repo root inside the temp fixture; the caller cleans up its parent dir
@@ -415,10 +413,13 @@ export function setupInstallRoundTripFixture(
     { cwd: sourceRoot, encoding: "utf8" },
   );
   assert.equal(maintainedAdditions.status, 0, maintainedAdditions.stderr);
+  // Include newly written source files so a developer can verify an installation before staging their changes.
   for (const path of maintainedAdditions.stdout.split("\0").filter(Boolean))
     retained.add(path);
   const directories = new Set<string>();
+  // Retain each required parent directory while excluding unrelated local work from the copied project.
   for (const path of retained) {
+    // Preserve the folder chain so the fixture copier can reach a selected nested file.
     for (
       let parentPath = dirname(path);
       parentPath !== ".";
@@ -433,6 +434,7 @@ export function setupInstallRoundTripFixture(
       // The root itself must remain so the user's fixture directory is created.
       if (rel === "") return true;
       const path = rel.split(sep).join("/");
+      // The fixture needs its own Git history and linked dependencies, rather than copies of the developer's local state.
       if (path === ".git" || path === "node_modules") return false;
       // Generated CLI modules are required even though the build directory is ignored.
       if (path === "dist" || path.startsWith("dist/")) return true;
@@ -457,9 +459,8 @@ export function setupInstallRoundTripFixture(
 }
 
 /**
- * Patch the cloned fixture so install round-trip tests include a reference skill: register the
- * fixture skill in manifest.json and constants.ts, stub package.json's test script with canned
- * TAP, and copy the skill source in. Mutates files inside the fixture root.
+ * Enroll the reference-bearing skill in a copied project so install/upgrade tests can audit its shipped files.
+ * The fixture mutates its catalogues and replaces its test command with canned TAP; parse or copy failures abort the test.
  *
  * @param root - the cloned fixture repo root produced by setupInstallRoundTripFixture
  * @returns the agent ids and deduped installed skill-root dirs read from the patched manifest
@@ -493,6 +494,7 @@ export function patchInstallRoundTripFixture(root: string): {
   const codeMapPath = join(root, ".goat-flow", "code-map.md");
   const codeMap = readFileSync(codeMapPath, "utf8");
   const fixtureSkillRow = `│   ├── ${INSTALL_FIXTURE_SKILL}/SKILL.md = installer round-trip fixture skill template`;
+  // A newly enrolled skill must be discoverable so the later audit can assess installation rather than a stale code map.
   if (!codeMap.includes(fixtureSkillRow)) {
     writeFileSync(
       codeMapPath,
@@ -565,11 +567,10 @@ export function patchInstallRoundTripFixture(root: string): {
 }
 
 /**
- * Run one real command inside a fixture project and capture what a user would have seen.
+ * Run a fixture command and capture the CLI output a developer would see during install or audit.
  *
- * Drift tests assert on actual CLI behaviour rather than mocked results, so this is the boundary where a test becomes an end-to-end check.
- *
- * Side effect: spawns a child process in `cwd`, bounded by the timeout so a hung command fails the test instead of the suite.
+ * Use for end-to-end assertions; the child runs in the fixture project with a bounded timeout.
+ * A launch failure or killed child adds diagnostics to the output and leaves status null.
  *
  * @param cwd - fixture project the command runs in
  * @param command - executable to run, restricted to the three the fixtures need

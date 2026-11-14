@@ -480,7 +480,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       assertSectionPatterns(playbookPath, "Diagnostic Router", [
         /writing-sentence-diagnostics\.md[\s\S]+sentence-level reader cost/u,
         /writing-structure-diagnostics\.md[\s\S]+document-level assembly defect/u,
-        /Do not load either diagnostic playbook for a small edit that passes the minimum core checks/u,
+        /Small edits passing the core checks skip diagnostics/u,
       ]);
       assertSectionPatterns(playbookPath, "Correctness and Meaning", [
         /names, numbers, units, versions, flags, options, and paths/u,
@@ -522,6 +522,47 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
         /status, requirement level, uncertainty, and provenance/u,
         /Scope Gate[\s\S]+source classification applied/u,
         /claim strength, attribution, and cited claims/u,
+      ]);
+    }
+  });
+
+  it("routes only qualifying prose to the fidelity audit", () => {
+    for (const playbookPath of [
+      "workflow/skills/playbooks/writing-human-facing-prose.md",
+      ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
+    ]) {
+      assertSectionPatterns(playbookPath, "Diagnostic Router", [
+        /writing-fidelity-audit\.md[^\n]+substantive recomposition or derivation with distinct claims, or unresolved fidelity/u,
+        /routine corrections and unchanged prose alone do not trigger it/u,
+      ]);
+    }
+  });
+
+  it("keeps the fidelity audit source-visible, two-way and bounded", () => {
+    for (const playbookPath of [
+      "workflow/skills/playbooks/writing-fidelity-audit.md",
+      ".goat-flow/skill-docs/playbooks/writing-fidelity-audit.md",
+    ]) {
+      assertSectionPatterns(playbookPath, "Availability Check", [
+        /source of truth and the proposed revision together/u,
+        /Derivation alone does not trigger it/u,
+        /minimal corrections and compliant unchanged prose do not automatically require/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Compare in Both Directions", [
+        /source to revision/u,
+        /revision to source/u,
+        /authorised summary omission/u,
+        /task authority alone does not supply missing facts/u,
+        /actor, action, number, identifier, scope, condition, qualifier, certainty, commitment and speech act/u,
+        /superior-authority correction/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Record the Result", [
+        /every modified qualifying human-prose unit once/u,
+        /existing unit and change records instead of duplicating them/u,
+        /Minimal edits and compliant unchanged prose do not gain compulsory detailed ledgers/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Verification", [
+        /unsupported meaning change stops the affected rewrite or judgment/u,
       ]);
     }
   });

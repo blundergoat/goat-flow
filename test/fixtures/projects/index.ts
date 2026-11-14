@@ -25,6 +25,7 @@ const HEALTHY_GOAT_FLOW_GITIGNORE = [
   "",
 ].join("\n");
 
+// Healthy projects expose every required playbook; tests override only the missing or invalid files relevant to their finding.
 const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
   "browser-use.md",
   "changelog.md",
@@ -38,12 +39,18 @@ const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
   "skill-playbook-authoring-sync.md",
   "test-selection.md",
   "writing-agent-facing-instructions.md",
+  "writing-fidelity-audit.md",
   "writing-sentence-diagnostics.md",
   "writing-structure-diagnostics.md",
   "writing-human-facing-prose.md",
 ] as const;
 
-// Render the default playbook index a healthy-project audit fixture exposes to users.
+/**
+ * List the required playbooks so a healthy fixture passes the audit's discovery check.
+ * Use the default index unless a test needs a missing or invalid discovery row.
+ *
+ * @returns the versioned README content exposed by the fixture filesystem
+ */
 function healthyPlaybookReadme(): string {
   const rows = HEALTHY_STANDALONE_PLAYBOOK_FILENAMES.map(
     (filename) => `| [\`${filename}\`](./${filename}) | Fixture | n/a |`,
@@ -59,7 +66,13 @@ ${rows.join("\n")}
 `;
 }
 
-// Render one versioned playbook with the first section users expect to load.
+/**
+ * Supply the version and entry section expected from an installed playbook.
+ * Use for healthy fixture files; failure cases replace this content through filesystem overrides.
+ *
+ * @param filename - registered playbook basename used as the heading
+ * @returns valid playbook content for the fixture's default audit result
+ */
 function healthyPlaybook(filename: string): string {
   return `---
 goat-flow-reference-version: "${AUDIT_VERSION}"
@@ -80,7 +93,7 @@ Fixture capability is available.
  * @returns file access with selected built-in content; unlisted file reads return null and directory listings start empty
  */
 export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
-  // Stands in for the committed goat-flow files an audit user would really have on disk.
+  // Resolve installed fixture files without reading or changing the developer's checkout.
   const defaultReadFile = (path: string): string | null => {
     // The default project keeps committed goat-flow files visible to audit users.
     if (path === ".goat-flow/.gitignore") return HEALTHY_GOAT_FLOW_GITIGNORE;

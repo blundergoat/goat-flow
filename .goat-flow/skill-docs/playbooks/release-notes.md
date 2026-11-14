@@ -166,6 +166,8 @@ Before publishing:
 
 ## Related References
 
+- [`writing-fidelity-audit.md`](./writing-fidelity-audit.md) - source-visible meaning review for substantive recomposition or derivation with distinct claims, or unresolved fidelity.
+
 - [`changelog.md`](./changelog.md) - source-of-truth release ledger.
 - [`writing-human-facing-prose.md`](./writing-human-facing-prose.md) - core correctness and diagnostic routing after audience and selection are settled.
 - [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) - optional document-level assembly diagnosis before sentence work.

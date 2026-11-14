@@ -272,7 +272,7 @@ workflow/                        = packaged template source copied into target p
 │   ├── goat-qa/references/       = progressive output templates loaded only when rendering QA results
 │   ├── goat-clarity/SKILL.md    = bounded comment, naming, and private-placement remediation template
 │   ├── reference/               = skill-preamble.md and skill-conventions.md templates
-│   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, naming-and-placement, observability, page-capture, release-notes, skill-playbook-authoring-sync, test-selection, writing-agent-facing-instructions, writing-human-facing-prose, writing-sentence-diagnostics, writing-structure-diagnostics
+│   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, naming-and-placement, observability, page-capture, release-notes, skill-playbook-authoring-sync, test-selection, writing-agent-facing-instructions, writing-fidelity-audit, writing-human-facing-prose, writing-sentence-diagnostics, writing-structure-diagnostics
 │
 ├── hooks/                       = hook templates and agent hook config templates
 │   ├── run-hook.mjs             = generated native launcher API and CLI from src/hooks
@@ -467,6 +467,7 @@ docs/                            = user and maintainer documentation
 │       ├── skill-playbook-authoring-sync.md = built-in playbook enrollment and verification contract
 │       ├── test-selection.md    = value-led test placement, dispositions, and safe mutation handoff
 │       ├── writing-agent-facing-instructions.md = agent-read authoring: skills, playbooks, shared preamble/conventions, instruction files, hook messages, README discovery rows
+│       ├── writing-fidelity-audit.md     = source-visible meaning review for substantive recomposition or derivation with distinct claims, or unresolved fidelity
 │       ├── writing-sentence-diagnostics.md = sentence-level reader-cost diagnostics after the writing core
 │       ├── writing-structure-diagnostics.md = document-level assembly diagnostics before sentence work
 │       └── writing-human-facing-prose.md     = compact correctness router for human-read prose; agent-read control text exempt
