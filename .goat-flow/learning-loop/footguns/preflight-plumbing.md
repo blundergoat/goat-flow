@@ -1,6 +1,6 @@
 ---
 category: preflight-plumbing
-last_reviewed: 2026-10-22
+last_reviewed: 2026-11-15
 ---
 
 **Scope:** Data crossing the Node-to-shell boundary inside preflight and CI scripts: command substitution, formatting that shell arithmetic cannot parse, and stdout fed into pattern matchers. What the audit checks mean lives in [auditor.md](auditor.md).
@@ -100,9 +100,15 @@ last_reviewed: 2026-10-22
 **Status:** active | **Created:** 2026-10-22 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Gate Gruff on the build marker and preserve the package build's executable CLI permission before writing that marker.
 
-**Prevention:** `scripts/preflight-checks.sh` (search: `check_typescript`, `tests|audit|memory|content|drift|gruff`) must complete both compiler output and the CLI permission step before Gruff starts. Test a checkout with no `dist`, not only an existing development build. `test/integration/preflight-test-diagnostics.test.ts` (search: `start gruff`) checks the scheduler order.
+**Prevention:** `scripts/preflight-checks.sh` (search: `check_typescript`, `tests|audit|memory|content|drift|gruff|links`) must complete both compiler output and the CLI permission step before Gruff starts. Test a checkout with no `dist`, not only an existing development build. `test/integration/preflight-test-diagnostics.test.ts` (search: `start gruff`) checks the scheduler order.
 
 **Evidence:** An untouched no-build worktree reported `design.package-bin-missing package.json`; gating Gruff alone changed that to `design.package-bin-not-executable package.json`. `package.json` (search: `chmodSync`) already defines the required build permission step. The main checkout's older executable build had concealed both failures.
+
+**Recurrence 2026-11-15 (package inventory):** The links worker could start before the compiler published its ready marker.
+Its `npm pack --dry-run` read `dist/cli/cli-parser.js` while TypeScript rewrote it and failed with `EOF`. The existing scheduler fixture,
+with a delayed compiler and a build requirement for links, fails before adding links to the build-dependent list and passes afterward.
+Keep every generated-file consumer behind that marker. Evidence: `scripts/preflight-checks.sh` (search: `run_preflight_workers`) and
+`test/integration/preflight-test-diagnostics.test.ts` (search: `waits for a complete build before checking packaged README links`).
 
 ## Resolved Entries
 

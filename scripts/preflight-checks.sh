@@ -2686,7 +2686,7 @@ run_preflight_workers() {
             [[ "${started[$index]:-0}" -eq 0 && "$active" -lt 4 ]] || continue
             name="${names[$index]}"
             case "$name" in
-                tests|audit|memory|content|drift|gruff)
+                tests|audit|memory|content|drift|gruff|links)
                     [[ -f "$LEDGER_DIR/build.ready" || "${finished[0]:-0}" -eq 1 ]] || continue ;;
             esac
             local -a runner=(scripts/preflight-command-runner.mjs --timeout-seconds 0 --heartbeat-seconds "$preflight_heartbeat_seconds" --label "Preflight $name")

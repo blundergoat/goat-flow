@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+Version 1.19.0 below is prepared but has not been published.
+
+## v1.19.0 - 2026-10-23
+
 ### Added
 
 - **Fidelity audit guidance** - Adds a source-visible meaning check for substantial prose rewrites, conditional writing routes and a clarity receipt field. Improved agent behavior remains unverified.
@@ -9,6 +13,9 @@
 - **Instruction audit** - Flags ambiguous tick reminders, agent Git directives and retired commands; missing milestone steps affect scores only.
 
 ### Changed
+
+- **Hooks run on Node** - New installations and Sync register Node handlers; restart your agent after upgrading.
+- **BREAKING: Direct upgrades start at 1.16.0** - Older projects must install 1.18.0 first, then 1.19.0; downgrading to Bash releases is unsupported.
 
 - **Quality save recovery** - Prompts retain every finding after a rejected save and distinguish transport rejection from saver validation errors.
 
@@ -20,7 +27,7 @@
 
 - **Plan layout and progress** - New plans separate notes, evidence and scripts; progress entries show timestamps and work time. Existing plans opt in.
 
-- **Windows/WSL hook evidence** - Reviewed captures of the current hook runtime cover all 18 delivery rows, including Claude Code 2.1.317 and Codex CLI 0.167.0 on both hosts and helper-free Antigravity 1.4.8 on Windows. Support gates are unchanged.
+- **Windows/WSL hook evidence** - Reviewed captures of the current hook runtime cover all 18 delivery rows, including helper-free Antigravity on Windows. Linux/macOS live delivery remains unverified; see the CLI capture matrix for versions and limits. Support gates are unchanged.
 - **Hook policy checks no longer use the frozen Bash reference** - Release checks run the installed Node policy hooks against the shipped corpus on Linux, macOS, Windows and WSL; installs are unaffected.
 
 - **BREAKING: Node 20.12.0 minimum** - The minimum supported Node version rises from 20.11.0 to 20.12.0. Upgrade Node before installing or running goat-flow.
@@ -41,6 +48,8 @@
 
 ### Security
 
+- **Cmd caret escapes no longer hide blocked commands** - Policies recognize caret-space and caret-tab forms of publication, merge and deletion commands.
+
 - **Binary files cannot hide secrets from Stop hooks** - Post-turn safety keeps blocking when skipped worktree or staged content holds a token or private key, including UTF-16 text. A private-key header alone blocks in any binary file except a compiled program, where key data must follow it. A staged asset over 256 MiB no longer blocks every Stop. Run `goat-flow hooks sync` to update existing installs.
 
 - **Native PowerShell policy inspection** - Literal commands reach both owning policies; unresolved dynamic execution and session-state changes remain blocked. Run `goat-flow hooks sync` to refresh existing installations.
@@ -54,25 +63,13 @@
 
 ### Fixed
 
+- **Guardrails troubleshooting** - Recovery guidance names Node prerequisites and explains refusals for uninspectable native PowerShell commands.
+
 - **Antigravity hooks start on Windows** - Hook commands now survive cmd.exe parsing; run `goat-flow hooks sync` to repair existing installs.
 - **Node hook verification** - Native registration audits use the configured hook filename, and policy self-tests fail when no cases run or the declared case count is wrong.
 - **Copilot hooks start on Windows** - Copilot's PowerShell hook commands now parse, so goat-flow hooks run instead of failing on every tool call; run `goat-flow hooks sync` to repair existing installs.
 - **Unchanged binary files no longer block every Stop** - Post-turn safety still blocks the first Stop that skips a binary file, then ends that session's repeated Stop with a warning while the files stay unchanged; coverage stays incomplete, and findings or other skipped files still block. Run `goat-flow hooks sync` to update existing installs.
 - **goat-review continues when a `worktree` snapshot is refused** - On Git LFS or `text=auto` repositories, or Git for Windows with `core.autocrlf` set, the skill re-selects `staged` or explicit paths instead of stopping for a waiver, and the `review snapshot` refusal names the converting path and attribute or the `core.autocrlf` value.
-
-## v1.19.0 - 2026-10-23
-
-### Security
-
-- **Cmd caret escapes no longer hide blocked commands** - Node policies recognize caret-space and caret-tab spellings of publication, PR merge and recursive deletion commands while keeping ordinary inspection available.
-
-### Changed
-
-- **Hooks run on Node** - New installations and `goat-flow hooks sync` register Node handlers; reload your agent after syncing an existing installation.
-
-### Fixed
-
-- **Native hook checks** - Audit and hook verification recognize the installed Node handlers and report missing dependencies.
 
 ## v1.18.0 - 2026-10-11
 

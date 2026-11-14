@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-10-10
+last_reviewed: 2026-11-15
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-outcomes.md](verification-outcomes.md) for interpreting execution and semantic outcomes, [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-gate-runs.md](verification-gate-runs.md) for ordering edits and gate runs during a change, [verification-size-gates.md](verification-size-gates.md) for size limits crossed by added text, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, [verification-gruff.md](verification-gruff.md) for the analyzer, [verification-environment.md](verification-environment.md) for whether the build, tree, or sandbox you measured is the one your claim is about, [milestone-accounting.md](milestone-accounting.md) for plan arithmetic, [milestone-timing.md](milestone-timing.md) for timing receipts, and [skill-trial-evidence.md](skill-trial-evidence.md) for skill-trial baselines and scoring.
@@ -56,7 +56,35 @@ Before renaming a test, search its full title across code and learning entries. 
 Read the source-owned labels before assembling a receipt, and describe live dirty bytes in adjacent prose.
 Evidence: `src/cli/review-validate-authority.ts` (search: `reviewScopeLabels`).
 
+**Recurrence 2026-11-15 (review ledger):** A search anchor containing a pipe made a refutation record fail the one-line grammar.
+Read the parser before drafting records; choose a function anchor without field separators.
+Evidence: `src/cli/review-validate-common.ts` (search: `REFUTATION_LEDGER_RECORD`).
+
 ---
+
+
+**Recurrence 2026-11-15 (release-index preview):** A temporary filesystem adapter overrode `readDir`, but the index parser calls `listDir`.
+Its assertion rejected the missing proposed ADR before any repository index was written. A later link-check probe also guessed a nonexistent helper filename. Read the immediate consumer and adapter interface,
+and discover an existing helper before importing it. Evidence: `src/cli/facts/shared/learning-loop-common.ts` (search: `listMarkdownEntries`) and
+`src/cli/types.ts` (search: `listDir(path: string): string[]`).
+
+
+**Recurrence 2026-11-15 (release heading):** Replacing the dated release heading with an undated one passed a patch check but failed preflight.
+The instruction-parity guard requires the dated heading, and three existing citations require `## Unreleased`. Preserve both contracts and
+label the prepared release as unpublished. Read those consumers before changing release structure. Evidence: `scripts/check-instruction-parity.mjs`
+(search: `readReleaseMetadata`) and `test/unit/local-instructions.test.ts` (search: `instruction release metadata`).
+
+
+**Recurrence 2026-11-15 (archive installation check):** A post-install probe expected archived provider templates in the installed runtime directory.
+The install and repeat preview had succeeded; comparing the registry's 41 unique scriptFiles instead verified the actual delivery contract.
+Use the destination inventory, not every archive input, when checking installation. Evidence: `src/cli/server/hooks-registry.ts`
+(search: `scriptFiles`) and `test/integration/packaged-hook-install.test.ts` (search: `extractPackedCandidate`).
+
+**Recurrence 2026-11-15 (build readiness):** The new package-link regression required the whole TypeScript worker to finish.
+A probe added work after the build-ready marker: links correctly ran before worker exit, but the assertion rejected that valid order.
+Check the fixture's ready-marker guard instead. Evidence: `scripts/preflight-checks.sh` (search: `PREFLIGHT_BUILD_READY`) and
+`test/integration/preflight-test-diagnostics.test.ts` (search: `waits for a complete build before checking packaged README links`).
+
 
 ## Lesson: I edited a dead code path because I assumed one implementation
 

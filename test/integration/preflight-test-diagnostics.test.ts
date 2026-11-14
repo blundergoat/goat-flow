@@ -261,10 +261,12 @@ function preflightSchedulerFixture({
   failingWorker = false,
   lingeringWorker = false,
   requireOverlap = false,
+  delayedBuild = false,
 }: {
   failingWorker?: boolean;
   lingeringWorker?: boolean;
   requireOverlap?: boolean;
+  delayedBuild?: boolean;
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "goat-preflight-scheduler-"));
   fixtureTemporaryDirectories.add(directory);
@@ -296,6 +298,7 @@ function preflightSchedulerFixture({
       "content",
       "drift",
       "gruff",
+      "links",
     ].includes(name)
       ? '[[ -f "$PREFLIGHT_BUILD_READY" ]] || exit 9'
       : ":";
@@ -326,7 +329,7 @@ check_${name}() {
   ${requireBuild}
   printf 'start ${name}\\n' >> "$PREFLIGHT_TEST_DIRECTORY/events"
   ${overlapBarrier}
-  sleep ${name === "typescript" ? "0.3" : "0.1"}
+  sleep ${name === "typescript" ? (delayedBuild ? "1.5" : "0.3") : "0.1"}
   ${buildReady}
   pass "fixture ${name}"
   ${failure}
@@ -417,6 +420,25 @@ describe("preflight parallel scheduler", () => {
       assert.ok(position > previous, label);
       previous = position;
     }
+  });
+
+  // A clean build writes package files while independent checks finish; packing must wait for its ready marker.
+  it("waits for a complete build before checking packaged README links", () => {
+    const fixture = preflightSchedulerFixture({ delayedBuild: true });
+    const result = spawnSync(
+      "bash",
+      [fixture.script, "--no-color", "--ascii"],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+        timeout: fixtureTimeoutMs,
+        env: { ...process.env, PREFLIGHT_TEST_DIRECTORY: fixture.directory },
+      },
+    );
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const events = readFileSync(join(fixture.directory, "events"), "utf8");
+    // The links worker requires the ready marker; later compiler-worker checks may still be running.
+    assert.ok(events.includes("start links"));
   });
 
   it("retains a worker's partial results and diagnostic while failing the complete run", () => {

@@ -803,7 +803,7 @@ Use `--dry-run` to inspect managed template drift without composing a prompt or 
 
 ### `goat-flow install [path] --agent <id> [--dry-run] [--force] [--update-config-version] [--clean-deprecated]`
 
-Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved; a source-backed replaceable file needs `--force-user-owned` plus a matching `--force-path`. Existing config choices and comments are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. Every valid older release, including an older patch, automatically receives the executing CLI's config version; v0.9 projects also receive deprecated-skill cleanup.
+Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved; a source-backed replaceable file needs `--force-user-owned` plus a matching `--force-path`. Existing config choices and comments are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. Supported older installations receive the executing CLI's config version. One-step upgrades start at 1.16.0; older projects must install 1.18.0 first, then retry 1.19.0.
 
 An existing config must record a complete numeric `X.Y.Z` release on a single top-level `version:` line; quoted keys, quoted values, anchors and inline comments are supported. Block scalars, aliases and flow mappings need owner review before installation because the line-based migration cannot preserve them safely. If the project is newer, upgrade the CLI before installing. If the saved version is missing, malformed, a prerelease or otherwise cannot be safely compared, review that value first. Public install and `setup --apply` refuse these targets before writing config, managed files, registrations or receipts. Force and `--update-config-version` cannot override the refusal. A fresh target without a config remains installable.
 
@@ -860,7 +860,7 @@ A locally edited managed file no longer blocks an upgrade on its own. When your 
 
 The decisions guide, `.goat-flow/learning-loop/decisions/README.md`, has one ownership-transfer exception. Earlier releases seeded it as user-owned and recorded no baseline. An exact copy of a recognised released template refreshes automatically. An inherited custom or unrecognised copy stays `local-preserved`, even without install history or after later template changes; `--force` and `--force-managed` do not replace it. To adopt the current package guide, run `goat-flow install <project> --agent <agent> --force-path .goat-flow/learning-loop/decisions/README.md`. After verification it receives the normal package baseline and follows ordinary managed-file rules.
 
-Keeping an inherited guide leaves that path without a package baseline and prevents a fresh full-install receipt. Other verified files still update normally; the completion summary names the kept guide and adoption command. The same rules apply to a guide in the old `.goat-flow/decisions/` folder: preview inspects it before the installer moves it. Unsafe paths and invalid history still block. Direct Bash installation with a guide in either location refuses before mutation and points to the public CLI; fresh installs remain supported.
+Keeping an inherited guide leaves that path without a package baseline and prevents a fresh full-install receipt. Other verified files still update normally; the completion summary names the kept guide and adoption command. The same rules apply to a guide in the old `.goat-flow/decisions/` folder: preview inspects it before the installer moves it. Unsafe paths and invalid history still block. The Bash installer no longer ships; use the public CLI for fresh installs and upgrades.
 
 If the preview blocks, inspect the listed paths, then choose the narrowest authority that covers them:
 
@@ -872,6 +872,28 @@ If the preview blocks, inspect the listed paths, then choose the narrowest autho
 | `--force-user-owned` plus a matching `--force-path` | replaces exactly the named user-owned file from its template |
 
 `--force-user-owned` on its own exits 2: replacing your content is never a broad choice. A `--force-path` that matches no row in the preview also fails, naming why - a typo, or a user-owned path that still needs `--force-user-owned`. No authority reaches a symlinked, non-regular, or unreadable destination; those stay blocked until you repair the path. The preview itself needs no rollback because it changes nothing. Before an authorized replacement, preserve the listed files with version control or a separate backup; after apply, use that same VCS/backup evidence to restore them if the result is not wanted.
+
+### Upgrading to 1.19.0
+
+Use Node 20.12.0 or newer. From the target project, preview the pinned release before applying it:
+
+```bash
+npx @blundergoat/goat-flow@1.19.0 install . --agent <id> --dry-run
+npx @blundergoat/goat-flow@1.19.0 install . --agent <id>
+```
+
+These package commands apply after 1.19.0 is published. Before publication, use a reviewed local package or the contributor checkout command in the README.
+For a project older than 1.16.0, use `npx @blundergoat/goat-flow@1.18.0 install . --agent <id>` first.
+
+Install preserves saved hook choices and user configuration. It removes retired Bash hooks only when their bytes match the saved baseline;
+edited or unclassified copies remain for review. Sync refreshes hooks from the running CLI's bundle; it does not upgrade that CLI.
+After upgrading, restart the agent and replace old Bash self-test lines in project instructions with the Node commands in the
+[guardrails guide](guardrails.md#verification). The Copilot Unix registration still requires the provider's Bash launch field.
+
+If installation is interrupted, keep the same pinned package, inspect reported claims with `goat-flow claims inspect . --target <path>`,
+and use the [claim recovery command](#goat-flow-claims-inspectrecover-path---target-project-relative-path) only after confirming that the writer has stopped.
+Then rerun the pinned install. Do not delete install state or bypass an unresolved policy or local-file review.
+Downgrading to a Bash release is unsupported: its installer cannot restore the new registrations, removed files and Node-only prerequisites.
 
 ### Atomic installer writes
 

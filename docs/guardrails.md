@@ -22,7 +22,7 @@ GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `den
 | Copilot CLI | `preToolUse` hooks registered in `.github/hooks/hooks.json` and invoking central hooks | `.github/hooks/hooks.json`, `.goat-flow/hooks/` |
 | Antigravity | `PreToolUse` hooks registered in `.agents/hooks.json` and invoking central hooks | `.agents/hooks.json`, `.goat-flow/hooks/` |
 
-Enabled Claude Code deny hooks block native PowerShell tool requests and direct the agent to the Bash tool with Git Bash. To refresh existing Claude registrations, run `goat-flow hooks sync .` in the selected project and restart Claude Code.
+Enabled Claude Code deny hooks inspect literal native PowerShell commands with both policies. Dynamic execution and session-state changes that cannot be inspected remain blocked. To refresh existing Claude registrations, run `goat-flow hooks sync .` in the selected project and restart Claude Code.
 
 ## Verification
 
@@ -42,7 +42,8 @@ A policy denial means the hook rejected the proposed command. An unavailable pol
 | Diagnostic | Meaning and next step |
 | --- | --- |
 | A named policy or command-syntax denial | Review the proposed command against the named rule. Retrying after a delay does not change the rule. |
-| `Policy hook unavailable` | Read the named hook and reason. Check Bash availability and the installed entrypoint and shared policy store; repair an incomplete installation before retrying. |
+| `Cannot inspect native PowerShell execution or session-state changes` | Use separate literal commands without dynamic syntax. A PowerShell launcher does not change the proposed command's shell; retain its tool-shell context when retrying. |
+| `Policy hook unavailable` | Read the named hook and reason. Check Node availability and the installed entrypoint and shared policy store; repair an incomplete installation before retrying. |
 | `exceeded its deadline; process-tree termination was requested` | The launcher reached its deadline. Let other verification work finish, then retry the same check once on its own. If it times out again, retain the diagnostic and investigate the named hook. A successful sequential retry does not establish what caused the original timeout. |
 | `hook timeout configuration is invalid` | Remove or correct `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS`. An unset or empty value uses the registered deadline; a supplied value must be a positive whole number of milliseconds. Values above the registered ceiling are capped at that ceiling. |
 
