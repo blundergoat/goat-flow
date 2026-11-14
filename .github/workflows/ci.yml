@@ -1,9 +1,9 @@
 # The CI workflow a developer sees as checks on every pull request to main or dev, and again after each merge to main.
 #
-# Every run includes eight Ubuntu jobs; the platform jobs join only on the weekly schedule or a manual run:
+# Every run includes nine Ubuntu jobs; the platform jobs join only on the weekly schedule or a manual run:
 # - checks: preflight without its test suite, the shell syntax check and the version-stamp check.
 # - test-fast: every test file outside the slow set, split across two shards.
-# - test-slow: the subprocess-heavy suite, one file at a time per runner, split across five shards.
+# - test-slow: the subprocess-heavy suite, one file at a time per runner, split across six shards.
 # - Platform jobs: Windows hook contracts, hook port controls (Linux, macOS, Windows and WSL2), the Windows ratchet.
 name: CI
 
@@ -104,19 +104,19 @@ jobs:
       - name: Test (fast shard ${{ matrix.shard }}/2)
         run: npm run test:fast -- --shard=${{ matrix.shard }}/2
 
-  # The subprocess-heavy suite, split across five runners that a PR lists as test-slow (1/5) through test-slow (5/5).
+  # The subprocess-heavy suite, split across six runners that a PR lists as test-slow (1/6) through test-slow (6/6).
   #
   # Several of its files share repository-root state such as .goat-flow/dashboard-state.json, so within one checkout they run one at a time.
   # Shards get separate checkouts, so the split is safe where raising --test-concurrency is not; run-tests.mjs balances files by measured cost.
   test-slow:
     runs-on: ubuntu-latest
     strategy:
-      # One failing shard leaves the other four running, so a single run reports every failing slow test.
+      # One failing shard leaves the other five running, so a single run reports every failing slow test.
       fail-fast: false
       matrix:
-        # Each value starts one runner and becomes --shard=N/5; changing the count means changing every /5 in this job too.
-        shard: [1, 2, 3, 4, 5]
-    name: test-slow (${{ matrix.shard }}/5)
+        # Each value starts one runner and becomes --shard=N/6; changing the count means changing every /6 in this job too.
+        shard: [1, 2, 3, 4, 5, 6]
+    name: test-slow (${{ matrix.shard }}/6)
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Fetch pinned upgrade fixture
@@ -137,9 +137,9 @@ jobs:
       - name: Build
         run: npm run build
 
-      # To rerun one failing shard locally after `npm run build`, run for example `npm run test:slow:ci -- --shard=3/5`.
-      - name: Test (slow shard ${{ matrix.shard }}/5)
-        run: npm run test:slow:ci -- --shard=${{ matrix.shard }}/5
+      # To rerun one failing shard locally after `npm run build`, run for example `npm run test:slow:ci -- --shard=3/6`.
+      - name: Test (slow shard ${{ matrix.shard }}/6)
+        run: npm run test:slow:ci -- --shard=${{ matrix.shard }}/6
 
   # Proves ADR-048/ADR-053 hook contracts and the Windows-only audit/package paths on the package-minimum Node, 20.12.0 from package.json's engines.
   # Apart from that Node, it uses only the runner's preinstalled PowerShell, Git Bash and tar.

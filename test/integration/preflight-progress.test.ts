@@ -787,8 +787,8 @@ describe("preflight Tests-phase progress", () => {
         `${file} must run in the serial slow pool`,
       );
     }
-    const shards = Array.from({ length: 5 }, (_, index) =>
-      Array.from(selection.shard(slow, { index: index + 1, total: 5 })),
+    const shards = Array.from({ length: 6 }, (_, index) =>
+      Array.from(selection.shard(slow, { index: index + 1, total: 6 })),
     );
     assert.ok(shards.every((files) => files.length > 0));
     assert.deepEqual(shards.flat().sort(), [...slow].sort());

@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-11-03
+last_reviewed: 2026-11-15
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -31,10 +31,10 @@ last_reviewed: 2026-11-03
 
 **Created:** 2026-03-28
 **Severity:** INTEGRATION
-**Updated:** 2026-10-17
+**Updated:** 2026-11-15
 **Decision changed:** After a guard rejects cleanup syntax, keep every destructive target literal and use the narrowest permitted file and directory operations.
 **Trigger phase:** ACT
-**Incident count:** 17 | **Latest occurrence:** 2026-10-17
+**Incident count:** 19 | **Latest occurrence:** 2026-11-15
 
 **Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves. This entry owns recovery after a block; authoring a search pattern that avoids the block is `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`).
 
@@ -63,6 +63,9 @@ For read-only reconciliation, run Git and checksum commands directly and compare
 - **Recurrence 2026-10-17 (plan snapshots):** Embedding two milestone documents in an inline Node command exceeded the command-size limit before execution. The file-edit tool saved those bounded temporary snapshots, then direct Git commands built and checked their patch. Keep document bodies out of shell command arguments. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
 - **Recurrence 2026-10-17 (clarity receipt):** Embedding the full clarity inventory exceeded command inspection limits before the receipt was saved. Save bounded counts, paths and hashes; derive case names from the existing test file. Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`).
 - **Recurrence 2026-10-17 (receipt pipeline):** A case extractor looked for `test` calls although the suite uses `it`. Its assertion failed, but the downstream redactor exited zero and saved an empty receipt. Preserve that file, use a fresh destination, and enable `pipefail` so producer failure cannot masquerade as saved evidence. Evidence: `test/unit/hook-policy-prefixes.test.ts` (search: `policy timing and privilege prefixes`).
+
+- **Recurrence 2026-11-15:** M57 hosted-CI capture embedded all job steps in one redactor command and exceeded the 16,384-byte inspection limit before writing. A compact record retained job timestamps, result rows, runner images and cache identity. Read-only gh help/status forms also met the write guard; plain API reads succeeded. Check command byte length before submission and keep evidence to fields needed for the claim. Evidence: `workflow/hooks/policy-input.mjs` (search: `policyCommandSizeRefusal`) and `workflow/hooks/deny-dangerous/github-command.mjs` (search: `GitHub write via gh is blocked`).
+- **Recurrence 2026-11-15 (CI proposal):** The six-shard follow-up embedded the full CI YAML in a validator command and hit the same inspection limit before execution. Generating the candidate from the existing file and bounded replacements passed the parsed-YAML check without changing source. Measure the complete command before submitting it, even when its source data was already reviewed. Evidence: `workflow/hooks/policy-input.mjs` (search: `policyCommandSizeRefusal`).
 
 ---
 
