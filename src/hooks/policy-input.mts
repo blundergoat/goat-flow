@@ -1,12 +1,35 @@
 /** Decode provider input for both policy evaluators without launching JSON or shell tools. */
+import { readSync } from "node:fs";
+
 type PolicyObject = Record<string, unknown>;
 export type PolicyOutputMode =
   "copilot-json" | "antigravity-json" | "stderr-exit";
+
+/** Raw provider envelopes may encode a valid 256 KiB command with JSON escapes, but must not consume unbounded memory. */
+export const RAW_POLICY_PAYLOAD_LIMIT_BYTES = 2 * 1024 * 1024;
 
 /** A denial with the protection that owns it; `{ scope: "destructive", reason }` renders as `Policy destructive: <reason>`. */
 export interface PolicyDenial {
   scope: string;
   reason: string;
+}
+
+/** Read at most one byte beyond the raw envelope limit so the policy can refuse oversized stdin without buffering the rest. */
+export function readBoundedPolicyStdin(fileDescriptor = 0): Uint8Array {
+  const input = Buffer.allocUnsafe(RAW_POLICY_PAYLOAD_LIMIT_BYTES + 1);
+  let totalBytes = 0;
+  while (totalBytes < input.byteLength) {
+    const bytesRead = readSync(
+      fileDescriptor,
+      input,
+      totalBytes,
+      input.byteLength - totalBytes,
+      null,
+    );
+    if (bytesRead === 0) break;
+    totalBytes += bytesRead;
+  }
+  return input.subarray(0, totalBytes);
 }
 
 /** Decode original request bytes strictly; retain Bash's removal of terminal LF characters. */

@@ -204,7 +204,7 @@ function effectiveStateFacts(
 }
 
 /** Check the historical Stop paragraph so an unrelated hook's date or gate cannot satisfy the reader-facing claim. */
-function assertCurrentCodexStopEvidence(
+function assertHistoricalCodexStopEvidence(
   documentation: string,
   source: string,
 ): void {
@@ -220,12 +220,7 @@ function assertCurrentCodexStopEvidence(
   assert.match(stopParagraph, /Codex CLI 0\.154\.0/iu, source);
   assert.match(stopParagraph, /registered Stop/iu, source);
   assert.doesNotMatch(stopParagraph, /expires?|expiring/iu, source);
-  assert.match(stopParagraph, /scenario-unverified/iu, source);
-  assert.doesNotMatch(
-    documentation,
-    /Stop remains `provider-capture-stale`/iu,
-    source,
-  );
+  assert.match(stopParagraph, /scenario-unverified.*at the time/iu, source);
 }
 
 /** Keep the dated deny capture and its original support limitation attributable. */
@@ -265,19 +260,19 @@ describe("hook provider contracts", () => {
       join(process.cwd(), "docs", "cli.md"),
       "utf8",
     );
-    assert.equal(stopEvidence?.effectiveSupportGate, "scenario-unverified");
-    // Both policies delivered denials in the same live session; neither may skip its separate local scenario proof.
+    assert.equal(stopEvidence?.effectiveSupportGate, "provider-capture-stale");
+    // The historical Linux session stays attributable while Windows delivery on the current runtime is pending.
     for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
       const denyEvidence = getHookSpec(hookId)?.providerEvidence.codex;
       assert.ok(denyEvidence, hookId);
       assert.equal(
         currentHookProviderSupportGate(denyEvidence),
-        "scenario-unverified",
+        "provider-capture-stale",
         hookId,
       );
     }
-    assertCurrentCodexStopEvidence(hookReadme, "workflow/hooks/README.md");
-    assertCurrentCodexStopEvidence(cliGuide, "docs/cli.md");
+    assertHistoricalCodexStopEvidence(hookReadme, "workflow/hooks/README.md");
+    assertHistoricalCodexStopEvidence(cliGuide, "docs/cli.md");
     // Simulate the reported drift while leaving Gruff's valid gate elsewhere in the guide.
     const staleStopGuide = cliGuide
       .split(/\n\s*\n/u)
@@ -288,7 +283,7 @@ describe("hook provider contracts", () => {
       )
       .join("\n\n");
     assert.throws(() =>
-      assertCurrentCodexStopEvidence(staleStopGuide, "stale Stop control"),
+      assertHistoricalCodexStopEvidence(staleStopGuide, "stale Stop control"),
     );
     assertCurrentCodexDenyEvidence(hookReadme, "workflow/hooks/README.md");
     assertCurrentCodexDenyEvidence(cliGuide, "docs/cli.md");

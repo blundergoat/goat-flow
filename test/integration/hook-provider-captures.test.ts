@@ -91,14 +91,15 @@ describe("host-specific hook provider captures", () => {
       assert.equal(
         row.capture !== undefined,
         row.verification === "verified",
-        row.caseId + ": only verified rows carry a capture",
+        row.caseId + ": only verified rows carry current receipts",
       );
-      if (!row.capture) continue;
-      assert.match(row.capture.artifactSha256, /^[a-f0-9]{64}$/u);
-      assert.match(row.capture.approvalPacketSha256, /^[a-f0-9]{64}$/u);
+      const receipt = row.capture ?? row.historicalCapture;
+      if (!receipt) continue;
+      assert.match(receipt.artifactSha256, /^[a-f0-9]{64}$/u);
+      assert.match(receipt.approvalPacketSha256, /^[a-f0-9]{64}$/u);
       // Rows share one map, so dropping a key would silently stop every row from noticing a change to that file.
       assert.equal(
-        Object.keys(row.capture.runtimeSha256).length,
+        Object.keys(receipt.runtimeSha256).length,
         CAPTURED_RUNTIME_FILE_COUNT,
         row.caseId + ": a capture records every runtime hash",
       );
@@ -112,7 +113,7 @@ describe("host-specific hook provider captures", () => {
       );
       // Each row is checked only against its own hook's files, so a change to a file this hook does not load leaves the row valid.
       for (const row of hookCaptures) {
-        // A row without a capture claims no runtime bytes.
+        // Historical receipts retain their original hashes and do not attest the current runtime.
         if (!row.capture) continue;
         // Changing any file this hook loads means recapturing this hook's rows.
         for (const file of hook.scriptFiles) {
@@ -166,7 +167,7 @@ describe("host-specific hook provider captures", () => {
         }
       }
     }
-    // Verified captures inform review only; each gate they attach to still waits for local scenario proof.
+    // Each observation stays attached to its provider and event, including rows with a current host gap.
     const attached = [
       ["copilot", "deny-dangerous", "C7"],
       ["copilot", "deny-git-mutations", "C7"],
@@ -195,17 +196,34 @@ describe("host-specific hook provider captures", () => {
       ["antigravity", "deny-dangerous", "C18"],
       ["antigravity", "deny-git-mutations", "C18"],
     ] as const;
+    const verificationByCase = new Map([
+      ["C1", "incomplete"],
+      ["C4", "incomplete"],
+      ["C5", "incomplete"],
+      ["C6", "incomplete"],
+      ["C7", "incomplete"],
+      ["C9", "incomplete"],
+      ["C10", "incomplete"],
+      ["C13", "incomplete"],
+      ["C16", "incomplete"],
+      ["C18", "incomplete"],
+    ]);
+    const staleGates = new Set([...verificationByCase.keys(), "C14", "C15"]);
     for (const [provider, hookId, caseId] of attached) {
       const evidence = getHookSpec(hookId)?.providerEvidence?.[provider];
-      assert.ok(
-        evidence?.hostCaptures?.some(
-          (row) => row.caseId === caseId && row.verification === "verified",
-        ),
-        `${provider}/${hookId} carries verified ${caseId}`,
+      const row = evidence?.hostCaptures?.find(
+        (capture) => capture.caseId === caseId,
+      );
+      assert.equal(
+        row?.verification,
+        verificationByCase.get(caseId) ?? "verified",
+        caseId,
       );
       assert.equal(
         evidence?.effectiveSupportGate,
-        "scenario-unverified",
+        staleGates.has(caseId)
+          ? "provider-capture-stale"
+          : "scenario-unverified",
         `${provider}/${hookId} gate`,
       );
     }
@@ -229,32 +247,26 @@ describe("host-specific hook provider captures", () => {
               .map((row) => row.host),
           ),
         ].sort();
-        if (
-          currentHookProviderSupportGate(evidence) === "scenario-unverified"
-        ) {
-          // Only live delivery on both captured hosts lets a gate wait for nothing but local scenario proof.
-          assert.deepEqual(
-            deliveredHosts,
-            ["windows", "wsl"],
-            label + ": verified delivery on both hosts",
-          );
-        } else {
-          // A delivered capture behind a provider gap means the reviewed gate is stale, not conservative.
-          assert.deepEqual(
-            deliveredHosts,
-            [],
-            label + ": provider gap without delivery",
-          );
-        }
+        const gate = currentHookProviderSupportGate(evidence);
+        const expectedHosts =
+          gate === "scenario-unverified"
+            ? ["windows", "wsl"]
+            : gate === "provider-capture-stale" && hook.event !== "PreToolUse"
+              ? ["wsl"]
+              : [];
+        assert.deepEqual(
+          deliveredHosts,
+          expectedHosts,
+          label + ": verified delivery by host",
+        );
       }
     }
   });
 
   it("keeps renewed Stop versions separate from earlier event captures", () => {
     for (const [caseId, provider, host, version] of [
-      ["C3", "claude", "windows", "2.1.322"],
-      ["C6", "codex", "windows", "0.168.0"],
-      ["C12", "claude", "wsl", "2.1.322"],
+      ["C3", "claude", "windows", "2.1.325"],
+      ["C12", "claude", "wsl", "2.1.325"],
       ["C15", "codex", "wsl", "0.169.0"],
     ] as const) {
       const stop = getHookSpec("post-turn-safety")?.providerEvidence?.[
@@ -266,71 +278,73 @@ describe("host-specific hook provider captures", () => {
       assert.equal(stop.capture?.providerVersion, version);
       assert.equal(stop.capture?.resultDelivery, "delivered");
       assert.equal(stop.capture?.continuationBehavior, "continued");
+      assert.ok(earlier.historicalCapture);
       assert.notEqual(
         stop.capture?.artifactSha256,
-        earlier.capture?.artifactSha256,
-        caseId + ": the Stop capture must not reuse another event's receipt",
+        earlier.historicalCapture.artifactSha256,
+        caseId + ": the Stop capture must not reuse the pre-tool receipt",
       );
     }
   });
 
-  it("verifies only the recaptured rows after the shared runtime change", () => {
+  it("retains verified host observations and reports incomplete Windows captures", () => {
     const windows = hostEvidence("copilot", "windows");
     const wsl = hostEvidence("copilot", "wsl");
     assert.equal(windows.caseId, "C7");
-    assert.equal(windows.verification, "verified");
-    assert.equal(windows.capture?.providerVersion, "1.0.103");
-    assert.equal(windows.capture?.resultDelivery, "delivered");
+    assert.equal(windows.verification, "incomplete");
+    assert.equal(windows.historicalCapture?.providerVersion, "1.0.103");
+    assert.equal(windows.historicalCapture?.resultDelivery, "delivered");
     assert.equal(wsl.caseId, "C16");
-    assert.equal(wsl.verification, "verified");
-    assert.equal(wsl.capture?.providerVersion, "1.0.91");
-    assert.equal(wsl.capture?.resultDelivery, "delivered");
+    assert.equal(wsl.verification, "incomplete");
+    assert.equal(wsl.historicalCapture?.providerVersion, "1.0.91");
+    assert.equal(wsl.historicalCapture?.resultDelivery, "delivered");
     const windowsClaude = hostEvidence("claude", "windows");
     assert.equal(windowsClaude.caseId, "C1");
-    assert.equal(windowsClaude.verification, "verified");
-    assert.equal(windowsClaude.capture?.providerVersion, "2.1.317");
+    assert.equal(windowsClaude.verification, "incomplete");
+    assert.equal(windowsClaude.historicalCapture?.providerVersion, "2.1.325");
     const wslClaude = hostEvidence("claude", "wsl");
     assert.equal(wslClaude.caseId, "C10");
-    assert.equal(wslClaude.verification, "verified");
-    assert.equal(wslClaude.capture?.providerVersion, "2.1.317");
+    assert.equal(wslClaude.verification, "incomplete");
+    assert.equal(wslClaude.historicalCapture?.providerVersion, "2.1.325");
     const windowsCodex = hostEvidence("codex", "windows");
     assert.equal(windowsCodex.caseId, "C4");
-    assert.equal(windowsCodex.verification, "verified");
-    assert.equal(windowsCodex.capture?.providerVersion, "0.167.0");
+    assert.equal(windowsCodex.verification, "incomplete");
+    assert.equal(windowsCodex.capture, undefined);
     const wslCodex = hostEvidence("codex", "wsl");
     assert.equal(wslCodex.caseId, "C13");
-    assert.equal(wslCodex.verification, "verified");
-    assert.equal(wslCodex.capture?.providerVersion, "0.167.0");
+    assert.equal(wslCodex.verification, "incomplete");
+    assert.equal(wslCodex.historicalCapture?.providerVersion, "0.169.0");
     const wslAntigravity = hostEvidence("antigravity", "wsl");
     assert.equal(wslAntigravity.caseId, "C18");
-    assert.equal(wslAntigravity.verification, "verified");
-    assert.equal(wslAntigravity.capture?.providerVersion, "1.4.12");
+    assert.equal(wslAntigravity.verification, "incomplete");
+    assert.equal(wslAntigravity.historicalCapture?.providerVersion, "1.4.12");
     const windowsAntigravity = hostEvidence("antigravity", "windows");
     assert.equal(windowsAntigravity.caseId, "C9");
-    assert.equal(windowsAntigravity.verification, "verified");
-    assert.equal(windowsAntigravity.capture?.providerVersion, "1.4.8");
+    assert.equal(windowsAntigravity.verification, "incomplete");
+    assert.equal(windowsAntigravity.capture, undefined);
     const expectedVerification: Readonly<
       Record<string, HookProviderHostEvidence["verification"]>
     > = {
-      C1: "verified",
+      C1: "incomplete",
       C2: "verified",
       C3: "verified",
-      C4: "verified",
-      C5: "verified",
-      C6: "verified",
-      C7: "verified",
+      C4: "incomplete",
+      C5: "incomplete",
+      C6: "incomplete",
+      C7: "incomplete",
       C8: "verified",
-      C9: "verified",
-      C10: "verified",
+      C9: "incomplete",
+      C10: "incomplete",
       C11: "verified",
       C12: "verified",
-      C13: "verified",
+      C13: "incomplete",
       C14: "verified",
       C15: "verified",
-      C16: "verified",
+      C16: "incomplete",
       C17: "verified",
-      C18: "verified",
+      C18: "incomplete",
     };
+    const historicalIds = new Set(["C1", "C7", "C10", "C13", "C16", "C18"]);
     for (const row of HOOK_PROVIDER_HOST_EVIDENCE) {
       const expected = expectedVerification[row.caseId] ?? "incomplete";
       assert.equal(row.verification, expected, row.caseId);
@@ -339,6 +353,18 @@ describe("host-specific hook provider captures", () => {
         expected === "verified",
         row.caseId,
       );
+      assert.equal(
+        row.historicalCapture !== undefined,
+        historicalIds.has(row.caseId),
+        row.caseId,
+      );
+      if (row.historicalCapture) {
+        assert.notEqual(
+          row.historicalCapture.runtimeSha256["policy-input.mjs"],
+          runtimeFileHash("policy-input.mjs"),
+          row.caseId + ": retain the original policy runtime hash",
+        );
+      }
     }
   });
 });

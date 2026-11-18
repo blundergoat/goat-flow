@@ -1,7 +1,8 @@
 /** Verify complete native policy decisions: provider rendering, request routing, guard dispatch and shell-state scoping. */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import fs, { mkdtempSync, rmSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -10,6 +11,10 @@ import {
   runPolicyHook,
   type PolicyGuard,
 } from "../../workflow/hooks/policy-evaluation.mjs";
+import {
+  RAW_POLICY_PAYLOAD_LIMIT_BYTES,
+  readBoundedPolicyStdin,
+} from "../../workflow/hooks/policy-input.mjs";
 
 let home = "";
 let repository = "";
@@ -83,6 +88,64 @@ describe("native policy provider responses", () => {
 });
 
 describe("native policy request routing", () => {
+  // Split a short input into single-byte reads to verify storage stays bounded independently of read size.
+  it("keeps backing storage within the input limit across short reads", (t) => {
+    const fixtureFd = 991;
+    const payload = Buffer.alloc(256, "x");
+    const backingBuffers = new Set<ArrayBufferLike>();
+    const originalRead = fs.readSync;
+    let bytesDelivered = 0;
+    const patchedRead = t.mock.method(
+      fs,
+      "readSync",
+      (
+        fd: number,
+        buffer: Buffer,
+        offset: number,
+        length: number,
+        position: number | null,
+      ) => {
+        if (fd !== fixtureFd)
+          return originalRead(fd, buffer, offset, length, position);
+        if (bytesDelivered === payload.length) return 0;
+        backingBuffers.add(buffer.buffer);
+        buffer[offset] = payload[bytesDelivered++];
+        return 1;
+      },
+    );
+    syncBuiltinESMExports();
+    try {
+      assert.deepEqual(readBoundedPolicyStdin(fixtureFd), payload);
+    } finally {
+      patchedRead.mock.restore();
+      syncBuiltinESMExports();
+    }
+    const capacity = [...backingBuffers].reduce(
+      (total, buffer) => total + buffer.byteLength,
+      0,
+    );
+    assert.ok(
+      capacity <= RAW_POLICY_PAYLOAD_LIMIT_BYTES + 1,
+      `short reads used ${capacity} backing bytes`,
+    );
+  });
+
+  it("refuses a raw provider envelope beyond the bounded stdin limit", async () => {
+    const outcome = await hook(
+      "deny-dangerous",
+      [],
+      `{"toolName":"bash","padding":"${"x".repeat(RAW_POLICY_PAYLOAD_LIMIT_BYTES)}"}`,
+    );
+    assert.ok(outcome.kind === "response");
+    assert.equal(outcome.exitCode, 0);
+    const response = JSON.parse(outcome.stdout);
+    assert.equal(response.permissionDecision, "deny");
+    assert.match(
+      response.permissionDecisionReason,
+      /2097152-byte policy input limit/u,
+    );
+  });
+
   it("protects the captured Antigravity read_file Path and refuses uninspectable reads", async () => {
     for (const [Path, decision, reason] of [
       [String.raw`C:\m61-fixture\.env`, "deny", "Policy secret:"],

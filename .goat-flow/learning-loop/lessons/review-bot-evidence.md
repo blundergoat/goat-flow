@@ -99,7 +99,7 @@ All three were wrong. Locally: `npm run typecheck` exits 0, `npm test` passes 83
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
 
-**Prevention:** Triage automated review comments against the current checkout, never against the comment text. Check the file content for "addressed" claims and re-read the cited symbol for open ones. Evidence anchors: `docs/coding-standards/git-commit-message.md` (search: `never longer`), `CLAUDE.md` (search: `Conventional `).
+**Prevention:** Triage automated review comments against the current checkout, never against the comment text. Check the file content for "addressed" claims and re-read the cited symbol for open ones. Evidence anchors: `docs/coding-standards/git-commit-message.md` (search: `Keep the entire header at 72 characters or fewer`), `CLAUDE.md` (search: `Conventional `).
 
 **What happened:** On PR #58, CodeRabbit appended `✅ Addressed in commits d40df9d to 5924750` to its finding that `docs/coding-standards/git-commit-message.md` contradicted the repository's 72-character subject rule. The file still read `No hard character limit` at review time, while `CLAUDE.md`, `AGENTS.md`, and `.github/copilot-instructions.md` all stated `≤72 chars`. Two other bot findings were the inverse: stale rather than unfixed. Codex reported that the release artifacts still identified as 1.15.0 and that the evidence contract had no production consumer, but `package.json`, `workflow/manifest.json`, and `CHANGELOG.md` were already at 1.15.1 and three server modules already imported the contract. Both classes are produced by bots reviewing an older commit than the branch head.
 

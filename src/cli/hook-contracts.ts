@@ -50,6 +50,18 @@ export interface HookProviderCaptureEvidence {
     "visible" | "not-visible" | "not-applicable" | "not-tested";
 }
 
+/** Hashes bind a host receipt to its original runtime and capture inputs. */
+interface HookProviderHostCapture extends HookProviderCaptureEvidence {
+  configurationPath: string;
+  nodeVersion: string;
+  artifactSha256: string;
+  approvalPacketSha256: string;
+  producer: string;
+  reviewSha256?: string;
+  /** SHA256 values keyed by paths relative to workflow/hooks; retained as captured. */
+  runtimeSha256: Readonly<Record<string, string>>;
+}
+
 /** Host-specific delivery observations retained separately from effective support gates. */
 export interface HookProviderHostEvidence {
   caseId: string;
@@ -61,16 +73,9 @@ export interface HookProviderHostEvidence {
   summary: string;
   limitations: readonly string[];
   /** Absent when no current-runtime capture is available; never infer delivery from the row. */
-  capture?: HookProviderCaptureEvidence & {
-    configurationPath: string;
-    nodeVersion: string;
-    artifactSha256: string;
-    approvalPacketSha256: string;
-    producer: string;
-    reviewSha256?: string;
-    /** SHA256 values keyed by paths relative to workflow/hooks; retained as captured. */
-    runtimeSha256: Readonly<Record<string, string>>;
-  };
+  capture?: HookProviderHostCapture;
+  /** Earlier delivery on runtime bytes that no longer apply to this row. */
+  historicalCapture?: HookProviderHostCapture;
 }
 
 /** Versioned evidence record for one provider, mode, event, and canonical tool combination. */

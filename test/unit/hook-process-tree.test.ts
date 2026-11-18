@@ -38,6 +38,22 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   }
 }
 
+/** Wait until a process marker contains the safe positive PID written by its running worker. */
+async function waitForReadyPid(markerPath: string): Promise<number> {
+  const deadline = Date.now() + 5000;
+  while (true) {
+    if (existsSync(markerPath)) {
+      const pid = Number(readFileSync(markerPath, "utf8"));
+      if (Number.isSafeInteger(pid) && pid > 0) return pid;
+    }
+    assert.ok(
+      Date.now() < deadline,
+      "worker PID did not arrive within five seconds",
+    );
+    await delay(10);
+  }
+}
+
 test("native cleanup resolves taskkill only from an absolute system root", () => {
   assert.equal(
     windowsTaskkillExecutablePath({ SystemRoot: "D:\\Windows" }),
@@ -77,17 +93,18 @@ test("native cleanup terminates a ready detached descendant and preserves unrela
     if (workerPid !== undefined && isRunning(workerPid))
       process.kill(workerPid, "SIGKILL");
   });
-  await waitFor(() => existsSync(marker) && existsSync(controlMarker));
-  workerPid = Number(readFileSync(marker, "utf8"));
-  assert.ok(Number.isSafeInteger(workerPid) && workerPid > 0);
+  const [readyWorkerPid, readyControlPid] = await Promise.all([
+    waitForReadyPid(marker),
+    waitForReadyPid(controlMarker),
+  ]);
+  workerPid = readyWorkerPid;
   const parentPid = parent.pid;
-  const controlPid = control.pid;
-  assert.ok(parentPid && controlPid);
+  assert.ok(parentPid && control.pid);
+  assert.equal(control.pid, readyControlPid);
   assert.ok(isRunning(parentPid));
   assert.ok(isRunning(workerPid));
-  assert.ok(isRunning(controlPid));
+  assert.ok(isRunning(readyControlPid));
   stopHookProcessTree(parent, process.platform, process.env);
-  const readyWorkerPid = workerPid;
   await waitFor(() => !isRunning(parentPid) && !isRunning(readyWorkerPid));
-  assert.ok(isRunning(controlPid), "unrelated work must remain running");
+  assert.ok(isRunning(readyControlPid), "unrelated work must remain running");
 });

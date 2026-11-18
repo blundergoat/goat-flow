@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, describe, it } from "node:test";
+import { after, describe, it, type TestContext } from "node:test";
 
 import { runAudit } from "../../src/cli/audit/audit.js";
 import {
@@ -53,6 +53,19 @@ import { verifyManagedConfiguredHook } from "../../src/cli/hooks-configured-runt
 import { countOwnedCommandRows } from "../unit/hook-registrar.helpers.js";
 
 const disposableProjects: string[] = [];
+
+/** Supply the provider precondition for cases that exercise local registration or proof. */
+function assumeReviewedClaudePolicies(testContext: TestContext): void {
+  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    const evidence = getHookSpec(hookId)?.providerEvidence.claude;
+    assert.ok(evidence);
+    const previous = evidence.effectiveSupportGate;
+    evidence.effectiveSupportGate = "scenario-unverified";
+    testContext.after(() => {
+      evidence.effectiveSupportGate = previous;
+    });
+  }
+}
 
 /** Minimal Claude settings shape used only to move or alter managed fixture entries. */
 interface ClaudeHookSettingsFixture {
@@ -305,7 +318,7 @@ describe("effective hook state", () => {
     // Missing Claude evidence fails instead of presenting a fixture as live support.
     assert.equal(
       claudeProviderEvidence?.effectiveSupportGate,
-      "scenario-unverified",
+      "provider-capture-stale",
     );
     // Missing Antigravity evidence likewise fails the undelivered-result contract.
     assert.equal(
@@ -314,7 +327,7 @@ describe("effective hook state", () => {
     );
   });
 
-  it("keeps Codex deny, Gruff and Stop proof valid as time advances", (testContext) => {
+  it("keeps Codex provider support gates stable as time advances", (testContext) => {
     const denySpec = getHookSpec("deny-dangerous");
     const gruffSpec = getHookSpec("gruff-code-quality");
     const postTurnSpec = getHookSpec("post-turn-safety");
@@ -334,16 +347,19 @@ describe("effective hook state", () => {
     });
     for (const now of ["2026-09-22T00:00:00Z", "2036-09-22T00:00:00Z"]) {
       testContext.mock.timers.setTime(new Date(now).getTime());
-      for (const evidence of [
-        denyCodexEvidence,
-        getHookSpec("deny-git-mutations")?.providerEvidence?.codex,
-        gruffCodexEvidence,
-        postTurnCodexEvidence,
-      ]) {
+      for (const [evidence, expected] of [
+        [denyCodexEvidence, "provider-capture-stale"],
+        [
+          getHookSpec("deny-git-mutations")?.providerEvidence?.codex,
+          "provider-capture-stale",
+        ],
+        [gruffCodexEvidence, "provider-capture-stale"],
+        [postTurnCodexEvidence, "provider-capture-stale"],
+      ] as const) {
         assert.ok(evidence);
         assert.equal(
           currentHookProviderSupportGate(evidence),
-          "scenario-unverified",
+          expected,
           `${evidence.identity} at ${now}`,
         );
       }
@@ -351,7 +367,8 @@ describe("effective hook state", () => {
   });
 
   // A desired hook with no exact registration is not protected merely because the registry lists it.
-  it("keeps enabled but unregistered hooks non-green", () => {
+  it("keeps enabled but unregistered hooks non-green", (t) => {
+    assumeReviewedClaudePolicies(t);
     const projectPath = createClaudeProject();
     const denyHookState = claudeHookState(projectPath, "deny-dangerous");
 
@@ -367,7 +384,8 @@ describe("effective hook state", () => {
   });
 
   // A current local install still stops at the registry's explicit configured-scenario gate.
-  it("separates current installation from scenario verification", () => {
+  it("separates current installation from scenario verification", (t) => {
+    assumeReviewedClaudePolicies(t);
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     recordCanonicalManagedHookBaseline(projectPath, [
@@ -581,7 +599,8 @@ describe("effective hook state", () => {
   });
 
   // A hard-linked agent config can contain exact bytes while remaining unsafe to execute.
-  it("keeps exact but hard-linked configuration untrusted", () => {
+  it("keeps exact but hard-linked configuration untrusted", (t) => {
+    assumeReviewedClaudePolicies(t);
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     const configPath = join(projectPath, ".claude", "settings.json");
@@ -770,11 +789,8 @@ describe("effective hook state", () => {
     assert.match(terminalCoverageLine ?? "", /WARNING/u);
     assert.match(markdownReport, /## Effective Hook Coverage: WARNING/u);
     assert.match(terminalReport, /deny-dangerous\/claude:/u);
-    assert.match(terminalReport, /scenario unverified/u);
-    assert.match(
-      terminalReport,
-      /hooks verify .*--scenario deny-hook --trusted-target/u,
-    );
+    assert.match(terminalReport, /provider capture stale/u);
+    assert.equal(auditDenyState.repairCommand, null);
     assert.equal(readFileSync(settingsPath, "utf-8"), settingsBeforeAudit);
   });
 
@@ -784,7 +800,8 @@ describe("effective hook state", () => {
    * Filesystem side effects: writes managed hooks, agent settings, verification receipts, and one conflict fixture inside a disposable project.
    * Invariant: optional disabled rows cannot lower an otherwise effective aggregate.
    */
-  it("passes effective required coverage with a disabled optional hook", () => {
+  it("passes effective required coverage with a disabled optional hook", (t) => {
+    assumeReviewedClaudePolicies(t);
     const projectPath = createClaudeProject();
     initializeDisposableGitProject(projectPath);
     mkdirSync(join(projectPath, "src"), { recursive: true });
@@ -883,13 +900,14 @@ describe("effective hook state", () => {
     );
     assert.deepEqual(
       claudeHookState(projectPath, "deny-dangerous").effectiveState,
-      { status: "effective", severity: "success" },
+      { status: "provider-capture-stale", severity: "warning" },
     );
   });
 
   // ADD INTEGRATION: a shared repair must invalidate both proofs, even when it restores identical release bytes.
   // Writes disposable runtime and evidence files, then replays both registered hooks with inert inputs.
-  it("requires independent policy proof after a shared runtime repair", () => {
+  it("requires independent policy proof after a shared runtime repair", (t) => {
+    assumeReviewedClaudePolicies(t);
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     /** Replay the selected policy's registered handler so the fixture records the same independent proof the Hooks page requires. */
@@ -989,12 +1007,12 @@ describe("effective hook state", () => {
       );
       assert.deepEqual(
         codexHookState(projectPath, "deny-dangerous").effectiveState,
-        { status: "effective", severity: "success" },
+        { status: "provider-capture-stale", severity: "warning" },
       );
       testContext.mock.timers.tick(365 * 24 * 60 * 60 * 1000);
       assert.deepEqual(
         codexHookState(projectPath, "deny-dangerous").effectiveState,
-        { status: "effective", severity: "success" },
+        { status: "provider-capture-stale", severity: "warning" },
       );
     },
   );
@@ -1039,8 +1057,8 @@ describe("effective hook state", () => {
     );
   });
 
-  // Writes a merge-conflict file in a disposable Git project to verify Stop; elapsed time must not invalidate the separate provider capture.
-  it("replays Codex Stop results without expiring provider proof", (testContext) => {
+  // Writes a merge conflict in a disposable Git project, then verifies Stop locally without clearing the provider delivery gap.
+  it("replays Codex Stop results without expiring provider proof or clearing a stale capture", (testContext) => {
     testContext.mock.timers.enable({
       apis: ["Date"],
       now: new Date("2036-10-17T00:00:00.001Z"),
@@ -1058,7 +1076,7 @@ describe("effective hook state", () => {
 
     assert.equal(
       codexHookState(projectPath, "post-turn-safety").effectiveState.status,
-      "scenario-unverified",
+      "provider-capture-stale",
     );
     const report = verifyManagedConfiguredHook({
       projectPath,
@@ -1074,7 +1092,7 @@ describe("effective hook state", () => {
     );
     assert.deepEqual(
       codexHookState(projectPath, "post-turn-safety").effectiveState,
-      { status: "effective", severity: "success" },
+      { status: "provider-capture-stale", severity: "warning" },
     );
   });
 

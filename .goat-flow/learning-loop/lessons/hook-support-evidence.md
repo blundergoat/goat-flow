@@ -1,6 +1,6 @@
 ---
 category: hook-support-evidence
-last_reviewed: 2026-11-13
+last_reviewed: 2026-11-17
 ---
 
 **Scope:** What a hook run proves about a provider - separating payload extraction, local availability, result delivery and model visibility before choosing a support label, keeping manual matrices clear of the live guard that inspects them, and the command shape a provider can execute. Test coverage strategy for hook changes is [hook-testing.md](hook-testing.md); driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -127,15 +127,18 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.
 ## Lesson: Approval to proceed does not prove native trust was completed
 
 **Status:** active | **Created:** 2026-10-27 | **Evidence:** OBSERVED
-**Decision changed:** Keep permission to run a session separate from factual confirmation of native workspace trust.
+**Decision changed:** Keep permission to run a session separate from current evidence of native workspace trust and sign-in.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-11-18
 
-**Prevention:** Do not turn a general approval into `nativeTrust.trusted: true`. Record completion from an explicit completion statement, or from observed native UI acceptance when the user delegates that action. If the provider contradicts a recorded confirmation, invalidate it and stop dependent captures without changing trust files or permission rules. Keep folder trust separate from tool permission: the subsequent trusted Claude C1 session still denied `command -v gh` because its noninteractive mode had no approval surface.
+**Prevention:** Do not turn a general approval into `nativeTrust.trusted: true`. Record completion from an explicit completion statement, or from observed native UI acceptance when the user delegates that action. If the provider contradicts a recorded confirmation, invalidate it and stop dependent captures without changing trust files or permission rules. Check folder trust, provider sign-in and permission to use each tool separately. A trusted Claude session still denied `command -v gh` because its noninteractive mode had no approval surface.
 
 **What happened:** The agent treated "i approve, keep going" as confirmation that seven native trust steps had happened. The first Claude session reported an untrusted workspace and denied a prerequisite command. Neither intended policy probe ran. The agent preserved the capture and invalidated the inferred confirmations.
 
-**Related contract:** `.goat-flow/learning-loop/footguns/hooks.md` (search: "Registered Stop hooks can be dead config behind agent trust gates") separates project trust, hook trust and live delivery. The local M61 capture retains this incident's transcript.
+**Recurrence 2026-11-18:** Copilot's retained Windows profile lacked its configuration file, and two no-task launches stopped at folder trust. After the operator restored trust, the next launch loaded three hooks and required sign-in. A fourth launch showed the expected fixture and three loaded hooks and exited cleanly after sign-in. The readiness record used that fourth observation before the claim was spent.
+
+**Related contract:** `.goat-flow/learning-loop/footguns/hooks.md` (search: "Registered Stop hooks can be dead config behind agent trust gates") separates project trust, hook trust and live delivery.
 
 ---
 
@@ -159,6 +162,7 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.
 ## Lesson: Check live-capture hash pins before planning a hook runtime change
 
 **Status:** active | **Created:** 2026-11-03 | **Evidence:** OBSERVED
+**Incident count:** 2 | **Latest occurrence:** 2026-11-17
 **Decision changed:** Before planning any edit to a shipped hook runtime file, decide which live captures it invalidates and when they will be redone.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
@@ -167,4 +171,43 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.
 
 **What happened:** A post-turn repair planned its owning tests, generation and replay proof, but not the capture pins. Its focused suites passed, then the fast suite failed `retains runtime hashes for all required host captures` because 5 of the 41 pinned files changed, invalidating all 18 verified Windows and WSL captures. Preflight failed on the same test.
 
-**Related source contract:** `test/integration/hook-provider-captures.test.ts` (search: `recapture the rows whose hook loads a changed runtime file`) compares the hashes each row pins for its own hook's files with the current `workflow/hooks` bytes. When this incident happened the guard compared every recorded hash, which is why all 18 rows were invalidated.
+**Recurrence 2026-11-17:** Startup hardening changed `workflow/hooks/policy-evaluation.mjs`, `workflow/hooks/policy-input.mjs` and `workflow/hooks/antigravity-hook-bootstrap.cjs`. The focused run, `npm test` and preflight each failed the capture-hash assertion for C1, C4, C7, C9, C10, C13, C16 and C18. The changelog still claimed all 18 rows covered the current runtime. Keep release claims aligned with capture validity; local classifier tests cannot renew provider delivery evidence.
+
+**Related source contract:** `test/integration/hook-provider-captures.test.ts` (search: `recapture the rows whose hook loads a changed runtime file`) compares the hashes each row pins for its own hook's files with the current `workflow/hooks` bytes. When the original incident happened the guard compared every recorded hash, which is why all 18 rows were invalidated.
+
+---
+
+## Lesson: Read a capture packet's whole sequence before driving its phases
+
+**Status:** active | **Created:** 2026-11-16 | **Evidence:** OBSERVED
+**Decision changed:** Read an approved capture packet's `sequence` and readiness text before its first phase, and wait or ask when a tool failure blocks that read.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Before running any phase of an approved live-capture packet, read its whole `sequence` and `nativeReadiness` text and list the operator steps between phases. Wrappers and runners enforce recorded state, not the operator's own steps, so a capture gate can pass after a required review was skipped. Do not reconstruct the protocol from controller code when the packet text could not be read.
+
+**What happened:** An agent ran two Codex WSL rows six seconds apart after repeated permission-check failures had blocked its reads of the packet's sequence. That sequence required reviewing each transcript before the next row; the agent had checked only the first receipt's summary. Both captures stayed valid, and an independent adversarial review reported the skipped step.
+
+**Related contract:** `.goat-flow/learning-loop/lessons/hook-support-evidence.md` (search: "Approval to proceed does not prove native trust was completed") keeps permission to run separate from what the operator actually observed.
+
+---
+
+## Lesson: A bundle check does not prove each runner's own preconditions
+
+**Status:** active | **Created:** 2026-11-16 | **Evidence:** OBSERVED
+**Decision changed:** Before a capture phase that spends an evidence path or claim, replay that phase's runner preconditions read-only against the exact packet, even when the parent bundle check passes.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 4 | **Latest occurrence:** 2026-11-18
+
+**Prevention:** A parent bundle check can accept values a child runner refuses, such as a recorded runtime variant. Before each phase, replay the runner's own assertions read-only against the exact packet. Check runtime bytes, fixture hashes at the current stage, hook order, configuration and binary pins, fresh output paths, and any launch prerequisites the rehearsal does not exercise. Confirm that the readiness recorder opens the selected packet and binds its output to that packet's digest. Hold before a one-use claim if a prerequisite remains unverified.
+
+**What happened:** A hook-security bundle check passed for two WSL child packets, but both pinned an older post-turn scanner that their fixtures held while their runners require the repository's scanner bytes. The first refresh failed on its first assertion and spent its evidence path. The replacement packets then passed a read-only replay of every runner precondition before approval. One replacement next stopped at fail-closed readiness because its installed-binary pin predated a reinstall; readiness spends nothing, so one more replacement fixed it without losing a claim.
+
+**Recurrence 2026-11-16:** A Windows Codex rehearsal exercised the hooks but skipped the live launcher’s sandbox setup. The subsequent capture spent its claim. The sandbox helper then failed before either policy probe ran. The incomplete observation is recorded in `src/cli/hook-provider-captures.ts` (search: `The Windows recapture stopped during sandbox setup`).
+
+**Recurrence 2026-11-17:** Copied Windows Copilot packets retained an earlier hook order and pointed to an already used usage file. Comparing the fixture’s registration order with the runner’s positional expectations exposed the mismatch. The replacement used the fixture’s order and fresh paths.
+
+**Recurrence 2026-11-18:** A Windows Antigravity preflight passed its file checks while the pinned readiness recorder still opened a historical packet and named a historical receipt. The later offline check caught that before refresh. The replacement preflight invoked the recorder with the exact packet and a fresh destination before requesting approval.
+
+**Related contract:** `.goat-flow/learning-loop/lessons/hook-support-evidence.md` (search: "Check live-capture hash pins before planning a hook runtime change") covers pins at planning time.

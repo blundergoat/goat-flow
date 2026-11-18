@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-11-13
+last_reviewed: 2026-11-16
 ---
 
 **Scope:** Hook test coverage strategy - what a self-test or fixture actually exercises, which suites and CI jobs run a changed hook, fixtures that must not carry real secrets, and splits that only look like coverage. What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md); the script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -183,12 +183,12 @@ An inventory goes stale. Repeat it for every pending group immediately before ea
 
 **Evidence:** The source CLI dry run also refused the absent target with ENOENT. The guard is owned by `src/cli/install-command.ts` (search: `Policy choices or ownership files could not be read safely`); its dry-run branch returns before installer side effects (search: `A dry-run reports the exact managed-template result`).
 
-**Recurrence 2026-11-11:** Three days after a recapture round's packets were built, the remaining WSL sessions stopped on inputs the first inventory had covered but nothing had rechecked. A later commit changed a review module, so four generated CLI files no longer matched the pins in every pending packet. Codex had updated to 0.167.0, which stopped three rows at the version check. One provider's status screen printed a model label its readiness parser could not read. They took two approved metadata updates before the sessions could start. A pre-preparation host check was also run against a fixture that was already prepared, and it reported the approved scanner as drift. The synced rows record the version finally captured: `src/cli/hook-provider-captures.ts` (search: `providerVersion: "0.167.0"`).
+**Recurrence 2026-11-11:** Three days after a recapture round's packets were built, the remaining WSL sessions stopped on inputs the first inventory had covered but nothing had rechecked. A later commit changed a review module, so four generated CLI files no longer matched the pins in every pending packet. Codex had updated to 0.167.0, which stopped three rows at the version check. One provider's status screen printed a model label its readiness parser could not read. They took two approved metadata updates before the sessions could start. A pre-preparation host check was also run against a fixture that was already prepared, and it reported the approved scanner as drift. The capture committed in `d7f7a298` recorded Codex CLI 0.167.0 for WSL PreToolUse. The current registry records the later capture in `src/cli/hook-provider-captures.ts` (search: `providerVersion: "0.169.0"`).
 
 ## Lesson: Derive capture operator inputs from the packet, not from memory
 
 **Status:** active | **Created:** 2026-11-11 | **Evidence:** OBSERVED
-**Incident count:** 3 | **Latest occurrence:** 2026-11-11
+**Incident count:** 4 | **Latest occurrence:** 2026-11-16
 **Decision changed:** Before sending a digest or attestation to a capture controller, compute it from the bound packet with a checked helper, and start the dependent command only after that check reports success.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -196,5 +196,7 @@ An inventory goes stale. Repeat it for every pending group immediately before ea
 **Prevention:** A capture controller validates operator input against its packet: the bundle digest, model descriptor, hook counts and hook owners must match exactly. Values typed from memory fail on the first field that differs, and a failed no-task readiness session still uses up its evidence path. Read digests from the approved artifact. Build an attestation with a helper that checks the rendered screens against the packet and then derives every field from it. Rehearse an input driver against saved screens before the live session. When commands run as separate tool calls, a failed call does not stop the next one, so confirm each result before issuing the command that depends on it.
 
 **What happened:** During a Codex Stop recapture on WSL, a read-only command was first issued with a remembered bundle digest and was refused. Two no-task readiness sessions then failed their attestations: the first sent the model name without its reasoning-effort suffix, and the second left out the hook owners. Neither submitted a task and the single live attempt stayed unused, but each failure needed a new evidence path and a new approval. A helper that derives the attestation from the packet, and a driver rehearsed against the saved screens, completed readiness on the next attempt.
+
+**Recurrence 2026-11-16:** An operator-written transport-check summary gave its run time as an estimate from memory, which placed it before the rehearsal. The controller's own output file showed it ran in packet order. Because the summary was create-only evidence, the correction went into the review ledger. Take any time or digest in operator-written evidence from the artifact itself.
 
 **Evidence:** The Codex WSL Stop row is maintained in `src/cli/hook-provider-captures.ts` (search: `caseId: "C15"`). Later recaptures replace its timestamp and receipt hashes, so use the case ID when citing the maintained row.

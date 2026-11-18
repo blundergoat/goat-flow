@@ -158,6 +158,10 @@ const STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS = [
   "const registrationNamesOperands=(value)=>{if(Array.isArray(value))return value.some(registrationNamesOperands);if(!isPlainObject(value))return false;for(const [key,nested] of Object.entries(value)){if((key==='command'||key==='bash'||key==='powershell')&&typeof nested==='string'&&commandNamesOperands(nested))return true;if(key==='args'&&Array.isArray(nested)&&argsNameOperands(nested))return true;if((Array.isArray(nested)||isPlainObject(nested))&&registrationNamesOperands(nested))return true;}return false;};",
 ];
 
+// Root discovery runs before the managed launcher, so it must carry its own time and output bounds.
+const BOUNDED_GIT_ROOT_LOOKUP_FRAGMENT =
+  "const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8',timeout:2000,maxBuffer:65536,windowsHide:true,killSignal:'SIGKILL'});";
+
 /**
  * Build project discovery after defining the registration recognizer; both bootstraps must choose the same managed root.
  *
@@ -194,7 +198,7 @@ function rootDiscoveryFragments(
         // Git remains a fallback only when the provider project supplied no complete managed install.
         if (fragment.startsWith("if(gitRootLookup.status===0")) {
           return [
-            "if(selected.state!=='complete'){const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){const inspected=inspectOnce(gitRootLookup.stdout.trim());if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}}",
+            `if(selected.state!=='complete'){${BOUNDED_GIT_ROOT_LOOKUP_FRAGMENT}if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){const inspected=inspectOnce(gitRootLookup.stdout.trim());if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}}`,
           ];
         }
         return [fragment];
@@ -208,7 +212,7 @@ function rootDiscoveryFragments(
     "const inspectCandidate=(candidate)=>{const root=realDirectory(candidate);if(!root)return {state:'none',root:''};const scriptSeen=managedEntryExists(root,hookScriptPath);const registration=managedRegularFile(root,registrationPath);let registered=false;if(registration){try{const parsed=JSON.parse(filesystem.readFileSync(registration,'utf8'));registered=isPlainObject(parsed)&&registrationNamesOperands(parsed);}catch{registered=false;}}const relevant=scriptSeen||registered;if(!relevant)return {state:'none',root};const launcher=managedRegularFile(root,bashLauncherRelativePath);const script=managedRegularFile(root,hookScriptPath);return registered&&launcher&&script?{state:'complete',root}:{state:'corrupt',root};};",
     "const visited=new Set();",
     "const inspectOnce=(candidate)=>{const root=realDirectory(candidate);if(!root||visited.has(root))return {state:'none',root};visited.add(root);return inspectCandidate(root);};",
-    "const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});",
+    BOUNDED_GIT_ROOT_LOOKUP_FRAGMENT,
     "let selected={state:'none',root:''};",
     "if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){selected=inspectOnce(gitRootLookup.stdout.trim());if(selected.state==='corrupt')reportUnavailable('managed root incomplete');}",
     "let ancestor=realDirectory(process.cwd());",

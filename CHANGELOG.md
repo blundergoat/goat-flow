@@ -4,6 +4,10 @@
 
 Version 1.19.0 below is prepared but has not been published.
 
+### Security
+
+- **Bound hook startup inputs** - Root discovery limits Git lookup time and output, and policy hooks cap provider input. Run `goat-flow hooks sync`, then review and trust changed hooks in your agent before relying on them.
+
 ## v1.19.0 - 2026-10-23
 
 ### Added
@@ -27,7 +31,7 @@ Version 1.19.0 below is prepared but has not been published.
 
 - **Plan layout and progress** - New plans separate notes, evidence and scripts; progress entries show timestamps and work time. Existing plans opt in.
 
-- **Windows/WSL hook evidence** - Reviewed captures of the current hook runtime cover all 18 delivery rows, including helper-free Antigravity on Windows. Linux/macOS live delivery remains unverified; see the CLI capture matrix for versions and limits. Support gates are unchanged.
+- **Windows/WSL hook evidence** - Eight captures verify current delivery. PreToolUse on both hosts and Windows Codex PostToolUse and Stop need new captures.
 - **Hook policy checks no longer use the frozen Bash reference** - Release checks run the installed Node policy hooks against the shipped corpus on Linux, macOS, Windows and WSL; installs are unaffected.
 
 - **BREAKING: Node 20.12.0 minimum** - The minimum supported Node version rises from 20.11.0 to 20.12.0. Upgrade Node before installing or running goat-flow.

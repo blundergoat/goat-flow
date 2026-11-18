@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-10-19
+last_reviewed: 2026-11-15
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -135,9 +135,11 @@ The recurring failure is crediting a sampled, truncated or wrongly shaped search
 **Severity:** CORRECTNESS
 **Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove.
 **Trigger phase:** VERIFY
-**Incident count:** 34 | **Latest occurrence:** 2026-10-18
+**Incident count:** 35 | **Latest occurrence:** 2026-11-15
 
-**Prevention:** Run `npm run check:touched` for its supported format, source lint, typecheck, Gruff, and guidance scopes; capture every selected check's result line. Run the repository-owned Knip and owning test gates separately with captured output. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Retained exact-registration evidence: `test/unit/hook-registrar.test.ts` (search: `the reported duplicate Stop state must converge to one row`).
+**Prevention:** Run `npm run check:touched` for its supported format, lint, typecheck, Gruff and guidance scopes, then run Knip and owning tests separately. Capture each literal result and invoke mandatory gates alone so later diagnostics cannot replace their exit status. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; retain the failure, run every other test and stop on any extra failure. Copy invocations from their owners: `package.json` (search: `test:fast`, `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`) and `knip.json` (search: `ignoreDependencies`). Registration evidence: `test/unit/hook-registrar.test.ts` (search: `the reported duplicate Stop state must converge to one row`).
+
+**Recurrence 2026-11-15 (masked exit):** A shell batch ran `check:touched` before Git diagnostics; its final status was zero although Prettier failed. Run each mandatory gate alone or preserve its status before diagnostics. Evidence: `scripts/check-touched.mjs` (search: `process.exitCode = await main()`).
 
 **Recurrence 2026-10-17 (manifest gate):** Scaffold validation guessed a manifest-check script name and failed because that command does not exist. Reading the preflight owner and actual test paths led to the manifest and ownership suites; the combined manifest/candidate run reported 42 passes. Discover a gate before invoking it. `scripts/preflight-checks.sh` (search: `manifest_eval`) and `test/unit/manifest.test.ts` (search: `checkManifest (real repo)`).
 
@@ -145,9 +147,9 @@ The recurring failure is crediting a sampled, truncated or wrongly shaped search
 
 **Root cause:** Repo-supported verification scopes were mixed with improvised paths, and parallel final gates were treated as interchangeable with a clean final evidence run, so the first failure was ambiguous and had to be rerun.
 
-**Recurrence 2026-10-11 (decisions-guide transfer):** Noncanonical v1 JSON invalidated the initial RED proof. Checks caught private-type imports, excess complexity, missing fixture imports and a moved anchor. Review found a copied fixture's fixed Windows timeout and a migration source omitted from preview. Validate failure causes and migration inputs; source typecheck excludes tests. Evidence: `test/integration/setup-install-decisions-readme.test.ts` (search: `inheritedTarget`), `src/cli/managed-setup-state.ts` (search: `normalizedLegacyBytes`) and `src/cli/decisions-readme-transfer.ts` (search: `readInheritedGuide`).
+**Recurrence 2026-10-11 (decisions-guide transfer):** Noncanonical v1 JSON invalidated the RED; checks then found private imports, complexity, missing fixtures and a stale anchor. Review found a fixed Windows timeout and an omitted migration input. Validate failure causes and migration inputs; source typecheck excludes tests. Evidence: `test/integration/setup-install-decisions-readme.test.ts` (search: `inheritedTarget`), `src/cli/managed-setup-state.ts` (search: `normalizedLegacyBytes`) and `src/cli/decisions-readme-transfer.ts` (search: `readInheritedGuide`).
 
-**Recurrence 2026-10-11 (dependency readiness):** Adding dependency guards made `renderReadinessSummary` exceed the ESLint complexity limit even though its runtime tests passed. Returning dependency clauses from `listDependencyBlockers` restored the supported gate. Read analyzer symbols and stable identities before choosing a fix: the remaining loop advisory named an unchanged transcript test, not the new cycle cases. Owners: `src/cli/plans-check-summary.ts` (search: `listDependencyBlockers`) and `test/unit/plans-check.test.ts` (search: `reports the same cap-one transcript with omitted and explicit policy`).
+**Recurrence 2026-10-11 (dependency readiness):** Dependency guards made `renderReadinessSummary` exceed the complexity limit although runtime tests passed. Extracting clauses into `listDependencyBlockers` restored the gate; the remaining loop advisory named an unchanged test. Read analyzer symbols before fixing. Owners: `src/cli/plans-check-summary.ts` (search: `listDependencyBlockers`) and `test/unit/plans-check.test.ts` (search: `reports the same cap-one transcript with omitted and explicit policy`).
 
 **Recurrence 2026-10-10:** Invoking the managed-hook generator with plain Node failed with `ERR_MODULE_NOT_FOUND` before checking the contract: its TypeScript imports require the repository loader. The package-owned command in `package.json` (search: `"check:managed-hook-contract"`) supplies `--import tsx`; that exact check reported `managed-hook contract current`. Read the script owner before improvising a verification invocation, and preserve the failed launch separately from the completed check.
 
@@ -230,9 +232,12 @@ The recurring failure is crediting a sampled, truncated or wrongly shaped search
 **Decision changed:** Before asking the user to approve a change to generated hook registrations, read the generator and its freeze comments, then list only the providers and files the change can legally reach.
 **Trigger phase:** SCOPE
 **Caught at:** ACT
+**Incident count:** 2 | **Latest occurrence:** 2026-11-15
 
 **Prevention:** A decision record and an allowlist sent for approval describe what the code will do. Read the function that emits the bytes before writing either. For hook registrations, check which providers ADR-053 freezes, and confirm the reach with the generated contract diff, not with the template file names. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `LEGACY_REGISTRATION_RECOGNITION_FRAGMENT`), `src/cli/server/agent-hook-command.ts` (search: `provider-project-first`), `.goat-flow/learning-loop/decisions/ADR-066-gruff-edit-scope-from-edited-file.md` (search: `narrowed to Claude's registration`).
 
 **What happened:** A milestone drafted ADR-066 and asked the user to approve a wider allowlist. Both said the Gruff launcher change would alter every provider's registration, four agent-config templates and three installed agent configs. The user approved. Implementation then reached the generator, whose recognizer preserves the Codex, Copilot and Antigravity registration bytes under ADR-053. The change was narrowed to Claude's structured bootstrap, ADR-066 was corrected after acceptance, and the generated contract diff showed three changed rows, all Claude's Gruff handlers. The template named in the request holds no Gruff row at all.
 
 **Root cause:** The request was written from the measured incident and the file names that mention the bootstrap, without reading the generator that owns those bytes. The accepted decisions that constrain it were found only while editing.
+
+**Recurrence 2026-11-15:** Replacing inline hook source left Base64 Windows fields on the old bootstrap; Gruff exposed 12 stale previews. Refresh encoded fields from the managed desired-state contract, then check every encoded mirror. `src/cli/server/agent-hook-command.ts` (search: `windowsPowerShellHookCommand`), `workflow/hooks/agent-config/managed-hook-desired-state.json` (search: `commandWindows`).

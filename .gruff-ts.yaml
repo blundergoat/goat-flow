@@ -57,11 +57,10 @@ allowlists:
   # ADR-053 requires these generated Windows bootstrap payloads to stay Base64.
   # Exact redacted previews keep the secret rule active for every other value.
   secretPreviews:
-    - "Y29u...KTs= (redacted, 7396 chars)"
-    - "Y29u...cyk7 (redacted, 7344 chars)"
-    - "Y29u...Ow== (redacted, 7332 chars)"
-    - "Y29u...KTs= (redacted, 7476 chars)"
-    - "cHJv...KTs= (redacted, 7412 chars)"
+    - "Y29u...cyk7 (redacted, 7484 chars)"
+    - "Y29u...Ow== (redacted, 7436 chars)"
+    - "cHJv...cyk7 (redacted, 7500 chars)"
+    - "Y29u...cyk7 (redacted, 7564 chars)"
   # Names that trigger naming.generic-function. Each key replaces the built-in
   # default when present; an empty list disables that rule's blacklist branch.
   # Default: [process, handle, doit, run, execute, manage]

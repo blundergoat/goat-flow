@@ -41,6 +41,22 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   }
 }
 
+/** Wait until a process marker contains the safe positive PID written by its running worker. */
+async function waitForReadyPid(markerPath: string): Promise<number> {
+  const deadline = Date.now() + 5000;
+  while (true) {
+    if (existsSync(markerPath)) {
+      const pid = Number(readFileSync(markerPath, "utf8"));
+      if (Number.isSafeInteger(pid) && pid > 0) return pid;
+    }
+    assert.ok(
+      Date.now() < deadline,
+      "worker PID did not arrive within five seconds",
+    );
+    await delay(10);
+  }
+}
+
 for (const damaged of [false, true]) {
   test(`native supervisor completes ${damaged ? "invalid UTF-8" : "split UTF-8 and exit status"}`, async (t) => {
     const program = damaged
@@ -115,14 +131,18 @@ for (const ending of ["deadline", "envelope", "diagnostic-flood"] as const) {
       if (workerPid !== undefined && isRunning(workerPid))
         process.kill(workerPid, "SIGKILL");
     });
-    await waitFor(() => existsSync(marker) && existsSync(controlMarker));
-    workerPid = Number(readFileSync(marker, "utf8"));
-    assert.ok(Number.isSafeInteger(workerPid) && workerPid > 0);
+    const [readyWorkerPid, readyControlPid] = await Promise.all([
+      waitForReadyPid(marker),
+      waitForReadyPid(controlMarker),
+    ]);
+    workerPid = readyWorkerPid;
     const parentPid = parent.pid;
-    const controlPid = control.pid;
-    assert.ok(parentPid && controlPid);
+    assert.ok(parentPid && control.pid);
+    assert.equal(control.pid, readyControlPid);
     assert.ok(
-      isRunning(parentPid) && isRunning(workerPid) && isRunning(controlPid),
+      isRunning(parentPid) &&
+        isRunning(workerPid) &&
+        isRunning(readyControlPid),
     );
     const started = Date.now();
     const captured = captureHookProcessUntilDeadline(
@@ -147,8 +167,7 @@ for (const ending of ["deadline", "envelope", "diagnostic-flood"] as const) {
       ending === "deadline" ? undefined : ending,
     );
     assert.equal(result.output?.areByteCountsExact, false);
-    const readyWorkerPid = workerPid;
     await waitFor(() => !isRunning(parentPid) && !isRunning(readyWorkerPid));
-    assert.ok(isRunning(controlPid), "unrelated work must remain running");
+    assert.ok(isRunning(readyControlPid), "unrelated work must remain running");
   });
 }

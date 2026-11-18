@@ -1,5 +1,4 @@
 /** Reach complete native policy decisions for both guards: request routing, segment preparation, rule dispatch and provider responses. */
-import { readFileSync } from "node:fs";
 import { isatty } from "node:tty";
 import { homedir } from "node:os";
 import {
@@ -38,6 +37,8 @@ import {
   parsePolicyPayload,
   policyCommandSizeRefusal,
   policySegmentCountRefusal,
+  RAW_POLICY_PAYLOAD_LIMIT_BYTES,
+  readBoundedPolicyStdin,
   readPolicyPayload,
   type PolicyDenial,
   type PolicyOutputMode,
@@ -952,6 +953,42 @@ interface RequestState {
   structured: boolean;
 }
 
+/** Refuse oversized raw stdin before decoding or parsing its provider envelope. */
+function rawPolicyInputRefusal(
+  args: PolicyArguments,
+  input: PolicyHookInput,
+): { mode: PolicyOutputMode; reason: string } | null {
+  if (
+    args.check !== "" &&
+    (args.source !== "positional" || input.stdinIsTerminal)
+  )
+    return null;
+  const raw = input.readStdin();
+  if (raw.byteLength <= RAW_POLICY_PAYLOAD_LIMIT_BYTES) return null;
+  return {
+    mode: detectPolicyOutputMode(Buffer.from(raw).toString("latin1")),
+    reason: `Hook payload exceeds the ${RAW_POLICY_PAYLOAD_LIMIT_BYTES}-byte policy input limit. Submit a smaller provider request.`,
+  };
+}
+
+/** Handle requests that finish before provider decoding: self-tests and oversized raw stdin. */
+function policyHookPreflight(
+  run: PolicyRun,
+  args: PolicyArguments,
+  input: PolicyHookInput,
+): PolicyHookOutcome | null {
+  if (args.selfTest !== "") return { kind: "self-test", mode: args.selfTest };
+  const refusal = rawPolicyInputRefusal(args, input);
+  if (refusal === null) return null;
+  return {
+    kind: "response",
+    ...renderPolicyResponse(refusal.mode, {
+      scope: run.guard,
+      reason: refusal.reason,
+    }),
+  };
+}
+
 /** Decode the request; a refusal names the guard because no segment has been inspected yet. */
 function readPolicyRequest(
   args: PolicyArguments,
@@ -1096,8 +1133,14 @@ export async function runPolicyHook(
   input: PolicyHookInput,
 ): Promise<PolicyHookOutcome> {
   const args = readPolicyArguments(input.argv);
-  if (args.selfTest !== "") return { kind: "self-test", mode: args.selfTest };
-  const read = readPolicyRequest(args, input);
+  let stdin: Uint8Array | null = null;
+  const memoizedInput: PolicyHookInput = {
+    ...input,
+    readStdin: () => (stdin ??= input.readStdin()),
+  };
+  const preflight = policyHookPreflight(run, args, memoizedInput);
+  if (preflight !== null) return preflight;
+  const read = readPolicyRequest(args, memoizedInput);
   if ("reason" in read)
     return {
       kind: "response",
@@ -1160,7 +1203,7 @@ export async function runPolicyEntrypoint(
     },
     {
       argv,
-      readStdin: () => readFileSync(0),
+      readStdin: () => readBoundedPolicyStdin(),
       stdinIsTerminal: isatty(0),
     },
   );

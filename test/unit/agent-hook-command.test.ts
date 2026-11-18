@@ -13,12 +13,29 @@ import { describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import {
   agentHookSpawnDescriptor,
+  antigravityHookBootstrapSource,
   buildAgentHookDescriptor,
   entryCarriesHandlerDescriptor,
   matcherForAgent,
 } from "../../src/cli/server/agent-hook-command.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
+
+describe("managed hook root discovery", () => {
+  it("bounds the bootstrap Git lookup before the managed launcher starts", () => {
+    const policy = getHookSpec("deny-dangerous");
+    assert.ok(policy);
+    const bound =
+      /timeout:2000,maxBuffer:65536,windowsHide:true,killSignal:'SIGKILL'/u;
+    assert.match(
+      JSON.stringify(
+        buildAgentHookDescriptor("claude", ".goat-flow/hooks", policy),
+      ),
+      bound,
+    );
+    assert.match(antigravityHookBootstrapSource(), bound);
+  });
+});
 
 describe("agent hook replay descriptors", () => {
   // Reading file content triggers the content policy without broadening Git-mutation checks to unrelated tools.
@@ -291,7 +308,11 @@ describe("Stop scan budget inheritance", () => {
               timeout: 5000,
             });
             assert.equal(result.status, 0, result.stderr);
-            assert.equal(result.stdout, expected);
+            assert.equal(
+              result.stdout,
+              expected,
+              result.stderr || result.error?.message,
+            );
           } finally {
             rmSync(root, { recursive: true, force: true });
           }

@@ -155,23 +155,25 @@ last_reviewed: 2026-11-14
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 37 | **Latest occurrence:** 2026-11-14
+**Incident count:** 38 | **Latest occurrence:** 2026-11-15
 
-**Prevention:** Create every fixture file, global and transitive helper. Check strict baselines and substitutions; keep other inputs valid and never borrow checkout state. Exercise the real failure predicate. Stats: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+**Prevention:** Create every dependency, keep controls valid and prove the intended failure without borrowing checkout state.
 
-**Recurrence 2026-11-14:** M57 exposed four drift failures: `test/integration/audit-drift.helpers.ts` omitted the new playbook (search: `SHARED_PLAYBOOK_FILENAMES`).
+**Recurrence 2026-11-15 (PID readiness):** Two process tests saw a marker before its PID bytes, so the full suite parsed an empty file. Poll for a positive PID. Evidence: `test/unit/hook-process-tree.test.ts` and `test/unit/hook-supervisor.test.ts` (search: `waitForReadyPid`).
 
-**Recurrence 2026-11-14:** M54 trials lacked required plan sections. Validate fixtures before delegation. Evidence: `src/cli/plans-check.ts` (search: `missing scope`).
+**Recurrence 2026-11-14:** M57 found four drift failures because `test/integration/audit-drift.helpers.ts` omitted the new playbook (search: `SHARED_PLAYBOOK_FILENAMES`).
 
-**Recurrence 2026-11-13 (live checkout):** An empty-project audit test used this repository and failed when its lessons aged. It now creates its own empty project. Evidence: `test/integration/audit-quality.test.ts` (search: `goat-flow-empty-learning-loop-`).
+**Recurrence 2026-11-14:** M54 trials omitted required plan sections. Validate before delegation. Evidence: `src/cli/plans-check.ts` (search: `missing scope`).
 
-**Recurrence 2026-11-13:** A preset-badge VM test loaded the readers and prompt helpers but omitted their global-safety dependency. It failed with `dashboardGlobalSafeAllowed is not defined`. Loading the real custom-prompt module made the unchanged production behavior pass. Evidence: `test/unit/dashboard-preset-flags.test.ts` (search: `"dashboard-custom-prompts.ts"`).
+**Recurrence 2026-11-13 (live checkout):** An empty-project audit reused this checkout and failed when its lessons aged; it now builds its own project. Evidence: `test/integration/audit-quality.test.ts` (search: `goat-flow-empty-learning-loop-`).
 
-**Recurrence 2026-10-23 (shallow CI history):** PR #69's slow shard failed four retirement cases because the fixture read `v1.18.0`, while CI fetched only its commit with `--no-tags`. The same fetch reproduced the missing tag in a disposable shallow clone. Enumerate both object and named-ref consumers, fetch the required tag explicitly, and verify with shallow history. Evidence: `.github/workflows/ci.yml` (search: `Fetch pinned upgrade fixture`); `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `released`); `test/integration/packaged-hook-install.test.ts` (search: `upgrades a complete pinned 1.18.0 install`).
+**Recurrence 2026-11-13:** A preset-badge VM omitted the custom-prompt module, so its global was undefined before product behavior ran. Load the real dependency. Evidence: `test/unit/dashboard-preset-flags.test.ts` (search: `"dashboard-custom-prompts.ts"`).
 
-**Recurrence 2026-10-23 (shallow package canary):** The diagnostic clone linked dependencies but omitted CI's build step. Three packaged-canary cases then failed because their archive lacked the declared CLI entry. Run the documented build before archive tests; a dependency link supplies neither ignored `dist/` output nor a complete CI setup. Evidence: `test/integration/packaged-hook-install.test.ts` (search: `preparePackedCliLaunch`, `declaredCliEntryPath`); `.github/workflows/ci.yml` (search: `npm run build`).
+**Recurrence 2026-10-23 (shallow CI history):** PR #69's shallow checkout lacked the `v1.18.0` tag required by four upgrade fixtures. Fetch and verify the named ref, not only its commit. Evidence: `.github/workflows/ci.yml` (search: `Fetch pinned upgrade fixture`); `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `released`); `test/integration/packaged-hook-install.test.ts` (search: `upgrades a complete pinned 1.18.0 install`).
 
-**Recurrence 2026-10-18 (compiler-fixture control):** After replacing repository clones with a tiny project, a mutation using an invalid module suffix made the complete deletion test pass even though its compiler already failed before deletion. The expected TS2307 was present in both states. Compile the intact fixture successfully before applying the deletion; the same mutation must then fail at that healthy-control assertion. Keep the control inside the existing case rather than adding another suite. Evidence: `test/unit/check-touched.test.ts` (search: `healthy.status`).
+**Recurrence 2026-10-23 (shallow package canary):** A diagnostic clone linked dependencies but skipped the build, so its archive lacked the CLI entry. Build before packing; links do not create `dist/`. Evidence: `test/integration/packaged-hook-install.test.ts` (search: `preparePackedCliLaunch`, `declaredCliEntryPath`); `.github/workflows/ci.yml` (search: `npm run build`).
+
+**Recurrence 2026-10-18 (compiler-fixture control):** An invalid module suffix made a deletion test pass although the fixture already failed with TS2307. Compile the intact fixture before mutation and keep that control in the same case. Evidence: `test/unit/check-touched.test.ts` (search: `healthy.status`).
 
 **Recurrence 2026-10-18 (installer convergence):** A CI runtime prototype removed the first repeat install because the next invocation was a no-op. A before-first-call snapshot showed that the removed invocation still changed `.claude/settings.json` after user content was planted. Retain the convergence call; shorten only Sync after the existing install pair has converged. Before removing setup, compare its input and output rather than inferring redundancy from a later no-op. Evidence: `test/integration/setup-install-write-set.test.ts` (search: `plantUserHookContent`, `assertRepeatIsNoOp`, `beforeSync`).
 
@@ -183,9 +185,7 @@ last_reviewed: 2026-11-14
 
 **Recurrence 2026-10-17 (packaged candidates):** Adding native entrypoints made a missing-policy fixture valid; its saved opt-out correctly returned zero, breaking the expected missing-path refusal. Remove the candidate only inside that fixture before asserting the refusal, preserving production opt-out behavior. A reused CI verifier also expected an ignored workspace receipt absent from the copy; explicit command/suite inputs removed that dependency. `test/unit/run-hook.test.ts` (search: `native CLI rejects missing, escaped and non-file scripts before an opt-out`).
 
-**What happened:** The first ADR-024 `stats --check` fixture cited absent `package.json` with a line suffix. Stats returned a stale ref, failing "expected an invalid-line-ref finding".
-
-**Root cause:** The fixture reused a root path without checking its temp filesystem; stats validates refs there, not in the checkout.
+**What happened:** An ADR-024 stats fixture cited absent `package.json`; stale-reference validation failed before its intended assertion. Evidence: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
 **Recurrence 2026-11-02:** Windows fixtures used a POSIX command, and recursive copy/removal silently missed emoji-containing paths. Gate transport by host, copy declared files, and verify readiness or absence. Evidence: `test/unit/agent-hook-command.test.ts` (search: `Stop scan budget inheritance`); `test/integration/hook-command-native-replay.test.ts` (search: `createNativePolicyFixture`); `test/unit/run-hook.test.ts` (search: `function fixture`).
 

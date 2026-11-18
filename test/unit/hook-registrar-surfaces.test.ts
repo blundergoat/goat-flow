@@ -222,8 +222,8 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         assert.deepEqual(state.scanRoots?.roots, rootCase.roots ?? []);
         assert.equal(codex.installed, false);
         assert.equal(codex.isRegistered, false);
-        // Fresh provider proof cannot register a hook whose local roots are invalid.
-        assert.equal(codex.effectiveState.status, "not-registered");
+        // The warning label can change with provider evidence while registration stays blocked.
+        assert.equal(codex.effectiveState.severity, "warning");
         assert.equal(codex.repairCommand, null);
         assert.match(
           codex.repairSummary,
@@ -292,7 +292,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         assert.equal(state?.scanRoots?.status, "invalid");
         assert.match(state?.scanRoots?.issue ?? "", /anchor|alias/iu);
         assert.equal(codex?.isRegistered, false);
-        assert.equal(codex?.effectiveState.status, "not-registered");
+        assert.equal(codex?.effectiveState.severity, "warning");
       });
     });
   }

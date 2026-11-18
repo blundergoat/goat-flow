@@ -1,6 +1,6 @@
 ---
 category: verification-size-gates
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-15
 ---
 
 **Scope:** Size limits that added text crosses - Gruff file-length and module-size thresholds, the learning-loop bucket byte limit, and skill or playbook word caps reached by comments, contract cases, or new entries. Analyzer rules and baselines are [verification-gruff.md](verification-gruff.md); instruction and reference word budgets are [instruction-word-budgets.md](instruction-word-budgets.md).
@@ -9,7 +9,7 @@ last_reviewed: 2026-11-02
 
 **Status:** active | **Created:** 2026-08-07
 **Severity:** INTEGRATION
-**Incident count:** 17 | **Latest occurrence:** 2026-11-02
+**Incident count:** 18 | **Latest occurrence:** 2026-11-15
 **Merged:** 2026-09-05 - absorbed three file-length recurrences (2026-08-09 x2, 2026-08-28) from the Gruff comment-fixes lesson in `.goat-flow/learning-loop/lessons/verification-gruff.md`; same mechanism, different gate. Moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` on 2026-10-11 when that bucket was split to recover its headroom.
 
 **Prevention:** Before adding comments, contract cases, or learning text to a file within about 20 percent of its size threshold, measure its headroom with the gate's own counter and plan the split first; `wc -l` and a word count are not the gate. Split by responsibility. Never accept the new finding: an oversized file created by the change that added the gate is what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
@@ -17,6 +17,8 @@ last_reviewed: 2026-11-02
 **What happened:** Applying the mandatory comment standard to `scripts/check-gruff-warning-ratchet.mjs` grew it from 626 to 783 lines, past the 750-line `size.file-length` threshold, so the warning-debt ratchet reported its own checker as new debt on the run meant to prove the release clean.
 
 **Root cause:** Comment work was treated as free of quality-gate consequences; doc comments on every function, context lines on every branch, and tag meanings add real lines, so a file near a threshold crosses it.
+
+**Recurrence 2026-11-15:** A hook-security regression was first placed in `test/integration/hook-command-spawn-matrix.test.ts`, where Gruff measured 1,037 substantive lines against the 1,000-line limit; compacting it still left 1,004. Moving the root-discovery bound assertion to `test/unit/agent-hook-command.test.ts` kept the full spawn matrix intact. Measure substantive headroom before choosing the regression owner, not after writing the case.
 
 **Recurrence 2026-11-02:** Moving one new lesson into `.goat-flow/learning-loop/lessons/hook-probe-testing.md`, already at 39,928 bytes, took it to 41,420 and failed `stats --check`. Placing the lesson in a bucket whose scope matched and that had headroom restored exit 0. Measure the destination bucket before moving an entry, not only before writing one. `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
 

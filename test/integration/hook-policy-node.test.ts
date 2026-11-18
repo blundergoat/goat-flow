@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { assertOutcome } from "../../scripts/check-hook-parity.mjs";
+import { RAW_POLICY_PAYLOAD_LIMIT_BYTES } from "../../workflow/hooks/policy-input.mjs";
 import { hookTreeRoot, selectedHookPath } from "../helpers/hook-entrypoint.js";
 import { restrictedConsumerEnvironment } from "../helpers/restricted-consumer-env.js";
 
@@ -410,6 +411,24 @@ test("candidate entrypoints answer JSON providers on stdout and route tool owner
   assert.equal(
     conflict.stderr,
     "BLOCKED: Policy deny-dangerous: Hook received both positional command and stdin payload. Submit exactly one command source.\n",
+  );
+});
+
+test("candidate policy entrypoint refuses raw stdin beyond its bounded envelope", (testContext) => {
+  const oversizedPayload = `{"toolName":"bash","padding":"${"x".repeat(RAW_POLICY_PAYLOAD_LIMIT_BYTES)}"}`;
+  const result = runEntrypoint(
+    testContext,
+    "deny-dangerous",
+    [],
+    oversizedPayload,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  const response = JSON.parse(result.stdout);
+  assert.equal(response.permissionDecision, "deny");
+  assert.match(
+    response.permissionDecisionReason,
+    /2097152-byte policy input limit/u,
   );
 });
 

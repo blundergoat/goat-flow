@@ -1,9 +1,21 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-11-04
+last_reviewed: 2026-11-19
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md). What a run proves about a provider is [hook-support-evidence.md](hook-support-evidence.md).
+
+## Lesson: Shorter generated hooks need complete file replacement
+
+**Status:** active | **Created:** 2026-11-19 | **Evidence:** OBSERVED
+**Decision changed:** Use the generator or copy its complete output with a truncating write, then check both runtime copies.
+**Trigger phase:** ACT
+
+**Prevention:** When copying selected generated files from a disposable tree, compare the full output bytes after the copy. Preserve a normal file edit path for recovery if the installed hook cannot start.
+
+**What happened:** A non-truncating write left trailing bytes when the generated policy input module got shorter. The installed hook refused commands until both copies matched the generated output. Evidence: `workflow/hooks/policy-input.mjs` (search: `readBoundedPolicyStdin`) and `scripts/generate-hook-runtime.mjs` (search: `writeOrCheckRuntimeFiles`).
+
+---
 
 ## Lesson: Typed hook boundaries must distinguish absent fields from explicit undefined
 
