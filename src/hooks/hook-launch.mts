@@ -1,4 +1,9 @@
-/** Native hook launch retains selected-project paths, original stdin and bounded supervision. */
+/**
+ * Starts an installed hook in the project selected by the agent or CLI.
+ *
+ * Use after validating the hook path and the agent's event input.
+ * The launcher passes through the event and delivers the result in the format the agent expects.
+ */
 import { spawn } from "node:child_process";
 import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, win32 } from "node:path";
@@ -90,9 +95,11 @@ export function hookScriptShapeFailure(
 }
 
 /**
- * Start a verified evaluator with this Node executable and an explicit selected-root argument.
- * The caller must validate paths and saved policy choices first; this primitive only owns process I/O.
- * Resolves launch errors through supervision; throws unexpected synchronous spawn errors to the caller.
+ * Run the verified hook after the caller has checked its paths and saved policy choices.
+ * Use capture for replies the launcher must validate before delivery, or relay legacy feedback directly.
+ *
+ * @param options - Capture choice and accepted Stop input. A null or omitted buffer leaves the input stream inherited.
+ * @returns The finished hook result. Startup errors are reported in it, and synchronous spawn errors reach the caller.
  */
 export function runNativeHookProcessUntilDeadline(
   hookScriptPath: string,
@@ -111,18 +118,21 @@ export function runNativeHookProcessUntilDeadline(
     {
       cwd: projectRoot,
       detached: hostPlatform !== "win32",
-      env: hookEnvironment,
+      env: { ...hookEnvironment, GOAT_FLOW_HOOK_OWNS_PROCESS_GROUP: "1" },
       shell: false,
+      // When the launcher has read a Stop event, give the hook a pipe to receive those same bytes.
       stdio: [acceptedStopInput === null ? "inherit" : "pipe", "pipe", "pipe"],
       windowsHide: true,
     },
   );
+  // Replay the Stop event consumed by validation so the scanner sees the original turn context.
   if (acceptedStopInput !== null && hookProcess.stdin !== null) {
     hookProcess.stdin.on("error", () => {
-      // Ignore an evaluator closing stdin early; its real status and output determine the response.
+      // For example, the scanner may exit after rejecting its configuration before it reads the event.
     });
     hookProcess.stdin.end(acceptedStopInput);
   }
+  // Legacy feedback goes straight to the caller so its normal output stays visible during the check.
   if (!shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
     hookProcess.stdout.pipe(process.stdout, { end: false });
     hookProcess.stderr.pipe(process.stderr, { end: false });
@@ -133,6 +143,7 @@ export function runNativeHookProcessUntilDeadline(
     launchTimeout,
     hostPlatform,
     shouldCaptureResult,
+    { handleCancellation: true },
   );
 }
 
@@ -516,12 +527,18 @@ export async function reportNativeLauncherUnavailable(
   return reportNativeHookUnavailable(mode, delivery.reason, hookIdentifier);
 }
 
-/** Hold legacy policy output until a complete allow or host-specific deny status can be trusted. */
+/**
+ * Deliver a legacy policy decision once its output and exit code are safe to use.
+ *
+ * @param execution - Policy result. A null status means the caller receives an unavailable reply.
+ * @returns Host exit code for the decision or unavailable reply.
+ */
 function renderNativeLegacyPolicyExecution(
   mode: string,
   execution: CapturedHookProcessResult,
   hookIdentifier: string,
 ): number {
+  // Oversized output cannot supply a complete decision, so the agent receives an unavailable result.
   if (execution.hasExceededOutputLimit) {
     return reportNativeHookUnavailable(
       mode,
@@ -529,7 +546,16 @@ function renderNativeLegacyPolicyExecution(
       hookIdentifier,
     );
   }
+  // A success exit still needs readable output before the agent can act on it.
+  if (execution.hasInvalidUtf8Output) {
+    return reportNativeHookUnavailable(
+      mode,
+      "policy output was not valid UTF-8",
+      hookIdentifier,
+    );
+  }
   const status = execution.status;
+  // Only a successful exit or the legacy policy's explicit deny code carries a decision.
   if (status !== 0 && !(mode === "policy" && status === 2)) {
     return reportNativeHookUnavailable(
       mode,
@@ -537,7 +563,9 @@ function renderNativeLegacyPolicyExecution(
       hookIdentifier,
     );
   }
+  // An empty reply adds nothing to the caller's output.
   if (execution.stdout.length > 0) process.stdout.write(execution.stdout);
+  // Forward any diagnostics that explain the decision.
   if (execution.stderr.length > 0) process.stderr.write(execution.stderr);
   return status;
 }

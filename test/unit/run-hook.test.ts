@@ -1,4 +1,9 @@
-/** Real CLI fixtures prove that native launch stages are wired in the required order. */
+/**
+ * Checks the hook launcher the agent calls from its installed settings.
+ *
+ * Use when input validation, hook startup, or provider replies change.
+ * CLI fixtures show how launch failures and decisions reach the caller.
+ */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -70,6 +75,29 @@ function run(
   assert.equal(result.error, undefined);
   return result;
 }
+
+test("native launcher refuses invalid UTF-8 from a successful policy child", (t) => {
+  const { root, hooks } = fixture(t);
+  writeFileSync(
+    join(hooks, "fixture.mjs"),
+    "process.stdout.write(Buffer.from([0xff]));",
+  );
+  const policy = run(root);
+  assert.equal(policy.status, 2);
+  assert.equal(policy.stdout, "");
+  assert.match(policy.stderr, /policy output was not valid UTF-8/u);
+
+  // Each JSON-speaking agent expects its own decision field when a successful child emits unreadable output.
+  for (const [mode, key] of [
+    ["antigravity", "decision"],
+    ["copilot", "permissionDecision"],
+  ]) {
+    const reply = run(root, undefined, mode);
+    assert.equal(reply.status, 0);
+    assert.equal(JSON.parse(reply.stdout)[key], "deny");
+    assert.match(reply.stdout, /policy output was not valid UTF-8/u);
+  }
+});
 
 /** Identify one explicit provider turn; true is its continuation rather than another user turn. */
 function stopInput(active: boolean) {

@@ -1,10 +1,16 @@
-/** Scan only the explicit Git roots a managed non-Git controller lists, using native Node children. */
+/**
+ * Coordinates post-turn safety checks from a selected project that contains separate Git roots.
+ *
+ * Use when the agent ends a turn and the user has configured explicit scan roots.
+ * The agent receives the combined result for those roots within one time budget.
+ */
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { detachHookHelper } from "../process-tree.mjs";
 import type { PostTurnContext } from "./context.mjs";
 import type * as NativeHookSupervisor from "../hook-supervisor.mjs";
 import { clearStopReentryState } from "./recovery.mjs";
@@ -389,6 +395,11 @@ async function controllerSettings(
   };
 }
 
+/**
+ * Run the Stop safety scan for one configured Git root before the turn's remaining time expires.
+ *
+ * @returns The scan result and diagnostics. A null status means no normal exit, and empty streams give no report or diagnostic text.
+ */
 async function runControllerChild(
   settings: ControllerSettings,
   scanUnit: ScanUnit,
@@ -406,20 +417,21 @@ async function runControllerChild(
       Math.max(1, Math.ceil(remainingMilliseconds / 1000)),
     ),
   };
-  // Managed controller children use the same independent byte and tree-cleanup contracts as the outer launcher.
+  // An installed hook accounts for each scan's output and can stop its workers if the turn runs out of time.
   if (settings.managed !== null) {
+    const detached = detachHookHelper(childEnvironment);
     const child = spawn(
       process.execPath,
       [settings.scannerScript, "--root", scanUnit.root],
       {
         cwd: scanUnit.root,
         env: childEnvironment,
-        detached: process.platform !== "win32",
+        detached,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       },
     );
-    // A scanner may close stdin before reading the event; its completed status and result still decide the outcome.
+    // For example, a root that became invalid after setup may be rejected before the scanner reads the turn event.
     child.stdin.on("error", () => undefined);
     child.stdin.end(settings.childPayload);
     const execution =
@@ -429,12 +441,13 @@ async function runControllerChild(
         remainingMilliseconds,
         process.platform,
         true,
+        { ownsProcessGroup: detached },
       );
-    // Retained child diagnostics stay visible without allowing their excess to discard a completed finding.
+    // Relay any retained diagnostics that explain this root's scan result.
     if (execution.stderr) process.stderr.write(execution.stderr);
     return execution;
   }
-  // Direct callers have no aggregate byte report, so only status, streams and launch errors are kept.
+  // A direct run still returns status, output, and startup errors for the scan, with no combined byte report.
   const { status, stdout, stderr, error } = spawnSync(
     process.execPath,
     [settings.scannerScript, "--root", scanUnit.root],

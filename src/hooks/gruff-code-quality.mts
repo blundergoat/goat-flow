@@ -1,5 +1,10 @@
 #!/usr/bin/env node
-/** Run per-file Gruff checks with native Node transport and bounded provider feedback. */
+/**
+ * Runs Gruff checks on source files an agent edited.
+ *
+ * Use from PostToolUse after a write, edit, or terminal action changes project files.
+ * The agent receives findings and coverage gaps in a reply sized for its provider.
+ */
 import {
   mkdtempSync,
   mkdirSync,
@@ -207,54 +212,92 @@ async function selfTest(): Promise<number> {
   }
 }
 
+/**
+ * Check the files this install can reach and report any remaining coverage gaps in the same reply.
+ *
+ * @param paths - Files eligible for this install. An empty list skips the analyzer.
+ * @param unscannedPaths - Files in the agent's project that this install could not reach. An empty list adds no coverage warning.
+ */
 async function inspectSelectedFiles(
   root: string,
   request: EditRequest,
   paths: string[],
+  unscannedPaths: string[],
 ): Promise<void> {
-  const cache = new Map<string, Capabilities>();
-  let best = result(-1, "pass", "completed-clean");
-  let completed = 0;
-  let verifiedBinary = "";
-  const findings: Finding[] = [];
+  const analyzerCapabilities = new Map<string, Capabilities>();
+  // A multi-project edit starts with incomplete coverage if any files are outside this install.
+  let overallResult = unscannedPaths.length
+    ? result(60, "incomplete", "coverage-incomplete")
+    : result(-1, "pass", "completed-clean");
+  let completedFiles = 0;
+  // Only a verified analyzer run can confirm that Gruff is working for this project.
+  let lastVerifiedAnalyzer = "";
+  const coverageFindings: Finding[] = unscannedPaths
+    .slice(0, 20)
+    .map((target) => ({
+      code: "edited-path-outside-project",
+      message:
+        "The edited source file is outside the selected project, so Gruff did not analyse it",
+      target: target.replaceAll("\\", "/"),
+    }));
+  // Keep one coverage warning visible while giving analyzer findings priority over the other missed files.
+  const findings = coverageFindings.slice(0, 1);
+  // For example, an edit across two subprojects can still return findings from the one this install covers.
   for (const path of paths) {
-    const value = await inspectFile(
+    // A pathless edit in a repo with no first commit can use staged ranges when there are no unstaged changes.
+    const fileResult = await inspectFile(
       request,
       root,
       path,
       paths.length,
       request.paths.length === 0,
       managed,
-      cache,
+      analyzerCapabilities,
     );
-    if (!managed) renderDirectFailure(value, path);
-    completed += value.completed;
-    findings.push(...value.findings);
-    if (value.priority > best.priority) best = value;
-    if (value.verified) verifiedBinary = value.binary;
+    // Direct runs print file failures for the terminal user.
+    if (!managed) renderDirectFailure(fileResult, path);
+    completedFiles += fileResult.completed;
+    findings.push(...fileResult.findings);
+    // Use the highest-priority result in the reply while keeping findings from all checked files.
+    if (fileResult.priority > overallResult.priority)
+      overallResult = fileResult;
+    // Remember the analyzer only after it completed a verified check.
+    if (fileResult.verified) lastVerifiedAnalyzer = fileResult.binary;
   }
-  if (verifiedBinary) announceHealth(root, request, verifiedBinary);
-  emit(best, paths.length, completed, findings);
+  // Publish a health signal only when this edit verified an analyzer.
+  if (lastVerifiedAnalyzer) announceHealth(root, request, lastVerifiedAnalyzer);
+  findings.push(...coverageFindings.slice(1));
+  emit(
+    overallResult,
+    paths.length + unscannedPaths.length,
+    completedFiles,
+    findings,
+  );
 }
 
+/** Read the agent's tool event and decide whether to run Gruff, report incomplete input, or finish quietly. */
 async function evaluate(): Promise<void> {
   let request: EditRequest;
   try {
     request = parseEditRequest(readFileSync(0));
   } catch {
+    // For example, a manual replay with truncated JSON cannot identify which edit to check.
     emitInvalid();
     return;
   }
+  // An event without a tool name cannot tell Gruff whether the agent made an edit.
   if (!request.tool) {
     emitInvalid();
     return;
   }
+  // Non-edit actions can finish quietly because there is no changed source to review.
   if (!isEdit(request)) {
     emit(result(0, "pass", "completed-clean"));
     return;
   }
   const root = entryRoot();
   const selection = selectedPaths(root, request);
+  // A failed Git lookup leaves coverage unknown, even if Gruff found no file to scan.
   if (selection.failed) {
     const value = result(60, "incomplete", "coverage-incomplete", {
       code: "git-scope-failed",
@@ -264,26 +307,12 @@ async function evaluate(): Promise<void> {
     emit(value, 0, 0, value.findings, true);
     return;
   }
-  if (selection.paths.length === 0) {
-    const missed =
-      request.paths.length > 0 ? unattributedPaths(root, request) : [];
-    const value = missed.length
-      ? result(60, "incomplete", "coverage-incomplete")
-      : result(0, "pass", "completed-clean");
-    emit(
-      value,
-      missed.length,
-      0,
-      missed.map((target) => ({
-        code: "edited-path-outside-project",
-        message:
-          "The edited source file is outside the selected project, so Gruff did not analyse it",
-        target: target.replaceAll("\\", "/"),
-      })),
-    );
-    return;
-  }
-  await inspectSelectedFiles(root, request, selection.paths);
+  await inspectSelectedFiles(
+    root,
+    request,
+    selection.paths,
+    unattributedPaths(root, request),
+  );
 }
 
 try {

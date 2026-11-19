@@ -940,7 +940,7 @@ npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-
 npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook --trusted-target
 ```
 
-The [Windows and WSL capture matrix](../workflow/hooks/README.md#windows-and-wsl-delivery-captures) has eight current delivery observations. PreToolUse on both hosts and Windows Codex PostToolUse and Stop await new captures. The registry reports `provider-capture-stale` for those events. Each `scenario-unverified` gate has verified delivery on both hosts and requires separate local scenario proof.
+The [Windows and WSL capture matrix](../workflow/hooks/README.md#windows-and-wsl-delivery-captures) records the earlier delivery observations. The shared launcher and process supervision changes require fresh captures for supported events on both hosts. The registry reports `provider-capture-stale` while that delivery evidence is pending.
 
 The following Codex captures are historical observations of their recorded registrations and runtime bytes.
 

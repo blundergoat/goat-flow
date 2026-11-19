@@ -1,4 +1,9 @@
-/** Inspect Git command context and saved aliases, preserving argv and returning write-policy reasons. */
+/**
+ * Inspects proposed Git commands and saved aliases for the project's command policy.
+ *
+ * Use when an agent asks to run Git from the terminal.
+ * Policy decisions can explain what the command would do without running the proposed command or alias.
+ */
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
@@ -8,6 +13,7 @@ import {
   gitConfigKeyMayHostCommand,
 } from "../policy-git.mjs";
 import type { PolicyDenial } from "../policy-input.mjs";
+import { detachHookHelper } from "../process-tree.mjs";
 import {
   policyUnresolvedSplitRefusal,
   splitPolicyTopLevelPipelineStages,
@@ -391,22 +397,30 @@ function recordAssignedGitExecutables(
   }
 }
 
-/** Read only the invoked alias; never run its expansion or the proposed Git subcommand. */
+/**
+ * Read the named Git alias so the policy can check its expansion before the agent runs it.
+ *
+ * @param lookupOptions - Git options that affect which configuration is read. An empty list uses the selected directory's configuration.
+ * @returns The alias expansion, or null if missing or unreadable. A non-null reason explains a lookup failure to the agent.
+ */
 async function readGitAlias(
   name: string,
   lookupOptions: readonly string[],
   options: GitCommandOptions,
 ): Promise<{ expansion: string | null; reason: string | null }> {
   const remaining = options.deadlineAt - Date.now();
+  // A spent or invalid time budget leaves no time to verify what the alias would do.
   if (!Number.isFinite(remaining) || remaining <= 0)
     return {
       expansion: null,
       reason: "Git alias inspection exceeded the hook deadline.",
     };
+  // Use the supplied command environment when available and keep the lookup from prompting the user.
   const environment = {
     ...(options.environment ?? process.env),
     GIT_TERMINAL_PROMPT: "0",
   };
+  const detached = detachHookHelper(environment);
   const child = spawn(
     "git",
     [
@@ -419,36 +433,41 @@ async function readGitAlias(
     ],
     {
       env: environment,
-      detached: process.platform !== "win32",
+      detached,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
-  const result = await captureHookProcessUntilDeadline(
+  const aliasLookup = await captureHookProcessUntilDeadline(
     child,
     environment,
     remaining,
     process.platform,
     true,
+    { ownsProcessGroup: detached },
   );
+  // Partial or unreadable configuration output cannot establish what the agent's alias would run.
   if (
-    result.timedOut ||
-    result.hasExceededOutputLimit ||
-    result.hasInvalidUtf8Output
+    aliasLookup.timedOut ||
+    aliasLookup.hasExceededOutputLimit ||
+    aliasLookup.hasInvalidUtf8Output
   )
     return {
       expansion: null,
       reason:
         "Cannot inspect a saved Git alias within the hook's execution and output limits.",
     };
-  if (result.status !== 0 && result.status !== 1)
+  // Git uses exit code 1 for a missing alias. Other failures need a config repair or a manual run.
+  if (aliasLookup.status !== 0 && aliasLookup.status !== 1)
     return {
       expansion: null,
       reason:
         "Cannot read Git aliases. Fix the Git configuration or ask the user to run the command manually.",
     };
+  // A missing alias has no expansion or lookup error to show.
   return {
-    expansion: result.status === 0 ? result.stdout.replace(/\n+$/u, "") : null,
+    expansion:
+      aliasLookup.status === 0 ? aliasLookup.stdout.replace(/\n+$/u, "") : null,
     reason: null,
   };
 }

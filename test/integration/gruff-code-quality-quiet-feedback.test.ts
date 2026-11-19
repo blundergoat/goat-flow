@@ -1,7 +1,8 @@
 /**
- * Integration tests for which edits the Gruff hook stays quiet about, and which results it must still show.
- * Edits Gruff has no work for complete silently. Project source the selected install cannot reach stays visible,
- * and that result, a finding and an analyzer failure all reach the model through the handler setup registers for Claude.
+ * Checks when the Gruff hook stays quiet and when the agent needs feedback.
+ *
+ * Use when edit selection, analyzer results, or Claude's registered handler changes.
+ * The tests cover findings, failures, and source files the selected install cannot check.
  */
 import { copyHookTree } from "../helpers/hook-entrypoint.js";
 import { after, describe, it } from "node:test";
@@ -429,6 +430,49 @@ describe("gruff-code-quality hook quiets edits outside the analysed scope", () =
     assert.equal(
       readFileSync(join(projectRoot, "gruff-hook-args.log"), "utf8"),
       "hook --format json src/sample.ts\n",
+    );
+  });
+
+  it("reports partial coverage when an edit also names source in a sibling install", () => {
+    const { workspaceRoot, projectRoot, siblingSourcePath } =
+      makeGruffWorkspace(FINDING_GRUFF_CONTRACT_ENVELOPE);
+    const siblingEdits = [siblingSourcePath];
+    // Simulate a bulk edit across projects. The reply must keep real findings visible even when coverage gaps exceed its limit.
+    for (let index = 0; index < 20; index++) {
+      const path = join(workspaceRoot, "sibling", "src", `other-${index}.ts`);
+      writeFileSync(path, "export const value = 1;\n");
+      siblingEdits.push(path);
+    }
+    const result = readMigratedGruffResult(
+      runMigratedHook(
+        projectRoot,
+        {
+          tool_name: "multi_replace_file_content",
+          tool_input: {
+            edits: [
+              ...siblingEdits.map((file_path) => ({ file_path })),
+              { file_path: "src/sample.ts" },
+              { file_path: join(projectRoot, "src", "sample.ts") },
+            ],
+          },
+        },
+        "/usr/bin:/bin",
+        { CLAUDE_PROJECT_DIR: workspaceRoot },
+      ),
+    );
+    assert.equal(result.outcome, "incomplete");
+    assert.equal(result.reasonCode, "coverage-incomplete");
+    assert.deepEqual(result.coverage, {
+      status: "partial",
+      attemptedUnits: 22,
+      completedUnits: 1,
+      skippedUnits: 21,
+    });
+    const findings = result.findings as Array<{ code: string }>;
+    assert.equal(findings.length, 20);
+    assert.deepEqual(
+      findings.slice(0, 3).map(({ code }) => code),
+      ["edited-path-outside-project", "size.file-length", "naming.short"],
     );
   });
 });

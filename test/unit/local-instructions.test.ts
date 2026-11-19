@@ -1,7 +1,8 @@
 /**
- * Exercises project-local instruction discovery and hot-path parity contracts.
- * Use these fixtures when routing, extraction, or release metadata changes so
- * users see only real paths and current instruction provenance.
+ * Checks how Goat Flow finds project instructions and verifies their release metadata.
+ *
+ * Use when instruction discovery, routing, or version checks change.
+ * The fixtures check that users see valid paths and can tell which release supplied their instructions.
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -210,6 +211,14 @@ describe("instruction release metadata", () => {
     try {
       copyInstructionParityFixture(fixtureRoot);
 
+      // Give the fixture a valid release date so the test measures instruction drift while the working changelog can still be a draft.
+      const { version } = JSON.parse(
+        readFileSync(join(fixtureRoot, "package.json"), "utf8"),
+      ) as { version: string };
+      writeFileSync(
+        join(fixtureRoot, "CHANGELOG.md"),
+        `# Changelog\n\n## v${version} - 2000-01-01\n`,
+      );
       const agentsPath = join(fixtureRoot, "AGENTS.md");
       const agentsContent = readFileSync(agentsPath, "utf8");
       writeFileSync(

@@ -1,8 +1,8 @@
 /**
- * Reviewed Windows and WSL observations of each provider delivering hook results to the model, for the 1.19.0 runtime.
+ * Records reviewed Windows and WSL observations of how agents deliver hook results.
  *
- * The hooks registry attaches each row to its provider's evidence; support gates are still decided separately.
- * Digests point back to the reviewed receipts without publishing transcripts or raw payload values.
+ * Use when the Hooks page or audit needs evidence for one agent, event, and host.
+ * Historical observations keep their original runtime hashes while current delivery waits for fresh evidence.
  */
 import type { HookProviderHostEvidence } from "./hook-contracts.js";
 
@@ -177,15 +177,16 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "claude",
       canonicalEvent: "post-tool",
       providerEventName: "PostToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "The native edit callback delivered Gruff findings to the model.",
       limitations: [
+        "This observation predates the current shared hook launcher and process supervision.",
         "The operator closed the completed client. The receipt records exit code 1 and the native transcript records a clean Stop.",
         "The approved same-content Write triggered Gruff. The transcript records the Write and delivered analysis while the fixture bytes stayed the same.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "2.1.325",
         providerMode: "interactive CLI, manual permission mode",
         hookVersion: "1.19.0",
@@ -218,15 +219,16 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "claude",
       canonicalEvent: "turn-stop",
       providerEventName: "Stop",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "Stop blocked a conflict marker, the model repaired it, and clean Stop completed.",
       limitations: [
+        "This observation predates the current shared hook launcher and process supervision.",
         "Claude Code 2.1.325 recorded the delivered Stop reason in the Stop summary’s hook errors.",
         "The operator closed the completed client. The receipt records exit code 1 after the clean Stop.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "2.1.325",
         providerMode:
           "interactive CLI, manual permission mode, project settings only",
@@ -343,15 +345,16 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "copilot",
       canonicalEvent: "post-tool",
       providerEventName: "postToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "The native edit callback delivered Gruff findings to the model.",
       limitations: [
+        "This observation predates the current shared hook launcher and process supervision.",
         "The callback and the model’s reply contain the expected Gruff feedback phrase. One digit elsewhere in the hook context differs between rehearsal and capture.",
         "Recorded hashes identify the intended synthetic edit and the final state of the other five declared fixture files.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "1.0.103",
         providerMode:
           "prompt mode (-p), JSON output, low reasoning, allow-all-tools within available-tools",
@@ -441,15 +444,16 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "claude",
       canonicalEvent: "post-tool",
       providerEventName: "PostToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "The native edit callback delivered Gruff findings to the model.",
       limitations: [
+        "This observation predates the current shared hook launcher and process supervision.",
         "The local controller recorded each approval input. The provider transcript also contains Remote Control bridge records with no approval-channel field.",
         "The controller ended the completed client with signal 9.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "2.1.325",
         providerMode:
           "interactive CLI, manual permission mode, project settings only",
@@ -483,15 +487,16 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "claude",
       canonicalEvent: "turn-stop",
       providerEventName: "Stop",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "Stop blocked a conflict marker, the model repaired it, and clean Stop completed.",
       limitations: [
+        "This observation predates the current shared hook launcher and process supervision.",
         "Claude Code 2.1.325 records the exact Stop reason in the summary’s hook errors. The model condensed it before repairing the fixture.",
         "The operator closed the completed client with signal 9 after a clean Stop.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "2.1.325",
         providerMode:
           "interactive CLI, manual permission mode, project settings only",
@@ -568,16 +573,17 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "codex",
       canonicalEvent: "post-tool",
       providerEventName: "PostToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "The native edit callback delivered Gruff findings to the model.",
       limitations: [
+        "This observation predates the current shared hook launcher and process supervision.",
         "The operator granted hook trust in a separate no-task session after the changed-hook prompt. This was outside the capture packet’s readiness phase.",
         "Gruff feedback reached the model in a separate developer message. The patch tool returned empty output.",
         "Codex records the requested model and reasoning settings. The session does not report the backend model identity.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "0.169.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, workspace goat-flow permission profile, launched with --ask-for-approval on-request",
@@ -611,16 +617,17 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "codex",
       canonicalEvent: "turn-stop",
       providerEventName: "Stop",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "Stop feedback blocked completion. The model repaired the fixture and completed the turn.",
       limitations: [
+        "This observation predates the current shared hook launcher and process supervision.",
         "The controller relied on previously granted native hook trust. Stop delivery is present in the bound rollout.",
         "The rollout records a completed turn and a clean fixture after repair. It contains no separate clean Stop record.",
         "The model quoted the detailed reason during continuation and shortened it in the final response.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "0.169.0",
         providerMode:
           "exec mode (codex exec --json), low reasoning, workspace goat-flow permission profile, launched with --ask-for-approval on-request",
@@ -696,15 +703,16 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "copilot",
       canonicalEvent: "post-tool",
       providerEventName: "postToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "The native edit callback delivered Gruff findings to the model.",
       limitations: [
+        "This observation predates the current shared hook launcher and process supervision.",
         "The controller ended the completed client with signal 9. The tool availability list included two extension tools, neither of which was called.",
         "A stale session lock remained under a terminated process ID. The event log hash matched the reviewed bytes.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "1.0.91",
         providerMode:
           "interactive CLI, manual approval mode, low reasoning, available-tools limited to edit and view",

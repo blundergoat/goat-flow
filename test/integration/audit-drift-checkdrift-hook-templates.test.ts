@@ -1,7 +1,9 @@
 /**
  * Covers the hook drift report users receive after setup or an upgrade.
+ *
  * Use when hook scripts, launchers, timeouts, or optional-hook settings change.
  * Fixtures prove current installs pass and stale managed values name a repair.
+ *
  * User-owned and explicitly disabled hooks remain outside the drift result.
  */
 import {
@@ -24,10 +26,7 @@ import {
 import { buildAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
-import {
-  getHookSpec,
-  listHookSpecs,
-} from "../../src/cli/server/hooks-registry.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 describe("checkDrift: hook templates", () => {
   // Fixture writes stale settings because the stable drift contract must fail at 60s and pass at 90s.

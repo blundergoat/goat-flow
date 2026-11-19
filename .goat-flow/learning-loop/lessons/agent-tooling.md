@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-11-15
+last_reviewed: 2026-11-20
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -247,11 +247,11 @@ Inspect literals independently when checking renames, as described in
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** On POSIX, `stopHookProcessTree` kills the child's process group, so the child must be started with `detached: true`. Without it the kill fails quietly and the deadline stops nothing. When porting a helper between Windows and POSIX, start a `sleep` with a sleeping grandchild under the helper's exact spawn options, call the stop function and confirm both exited and `close` fired.
+**Prevention:** On POSIX, start a child with `detached: true` when cleanup owns its process group. If the child shares an already supervised hook group, pass `ownsProcessGroup: false` to scope its timeout cleanup to its own subtree. Test the exact spawn options with an idle child and grandchild. Confirm both stop and unrelated processes remain alive.
 
 **What happened:** A Linux capture helper was derived from a reviewed Windows helper. The Windows branch stops children with `taskkill`, so that review never exercised the process-group contract. An independent review flagged the missing option before any session ran. A paired run confirmed it: without `detached` both processes survived the stop call and `close` never fired, and with it both exited. An overrunning session would have kept spending past its limit and could have left no receipt after spending its one-use claim.
 
-**Related source contract:** `workflow/hooks/process-tree.mjs` (search: "must have started the POSIX hook as a detached process group").
+**Related source contract:** `workflow/hooks/process-tree.mjs` (search: "A shared-group helper can terminate its subtree").
 
 ---
 

@@ -1,4 +1,9 @@
-/** Resolve edited files and their owning installations without borrowing the shell's project scope. */
+/**
+ * Finds the source files and Gruff settings that apply to an agent edit.
+ *
+ * Use when an edit names files or the hook must ask Git which files changed.
+ * It respects the selected project and identifies files this install cannot check.
+ */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -355,29 +360,40 @@ export function selectedPaths(
   };
 }
 
-/** Source inside the provider boundary but outside this entry install must remain visibly unchecked. */
+/**
+ * Identify source edits inside the agent's project that this Gruff install cannot check.
+ *
+ * @param request - The edit event. An empty path list gives no named files to report as outside this install.
+ * @returns Paths to report as unchecked. An empty list adds no coverage warning.
+ */
 export function unattributedPaths(
   root: string,
   request: EditRequest,
 ): string[] {
+  // Use Claude's project boundary when available. An unset or empty value uses the selected root.
   const boundary = resolve(process.env.CLAUDE_PROJECT_DIR || root);
   return [
     ...new Set(
       request.paths.flatMap((path) => {
-        if (!variant(path)) return [];
+        // Skip unsupported file types and files already eligible for this install's own checks.
+        if (!variant(path) || eligiblePath(root, path) !== null) return [];
         const absolute = resolve(root, path.replaceAll("\\", "/"));
         let base = boundary;
         let selected = absolute;
+        // A link may make a file in the agent's project appear to be outside it.
         if (!beneath(selected, base)) {
           try {
             base = realpathSync(base);
             selected = realpathSync(selected);
           } catch {
+            // For example, a file removed after the edit event cannot be resolved to a project through a link.
             return [];
           }
         }
+        // Leave files outside the agent's project out of its coverage count.
         if (!beneath(selected, base)) return [];
         const rel = relative(base, selected).replaceAll("\\", "/");
+        // Unsupported files and projects that opted out of Gruff contribute no coverage warning.
         return supported(rel) &&
           ownerSettings(ownerRoot(base, rel)).choice !== "disabled"
           ? [absolute]

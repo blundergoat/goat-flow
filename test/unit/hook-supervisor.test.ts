@@ -1,6 +1,12 @@
-/** Real process boundaries protect native result delivery and bounded cleanup. */
+/**
+ * Checks the replies and process cleanup users rely on when a native hook runs.
+ *
+ * Use when deadlines, output limits, or cancellation handling changes.
+ * Real subprocesses exercise the cases where workers can still be running after a hook is stopped.
+ */
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -103,6 +109,66 @@ test("native supervisor reports a missing executable without a trusted exit stat
   assert.equal(result.timedOut, false);
   assert.equal(result.output?.areByteCountsExact, false);
 });
+
+// Simulate a check reaching its deadline and an agent stopping the launcher while a worker is still running.
+for (const ending of ["deadline", "SIGTERM"] as const) {
+  test(
+    `native supervision cleans up inherited-group workers on ${ending}`,
+    { skip: process.platform === "win32" },
+    async (t) => {
+      const root = mkdtempSync(join(tmpdir(), "goat-native-supervisor-"));
+      const workerPidFile = join(root, "worker.pid");
+      const resultMarker = join(root, "delivered");
+      const worker = [
+        "const fs = require('node:fs');",
+        "fs.writeFileSync(process.argv[1], String(process.pid));",
+        "setInterval(() => {}, 1000);",
+      ].join("");
+      const evaluator = [
+        "const { spawn } = require('node:child_process');",
+        `spawn(process.execPath, ['-e', ${JSON.stringify(worker)}, process.argv[1]], { stdio: ['ignore', 'inherit', 'inherit'] }).unref();`,
+      ].join("");
+      const supervisor = new URL(
+        "../../workflow/hooks/hook-supervisor.mjs",
+        import.meta.url,
+      );
+      const program = `
+        import { spawn } from "node:child_process";
+        import { writeFileSync } from "node:fs";
+        import { captureHookProcessUntilDeadline } from ${JSON.stringify(supervisor.href)};
+        const child = spawn(process.execPath, ["-e", ${JSON.stringify(evaluator)}, process.argv[1]], { detached: true, stdio: "pipe" });
+        const result = await captureHookProcessUntilDeadline(child, process.env, ${ending === "deadline" ? 2000 : 8000}, process.platform, true, { handleCancellation: true });
+        writeFileSync(process.argv[2], "result available");
+        process.exitCode = result.timedOut ? 0 : 1;
+      `;
+      const launcher = spawn(
+        process.execPath,
+        ["--input-type=module", "-e", program, workerPidFile, resultMarker],
+        {
+          stdio: "ignore",
+        },
+      );
+      const closed = once(launcher, "close");
+      let workerPid: number | undefined;
+      t.after(() => {
+        launcher.kill("SIGKILL");
+        // A failing check may leave a known worker running, so stop it before removing the project.
+        if (workerPid !== undefined && isRunning(workerPid))
+          process.kill(workerPid, "SIGKILL");
+        rmSync(root, { recursive: true, force: true });
+      });
+      workerPid = await waitForReadyPid(workerPidFile);
+      // Send cancellation only after a worker has started. The timeout case lets the launcher's timer fire.
+      if (ending === "SIGTERM") launcher.kill("SIGTERM");
+      assert.deepEqual(
+        await closed,
+        ending === "deadline" ? [0, null] : [null, "SIGTERM"],
+      );
+      assert.equal(existsSync(resultMarker), ending === "deadline");
+      await waitFor(() => workerPid !== undefined && !isRunning(workerPid));
+    },
+  );
+}
 
 for (const ending of ["deadline", "envelope", "diagnostic-flood"] as const) {
   test(`native supervisor stops owned processes on ${ending} and preserves unrelated work`, async (t) => {

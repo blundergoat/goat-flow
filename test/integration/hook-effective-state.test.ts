@@ -1,8 +1,8 @@
 /**
- * Proves the hook status chain users see after setup, drift, or tampering.
+ * Checks the hook status users see after setup or changes to installed files.
  *
- * Use these fixtures when hook registry, installation, trust, or repair changes affect CLI or dashboard views.
- * Every project is disposable and no provider model is launched.
+ * Use when registration, trust, or repair affects CLI or dashboard output.
+ * Disposable projects let the tests inspect status and replay hooks without launching an agent.
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -54,9 +54,17 @@ import { countOwnedCommandRows } from "../unit/hook-registrar.helpers.js";
 
 const disposableProjects: string[] = [];
 
-/** Supply the provider precondition for cases that exercise local registration or proof. */
-function assumeReviewedClaudePolicies(testContext: TestContext): void {
-  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+/**
+ * Assume current Claude delivery while testing what the Hooks page shows for a local install.
+ *
+ * @param hookIds - Hooks to mark as reviewed. Omit for both policy hooks, or pass an empty list to leave evidence untouched.
+ */
+function assumeReviewedClaudeHooks(
+  testContext: TestContext,
+  hookIds = ["deny-dangerous", "deny-git-mutations"],
+): void {
+  // Give only the selected rows a reviewed delivery gate, then restore them so other tests still see release evidence.
+  for (const hookId of hookIds) {
     const evidence = getHookSpec(hookId)?.providerEvidence.claude;
     assert.ok(evidence);
     const previous = evidence.effectiveSupportGate;
@@ -368,7 +376,7 @@ describe("effective hook state", () => {
 
   // A desired hook with no exact registration is not protected merely because the registry lists it.
   it("keeps enabled but unregistered hooks non-green", (t) => {
-    assumeReviewedClaudePolicies(t);
+    assumeReviewedClaudeHooks(t);
     const projectPath = createClaudeProject();
     const denyHookState = claudeHookState(projectPath, "deny-dangerous");
 
@@ -385,7 +393,7 @@ describe("effective hook state", () => {
 
   // A current local install still stops at the registry's explicit configured-scenario gate.
   it("separates current installation from scenario verification", (t) => {
-    assumeReviewedClaudePolicies(t);
+    assumeReviewedClaudeHooks(t);
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     recordCanonicalManagedHookBaseline(projectPath, [
@@ -417,7 +425,8 @@ describe("effective hook state", () => {
    * Side effects: writes one local hook customization inside a disposable project.
    * Invariant: unclassified drift stays command-free until a trusted baseline establishes direction.
    */
-  it("keeps installed byte drift unclassified without a baseline", () => {
+  it("keeps installed byte drift unclassified without a baseline", (t) => {
+    assumeReviewedClaudeHooks(t, ["post-turn-safety"]);
     const projectPath = createClaudeProject();
     initializeDisposableGitProject(projectPath);
     syncHookStates(projectPath);
@@ -600,7 +609,7 @@ describe("effective hook state", () => {
 
   // A hard-linked agent config can contain exact bytes while remaining unsafe to execute.
   it("keeps exact but hard-linked configuration untrusted", (t) => {
-    assumeReviewedClaudePolicies(t);
+    assumeReviewedClaudeHooks(t);
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     const configPath = join(projectPath, ".claude", "settings.json");
@@ -801,7 +810,11 @@ describe("effective hook state", () => {
    * Invariant: optional disabled rows cannot lower an otherwise effective aggregate.
    */
   it("passes effective required coverage with a disabled optional hook", (t) => {
-    assumeReviewedClaudePolicies(t);
+    assumeReviewedClaudeHooks(t, [
+      "deny-dangerous",
+      "deny-git-mutations",
+      "post-turn-safety",
+    ]);
     const projectPath = createClaudeProject();
     initializeDisposableGitProject(projectPath);
     mkdirSync(join(projectPath, "src"), { recursive: true });
@@ -907,7 +920,7 @@ describe("effective hook state", () => {
   // ADD INTEGRATION: a shared repair must invalidate both proofs, even when it restores identical release bytes.
   // Writes disposable runtime and evidence files, then replays both registered hooks with inert inputs.
   it("requires independent policy proof after a shared runtime repair", (t) => {
-    assumeReviewedClaudePolicies(t);
+    assumeReviewedClaudeHooks(t);
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     /** Replay the selected policy's registered handler so the fixture records the same independent proof the Hooks page requires. */
@@ -1023,7 +1036,8 @@ describe("effective hook state", () => {
    * Side effects: writes one merge-conflict file in a disposable Git project removed by cleanup.
    * Invariant: the configured command reports both result classes without provider invocation.
    */
-  it("replays finding and incomplete results through the configured Stop command", () => {
+  it("replays finding and incomplete results through the configured Stop command", (t) => {
+    assumeReviewedClaudeHooks(t, ["post-turn-safety"]);
     const projectPath = createClaudeProject();
     initializeDisposableGitProject(projectPath);
     mkdirSync(join(projectPath, "src"), { recursive: true });
@@ -1097,7 +1111,8 @@ describe("effective hook state", () => {
   });
 
   // An edited source without a Gruff config is unavailable and malformed input is incomplete, while a non-source edit stays quiet.
-  it("replays incomplete, quiet, and unavailable Gruff results through its configured command", () => {
+  it("replays incomplete, quiet, and unavailable Gruff results through its configured command", (t) => {
+    assumeReviewedClaudeHooks(t, ["gruff-code-quality"]);
     const projectPath = createClaudeProject();
     initializeDisposableGitProject(projectPath);
     enableGruffForProject(projectPath);

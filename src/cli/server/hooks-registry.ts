@@ -1,10 +1,8 @@
 /**
  * Defines the hooks users can enable from the dashboard or CLI.
  *
- * Use when setup, sync, and audit need one display name, script, event, and deadline.
- *
- * The manifest still decides which coding agents support hook registration.
- * Keeping these values central makes every user-facing setup path agree.
+ * Use when setup, sync, and audit need the same display name, script, event, and deadline.
+ * Agent profiles describe where a hook can register. The registry's evidence informs the delivery status users see.
  */
 import type { AgentId } from "../types.js";
 import {
@@ -134,6 +132,7 @@ const POLICY_RUNTIME_FILES = [
   "deny-dangerous/corpus.json",
 ];
 
+// A stale capture leaves delivery unverified for the current runtime, even if a user can install and register the hook.
 const HOOKS: HookSpec[] = [
   {
     id: "deny-dangerous",
@@ -263,14 +262,13 @@ const HOOKS: HookSpec[] = [
     togglable: true,
     defaultEnabled: false,
     requiresConfirmDialog: false,
-    // Above the script's internal 60s analyzer timeout so the hook's own
-    // timeout/config diagnostics print before the runner kills the wrapper.
+    // Give the hook time to report a 60-second analyzer timeout to the agent before the launcher stops it.
     timeoutSec: 90,
     deliveryContract: GRUFF_DELIVERY_CONTRACT,
     providerEvidence: {
       claude: {
         identity: "hook-provider-adapter.v1:claude:post-tool",
-        effectiveSupportGate: "scenario-unverified",
+        effectiveSupportGate: "provider-capture-stale",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "claude" &&
@@ -297,7 +295,7 @@ const HOOKS: HookSpec[] = [
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:post-tool",
-        effectiveSupportGate: "scenario-unverified",
+        effectiveSupportGate: "provider-capture-stale",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "copilot" &&
@@ -340,7 +338,7 @@ const HOOKS: HookSpec[] = [
     providerEvidence: {
       claude: {
         identity: "hook-provider-adapter.v1:claude:turn-stop",
-        effectiveSupportGate: "scenario-unverified",
+        effectiveSupportGate: "provider-capture-stale",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "claude" &&

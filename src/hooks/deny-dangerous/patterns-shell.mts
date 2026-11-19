@@ -1,4 +1,9 @@
-/** Classify recursive cleanup and shell/interpreter inputs without executing proposed commands. */
+/**
+ * Checks patterns in shell commands an agent proposes to run.
+ *
+ * Use when a command could delete files, run a script, or send instructions to another tool.
+ * The policy uses these classifications to explain when a command needs manual review.
+ */
 import { asciiLowerCase, type PolicyDenial } from "../policy-input.mjs";
 import type { PolicySegmentEvaluator } from "../policy-substitutions.mjs";
 import {
@@ -737,8 +742,9 @@ const databaseClient =
 const databaseInlineFlag = /-e|-c|--command|--eval/u;
 const databaseDestructiveStatement =
   /drop[ \t\n\v\f\r]+(?:database|table|schema|index|view)|truncate[ \t\n\v\f\r]+table|delete[ \t\n\v\f\r]+from|\.drop[ \t\n\v\f\r]*\(|\.deletemany[ \t\n\v\f\r]*\(|\.deleteone[ \t\n\v\f\r]*\(|\.remove[ \t\n\v\f\r]*\(/u;
+// For example, a migration read from a file leaves the SQL outside the proposed command, so the user needs to review it.
 const databaseFileInput =
-  /(?:^|[ \t\n\v\f\r])(?:psql|mysql|mariadb|sqlite3|mongosh)(?:[ \t\n\v\f\r]+|$).*-f[ \t\n\v\f\r]/su;
+  /(?:^|[ \t\n\v\f\r])(?:psql|mysql|mariadb|sqlite3|mongosh)[ \t\n\v\f\r]+.*-f[ \t\n\v\f\r]/su;
 const npmTokenRevocation =
   /^npm[ \t\n\v\f\r]+token[ \t\n\v\f\r]+(?:delete|revoke)/u;
 const interpreterEval =

@@ -1,14 +1,30 @@
-/** Native hook cleanup retains the existing owned-tree contract without a shell launch. */
+/**
+ * Stops hook processes and their workers on Windows and POSIX hosts.
+ *
+ * Use when an installed hook is cancelled, times out, or emits too much output.
+ * Cleanup targets processes started for that check so unrelated work can continue.
+ */
 import { spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { win32 } from "node:path";
 
+/** Keep analyzers and scanners with the running hook when its launcher is responsible for stopping them. */
+export function detachHookHelper(environment: NodeJS.ProcessEnv): boolean {
+  return (
+    process.platform !== "win32" &&
+    environment.GOAT_FLOW_HOOK_OWNS_PROCESS_GROUP !== "1"
+  );
+}
+
 /**
- * Resolve the OS tree terminator without consulting project PATH or cwd.
- * Contract: a missing or relative Windows root returns null for direct-process fallback.
+ * Find the Windows process-tree tool in the host's system directory.
+ *
+ * @returns The tool path, or null if Windows paths are missing or relative and cleanup falls back to the hook process.
  */
 export function windowsTaskkillExecutablePath(
   environment: NodeJS.ProcessEnv,
 ): string | null {
+  // Either Windows variable can identify the system directory. An empty value leaves cleanup to the caller.
   const root = environment.SystemRoot || environment.WINDIR || "";
   return win32.isAbsolute(root)
     ? win32.join(root, "System32", "taskkill.exe")
@@ -16,8 +32,10 @@ export function windowsTaskkillExecutablePath(
 }
 
 /**
- * Parse positive process identities from the bounded ps result.
- * Ignore incomplete rows so they cannot identify unrelated work for cleanup.
+ * Group the host's listed processes by parent so cleanup can find workers that belong to a stopped hook.
+ *
+ * @param output - Host process list. Empty output means that no worker can be identified from the listing.
+ * @returns Children by parent process ID. An empty map leaves cleanup with the known hook process or its group.
  */
 function readHookProcessChildren(
   output: string,
@@ -26,17 +44,20 @@ function readHookProcessChildren(
     number,
     { processId: number; groupId: number }[]
   >();
+  // Each row identifies a process and its parent and group, including workers from an analyzer or scanner.
   for (const row of output.trim().split("\n")) {
     const [processId = NaN, parentId = NaN, groupId = NaN] = row
       .trim()
       .split(/[ \t]+/u)
       .map(Number);
+    // Skip incomplete rows so cleanup cannot rely on them to identify a worker belonging to this hook.
     if (
       ![processId, parentId, groupId].every(
         (id) => Number.isSafeInteger(id) && id > 0,
       )
     )
       continue;
+    // The first worker seen for a parent starts that parent's list.
     const siblings = childrenByParent.get(parentId) ?? [];
     siblings.push({ processId, groupId });
     childrenByParent.set(parentId, siblings);
@@ -44,46 +65,65 @@ function readHookProcessChildren(
   return childrenByParent;
 }
 
-/** Starts one bounded process lookup; failure returns no extra owned groups. */
-function findDetachedHookProcessGroups(hookProcessId: number): number[] {
-  const lookup = spawnSync("ps", ["-e", "-o", "pid=,ppid=,pgid="], {
-    encoding: "utf8",
-    timeout: 1000,
-    maxBuffer: 262_144,
-    windowsHide: true,
-  });
-  if (lookup.status !== 0 || lookup.error) return [];
-  const childrenByParent = readHookProcessChildren(lookup.stdout);
+/**
+ * Find the workers and separate process groups started by a hook that needs to stop.
+ *
+ * @returns The hook and its known descendants. With no usable process list, only the hook ID is known.
+ */
+function findHookProcessTree(hookProcessId: number) {
+  // Use the host's process list even if the selected project's PATH points somewhere else.
+  const executable = existsSync("/bin/ps") ? "/bin/ps" : "/usr/bin/ps";
+  const processListing = spawnSync(
+    executable,
+    ["-e", "-o", "pid=,ppid=,pgid="],
+    {
+      encoding: "utf8",
+      timeout: 1000,
+      maxBuffer: 262_144,
+      windowsHide: true,
+    },
+  );
   const descendantIds = new Set([hookProcessId]);
   const detachedGroups = new Set<number>();
-  for (const parentId of descendantIds) {
-    for (const child of childrenByParent.get(parentId) ?? []) {
-      descendantIds.add(child.processId);
-      if (child.groupId === child.processId) detachedGroups.add(child.groupId);
+  // Use the listing only if it completed. Otherwise cleanup can still target the hook or its own group.
+  if (processListing.status === 0 && !processListing.error) {
+    const childrenByParent = readHookProcessChildren(processListing.stdout);
+    // Workers added as descendants will also be visited, so nested workers can be stopped.
+    for (const parentId of descendantIds) {
+      // A parent with no listed children needs no additional cleanup.
+      for (const child of childrenByParent.get(parentId) ?? []) {
+        descendantIds.add(child.processId);
+        // A worker that started its own group needs a separate signal when the hook stops.
+        if (child.groupId === child.processId)
+          detachedGroups.add(child.groupId);
+      }
     }
   }
-  return [...detachedGroups].reverse();
+  return { descendantIds, detachedGroups };
 }
 
 /**
- * Stop a hook's owned descendants, including detached POSIX groups.
- * Contract: the launcher must have started the POSIX hook as a detached process group.
- * Mutates process state; swallows exit races, and a failed Windows tree kill falls back to its direct child.
+ * Stop a hook and its workers after cancellation, timeout, or excess output.
+ * A shared-group helper can terminate its subtree without signalling the running hook's group.
  */
 export function stopHookProcessTree(
   hookProcess: ChildProcess,
   hostPlatform: NodeJS.Platform,
   environment: NodeJS.ProcessEnv,
+  ownsProcessGroup = true,
 ): void {
+  // A hook that failed to start has no process to stop.
   if (!hookProcess.pid) return;
   try {
+    // Windows can stop a hook and its descendants together through the system process-tree tool.
     if (hostPlatform === "win32") {
       const executable = windowsTaskkillExecutablePath(environment);
+      // With no usable Windows system path, try stopping the hook process directly.
       if (executable === null) {
         hookProcess.kill("SIGKILL");
         return;
       }
-      const result = spawnSync(
+      const treeKill = spawnSync(
         executable,
         ["/pid", String(hookProcess.pid), "/T", "/F"],
         {
@@ -92,19 +132,28 @@ export function stopHookProcessTree(
           windowsHide: true,
         },
       );
-      if (result.status !== 0) hookProcess.kill("SIGKILL");
+      // If Windows could not stop the whole tree, try the hook process itself.
+      if (treeKill.status !== 0) hookProcess.kill("SIGKILL");
       return;
     }
-    // Detached checks need stopping before the parent relationships disappear.
-    for (const groupId of findDetachedHookProcessGroups(hookProcess.pid)) {
+    const { descendantIds, detachedGroups } = findHookProcessTree(
+      hookProcess.pid,
+    );
+    const signalTargets = [...detachedGroups]
+      .reverse()
+      .map((groupId) => -groupId);
+    // The launcher may stop its whole group. A timed-out helper in that group can stop only its descendants and itself.
+    if (ownsProcessGroup) signalTargets.push(-hookProcess.pid);
+    else signalTargets.push(...[...descendantIds].reverse());
+    // Stop separate groups first, then the launcher group or the individual processes it owns.
+    for (const signalTarget of signalTargets) {
       try {
-        process.kill(-groupId, "SIGKILL");
+        process.kill(signalTarget, "SIGKILL");
       } catch {
-        // Ignore cleanup races with a child finishing after the process snapshot.
+        // Ignore a cleanup race when an analyzer worker exits between the process listing and the signal.
       }
     }
-    process.kill(-hookProcess.pid, "SIGKILL");
   } catch {
-    // Cleanup is best effort when the process exits or the host refuses a signal.
+    // Cleanup is best effort when the hook exits just before Windows tries to stop it.
   }
 }

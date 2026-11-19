@@ -1,4 +1,9 @@
-/** Resolve approved analyzer locations and supervise native processes without a shell fallback. */
+/**
+ * Finds and runs the Gruff analyzer configured for edited source.
+ *
+ * Use when the hook needs capabilities or findings from a project's analyzer.
+ * Results keep startup, timeout, and output failures visible to the calling check.
+ */
 import { spawn } from "node:child_process";
 import {
   accessSync,
@@ -15,6 +20,7 @@ import { delimiter, dirname, extname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { captureHookProcessUntilDeadline } from "../hook-supervisor.mjs";
+import { detachHookHelper } from "../process-tree.mjs";
 import { beneath, object, ownerSettings } from "./scope.mjs";
 
 export interface AnalyzerCommand {
@@ -229,7 +235,12 @@ export function timeoutSeconds(binary: string): number {
   return /^[0-9]+$/u.test(value) && Number(value) >= 1 ? Number(value) : 60;
 }
 
-/** Capture output and stop the analyzer's owned process tree at the feedback deadline. */
+/**
+ * Run one Gruff request so the edit hook can show findings or explain why analysis stopped.
+ *
+ * @param args - Arguments for this request. An empty list adds nothing to the analyzer command's saved arguments.
+ * @returns Analyzer output and failure details. A null status means no exit code, and empty diagnostics mean no error text was captured.
+ */
 export async function invokeAnalyzer(
   command: AnalyzerCommand,
   args: string[],
@@ -240,29 +251,34 @@ export async function invokeAnalyzer(
     ...process.env,
     GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
   };
+  // An installed hook's launcher can stop the analyzer with the rest of its workers.
+  const detached = detachHookHelper(environment);
   const child = spawn(command.executable, [...command.args, ...args], {
     cwd: root,
     env: environment,
-    detached: process.platform !== "win32",
+    detached,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const result = await captureHookProcessUntilDeadline(
+  // Capture the full analyzer report within its own limit before choosing what fits in the agent's reply.
+  const analyzerRun = await captureHookProcessUntilDeadline(
     child,
     environment,
     timeoutSeconds(binary) * 1000,
     process.platform,
     true,
-    16_777_216, // Analyzer JSON includes full findings; the provider envelope is bounded separately.
+    { stdoutLimitBytes: 16_777_216, ownsProcessGroup: detached },
   );
   return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.hasExceededOutputLimit
+    status: analyzerRun.status,
+    stdout: analyzerRun.stdout,
+    // Prefer the output-limit reason, then analyzer diagnostics or a startup error. A clean run may have no diagnostic.
+    stderr: analyzerRun.hasExceededOutputLimit
       ? "Analyzer output exceeded its capture limit"
-      : result.stderr || result.launchError?.message || "",
-    timedOut: result.timedOut,
-    invalid: result.hasExceededOutputLimit || result.hasInvalidUtf8Output,
+      : analyzerRun.stderr || analyzerRun.launchError?.message || "",
+    timedOut: analyzerRun.timedOut,
+    invalid:
+      analyzerRun.hasExceededOutputLimit || analyzerRun.hasInvalidUtf8Output,
   };
 }
 

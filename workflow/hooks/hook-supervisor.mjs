@@ -3,41 +3,74 @@
 import { appendBoundedHookOutput, createCapturedHookOutput, finishCapturedHookOutput, } from "./hook-output.mjs";
 import { stopHookProcessTree } from "./process-tree.mjs";
 /**
- * Capture a started hook until its first exit, launch error, output flood or deadline.
- * The POSIX child must own a detached process group; false leaves feedback relay to the caller.
- * Resolves launch errors in the result and stops owned processes on forced endings without awaiting close.
- * An optional stdout budget supports analyzer reports; hook callers retain the default provider envelope.
+ * Wait for a started hook so the agent can receive a decision or see why the check did not finish.
+ * Use the default output budget for agent replies or pass a larger budget for an analyzer report.
+ *
+ * @returns Captured output and failure details. A null status means there is no completed exit code to trust.
  */
-export function captureHookProcessUntilDeadline(hookProcess, hookEnvironment, launchTimeout, hostPlatform, shouldCaptureResult, stdoutLimitBytes) {
+export function captureHookProcessUntilDeadline(hookProcess, hookEnvironment, launchTimeout, hostPlatform, shouldCaptureResult, { stdoutLimitBytes, ownsProcessGroup = true, handleCancellation = false, } = {}) {
     return new Promise((resolveHookResult) => {
-        let hasDeliveredHookResult = false;
+        let hasFinishedSupervision = false;
         let hasHookReachedDeadline = false;
         let hasExceededOutputLimit = false;
         const captured = createCapturedHookOutput(hookEnvironment.GOAT_FLOW_HOOK_PROVIDER_MODE === "managed", stdoutLimitBytes);
-        /** Release owned pipes so surviving descendants cannot keep the launcher open. */
+        /** Close the output pipes so a worker still holding them cannot delay the agent's reply. */
         function releaseHookOutputStreams() {
+            // Either output stream may still be open when an analyzer runs out of time.
             for (const outputStream of [hookProcess.stdout, hookProcess.stderr]) {
+                // An inherited stream needs no cleanup from this launcher.
                 if (outputStream === null)
                     continue;
                 outputStream.removeAllListeners("data");
                 outputStream.destroy();
             }
         }
-        // Deliver independently of close: a descendant may still hold the hook's pipes open.
-        const launchDeadlineTimer = setTimeout(() => {
-            hasHookReachedDeadline = true;
-            stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment);
+        /** Stop the hook and its workers when the caller can no longer use their result. */
+        function stopHook() {
+            stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment, ownsProcessGroup);
             hookProcess.unref();
             releaseHookOutputStreams();
+        }
+        /** Forward a cancellation after cleanup so stopping a turn cannot deliver a hook decision. */
+        function cancelHook(signal) {
+            stopHook();
+            finishSupervision();
+            process.kill(process.pid, signal);
+        }
+        // The launcher handles signals sent to it. Helpers share the launcher's cancellation path.
+        if (handleCancellation) {
+            process.once("SIGINT", cancelHook);
+            process.once("SIGTERM", cancelHook);
+        }
+        // Report a timeout even if an analyzer worker still holds the output pipes open.
+        const launchDeadlineTimer = setTimeout(() => {
+            hasHookReachedDeadline = true;
+            stopHook();
             deliverHookResult(null, null);
         }, launchTimeout);
-        /** Resolve once; forced endings retain lower-bound byte totals and no trusted exit status. */
-        function deliverHookResult(status, launchError) {
-            if (hasDeliveredHookResult)
-                return;
-            hasDeliveredHookResult = true;
+        /** Clear the timer and handlers so a finished check cannot respond again. */
+        function finishSupervision() {
+            hasFinishedSupervision = true;
             clearTimeout(launchDeadlineTimer);
+            // The launcher removes the handlers it registered for this check.
+            if (handleCancellation) {
+                process.removeListener("SIGINT", cancelHook);
+                process.removeListener("SIGTERM", cancelHook);
+            }
+        }
+        /**
+         * Return one result for the agent or the calling hook.
+         *
+         * @param status - Exit code, or null if the check stopped without one.
+         * @param launchError - Startup failure, or null if startup did not fail.
+         */
+        function deliverHookResult(status, launchError) {
+            // The timeout or output limit may have already reported a result before the process closed.
+            if (hasFinishedSupervision)
+                return;
+            finishSupervision();
             const hasInvalidUtf8Output = finishCapturedHookOutput(captured);
+            // Managed runs report exact byte counts only when the hook finished normally.
             if (captured.output)
                 captured.output.areByteCountsExact =
                     status !== null &&
@@ -55,18 +88,19 @@ export function captureHookProcessUntilDeadline(hookProcess, hookEnvironment, la
                 hasInvalidUtf8Output,
             });
         }
-        /** Retain bounded raw output; a breached budget stops the owned tree and resolves immediately. */
+        /** Collect output until it reaches the limit, then end the check with an output-limit result. */
         function captureHookOutputChunk(stream, chunk) {
+            // Ignore bytes queued after the check already hit its output limit.
             if (hasExceededOutputLimit)
                 return;
+            // Keep waiting for the result while the incoming output still fits.
             if (appendBoundedHookOutput(captured, stream, chunk))
                 return;
             hasExceededOutputLimit = true;
-            stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment);
-            hookProcess.unref();
-            releaseHookOutputStreams();
+            stopHook();
             deliverHookResult(null, null);
         }
+        // Collect output only for checks that return a reply. The caller relays other output directly.
         if (shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
             hookProcess.stdout.on("data", captureHookOutputChunk.bind(null, "stdout"));
             hookProcess.stderr.on("data", captureHookOutputChunk.bind(null, "stderr"));

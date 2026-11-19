@@ -115,8 +115,10 @@ ownership semantics does need an ADR before implementation.
    inventory into both `NAMED_PATHS` and `REQUIRED_SKILL_DOC_FILES`.
 7. Register the source/install pair in `SHARED_ARTIFACT_MIRRORS` in
    `src/cli/audit/artifact-templates.ts`.
-8. Register ownership/source in `workflow/manifest.json` `required_files`, and
-   name the playbook in the playbooks `directory_purposes` description.
+8. Add the installed path to `required_files` in `workflow/manifest.json`.
+   In `file_ownership`, give that same path a `system-owned` entry whose
+   `source` is the canonical playbook. Name the playbook in the playbooks
+   `directory_purposes` description.
 9. Add the installed playbook's existence check to
    `workflow/setup/03-install-skills.md`.
 10. Add the playbook to preflight mirror/budget checks and the integration

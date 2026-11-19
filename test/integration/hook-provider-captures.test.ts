@@ -1,6 +1,8 @@
 /**
- * Checks host-specific delivery metadata without launching a provider.
- * Keep recorded runtime bytes and incomplete host outcomes separate from support activation.
+ * Checks the Windows and WSL evidence the Hooks page and audit present.
+ *
+ * Use when delivery is recaptured or a hook runtime change makes earlier evidence stale.
+ * The tests compare registry metadata and runtime hashes without launching an agent.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -196,45 +198,30 @@ describe("host-specific hook provider captures", () => {
       ["antigravity", "deny-dangerous", "C18"],
       ["antigravity", "deny-git-mutations", "C18"],
     ] as const;
-    const verificationByCase = new Map([
-      ["C1", "incomplete"],
-      ["C4", "incomplete"],
-      ["C5", "incomplete"],
-      ["C6", "incomplete"],
-      ["C7", "incomplete"],
-      ["C9", "incomplete"],
-      ["C10", "incomplete"],
-      ["C13", "incomplete"],
-      ["C16", "incomplete"],
-      ["C18", "incomplete"],
-    ]);
-    const staleGates = new Set([...verificationByCase.keys(), "C14", "C15"]);
+    // Every linked observation still belongs to the same hook, and each associated status now needs fresh evidence.
     for (const [provider, hookId, caseId] of attached) {
       const evidence = getHookSpec(hookId)?.providerEvidence?.[provider];
       const row = evidence?.hostCaptures?.find(
         (capture) => capture.caseId === caseId,
       );
-      assert.equal(
-        row?.verification,
-        verificationByCase.get(caseId) ?? "verified",
-        caseId,
-      );
+      assert.equal(row?.verification, "incomplete", caseId);
       assert.equal(
         evidence?.effectiveSupportGate,
-        staleGates.has(caseId)
-          ? "provider-capture-stale"
-          : "scenario-unverified",
+        "provider-capture-stale",
         `${provider}/${hookId} gate`,
       );
     }
   });
 
   it("keeps each reviewed support gate within its verified host delivery", () => {
+    // Check each hook's status against what has been verified on the two hosts.
     for (const hook of listHookSpecs()) {
+      // A hook with no recorded provider evidence has no delivery rows to check.
       for (const [provider, evidence] of Object.entries(
         hook.providerEvidence ?? {},
       )) {
         const label = `${provider}/${hook.id}`;
+        // A host with no current successful capture cannot appear as verified.
         const deliveredHosts = [
           ...new Set(
             (evidence.hostCaptures ?? [])
@@ -249,11 +236,7 @@ describe("host-specific hook provider captures", () => {
         ].sort();
         const gate = currentHookProviderSupportGate(evidence);
         const expectedHosts =
-          gate === "scenario-unverified"
-            ? ["windows", "wsl"]
-            : gate === "provider-capture-stale" && hook.event !== "PreToolUse"
-              ? ["wsl"]
-              : [];
+          gate === "scenario-unverified" ? ["windows", "wsl"] : [];
         assert.deepEqual(
           deliveredHosts,
           expectedHosts,
@@ -264,6 +247,7 @@ describe("host-specific hook provider captures", () => {
   });
 
   it("keeps renewed Stop versions separate from earlier event captures", () => {
+    // A past Stop result must stay tied to its own event, even when the same agent also ran a policy hook.
     for (const [caseId, provider, host, version] of [
       ["C3", "claude", "windows", "2.1.325"],
       ["C12", "claude", "wsl", "2.1.325"],
@@ -274,13 +258,13 @@ describe("host-specific hook provider captures", () => {
       ]?.hostCaptures?.find((row) => row.host === host);
       const earlier = hostEvidence(provider, host);
       assert.equal(stop?.caseId, caseId);
-      assert.equal(stop.verification, "verified");
-      assert.equal(stop.capture?.providerVersion, version);
-      assert.equal(stop.capture?.resultDelivery, "delivered");
-      assert.equal(stop.capture?.continuationBehavior, "continued");
+      assert.equal(stop.verification, "incomplete");
+      assert.equal(stop.historicalCapture?.providerVersion, version);
+      assert.equal(stop.historicalCapture?.resultDelivery, "delivered");
+      assert.equal(stop.historicalCapture?.continuationBehavior, "continued");
       assert.ok(earlier.historicalCapture);
       assert.notEqual(
-        stop.capture?.artifactSha256,
+        stop.historicalCapture?.artifactSha256,
         earlier.historicalCapture.artifactSha256,
         caseId + ": the Stop capture must not reuse the pre-tool receipt",
       );
@@ -322,47 +306,37 @@ describe("host-specific hook provider captures", () => {
     assert.equal(windowsAntigravity.caseId, "C9");
     assert.equal(windowsAntigravity.verification, "incomplete");
     assert.equal(windowsAntigravity.capture, undefined);
-    const expectedVerification: Readonly<
-      Record<string, HookProviderHostEvidence["verification"]>
-    > = {
-      C1: "incomplete",
-      C2: "verified",
-      C3: "verified",
-      C4: "incomplete",
-      C5: "incomplete",
-      C6: "incomplete",
-      C7: "incomplete",
-      C8: "verified",
-      C9: "incomplete",
-      C10: "incomplete",
-      C11: "verified",
-      C12: "verified",
-      C13: "incomplete",
-      C14: "verified",
-      C15: "verified",
-      C16: "incomplete",
-      C17: "verified",
-      C18: "incomplete",
-    };
-    const historicalIds = new Set(["C1", "C7", "C10", "C13", "C16", "C18"]);
+    const historicalIds = new Set([
+      "C1",
+      "C2",
+      "C3",
+      "C7",
+      "C8",
+      "C10",
+      "C11",
+      "C12",
+      "C13",
+      "C14",
+      "C15",
+      "C16",
+      "C17",
+      "C18",
+    ]);
+    // The current runtime needs fresh evidence on every row, while previously reviewed results remain available as history.
     for (const row of HOOK_PROVIDER_HOST_EVIDENCE) {
-      const expected = expectedVerification[row.caseId] ?? "incomplete";
-      assert.equal(row.verification, expected, row.caseId);
-      assert.equal(
-        row.capture !== undefined,
-        expected === "verified",
-        row.caseId,
-      );
+      assert.equal(row.verification, "incomplete", row.caseId);
+      assert.equal(row.capture, undefined, row.caseId);
       assert.equal(
         row.historicalCapture !== undefined,
         historicalIds.has(row.caseId),
         row.caseId,
       );
+      // A past capture still describes the launcher the user was running when it was recorded.
       if (row.historicalCapture) {
         assert.notEqual(
-          row.historicalCapture.runtimeSha256["policy-input.mjs"],
-          runtimeFileHash("policy-input.mjs"),
-          row.caseId + ": retain the original policy runtime hash",
+          row.historicalCapture.runtimeSha256["hook-launch.mjs"],
+          runtimeFileHash("hook-launch.mjs"),
+          row.caseId + ": retain the original launcher hash",
         );
       }
     }

@@ -31,17 +31,17 @@ GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `den
 
 Native `powershell` requests are inspected with PowerShell command context. Literal commands can reach their owning policies; unresolved dynamic execution, interpolation and session-state changes are refused. This is bounded command inspection, not a full PowerShell interpreter.
 
-Eight Windows and WSL rows have reviewed delivery for their current registrations and runtime files. PreToolUse needs current captures for every provider on both hosts after the policy input reader changed. Windows Codex PostToolUse and Stop also need new captures. These gates report `provider-capture-stale`. A `scenario-unverified` gate requires verified delivery from both hosts and separate local scenario proof. Each capture applies to its recorded provider, mode, host, trust, registration and runtime bytes.
+The shared launcher and process supervision changes require fresh Windows and WSL delivery captures for every supported provider event. The affected registry entries report `provider-capture-stale`. Each retained capture applies to its recorded provider, mode, host, trust, registration and runtime bytes.
 
 | Provider | Host | Version and mode | PreToolUse | PostToolUse | Stop |
 |---|---|---|---|---|---|
-| Claude Code | Windows | 2.1.325, interactive/manual | C1 stale | C2 verified | C3 verified |
+| Claude Code | Windows | 2.1.325, interactive/manual | C1 stale | C2 stale | C3 stale |
 | Codex CLI | Windows | 0.168.0 (historical C5/C6), exec/JSON | C4 incomplete | C5 incomplete | C6 incomplete |
-| Copilot CLI | Windows | 1.0.103, prompt/JSON | C7 stale | C8 verified | No delivery claim |
+| Copilot CLI | Windows | 1.0.103, prompt/JSON | C7 stale | C8 stale | No delivery claim |
 | Antigravity | Windows | 1.4.8 was the historical capture, interactive/Request Review | C9 blocked | No delivery claim | No delivery claim |
-| Claude Code | WSL | 2.1.325, interactive/manual | C10 stale | C11 verified | C12 verified |
-| Codex CLI | WSL | 0.169.0, exec/JSON | C13 stale | C14 verified | C15 verified |
-| Copilot CLI | WSL | 1.0.91, interactive/manual | C16 stale | C17 verified | No delivery claim |
+| Claude Code | WSL | 2.1.325, interactive/manual | C10 stale | C11 stale | C12 stale |
+| Codex CLI | WSL | 0.169.0, exec/JSON | C13 stale | C14 stale | C15 stale |
+| Copilot CLI | WSL | 1.0.91, interactive/manual | C16 stale | C17 stale | No delivery claim |
 | Antigravity | WSL | 1.4.12, interactive/Request Review | C18 stale | No delivery claim | No delivery claim |
 
 A verified PreToolUse capture delivers both policy reasons and allows the harmless controls. A verified PostToolUse capture delivers Gruff feedback to the model. The Stop captures record a block, a repair and a completed turn. Windows captures used Node 24.21.0 and WSL captures used Node 22.22.1. Raw hook stdin and forced-timeout behavior are outside this evidence.
