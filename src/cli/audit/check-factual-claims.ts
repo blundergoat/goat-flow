@@ -27,6 +27,12 @@ const PROSE_TARGETS = [
 
 const DOC_GLOB = "docs/*.md";
 const GLOSSARY_TARGET = ".goat-flow/glossary.md";
+// Instruction files receive command checks without inheriting numeric prose-claim patterns.
+const INSTRUCTION_COMMAND_TARGETS = [
+  "CLAUDE.md",
+  "AGENTS.md",
+  ".github/copilot-instructions.md",
+];
 
 /** Files where a loose `N views`/`N presets` pattern is safe because the file
  *  is dashboard-specific. Outside these files, the pattern would false-positive
@@ -637,6 +643,12 @@ export function runFactualClaimChecks(ctx: AuditContext): {
     findings.push(...scanCountClaims(GLOSSARY_TARGET, glossary));
     findings.push(...scanConcernCountClaims(GLOSSARY_TARGET, glossary));
     findings.push(...scanRemovedCommands(GLOSSARY_TARGET, glossary));
+  }
+  for (const path of INSTRUCTION_COMMAND_TARGETS) {
+    const text = ctx.fs.readFile(path);
+    if (text === null) continue;
+    filesScanned++;
+    findings.push(...scanRemovedCommands(path, text));
   }
   // Dashboard-specific loose patterns (safe only on dashboard docs).
   for (const rel of DASHBOARD_SCOPED_TARGETS) {

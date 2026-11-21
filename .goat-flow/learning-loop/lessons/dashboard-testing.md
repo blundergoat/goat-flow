@@ -1,9 +1,9 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-09-21
+last_reviewed: 2026-11-14
 ---
 
-**Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md); proving a provider actually delivers hook feedback is [hook-testing.md](hook-testing.md).
+**Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md); proving a provider actually delivers hook feedback is [hook-support-evidence.md](hook-support-evidence.md).
 
 ## Lesson: Dashboard release QA should avoid real agent runners unless runner behavior is the target
 
@@ -126,3 +126,19 @@ last_reviewed: 2026-09-21
 **What happened:** The first cached `/api/audit?quality=true` benchmark in `scripts/profile-dashboard-audit.mjs` reported about `1375ms` while server-side profile spans totalled about `17ms`; the route was cached and fast, and the first Node `fetch()` carried client and session warmup.
 
 **Root cause:** The benchmark process's first HTTP request was treated as representative endpoint time, mixing one-time client setup with the route being measured.
+
+
+---
+
+## Lesson: Wait for the popup target URL before asserting navigation
+
+**Status:** active | **Created:** 2026-11-14
+**Severity:** INTEGRATION
+**Decision changed:** Wait for the expected popup URL before judging whether a dashboard link opened the right page.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** After `expect_popup`, use `popup.wait_for_url(expected_url, wait_until="domcontentloaded")` before asserting its URL, title or content. A load-state wait alone can complete for the initial document.
+
+**What happened:** The first M58 browser check inspected an empty popup URL after `wait_for_load_state("domcontentloaded")` and failed. A diagnostic captured the empty URL before an explicit navigation wait and the correct issue URL afterward. Waiting for that URL made all four page/theme cases pass without a product-code change.
+
+**Evidence:** `src/dashboard/views/prompts.html` and `src/dashboard/views/workspace.html` (search: `tell us how you use it`) contain the exercised new-tab links. The [Playwright Page API](https://playwright.dev/python/docs/api/class-page#page-wait-for-url) defines the URL wait; its load-state contract permits an immediate return when the current document already reached that state.

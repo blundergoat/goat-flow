@@ -1,3 +1,4 @@
+import { resolveExecutable } from "../helpers/restricted-consumer-env.js";
 /**
  * Locks provider documentation, live capture, trust, effective-state, and result contracts.
  * Use these fixtures before dashboard or setup claims change, and when a hook result
@@ -5,7 +6,6 @@
  */
 import assert from "node:assert/strict";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -54,9 +54,17 @@ import {
   buildStopPayload,
   runHook,
   withCommandShim,
+  withScannerFileFault,
   withTempRepo,
   writeFile,
 } from "./post-turn-safety-hook.helpers.js";
+
+/** Fail the scanner's file read through its in-process fault seam. */
+function withUnreadableScannerFile(
+  scenario: (environment: Record<string, string>) => void,
+): void {
+  withScannerFileFault("readFileSync", scenario);
+}
 
 const SUPPORT_CHECK_DATE = new Date("2026-08-09T12:00:00.000Z");
 const TURN_STOP_EVENT: HookLifecycleEvent = "turn-stop";
@@ -68,8 +76,7 @@ const DELIVERED_RESPONSE_CHANNELS: HookProviderResponseChannel[] = [
   "model-context",
 ];
 const STOP_SCANNER_VARIANTS = [
-  { displayName: "native scanner", forceBash3Fallback: "0" },
-  { displayName: "Bash 3 compatibility scanner", forceBash3Fallback: "1" },
+  { displayName: "Node scanner", forceBash3Fallback: "0" },
 ] as const;
 const GRUFF_RESULT_FIXTURES = [
   {
@@ -196,8 +203,8 @@ function effectiveStateFacts(
   };
 }
 
-/** Check the current Stop paragraph so an unrelated hook's date or gate cannot satisfy the reader-facing claim. */
-function assertCurrentCodexStopEvidence(
+/** Check the historical Stop paragraph so an unrelated hook's date or gate cannot satisfy the reader-facing claim. */
+function assertHistoricalCodexStopEvidence(
   documentation: string,
   source: string,
 ): void {
@@ -207,21 +214,16 @@ function assertCurrentCodexStopEvidence(
   assert.equal(
     stopParagraphs.length,
     1,
-    `${source}: one current Stop capture paragraph is required`,
+    `${source}: one historical Stop capture paragraph is required`,
   );
   const stopParagraph = stopParagraphs[0]!;
   assert.match(stopParagraph, /Codex CLI 0\.154\.0/iu, source);
   assert.match(stopParagraph, /registered Stop/iu, source);
   assert.doesNotMatch(stopParagraph, /expires?|expiring/iu, source);
-  assert.match(stopParagraph, /scenario-unverified/iu, source);
-  assert.doesNotMatch(
-    documentation,
-    /Stop remains `provider-capture-stale`/iu,
-    source,
-  );
+  assert.match(stopParagraph, /scenario-unverified.*at the time/iu, source);
 }
 
-/** Check the current deny paragraph so historical captures cannot satisfy the guide's live-support claim. */
+/** Keep the dated deny capture and its original support limitation attributable. */
 function assertCurrentCodexDenyEvidence(
   documentation: string,
   source: string,
@@ -232,7 +234,7 @@ function assertCurrentCodexDenyEvidence(
   assert.equal(
     denyParagraphs.length,
     1,
-    `${source}: one current deny capture paragraph is required`,
+    `${source}: one historical deny capture paragraph is required`,
   );
   const denyParagraph = denyParagraphs[0]!;
   assert.match(
@@ -247,7 +249,7 @@ function assertCurrentCodexDenyEvidence(
 }
 
 describe("hook provider contracts", () => {
-  it("keeps Codex documentation aligned with current Stop and deny evidence gates", () => {
+  it("keeps historical Codex captures and their support limitations in the documentation", () => {
     const stopEvidence =
       getHookSpec("post-turn-safety")?.providerEvidence.codex;
     const hookReadme = readFileSync(
@@ -258,19 +260,19 @@ describe("hook provider contracts", () => {
       join(process.cwd(), "docs", "cli.md"),
       "utf8",
     );
-    assert.equal(stopEvidence?.effectiveSupportGate, "scenario-unverified");
-    // Both policies delivered denials in the same live session; neither may skip its separate local scenario proof.
+    assert.equal(stopEvidence?.effectiveSupportGate, "provider-capture-stale");
+    // The historical Linux session stays attributable while Windows delivery on the current runtime is pending.
     for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
       const denyEvidence = getHookSpec(hookId)?.providerEvidence.codex;
       assert.ok(denyEvidence, hookId);
       assert.equal(
         currentHookProviderSupportGate(denyEvidence),
-        "scenario-unverified",
+        "provider-capture-stale",
         hookId,
       );
     }
-    assertCurrentCodexStopEvidence(hookReadme, "workflow/hooks/README.md");
-    assertCurrentCodexStopEvidence(cliGuide, "docs/cli.md");
+    assertHistoricalCodexStopEvidence(hookReadme, "workflow/hooks/README.md");
+    assertHistoricalCodexStopEvidence(cliGuide, "docs/cli.md");
     // Simulate the reported drift while leaving Gruff's valid gate elsewhere in the guide.
     const staleStopGuide = cliGuide
       .split(/\n\s*\n/u)
@@ -281,7 +283,7 @@ describe("hook provider contracts", () => {
       )
       .join("\n\n");
     assert.throws(() =>
-      assertCurrentCodexStopEvidence(staleStopGuide, "stale Stop control"),
+      assertHistoricalCodexStopEvidence(staleStopGuide, "stale Stop control"),
     );
     assertCurrentCodexDenyEvidence(hookReadme, "workflow/hooks/README.md");
     assertCurrentCodexDenyEvidence(cliGuide, "docs/cli.md");
@@ -503,14 +505,9 @@ describe("hook provider contracts", () => {
         label: "unsupported capability",
         /** Writes an older analyzer and config so users see why JSON feedback is unavailable. */
         prepareProject(projectRoot: string) {
-          const analyzerDirectoryPath = join(projectRoot, "bin");
-          mkdirSync(analyzerDirectoryPath, { recursive: true });
-          const analyzerPath = join(analyzerDirectoryPath, "gruff-ts");
-          writeFileSync(
-            analyzerPath,
-            '#!/usr/bin/env bash\n# A user may still have a pre-JSON analyzer on PATH after enabling Gruff.\nif [[ "$1" == "analyse" && "$2" == "--help" ]]; then printf "Usage: gruff analyse FILE\\n"; fi\nexit 0\n',
-          );
-          chmodSync(analyzerPath, 0o755);
+          writeContractGruffBinary(projectRoot, CLEAN_GRUFF_CONTRACT_ENVELOPE, {
+            capabilities: "",
+          });
           writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
         },
         findingCode: "analyzer-capability-unsupported",
@@ -666,7 +663,7 @@ describe("hook provider contracts", () => {
 
         writeFile(
           projectRoot,
-          ".goat-flow/hooks/post-turn-safety.sh",
+          ".goat-flow/hooks/post-turn-safety.mjs",
           readFileSync(HOOK_PATH, "utf8"),
         );
 
@@ -710,70 +707,10 @@ describe("hook provider contracts", () => {
       });
     }
 
-    // Git Bash refuses `mkdir -p` on an absolute //wsl.localhost path even when the directory exists.
-    //
-    // A state directory created by absolute path therefore never stores the record that ends the repeated Stop.
-    // This case writes a managed hook copy and re-entry state while hook subprocesses run behind a mkdir shim.
-    it("bounds a managed non-Git Stop root when mkdir refuses absolute paths", () => {
-      const projectRoot = makeRoot();
-      const sessionIdentifier = "absolute-mkdir-refused-session";
-      const managedEnvironment = {
-        GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
-        GOAT_FLOW_HOOK_PROVIDER: "codex",
-        GOAT_FLOW_HOOK_EVENT: "turn-stop",
-        GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
-        GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
-      };
-
-      writeFile(
-        projectRoot,
-        ".goat-flow/hooks/post-turn-safety.sh",
-        readFileSync(HOOK_PATH, "utf8"),
-      );
-
-      withCommandShim(
-        "mkdir",
-        [
-          'for argument in "$@"; do',
-          '  case "$argument" in',
-          "    /*)",
-          '      printf "mkdir: cannot create directory \'%s\': Read-only file system\\n" "$argument" >&2',
-          "      exit 1",
-          "      ;;",
-          "  esac",
-          "done",
-        ].join("\n"),
-        (commandShimEnvironment) => {
-          const firstResult = runHook(
-            projectRoot,
-            { ...managedEnvironment, ...commandShimEnvironment },
-            buildStopPayload(sessionIdentifier, false),
-          );
-          assert.equal(firstResult.status, 0, firstResult.stderr);
-          assert.equal(
-            JSON.parse(firstResult.stdout).reasonCode,
-            "coverage-incomplete",
-          );
-
-          const reentryResult = runHook(
-            projectRoot,
-            { ...managedEnvironment, ...commandShimEnvironment },
-            buildStopPayload(sessionIdentifier, true),
-          );
-          assert.equal(reentryResult.status, 0, reentryResult.stderr);
-          assert.equal(
-            JSON.parse(reentryResult.stdout).reasonCode,
-            "bounded-reentry-ended",
-            reentryResult.stderr,
-          );
-        },
-      );
-    });
-
     // Git refuses a checkout owned by another account, which Git for Windows reports for a \\wsl.localhost checkout by default.
     //
     // The generic root failure hid that cause from the agent, so the result names it and the remedy only the user can apply.
-    // Each scanner has its own root lookup, so both are run behind a git shim that refuses every lookup.
+    // The scanner runs behind a git shim that refuses every root lookup.
     for (const scannerVariant of STOP_SCANNER_VARIANTS) {
       // This case writes a managed hook copy and re-entry state while hook subprocesses run behind a git shim.
       it(`names dubious ownership when Git refuses the root with the ${scannerVariant.displayName}`, () => {
@@ -790,20 +727,18 @@ describe("hook provider contracts", () => {
 
         writeFile(
           projectRoot,
-          ".goat-flow/hooks/post-turn-safety.sh",
+          ".goat-flow/hooks/post-turn-safety.mjs",
           readFileSync(HOOK_PATH, "utf8"),
         );
 
         withCommandShim(
-          "git",
-          [
-            'for argument in "$@"; do',
-            '  if [ "$argument" = rev-parse ]; then',
-            '    printf "fatal: detected dubious ownership in repository at \'%s\'\\n" "$PWD" >&2',
-            "    exit 128",
-            "  fi",
-            "done",
-          ].join("\n"),
+          resolveExecutable("git"),
+          {
+            when: { includes: ["rev-parse"] },
+            stderr:
+              "fatal: detected dubious ownership in repository at '{{cwd}}'\n",
+            status: 128,
+          },
           (commandShimEnvironment) => {
             const refusedResult = runHook(
               projectRoot,
@@ -831,7 +766,7 @@ describe("hook provider contracts", () => {
       });
     }
 
-    // Each named case creates a temporary Git repo and runs the selected shell scanner.
+    // Each named case creates a temporary Git repo and runs the Node scanner.
     for (const scannerVariant of STOP_SCANNER_VARIANTS) {
       // This case writes user files and re-entry state while hook subprocesses exercise recovery.
       it(`bounds repeated Stop failures with the ${scannerVariant.displayName}`, () => {
@@ -854,7 +789,7 @@ describe("hook provider contracts", () => {
               : [];
           writeFile(projectRoot, "settings.env", "API_KEY=your_api_key_here\n");
 
-          withCommandShim("wc", "exit 2", (commandShimEnvironment) => {
+          withUnreadableScannerFile((commandShimEnvironment) => {
             const firstFailure = runHook(
               projectRoot,
               {
@@ -941,7 +876,7 @@ describe("hook provider contracts", () => {
       });
     }
 
-    // Each named case writes a token fixture and runs the provider-managed shell result path.
+    // Each named case writes a token fixture and runs the provider-managed Node result path.
     for (const scannerVariant of STOP_SCANNER_VARIANTS) {
       it(`emits neutral Stop results with the ${scannerVariant.displayName}`, () => {
         const forceBash3Fallback = scannerVariant.forceBash3Fallback;
@@ -976,7 +911,7 @@ describe("hook provider contracts", () => {
           assert.equal(findingEnvelope.findings[0]?.target, "settings.env");
 
           writeFile(projectRoot, "settings.env", "API_KEY=your_api_key_here\n");
-          withCommandShim("wc", "exit 2", (commandShimEnvironment) => {
+          withUnreadableScannerFile((commandShimEnvironment) => {
             const incompleteEnvironment = {
               ...commandShimEnvironment,
               ...managedCodexResultEnvironment,

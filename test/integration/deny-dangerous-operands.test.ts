@@ -3,9 +3,10 @@
  * Every command is inert text, replayed through --check and provider-shaped stdin.
  */
 import assert from "node:assert/strict";
+import { copyHookTree, spawnSelectedHook } from "../helpers/hook-entrypoint.js";
 import { runHookWithPayload } from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { after, describe, it } from "node:test";
@@ -13,9 +14,7 @@ import { after, describe, it } from "node:test";
 const fixture = mkdtempSync(resolve(tmpdir(), "goat-policy-operands-"));
 const hooks = resolve(fixture, ".goat-flow/hooks");
 mkdirSync(hooks, { recursive: true });
-cpSync(resolve(import.meta.dirname, "../../workflow/hooks"), hooks, {
-  recursive: true,
-});
+copyHookTree(hooks);
 assert.equal(spawnSync("git", ["init", "-q", fixture]).status, 0);
 after(() => rmSync(fixture, { recursive: true, force: true }));
 
@@ -37,7 +36,7 @@ function classify(command: string, hook: PolicyHook, isProviderInput: boolean) {
       fixture,
       JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
     );
-  return spawnSync("bash", [resolve(hooks, `${hook}.sh`), "--check", command], {
+  return spawnSelectedHook(resolve(hooks, `${hook}.sh`), ["--check", command], {
     cwd: fixture,
     encoding: "utf8",
   });

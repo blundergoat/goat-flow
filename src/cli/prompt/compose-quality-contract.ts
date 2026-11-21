@@ -356,6 +356,10 @@ function appendReportJsonRules(
     );
   }
   lines.push("");
+  lines.push(
+    "Preserve the complete report in memory until persistence is confirmed; never trim findings to make a save fit.",
+  );
+  lines.push("");
   // Dashboard-launched restricted reviews hand their draft to the launcher's persistence route.
   if (isStagedDraftMode) {
     appendStagedDraftPersistence(lines, input);
@@ -398,7 +402,8 @@ function appendReportJsonRules(
   );
   lines.push("");
   lines.push(
-    "If save exits non-zero, fix the reported JSON or ownership error and retry through the same command. Do not claim persistence until it prints `OK <absolute-report-path>`.",
+    "If a tool or hook rejects the command before the saver runs, that attempt saved nothing. Do not repeat an unchanged rejected command. Retry only through a supported transport to a compatible saver, preserving the complete report and the quoted JSON delimiter. If none is available, state `persist-skipped: transport-unavailable`; never stage a raw file or bypass the rejection.",
+    "If the saver runs and reports a JSON, schema or ownership error, retain every finding while correcting that error, then retry through the compatible saver. For other save failures, report the error and keep the report unsaved until a supported retry succeeds. Do not claim persistence until it prints `OK <absolute-report-path>`.",
   );
   lines.push("");
   lines.push(

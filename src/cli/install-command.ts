@@ -16,10 +16,7 @@ import { CLIError } from "./cli-error.js";
 import { pathWriteClaimInspectCommand } from "./claims-command.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { createFS } from "./facts/fs.js";
-import {
-  buildInstallerInvocation,
-  buildInstallerSpawnSpec,
-} from "./install-invocation.js";
+import { applyInstaller, installerVersionBlocker } from "./installer/apply.js";
 import {
   emitInstallSummary,
   hookRegistrationEdit,
@@ -30,7 +27,6 @@ import {
   buildManagedSetupPreview,
   isBlockingManagedFile,
   ManagedInstallStateRecordError,
-  managedSetupPreviewForInstallerLaunch,
   prepareManagedInstallStateForApply,
   recordManagedInstallAfterVerification,
   type ManagedSetupPreview,
@@ -76,15 +72,8 @@ function deriveInstallFlags(
     const state = classifyProjectState(projectFS, agentId);
     const flags: string[] = [];
     // Refreshing an older installation also records the current config version unless the user already requested that flag.
-    if (
-      !options.updateConfigVersion &&
-      (state.state === "outdated" || state.state === "v0.9")
-    ) {
+    if (!options.updateConfigVersion && state.state === "outdated") {
       flags.push("--update-config-version");
-    }
-    // The older layout needs retired-skill cleanup to complete the user's upgrade.
-    if (!options.cleanDeprecated && state.state === "v0.9") {
-      flags.push("--clean-deprecated");
     }
     return flags;
   } catch {
@@ -99,44 +88,12 @@ function installAdmissionBlocker(
   agent: AgentId,
 ): string | null {
   const state = classifyProjectState(createFS(projectPath), agent);
+  if (state.state === "v0.9")
+    return "Installation refused: pre-1.0 skill layout needs an intermediate upgrade. Install goat-flow 1.18.0 first, then retry this version.";
   return state.action === "none"
     ? `Installation refused: ${state.details}`
-    : policyUpgradeBlocker(projectPath);
-}
-
-/**
- * Build the installer flag list from user choices plus the preview's own decisions.
- * The preview decides which managed paths remain preserved; Bash receives those choices rather than deciding them again.
- *
- * @param options - parsed user choices carrying the target and any explicit authority
- * @param agent - selected agent whose managed mirror is installed
- *
- * @param preview - the report already shown to the user; its preserved rows become skip flags
- * @returns the complete argument list appended after the installer's target and agent
- */
-function collectInstallerFlags(
-  options: ParsedCLI,
-  agent: AgentId,
-  preview: ManagedSetupPreview,
-): string[] {
-  const flags: string[] = [];
-  // Pass the user's explicit version-refresh choice to the bundled installer.
-  if (options.updateConfigVersion) flags.push("--update-config-version");
-  // Pass the user's explicit retired-skill cleanup choice to the bundled installer.
-  if (options.cleanDeprecated) flags.push("--clean-deprecated");
-  // Each row's own decision travels to Bash, so apply cannot re-derive a different one.
-  for (const file of preview.files) {
-    // Locally preserved files stay in the user's project during the installer run.
-    if (file.state === "local-preserved") {
-      flags.push("--preserve-path", file.path);
-    }
-    // Only a named, twice-authorized user-owned path may lose its create-only protection.
-    if (file.authority === "granted-user-owned") {
-      flags.push("--replace-user-path", file.path);
-    }
-  }
-  flags.push(...deriveInstallFlags(options.projectPath, agent, options));
-  return flags;
+    : (installerVersionBlocker(projectPath) ??
+        policyUpgradeBlocker(projectPath));
 }
 
 /**
@@ -154,17 +111,6 @@ function readManagedSetupAuthority(options: ParsedCLI): ManagedSetupAuthority {
     shouldReplaceNamedUserOwned: options.shouldForceUserOwned,
   };
 }
-
-/** Config key or block whose presence means install will rewrite part of the file. */
-const RETIRED_CONFIG_BLOCKS: ReadonlyArray<{ pattern: RegExp; edit: string }> =
-  [
-    { pattern: /^agents\s*:/mu, edit: "remove the legacy agents allowlist" },
-    { pattern: /^tasks\s*:/mu, edit: "migrate the legacy tasks path to plans" },
-    {
-      pattern: /^plan-guard\s*:/mu,
-      edit: "remove the retired plan-guard block",
-    },
-  ];
 
 /** Hook toggles install adds when the user's config predates them. */
 const SHIPPED_HOOK_TOGGLES = [
@@ -797,11 +743,6 @@ function pendingConfigMigrationEdits(
     );
   // A requested version change appears as a config edit in the install preview.
   if (migratesConfigVersion) edits.push("update the version field");
-  // Inspect each retired config section before naming its removal in the preview.
-  for (const retired of RETIRED_CONFIG_BLOCKS) {
-    // A present retired section adds only its own removal notice.
-    if (retired.pattern.test(configText)) edits.push(retired.edit);
-  }
   const absentToggles = SHIPPED_HOOK_TOGGLES.filter(
     (hookId) => !new RegExp(`^\\s{2}${hookId}\\s*:`, "mu").test(configText),
   );
@@ -1110,7 +1051,7 @@ function blockedInstallPreview(
  * Error behavior: preserves installer exits and translates verified-but-unrecorded state into the accepted recovery error.
  * @returns verified closing text after post-install writes, or null after preserving a non-zero child status
  */
-async function runClaimedManagedInstall(
+function runClaimedManagedInstall(
   options: ParsedCLI,
   agent: AgentId,
   authority: ManagedSetupAuthority,
@@ -1129,48 +1070,31 @@ async function runClaimedManagedInstall(
     options.projectPath,
     installPreview,
   );
-  // V2 state and every old-reader marker become visible while the complete claim batch is held, before Bash receives permission to mutate targets.
+  // V2 state and every old-reader marker become visible while the complete claim batch is held, before the Node writer mutates targets.
   prepareManagedInstallStateForApply(options.projectPath);
-  const installerLaunch = buildInstallerInvocation({
-    scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
+  applyInstaller({
     projectPath: options.projectPath,
     agent,
-    installerFlags: collectInstallerFlags(options, agent, installPreview),
-    platform: process.platform,
+    preservePaths: installPreview.files
+      .filter((file) => file.state === "local-preserved")
+      .map((file) => file.path),
+    replaceUserPaths: installPreview.files
+      .filter((file) => file.authority === "granted-user-owned")
+      .map((file) => file.path),
+    updateConfigVersion: options.updateConfigVersion,
+    cleanDeprecated: options.cleanDeprecated,
+    hasManagedAdmission: true,
+    retirementPaths: installPreview.files
+      .filter((file) => file.action === "remove")
+      .map((file) => file.path),
+    reviewedRuntimePaths: installPreview.files
+      .filter(
+        (file) =>
+          file.action === "migrate" &&
+          ["granted-path", "granted-managed"].includes(file.authority),
+      )
+      .map((file) => file.path),
   });
-  // An unavailable safe installer launcher stops this install before its subprocess starts.
-  if (!installerLaunch.ok) throw new CLIError(installerLaunch.error, 1);
-
-  const { spawnInheritedSync } = await import("./server/safe-exec.js");
-  const installerProcess = buildInstallerSpawnSpec(installerLaunch);
-  const installResult = spawnInheritedSync({
-    command: installerProcess.command,
-    args: installerProcess.args,
-    allowedBasenames: ["bash", "bash.exe"],
-    env: {
-      ...installerProcess.env,
-      GOAT_FLOW_INSTALL_ADMISSION: "v2",
-    },
-  });
-  // A missing executable or launch failure is reported as an installer error to the caller.
-  if (installResult.error) {
-    throw new CLIError(
-      `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
-      1,
-    );
-  }
-  // A terminated installer cannot be reported as a completed setup.
-  if (installResult.signal) {
-    throw new CLIError(
-      `Installer terminated by signal ${installResult.signal}`,
-      1,
-    );
-  }
-  // A failed installer preserves its exit status and skips recording successful install state.
-  if (installResult.status !== 0) {
-    process.exitCode = installResult.status ?? 1;
-    return null;
-  }
 
   let installationMismatches: string[];
   try {
@@ -1194,10 +1118,8 @@ async function runClaimedManagedInstall(
   }
   emitCommitGuidanceInstallResult(options.projectPath, agent);
   emitIndexGenerationInstallResult(options.projectPath);
-  return renderInstallSummary(
-    options.projectPath,
-    installPreview,
-    hookObservations,
+  return Promise.resolve(
+    renderInstallSummary(options.projectPath, installPreview, hookObservations),
   );
 }
 
@@ -1283,25 +1205,11 @@ async function installManagedFiles(
     selectedAgent,
   );
   let installPreview = buildInstallPreview(options, selectedAgent, authority);
-  const installerLaunch = buildInstallerInvocation({
-    scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
-    projectPath: options.projectPath,
-    agent: selectedAgent,
-    installerFlags: collectInstallerFlags(
-      options,
-      selectedAgent,
-      installPreview,
-    ),
-    platform: process.platform,
-  });
   // A dry-run reports the exact managed-template result and exits before installer side effects.
   if (options.shouldDryRun) {
     emitManagedSetupDryRun(
       options,
-      managedSetupPreviewForInstallerLaunch(
-        blockedInstallPreview(installPreview, admissionBlocker),
-        installerLaunch,
-      ),
+      blockedInstallPreview(installPreview, admissionBlocker),
     );
     return;
   }
@@ -1312,13 +1220,8 @@ async function installManagedFiles(
     installPreview,
     authority,
   );
-  // A conflict report is returned before Bash starts, so the user's target remains unchanged.
+  // A conflict report is returned before the writer starts, so the user's target remains unchanged.
   if (overwriteBlocker !== null) throw new CLIError(overwriteBlocker, 1);
-
-  // Invalid launch arguments stop before Bash can change the selected target.
-  if (!installerLaunch.ok) {
-    throw new CLIError(installerLaunch.error, 1);
-  }
 
   // Relocation is an apply-only upgrade step, after preview and launch admission.
   try {

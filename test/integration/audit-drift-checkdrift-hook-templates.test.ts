@@ -1,7 +1,9 @@
 /**
  * Covers the hook drift report users receive after setup or an upgrade.
+ *
  * Use when hook scripts, launchers, timeouts, or optional-hook settings change.
  * Fixtures prove current installs pass and stale managed values name a repair.
+ *
  * User-owned and explicitly disabled hooks remain outside the drift result.
  */
 import {
@@ -115,7 +117,7 @@ describe("checkDrift: hook templates", () => {
       writeHookFixtures(root);
 
       // A registered hook script that disappeared must surface as repairable drift.
-      rmSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh"));
+      rmSync(join(root, ".goat-flow", "hooks", "deny-dangerous.mjs"));
       const missingScriptReport = checkDrift({
         fs: createFS(root),
         projectPath: root,
@@ -125,7 +127,7 @@ describe("checkDrift: hook templates", () => {
       const missingFinding = missingScriptReport.findings.find(
         (finding) =>
           finding.kind === "missing" &&
-          finding.path === ".goat-flow/hooks/deny-dangerous.sh",
+          finding.path === ".goat-flow/hooks/deny-dangerous.mjs",
       );
       assert.ok(
         missingFinding,
@@ -133,14 +135,14 @@ describe("checkDrift: hook templates", () => {
       );
       assert.match(missingFinding.message, /run goat-flow hooks sync/u);
       writeFileSync(
-        join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
-        HOOK_STUB,
+        join(root, ".goat-flow", "hooks", "deny-dangerous.mjs"),
+        HOOK_LAUNCHER_STUB,
       );
 
       // A version-drifted shared launcher must surface the same local repair,
       // without claiming anything about provider-side delivery.
       writeFileSync(
-        join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        join(root, ".goat-flow", "hooks", "run-hook.mjs"),
         "// stale launcher bytes from an earlier release\n",
       );
       const staleLauncherReport = checkDrift({
@@ -152,7 +154,7 @@ describe("checkDrift: hook templates", () => {
       const staleFinding = staleLauncherReport.findings.find(
         (finding) =>
           finding.kind === "content" &&
-          finding.path === ".goat-flow/hooks/run-with-bash.mjs",
+          finding.path === ".goat-flow/hooks/run-hook.mjs",
       );
       assert.ok(
         staleFinding,
@@ -161,7 +163,7 @@ describe("checkDrift: hook templates", () => {
       assert.match(staleFinding.message, /run goat-flow hooks sync/u);
       assert.doesNotMatch(staleFinding.message, /deliver/iu);
       writeFileSync(
-        join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        join(root, ".goat-flow", "hooks", "run-hook.mjs"),
         HOOK_LAUNCHER_STUB,
       );
 
@@ -201,7 +203,7 @@ describe("checkDrift: hook templates", () => {
                     {
                       type: "command",
                       command:
-                        'node -e "process.exit(2)" ".goat-flow/hooks/deny-dangerous.sh"',
+                        'node -e "process.exit(2)" ".goat-flow/hooks/deny-dangerous.mjs"',
                     },
                   ],
                 },
@@ -294,8 +296,8 @@ describe("checkDrift: hook templates", () => {
     try {
       writeHookFixtures(root);
       writeFileSync(
-        join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
-        `${HOOK_STUB}\n# local drift\n`,
+        join(root, ".goat-flow", "hooks", "deny-dangerous.mjs"),
+        `${HOOK_LAUNCHER_STUB}\n# local drift\n`,
       );
       const report = checkDrift({
         fs: createFS(root),
@@ -307,7 +309,7 @@ describe("checkDrift: hook templates", () => {
         report.findings.some(
           (finding) =>
             finding.kind === "content" &&
-            finding.path === ".goat-flow/hooks/deny-dangerous.sh",
+            finding.path === ".goat-flow/hooks/deny-dangerous.mjs",
         ),
         `expected central hook drift, findings=${JSON.stringify(report.findings)}`,
       );
@@ -320,7 +322,7 @@ describe("checkDrift: hook templates", () => {
     const root = setupFixture();
     try {
       writeHookFixtures(root);
-      rmSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh"), {
+      rmSync(join(root, ".goat-flow", "hooks", "deny-dangerous.mjs"), {
         force: true,
       });
       const report = checkDrift({
@@ -333,7 +335,7 @@ describe("checkDrift: hook templates", () => {
         report.findings.some(
           (finding) =>
             finding.kind === "missing" &&
-            finding.path === ".goat-flow/hooks/deny-dangerous.sh",
+            finding.path === ".goat-flow/hooks/deny-dangerous.mjs",
         ),
         `expected missing central hook finding, findings=${JSON.stringify(report.findings)}`,
       );
@@ -406,8 +408,8 @@ describe("checkDrift: hook templates", () => {
     try {
       writeHookFixtures(root);
       writeFileSync(
-        join(root, ".goat-flow", "hooks", "gruff-code-quality.sh"),
-        `${HOOK_STUB}\n# stale unsupported copy\n`,
+        join(root, ".goat-flow", "hooks", "gruff-code-quality.mjs"),
+        `${HOOK_LAUNCHER_STUB}\n# stale unsupported copy\n`,
       );
 
       const antigravityReport = checkDrift({
@@ -431,7 +433,7 @@ describe("checkDrift: hook templates", () => {
       assert.ok(
         aggregateReport.findings.some(
           (finding) =>
-            finding.path === ".goat-flow/hooks/gruff-code-quality.sh" &&
+            finding.path === ".goat-flow/hooks/gruff-code-quality.mjs" &&
             finding.kind === "content",
         ),
         `aggregate drift lost the stale hook: ${JSON.stringify(aggregateReport.findings)}`,
@@ -446,8 +448,8 @@ describe("checkDrift: hook templates", () => {
     try {
       writeHookFixtures(root);
       writeFileSync(
-        join(root, ".goat-flow", "hooks", "post-turn-safety.sh"),
-        `${HOOK_STUB}\n# local safety drift\n`,
+        join(root, ".goat-flow", "hooks", "post-turn-safety.mjs"),
+        `${HOOK_LAUNCHER_STUB}\n# local safety drift\n`,
       );
       const report = checkDrift({
         fs: createFS(root),
@@ -459,7 +461,7 @@ describe("checkDrift: hook templates", () => {
         report.findings.some(
           (finding) =>
             finding.kind === "content" &&
-            finding.path === ".goat-flow/hooks/post-turn-safety.sh",
+            finding.path === ".goat-flow/hooks/post-turn-safety.mjs",
         ),
         `expected post-turn safety drift, findings=${JSON.stringify(report.findings)}`,
       );

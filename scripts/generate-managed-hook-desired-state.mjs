@@ -17,6 +17,7 @@ import { join, resolve } from "node:path";
 
 import { getAgentProfiles } from "../src/cli/agents/registry.ts";
 import {
+  antigravityHookBootstrapSource,
   LEGACY_DENY_DANGEROUS_HOOK_IDS,
   LEGACY_DENY_DANGEROUS_SCRIPT_NAMES,
 } from "../src/cli/server/agent-hook-command.ts";
@@ -86,6 +87,9 @@ function hookCleanupContract(hookSpec) {
     ],
     commandScriptNames: [
       hookSpec.primaryScript,
+      ...(hookSpec.primaryScript.endsWith(".mjs")
+        ? [hookSpec.primaryScript.replace(/\.mjs$/u, ".sh")]
+        : []),
       ...(hookSpec.id === "deny-dangerous"
         ? LEGACY_DENY_DANGEROUS_SCRIPT_NAMES
         : []),
@@ -186,24 +190,47 @@ function buildManagedHookContract() {
  * Use after registry changes so reviewers can see the exact standalone state users will receive.
  */
 function renderManagedHookContract() {
-  return `${JSON.stringify(buildManagedHookContract(), null, 2)}\n`;
+  const formatted = JSON.stringify(buildManagedHookContract(), null, 2);
+  // Keep short primitive lists together without hiding nested provider configuration.
+  const compact = formatted.replace(
+    /\[\n(?:[ \t]+(?:"(?:\\.|[^"\\])*"|true|false|null|-?\d+(?:\.\d+)?),?\n)+[ \t]*\]/gu,
+    (arrayText) => {
+      const inline = JSON.stringify(JSON.parse(arrayText));
+      return inline.length <= 200 ? inline : arrayText;
+    },
+  );
+  return `${compact}\n`;
 }
 
 /**
  * Run the read-only artifact check by default, or deliberately regenerate it with `--write`.
  *
- * Side effects: write mode replaces only the generated JSON; check mode writes nothing.
+ * Side effects: write mode replaces the contract and both Antigravity bootstrap copies; check mode writes nothing.
  * Missing, stale, or invalid checks set a failing process status so divergent installers cannot build.
  */
 function main() {
   // No argument defaults to the read-only check used by normal verification.
   const requestedMode = process.argv[2] ?? "--check";
   const generatedContract = renderManagedHookContract();
+  const bootstrap = antigravityHookBootstrapSource();
+  const outputs = new Map([
+    [OUTPUT_PATH, generatedContract],
+    [
+      join(PROJECT_ROOT, "workflow/hooks/antigravity-hook-bootstrap.cjs"),
+      bootstrap,
+    ],
+    [
+      join(PROJECT_ROOT, ".goat-flow/hooks/antigravity-hook-bootstrap.cjs"),
+      bootstrap,
+    ],
+  ]);
 
   // Write mode is the deliberate maintenance action used after registry changes.
   if (requestedMode === "--write") {
-    writeFileSync(OUTPUT_PATH, generatedContract);
-    process.stdout.write(`updated ${OUTPUT_PATH}\n`);
+    for (const [path, bytes] of outputs) {
+      writeFileSync(path, bytes);
+      process.stdout.write(`updated ${path}\n`);
+    }
     return;
   }
 
@@ -216,23 +243,25 @@ function main() {
     return;
   }
 
-  // A missing artifact means the standalone installer has no desired state to consume.
-  if (!existsSync(OUTPUT_PATH)) {
-    process.stderr.write(
-      `Missing generated managed-hook contract: ${OUTPUT_PATH}\nRun this script with --write.\n`,
-    );
-    process.exitCode = 1;
-    return;
-  }
+  // A missing artifact leaves the installer contract or managed launch file unavailable.
+  for (const [path, bytes] of outputs) {
+    if (!existsSync(path)) {
+      process.stderr.write(
+        `Missing generated managed-hook artifact: ${path}\nRun this script with --write.\n`,
+      );
+      process.exitCode = 1;
+      return;
+    }
 
-  const committedContract = readFileSync(OUTPUT_PATH, "utf-8");
-  // Different bytes mean TypeScript and standalone installation would show users different hook state.
-  if (committedContract !== generatedContract) {
-    process.stderr.write(
-      `Generated managed-hook contract is stale: ${OUTPUT_PATH}\nRun this script with --write.\n`,
-    );
-    process.exitCode = 1;
-    return;
+    const committedContract = readFileSync(path, "utf-8");
+    // Different bytes mean TypeScript and standalone installation would show users different hook state.
+    if (committedContract !== bytes) {
+      process.stderr.write(
+        `Generated managed-hook artifact is stale: ${path}\nRun this script with --write.\n`,
+      );
+      process.exitCode = 1;
+      return;
+    }
   }
 
   process.stdout.write(`managed-hook contract current: ${OUTPUT_PATH}\n`);

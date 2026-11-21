@@ -2,6 +2,84 @@
 
 ## Unreleased
 
+The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Publication is pending.
+
+## v1.19.0 - 2026-11-21
+
+### Added
+
+- **Fidelity checks for prose rewrites** - The writing playbook compares a substantial rewrite with its source in both directions to catch lost claims and unsupported additions. The clarity receipt records the result. The effect on agent behavior remains unverified.
+
+- **Instruction audit** - Warns about ambiguous checkbox reminders, instructions directing agents to commit or push, and retired Bash policy self-tests. Missing milestone steps affect the harness score only.
+
+### Changed
+
+- **BREAKING: Node 20.12.0 minimum** - The minimum rises from 20.11.0 to 20.12.0. Upgrade Node before installing or running goat-flow 1.19.0.
+- **BREAKING: Direct upgrades start at 1.16.0** - Projects on earlier versions must install 1.18.0 first, then 1.19.0. Downgrading to a Bash-based release is unsupported.
+- **Hooks run on Node** - Install and `goat-flow hooks sync` register Node handlers. Copilot on Unix still launches them through its Bash command field. After upgrading, restart your agent and update project instructions to use the [Node self-tests](docs/guardrails.md#verification).
+
+- **Quality save recovery** - When a save fails, quality prompts retain the full report and give separate retry guidance for rejected commands and report validation errors.
+
+- **Quality prompts** - Ask the assessor to use an idle checkout and independently recheck serious findings from other agents. Earlier assessors' scores stay out of the prompt.
+
+- **Milestone reviews** - Milestone work runs review before acceptance; repairs keep their approved scope and refresh affected evidence.
+
+- **Milestone commands** - Instructions name timing and tick steps, preserve other writers' edits and require causal failure diagnosis.
+
+- **Plan layout and progress** - New plans separate notes, evidence and scripts; progress entries show timestamps and work time. Existing plans opt in.
+
+- **Windows and WSL hook delivery** - The shared launcher and process supervision changes require fresh delivery captures on both hosts. See the [capture matrix](workflow/hooks/README.md#windows-and-wsl-delivery-captures).
+  - All 18 combinations had verified delivery at the November 15 checkpoint (`d7f7a298`). Linux and macOS passed compatibility checks. Live provider delivery on those two platforms remains unverified.
+- **Hook policy checks no longer use the frozen Bash reference** - Release checks run the installed Node policy hooks against the shipped corpus on Linux, macOS, Windows and WSL; installs are unaffected.
+
+- **Stop hooks default to a 4 MiB whole-file scan limit** - Claude and Codex use `4194304` for `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES` unless you set it. Sync updates the registered Codex Stop command.
+
+- **Issue briefs show effort and benefits by task** - `ISSUE.md` gives likely agent-minutes per task, totals the open work in minutes and hours, and shows what changes for the user. The template includes a worked example.
+- **Commit-message drafting** - The guide now accepts a branch and diff as inputs, explains when to use a body or breaking-change footer, and includes worked examples for a fix, a breaking change and a header-only message.
+  - New Git installs receive the guide. Existing guides are preserved.
+
+### Deprecated
+
+- **Prompts and Workspace** - [Share how you use these dashboard pages](https://github.com/blundergoat/goat-flow/issues/70) before a removal decision.
+
+### Removed
+
+- **BREAKING: Bash installer removed** - Replace `workflow/install-goat-flow.sh` with `goat-flow install . --agent <id>` for installs and upgrades.
+- **BREAKING: Bash hook runtimes removed** - The managed `.sh` hooks and Bash launcher have been retired. On upgrade, `goat-flow install` removes old copies that match their saved hash and preserves locally edited copies.
+  - If an agent still references the retired runtime, install and `goat-flow hooks sync` pause for review when a retired file differs from its saved hash or has no saved hash. Approve the registration change on the dashboard Hooks page or with `goat-flow install . --agent <id> --force-path <file>`. The local file is preserved.
+
+### Security
+
+- **Policy hooks reject malformed output** - The launcher uses the provider's unavailable response when an evaluator returns invalid UTF-8.
+
+- **Hook startup limits** - Policy hooks refuse provider requests over 2 MiB before parsing them. When locating the project root, hook commands also limit Git lookup time and output. Run `goat-flow hooks sync`, then review and trust the updated hooks in your agent.
+
+- **Cmd caret escapes no longer hide blocked commands** - Policies recognize caret-space and caret-tab forms of publication, merge and deletion commands.
+
+- **Stop hooks check binaries for known token and private-key patterns** - The scanner checks worktree files and staged blobs, including UTF-16 text. A recognized private-key header blocks in a binary file. In a recognized compiled program, the scanner also requires nearby matching key data. Run `goat-flow hooks sync` to update existing installs.
+
+- **Native PowerShell policy inspection** - Literal commands reach both owning policies; unresolved dynamic execution and session-state changes remain blocked. Run `goat-flow hooks sync` to refresh existing installations.
+
+- **Windows GitHub CLI paths stay protected** - GitHub write protection recognizes Windows executable names and paths while preserving read and comment exceptions.
+- **Antigravity file reads reach secret protection** - `read_file` requests now reach the policy. Run `goat-flow hooks sync` to update existing installs.
+- **Node guards inspect more shell command forms** - Quotes in comments, ANSI-C strings, case arms, arithmetic-like command substitutions and functions with subshell bodies no longer hide a later delete or push. Dynamic Git verbs and uninspectable xargs subcommands are refused; known Git executable variables stay tracked through nested shells and pipelines.
+- **Node guards inspect wrapper option values and refuse unreadable Git aliases** - Sudo, Bash and env option operands no longer hide the command being checked. Git alias lookup follows env directory changes and refuses lookup failures; `git send-email` counts as publication.
+
+- **Claude blocks a command when a policy hook cannot run** - Both PreToolUse policy registrations carry `onFailure: "block"`, so Claude Code 2.1.295 or later refuses the command when the hook fails to start, times out or exits with an unexpected status instead of letting it through. Run `goat-flow hooks sync` to add the field to an existing installation.
+
+### Fixed
+
+- **Native hook cleanup** - The launcher stops its evaluator on catchable cancellation signals. Supervised helpers share the evaluator's process group so the launcher can stop them if the evaluator exits before the deadline.
+- **Gruff reports partial coverage for mixed edits** - Findings from scanned files stay visible alongside warnings for files outside the selected install. A file named through a symlinked directory or a Windows short name is analysed and counted once.
+
+- **Guardrails troubleshooting** - Recovery guidance names Node prerequisites and explains refusals for uninspectable native PowerShell commands.
+
+- **Antigravity hooks start on Windows** - Hook commands now survive cmd.exe parsing; run `goat-flow hooks sync` to repair existing installs.
+- **Node hook verification** - Native registration audits use the configured hook filename, and policy self-tests fail when no cases run or the declared case count is wrong.
+- **Copilot hooks start on Windows** - Copilot's PowerShell hook commands now parse, so goat-flow hooks run instead of failing on every tool call; run `goat-flow hooks sync` to repair existing installs.
+- **Unchanged binary files no longer block every Stop** - The first Stop that skips a binary still blocks. If the only gaps on the continued Stop are the same unchanged binaries, it can finish with an incomplete-scan warning, including for staged assets over 256 MiB. A finding, changed binary or other skipped file still blocks. Run `goat-flow hooks sync` to update existing installs.
+- **goat-review continues when a `worktree` snapshot is refused** - On Git LFS or `text=auto` repositories, or Git for Windows with `core.autocrlf` set, the skill re-selects `staged` or explicit paths instead of stopping for a waiver, and the `review snapshot` refusal names the converting path and attribute or the `core.autocrlf` value.
+
 ## v1.18.0 - 2026-10-11
 
 ### Added

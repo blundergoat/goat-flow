@@ -1494,6 +1494,19 @@ body {
   border-color: var(--border-default);
 }
 
+/* --- Deprecation notice --- */
+.gf-deprecation-notice {
+  flex: 0 0 auto;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--amber-border);
+  border-radius: 6px;
+  background: var(--amber-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 /* --- Links --- */
 .gf-link {
   color: var(--accent);

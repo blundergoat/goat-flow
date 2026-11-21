@@ -55,11 +55,14 @@ Install the playbook pack from `workflow/skills/playbooks/`:
 - `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md` from `workflow/skills/playbooks/writing-agent-facing-instructions.md` - authoring discipline for agent-read documents: skills, playbooks, shared preamble/conventions, instruction files, hook messages, and README discovery rows
 - `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` from `workflow/skills/playbooks/writing-sentence-diagnostics.md` - sentence-level reader-cost diagnostics after the writing core identifies an objective trigger
 - `.goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md` from `workflow/skills/playbooks/writing-structure-diagnostics.md` - document-level assembly diagnostics before sentence work
+- `.goat-flow/skill-docs/playbooks/writing-fidelity-audit.md` from `workflow/skills/playbooks/writing-fidelity-audit.md` - source-visible meaning review for substantive recomposition or derivation with distinct claims, or unresolved fidelity
 - `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` from `workflow/skills/playbooks/writing-human-facing-prose.md` - compact correctness and routing owner for human-read prose, with agent-read control text explicitly exempt
 - `.goat-flow/skill-docs/skill-quality-testing/README.md` from `workflow/skills/playbooks/skill-quality-testing.md` - short index for skill authoring and hardening
 - `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` from `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
 - `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
 - `.goat-flow/skill-docs/skill-quality-testing/deployment.md` from `workflow/skills/playbooks/skill-quality-testing/deployment.md` - deployment checklist and reference-pack budget rules
+
+The manifest installs goat-clarity's `references/target-scope-and-evidence.md` and `references/receipt-evidence.md` with the skill in each selected agent root. Keep both references beside SKILL.md.
 
 ## Gitignore exception check (load-bearing for git tracking)
 
@@ -119,6 +122,7 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/writing-fidelity-audit.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/README.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` exists

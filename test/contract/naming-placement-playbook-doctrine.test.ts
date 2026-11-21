@@ -330,13 +330,6 @@ const ENROLLMENT_OWNERS = [
     ],
   },
   {
-    path: "workflow/install-goat-flow.sh",
-    required: [
-      "workflow/skills/playbooks/naming-and-placement.md",
-      ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
-    ],
-  },
-  {
     path: "scripts/preflight-checks.sh",
     required: ["naming-and-placement.md sync", "naming-and-placement.md"],
   },

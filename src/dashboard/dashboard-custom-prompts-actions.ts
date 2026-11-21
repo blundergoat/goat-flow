@@ -133,7 +133,7 @@ function dashboardPreviewCustomPromptPreset(
       globalSafe: draft.globalSafe,
     }),
     internalOnly: false,
-    qualityMode: false,
+    qualityWorkflow: false,
     requiresGh: draft.requiresGh,
     requiresPrOrIssue: draft.requiresPrOrIssue,
     requiresLocalDiff: draft.requiresLocalDiff,

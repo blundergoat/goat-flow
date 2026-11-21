@@ -93,14 +93,31 @@ describe("createFS glob support", () => {
         await write(root, "node_modules/pkg/ignored.ts");
         await write(root, "dist/out/ignored.ts");
         await write(root, "scripts/run.sh");
+        await write(root, "src/plans/model.ts");
+        await write(root, ".goat-flow/plans/active/ignored.ts");
+        await write(root, ".goat-flow/plans/active/local.py");
+        await write(root, ".goat-flow/scratchpad/archive/ignored.ts");
+        await write(root, ".goat-flow/scratchpad/archive/local.go");
+        await write(root, ".goat-flow/learning-loop/lessons/kept.md");
       },
       async (root) => {
         const fs = createFS(root);
 
-        assert.deepEqual(fs.glob("**/*.ts"), ["src/app.ts"]);
+        assert.deepEqual(fs.glob("**/*.ts").sort(), [
+          "src/app.ts",
+          "src/plans/model.ts",
+        ]);
+        assert.deepEqual(fs.glob("**/*.md"), [
+          ".goat-flow/learning-loop/lessons/kept.md",
+        ]);
         assert.equal(fs.existsGlob("**/*.ts"), true);
         assert.equal(fs.existsGlob("**/*.sh"), true);
         assert.equal(fs.existsGlob("**/*.go"), false);
+        assert.equal(fs.existsGlob("**/*.py"), false);
+        assert.deepEqual(fs.glob(".goat-flow/plans/**/*.py"), [
+          ".goat-flow/plans/active/local.py",
+        ]);
+        assert.equal(fs.existsGlob(".goat-flow/scratchpad/**/*.go"), true);
       },
     );
   });

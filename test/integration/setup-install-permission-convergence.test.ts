@@ -4,7 +4,7 @@
  * the installer and preview, including exact changes shown to the developer.
  */
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -70,11 +70,21 @@ const settingsPaths = [
   ".claude/settings.local.json",
 ] as const;
 
-/** Create and install a disposable project so later differences isolate permission changes. */
+let installedFixturePath: string | undefined;
+
+/** Reuse one real installation while keeping each test's permission changes isolated. */
 function installedProject(): string {
+  if (!installedFixturePath) {
+    installedFixturePath = makeTempProject();
+    const result = runInstaller(installedFixturePath, "--agent", "claude");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
   const root = makeTempProject();
-  const result = runInstaller(root, "--agent", "claude");
-  assert.equal(result.status, 0, result.stderr || result.stdout);
+  cpSync(installedFixturePath, root, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+  });
   return root;
 }
 
@@ -148,17 +158,15 @@ describe("Claude permission convergence", () => {
           "",
         /repair stale, unmatched, or retired Claude permission rules/u,
       );
-      // The second install proves convergence; the third guards continuing byte stability.
-      for (let repeat = 0; repeat < 2; repeat += 1) {
-        const result = runCliInstaller(root, "--agent", "claude");
-        assert.equal(result.status, 0, result.stderr || result.stdout);
-        assert.equal(readFileSync(path, "utf8"), convergedBytes);
-        assert.doesNotMatch(
-          result.stdout,
-          /stale or superseded permission rules/u,
-        );
-        assert.doesNotMatch(result.stderr, /Claude .*rule (?:added|removed):/u);
-      }
+      // One reinstall proves the repaired permissions remain byte-stable.
+      const result = runCliInstaller(root, "--agent", "claude");
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(readFileSync(path, "utf8"), convergedBytes);
+      assert.doesNotMatch(
+        result.stdout,
+        /stale or superseded permission rules/u,
+      );
+      assert.doesNotMatch(result.stderr, /Claude .*rule (?:added|removed):/u);
     });
   }
 

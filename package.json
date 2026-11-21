@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "description": "AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot - setup audits, guardrails, structured skills, deny hooks, and persistent learning loops.",
   "author": "Matthew Hansen (https://www.blundergoat.com)",
   "license": "MIT",
@@ -41,7 +41,7 @@
     "workflow"
   ],
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=20.12.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -49,16 +49,17 @@
     ]
   },
   "scripts": {
-    "build": "npm run check:hook-policy-parser && npm run check:hook-graphql-parser && npm run check:managed-hook-contract && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
+    "build": "npm run check:hook-policy-parser && npm run check:hook-graphql-parser && npm run check:managed-hook-contract && npm run check:hook-runtime && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
     "build:dashboard": "tsc -p tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs",
     "test": "npm run test:fast",
     "test:fast": "node scripts/run-tests.mjs fast",
+    "test:preflight": "node scripts/run-tests.mjs preflight",
     "test:slow": "npm run build && node scripts/run-tests.mjs slow",
     "test:slow:ci": "node scripts/run-tests.mjs slow",
     "test:full": "npm run test:fast && npm run test:slow",
     "test:coverage": "node scripts/run-tests.mjs coverage",
     "gruff-ts": "gruff-ts",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.dashboard.json --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.dashboard.json --noEmit && npm run typecheck:hooks",
     "check:touched": "node scripts/check-touched.mjs",
     "check:node-pty": "node scripts/warn-node-pty.mjs",
     "goat-flow:cli": "node dist/cli/cli.js",
@@ -76,11 +77,14 @@
     "check:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --check",
     "check:hook-policy-parser": "node scripts/generate-hook-policy-parser.mjs --check",
     "check:hook-graphql-parser": "node scripts/generate-hook-graphql-parser.mjs --check",
-    "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
-    "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
+    "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,mts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
+    "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,mts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "prepublishOnly": "npm run publish:check",
     "publish:check": "npm run publish:check:quick && npm run test:fast && node scripts/run-tests.mjs slow",
-    "publish:check:quick": "npm run check-versions && npm run check-instruction-parity && npm run build && npm run check-package-links"
+    "publish:check:quick": "npm run check-versions && npm run check-instruction-parity && npm run build && npm run check-package-links",
+    "typecheck:hooks": "npm run check:hook-runtime && tsc -p tsconfig.hooks.json --noEmit",
+    "generate:hook-runtime": "node scripts/generate-hook-runtime.mjs --write",
+    "check:hook-runtime": "node scripts/generate-hook-runtime.mjs --check"
   },
   "keywords": [
     "goat-flow",
@@ -141,8 +145,9 @@
   },
   "main": "dist/cli/index.js",
   "overrides": {
+    "minimatch": "11.0.1",
     "typed-rest-client": {
-      "qs": "6.16.0"
+      "qs": "6.16.1"
     }
   }
 }

@@ -12,16 +12,16 @@ import {
   forbiddenCodexConsentPattern,
   forbiddenCodexExceptionPattern,
   forbiddenDelegationPromptPattern,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readProjectFile,
-  INSTALLED_SKILL_ROOTS,
+  CANONICAL_SKILL_ROOT,
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () => {
   it("gives public type contracts higher risk than internal type-only changes", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const changeRisk = readMarkdownSection(
         skillPath,
         "Phase 1 - Change Risk Analysis",
@@ -47,7 +47,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("keeps Audit inspection role separate from impact-based risk", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const auditMode = readMarkdownSection(skillPath, "Audit Mode");
       assert.match(
         auditMode,
@@ -73,7 +73,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("keeps goat-qa Audit priorities coherent through the post-gate plan", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -87,7 +87,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      canonicalSkillReferencePaths("goat-qa", "references/output-templates.md"),
       (referencePath) => {
         const outputTemplates = readProjectFile(referencePath);
         const auditPostGateHeading =
@@ -112,7 +112,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("classifies goat-qa Audit coverage per named behaviour or invariant", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const auditMode = readMarkdownSection(skillPath, "Audit Mode");
       assert.match(
         auditMode,
@@ -139,7 +139,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
 
   it("defines each goat-qa coverage depth by the evidence that earns it", () => {
     // These four definitions decide every depth an agent may assign, so each one names the evidence that earns it.
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const coverageDepth = readMarkdownSection(skillPath, "Coverage Depth");
 
       // A user's existing manual test plan counts as coverage, so NONE requires a search that finds neither tests nor a plan.
@@ -174,7 +174,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("requires goat-qa to back absent, unavailable, and zero-gap claims with evidence", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const gapAnalysis = readMarkdownSection(
         skillPath,
         "Phase 2 - Gap Analysis",
@@ -211,7 +211,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     // Asking goat-qa for a test plan releases Standard's Phase 2 gate, so the answer includes both the risk analysis and the plan.
     // The output template must allow that combined answer because it controls rendering after the skill chooses the mode.
     assertForEachTarget(
-      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      canonicalSkillReferencePaths("goat-qa", "references/output-templates.md"),
       (referencePath) => {
         const outputTemplates = readProjectFile(referencePath);
 
@@ -261,7 +261,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       /\| LOW \| Defer \| Defer \| Defer \| Defer \|/,
     ];
 
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Exhaustive priority matrix/, skillPath);
       // Every risk and coverage combination must have guidance so QA priority does not depend on an omitted case.
@@ -290,7 +290,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      canonicalSkillReferencePaths("goat-qa", "references/output-templates.md"),
       (referencePath) => {
         const outputTemplates = readProjectFile(referencePath);
         assert.match(
@@ -308,7 +308,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("carries MEDIUM high-value gaps into goat-qa Standard Phase 2", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const phase2 = readMarkdownSection(skillPath, "Phase 2 - Gap Analysis");
 
       assert.match(
@@ -323,7 +323,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      canonicalSkillReferencePaths("goat-qa", "references/output-templates.md"),
       (referencePath) => {
         const outputTemplates = readProjectFile(referencePath);
         const outputStartMarker =
@@ -360,7 +360,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("accepts verified clean goat-critique results without fabricated findings", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assertMatchesAll(
         skillGuidance,
@@ -381,7 +381,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
     });
 
-    const directivePaths = INSTALLED_SKILL_ROOTS.map(
+    const directivePaths = [CANONICAL_SKILL_ROOT].map(
       (skillRoot) =>
         `${skillRoot}/goat-critique/references/sub-agent-directives.md`,
     );
@@ -414,7 +414,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("merges goat-critique rubric context maps into the fixed context split", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assertMatchesAll(
         skillGuidance,
@@ -434,7 +434,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-critique",
         "references/rubric-examples.md",
       ),
@@ -479,7 +479,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       "Blind-spot statement",
     ];
 
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
       assert.match(
         synthesis,
@@ -497,7 +497,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-critique",
         "references/rubric-examples.md",
       ),
@@ -526,7 +526,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   // The shared evidence scale keeps HUMAN-PENDING visible when a finding still needs the user's verification.
   it("gives every goat-critique finding an identity and the shared evidence scale", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-critique",
         "references/sub-agent-directives.md",
       ),
@@ -547,7 +547,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
 
   // Users need unread scope shown as a coverage gap; turning that gap into a HIGH finding would falsely block a clean artifact.
   it("reports goat-critique dimension coverage instead of manufacturing findings", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const ranking = readMarkdownSection(
         skillPath,
         "Phase 2 - Rank and Compare",
@@ -564,7 +564,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-critique",
         "references/sub-agent-directives.md",
       ),
@@ -588,7 +588,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
 
   // The meta-agent grades a packet it is handed; every rule it applies has to travel inside that packet.
   it("makes the goat-critique meta packet carry the rules it grades against", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
       assertMatchesAll(
         synthesis,
@@ -602,7 +602,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-critique",
         "references/rubric-examples.md",
       ),
@@ -630,7 +630,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
 
   // Explain why one critic's assessment is stronger so users can judge the comparison without an invented numerical ranking.
   it("defines evidence-based goat-critique ranking criteria at their routed owner", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       assert.match(
         readMarkdownSection(skillPath, "Phase 2 - Rank and Compare"),
         /Ranking criteria[^\n]*`references\/sub-agent-directives\.md`/u,
@@ -638,7 +638,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-critique",
         "references/sub-agent-directives.md",
       ),
@@ -663,7 +663,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   // A score names the exact draft it graded, so a later edit cannot inherit a score it never earned.
   it("binds a goat-critique meta score to the revision it audited", () => {
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-critique",
         "references/rubric-examples.md",
       ),
@@ -683,7 +683,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
 
   // Show users the highest supported severity and the coverage gaps separately so they can judge what CLEAN establishes.
   it("derives goat-critique risk level and CLEAN from surviving findings", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
       assertMatchesAll(
         synthesis,
@@ -701,7 +701,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
       assert.doesNotMatch(synthesis, /Must never be empty/iu, skillPath);
     });
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       assert.doesNotMatch(
         readProjectFile(skillPath),
         /no disputes - full consensus/iu,
@@ -712,7 +712,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
 
   // Even a 100/100 critique must show the meta-audit result, using a clean attestation when it found no issues.
   it("renders truthful goat-critique meta-audit issues for clean results", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
       const outputFormat = readMarkdownSection(skillPath, "Output Format");
 
@@ -735,7 +735,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths(
+      canonicalSkillReferencePaths(
         "goat-critique",
         "references/rubric-examples.md",
       ),
@@ -759,7 +759,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("keeps goat-critique lifecycle aligned with its accepted decision and public guidance", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -795,7 +795,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("keeps goat-critique host-owned so human gates cannot auto-convert", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
 
@@ -835,7 +835,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("redacts goat-critique persistence before disk and preserves the human gate", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const records = readMarkdownSection(
         skillPath.replace(/SKILL\.md$/u, "references/rubric-examples.md"),
         "Saved records and recovery",
@@ -863,7 +863,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("keeps goat-critique direct invocation as delegation consent", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /\$goat-critique/, skillPath);
       assert.match(skillGuidance, /\/goat-critique/, skillPath);
@@ -881,7 +881,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("keeps goat-critique report-only until explicit apply", () => {
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assertMatchesAll(
         skillGuidance,
@@ -945,7 +945,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("keeps goat dispatcher from routing bare task paths to implementation", () => {
-    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
@@ -961,7 +961,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("lets simple factual questions bypass dispatcher ceremony", () => {
-    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Simple-fact fast path/, skillPath);
       assert.match(

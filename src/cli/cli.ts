@@ -15,6 +15,7 @@ import { CLIError } from "./cli-error.js";
 import { dispatchCommand } from "./cli-handlers.js";
 import { renderHelp } from "./help.js";
 import { parseCLIArgs } from "./cli-parser.js";
+import type { ParsedCLI } from "./cli-types.js";
 
 export { dispatchCommand } from "./cli-handlers.js";
 export { parseCLIArgs } from "./cli-parser.js";
@@ -24,11 +25,27 @@ export type { ParsedCLI } from "./cli-types.js";
 const PACKAGE_VERSION = getPackageVersion();
 
 /**
- * Print package identity when a user runs `--version`.
- * Use before dispatch so version output never depends on project state.
+ * Return what a help or version request prints, for example `goat-flow review --help` or `goat-flow --version`, before any project is opened.
+ * The CLI prints the result; tests call it directly to check help text without starting a CLI process.
+ *
+ * @param commandArguments - the arguments the user typed, which tell `menu --help` apart from a bare `--help`
+ * @param cliRequest - the parsed request; one without a help or version flag returns null
+ * @returns the help or version text without its trailing newline, or null when the request needs its command to run
  */
-function printPackageVersion(): void {
-  console.log(`goat-flow v${PACKAGE_VERSION}`);
+export function renderInformationalRequest(
+  commandArguments: string[],
+  cliRequest: ParsedCLI,
+): string | null {
+  // Help requests return guidance before a missing, incomplete, or drifted project can block the user.
+  if (cliRequest.showHelp) {
+    // A bare `--help` has no selected workflow, while `menu --help` asks for the menu topic even though both parse to the menu command.
+    const requestedHelpCommand =
+      commandArguments[0] === cliRequest.command ? cliRequest.command : null;
+    return renderHelp(requestedHelpCommand);
+  }
+  // Version requests identify the installed package without opening the user's target project.
+  if (cliRequest.showVersion) return `goat-flow v${PACKAGE_VERSION}`;
+  return null;
 }
 
 /**
@@ -51,17 +68,13 @@ async function routeCliRequest(): Promise<void> {
   // No command opens the menu, while every project action still requires the user to name its workflow.
   const cliRequest = parseCLIArgs(commandArguments);
 
-  // Help requests return guidance before a missing, incomplete, or drifted project can block the user.
-  if (cliRequest.showHelp) {
-    // A bare `--help` has no selected workflow, while `menu --help` asks for the menu topic even though both parse to the menu command.
-    const requestedHelpCommand =
-      commandArguments[0] === cliRequest.command ? cliRequest.command : null;
-    console.log(renderHelp(requestedHelpCommand));
-    return;
-  }
-  // Version requests identify the installed package without opening the user's target project.
-  if (cliRequest.showVersion) {
-    printPackageVersion();
+  const informational = renderInformationalRequest(
+    commandArguments,
+    cliRequest,
+  );
+  // Help and version text needs no project, so print it and stop before dispatch.
+  if (informational !== null) {
+    console.log(informational);
     return;
   }
 

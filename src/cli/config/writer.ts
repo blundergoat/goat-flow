@@ -407,7 +407,7 @@ function scanRootBlockListUsesYamlAlias(
 
 /**
  * Check for YAML aliases before registering the user's post-turn scan folders.
- * The CLI resolves aliases, but post-turn-safety.sh cannot; accepting them would fail at the end of the agent's turn.
+ * The CLI resolves aliases, but post-turn-safety.mjs cannot; accepting them would fail at the end of the agent's turn.
  *
  * @param projectPath - selected project whose `.goat-flow/config.yaml` is inspected as text; a missing file has no scan roots
  * @returns true when a `scan-roots` value, flow list item, or block list item starts with `*` or `&`

@@ -1336,13 +1336,16 @@ export function untrackedPaths(
     .sort(comparePaths);
 }
 
+// Git attributes whose set value means the checkout bytes differ from the stored blob.
+const CONVERTING_ATTRS = ["filter", "working-tree-encoding", "text", "eol"];
+
 /**
  * Refuse comparisons whose Git attributes would transform the bytes the reviewer actually sees.
  *
  * @param context - selected local repository whose attributes and config determine conversion
- *
  * @param paths - comparison membership; empty has no content to convert
- * @throws ReviewAuthorityError when filters, encoding, text, or line-ending conversion prevent a raw-byte comparison
+ * @throws ReviewAuthorityError when filters, encoding, text, or line-ending conversion prevent a raw-byte comparison; the message names the
+ *   first converting path and attribute, or the effective `core.autocrlf` value, so the reviewer can re-select without guessing
  */
 export function requireRawComparison(
   context: GitContext,
@@ -1353,22 +1356,20 @@ export function requireRawComparison(
   const attributes = nulRecords(
     readGit(
       context.root,
-      [
-        "check-attr",
-        "-z",
-        "--stdin",
-        "filter",
-        "working-tree-encoding",
-        "text",
-        "eol",
-      ],
+      ["check-attr", "-z", "--stdin", ...CONVERTING_ATTRS],
       `${paths.join("\0")}\0`,
     ),
   );
-  const unsafe = attributes.some(
+  // Records repeat path, attribute, value; the first set value names the file the reviewer must re-select around.
+  const converted = attributes.findIndex(
     (value, index) =>
       index % 3 === 2 && value !== "unspecified" && value !== "unset",
   );
+  if (converted !== -1)
+    throw new ReviewAuthorityError(
+      "authority-unsupported",
+      `live comparison requires unsupported content conversion: ${attributes[converted - 2]} has ${attributes[converted - 1]}=${attributes[converted]}; select staged or explicit raw paths`,
+    );
   // Read the effective setting, so an overridden true value cannot block the operator's current raw-byte selection.
   const autocrlf = readGit(context.root, [
     "config",
@@ -1382,8 +1383,7 @@ export function requireRawComparison(
   // Parse only the effective value: Git's typed --get also parses shadowed entries, so a global input can reject a local false.
   // An empty stdin config lets Git own boolean spellings without re-reading those overridden values.
   requireAuthority(
-    !unsafe &&
-      autocrlf !== "input" &&
+    autocrlf !== "input" &&
       readGit(
         context.root,
         [
@@ -1400,7 +1400,7 @@ export function requireRawComparison(
       )
         .toString()
         .trim() === "false",
-    "live comparison requires unsupported content conversion; select explicit raw paths",
+    `live comparison requires unsupported content conversion: core.autocrlf=${autocrlf}; select staged or explicit raw paths`,
     "authority-unsupported",
   );
 }

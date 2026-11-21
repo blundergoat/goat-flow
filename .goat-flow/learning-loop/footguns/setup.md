@@ -1,7 +1,47 @@
 ---
 category: setup
-last_reviewed: 2026-10-11
+last_reviewed: 2026-11-03
 ---
+
+## Footgun: Repository mirror syncs leave stale install hashes behind
+
+**Status:** active | **Created:** 2026-11-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Compare this repository's installed hook mirrors with the canonical `workflow/` bytes before trusting hash-gated cleanup to remove them.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+**Severity:** INTEGRATION
+
+**Prevention:** Before retiring a shipped file, check each installed mirror against the canonical file at `HEAD` and against its saved hash. A mirror that matches `HEAD` but not its saved hash was copied by a repository sync step, not edited by a person; remove it with an approved tracked deletion instead of waiting for the installer.
+
+**Symptoms:** An installer dry run in this repository planned to remove only 4 of 10 retired hook copies. It kept the other 6 as edited or unclassified bytes, although all 10 matched the canonical files exactly.
+
+**Why it happens:** `src/cli/installer/retired-runtime.ts` (search: `A filename alone never authorizes removal`) removes a retired file only when its bytes match the hash saved in `.goat-flow/state/install/managed.json`. `scripts/bump-version.sh` (search: `Syncing installed mirrors`) refreshes the installed mirrors with `cp` and never writes that state file, so its hashes keep describing older bytes. Consumer installs record hashes as they write, so this drift belongs to repositories that sync their own mirrors.
+
+**Evidence:** Measured 2026-11-03: the saved hash for the retired `deny-dangerous.sh` matched an earlier commit's bytes, while the installed copy matched the canonical file at `HEAD`; the dry run listed six such copies as `preserve`.
+
+---
+
+## Footgun: Raw JSON matching misses quoted runtime dependencies
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Decode provider JSON before checking commands for retired runtime dependencies.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+**Severity:** SECURITY
+
+**Prevention:** Inspect parsed command strings. Preserve dependencies when provider configuration cannot be read safely; malformed JSON is not evidence that a dependency is unused.
+
+**Evidence:** `src/cli/installer/retired-runtime.ts` (`hasRetiredRegistration`, `containsRetiredRuntime`) previously searched serialized JSON. A command with a quoted script path was missed because JSON inserted a backslash before its closing quote. `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `keeps registrations and dependencies while a runtime customization awaits migration consent`) now retains the quoted command and its dependencies until review.
+
+## Footgun: Non-exclusive staging copies follow a raced payload symlink
+
+**Status:** active | **Created:** 2026-10-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Create staged copy payloads exclusively and validate their file type before publication.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+**Severity:** SECURITY
+
+**Prevention:** Use `COPYFILE_EXCL` when copying into a new staging payload, reject non-regular or multiply linked payloads before publication, and check the staging directory identity before cleanup. A random private staging directory does not make a later non-exclusive copy safe.
+
+**Evidence:** A controlled M05 fixture inserted a payload symlink immediately before `copyFileSync`; the default copy overwrote the separate target file. `src/cli/installer/atomic-files.ts` (search: `constants.COPYFILE_EXCL`, `stagingIdentity`) now refuses that copy. `test/integration/setup-install-atomic-staging.test.ts` (search: `refuses a raced payload symlink without overwriting its target`) verifies both the destination and the symlink target retain their original bytes, with no staging residue.
+
 
 ## Footgun: A preview-layer classification change is inert until apply consumes the decision
 
@@ -13,9 +53,9 @@ last_reviewed: 2026-10-11
 
 **Why it happens:** Preview classification, admission, and authority live in TypeScript; the writes live in the installer script. Nothing in the type system, the linter, or a classifier unit test crosses that boundary.
 
-**Evidence:** While implementing the 1.16.0 `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` changed and `install` exited 0, but `workflow/install-goat-flow.sh` (search: `copy_file()`) still replaced every system-owned destination. The fix was a decision channel: `src/cli/install-command.ts` (search: `Each row's own decision travels to Bash`) turns preview rows into `--preserve-path` and `--replace-user-path` flags, and `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) consults them inside `copy_file`.
+**Evidence:** While implementing the 1.16.0 `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` changed and `install` exited 0, but the retired Bash installer still replaced every system-owned destination. The fix was a decision channel: `src/cli/install-command.ts` (search: `preservePaths: installPreview.files`) now passes those per-row decisions to `applyInstaller`; `src/cli/installer/apply.ts` (search: `preserved.has(destination)`) honors them at the write. The retired Bash installer used the same decision channel as flags.
 
-**Reporting recurrence 2026-10-09 (ACTUAL_MEASURED):** Closing output must distinguish requested state from completed writes across the same boundary. The summary fixture initially inferred registration removal from a disabled deny choice, but the installer retained its neutral registration. `workflow/install-goat-flow.sh` (search: `shouldRegisterManagedHook`) uses the generated `retainRegistrationWhenDisabled` contract; Stop registration does not have that retention. A non-Git fixture also lacked a Stop registration before apply, so absence afterward could not prove removal. `test/integration/setup-install-upgrade-summary.test.ts` (search: `names replaced local content and disabled registration removals after verification`) now establishes the initial registration in a Git fixture, verifies actual Stop removal and deny retention, and couples the closing output to target bytes. `src/cli/install-summary.ts` (search: `completedHookChanges`) compares registry readings before and after apply rather than treating preview edit phrases or flags as results. For failure injection, ensure a changed baseline or missing selected receipt reaches the required write: preservable local edits and identical state bytes legitimately skip those failure boundaries.
+**Reporting recurrence 2026-10-09 (ACTUAL_MEASURED):** Closing output must distinguish requested state from completed writes across the same boundary. The summary fixture initially inferred registration removal from a disabled deny choice, but the installer retained its neutral registration. `scripts/generate-managed-hook-desired-state.mjs` (search: `retainRegistrationWhenDisabled`) publishes that retention contract; Stop registration does not have that retention. A non-Git fixture also lacked a Stop registration before apply, so absence afterward could not prove removal. `test/integration/setup-install-upgrade-summary.test.ts` (search: `names replaced local content and disabled registration removals after verification`) now establishes the initial registration in a Git fixture, verifies actual Stop removal and deny retention, and couples the closing output to target bytes. `src/cli/install-summary.ts` (search: `completedHookChanges`) compares registry readings before and after apply rather than treating preview edit phrases or flags as results. For failure injection, ensure a changed baseline or missing selected receipt reaches the required write: preservable local edits and identical state bytes legitimately skip those failure boundaries.
 
 ## Footgun: Optional-hook agent profiles break when installer treats hooks as universal
 
@@ -27,7 +67,7 @@ last_reviewed: 2026-10-11
 
 **Why it happens:** `workflow/manifest.json` allows agents without project-local hook fields, but the Bash installer once required `hooks_dir` and `deny_hook` for every profile, so "no hook mechanism documented yet" looked like a corrupt profile.
 
-**Evidence:** `src/cli/manifest/types.ts` (search: `upstream runtime has no documented project-local hook wiring`) documents optional `deny_mechanism` and `hook_events`; `workflow/install-goat-flow.sh` (search: `HOOKS_ENABLED=false`) gates hook copying separately from skills and references; the round-trip test above keeps every manifest agent in coverage.
+**Evidence:** `src/cli/manifest/types.ts` (search: `upstream runtime has no documented project-local hook wiring`) documents optional `deny_mechanism` and `hook_events`; `src/cli/installer/apply.ts` (search: `function copyManifestTemplates`) copies the hook group separately from skills and references; the round-trip test above keeps every manifest agent in coverage.
 
 ## Footgun: New-harness contributions can bypass the manifest-driven installer and modify shared core surfaces
 
@@ -43,7 +83,7 @@ last_reviewed: 2026-10-11
 **Why it happens:** The per-harness model is invisible to a first-time contributor: the manifest declares each agent's `skills_dir`, `hooks_dir`, `hook_config_file`, and `local_pattern`; the installer reads it and writes mirrors; the parity script enforces shared sections. No document walks that path, so contributors reach for the direct mechanism.
 
 **Evidence:**
-- `workflow/manifest.json` (search: `"agents"`) declares every supported agent; `workflow/install-goat-flow.sh` (search: `manifest_eval supported-agents`) writes per-agent mirrors from it; `scripts/check-instruction-parity.mjs` (search: `LIVE_FILES`) enforces shared sections only for registered files.
+- `workflow/manifest.json` (search: `"agents"`) declares every supported agent; `src/cli/installer/apply.ts` (search: `manifest.agents[options.agent]`) writes the selected agent's mirrors from it; `scripts/check-instruction-parity.mjs` (search: `LIVE_FILES`) enforces shared sections only for registered files.
 - `scripts/installers/*.sh` install the agent CLIs themselves and never call the goat-flow installer, so they are not where a harness is added.
 - External corroboration: obra/superpowers PR #1586 ("feat: add DeepSeek TUI harness support") was closed for bypassing the plugin install mechanism and turning a symlinked `AGENTS.md` into a file.
 
@@ -104,7 +144,7 @@ last_reviewed: 2026-10-11
 
 **Why it happened:** `lstat` does not follow the final symlink, but it resolves symlinked parents on the way to a child, so a final-file check proved only that the last component was regular.
 
-**Evidence:** `src/cli/managed-setup-write-set.ts` (search: `Every parent must remain a real directory`); `src/cli/managed-setup-state.ts` (search: `Require project-local directories before any baseline read or write`); `src/cli/managed-setup-admission.ts` (search: `no authority bypasses path safety`); `workflow/install-goat-flow.sh` (search: `The shared setup root must be local before migrations`); regressions in `test/integration/setup-install-preview.test.ts` (search: `blocks symlinked managed parents even when force is supplied`), `test/unit/managed-setup-preview.test.ts` (search: `rejects a valid baseline behind a symlinked install-state directory`), and `test/integration/setup-install-atomic-staging.test.ts` (search: `blocks a symlinked goat-flow root before creating outside directories`).
+**Evidence:** `src/cli/managed-setup-write-set.ts` (search: `Every parent must remain a real directory`); `src/cli/managed-setup-state.ts` (search: `Require project-local directories before any baseline read or write`); `src/cli/managed-setup-admission.ts` (search: `no authority bypasses path safety`); regressions in `test/integration/setup-install-preview.test.ts` (search: `blocks symlinked managed parents even when force is supplied`), `test/unit/managed-setup-preview.test.ts` (search: `rejects a valid baseline behind a symlinked install-state directory`), and `test/integration/setup-install-atomic-staging.test.ts` (search: `blocks a symlinked goat-flow root before creating outside directories`).
 
 **Prevention retained:** Walk every destination component before scaffolding and before file writes. Treat symlinked, non-regular, and unreadable components as path-safety failures that no overwrite flag bypasses, and snapshot the outside tree in regression tests so a green status proves containment.
 

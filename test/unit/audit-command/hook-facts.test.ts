@@ -10,6 +10,7 @@ import {
   extractHookFacts,
   extractHookFactsForDenyContent,
   it,
+  posixifyPath,
   readFileSync,
   resolve,
   stubFS,
@@ -20,21 +21,21 @@ import {
   extractSkillFacts,
   readHookConfig,
 } from "../../src.js";
+import { readdirSync, statSync } from "node:fs";
 
 /** Extract hook facts from the packaged deny hook plus its shared pattern libraries. */
 function extractPackagedDenyHookFacts(
   missingPath?: string,
 ): ReturnType<typeof extractHookFacts> {
   const files = new Map(
-    [
-      "deny-dangerous.sh",
-      "deny-git-mutations.sh",
-      "deny-dangerous/guard-runtime.sh",
-      "deny-dangerous/patterns-shell.sh",
-      "deny-dangerous/patterns-paths.sh",
-      "deny-dangerous/patterns-writes.sh",
-      "deny-dangerous/deny-dangerous-self-test.sh",
-    ]
+    readdirSync(resolve(PROJECT_ROOT, "workflow/hooks"), { recursive: true })
+      .map(String)
+      .map(posixifyPath)
+      .filter(
+        (file) =>
+          /\.(?:mjs|cjs|json)$/u.test(file) &&
+          statSync(resolve(PROJECT_ROOT, "workflow/hooks", file)).isFile(),
+      )
       .filter((file) => file !== missingPath)
       .map((file) => [
         `.goat-flow/hooks/${file}`,
@@ -51,13 +52,19 @@ function extractPackagedDenyHookFacts(
 describe("hook fact extraction", () => {
   it("does not borrow Git coverage from settings when the managed Git store is incomplete", () => {
     for (const missingPath of [
-      "deny-git-mutations.sh",
-      "deny-dangerous/guard-runtime.sh",
+      "deny-git-mutations.mjs",
+      "policy-evaluation.mjs",
     ]) {
       const facts = extractPackagedDenyHookFacts(missingPath);
       assert.equal(facts.denyBlocksGitPush, false, missingPath);
     }
-    assert.equal(extractPackagedDenyHookFacts().denyBlocksGitPush, true);
+    const native = extractPackagedDenyHookFacts();
+    assert.equal(native.denyBlocksGitPush, true);
+    assert.equal(native.denyHasBlocks, true);
+    assert.equal(native.denyHandlesChaining, true);
+    assert.equal(native.bashDenyCoversSecrets, true);
+    assert.equal(native.denyBlocksPipeToShell, true);
+    assert.equal(native.denyBlocksCloudDestructive, true);
   });
 
   it("derives hook registration and skill facts from agent-owned surfaces", () => {
@@ -122,11 +129,11 @@ describe("hook fact extraction", () => {
       {
         deny: {
           denyIsRegistered: true,
-          denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+          denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.mjs",
         },
         postTurn: {
           postTurnRegistered: true,
-          postTurnRegisteredPath: ".goat-flow/hooks/post-turn-safety.sh",
+          postTurnRegisteredPath: ".goat-flow/hooks/post-turn-safety.mjs",
         },
       },
     );

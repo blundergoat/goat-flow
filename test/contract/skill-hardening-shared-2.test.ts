@@ -8,11 +8,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertForEachTarget,
-  installedSkillPaths,
-  installedSkillReferencePaths,
+  canonicalSkillPaths,
+  canonicalSkillReferencePaths,
   readMarkdownSection,
   readProjectFile,
-  INSTALLED_SKILL_ROOTS,
+  CANONICAL_SKILL_ROOT,
 } from "./skill-hardening.helpers.js";
 
 // Assert stable semantic anchors inside one named Markdown section.
@@ -130,7 +130,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
   });
 
   it("keeps covered behaviours from deferring uncovered siblings", () => {
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const auditMode = readMarkdownSection(skillPath, "Audit Mode");
 
       assert.match(
@@ -146,7 +146,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      canonicalSkillReferencePaths("goat-qa", "references/output-templates.md"),
       (referencePath) => {
         const outputTemplates = readProjectFile(referencePath);
         const auditOutputHeading = "### Audit mode (no diff - A1–A4 shape)";
@@ -163,7 +163,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
   });
 
   it("lets an explicit read-only investigation pass its scope checkpoint", () => {
-    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-debug"), (skillPath) => {
       const investigateMode = readMarkdownSection(
         skillPath,
         "Investigate Mode",
@@ -332,11 +332,11 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
 
   it("keeps direction audits advisory, grounded, and separate from defect verdicts", () => {
     // Every runner must show the evidence classes and rejection routes behind the concise skill rule.
-    const reviewExamplePaths = INSTALLED_SKILL_ROOTS.map(
+    const reviewExamplePaths = [CANONICAL_SKILL_ROOT].map(
       (skillRoot) => `${skillRoot}/goat-review/references/examples.md`,
     );
 
-    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Direction \/ Opportunity Audit/, skillPath);
       assert.match(skillGuidance, /advisory opportunity output/, skillPath);
@@ -375,7 +375,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     const proofClassContract =
       /RUNTIME\s*\|\s*CONTRACT-GREP\s*\|\s*STATIC\s*\|\s*NOT-REPRODUCED/;
 
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-security"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, proofClassContract, skillPath);
       const outputPath = skillPath.replace(
@@ -387,7 +387,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       assert.match(output, /Proof classes:/, outputPath);
     });
 
-    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /skill-preamble\.md/u, skillPath);
       // Shared proof classes apply to all claims; QA additionally extends the Proof Gate beyond completion claims.
@@ -398,7 +398,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       );
     });
     assertForEachTarget(
-      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      canonicalSkillReferencePaths("goat-qa", "references/output-templates.md"),
       (referencePath) => {
         const outputTemplates = readProjectFile(referencePath);
         assert.match(
@@ -415,7 +415,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       },
     );
 
-    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+    assertForEachTarget(canonicalSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, proofClassContract, skillPath);
       assert.match(
@@ -480,7 +480,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       assertSectionPatterns(playbookPath, "Diagnostic Router", [
         /writing-sentence-diagnostics\.md[\s\S]+sentence-level reader cost/u,
         /writing-structure-diagnostics\.md[\s\S]+document-level assembly defect/u,
-        /Do not load either diagnostic playbook for a small edit that passes the minimum core checks/u,
+        /Small edits passing the core checks skip diagnostics/u,
       ]);
       assertSectionPatterns(playbookPath, "Correctness and Meaning", [
         /names, numbers, units, versions, flags, options, and paths/u,
@@ -522,6 +522,47 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
         /status, requirement level, uncertainty, and provenance/u,
         /Scope Gate[\s\S]+source classification applied/u,
         /claim strength, attribution, and cited claims/u,
+      ]);
+    }
+  });
+
+  it("routes only qualifying prose to the fidelity audit", () => {
+    for (const playbookPath of [
+      "workflow/skills/playbooks/writing-human-facing-prose.md",
+      ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
+    ]) {
+      assertSectionPatterns(playbookPath, "Diagnostic Router", [
+        /writing-fidelity-audit\.md[^\n]+substantive recomposition or derivation with distinct claims, or unresolved fidelity/u,
+        /routine corrections and unchanged prose alone do not trigger it/u,
+      ]);
+    }
+  });
+
+  it("keeps the fidelity audit source-visible, two-way and bounded", () => {
+    for (const playbookPath of [
+      "workflow/skills/playbooks/writing-fidelity-audit.md",
+      ".goat-flow/skill-docs/playbooks/writing-fidelity-audit.md",
+    ]) {
+      assertSectionPatterns(playbookPath, "Availability Check", [
+        /source of truth and the proposed revision together/u,
+        /Derivation alone does not trigger it/u,
+        /minimal corrections and compliant unchanged prose do not automatically require/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Compare in Both Directions", [
+        /source to revision/u,
+        /revision to source/u,
+        /authorised summary omission/u,
+        /task authority alone does not supply missing facts/u,
+        /actor, action, number, identifier, scope, condition, qualifier, certainty, commitment and speech act/u,
+        /superior-authority correction/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Record the Result", [
+        /every modified qualifying human-prose unit once/u,
+        /existing unit and change records instead of duplicating them/u,
+        /Minimal edits and compliant unchanged prose do not gain compulsory detailed ledgers/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Verification", [
+        /unsupported meaning change stops the affected rewrite or judgment/u,
       ]);
     }
   });

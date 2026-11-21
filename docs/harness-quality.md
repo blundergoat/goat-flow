@@ -63,7 +63,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 **Quality evaluates:**
 - Are Ask First boundaries specific to real risk areas in this codebase, or generic placeholders?
-- Do both policy hooks pass their self-tests (`deny-dangerous.sh --self-test` and `deny-git-mutations.sh --self-test`)?
+- Do both policy hooks pass their self-tests (`deny-dangerous.mjs --self-test` and `deny-git-mutations.mjs --self-test`)?
 - Does `.goat-flow/config.yaml` stay lean and accurate for this project? Optional project-calibration fields such as `toolchain` are valid only when they reflect real commands; their absence is not a setup gap.
 - Are there static analysis tools in the project's package manifest that aren't registered as constraints?
 
@@ -78,7 +78,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 ### 4. Recovery
 
-**Audit checks:** plans directory exists, session logs directory exists.
+**Audit checks:** plans directory exists, session logs directory exists, and present instruction files name the milestone start, stop/finalize commands and immediate tick rule. The command check is score-only and cannot establish that the agent followed the instructions.
 
 **Quality evaluates:**
 - Are recovery instructions clear about optional task files versus session logs?

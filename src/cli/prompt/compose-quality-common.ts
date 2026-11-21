@@ -28,6 +28,8 @@ export interface QualityInput {
   auditReport: AuditReport | null;
   auditUnavailableReason?: AuditUnavailableReason | undefined;
   priorReport?: QualityHistoryEntry | null;
+  /** Latest same-mode reports from other agents; rendered as claims without their scores. */
+  otherAgentReports?: QualityHistoryEntry[];
   qualityMode?: QualityMode;
   selectedProjectPath?: string | undefined;
   runDate?: string;
@@ -545,16 +547,22 @@ export function markdownTableCell(cellText: string): string {
  *
  * @param priorReport - selected same-mode report; null produces no-prior guidance
  * @param qualityMode - active mode used to describe a missing prior report
+ * @param otherAgentReports - latest same-mode peer reports; absent input adds no peer block
  * @returns Markdown context block ready for prompt composition
  */
 export function renderPriorReportContext(
   priorReport: QualityHistoryEntry | null,
   qualityMode: QualityMode,
+  otherAgentReports?: QualityHistoryEntry[],
 ): string {
   const lines: string[] = [];
   lines.push("---");
   lines.push("");
   lines.push("## Prior report context");
+  lines.push("");
+  lines.push(
+    "Assess a quiescent checkout. Record any snapshot drift as a grounding limit and re-check affected claims before retaining them.",
+  );
   lines.push("");
   // A saved same-mode report gives the user concrete claims to re-test; null starts a clean baseline instead.
   if (priorReport) {
@@ -657,7 +665,54 @@ export function renderPriorReportContext(
       "Set top-level `prior_report_id` to `null` because no prior same-agent report context was provided.",
     );
   }
+  lines.push(...renderOtherAgentClaims(otherAgentReports));
   return lines.join("\n");
+}
+
+/**
+ * Render serious peer claims for independent verification.
+ * Invariant: at most five per peer, without scores, detail text or obsolete write-policy findings.
+ * Empty peer histories add no heading; saved claims always require independent verification.
+ */
+function renderOtherAgentClaims(reports: QualityHistoryEntry[] = []): string[] {
+  const rows: string[] = [];
+  for (const entry of reports) {
+    const findings = entry.report.findings
+      .filter(
+        (finding) =>
+          (finding.severity === "BLOCKER" || finding.severity === "MAJOR") &&
+          !isSupersededLocalArtifactWriteFinding(finding),
+      )
+      .sort(
+        (left, right) =>
+          qualityFindingSeverityRank(left.severity) -
+            qualityFindingSeverityRank(right.severity) ||
+          left.id.localeCompare(right.id),
+      )
+      .slice(0, 5);
+    // A peer with no current serious claims contributes no empty or misleading heading.
+    if (findings.length === 0) continue;
+    rows.push(
+      `- Agent ${entry.agent}; report \`${renderPriorFindingSummary(entry.id)}\` (${entry.report.run_date})`,
+    );
+    for (const finding of findings) {
+      const file = finding.file
+        ? renderPriorFindingSummary(finding.file)
+        : "no file recorded";
+      rows.push(
+        `  - ${finding.severity} | ${file} | ${renderPriorFindingSummary(finding.summary)}`,
+      );
+    }
+  }
+  if (rows.length === 0) return [];
+  return [
+    "",
+    "### Other agents' claims to re-check",
+    "",
+    "These are unscored claims to re-verify, not evidence or findings for this run. Independently test their premises; do not inherit peer scores, severity decisions or delta tags.",
+    "",
+    ...rows,
+  ];
 }
 
 /**

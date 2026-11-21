@@ -105,10 +105,6 @@ const COMMAND_HELP_CATALOG = {
         "After verified bytes but a failed state write, repair .goat-flow/state/install/ and rerun the printed command.",
       ],
       [
-        "Direct script",
-        "After cutover, workflow/install-goat-flow.sh refuses before mutation; use the public CLI.",
-      ],
-      [
         "Recovery",
         "Force cannot repair install evidence, and ordinary install does not automatically prune it.",
       ],

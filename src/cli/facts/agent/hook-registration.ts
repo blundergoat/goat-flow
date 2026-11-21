@@ -15,27 +15,29 @@ interface HookRegistrationMatch {
   path: string | null;
 }
 
-/** Normalize hook command arguments into a repo-relative shell-script path. */
+/** Normalize native and legacy hook operands into a project-relative script path. */
 function normalizeHookPath(candidate: string): string | null {
   if (!candidate) return null;
   let path = candidate.trim();
   if (!path) return null;
   path = path.replace(/^['"`]|['"`]$/g, "");
-  // Hook launchers prefix the script path with a resolved repo root, either as an inline substitution ($(git rev-parse --show-toplevel)/...sh) or a
-  // shell variable ($root/...sh, $REPO/...sh) populated earlier in the command.
+  // Hook launchers prefix the script path with a root substitution or variable in legacy registrations.
+  // Strip that prefix before comparing either script extension as a project-relative path.
   // Strip either prefix so callers see a repo-relative script path.
-  const substitutionMatch = path.match(/\$(?:\([^)]*\)|\{?\w+\}?)\/(.*\.sh)$/);
+  const substitutionMatch = path.match(
+    /\$(?:\([^)]*\)|\{?\w+\}?)\/(.*\.(?:mjs|sh))$/,
+  );
   if (substitutionMatch && substitutionMatch[1]) {
     path = substitutionMatch[1];
   }
-  if (!path.endsWith(".sh")) return null;
+  if (!/\.(?:mjs|sh)$/u.test(path)) return null;
   return path;
 }
 
-/** Extract normalized shell-script paths from one hook command string. */
+/** Extract native and legacy script operands from one configured hook command. */
 function extractHookPathsFromCommand(command: string): string[] {
   const pathCandidates: string[] = [];
-  const quotedMatches = command.matchAll(/["']([^"']+\.sh)["']/g);
+  const quotedMatches = command.matchAll(/["']([^"']+\.(?:mjs|sh))["']/g);
   for (const match of quotedMatches) {
     const path = match[1];
     if (path === undefined) continue;
@@ -43,7 +45,7 @@ function extractHookPathsFromCommand(command: string): string[] {
     if (normalized) pushUniquePath(pathCandidates, normalized);
   }
 
-  const unquotedMatches = command.matchAll(/([^\s"'`]+\.sh)/g);
+  const unquotedMatches = command.matchAll(/([^\s"'`]+\.(?:mjs|sh))/g);
   for (const match of unquotedMatches) {
     const path = match[1];
     if (path === undefined) continue;
@@ -73,7 +75,9 @@ function preferredHookPathFromCommands(commands: string[]): string | null {
   }
 
   return (
+    paths.find((path) => path.endsWith("/post-turn-safety.mjs")) ??
     paths.find((path) => path.endsWith("/post-turn-safety.sh")) ??
+    paths.find((path) => path.endsWith("/deny-dangerous.mjs")) ??
     paths.find((path) => path.endsWith("/deny-dangerous.sh")) ??
     paths.find((path) => path.endsWith("/guard-repository-writes.sh")) ??
     paths.find((path) => !path.endsWith("/plan-checkbox-guard.sh")) ??
@@ -206,14 +210,23 @@ function normalizePolicyEventConfig(
   const paths = extractCommandsFromEventConfig(hooks, event).flatMap(
     extractHookPathsFromCommand,
   );
-  const exact = paths.find(
-    (path) => path === `${hookId}.sh` || path.endsWith(`/${hookId}.sh`),
-  );
+  const exact =
+    paths.find(
+      (path) => path === `${hookId}.mjs` || path.endsWith(`/${hookId}.mjs`),
+    ) ??
+    paths.find(
+      (path) => path === `${hookId}.sh` || path.endsWith(`/${hookId}.sh`),
+    );
   // Retain wrong-path evidence for the existing guard's remediation, without mistaking the Git sibling for it.
   const path =
     exact ??
     (hookId === "deny-dangerous"
-      ? paths.find((candidate) => !candidate.endsWith("deny-git-mutations.sh"))
+      ? paths.find(
+          (candidate) =>
+            !/\/(?:deny-git-mutations\.(?:mjs|sh)|run-hook\.mjs|run-with-bash\.mjs)$/u.test(
+              candidate,
+            ),
+        )
       : null) ??
     null;
   return { isRegistered: path !== null, path };

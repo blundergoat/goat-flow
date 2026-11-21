@@ -6,6 +6,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import { join } from "node:path";
 
 import { getAgentProfiles } from "./agents/registry.js";
 import type { HookScenario } from "./cli-types.js";
@@ -161,7 +162,7 @@ function configuredRegistrationReasonCode(
   return null;
 }
 
-/** Host-owned Windows paths the managed launcher consumes for discovery and cleanup. */
+/** Host paths used by the Windows launcher and PowerShell's module discovery. */
 const WINDOWS_MANAGED_ENVIRONMENT_KEYS = [
   "SystemRoot",
   "WINDIR",
@@ -169,6 +170,7 @@ const WINDOWS_MANAGED_ENVIRONMENT_KEYS = [
   "ProgramW6432",
   "ProgramFiles(x86)",
   "LOCALAPPDATA",
+  "PSModulePath",
   "TEMP",
   "TMP",
 ] as const;
@@ -253,7 +255,7 @@ export function managedHookEnvironment(
     LANG: "C",
     LC_ALL: "C",
   };
-  // Windows launcher discovery and timeout cleanup need only these host-owned path variables.
+  // Preserve Windows launcher paths and the registered PowerShell command's module search path.
   if (platform === "win32") {
     Object.assign(
       managedEnvironment,
@@ -500,7 +502,8 @@ function executeConfiguredFeedbackProbe(
   const startedAt = performance.now();
   const probe = agentHookSpawnDescriptor(configuredHandler);
   const execution = spawnSync(probe.command, probe.args, {
-    cwd: projectPath,
+    cwd: probe.cwd ? join(projectPath, probe.cwd) : projectPath,
+    windowsVerbatimArguments: probe.windowsVerbatimArguments,
     encoding: "utf-8",
     env: { ...managedHookEnvironment(projectPath), ...probe.env },
     input: scenario.payload,

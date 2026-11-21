@@ -195,7 +195,7 @@ flowchart TD
     P1 --> P2["Phase 2: Emit the proportional plan\nor report read-only analysis"]
     P2 -->|"Plan/design only"| Planned["Stop after plan handoff"]
     P2 -->|"return-to-implement"| ACT["Ordinary ACT implementation"]
-    ACT --> P3["Phase 3: Fresh proof\nHuman verification gate"]
+    ACT --> P3["Phase 3: Clarity, proof, review and repair\nHuman verification gate"]
     P3 -->|"BLOCKING GATE"| Next{"Next milestone?"}
     Next -->|Yes| P3
     Next -->|No| P4["Phase 4: Final proof\nHuman completion gate"]
@@ -206,13 +206,15 @@ flowchart TD
 
 **Planning lenses:** Prove It Works, Make It Real, Make It Solid, and Make It Shine are optional planning lenses, not required phases. A spike exists only for a named uncertainty. Lenses merge or disappear when they do not reduce uncertainty, deliver independent value, or create a real decision gate.
 
-**Artifacts and proof:** Small plans target one screen. Standard overviews put outcome, budget, must-deliver scope, exclusions, risk, proof, and next action first. Milestones keep tasks executable for a fresh agent, organise proof as claim → evidence, give each command one home, and omit empty sections. Delivery bands in `ISSUE.md` are roll-ups of milestone forecasts, never inputs used to size those milestones.
+**Artifacts and proof:** Small plans target one screen. Standard overviews put outcome, budget, must-deliver scope, exclusions, risk, proof, and next action first. Milestones keep tasks executable for a fresh agent, organise proof as claim → evidence, give each command one home, and omit empty sections. Task minutes in `ISSUE.md` are the likely figures from milestone forecasts, never inputs used to size those milestones; each task also gets a bullet on what it gives the user and a before-and-after row.
 
 **Agent-time forecasts:** Count positive agent-owned Task, Proof, Mid-proof, and admin entries; exclude `[HUMAN]` and zero-minute items. Separate independently verifiable changes and foreground proof executions, including repeats; reusing completed evidence adds no run. Below three eligible selected-plan bases, use the `1.0-2.5-6 min/unit` cold prior; otherwise use the rates shown by `plans check`. A fast case needs measured feasibility evidence or an explicit provisional label, bounded investigation, stop condition and reforecast checkpoint. Preserve issued whole forecasts and append remaining-work revisions at closed receipt cutoffs; the overview combines recorded effort with that remaining forecast. See [Forecast context and history](cli.md#forecast-context-and-history) for the record grammar and per-plan registration contract.
 
 **Experimental history:** `contextual-v1` remains opt-in. It matches registered earlier measurements by known work state, scope kind and rubric; sparse or missing context retains the selected-plan numerical fallback. Broad pooling is diagnostic, and short valid receipts remain valid without establishing fresh-work comparability. Behavior tests and saved context do not qualify default promotion; prospective accuracy evidence is still required.
 
 **Execution and recovery:** Authorized build/change requests may return to ordinary ACT without another implementation-approval pause. Every milestone still stops on invalidated assumptions, kill criteria, changed scope, or conflicting evidence. Fresh proof records actual effort before the blocking human gate. Reconciliation without requested edits remains read-only, and plan state remains local workflow context. Naming a creation destination or editing another plan leaves a valid active marker unchanged; explicitly selecting a fresh active plan permits the switch.
+
+**Milestone review:** Capture the starting state and owned changes before editing. After scoped clarity and required checks, run both review passes at the selected risk depth. Make only authorized repairs, refresh affected proof and revisit changed conclusions before human handoff. Standalone review remains report-only; progress names the next permitted action and current proof.
 
 **Completion:** Final closure requires current evidence and human approval. `/goat-plan` never infers approval, silently weakens requirements, auto-runs `/goat-critique`, or writes self-deletion instructions.
 
@@ -435,6 +437,8 @@ provenance stay prohibited.
 Other references remain only when they supply the durable contract, removal trigger or verification path.
 
 Naming and placement diagnosis runs before comment work so prose does not compensate for a weak name. A request to inspect every method or branch remains exhaustive, but prose is added only for verified hidden reader information. A false comment caused by defective behaviour stays byte-stable as `BLOCKED-ON-BEHAVIOUR` and routes to debugging. Safe apply permits diagnosed clarity changes inside frozen paths. An explicit current user instruction naming a private symbol and its destination can authorize its move wholly inside one frozen writable file, with behavior and compatibility preserved. A general clarity request or diagnosis alone needs a Scope v2 proposal; cross-file or uncertain placement still needs second approval. Public parameters in languages with named arguments and serialized or returned keys remain compatibility surfaces routed to planning. Scope v2 allows enumerated public/exported identifier renames plus mechanical references only after a second approval; the initial request does not satisfy it. The gate names every identifier, exact affected writable paths, and per-identifier compatibility impact. One approval covers only the disclosed set; an added identifier needs another gate. Require explicit user acceptance for each compatibility break. Scope v2 cannot approve behaviour, signature-shape, serialization, persisted-data, migration, or test-meaning changes.
+
+The skill reads `references/target-scope-and-evidence.md` for selector and snapshot rules and `references/receipt-evidence.md` for status and receipt evidence on every run. Substantive recomposition or derivation with distinct claims, or unresolved fidelity, loads the fidelity audit with the source visible. The existing `Meaning audit:` field maps each qualifying modified human-prose unit once to source-linked dropped, changed or added claims; otherwise it records `none`. Routine corrections and unchanged prose require no detailed audit.
 
 Every run ends with separate selected-unit, changed-span, and command-evidence ledgers. Classification and outcome totals each reconcile to the inventory;
 protected and context-only units are counted apart from excluded units. `Documentation writes: granted | withheld` states permission separately from authority.

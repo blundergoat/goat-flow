@@ -1,18 +1,22 @@
 /**
  * Replay the selected project's deny hooks when the caller has authorized trusted-target execution.
  *
- * Configured launchers receive safe and blocked requests; undiscovered or unreadable registrations use a direct-script fallback.
+ * Configured launchers receive safe and blocked requests; unavailable native registrations produce an explicit failure.
  * Results describe these local replays, without proving external agent delivery during a live session.
  */
 import * as childProcess from "node:child_process";
-import { existsSync } from "node:fs";
-import { join, posix } from "node:path";
 import {
-  buildInstallerSpawnSpec,
-  discoverWindowsBashCandidates,
-  pickWindowsBashPath,
-  toBashPath,
-} from "../install-invocation.js";
+  closeSync,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, posix } from "node:path";
+import { agentHookSpawnDescriptor } from "../hook-spawn-descriptor.js";
+import type { InstallerSpawnSpec } from "../install-invocation.js";
 import type { AuditContext, AuditFailure } from "./types.js";
 
 /**
@@ -144,17 +148,6 @@ function spawnFailureFromResult(
  */
 function runtimeProbeEnvironment(hookInput: string): NodeJS.ProcessEnv {
   return { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: hookInput };
-}
-
-/**
- * Pipe one policy request into the exact shell command registered in the trusted target.
- * Preserve launcher syntax because rewriting it could conceal a broken registration.
- *
- * @param configuredHookCommand - registered shell text; empty leaves an invalid empty command group
- * @returns non-empty replay pipeline containing the payload command and configured launcher
- */
-function pipeRuntimeProbeTo(configuredHookCommand: string): string {
-  return `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${configuredHookCommand}; }`;
 }
 
 /**
@@ -336,13 +329,14 @@ function configuredRuntimeProbes(
  */
 function registeredDenyRelPath(
   agentFacts: AuditContext["agents"][number],
+  scriptFile = "deny-dangerous.sh",
 ): string | null {
   // Prefer the registered path so a hand-edited installation is checked against its own hook target.
   if (agentFacts.hooks.denyRegisteredPath)
     return agentFacts.hooks.denyRegisteredPath;
   // No hook directory means setup, rather than runtime audit, owns the next action.
   if (!agentFacts.agent.hooksDir) return null;
-  return join(agentFacts.agent.hooksDir, "deny-dangerous.sh");
+  return join(agentFacts.agent.hooksDir, scriptFile);
 }
 
 /**
@@ -351,8 +345,9 @@ function registeredDenyRelPath(
  */
 function normalizedRegisteredDenyRelPath(
   agentFacts: AuditContext["agents"][number],
+  scriptFile = "deny-dangerous.sh",
 ): string | null {
-  const registeredPath = registeredDenyRelPath(agentFacts);
+  const registeredPath = registeredDenyRelPath(agentFacts, scriptFile);
   // Without an expected hook location, audit cannot compare the launcher's target with a registration.
   if (registeredPath === null) return null;
   return posix.normalize(
@@ -394,8 +389,9 @@ function extractConfiguredScriptPath(
   const withoutShellComment =
     command.replace(/\\/g, "/").split("#", 1)[0] ?? "";
   // Inspect each script token; no tokens means there is no managed path to validate.
-  for (const candidate of withoutShellComment.match(/[^\s"'`;|&{}]+\.sh/gu) ??
-    []) {
+  for (const candidate of withoutShellComment.match(
+    /[^\s"'`;|&{}]+\.(?:sh|mjs)/gu,
+  ) ?? []) {
     // Other script names are user hooks outside this managed deny check.
     if (posix.basename(candidate) !== scriptFile) continue;
     // A launcher may prefix its managed path with $root; compare the remaining project-relative operand.
@@ -481,6 +477,7 @@ function pushConfiguredCommand(
   command: unknown,
   commandWindows: unknown,
   configPath: string,
+  managedScripts: readonly string[],
 ): void {
   // Empty or non-text values cannot be launchers the user's agent will run.
   if (typeof command !== "string" || command.length === 0) return;
@@ -490,7 +487,7 @@ function pushConfiguredCommand(
   const commandSearchText = [command, configuredWindowsCommand ?? ""].join(
     "\n",
   );
-  const managedScriptFile = CONFIGURED_RUNTIME_SCRIPTS.find((script) =>
+  const managedScriptFile = managedScripts.find((script) =>
     commandsReferenceScriptToken(commandSearchText, script),
   );
   // Unrelated user hooks stay outside the managed runtime audit.
@@ -522,6 +519,7 @@ function pushConfiguredArgvCommand(
   command: unknown,
   argumentValues: unknown[],
   configPath: string,
+  managedScripts: readonly string[],
 ): void {
   // A runnable exec-form row needs one executable string beside its argument array.
   if (typeof command !== "string" || command.length === 0) return;
@@ -530,7 +528,7 @@ function pushConfiguredArgvCommand(
       typeof argumentValue === "string",
   );
   const argumentText = stringArguments.join("\n");
-  const managedScriptFile = CONFIGURED_RUNTIME_SCRIPTS.find((script) =>
+  const managedScriptFile = managedScripts.find((script) =>
     commandsReferenceScriptToken(argumentText, script),
   );
   // Unrelated user hooks stay outside the managed runtime audit.
@@ -555,17 +553,19 @@ function pushConfiguredArgvCommand(
  *
  * @param configPath - settings path retained so a finding identifies the file to repair
  * @param commands - handler queue mutated in place; initially empty means no handlers have been discovered
+ * @param managedScripts - exact installed or explicitly selected candidate filenames; other user hooks are ignored
  */
 function collectNestedCommandValues(
   configNode: unknown,
   configPath: string,
   commands: ConfiguredHookCommand[],
+  managedScripts: readonly string[],
 ): void {
   // Agents nest hook registrations differently, so both arrays and objects are walked rather than assuming one layout.
   if (Array.isArray(configNode)) {
     // Visit each registration in a settings array so later handlers are also checked.
     for (const entry of configNode) {
-      collectNestedCommandValues(entry, configPath, commands);
+      collectNestedCommandValues(entry, configPath, commands, managedScripts);
     }
     return;
   }
@@ -574,35 +574,50 @@ function collectNestedCommandValues(
   const obj = configNode as Record<string, unknown>;
   // Exec-form rows carry their operands in args; string rows keep shell text in command.
   if (Array.isArray(obj.args)) {
-    pushConfiguredArgvCommand(commands, obj.command, obj.args, configPath);
+    pushConfiguredArgvCommand(
+      commands,
+      obj.command,
+      obj.args,
+      configPath,
+      managedScripts,
+    );
   } else {
     pushConfiguredCommand(
       commands,
       obj.command,
       obj.commandWindows,
       configPath,
+      managedScripts,
     );
   }
-  pushConfiguredCommand(commands, obj.bash, undefined, configPath);
+  // Copilot keeps its Windows PowerShell command in `powershell` beside the Bash command.
+  pushConfiguredCommand(
+    commands,
+    obj.bash,
+    obj.powershell,
+    configPath,
+    managedScripts,
+  );
   // Look through nested settings objects for managed registrations.
   for (const child of Object.values(obj)) {
     // Nested objects may contain handlers; null children are ignored by the next visit.
     if (typeof child === "object") {
-      collectNestedCommandValues(child, configPath, commands);
+      collectNestedCommandValues(child, configPath, commands, managedScripts);
     }
   }
 }
 
 /**
  * Read and deduplicate the managed deny commands audit can discover in one agent's settings.
- * Missing or malformed settings recover as an empty list, allowing the caller's direct-script fallback.
+ * Missing or malformed settings recover as an empty list, which the runtime check reports as unavailable.
+ * Discovery reads native .mjs registrations without executing hooks.
  *
  * @param ctx - audit context supplying the selected project's filesystem
  *
  * @param agentFacts - agent whose configured handlers are read
  * @returns discovered managed handlers; empty means none were extracted, not that the agent has no protection
  */
-function configuredGuardCommands(
+export function configuredGuardCommands(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
 ): ConfiguredHookCommand[] {
@@ -621,7 +636,10 @@ function configuredGuardCommands(
     return [];
   }
   const commands: ConfiguredHookCommand[] = [];
-  collectNestedCommandValues(parsed, configPath, commands);
+  const managedScripts = CONFIGURED_RUNTIME_SCRIPTS.map((script) =>
+    script.replace(/\.sh$/u, ".mjs"),
+  );
+  collectNestedCommandValues(parsed, configPath, commands, managedScripts);
   const seen = new Set<string>();
   return commands.filter((command) => {
     // Args join the identity so two handlers sharing one executable stay distinct.
@@ -658,10 +676,12 @@ function describeConfiguredCommand(configured: ConfiguredHookCommand): string {
 function configuredHookExecutable(configured: ConfiguredHookCommand): string {
   // Exec-form failures must name the configured executable in installation or permission advice.
   if (configured.args !== null) return configured.command;
-  // Shell registrations select PowerShell for a Windows override and Bash otherwise.
+  // Preserve a saved Windows override when classifying a configured launch failure.
   return process.platform === "win32" && configured.commandWindows !== null
     ? "powershell.exe"
-    : "bash";
+    : configured.scriptFile.endsWith(".mjs")
+      ? "node"
+      : "bash";
 }
 
 /**
@@ -681,12 +701,13 @@ function configuredHookCommandPathFailure(
     return `${agentFacts.agent.id} configured hook command does not name an exact managed hook script path: ${describeConfiguredCommand(configured)}`;
   }
   const expectedScriptPath =
-    configured.scriptFile === "deny-git-mutations.sh"
+    configured.scriptFile === "deny-git-mutations.sh" ||
+    configured.scriptFile === "deny-git-mutations.mjs"
       ? (agentFacts.hooks.gitDenyRegisteredPath ??
         (agentFacts.agent.hooksDir
-          ? `${agentFacts.agent.hooksDir}/deny-git-mutations.sh`
+          ? `${agentFacts.agent.hooksDir}/${configured.scriptFile}`
           : null))
-      : normalizedRegisteredDenyRelPath(agentFacts);
+      : normalizedRegisteredDenyRelPath(agentFacts, configured.scriptFile);
   // When registration supplies an expected path, a different target requires the user to repair the launcher.
   if (
     expectedScriptPath !== null &&
@@ -708,6 +729,9 @@ function configuredHookProbeLocations(
   label: string;
   cwd: string;
 }> {
+  if (agentFacts.agent.id === "antigravity") {
+    return [{ label: ".agents", cwd: join(ctx.projectPath, ".agents") }];
+  }
   const probeLocations = [{ label: "project root", cwd: ctx.projectPath }];
   // Copilot supplies its workspace root, so one root replay matches its user flow.
   if (agentFacts.agent.id === "copilot") return probeLocations;
@@ -777,6 +801,69 @@ function configuredHookProbeFailureFromResult(
 }
 
 /**
+ * Spawns an explicitly selected native handler; writes and removes finite Windows input to preserve EOF.
+ * Throws on non-native operands or filesystem failures rather than manufacturing a policy result.
+ */
+function spawnNativeConfiguredHookProbe(
+  configured: ConfiguredHookCommand,
+  input: string,
+  cwd: string,
+): childProcess.SpawnSyncReturns<string> {
+  if (
+    !configured.scriptFile.endsWith(".mjs") ||
+    !configured.scriptPath?.endsWith(".mjs")
+  ) {
+    throw new Error("native replay requires a managed .mjs policy operand");
+  }
+  const descriptor = agentHookSpawnDescriptor(
+    configured.args !== null
+      ? {
+          form: "argv",
+          command: configured.command,
+          args: configured.args,
+          bash: "exit 0",
+          powershell: "exit 0",
+        }
+      : {
+          form: "shell",
+          command: configured.command,
+          ...(configured.commandWindows !== null
+            ? { commandWindows: configured.commandWindows }
+            : {}),
+        },
+    process.platform,
+  );
+  const options = {
+    cwd,
+    windowsVerbatimArguments: descriptor.windowsVerbatimArguments,
+    encoding: "utf8" as const,
+    env: { ...runtimeProbeEnvironment(input), ...descriptor.env },
+    timeout: 5000,
+  };
+  if (descriptor.command !== "powershell.exe") {
+    return childProcess.spawnSync(descriptor.command, descriptor.args, {
+      ...options,
+      input,
+    });
+  }
+  // Windows PowerShell needs finite file input so the registered bootstrap observes EOF.
+  const directory = mkdtempSync(join(tmpdir(), "goat-audit-native-input-"));
+  let inputDescriptor: number | null = null;
+  try {
+    const path = join(directory, "payload.json");
+    writeFileSync(path, input, { flag: "wx", mode: 0o600 });
+    inputDescriptor = openSync(path, "r");
+    return childProcess.spawnSync(descriptor.command, descriptor.args, {
+      ...options,
+      stdio: [inputDescriptor, "pipe", "pipe"],
+    });
+  } finally {
+    if (inputDescriptor !== null) closeSync(inputDescriptor);
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+/**
  * Spawns one bounded policy replay using the trusted target's exact configured invocation.
  *
  * The caller must authorize target execution before entering this runtime path.
@@ -787,47 +874,17 @@ function configuredHookProbeFailureFromResult(
  *
  * @param workingDirectoryPath - selected project root or managed directory used as the replay's working directory
  * @returns process result; null status means no child exit code was recorded
+ * @throws when explicit native replay fails operand admission or temporary input handling
  */
-function spawnConfiguredHookProbe(
+export function spawnConfiguredHookProbe(
   configured: ConfiguredHookCommand,
   runtimeProbe: RuntimeProbeExpectation,
   workingDirectoryPath: string,
 ): childProcess.SpawnSyncReturns<string> {
-  // Exec-form handlers receive the policy request on stdin without shell retokenization.
-  if (configured.args !== null) {
-    return childProcess.spawnSync(configured.command, configured.args, {
-      cwd: workingDirectoryPath,
-      encoding: "utf8",
-      env: process.env,
-      input: runtimeProbe.hookInput,
-      timeout: 5000,
-    });
-  }
-  // Codex users on native Windows run the registered PowerShell override directly.
-  if (process.platform === "win32" && configured.commandWindows !== null) {
-    return childProcess.spawnSync(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", configured.commandWindows],
-      {
-        cwd: workingDirectoryPath,
-        encoding: "utf8",
-        env: runtimeProbeEnvironment(runtimeProbe.hookInput),
-        input: runtimeProbe.hookInput,
-        timeout: 5000,
-      },
-    );
-  }
-  // Other shell registrations pipe the request exactly as their Bash command expects.
-  return childProcess.spawnSync(
-    "bash",
-    ["-c", pipeRuntimeProbeTo(configured.command)],
-    {
-      cwd: workingDirectoryPath,
-      encoding: "utf8",
-      env: runtimeProbeEnvironment(runtimeProbe.hookInput),
-      input: "",
-      timeout: 5000,
-    },
+  return spawnNativeConfiguredHookProbe(
+    configured,
+    runtimeProbe.hookInput,
+    workingDirectoryPath,
   );
 }
 
@@ -851,7 +908,7 @@ function verifyConfiguredHookRuntime(
   }
   const runtimeProbes = configuredRuntimeProbes(
     agentFacts.agent.id,
-    configured.scriptFile,
+    configured.scriptFile.replace(/\.mjs$/u, ".sh"),
   );
   // Replay the root and any selected managed directory to expose working-directory-dependent launcher failures.
   for (const probeLocation of configuredHookProbeLocations(ctx, agentFacts)) {
@@ -876,41 +933,51 @@ function verifyConfiguredHookRuntime(
   return { ok: true, message: "", evidence: configured.configPath };
 }
 
+/** Prepare a native direct audit process; failures retain actionable launcher guidance. */
+function directHookInvocation(
+  projectPath: string,
+  denyRelPath: string,
+  hookInput: string,
+): InstallerSpawnSpec | SpawnFailure {
+  const hookPath = join(projectPath, denyRelPath);
+  if (!denyRelPath.endsWith(".mjs")) {
+    return {
+      message: "Native direct audit requires a .mjs hook.",
+      howToFix: "Run goat-flow hooks sync to install the native policy hook.",
+    };
+  }
+  return {
+    command: process.execPath,
+    args: [hookPath, "--root", projectPath],
+    env: runtimeProbeEnvironment(hookInput),
+  };
+}
+
 /**
- * Spawns a replay of one blocked request through the installed script when no launcher was discovered.
- * This fallback checks the script's response without verifying configured launcher syntax or external agent delivery.
+ * Spawns one blocked request through a native policy dispatcher; configured handlers remain a separate proof owner.
+ * The dispatcher receives the same provider-shaped input used by configured replay.
+ *
+ * @param ctx - trusted selected project; its root is the child's working directory
+ * @param agentFacts - provider whose input shape and denial response are checked
+ * @param denyRelPath - managed .mjs script operand
+ * @returns local response verdict or launcher repair; a pass does not prove configured or live provider delivery
  */
-function verifyDirectHookRuntime(
+export function verifyDirectHookRuntime(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
   denyRelPath: string,
 ): { ok: boolean; message?: string; howToFix?: string } {
+  const scriptFile = posix.basename(denyRelPath.replaceAll("\\", "/"));
   const blockedProbe = blockedRuntimeProbeForScript(
     agentFacts.agent.id,
-    posix.basename(denyRelPath.replaceAll("\\", "/")),
+    scriptFile.replace(/\.mjs$/u, ".sh"),
   );
-  const bashCommand =
-    process.platform === "win32"
-      ? pickWindowsBashPath(discoverWindowsBashCandidates())
-      : "bash";
-  // A WSL launcher cannot verify a native Windows hook path.
-  if (bashCommand === null) {
-    return {
-      ok: false,
-      message:
-        "No native Windows Bash found for the direct hook runtime check.",
-      howToFix: "Install Git for Windows and rerun the hook audit.",
-    };
-  }
-  const hookPath = join(ctx.projectPath, denyRelPath);
-  const invocation = buildInstallerSpawnSpec(
-    {
-      ok: true,
-      bashCommand,
-      args: [process.platform === "win32" ? toBashPath(hookPath) : hookPath],
-    },
-    runtimeProbeEnvironment(blockedProbe.hookInput),
+  const invocation = directHookInvocation(
+    ctx.projectPath,
+    denyRelPath,
+    blockedProbe.hookInput,
   );
+  if (!("command" in invocation)) return { ok: false, ...invocation };
   const probeResult = childProcess.spawnSync(
     invocation.command,
     invocation.args,
@@ -925,6 +992,7 @@ function verifyDirectHookRuntime(
   const spawnFailure = spawnFailureFromResult(
     probeResult,
     `registered deny hook runtime check for ${agentFacts.agent.id}`,
+    "node",
   );
   // A script that cannot start leaves the user without direct policy proof.
   if (spawnFailure !== null) {
@@ -947,15 +1015,26 @@ function verifyDirectHookRuntime(
 
 /**
  * Replay discovered managed handlers and report the first local runtime failure.
- * Undefined requests the direct-script fallback; null means every discovered handler passed its selected probes.
+ * A missing registration is a failure; null means both policies passed their selected probes.
+ * Replay uses the saved native handlers, preserving their argument and platform forms.
+ *
+ * @param ctx - trusted target root and read-only filesystem snapshot used to discover handlers
+ * @param agentFacts - selected provider and its registered managed policy paths
+ * @returns first replay failure, or null when both policies pass
  */
-function configuredHookRuntimeFailure(
+export function configuredHookRuntimeFailure(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
 ): AuditFailure | null | undefined {
   const configuredLaunchers = configuredGuardCommands(ctx, agentFacts);
-  // No launcher means the user needs the direct-script fallback checked next.
-  if (configuredLaunchers.length === 0) return undefined;
+  // Missing registrations cannot certify either policy through a substitute invocation.
+  if (configuredLaunchers.length === 0) {
+    return {
+      check: "Agent deny mechanism",
+      message: `Native policy registrations are unavailable for ${agentFacts.agent.id}; no runtime replay was verified.`,
+      howToFix: "Run goat-flow hooks sync to register both native policies.",
+    };
+  }
   // Each configured guard must preserve the same safe-and-blocked user outcomes.
   for (const configuredLauncher of configuredLaunchers) {
     const runtimeResult = verifyConfiguredHookRuntime(
@@ -976,7 +1055,8 @@ function configuredHookRuntimeFailure(
     };
   }
   // Check both policy entry points so the audit cannot report complete protection from only one configured launcher.
-  for (const script of CONFIGURED_RUNTIME_SCRIPTS) {
+  for (const installedScript of CONFIGURED_RUNTIME_SCRIPTS) {
+    const script = installedScript.replace(/\.sh$/u, ".mjs");
     // An undiscovered configured launcher leaves that policy's audit evidence incomplete.
     if (
       !configuredLaunchers.some((launcher) => launcher.scriptFile === script)

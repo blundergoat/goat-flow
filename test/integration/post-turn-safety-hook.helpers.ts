@@ -2,16 +2,21 @@
  * Shared fixtures for the post-turn-safety hook suites.
  * The hook scans a turn's changed content for secrets and conflict markers, so every case
  * needs the same scaffolding: a disposable git repo in a precise state, obviously fake
- * tokens shaped like real ones, and a runner that captures the hook's verdict on both the
- * modern and the bash-3 fallback scanner.
+ * tokens shaped like real ones, and a runner that captures the selected Node scanner's verdict.
  *
  * The tokens are assembled from fragments so this file never contains a string a secret
  * scanner - including the hook under test - would rightly flag.
  */
 import assert from "node:assert/strict";
+import {
+  copyHookTree,
+  hookTreeRoot,
+  selectedHookPath,
+  spawnSelectedHook,
+} from "../helpers/hook-entrypoint.js";
+import { basename, isAbsolute } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
-  chmodSync,
   closeSync,
   mkdirSync,
   mkdtempSync,
@@ -21,15 +26,45 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
-export const HOOK_PATH = resolve(
-  PROJECT_ROOT,
-  "workflow/hooks/post-turn-safety.sh",
+export const HOOK_PATH = selectedHookPath(
+  join(hookTreeRoot(), "post-turn-safety.sh"),
 );
 export const FORCE_BASH3_ENV_KEY =
   "GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK";
+
+/**
+ * Install the post-turn hook into a test project the way setup installs it for a consumer, optionally adding code to the scanner child.
+ *
+ * Writes the selected hook folder into `.goat-flow/hooks/`; with `nodeChildCode` it also rewrites the copied scanner entrypoint.
+ *
+ * @param root - temporary test project whose `.goat-flow/hooks/` folder is replaced
+ * @param nodeChildCode - Node code run only inside the controller's scanner child; empty installs the hook unchanged
+ * @returns nothing; the installed files are the result
+ */
+export function installPostTurnHook(root: string, nodeChildCode = ""): void {
+  const hooksDirectory = join(root, ".goat-flow/hooks");
+  copyHookTree(hooksDirectory);
+  // No child code means the test runs the hook exactly as shipped.
+  if (nodeChildCode === "") return;
+  const scannerEntrypoint = join(hooksDirectory, basename(HOOK_PATH));
+  const shippedSource = readFileSync(scannerEntrypoint, "utf8");
+  // The injected code goes after any shebang line and runs only when the controller starts the scanner as its child.
+  const nodeChildGuard =
+    'if (process.env.GOAT_FLOW_POST_TURN_CONTROLLER_CHILD === "1") {\n';
+  const instrumented = shippedSource.replace(
+    /^(#![^\n]*\n)?/u,
+    (opening) => opening + `${nodeChildGuard}${nodeChildCode}\n}\n`,
+  );
+  assert.notEqual(
+    instrumented,
+    shippedSource,
+    "scanner instrumentation must apply",
+  );
+  writeFileSync(scannerEntrypoint, instrumented);
+}
 export const TEST_AWS_ACCESS_KEY = `AKIA${"1234567890ABCDEF"}`;
 export const TEST_GITHUB_TOKEN = `ghp_${"abcdefghijklmnopqrsttestuvwxyzABCD"}`;
 export const TEST_FINE_GRAINED_GITHUB_TOKEN = `github_pat_${"a".repeat(20)}`;
@@ -229,13 +264,52 @@ export function commitAll(root: string, message: string): void {
 }
 
 /**
+ * Writes and commits one tracked file, then appends a line to it, like a user editing a committed file without staging it.
+ *
+ * @param root - committed fixture repository
+ * @param path - repository-relative file to create, commit and edit
+ * @param line - text appended after the committed first line; a multi-line value appends several lines
+ * @returns nothing; the worktree holds the edit and the index still matches HEAD
+ */
+export function appendCommittedLine(
+  root: string,
+  path: string,
+  line: string,
+): void {
+  writeFile(root, path, "export const safe = 1;\n");
+  commitAll(root, `add ${path}`);
+  writeFile(root, path, `export const safe = 1;\n${line}\n`);
+}
+
+/**
+ * Writes, commits and stages an appended line, like a user running `git add`; optionally the worktree is then restored.
+ *
+ * @param root - committed fixture repository
+ * @param path - repository-relative file to create, commit, edit and stage
+ * @param line - text appended and staged
+ * @param isIndexOnly - true restores the committed worktree copy after staging; false leaves worktree and index equal
+ * @returns nothing; the index always holds the appended line
+ */
+export function stageAppendedLine(
+  root: string,
+  path: string,
+  line: string,
+  isIndexOnly: boolean,
+): void {
+  appendCommittedLine(root, path, line);
+  runGit(root, ["add", path]);
+  // Index-only is a user who staged the line and then reverted the file, so only `git diff --cached` still shows it.
+  if (isIndexOnly) writeFile(root, path, "export const safe = 1;\n");
+}
+
+/**
  * Run the real hook against a fixture repo and capture its verdict.
  * The scanner variant is chosen by env so the same case can prove both implementations.
  *
  * @param root - non-empty fixture root the user expects the hook to scan
  * @param env - overrides merged onto the process env; absent means the default scanner
  * @param stdinPayload - optional provider JSON; absent means a direct user run
- * @returns the finished process; null status means Bash did not start for the user
+ * @returns captured process metadata; inspect error and signal when status is null
  */
 export function runHook(
   root: string,
@@ -251,7 +325,7 @@ export function runHook(
  * @param hookArguments - exact CLI options; empty means the normal Stop scan
  * @param env - optional process overrides; absent keeps the user's environment
  * @param stdinPayload - optional provider JSON; absent represents direct human use
- * @returns the finished command; a null status means Bash could not start for the user
+ * @returns captured command metadata; inspect error and signal when status is null
  */
 export function runHookCommand(
   root: string,
@@ -268,7 +342,7 @@ export function runHookCommand(
  * @param hookArguments - selected command options; empty starts a normal scan
  * @param env - optional scanner or failure-injection settings; absent keeps defaults
  * @param stdinPayload - provider JSON; absent closes stdin for a direct user run
- * @returns the completed hook process; a null status means Bash could not launch
+ * @returns captured hook metadata; inspect error and signal when status is null
  */
 function runHookProcess(
   root: string,
@@ -309,7 +383,7 @@ function captureHookOutput(
   try {
     for (const path of [stdoutPath, stderrPath])
       descriptors.push(openSync(path, "wx", 0o600));
-    const result = spawnSync("bash", [HOOK_PATH, ...hookArguments], {
+    const result = spawnSelectedHook(HOOK_PATH, hookArguments, {
       cwd: root,
       encoding: "utf8",
       stdio: [stdin, ...descriptors],
@@ -343,50 +417,179 @@ export function buildStopPayload(
   });
 }
 
+/** A command fault names one absolute executable and its observable failure. */
+export interface CommandFault {
+  when?: {
+    first?: string;
+    prefix?: string[];
+    includes?: string[];
+    any?: string[];
+    absoluteOperand?: boolean;
+  };
+  status?: number;
+  stdout?: string;
+  stdoutEnvironment?: string;
+  stderr?: string;
+  delegateThenRemoveEnvironment?: string;
+}
+
+// Child argv belongs to generated source, separate from the parent fixture's write path.
+function commandFaultSource(
+  declaration: CommandFault & { executable: string },
+): string {
+  return `import { spawnSync } from "node:child_process";
+import { rmSync } from "node:fs";
+const fault = ${JSON.stringify(declaration)};
+const args = process.argv.slice(2);
+const predicate = fault.when ?? {};
+const absolute = args.find((argument) => argument.startsWith("/"));
+const matches = (!predicate.first || args[0] === predicate.first)
+  && (!predicate.prefix || predicate.prefix.every((argument, index) => args[index] === argument))
+  && (!predicate.includes || predicate.includes.every((argument) => args.includes(argument)))
+  && (!predicate.any || predicate.any.some((argument) => args.includes(argument)))
+  && (!predicate.absoluteOperand || absolute !== undefined);
+const delegate = () => spawnSync(fault.executable, args, { stdio: "inherit" }).status ?? 1;
+if (!matches) process.exit(delegate());
+if (fault.delegateThenRemoveEnvironment) {
+  const status = delegate();
+  const path = process.env[fault.delegateThenRemoveEnvironment];
+  if (!path) throw new Error("fault removal target missing");
+  rmSync(path, { force: true });
+  process.exit(status);
+}
+if (fault.stdoutEnvironment) process.stdout.write((process.env[fault.stdoutEnvironment] ?? "") + "\\n");
+if (fault.stdout) process.stdout.write(fault.stdout);
+if (fault.stderr) process.stderr.write(fault.stderr.replaceAll("{{cwd}}", process.cwd()).replaceAll("{{absolute}}", absolute ?? ""));
+process.exit(fault.status ?? 2);
+`;
+}
+
 /**
- * Put one deterministic command shim first on PATH for a bounded failure fixture.
- * The supplied body exits on its target invocation; other calls fall through to
- * the real command using the original PATH.
+ * Make one command misbehave inside the hook's child processes, so a test can check what the user sees when, say, `git` fails mid-scan.
  *
- * @param command - required command name; empty cannot produce a usable shim
- * @param scriptBody - failure predicate; empty delegates every call to the real command
- * @param scenario - required scenario callback given the shim environment; absence runs no proof
- * @returns nothing; the temporary shim is removed after the scenario
+ * Writes a fault driver and a preload to a temporary directory; the preload sends only the declared command to the driver.
+ * The driver applies the fault's predicates, output and exit status the same way on every host, then the directory is removed.
+ *
+ * @param executable - absolute path of the command to fault, resolved by the caller without shell lookup
+ * @param fault - predicates, output and exit status the driver applies
+ * @param scenario - assertions run with the fault environment; NODE_OPTIONS loads the preload in each hook child
+ * @returns nothing; the temporary directory is removed even when the scenario throws
  */
 export function withCommandShim(
-  command: string,
-  scriptBody: string,
+  executable: string,
+  fault: CommandFault,
   scenario: (env: Record<string, string>) => void,
 ): void {
+  assert(isAbsolute(executable), "fault target must be an absolute executable");
   const shimRoot = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-shim-"));
-  // A missing PATH represents a user environment where only the test shim is discoverable.
-  const originalPath = process.env.PATH ?? "";
-  // Resolve before installing the shim; a nested Bash -> Node -> Bash trip can convert an env-carried search path twice.
-  const realCommand = spawnSync(
-    "bash",
-    ["-c", 'command -v "$1"', "sh", command],
-    { encoding: "utf8" },
-  );
-  assert.equal(realCommand.status, 0, realCommand.stderr);
-  const quotedExecutable = `'${realCommand.stdout.trim().replaceAll("'", "'\\''")}'`;
+  const driver = join(shimRoot, "fault.mjs");
+  const preload = join(shimRoot, "fault-preload.cjs");
+  const declaration = { executable, ...fault };
   try {
-    const commandPath = join(shimRoot, command);
+    writeFileSync(driver, commandFaultSource(declaration));
+    const shimmedCommandName = basename(executable).replace(/\.exe$/iu, "");
+    // Redirect only this declared command; the driver delegates by absolute path without recursion.
     writeFileSync(
-      commandPath,
-      [
-        "#!/usr/bin/env bash",
-        "set -u",
-        scriptBody,
-        `exec ${quotedExecutable} "$@"`,
-        "",
-      ].join("\n"),
+      preload,
+      `const cp = require("node:child_process");
+const original = cp.spawnSync;
+cp.spawnSync = function(command, args = [], options = {}) {
+  return command === ${JSON.stringify(shimmedCommandName)}
+    ? original.call(this, process.execPath, [${JSON.stringify(driver)}, ...args], options)
+    : original.call(this, command, args, options);
+};
+require("node:module").syncBuiltinESMExports();
+`,
     );
-    chmodSync(commandPath, 0o755);
     scenario({
-      PATH: `${shimRoot}${delimiter}${originalPath}`,
+      NODE_OPTIONS:
+        `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(preload)}`.trim(),
+      GOAT_TEST_COMMAND_FAULT: JSON.stringify(declaration),
     });
   } finally {
     rmSync(shimRoot, { recursive: true, force: true });
+  }
+}
+
+/** Make the scanner child fail to read settings.env, or change it mid-digest, without production test switches.
+ * Writes a temporary preload file that the scanner child loads, and deletes it when the scenario ends.
+ *
+ * @param operation - Fault applied only to settings.env; the two `-during-digest` faults keep its bytes and size the same.
+ * @param scenario - Assertions run with the disposable preload; the helper removes it afterward.
+ */
+export function withScannerFileFault(
+  operation:
+    | "readFileSync"
+    | "readSync"
+    | "lstatSync"
+    | "vanish"
+    | "replace-during-digest"
+    | "touch-during-digest",
+  scenario: (environment: Record<string, string>) => void,
+): void {
+  const root = mkdtempSync(join(tmpdir(), "goat-scanner-fault-"));
+  const preload = join(root, "fault.cjs");
+  // Preload before ESM imports so the real scanner encounters the chosen filesystem failure.
+  try {
+    writeFileSync(
+      preload,
+      `
+const fs = require('node:fs');
+const { syncBuiltinESMExports } = require('node:module');
+const operation = ${JSON.stringify(operation)};
+const matches = (path) => typeof path === 'string' && /(?:^|[\\\\/])settings\\.env$/.test(path);
+const handles = new Set();
+const paths = new Map();
+const mutated = new Set();
+const fail = () => { throw Object.assign(new Error('injected scanner file failure'), { code: 'EACCES' }); };
+// Wrap each call the scanner uses to open or inspect settings.env, so a test can break it the way a locked or deleted file would.
+for (const name of ['openSync', 'readFileSync', 'lstatSync']) {
+  const original = fs[name];
+  fs[name] = function(path, ...args) {
+    // The chosen call fails as if the user had locked settings.env, for example by removing read permission mid-turn.
+    if (matches(path) && name === operation) fail();
+    const result = original.call(fs, path, ...args);
+    // Remember every open settings.env handle, so later reads can be faulted or changed.
+    if (matches(path) && name === 'openSync') { handles.add(result); paths.set(result, path); }
+    // The file disappears right after the scanner looks at it, as if the agent deleted it during the scan.
+    if (matches(path) && name === 'lstatSync' && operation === 'vanish') fs.unlinkSync(path);
+    return result;
+  };
+}
+const close = fs.closeSync;
+fs.closeSync = function(fd) { handles.delete(fd); paths.delete(fd); return close.call(fs, fd); };
+const read = fs.readSync;
+fs.readSync = function(fd, ...args) {
+  // Reading settings.env fails part-way, as if the disk or a permission change interrupted the scan.
+  if (operation === 'readSync' && handles.has(fd)) fail();
+  const count = read.call(fs, fd, ...args);
+  // 1048576 matches the scanner's digest chunk size, so only the binary digest read triggers the change, once per open file.
+  if (handles.has(fd) && args[2] === 1048576 && !mutated.has(fd)) {
+    mutated.add(fd);
+    const path = paths.get(fd);
+    const before = fs.statSync(path);
+    // Swap in an identical copy with the same timestamps, as if an editor saved the file by replacing it mid-scan.
+    if (operation === 'replace-during-digest') {
+      const replacement = path + '.replacement';
+      fs.writeFileSync(replacement, fs.readFileSync(path));
+      fs.utimesSync(replacement, before.atime, before.mtime);
+      fs.renameSync(replacement, path);
+    } else if (operation === 'touch-during-digest') {
+      // Leave the bytes alone but move the modified time, as if a tool touched the file mid-scan.
+      fs.utimesSync(path, before.atime, new Date(before.mtimeMs + 2000));
+    }
+  }
+  return count;
+};
+syncBuiltinESMExports();
+`,
+    );
+    // Keep any NODE_OPTIONS the test run already set; when none is set, only the fault preload is added.
+    scenario({
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(preload)}`,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
@@ -394,7 +597,7 @@ export function withCommandShim(
  *
  * @param root - non-empty fixture root whose scan must remain incomplete
  * @param env - required failure controls; empty means no fault was injected
- * @returns the blocked process; null status means Bash did not start and fails the assertion
+ * @returns the blocked process; a null status fails the completed-exit assertion
  */
 export function assertHookIncomplete(
   root: string,
