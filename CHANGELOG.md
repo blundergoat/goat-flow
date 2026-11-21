@@ -4,7 +4,7 @@
 
 The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Publication is pending.
 
-## v1.19.0 - 2026-11-??
+## v1.19.0 - 2026-11-21
 
 ### Added
 
