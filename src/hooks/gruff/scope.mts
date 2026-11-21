@@ -300,10 +300,11 @@ function eligiblePath(root: string, path: string): string | null {
   let base = root;
   let absolute = resolve(root, normalized);
   // A symlinked directory or a Windows short name can spell a file inside the root differently from Git's toplevel.
+  // The native call asks the OS for the final path, which expands 8.3 short names that the JavaScript realpath keeps.
   if (!beneath(absolute, base)) {
     try {
-      base = realpathSync(root);
-      absolute = realpathSync(absolute);
+      base = realpathSync.native(root);
+      absolute = realpathSync.native(absolute);
     } catch {
       // A file that no longer exists has no real path, so it stays outside this install.
       return null;
@@ -392,11 +393,11 @@ export function unattributedPaths(
         const absolute = resolve(root, path.replaceAll("\\", "/"));
         let base = boundary;
         let selected = absolute;
-        // A link may make a file in the agent's project appear to be outside it.
+        // A link or a Windows short name may make a file in the agent's project appear to be outside it.
         if (!beneath(selected, base)) {
           try {
-            base = realpathSync(base);
-            selected = realpathSync(selected);
+            base = realpathSync.native(base);
+            selected = realpathSync.native(selected);
           } catch {
             // For example, a file removed after the edit event cannot be resolved to a project through a link.
             return [];
