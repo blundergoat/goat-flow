@@ -98,7 +98,7 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 │   ├── render.ts                = text/json/markdown audit renderers
 │   ├── types.ts                 = audit report/check/failure types
 │   ├── harness-scoring.ts       = folds harness check results into the five concern scores, repairs, and caveats
-│   └── harness/                 = 18 advisory/integrity/metric checks across the 5 harness concerns
+│   └── harness/                 = 19 advisory/integrity/metric checks across the 5 harness concerns
 │
 ├── config/                      = `.goat-flow/config.yaml` loading and validation
 │   ├── index.ts                 = single import path for config types and the loader

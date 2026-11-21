@@ -38,24 +38,35 @@ describe("managed hook root discovery", () => {
 });
 
 describe("agent hook replay descriptors", () => {
-  // Reading file content triggers the content policy without broadening Git-mutation checks to unrelated tools.
-  it("matches Antigravity read_file only for its content policy", () => {
+  // Reading, writing or editing file content triggers the content policy without broadening Git-mutation checks to unrelated tools.
+  it("matches Antigravity CLI file tools only for its content policy", () => {
     const content = getHookSpec("deny-dangerous");
     const git = getHookSpec("deny-git-mutations");
     assert.ok(content);
     assert.ok(git);
-    assert.ok(
-      matcherForAgent(PROFILES.antigravity, content)
-        .split("|")
-        .includes("read_file"),
+    const cliFileTools = ["read_file", "write_file", "edit_file"];
+    const antigravityTools = matcherForAgent(
+      PROFILES.antigravity,
+      content,
+    ).split("|");
+    assert.deepEqual(
+      cliFileTools.filter((tool) => !antigravityTools.includes(tool)),
+      [],
+      "every Antigravity CLI file tool reaches the content policy",
     );
     assert.equal(matcherForAgent(PROFILES.antigravity, git), "run_command");
     // Other providers keep their own tool vocabulary for the same user action.
-    for (const agent of [PROFILES.claude, PROFILES.codex, PROFILES.copilot]) {
-      assert.ok(
-        !matcherForAgent(agent, content).split("|").includes("read_file"),
-      );
-    }
+    const borrowedNames = [
+      PROFILES.claude,
+      PROFILES.codex,
+      PROFILES.copilot,
+    ].flatMap((agent) =>
+      matcherForAgent(agent, content)
+        .split("|")
+        .filter((tool) => cliFileTools.includes(tool))
+        .map((tool) => `${agent.id}:${tool}`),
+    );
+    assert.deepEqual(borrowedNames, []);
   });
 
   /** Spawns two inert Bash replays so `hooks verify` stays honest on Windows when a caller drops the replay environment. */

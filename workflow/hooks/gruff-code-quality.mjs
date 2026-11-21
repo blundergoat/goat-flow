@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { reportNativeLauncherUnavailable } from "./hook-launch.mjs";
 import { entryRoot, isEdit, parseEditRequest, selectedPaths, unattributedPaths, } from "./gruff/scope.mjs";
 import { inspectFile, renderDirectFailure, result, } from "./gruff/feedback.mjs";
-const version = readFileSync(fileURLToPath(import.meta.url), "utf8").match(/^\/\/ goat-flow-hook-version: ([^\r\n ]+)$/mu)?.[1] ?? "1.18.0";
+const version = readFileSync(fileURLToPath(import.meta.url), "utf8").match(/^\/\/ goat-flow-hook-version: ([^\r\n ]+)$/mu)?.[1] ?? "";
 const managed = [
     "GOAT_FLOW_HOOK_PROVIDER",
     "GOAT_FLOW_HOOK_EVENT",

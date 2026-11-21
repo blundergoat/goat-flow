@@ -146,38 +146,43 @@ describe("native policy request routing", () => {
     );
   });
 
-  it("protects the captured Antigravity read_file Path and refuses uninspectable reads", async () => {
-    for (const [Path, decision, reason] of [
-      [String.raw`C:\m61-fixture\.env`, "deny", "Policy secret:"],
-      [String.raw`C:\m61-fixture\control.txt`, "allow", ""],
-      [undefined, "deny", "did not expose"],
-      [42, "deny", "did not expose"],
-    ] as const) {
-      const outcome = await hook(
-        "deny-dangerous",
+  // The Antigravity CLI reads, writes and edits through three tools that share one Path field; each must reach the secret policy.
+  // Throws when a hook returns no response, so a crashed evaluator fails the case instead of passing silently.
+  it("protects the Antigravity CLI file-tool Path and refuses uninspectable requests", async () => {
+    for (const name of ["read_file", "write_file", "edit_file"]) {
+      for (const [Path, decision, reason] of [
+        [String.raw`C:\m61-fixture\.env`, "deny", "Policy secret:"],
+        [String.raw`C:\m61-fixture\control.txt`, "allow", ""],
+        [undefined, "deny", "did not expose"],
+        [42, "deny", "did not expose"],
+      ] as const) {
+        const outcome = await hook(
+          "deny-dangerous",
+          [],
+          JSON.stringify({ toolCall: { name, args: { Path } } }),
+        );
+        // A failure names the tool and the path row it came from.
+        const row = `${name} with Path ${String(Path)}`;
+        assert.equal(outcome.kind, "response", row);
+        if (outcome.kind !== "response") throw new Error("missing response");
+        assert.equal(outcome.exitCode, 0, row);
+        const response = JSON.parse(outcome.stdout);
+        assert.equal(response.decision, decision, row);
+        if (reason)
+          assert.ok(response.reason.includes(reason), response.reason);
+      }
+      // The Git policy leaves file tools to the content policy.
+      const gitPolicy = await hook(
+        "deny-git-mutations",
         [],
-        JSON.stringify({ toolCall: { name: "read_file", args: { Path } } }),
+        JSON.stringify({
+          toolCall: { name, args: { Path: String.raw`C:\m61-fixture\.env` } },
+        }),
       );
-      assert.equal(outcome.kind, "response");
-      if (outcome.kind !== "response") throw new Error("missing response");
-      assert.equal(outcome.exitCode, 0);
-      const response = JSON.parse(outcome.stdout);
-      assert.equal(response.decision, decision);
-      if (reason) assert.ok(response.reason.includes(reason), response.reason);
+      assert.equal(gitPolicy.kind, "response", name);
+      if (gitPolicy.kind !== "response") throw new Error("missing response");
+      assert.deepEqual(JSON.parse(gitPolicy.stdout), { decision: "allow" });
     }
-    const gitPolicy = await hook(
-      "deny-git-mutations",
-      [],
-      JSON.stringify({
-        toolCall: {
-          name: "read_file",
-          args: { Path: String.raw`C:\m61-fixture\.env` },
-        },
-      }),
-    );
-    assert.equal(gitPolicy.kind, "response");
-    if (gitPolicy.kind !== "response") throw new Error("missing response");
-    assert.deepEqual(JSON.parse(gitPolicy.stdout), { decision: "allow" });
   });
 
   describe("native PowerShell decisions", () => {

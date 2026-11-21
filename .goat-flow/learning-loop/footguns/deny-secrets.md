@@ -1,6 +1,6 @@
 ---
 category: deny-secrets
-last_reviewed: 2026-09-27
+last_reviewed: 2026-11-22
 ---
 
 Secret-path read traps: what counts as a secret path, and which read channels the deny surface actually binds.
@@ -109,3 +109,22 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 **Why it happens:** `patterns-paths.sh` masked `([A-Za-z]):\.env…` to `__goat_drive_relative_env__` before the secret regex ran, and the self-test asserted `expect_allow paths "cat C:.env"` with a mirror in `deny-dangerous-policy.test.ts`, so the fixture read as coverage. The premise was wrong: Windows resolves `C:.env` against the current directory on C:, the checkout's own credential file.
 
 **Evidence:** `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `Drive-relative operands such as`) removed the mask on 2026-08-19; only the `.env.example` spelling stays exempt on any drive. `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `Windows drive-relative env read`) reversed the assertion to `expect_block` and added the type, curl upload, and PowerShell siblings; the corpus went 470 to 481 executed. Measured at `81636441`: four drive-relative reads exited 0 before the fix and 2 with `Policy secret` after, while `cat C:.env.example` still exits 0. Current Node owner: `workflow/hooks/deny-dangerous/corpus.json` (search: `Windows drive-relative env read`).
+
+---
+
+## Footgun: A provider file tool missing from the secret-file list passes unchecked
+
+**Status:** active | **Created:** 2026-11-22 | **Evidence:** ACTUAL_MEASURED
+**Severity:** SECURITY
+**Decision changed:** When adding or reviewing a provider's file tools, take the names from its current client and add each one to both the registration matcher and the secret-file classifier.
+**Trigger phase:** READ
+**hallucination-risk:** high
+**Incident count:** 2 | **Latest occurrence:** 2026-11-22
+
+**Prevention:** List the file tools the provider's current client exposes instead of extending the names already present. Add each name to the matcher and the classifier in the same change, and pair a secret-path denial with a harmless-path control for every name. One product can ship two vocabularies: the Antigravity IDE and CLI name the same file actions differently.
+
+**Symptoms:** With `{"toolCall":{"name":"write_file","args":{"Path":".env"}}}` on stdin, the installed dangerous hook returned `{"decision":"allow"}` and exit 0. `edit_file` gave the same result. `read_file`, `write_to_file` and `replace_file_content` were denied for the same path. The Antigravity registration matcher omitted both names too, so the provider would not start the hook for those calls.
+
+**Why it happens:** The policy inspects a structured request only when its tool is a shell tool or appears in the secret-file list. Any other named tool is allowed without a path check. The lists carried the Antigravity IDE's write tools (`write_to_file`, `replace_file_content`, `multi_replace_file_content`), while the CLI calls them `write_file` and `edit_file`. The repair for the same gap on 2026-10-27 added only `read_file`.
+
+**Evidence:** `src/hooks/policy-input.mts` (search: `export function isPolicySecretFileTool`) and `src/cli/server/agent-hook-command.ts` (search: `The CLI names its file tools`) now carry all three CLI names. `test/unit/hook-policy-evaluation.test.ts` (search: `protects the Antigravity CLI file-tool Path`) pairs each denial with an allowed control. `src/hooks/policy-evaluation.mts` (search: `function ownsPolicyRequest`) owns the rule that lets unlisted tools through. Antigravity CLI 1.5.14 exposed `read_file`, `write_file` and `edit_file`, each with a `Path` argument, in a local session on 2026-11-22. The probes prove local classification and registration content, not provider-side hook delivery.

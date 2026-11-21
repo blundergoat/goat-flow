@@ -760,6 +760,8 @@ describe("policy tool ownership and stdin consumers", () => {
       "view_file",
       "read_file",
       "READ_FILE",
+      "write_file",
+      "Edit_File",
       "Write",
       "Edit",
       "MultiEdit",

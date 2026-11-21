@@ -97,6 +97,8 @@ export function isPolicySecretFileTool(tool) {
         "view",
         "view_file",
         "read_file",
+        "write_file",
+        "edit_file",
         "write",
         "edit",
         "multiedit",

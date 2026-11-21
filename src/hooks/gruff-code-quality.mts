@@ -37,7 +37,7 @@ import type { Capabilities } from "./gruff/analyzer.mjs";
 const version =
   readFileSync(fileURLToPath(import.meta.url), "utf8").match(
     /^\/\/ goat-flow-hook-version: ([^\r\n ]+)$/mu,
-  )?.[1] ?? "1.18.0";
+  )?.[1] ?? "";
 const managed = [
   "GOAT_FLOW_HOOK_PROVIDER",
   "GOAT_FLOW_HOOK_EVENT",

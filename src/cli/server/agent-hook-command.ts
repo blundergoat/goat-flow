@@ -928,11 +928,14 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
   // Git mutation protection follows Antigravity's shell tool, where the user's Git command is executed.
   if (spec.id === "deny-git-mutations") return "run_command";
   // Antigravity policy coverage includes both shell and direct file actions users can request.
+  // The CLI names its file tools read_file, write_file and edit_file; the IDE uses the longer names.
   if (spec.id === "deny-dangerous") {
     return [
       "run_command",
       "view_file",
       "read_file",
+      "write_file",
+      "edit_file",
       "grep_search",
       "write_to_file",
       "replace_file_content",

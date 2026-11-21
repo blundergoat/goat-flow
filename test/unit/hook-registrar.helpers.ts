@@ -115,7 +115,7 @@ export const SUPPORTED_PROVIDER_HOOK_CASES = [
       {
         event: "PreToolUse",
         matcher:
-          "run_command|view_file|read_file|grep_search|write_to_file|replace_file_content|multi_replace_file_content",
+          "run_command|view_file|read_file|write_file|edit_file|grep_search|write_to_file|replace_file_content|multi_replace_file_content",
       },
     ],
   },

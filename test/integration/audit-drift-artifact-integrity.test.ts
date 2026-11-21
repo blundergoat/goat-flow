@@ -487,13 +487,15 @@ describe("checkDrift: artifact integrity", () => {
     // Regression: "N advisory/integrity/metric checks across the 5 harness
     // concerns" evaded the count regex, which required the digit directly
     // before "checks across N concerns" (2026-07-16 quality reports).
+    // The code map keeps this line inside its fenced directory tree, where the
+    // scan skipped it and a stale 18 survived a green audit (2026-11-22 quality report).
     const fixtureRoot = setupFixture();
     try {
       const codeMapPath = join(fixtureRoot, ".goat-flow", "code-map.md");
       mkdirSync(dirname(codeMapPath), { recursive: true });
       writeFileSync(
         codeMapPath,
-        "│   └── harness/ = 999 advisory/integrity/metric checks across the 5 harness concerns\n",
+        "```text\n│   └── harness/ = 999 advisory/integrity/metric checks across the 5 harness concerns\n```\n",
       );
       const context = {
         projectPath: fixtureRoot,
@@ -509,6 +511,36 @@ describe("checkDrift: artifact integrity", () => {
         ),
         true,
         `expected a harness-check-count-drift finding for the code map, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Regression fixture: writes the contributor guide's "grouped by" wording with a stale count, which the scan missed; the count is a contract.
+  it("reports a stale harness count in the contributor guide's grouped-by phrasing", () => {
+    // Regression: CONTRIBUTING.md kept "18 checks grouped by 5 concerns"
+    // through a green audit while the live registry said 19 (2026-11-22 quality report).
+    const fixtureRoot = setupFixture();
+    try {
+      writeFileSync(
+        join(fixtureRoot, "CONTRIBUTING.md"),
+        "- **Quality checks** (`src/cli/audit/harness/`) - 999 checks grouped by 5 concerns.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "harness-check-count-drift" &&
+            finding.path === "CONTRIBUTING.md",
+        ),
+        true,
+        `expected a harness-check-count-drift finding for the contributor guide, got ${JSON.stringify(report.findings)}`,
       );
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });

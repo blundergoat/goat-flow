@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Publication is pending.
+The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Later fixes are included in the v1.19.0 section below. Publication is pending.
 
-## v1.19.0 - 2026-11-21
+## v1.19.0 - 2026-11-22
 
 ### Added
 
@@ -22,9 +22,9 @@ The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Publicati
 
 - **Quality prompts** - Ask the assessor to use an idle checkout and independently recheck serious findings from other agents. Earlier assessors' scores stay out of the prompt.
 
-- **Milestone reviews** - Milestone work runs review before acceptance; repairs keep their approved scope and refresh affected evidence.
+- **Milestone reviews** - Milestones are reviewed before acceptance; repairs keep their approved scope and refresh affected evidence.
 
-- **Milestone commands** - Instructions name timing and tick steps, preserve other writers' edits and require causal failure diagnosis.
+- **Milestone commands** - Instructions name the timing and tick steps, and require agents to preserve other writers' edits and diagnose a failure's cause.
 
 - **Plan layout and progress** - New plans separate notes, evidence and scripts; progress entries show timestamps and work time. Existing plans opt in.
 
@@ -58,10 +58,10 @@ The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Publicati
 
 - **Stop hooks check binaries for known token and private-key patterns** - The scanner checks worktree files and staged blobs, including UTF-16 text. A recognized private-key header blocks in a binary file. In a recognized compiled program, the scanner also requires nearby matching key data. Run `goat-flow hooks sync` to update existing installs.
 
-- **Native PowerShell policy inspection** - Literal commands reach both owning policies; unresolved dynamic execution and session-state changes remain blocked. Run `goat-flow hooks sync` to refresh existing installations.
+- **Native PowerShell policy inspection** - Both policies now inspect literal commands; unresolved dynamic execution and session-state changes remain blocked. Run `goat-flow hooks sync` to update existing installs.
 
 - **Windows GitHub CLI paths stay protected** - GitHub write protection recognizes Windows executable names and paths while preserving read and comment exceptions.
-- **Antigravity file reads reach secret protection** - `read_file` requests now reach the policy. Run `goat-flow hooks sync` to update existing installs.
+- **Antigravity CLI file tools are covered by secret protection** - The policy and the Antigravity hook registration now include `read_file`, `write_file` and `edit_file`. Run `goat-flow hooks sync` to update existing installs.
 - **Node guards inspect more shell command forms** - Quotes in comments, ANSI-C strings, case arms, arithmetic-like command substitutions and functions with subshell bodies no longer hide a later delete or push. Dynamic Git verbs and uninspectable xargs subcommands are refused; known Git executable variables stay tracked through nested shells and pipelines.
 - **Node guards inspect wrapper option values and refuse unreadable Git aliases** - Sudo, Bash and env option operands no longer hide the command being checked. Git alias lookup follows env directory changes and refuses lookup failures; `git send-email` counts as publication.
 
@@ -69,7 +69,7 @@ The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Publicati
 
 ### Fixed
 
-- **Native hook cleanup** - The launcher stops its evaluator on catchable cancellation signals. Supervised helpers share the evaluator's process group so the launcher can stop them if the evaluator exits before the deadline.
+- **Native hook cleanup** - The launcher stops its evaluator on catchable cancellation signals and can stop supervised helpers left running when the evaluator exits before the deadline.
 - **Gruff reports partial coverage for mixed edits** - Findings from scanned files stay visible alongside warnings for files outside the selected install. A file named through a symlinked directory or a Windows short name is analysed and counted once.
 
 - **Guardrails troubleshooting** - Recovery guidance names Node prerequisites and explains refusals for uninspectable native PowerShell commands.
