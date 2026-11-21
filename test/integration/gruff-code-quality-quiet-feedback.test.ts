@@ -41,6 +41,7 @@ import {
   sampleGruffEditPayload,
   writeContractGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
+import { symlinkTestOptions } from "../helpers/symlink-capability.js";
 
 const PROJECT_ROOT = join(import.meta.dirname, "..", "..");
 
@@ -475,6 +476,73 @@ describe("gruff-code-quality hook quiets edits outside the analysed scope", () =
       ["edited-path-outside-project", "size.file-length", "naming.short"],
     );
   });
+
+  /**
+   * Runs one edit against a fresh install that is also reachable through a link from outside it.
+   * Git reports the install's real path, while an agent working through the link names files by the linked path.
+   *
+   * @param pathsFor - the edit's file paths, given the linked spelling of the install's src/sample.ts
+   * @returns the neutral result and the analyzer arguments the install recorded, or null when it never ran
+   */
+  function runLinkedInstallEdit(pathsFor: (linkedSample: string) => string[]) {
+    const projectRoot = makeEditedGruffContractProject(
+      FINDING_GRUFF_CONTRACT_ENVELOPE,
+    );
+    const linkedRoot = join(makeRoot(), "linked-install");
+    symlinkSync(projectRoot, linkedRoot);
+    const edits = pathsFor(join(linkedRoot, "src", "sample.ts")).map(
+      (file_path) => ({ file_path }),
+    );
+    const result = readMigratedGruffResult(
+      runMigratedHook(
+        projectRoot,
+        { tool_name: "multi_replace_file_content", tool_input: { edits } },
+        "/usr/bin:/bin",
+      ),
+    );
+    const argsLog = join(projectRoot, "gruff-hook-args.log");
+    const { attemptedUnits, completedUnits, skippedUnits } =
+      result.coverage as Record<string, number>;
+    return {
+      result,
+      counts: { attemptedUnits, completedUnits, skippedUnits },
+      analyzerArgs: existsSync(argsLog) ? readFileSync(argsLog, "utf8") : null,
+    };
+  }
+
+  it(
+    "analyses an install file named only through a linked path",
+    symlinkTestOptions(),
+    () => {
+      const { result, counts, analyzerArgs } = runLinkedInstallEdit(
+        (linkedSample) => [linkedSample],
+      );
+      assert.equal(result.outcome, "advisory");
+      assert.deepEqual(counts, {
+        attemptedUnits: 1,
+        completedUnits: 1,
+        skippedUnits: 0,
+      });
+      assert.equal(analyzerArgs, "hook --format json src/sample.ts\n");
+    },
+  );
+
+  it(
+    "counts an install file named by its own and its linked path once",
+    symlinkTestOptions(),
+    () => {
+      const { result, counts, analyzerArgs } = runLinkedInstallEdit(
+        (linkedSample) => ["src/sample.ts", linkedSample],
+      );
+      assert.equal(result.outcome, "advisory");
+      assert.deepEqual(counts, {
+        attemptedUnits: 1,
+        completedUnits: 1,
+        skippedUnits: 0,
+      });
+      assert.equal(analyzerArgs, "hook --format json src/sample.ts\n");
+    },
+  );
 });
 
 describe("gruff-code-quality hook delivers source results through Claude's registered handler", () => {

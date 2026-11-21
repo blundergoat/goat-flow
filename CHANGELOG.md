@@ -70,7 +70,7 @@ The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Publicati
 ### Fixed
 
 - **Native hook cleanup** - The launcher stops its evaluator on catchable cancellation signals. Supervised helpers share the evaluator's process group so the launcher can stop them if the evaluator exits before the deadline.
-- **Gruff reports partial coverage for mixed edits** - Findings from scanned files stay visible alongside warnings for files outside the selected install.
+- **Gruff reports partial coverage for mixed edits** - Findings from scanned files stay visible alongside warnings for files outside the selected install. A file named through a symlinked directory or a Windows short name is analysed and counted once.
 
 - **Guardrails troubleshooting** - Recovery guidance names Node prerequisites and explains refusals for uninspectable native PowerShell commands.
 

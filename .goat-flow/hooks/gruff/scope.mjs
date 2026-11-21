@@ -221,12 +221,25 @@ function eligiblePath(root, path) {
         return null;
     if (normalized.split("/").includes(".."))
         return null;
-    const absolute = resolve(root, normalized);
-    if (!beneath(absolute, root))
-        return null;
-    const rel = relative(root, absolute).replaceAll("\\", "/");
+    let base = root;
+    let absolute = resolve(root, normalized);
+    // A symlinked directory or a Windows short name can spell a file inside the root differently from Git's toplevel.
+    if (!beneath(absolute, base)) {
+        try {
+            base = realpathSync(root);
+            absolute = realpathSync(absolute);
+        }
+        catch {
+            // A file that no longer exists has no real path, so it stays outside this install.
+            return null;
+        }
+        // Only a file whose real path is inside the root belongs to this install; a link out of it is still refused.
+        if (!beneath(absolute, base))
+            return null;
+    }
+    const rel = relative(base, absolute).replaceAll("\\", "/");
     return supported(rel) &&
-        ownerSettings(ownerRoot(root, rel)).choice !== "disabled"
+        ownerSettings(ownerRoot(base, rel)).choice !== "disabled"
         ? rel
         : null;
 }
