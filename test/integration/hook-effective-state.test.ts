@@ -323,10 +323,10 @@ describe("effective hook state", () => {
       adapterVersion: "1",
       launcherDeadlineMs: 25_000,
     });
-    // Reviewed Claude delivery still stops at the configured-scenario gate instead of presenting a fixture as live support.
+    // Hooks shows a stale capture for Claude until delivery is recorded on the updated runtime.
     assert.equal(
       claudeProviderEvidence?.effectiveSupportGate,
-      "scenario-unverified",
+      "provider-capture-stale",
     );
     // Missing Antigravity evidence likewise fails the undelivered-result contract.
     assert.equal(
@@ -798,12 +798,9 @@ describe("effective hook state", () => {
     assert.match(terminalCoverageLine ?? "", /WARNING/u);
     assert.match(markdownReport, /## Effective Hook Coverage: WARNING/u);
     assert.match(terminalReport, /deny-dangerous\/claude:/u);
-    assert.match(terminalReport, /scenario unverified/u);
-    // Audit names the bounded verify command but never runs it.
-    assert.match(
-      auditDenyState.repairCommand ?? "",
-      /hooks verify .* --agent claude --scenario deny-hook --trusted-target/u,
-    );
+    // After syncing a Claude project, audit can still report stale delivery evidence. There is no local repair command for this warning.
+    assert.match(terminalReport, /provider capture stale/u);
+    assert.equal(auditDenyState.repairCommand, null);
     assert.equal(readFileSync(settingsPath, "utf-8"), settingsBeforeAudit);
   });
 
@@ -915,10 +912,10 @@ describe("effective hook state", () => {
       report.scenarios.map((scenario) => scenario.observed),
       ["blocked", "blocked", "allowed"],
     );
-    // With reviewed Claude delivery, the local scenario proof is the last gate before effective.
+    // Passing the local deny scenarios leaves the warning in place until Claude delivery is reviewed on the current runtime.
     assert.deepEqual(
       claudeHookState(projectPath, "deny-dangerous").effectiveState,
-      { status: "effective", severity: "success" },
+      { status: "provider-capture-stale", severity: "warning" },
     );
   });
 

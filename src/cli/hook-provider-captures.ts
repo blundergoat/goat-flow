@@ -1,8 +1,8 @@
 /**
  * Records reviewed Windows and WSL observations of how agents deliver hook results.
  *
- * Use when the Hooks page or audit needs evidence for one agent, event, and host.
- * Verified rows carry a capture of the current runtime; historical observations keep the runtime hashes they were captured on.
+ * Use when the Hooks page or audit needs delivery evidence for one agent, event, and host.
+ * A row without a current capture leaves delivery unverified. A historical capture keeps the hashes of the runtime that was reviewed.
  */
 import type { HookProviderHostEvidence } from "./hook-contracts.js";
 
@@ -158,17 +158,18 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "claude",
       canonicalEvent: "pre-tool",
       providerEventName: "PreToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
+        "The Windows file-tool path fix changed the policy evaluator after this capture.",
         "The hook reason reached the model inside Claude Code’s hook-error text, which also carried the inline launcher source.",
         "Claude Code ran pwd and node --version without a prompt. Only command -v gh needed the one-time approval.",
         "The transcript labels permission mode default. The requested arguments and native UI show manual mode.",
         "The operator closed the completed client. The receipt records exit code 1 after the final answer.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "2.1.330",
         providerMode:
           "interactive CLI, manual permission mode, project settings only",
@@ -330,16 +331,17 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "copilot",
       canonicalEvent: "pre-tool",
       providerEventName: "preToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
+        "The Windows file-tool path fix changed the policy evaluator after this capture.",
         "Copilot logs one combined preToolUse record per tool call for both policy hooks. The reason text names the policy behind each denial.",
         "The deny-dangerous reason printed the denied Windows path without its backslashes.",
         "The capture used synthetic files and a local GitHub stub. Recorded hashes cover the final state of the six declared fixture files.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "1.0.103",
         providerMode:
           "prompt mode (-p), JSON output, low reasoning, allow-all-tools within available-tools",
@@ -416,16 +418,17 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "antigravity",
       canonicalEvent: "pre-tool",
       providerEventName: "PreToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
+        "The Windows file-tool path fix changed the policy evaluator after this capture.",
         "The deny-dangerous reason printed the denied Windows path without its backslashes.",
         "The provider recorded no approval channel or hook owner. The local input sequence and timing establish the operator’s approvals, and the reason text names the policy behind each denial.",
         "The operator closed the completed client. The receipt records exit code 1.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "1.4.8",
         providerMode:
           "interactive CLI, request-review tool permission, default agent mode, low effort, run from a private copy",
@@ -459,16 +462,17 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "claude",
       canonicalEvent: "pre-tool",
       providerEventName: "PreToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
+        "The Windows file-tool path fix changed the policy evaluator after this capture.",
         "The local controller recorded each approval input. The provider transcript also contains Remote Control bridge records with no approval-channel field.",
         "Claude Code ran pwd and node --version without a prompt. Only command -v gh needed the one-time approval.",
         "The controller ended the completed client with signal 9.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "2.1.330",
         providerMode:
           "interactive CLI, manual permission mode, project settings only",
@@ -719,16 +723,17 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "copilot",
       canonicalEvent: "pre-tool",
       providerEventName: "preToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
+        "The Windows file-tool path fix changed the policy evaluator after this capture.",
         "Copilot 1.0.114 ran command -v gh without a prompt. Only node --version needed the one-time approval, and no persistent allow rule was added.",
         "Hook records name no owner. Attribution rests on the pinned code, the local rehearsal and matching denial reasons.",
         "The controller ended the completed client with signal 9.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "1.0.114",
         providerMode:
           "interactive CLI, manual approval mode, low reasoning, available-tools limited to bash and view",
@@ -804,16 +809,17 @@ export const HOOK_PROVIDER_HOST_EVIDENCE: readonly HookProviderHostEvidence[] =
       provider: "antigravity",
       canonicalEvent: "pre-tool",
       providerEventName: "PreToolUse",
-      verification: "verified",
+      verification: "incomplete",
       summary:
         "Both policy denials reached the model and all harmless controls succeeded.",
       limitations: [
+        "The Windows file-tool path fix changed the policy evaluator after this capture.",
         "The conversation used a write-ahead log. The capture bound the native database and sidecar bytes to the reviewed output.",
         "The provider recorded no approval channel or hook owner. The local input sequence and timing establish the operator’s approvals; registration order and reason text attribute each denial.",
         "The controller ended the completed client with signal 9.",
         "Raw hook stdin was not retained. Input field coverage and forced timeouts were untested.",
       ],
-      capture: {
+      historicalCapture: {
         providerVersion: "1.4.12",
         providerMode:
           "interactive CLI, request-review tool permission, default agent mode, low effort, run from a private read-only copy",

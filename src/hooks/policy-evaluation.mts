@@ -1054,6 +1054,19 @@ function ownsPolicyRequest(run: PolicyRun, request: RequestState): boolean {
   );
 }
 
+/**
+ * Read a file tool's request as a path, not shell text: a Windows backslash is a separator there.
+ * Read as an escape, it would collapse `C:\Users\me\.env` into one word, and the denial would name that word.
+ *
+ * @param request - the parsed provider request; shell and PowerShell text keep their own escapes
+ * @returns the text to evaluate, with file-tool backslashes turned into forward slashes
+ */
+function policyRequestText(request: RequestState): string {
+  return isPolicySecretFileTool(request.tool)
+    ? request.command.replaceAll("\\", "/")
+    : request.command;
+}
+
 /** Keep native path separators literal and mask only POSIX heredoc data. */
 function policyCommandProjection(command: string, host: string): string {
   if (host !== "") return command.replaceAll("\\", "/");
@@ -1167,7 +1180,9 @@ export async function runPolicyHook(
         : null,
     );
   const host = isPolicyPowerShellTool(request.tool) ? "powershell" : "";
-  return respond(await evaluatePolicyCommand(run, request.command, host));
+  return respond(
+    await evaluatePolicyCommand(run, policyRequestText(request), host),
+  );
 }
 
 /** Finish before the launcher's kill deadline: its configured timeout or the 25-second policy ceiling, less two seconds to reply. */

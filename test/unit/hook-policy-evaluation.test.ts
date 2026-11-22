@@ -1,4 +1,9 @@
-/** Verify complete native policy decisions: provider rendering, request routing, guard dispatch and shell-state scoping. */
+/**
+ * Tests how the policy hooks decide what an agent may do and what denial reason the agent receives.
+ *
+ * Use when changing how a hook reads a tool request, evaluates it, or replies in the provider's format.
+ * The tests send fixture requests to an isolated hook so they can check the decision without running the requested tool.
+ */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs, { mkdtempSync, rmSync } from "node:fs";
@@ -345,6 +350,76 @@ describe("native policy request routing", () => {
       kind: "self-test",
       mode: "smoke",
     });
+  });
+
+  // When an agent tries to read a protected Windows file, the denial points to the filename so the user can tell what triggered it.
+  it("names Windows file-tool paths by their final segment in secret denials", async () => {
+    /** Build the denial each provider should deliver so all three cases check the same policy wording. */
+    const expectedSecretDenial = (fileName: string) =>
+      `Policy secret: Secret-file access (${fileName}). Reading or editing .env / SSH/AWS/GCP keys / credentials through the agent is an exfil risk. Use a checked-in example or ask the user for sanitized fields.`;
+    const claudeReadResponse = await hook(
+      "deny-dangerous",
+      [],
+      JSON.stringify({
+        tool_name: "Read",
+        tool_input: { file_path: "C:\\Users\\example\\proj\\.env" },
+      }),
+    );
+    const copilotViewResponse = await hook(
+      "deny-dangerous",
+      [],
+      JSON.stringify({
+        toolName: "view",
+        toolArgs: JSON.stringify({ path: "C:\\Users\\example\\.ssh\\id_rsa" }),
+      }),
+    );
+    const antigravityReadResponse = await hook(
+      "deny-dangerous",
+      [],
+      JSON.stringify({
+        toolCall: {
+          name: "read_file",
+          args: { Path: "C:\\Users\\example\\proj\\.env" },
+        },
+      }),
+    );
+    // Opening a README uses the same Windows path format and must proceed without a denial.
+    const allowedReadResponse = await hook(
+      "deny-dangerous",
+      [],
+      JSON.stringify({
+        toolName: "view",
+        toolArgs: JSON.stringify({
+          path: "C:\\Users\\example\\proj\\README.md",
+        }),
+      }),
+    );
+    assert.ok(
+      claudeReadResponse.kind === "response" &&
+        copilotViewResponse.kind === "response" &&
+        antigravityReadResponse.kind === "response" &&
+        allowedReadResponse.kind === "response",
+    );
+    assert.equal(
+      claudeReadResponse.stderr,
+      `BLOCKED: ${expectedSecretDenial(".env")}\n`,
+    );
+    assert.equal(
+      JSON.parse(copilotViewResponse.stdout).permissionDecisionReason,
+      expectedSecretDenial("id_rsa"),
+    );
+    assert.equal(
+      JSON.parse(antigravityReadResponse.stdout).reason,
+      expectedSecretDenial(".env"),
+    );
+    assert.deepEqual(
+      [
+        allowedReadResponse.exitCode,
+        allowedReadResponse.stdout,
+        allowedReadResponse.stderr,
+      ],
+      [0, "", ""],
+    );
   });
 
   it("answers JSON providers on stdout and keeps their allow envelope", async () => {
