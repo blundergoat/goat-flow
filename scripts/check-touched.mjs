@@ -346,9 +346,9 @@ async function runCommand(root, argv) {
 /** Report code points without printing the invisible characters themselves. */
 function runUnicodeCheck(root, paths) {
   const result = scanUnicodeFiles(root, paths);
-  for (const item of result.diagnostics) {
+  for (const diagnostic of result.diagnostics) {
     console.log(
-      `  ${printable(JSON.stringify(item.path))}:${item.line}:${item.column}: ${item.codePoint}`,
+      `  ${printable(JSON.stringify(diagnostic.path))}:${diagnostic.line}:${diagnostic.column}: ${diagnostic.codePoint}`,
     );
   }
   if (result.count > result.diagnostics.length)
