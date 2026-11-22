@@ -1,6 +1,6 @@
 ---
 category: milestone-timing
-last_reviewed: 2026-10-11
+last_reviewed: 2026-10-16
 ---
 
 **Scope:** Milestone timing receipts - prospective measurement, category changes, activation and finalization. Plan state, estimates and release accounting are in [milestone-accounting.md](milestone-accounting.md).
@@ -12,7 +12,7 @@ last_reviewed: 2026-10-11
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 14 | **Latest occurrence:** 2026-09-20
+**Incident count:** 15 | **Latest occurrence:** 2026-10-16
 
 **Prevention:**
 1. Before the first action, record UTC and epoch seconds for an active segment tagged `product`, `proof`, or `other`; close it before a human gate, interruption, backgrounded command, or unrelated task, and open a new one when work resumes. Change categories with `plans time stop` followed by `plans time start --category`; there is no `switch` action.
@@ -41,6 +41,8 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 **Recurrence 2026-09-20 (finalized before the gates):** The forecast study finalized a 1,420-second receipt before comparing its segments with the work done. The Actual correction, two lesson recurrences, the index and check re-runs and a final preflight all followed, so they sit outside the receipt. A background preflight had also shared the last proof span with foreground reading. Actual reads `unavailable`.
 
 ---
+
+**Recurrence 2026-10-16:** During the canonical-contract cleanup, owner reads, a touched-file check and a contract replay ran after a sample segment stopped and before timing resumed. The receipt therefore omits real work. Preserve its raw seconds, label Actual incomplete, and exclude it from measured calibration. Resume the appropriate category before follow-up reads or checks, even when a scope decision is approaching. `src/cli/plans-effort.ts` (search: `renderActualLine`) renders receipt totals; it cannot recover unrecorded intervals.
 
 ## Lesson: A running receipt makes a wrong category split look measured
 

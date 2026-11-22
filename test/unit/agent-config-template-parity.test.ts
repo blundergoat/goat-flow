@@ -241,7 +241,7 @@ describe("agent config template parity", () => {
   // by a later hook commit), so this locks every deny rule in the template
   // AND the controlling workspace settings to a form Claude actually matches.
   // Keep this allow-set in sync with REMOVED_CLAUDE_TOOLS and
-  // UNMATCHED_RULE_REWRITES in workflow/install-goat-flow.sh.
+  // UNMATCHED_RULE_REWRITES in src/cli/installer/claude-permissions.ts.
   // One named case per config file and rule list, so a failure names the exact list to open.
   for (const configPath of [
     "workflow/hooks/agent-config/claude.json",

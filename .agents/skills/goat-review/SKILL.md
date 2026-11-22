@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Use when reviewing a diff, PR, or set of code changes, or auditing a codebase area for quality issues. Triggers: 'review this', 'code review', 'audit X', 'look at these changes'."
-goat-flow-skill-version: "1.18.0"
+goat-flow-skill-version: "1.19.0"
 ---
 # /goat-review
 
@@ -28,7 +28,7 @@ Select diff (Quick), PR (Quick default), or area audit (Full).
 
 **Pass 0 gates:** with explicit current-session consent, run non-fixing instruction/CI gates once; never fix/rerun. Use `references/examples.md` → `Pass 0 Automated Gates`; only host-proven changed-code is a defect. Emit `Gates: run | skipped (<reason>) | unavailable`; non-run adds `gates-not-run`; tracked mutation stops.
 
-**State authority:** `goat-flow review snapshot` binds the diff and Pass 2 files to one declared authority. Controlling CLI uses `--project <reviewed-root> --expected-version <installed-skill-version>`; ledger rejects --project. With no version-matched producer, use the controlling package source; else stop and report authority unavailable. Never invent a schema. Follow `references/examples.md` → `State Authority Matrix`; drift stops. Raw bytes stay transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
+**State authority:** `goat-flow review snapshot` binds the diff and Pass 2 files to one declared authority. Controlling CLI uses `--project <reviewed-root> --expected-version <installed-skill-version>`; ledger rejects --project. With no version-matched producer, use the controlling package source; else stop and report authority unavailable. Never invent a schema. Follow `references/examples.md` → `State Authority Matrix`; drift stops. On a content-conversion refusal of `worktree`/`unstaged`, re-select per that matrix; never ask for a waiver. Raw bytes stay transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
 
 **Artifacts:** random-suffixed `.txt`/`.json`/`.diff`/`.md` in `.goat-flow/logs/review/`.
 
@@ -206,6 +206,10 @@ Never emit a whole field for `n/a` except failed PR ingestion; subvalues may.
 - **Consequence Gate:** every MUST/SHOULD finding MUST state concrete harm. Without named harm, downgrade to MAY.
 - **Ship Verdict (diff/PR or release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. Ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` lowers one rung.
 - **Zero-findings HALT:** Name checked surfaces and why none surfaced.
+
+## Return to a milestone
+
+Standalone review remains report-only. An invoking milestone may resume already-authorized implementation after this review. Findings grant no new write or boundary authority; the milestone owns authorized repairs, affected rechecks and revisiting changed conclusions.
 
 ## Output Format
 

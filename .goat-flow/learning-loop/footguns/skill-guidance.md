@@ -1,6 +1,6 @@
 ---
 category: skill-guidance
-last_reviewed: 2026-10-09
+last_reviewed: 2026-11-09
 ---
 
 **Scope:** Editing shipped skill and playbook guidance: behavioural wording, authority alignment, contract caps, and load-budget signals. Skill candidacy and runtime authoring traps live in [skill-authoring.md](skill-authoring.md); mirror sync lives in [skills.md](skills.md).
@@ -98,7 +98,7 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 
 **Symptoms:** A small approved addition to goat-plan's SKILL.md or reference files passes every phrase-pinning assertion and the mirror byte-identical check, then fails `keeps the redesigned goat-plan canonical surface within its tighter budget`.
 
-**Why it happens:** Earlier redesign budgets capped both the skill body and the combined three-file surface, leaving only one word of headroom at 2099/2100 and 4499/4500 before 2026-08-15. Useful additions then competed with existing controls. Those special caps were replaced on 2026-09-14 with a body below 2500 words and each reference below 3000, without an aggregate cap. Since the 2026-09-30 consolidation, `test/contract/skill-hardening-contracts.test.ts` owns both checks (search: `functional skills stay within the 2500-word cap across all mirrors`; `progressive reference packs stay within the 3000-word cap per file`), including the installed plan-reference copies. `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) owns frontmatter exclusion. The earlier assertion names and numbers below describe historical incidents.
+**Why it happens:** Earlier redesign budgets capped both the skill body and the combined three-file surface, leaving only one word of headroom at 2099/2100 and 4499/4500 before 2026-08-15. Useful additions then competed with existing controls. Those special caps were replaced on 2026-09-14 with a body below 2500 words and each reference below 3000, without an aggregate cap. Since the 2026-09-30 consolidation, `test/contract/skill-hardening-contracts.test.ts` owns both checks (search: `functional skills stay within the 2500-word cap in canonical guidance`; `progressive reference packs stay within the 3000-word cap per file`), checking canonical skill/reference text; preflight retains installed-copy equality checks. `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) owns frontmatter exclusion. The earlier assertion names and numbers below describe historical incidents.
 
 **Incident ledger:**
 - **2026-08-15:** adding two template sections plus one SKILL.md sentence (97 words) tipped both caps to 2117/2100 and 4596/4500; the user approved raising them to 2150/4650.
@@ -141,6 +141,8 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 
 **Recurrence 2026-09-30:** A review draft used the wrong bundle name/extension, counted five ledger refutations as finding evidence, omitted the literal bold `Decision:` row, and claimed `confident` despite `gates-not-run`. Draft validation returned four violations, then one remaining bundle violation. Reading the executable grammar and correcting the declarations produced `review validate-draft: PASS (persistence unverified)` and `review validate: PASS`. Use `goat-review-bundle.<random>.diff`, count visible finding evidence only, and derive conclusion/verdict from the emitted flags. Owners: `src/cli/review-validate-common.ts` (search: `REVIEW_BUNDLE_PATH`; `Decision:`), `src/cli/review-validate-verdict.ts` (search: `conclusionForDegradationFlags`), and `src/cli/review-validate-sections.ts` (search: `Evidence claims`).
 
+**Recurrence 2026-10-17:** A review of live uncommitted files used `uncommitted=yes` with explicit-path authority. Draft validation rejected the mismatch; guessing `source=paths` then broke the readable-row grammar. Reading `src/cli/review-validate-authority.ts` (search: `reviewScopeLabels`) showed the required labels: `source=explicit path list`, `base=n/a`, `head=per-path`, `uncommitted=n/a`. The corrected draft reported `review validate-draft: PASS (persistence unverified)`. Derive scope labels from the authority's source kind; describe the selected files' dirty state separately.
+
 ## Footgun: The review degradation vocabulary has no honest token for an unavailable authority producer
 
 **Status:** active | **Created:** 2026-09-07 | **Evidence:** ACTUAL_MEASURED
@@ -170,3 +172,18 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 **Why it happens:** `src/cli/audit/resource-references.ts` (search: `references missing canonical resource`) extracts reference tokens from shared guidance and requires each resolved path to exist in the canonical workflow package. A token that reads to an agent as "the goat-plan reference" is a relative path to the checker.
 
 **Evidence:** 2026-09-11: the first shared-conventions pointer read `references/milestone-examples.md` → Status reason and produced `workflow/skills/reference/skill-conventions.md references missing canonical resource workflow/skills/reference/references/milestone-examples.md`; rewording to `its milestone-examples reference → Status reason` returned the audit to `drift: pass, findings: 0, checked: 250`. The accepted wording is pinned by `test/contract/skill-hardening-plan-2.test.ts` (search: `its milestone-examples reference`).
+
+## Footgun: The review snapshot refuses `worktree` capture when any tracked path converts content
+
+**Status:** active | **Created:** 2026-11-09 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Treat a content-conversion refusal of `worktree` or `unstaged` as re-selection to `staged` or `paths`, never as a stop or a waiver request.
+**Trigger phase:** SCOPE
+**Caught at:** ACT
+
+**Prevention:** `requireRawComparison` in `src/cli/review-validate-anchors.ts` runs `git check-attr` over every tracked path, not only the changed ones, and refuses any effective `core.autocrlf` other than `false`. One `filter=lfs` asset, a `* text=auto` line, or the Git for Windows installer default is enough to refuse `worktree` and `unstaged` in a repository whose changed files are plain source. Read the refusal as a selection error: the message names the path and attribute, or the `core.autocrlf` value, and `workflow/skills/goat-review/references/examples.md` (search: `not drift or a waiver request`) gives the `staged` and `paths` re-selection. Do not ask the user for a waiver, and do not add a degradation token for it.
+
+**Symptoms:** `goat-flow review snapshot` exits 2 with `authority-unsupported: live comparison requires unsupported content conversion` on the first `worktree` request and the reviewer reports the review as blocked before Pass 1, while `staged` and `paths` requests on the same tree succeed.
+
+**Why it happens:** The raw-byte check guards every live-versus-Git comparison, so it covers the whole index: a filter on an unchanged binary still means Git would rewrite bytes somewhere in the comparison set. The skill presented `worktree` as the capture for a dirty tree and gave no route out of the refusal, while `docs/cli.md` states that these refusals never fall back to HEAD or live bytes. A reviewer holding both sentences stopped instead of re-selecting.
+
+**Evidence:** 2026-11-09: a Codex session on Windows reviewing a consumer Git LFS repository received the refusal on `{"kind":"worktree","base":"HEAD","untracked":{"mode":"all-nonignored"}}` and asked the user for a waiver; that repository's review log held eight earlier `paths` captures and one `staged` capture. Reproduced on this repository's clean `dev` tree, where `.gitattributes` sets `* text=auto eol=lf`: `worktree` exits 2 while `staged` and `paths` exit 0. Reproduced on the LFS repository from WSL with `core.autocrlf` unset, which isolates its 65 `filter=lfs` paths as sufficient cause. `test/integration/review-validate-authority.test.ts` pins the attribute refusal (search: `does not run Git content filters`) and the `core.autocrlf` refusal (search: `uses Git's effective autocrlf setting`).

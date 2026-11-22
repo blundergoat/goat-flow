@@ -1,6 +1,6 @@
 ---
 category: verification-environment
-last_reviewed: 2026-10-10
+last_reviewed: 2026-11-08
 ---
 
 **Scope:** Whether the build, tree, or sandbox that produced the evidence is the one the claim is about - a published package standing in for local source, a mutation sandbox that is not the checkout, and suite results taken while another session writes the tree. What counts as proof in general is [verification.md](verification.md); what a test must establish is [verification-testing.md](verification-testing.md).
@@ -9,7 +9,7 @@ last_reviewed: 2026-10-10
 
 **Status:** active | **Created:** 2026-05-15 | **Merged during:** learning-loop consolidation
 
-**Prevention:** For mutation-test helpers, run `bash scripts/mutation-test.sh '<target>' -- --dryRunOnly` before a full campaign. Keep Stryker sandbox inputs focused on committed anchors, ignore the local contents of `.goat-flow/logs/`, `.goat-flow/scratchpad/`, and `.goat-flow/plans/`, and keep post-turn and generated-output scanners scoped to committable content rather than gitignored local state. Use mutation-safe test selection for source-text and built-dist guards. Evidence anchors: `scripts/mutation-test.sh` (search: `ignorePatterns`), `scripts/mutation-test.sh` (search: `--test-skip-pattern`), `workflow/hooks/post-turn-safety.sh` (search: `scan_untracked_changes`).
+**Prevention:** For mutation-test helpers, run `bash scripts/mutation-test.sh '<target>' -- --dryRunOnly` before a full campaign. Keep Stryker sandbox inputs focused on committed anchors, ignore the local contents of `.goat-flow/logs/`, `.goat-flow/scratchpad/`, and `.goat-flow/plans/`, and keep post-turn and generated-output scanners scoped to committable content rather than gitignored local state. Use mutation-safe test selection for source-text and built-dist guards. Evidence anchors: `scripts/mutation-test.sh` (search: `ignorePatterns`), `scripts/mutation-test.sh` (search: `--test-skip-pattern`), `test/fixtures/hooks-bash/workflow/hooks/post-turn-safety.sh` (search: `scan_untracked_changes`).
 
 **What happened:** The first audit-engine run failed before mutation testing because Stryker copied gitignored scratchpad content into its sandbox. After local-state ignores were added, the dry run still failed because instrumented source broke learning-loop semantic-anchor checks and the sandbox lacked the built CLI entry for the main-module guard. On 2026-06-14 `post-turn-safety` also looped Claude Stop by scanning ignored sandbox env examples copied from scratchpad material.
 
@@ -46,7 +46,7 @@ last_reviewed: 2026-10-10
 **Recurrence 2026-08-23:** The no-schema gate used broad `src/cli` and `test` status as an ownership signal; it ran clean before the session wrote its decision, then a concurrent playbook batch made twelve paths appear dirty although the session had not edited them. Proof was narrowed to the exact paths owned by the session plus an all-diff search for checkpoint-schema vocabulary. `src/cli/audit/skill-docs-contract.ts` (search: `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md`), `workflow/skills/goat-plan/SKILL.md` (search: `mid-proof before switching modules`).
 **Recurrence 2026-08-27:** Running `npm run build` and the packaged-hook canary concurrently let the build delete and recreate `dist` while the test archived the package, so the archive exposed the declared CLI path without its file and the combined run failed 91/92. The isolated canary after the build completed passed 2/2, proving verification-command interference rather than a package regression. `package.json` (search: `rmSync('dist'`), `test/integration/packaged-hook-install.test.ts` (search: `existsSync(declaredCliEntryPath)`).
 
-**Recurrence 2026-10-08:** I edited `workflow/install-goat-flow.sh` while a focused installer suite was still running. The local-settings repeat in `test/integration/setup-install-permission-convergence.test.ts` (search: `converges historical permissions once`) then exited with a Bash syntax error, although the final script passed `bash -n`. That mixed-revision run cannot verify the final source. Finish source edits before launching the suite and keep every executed script frozen until it exits; this applies to one session overlapping its own work as well as concurrent agents.
+**Recurrence 2026-10-08:** I edited the Bash installer while a focused installer suite was still running. The local-settings repeat in `test/integration/setup-install-permission-convergence.test.ts` (search: `converges historical permissions once`) then exited with a Bash syntax error, although the final script passed `bash -n`. That mixed-revision run cannot verify the final source. Finish source edits before launching the suite and keep every executed script frozen until it exits; this applies to one session overlapping its own work as well as concurrent agents.
 
 **Recurrence 2026-10-10:** The first PR #67 preflight overlapped this session's installer-fixture edits. Its formatter and warning-ratchet test inspected intermediate files and failed on formatting and `size.file-length`, while later focused checks inspected the corrected bytes. Finish formatting and the targeted analyzer check, freeze the files, then rerun the full gate; retain the mixed run as a failure rather than final verification. Anchors: `scripts/preflight-checks.sh` (search: `Typecheck + build`) and `test/integration/gruff-warning-ratchet.test.ts` (search: `launches the installed analyzer through the production ratchet`).
 
@@ -55,12 +55,18 @@ last_reviewed: 2026-10-10
 ## Lesson: Parallel sessions need concurrency-safe file patterns
 
 **Status:** active | **Created:** 2026-04-05
-**Decision changed:** Before appending to a shared learning-loop bucket, check whether another session already has it dirty, and treat the append as a read-modify-write that must be re-read immediately beforehand.
+**Severity:** INTEGRATION
+**Incident count:** 2 | **Latest occurrence:** 2026-11-06
+**Decision changed:** Before overlapping operations, compare their write sets and snapshot read sets. Serialize work on a shared file, and re-read immediately before a read-modify-write.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
 **Prevention:** Run `git status --short` over the target directory before writing a learning-loop bucket. If the bucket is already modified by another session, do not append: record the entry in a bucket you own, or wait and re-read. Re-read the file immediately before each append rather than writing from a copy read earlier in the session, keep the append to one entry, and run the entry-order contract and `stats --check` afterwards so a clobbered or duplicated entry surfaces immediately. Per-entry files were considered and rejected: ADR-033 keeps category buckets, so the mitigation is sequencing, not file layout. Evidence anchors: `.goat-flow/learning-loop/lessons/README.md` (search: `Bucket Size`), `.goat-flow/learning-loop/footguns/learning-loop-extraction.md` (search: `Bulk learning-loop rewrites can duplicate entries`).
 
+Treat a helper that snapshots a shared control record as owning that record until the helper exits. Finish and inspect a phase before a transport recorder or another writer updates its gate. A successful inner process does not prove that its wrapper accepted the phase.
+
 **What happened:** Two agents wrote the same learning-loop file during parallel Claude sessions. The buckets under `.goat-flow/logs/`, `.goat-flow/learning-loop/lessons/`, and `.goat-flow/learning-loop/footguns/` are append-only by convention, but nothing prevents concurrent writes; session logs use date-slug filenames that reduce collisions, while category buckets are shared write targets.
 
 **Root cause:** goat-flow was designed for single-agent sessions, so nothing serialises two appends to one bucket and a whole-file write from a stale read silently discards the other session's entry.
+
+**Recurrence 2026-11-06:** An offline hook rehearsal matched all five checks, but the host started a transport recorder before the rehearsal wrapper exited. Both used the same capture record. The recorder changed it between the wrapper's snapshots, and the wrapper rejected the phase with `Capture record changed during the phase`. No provider task ran and no one-use claim was spent. Preserve the failed receipt and require a fresh serialized rehearsal rather than granting the gate from the inner result. `AGENTS.md` (search: `Stop-the-line`) owns the recovery rule.

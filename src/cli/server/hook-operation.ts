@@ -5,21 +5,20 @@
  * Apply keeps those claims through file verification and hook-history publication, and reports partial changes honestly.
  */
 import { createHash } from "node:crypto";
-import {
-  chmodSync,
-  lstatSync,
-  readFileSync,
-  realpathSync,
-  unlinkSync,
-} from "node:fs";
+import { chmodSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import {
-  POLICY_OWNERSHIP_FILES,
+  policyOwnershipFiles,
   parsePolicyChoices,
   policyUpgradeReview,
   type PolicyUpgradeReview,
 } from "../../../workflow/hooks/hook-policy-state.cjs";
 import { getTemplatePath } from "../paths.js";
+import { loadManifest } from "../manifest/manifest.js";
+import {
+  inspectRuntimeRetirement,
+  removeRetiredRuntimeFile,
+} from "../installer/retired-runtime.js";
 import { pathWriteClaimInspectCommand } from "../claims-command.js";
 import { AUDIT_VERSION } from "../constants.js";
 import {
@@ -179,6 +178,7 @@ export class PreparedHookChange {
   readonly destinations = new Map<string, HookDestination>();
   readonly baseline: ReturnType<typeof readManagedSetupV2Baseline>;
   private policyReview: PolicyUpgradeReview | null = null;
+  private retirementConflicts: HookReplacementConflict[] = [];
   private ownershipEvidence: {
     path: string;
     originalIdentity: string | null;
@@ -343,7 +343,15 @@ export class PreparedHookChange {
    * @param path - one registry-owned retired file; missing files remain successful no-ops
    */
   removeOwned(path: string): void {
+    if (this.baseline.facade.source !== "v2") return;
+    const expected = this.baseline.facade.expectedHashes.get(path);
+    if (!expected) return;
     const destination = this.capture(path);
+    if (
+      destination.originalIdentity.state !== "present" ||
+      destination.originalIdentity.sha256 !== expected
+    )
+      return;
     destination.replacement = null;
     destination.priority = 3;
   }
@@ -357,6 +365,26 @@ export class PreparedHookChange {
 
   /** Capture ownership inputs before review identity and claims, including files preserved by disabled hooks. */
   preparePolicyReview(): void {
+    if (this.intent.kind === "sync") {
+      const retirement = inspectRuntimeRetirement(
+        this.projectPath,
+        this.baseline.facade.source === "v2"
+          ? this.baseline.facade.expectedHashes
+          : new Map(),
+        new Set(Object.keys(loadManifest().file_ownership)),
+      );
+      for (const file of retirement) {
+        this.capture(file.path);
+        if (file.canRemove) this.removeOwned(file.path);
+      }
+      this.retirementConflicts = retirement
+        .filter((file) => file.needsMigrationReview)
+        .map((file) => ({
+          path: file.path,
+          hookIds: [],
+          reason: file.expectedSha256 === null ? "unclassified" : "diverged",
+        }));
+    }
     const policyDestinations = this.sortedDestinations().filter(
       (file) =>
         file.hookIds.has("deny-dangerous") ||
@@ -371,7 +399,10 @@ export class PreparedHookChange {
       config.replacement ?? config.originalText ?? "",
     );
     // Disabled hooks retain their files, so capture their ownership too; null identity means a missing file cannot prove prior consent.
-    this.ownershipEvidence = POLICY_OWNERSHIP_FILES.map((name) => {
+    this.ownershipEvidence = policyOwnershipFiles(
+      getTemplatePath("workflow/hooks"),
+      join(this.projectPath, ".goat-flow/hooks"),
+    ).map((name) => {
       const file = this.capture(`.goat-flow/hooks/${name}`);
       return {
         path: file.path,
@@ -387,7 +418,7 @@ export class PreparedHookChange {
     const hasPolicyInstallation = this.sortedDestinations().some(
       (file) =>
         file.originalText !== null &&
-        /\/(?:deny-dangerous|deny-git-mutations|guard-repository-writes)\.sh$/u.test(
+        /\/(?:deny-dangerous|deny-git-mutations|guard-repository-writes)\.(?:sh|mjs)$/u.test(
           file.path,
         ),
     );
@@ -435,30 +466,33 @@ export class PreparedHookChange {
    * Missing or identical files need no review; absent baseline rows keep differing bytes unclassified, and hook IDs keep a stable order.
    */
   replacementConflicts(): HookReplacementConflict[] {
-    return this.sortedDestinations().flatMap((destination) => {
-      // Missing and byte-identical files can be safely installed or adopted without a replacement prompt.
-      if (
-        !destination.officialHash ||
-        destination.originalIdentity.state === "missing" ||
-        destination.originalIdentity.sha256 === destination.officialHash
-      )
-        return [];
-      const expectedHash = this.baseline.facade.expectedHashes.get(
-        destination.path,
-      );
-      // A pristine prior package file can advance to this bundle without erasing a local edit.
-      if (expectedHash === destination.originalIdentity.sha256) return [];
-      return [
-        {
-          path: destination.path,
-          hookIds: [...destination.hookIds].sort(),
-          reason:
-            expectedHash === undefined
-              ? ("unclassified" as const)
-              : ("diverged" as const),
-        },
-      ];
-    });
+    return [
+      ...this.retirementConflicts,
+      ...this.sortedDestinations().flatMap((destination) => {
+        // Missing and byte-identical files can be safely installed or adopted without a replacement prompt.
+        if (
+          !destination.officialHash ||
+          destination.originalIdentity.state === "missing" ||
+          destination.originalIdentity.sha256 === destination.officialHash
+        )
+          return [];
+        const expectedHash = this.baseline.facade.expectedHashes.get(
+          destination.path,
+        );
+        // A pristine prior package file can advance to this bundle without erasing a local edit.
+        if (expectedHash === destination.originalIdentity.sha256) return [];
+        return [
+          {
+            path: destination.path,
+            hookIds: [...destination.hookIds].sort(),
+            reason:
+              expectedHash === undefined
+                ? ("unclassified" as const)
+                : ("diverged" as const),
+          },
+        ];
+      }),
+    ];
   }
 
   /**
@@ -649,7 +683,14 @@ export class PreparedHookChange {
     // Retired files are removed by exact name; other errors remain visible as partial apply.
     if (destination.replacement === null) {
       // An already absent retired file needs no deletion during the user's retry.
-      if (current.state === "present") unlinkSync(absolutePath);
+      if (current.state === "present")
+        removeRetiredRuntimeFile(this.projectPath, {
+          path: destination.path,
+          expectedSha256:
+            this.baseline.facade.expectedHashes.get(destination.path) ?? null,
+          canRemove: true,
+          needsMigrationReview: false,
+        });
       return;
     }
     const mode = destination.replacementMode ?? destination.originalMode;

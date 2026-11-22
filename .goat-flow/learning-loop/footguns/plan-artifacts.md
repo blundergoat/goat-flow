@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-10-03
+last_reviewed: 2026-11-14
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts: evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -12,7 +12,7 @@ last_reviewed: 2026-10-03
 **Decision changed:** Keep machine-parsed checklist sections contiguous, leave `(est: ...)` as each row's final token, and put explanatory prose and tables under their own headings outside the checklist.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-08-30
+**Incident count:** 7 | **Latest occurrence:** 2026-11-02
 
 **Prevention:** Keep a checklist section to its rows, with `(est: ...)` as the final token of every estimated row, and never append completion evidence after that suffix. Caveats, inventories, and tables go under a dedicated heading outside the parsed checklist; gate evidence goes under `## Mid-implementation evidence`. This applies to every section `readChecklistItems` parses: tasks, proof, and mid-proof. Run `plans check --strict` immediately after editing checklist sections; three errors together with unchanged estimates point at absorbed content, not arithmetic.
 
@@ -27,6 +27,7 @@ last_reviewed: 2026-10-03
 - **Recurrence 2026-08-23:** One indented evidence bullet after each completed P1/C1-C3 row; zero proof minutes, four gates without estimates, 8 of 12 units.
 - **Recurrence 2026-08-27:** A `Satisfied on ...` sentence after `(est: 2 min proof)`; moving it before the suffix restored the row.
 - **Recurrence 2026-08-30:** Two checkpoint paragraphs after the sole mid-proof row; proof work 5 to 3, 11 of 12 units.
+- **Recurrence 2026-11-02:** A reopened-proof caveat after the last proof row, then after the `[HUMAN]` row; first all three errors, then one gate without an estimate. Placing it under `## Proof` before the first row restored exit 0.
 
 ---
 
@@ -107,12 +108,17 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 **Decision changed:** Cross-train dependency pointers go in a separate `**Dependency note:**` line, never in `**Depends on:**`.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
+**Severity:** INTEGRATION
+**Incident count:** 2 | **Latest occurrence:** 2026-10-20
 
-**Prevention:** Keep `**Depends on:**` machine-parseable, `none` or local `Mnn` ids only, with the moved-from path, rationale, and cross-train ordering on a following `**Dependency note:**` line. After a move, re-run `plans check --strict` on the destination and every source train; a train already failing for unrelated reasons needs an error-count comparison, not a pass/fail read. Leave a pull-forward note at the top of the source `ISSUE.md` or `README.md` so surviving bare `Mnn` labels still resolve. Adding an effort estimate to an older Archetype-format milestone also obliges per-task and per-gate `(est: ...)` entries that sum to the declared split.
+**Prevention:** Keep `**Depends on:**` machine-parseable, `none` or local `Mnn` ids only, with the moved-from path, rationale, and cross-train ordering on a following `**Dependency note:**` line. A standalone card may omit dependencies, but after moving it into a multi-milestone plan, declare `none` or local predecessor IDs explicitly. After a move, re-run `plans check --strict` on the destination and every source train; a train already failing for unrelated reasons needs an error-count comparison, not a pass/fail read. Leave a pull-forward note at the top of the source `ISSUE.md` or `README.md` so surviving bare `Mnn` labels still resolve. Adding an effort estimate to an older Archetype-format milestone also obliges per-task and per-gate `(est: ...)` entries that sum to the declared split.
 
 **Symptoms:** Moving a milestone between plan directories and repointing the trains that referenced it makes `plans check <dir> --strict` exit 1 with `dependencies must be \`none\` or comma-separated local milestone IDs`. Measured 2026-08-07 while pulling work from `1.21.0` and `1.30.0` into `1.16.0`: 1.21.0 was strict-clean beforehand and its only failures were the two edited dependency lines.
 
 **Why it happens:** `src/cli/plans-check-structure.ts` (search: `function readDependencies`) accepts only `none` or `/^M\d+(?:\s*,\s*M\d+)*$/` because the field feeds cycle detection. A path, a parenthetical, or `and shipped ...` fails the regex and the milestone contributes no edges. Two adjacent gates fire from the same edit: declaring `**Effort estimate:**` on an older-format milestone requires reconciled `(est: ...)` entries, and a `## Scope ...` heading beside `## Scope Discipline` trips `conflicting scope representations`.
+
+
+**Recurrence 2026-10-20:** Moving the deprecation-notice card from a single-milestone plan into the release train exposed its omitted dependency field. Strict validation reported `missing dependencies for a multi-milestone plan`; adding `**Depends on:** none` retained its independent scheduling and cleared the error. The receiving release join names the moved card separately. Evidence: `src/cli/plans-check-structure.ts` (search: `missing dependencies for a multi-milestone plan`), whose `requiresField` branch distinguishes a single card from a larger plan.
 
 ---
 
@@ -120,12 +126,12 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 
 **Status:** active | **Created:** 2026-08-19 | **Evidence:** ACTUAL_MEASURED
 **Severity:** INTEGRATION
-**Decision changed:** Reforecast every estimate line together, then reconcile the derived `ISSUE.md` bands the checker never reads; when the advice says the likely is floored at 1.00 min/unit, copy the floored rates and name the measured rate in `source:`.
+**Decision changed:** Reforecast positive agent-owned estimates together; preserve zero-minute and human-owned items. Reconcile derived `ISSUE.md` bands, copy stated floored rates, and name measured rates in `source:`.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 11 | **Latest occurrence:** 2026-09-14
+**Incident count:** 12 | **Latest occurrence:** 2026-11-14
 
-**Prevention:** Treat a reforecast as one atomic edit to basis, range, headline, split, and every `(est: ...)` entry, then run strict validation before starting the timing receipt. A clean strict result is not consistency: recompute the `ISSUE.md` At a glance row, task band and Forecast summary rows from the milestone headers, because no checker validates them. After appending receipt time, reconcile measured-plus-remaining overview totals too; preserve the issued estimate instead of replacing it with Actual. When history runs under one minute per unit, the checker floors the advised likely at 1.00 min/unit and says so; copy those rates. Preserve planning-time estimates only when the advice still cannot be allocated: a `reforecast required` line whose likely rate is under 1.00 with no floor note, or `forecast advice` that says `issued values retained`. Derive bounds with floor, nearest, and ceiling, and never rescale an in-progress or completed milestone to newer calibration data.
+**Prevention:** Reforecast basis, range, headline, category split and every positive agent-owned `(est: ...)` allocation atomically; preserve zero-minute and human-owned items. Validate before timing. Derive ISSUE headline/task bands and forecast rows from saved headers; strict does not check ISSUE. After receipts, reconcile measured-plus-remaining totals; retain issued estimates beside Actual. Copy stated floored rates; keep measured rates in `source:`. Owner: `src/cli/plans-effort.ts` (search: `function floorUnallocatableLikely`). Preserve issued allocations only when advice leaves a likely below one minute without a floor note, or says `issued values retained`. Use floor/nearest/ceiling for low/likely/high. Never reforecast in-progress or completed milestones to newer calibration.
 
 **Symptoms:** `plans check --strict` printed the advisory `reforecast required: ... use 0.61-0.93-1.04 min/unit before implementation`. Updating only `**Forecast basis:**` and `**Forecast range:**`, as a handoff note suggested, flipped the plan to exit 1 with `forecast range likely (8 min) must equal the Effort estimate total (22 min)`. Measured 2026-08-19 on two release-verification tasks with 9 and 8 units.
 
@@ -141,6 +147,7 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 - **Recurrence 2026-08-28:** Activation moved the derived likely value to 36 minutes while `Effort estimate` stayed at 34, failing `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`).
 - **Recurrence 2026-09-13 (forecast-accuracy):** Expanding repeated skill trials and adding default activation changed the counted work to 35 and 14 units, but a header replacement without multiline matching left the bases at 18 and 13. Strict validation caught both, including `forecast basis declares 18 agent work units but the plan contains 35`; the independent overview check also rejected the stale unit total. Correcting both bases restored 103 units and 277 likely minutes. `src/cli/plans-effort.ts` (search: `forecast basis declares`) owns the reproduced diagnostic. After scripted reforecasts, assert that every intended field was replaced and derive the overview from parsed saved headers before delivery.
 - **Recurrence 2026-09-07:** The loud half failed first, `forecast range likely (30 min) must equal the Effort estimate total (33 min)`, and was fixed by cutting three task estimates. Strict validation then passed while four `ISSUE.md` figures stayed stale, because `src/cli/plans-check-summary.ts` (search: `renderRequiredReforecasts`) advises rates without reading any ISSUE band, and the plan's own reconciliation milestone owns that check only at the end of the plan. Recomputing all sixty milestone headers matched every band except the three affected bands: `Whole plan` 1907/913, `Remaining work` 1166/504 and `Shared, disclosure and hooks` 229/103 each needed minus 3 likely and minus 3 product. The same pass exposed an older stale headline claiming 37 unfinished milestones after three tasks completed.
+- **Recurrence 2026-11-14:** M29's helper changed a zero-minute human gate to one; strict rejected proof 18 versus 17. Restoring zero resolved it. Evidence: `src/cli/plans-check.ts` (search: `counted work (`).
 
 ---
 

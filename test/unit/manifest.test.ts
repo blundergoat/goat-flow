@@ -589,7 +589,24 @@ describe("getRequiredInstructionSections (real repo)", () => {
     resetManifestCache();
     const rules = loadManifest().instruction_file.parity_phrases;
 
-    assert.equal(rules.length, 9);
+    assert.equal(rules.length, 10);
+    assert.deepEqual(
+      rules.find(
+        (rule) => rule.label === "milestone timing and tick discipline",
+      ),
+      {
+        label: "milestone timing and tick discipline",
+        section: "Execution Loop",
+        phrases: [
+          "goat-flow plans time start",
+          "goat-flow plans time stop",
+          "--finalize",
+          "Milestone: [path or none]",
+          "Receipt: [open, stopped or none]",
+          "Milestone ticks are Definition of Done gate (7).",
+        ],
+      },
+    );
     assert.deepEqual(
       rules.find((rule) => rule.label === "prose-surface READ routing"),
       {

@@ -1,0 +1,320 @@
+/** Find literal credential assignments in config-shaped files; references, expressions and placeholders stay allowed. */
+
+const ENV_ASSIGNMENT =
+  /^[ \t\n\v\f\r]*((export|EXPORT|arg|ARG|env|ENV)[ \t\n\v\f\r]+)?([A-Za-z_][A-Za-z0-9_-]*)[ \t\n\v\f\r]*[:=][ \t\n\v\f\r]*(.*)$/su;
+const DOCKER_INSTRUCTION =
+  /^[ \t\n\v\f\r]*([aA][rR][gG]|[eE][nN][vV])[ \t\n\v\f\r]+(.*)$/su;
+const DOCKER_KEY_VALUE =
+  /^([A-Za-z_][A-Za-z0-9_-]*)[ \t\n\v\f\r]*=[ \t\n\v\f\r]*(.*)$/su;
+const DOCKER_KEY_SPACE = /^([A-Za-z_][A-Za-z0-9_-]*)[ \t\n\v\f\r]+(.+)$/su;
+const DOCKER_KEY_ONLY = /^([A-Za-z_][A-Za-z0-9_-]*)$/u;
+const DOCKER_ENV_WORD = /^([A-Za-z_][A-Za-z0-9_-]*)=(.*)$/su;
+const DOTTED_IDENTIFIER =
+  /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$/u;
+const OPERATOR_EXPRESSION =
+  /^([A-Za-z_][A-Za-z0-9_]*)([+*/%=]|==|!=)([A-Za-z_][A-Za-z0-9_]*)$/u;
+const CREDENTIAL_KEYS = new Set([
+  "token",
+  "secret",
+  "secrets",
+  "password",
+  "passwords",
+  "api_key",
+  "apikey",
+  "private_key",
+  "access_token",
+  "auth_token",
+  "refresh_token",
+  "bearer_token",
+  "client_secret",
+  "client_secrets",
+  "secret_key",
+  "secret_keys",
+]);
+const CREDENTIAL_KEY_SUFFIXES = [
+  "_api_key",
+  "_apikey",
+  "_private_key",
+  "_access_token",
+  "_auth_token",
+  "_refresh_token",
+  "_bearer_token",
+  "_client_secret",
+  "_client_secrets",
+  "_secret_key",
+  "_secret_keys",
+  "_password",
+  "_passwords",
+  "_token",
+  "_secret",
+  "_secrets",
+];
+const EXCLUDED_KEYS = new Set(["tokens", "tokenizer", "tokeniser", "tokenize"]);
+const EXCLUDED_KEY_PARTS = ["tokenizer", "tokeniser", "tokenize"];
+const EXCLUDED_KEY_SUFFIXES = [
+  "tokens",
+  "_count",
+  "_index",
+  "_id",
+  "_name",
+  "_type",
+  "_header",
+  "_url",
+  "_path",
+  "_list",
+  "_re",
+  "_pattern",
+  "_field",
+  "not_secret",
+  "not_a_secret",
+  "non_secret",
+  "no_secret",
+  "not_token",
+  "not_a_token",
+  "non_token",
+  "no_token",
+  "not_password",
+  "not_a_password",
+  "non_password",
+  "no_password",
+  "not_api_key",
+  "not_an_api_key",
+  "non_api_key",
+  "no_api_key",
+  "not_private_key",
+  "not_a_private_key",
+  "non_private_key",
+  "no_private_key",
+];
+const CONFIG_REFERENCE_PREFIXES = new Set([
+  "app",
+  "application",
+  "cfg",
+  "conf",
+  "config",
+  "configs",
+  "configuration",
+  "constant",
+  "constants",
+  "context",
+  "credentials",
+  "credential",
+  "creds",
+  "ctx",
+  "default",
+  "defaults",
+  "env",
+  "environ",
+  "environment",
+  "os",
+  "process",
+  "self",
+  "setting",
+  "settings",
+  "this",
+]);
+
+function stripSpace(text: string): string {
+  return text.replace(/^[ \t\n\v\f\r]+|[ \t\n\v\f\r]+$/gu, "");
+}
+
+// Recognize varied literal values so ordinary words do not interrupt the user's turn.
+function hasCredentialEntropy(value: string): boolean {
+  if (/^(gh[pousr]_|github_pat_|npm_|sk-|xox[baprs]-|AKIA|ASIA)/u.test(value))
+    return true;
+  if (!/[0-9]/u.test(value)) return false;
+  // Mixed letter case or credential punctuation usually means an opaque generated value.
+  if (/[a-z]/u.test(value) && /[A-Z]/u.test(value)) return true;
+  if (/[._+/=~-]/u.test(value)) return true;
+  // Long hexadecimal text can represent a real key even without mixed case.
+  return value.length >= 20 && /^[a-f0-9]+$/u.test(value);
+}
+
+// Keep environment references and UI template expressions out of literal-secret warnings.
+function isReferenceOrInterpolation(value: string): boolean {
+  const markers = [
+    "%env(",
+    "%ENV(",
+    "${",
+    "$(",
+    "{{",
+    "}}",
+    "{%",
+    "%}",
+    "<%",
+    "%>",
+  ];
+  return (
+    markers.some((marker) => value.includes(marker)) ||
+    /^%[^% \t\n\v\f\r]+%$/u.test(value)
+  );
+}
+
+// Only nothing, a comment or a bare statement terminator may follow a quoted value.
+function suffixEndsAssignment(suffix: string): boolean {
+  if (suffix === "" || suffix.startsWith("#") || suffix === ";") return true;
+  if (!suffix.startsWith(";")) return false;
+  const afterTerminator = stripSpace(suffix.slice(1));
+  return afterTerminator === "" || afterTerminator.startsWith("#");
+}
+
+// Extract one quoted literal; whitespace, references and trailing code mean it is not a single credential value.
+function quotedLiteralValue(raw: string): string | null {
+  const quote = raw.charAt(0);
+  const afterOpening = raw.slice(1);
+  const closing = afterOpening.indexOf(quote);
+  if (closing < 0) return null;
+  const literal = afterOpening.slice(0, closing);
+  // Double quotes still expand $ in shells, so only single-quoted text may contain one.
+  if (
+    /[ \t\n\v\f\r]/u.test(literal) ||
+    (quote === '"' && literal.includes("$"))
+  )
+    return null;
+  if (isReferenceOrInterpolation(literal)) return null;
+  return suffixEndsAssignment(stripSpace(afterOpening.slice(closing + 1)))
+    ? literal
+    : null;
+}
+
+// Dotted names are config references unless their first segment is itself token-shaped.
+function isDottedReference(value: string): boolean {
+  if (!DOTTED_IDENTIFIER.test(value)) return false;
+  const firstSegment = value.slice(0, value.indexOf("."));
+  return (
+    CONFIG_REFERENCE_PREFIXES.has(firstSegment.toLowerCase()) ||
+    !hasCredentialEntropy(firstSegment)
+  );
+}
+
+// Identifier-led expressions stay allowed unless the left side itself is token-shaped.
+function isPlainExpression(value: string): boolean {
+  const expression = OPERATOR_EXPRESSION.exec(value);
+  return expression !== null && !hasCredentialEntropy(expression[1] ?? "");
+}
+
+// Extract one unquoted literal; code-like text, identifiers and references cannot justify a credential finding.
+function unquotedLiteralValue(raw: string): string | null {
+  const value = stripSpace(raw.split("#", 1)[0] ?? "");
+  // An empty assignment gives the user no credential to rotate.
+  if (value === "" || /[ \t\n\v\f\r()[\]{},;<>|&`$]/u.test(value)) return null;
+  // A simple lowercase identifier is a runtime reference, not an embedded user secret.
+  if (
+    /^[a-z_][a-z0-9_]*$/u.test(value) ||
+    isDottedReference(value) ||
+    isPlainExpression(value)
+  )
+    return null;
+  // Short or punctuated expressions are not high-confidence rotatable credentials.
+  if (!/^[A-Za-z0-9._+/=~-]{12,}$/u.test(value)) return null;
+  return hasCredentialEntropy(value) ? value : null;
+}
+
+// Extract the credential-shaped literal from one assignment value, or null when it cannot be a rotatable secret.
+function literalAssignmentValue(rawValue: string): string | null {
+  const raw = stripSpace(rawValue);
+  // Formatted and raw-formatted strings are code that builds a value, not a literal.
+  if (/^([fF]|[fF][rR]|[rR][fF])["']/u.test(raw)) return null;
+  if (raw.startsWith('"') || raw.startsWith("'"))
+    return quotedLiteralValue(raw);
+  return unquotedLiteralValue(raw);
+}
+
+// Normalize labels so camelCase, acronym and kebab-case spellings receive the same verdict.
+function normalizeCredentialKey(label: string): string {
+  const camelSeparated = label.replace(/(?<=[a-z0-9])(?=[A-Z])/gu, "_");
+  const acronymSeparated = camelSeparated.replace(
+    /(?<=[A-Z])(?=[A-Z][a-z])/gu,
+    "_",
+  );
+  return acronymSeparated.toLowerCase().replaceAll("-", "_");
+}
+
+// Exclude labels such as token counts or secret names that do not hold credentials.
+function isExcludedCredentialKey(key: string): boolean {
+  return (
+    EXCLUDED_KEYS.has(key) ||
+    EXCLUDED_KEY_PARTS.some((part) => key.includes(part)) ||
+    EXCLUDED_KEY_SUFFIXES.some((suffix) => key.endsWith(suffix))
+  );
+}
+
+// Recognize credential labels across common config naming styles.
+function isCredentialKey(label: string): boolean {
+  const key = normalizeCredentialKey(label);
+  if (isExcludedCredentialKey(key)) return false;
+  return (
+    CREDENTIAL_KEYS.has(key) ||
+    CREDENTIAL_KEY_SUFFIXES.some((suffix) => key.endsWith(suffix))
+  );
+}
+
+// Return the finding family when one changed assignment embeds a literal credential the user can rotate.
+function literalCredentialFamily(
+  key: string,
+  rawValue: string,
+  isPlaceholder: (value: string) => boolean,
+): string | null {
+  if (key === "" || !isCredentialKey(key)) return null;
+  const value = literalAssignmentValue(rawValue);
+  // Short literals do not meet the high-confidence threshold used to interrupt the user's turn.
+  if (value === null || value.length < 12 || isPlaceholder(value)) return null;
+  return `credential assignment (${key})`;
+}
+
+function isDockerfilePath(path: string): boolean {
+  const lowerPath = path.toLowerCase();
+  const basename = lowerPath.slice(lowerPath.lastIndexOf("/") + 1);
+  return /^(dockerfile|dockerfile\..*|.*\.dockerfile)$/su.test(basename);
+}
+
+// Equals-form ENV can hold several whitespace-separated assignments; a later one can carry the secret.
+function dockerEnvAssignments(payload: string): [string, string][] {
+  return payload
+    .split(/[ \t\n]+/u)
+    .map((word) => DOCKER_ENV_WORD.exec(word))
+    .flatMap((match) => (match ? [[match[1] ?? "", match[2] ?? ""]] : []));
+}
+
+// Accept Docker equals, space and declaration-only forms; a declaration-only label carries no literal value.
+function dockerKeyAssignment(payload: string): [string, string][] {
+  const form =
+    DOCKER_KEY_VALUE.exec(payload) ??
+    DOCKER_KEY_SPACE.exec(payload) ??
+    DOCKER_KEY_ONLY.exec(payload);
+  return form ? [[form[1] ?? "", form[2] ?? ""]] : [];
+}
+
+// Split Docker ARG and ENV forms into the key/value pairs a container user expects checked.
+function dockerAssignments(line: string): [string, string][] {
+  const instruction = DOCKER_INSTRUCTION.exec(line);
+  if (!instruction) return [];
+  const payload = stripSpace(instruction[2] ?? "");
+  // An empty Docker declaration gives the user no literal value to rotate.
+  if (payload === "") return [];
+  const firstWord = payload.split(/[ \t\n\v\f\r]/u, 1)[0] ?? "";
+  const isEnvWordList =
+    instruction[1]?.toLowerCase() === "env" && DOCKER_ENV_WORD.test(firstWord);
+  return isEnvWordList
+    ? dockerEnvAssignments(payload)
+    : dockerKeyAssignment(payload);
+}
+
+/** List credential-assignment finding families for one changed line of a config-shaped file. */
+export function credentialAssignmentFamilies(
+  path: string,
+  line: string,
+  isPlaceholder: (value: string) => boolean,
+): string[] {
+  let assignments: [string, string][] = [];
+  // Docker users need container grammar; other config files use normal assignments.
+  if (isDockerfilePath(path)) assignments = dockerAssignments(line);
+  else {
+    const assignment = ENV_ASSIGNMENT.exec(line);
+    if (assignment) assignments = [[assignment[3] ?? "", assignment[4] ?? ""]];
+  }
+  return assignments.flatMap(([key, rawValue]) => {
+    const family = literalCredentialFamily(key, rawValue, isPlaceholder);
+    return family === null ? [] : [family];
+  });
+}

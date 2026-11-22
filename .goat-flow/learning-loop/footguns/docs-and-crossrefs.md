@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-10-10
+last_reviewed: 2026-11-14
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -25,7 +25,7 @@ last_reviewed: 2026-10-10
 **Severity:** INTEGRATION
 **Incident count:** 3 | **Latest occurrence:** 2026-07-14
 
-**Prevention:** Keep playbook rules self-contained; reference only installed siblings and the consumer's instruction files, and move goat-flow-specific commands, scans, and ADR pointers into goat-flow's own instruction files. Before declaring a playbook or shipped skill done, grep it for `\.goat-flow/(decisions|lessons|patterns|footguns)|src/cli|scripts/|ADR-|check-(drift|goat-flow)|stats --check|DESIGN_TARGET` and confirm any `scripts/...` path it names is listed in `workflow/manifest.json`; otherwise genericize it. Triage each hit: a reference to a learning-loop directory the consumer is meant to populate is portable, because `workflow/install-goat-flow.sh` (search: `for dir in .goat-flow/learning-loop/footguns`) seeds those directories, and only a specific goat-flow-authored file or ADR number is dead.
+**Prevention:** Keep playbook rules self-contained; reference only installed siblings and the consumer's instruction files, and move goat-flow-specific commands, scans, and ADR pointers into goat-flow's own instruction files. Before declaring a playbook or shipped skill done, grep it for `\.goat-flow/(decisions|lessons|patterns|footguns)|src/cli|scripts/|ADR-|check-(drift|goat-flow)|stats --check|DESIGN_TARGET` and confirm any `scripts/...` path it names is listed in `workflow/manifest.json`; otherwise genericize it. Triage each hit: a reference to a learning-loop directory the consumer is meant to populate is portable, because `src/cli/installer/apply.ts` (search: `manifest.required_dirs`) seeds those directories, and only a specific goat-flow-authored file or ADR number is dead.
 
 **Symptoms:** A playbook under `workflow/skills/playbooks/` or a skill under `workflow/skills/` cites an ADR, CLI source, a learning-loop file, an unshipped script such as `scripts/install-browser-tools.sh`, roadmap jargon, or a not-yet-existing file. The reference resolves in this repo and is dead in every consumer install.
 
@@ -81,10 +81,10 @@ The follow-up review found a second symptom in `.goat-flow/learning-loop/decisio
 **Decision changed:** Stage a rename before registering its destination; search all tracked files, not only Markdown, for old paths.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 9
-**Latest occurrence:** 2026-09-18
+**Incident count:** 11
+**Latest occurrence:** 2026-11-14
 
-**Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files, stage the destination before changing existence-validated pointers, and repeat both sweeps after edits, classifying old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. After merging a learning-loop bucket or generated index, run `goat-flow index` and `goat-flow stats --check` even when Git reports a clean auto-merge. For semantic-anchor changes, search all tracked text, including hidden learning buckets; prefer stable function or event identities over test titles that describe a temporary evidence state. This is DoD gate #6.
+**Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files, stage the destination before changing existence-validated pointers, and repeat both sweeps after edits, classifying old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. After merging a learning-loop bucket or generated index, run `goat-flow index` and `goat-flow stats --check` even when Git reports a clean auto-merge. For semantic-anchor changes, search all tracked text, including hidden learning buckets; prefer stable function or event identities over test titles that describe a temporary evidence state. When moving reference sections, inspect every test reader of the old owner; heading searches miss phrase-based assertions. New registered owners also need explicit fixture inventories, and machine-parsed catalogues retain their declared item grammar. Before consolidating fixture inventories, inspect literal filename-enrollment tests as well as runtime consumers; preserve independent fixtures when their contract requires them. This is DoD gate #6.
 
 **Symptoms:** A renamed or moved file breaks links in several documents at once. The glossary's Canonical File column, the `NEXT:` links in `workflow/setup/01-system-overview.md`, and the component tables in `.goat-flow/architecture.md` are dense pointer maps, so one stale path misleads setup, glossary, and architecture readers together.
 
@@ -93,6 +93,11 @@ The follow-up review found a second symptom in `.goat-flow/learning-loop/decisio
 **Evidence:** 2026-07-27: A declaration registered a destination before its implementation created it, so audit failed `evidence_path does not exist`, and the implementation missed two synthetic config references. 2026-08-09: correcting the timeout premise left removed-phrase anchors in two roadmaps and two analysis reports that `rg --hidden --no-ignore` caught. 2026-08-27: renaming the Codex capture-expiry integration test updated the new recurrence but left an older one pointing at the previous title, and later that day Git auto-merged concurrent edits to a bucket and its generated index without a textual conflict while the combined index kept the old decision text and token estimate; `stats --check` caught both. Enforcers: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`), `scripts/profile-dashboard-audit.mjs` (search: `Synthetic. Commit rules`), `src/cli/facts/shared/search-anchors.ts` (search: `Validate one parsed citation`), `test/integration/hook-effective-state.test.ts` (search: `currentHookProviderSupportGate`), `src/cli/stats/stats.ts` (search: `stale file ref`), `src/cli/stats/index-freshness.ts` (search: `const expected = formatIndex`). The historical setup-step renumber left three stale pointers at the removed steps 09-customise-to-project and 05-install-skills, since fixed to `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`.
 
 **Recurrence 2026-09-18:** The change renewed the Codex Stop expiry test and repaired its lesson citation, but its four-file patch omitted the older citation in this footgun. The foreground learning check reported that test title as a stale file reference after both test owners passed. The source-wide search located this remaining citation. Evidence: `test/integration/hook-effective-state.test.ts` (search: `currentHookProviderSupportGate`), `src/cli/stats/stats.ts` (search: `stale file ref`).
+
+**Recurrence 2026-11-14:** M29 moved two evidence sections unchanged into `workflow/skills/goat-clarity/references/receipt-evidence.md`. Three phrase-based readers still loaded the old owner: contracts reported `# pass 154`, `# fail 3`; redirecting their reads preserved all assertions and yielded `# pass 157`, `# fail 0`. Later preflight reported five failures from two fixture inventories omitting the newly required playbook, and content lint rejected an annotation in the filename-only architecture catalogue. Evidence: `test/contract/skill-hardening-clarity.test.ts` (search: `const RECEIPT_REFERENCE_PATH`), `test/fixtures/projects/index.ts` (search: `HEALTHY_STANDALONE_PLAYBOOK_FILENAMES`), `test/integration/audit-build.test.ts` (search: `requiredSkillDocsFiles`), `src/cli/audit/check-factual-semantic-drift.ts` (search: `skill-playbook-inventory-drift`). These failures were captured before the fixture/catalogue repairs.
+
+
+**Recurrence 2026-11-14:** The approved review repairs shortened the helper comment cited by two lesson references; stats reported both as stale until the phrase was restored. Deriving two healthy fixture inventories from the runtime registry then failed four filename-enrollment assertions. Reverting only that optional refactor preserved the independent inventories and restored the focused suites to `# pass 70`, `# fail 0`. Evidence: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/contract/naming-placement-playbook-doctrine.test.ts` (search: `naming and placement enrollment`), `test/contract/test-selection-playbook-doctrine.test.ts` (search: `test-selection enrollment`).
 
 ---
 
@@ -137,7 +142,7 @@ The follow-up review found a second symptom in `.goat-flow/learning-loop/decisio
 
 **Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
 **Severity:** INTEGRATION
-**Incident count:** 6 | **Latest occurrence:** 2026-10-11
+**Incident count:** 7 | **Latest occurrence:** 2026-10-23
 
 **Prevention:** Derive fanout from manifest ownership. After every bump, search tracked release surfaces for literal and regex-escaped old versions, capture the release snapshot, run packed-byte canaries, and run the full suite.
 
@@ -147,7 +152,10 @@ The follow-up review found a second symptom in `.goat-flow/learning-loop/decisio
 
 **Evidence:** Earlier releases missed synthetic dashboard projects, playbook frontmatter, plan examples, and regex-escaped assertions; 1.15.1 first omitted shared Node hook runtimes, and final proof found two 1.15.0 contract assertions and no frozen v1.15.1 manifest snapshot. Anchors: `scripts/bump-version.sh` (search: `manifest_hook_runtime_paths`), `scripts/check-versions.mjs` (search: `hookRuntimeTemplates`), `test/contract/skill-hardening-review-1.test.ts` (search: `registers evidenced goat-review reasoning traps across every root`), `test/unit/manifest.test.ts` (search: `provides a readable snapshot for every changelog release`).
 
-**Recurrence 2026-10-11:** The 1.18.0 bump left `workflow/hooks/deny-dangerous/guard-runtime.sh` and its installed mirror stamped 1.17.0, and `check-versions` passed. Both the writer and the checker scan only top-level `workflow/hooks`, but the audit requires the nested stamp, so `audit` failed `Hook version` until both stamps were edited by hand. The same bump also needed a hand edit to the packed `--version` assertion in `test/integration/packaged-hook-install.test.ts` (search: `goat-flow v1.`). The writer now stamps and mirrors every stamped nested module, `scripts/bump-version.sh` (search: `nested_hook_runtime`), and the checker verifies the same set, `scripts/check-versions.mjs` (search: `nestedStampedHookTemplates`). A nested module that the audit requires but that has no stamp falls outside both. Audit anchor: `src/cli/audit/check-goat-flow.ts` (search: `deny-dangerous/guard-runtime.sh`).
+**Recurrence 2026-10-11:** The 1.18.0 bump left `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.sh` and its installed mirror stamped 1.17.0, and `check-versions` passed. Both the writer and the checker scan only top-level `workflow/hooks`, but the audit requires the nested stamp, so `audit` failed `Hook version` until both stamps were edited by hand. The same bump also needed a hand edit to the packed `--version` assertion in `test/integration/packaged-hook-install.test.ts` (search: `packedVersionResult.stdout.trim()`). The writer now stamps and mirrors every stamped nested module, `scripts/bump-version.sh` (search: `nested_hook_runtime`), and the checker verifies the same set, `scripts/check-versions.mjs` (search: `nestedStampedHookTemplates`). A nested module that the audit requires but that has no stamp falls outside both. Audit anchor: `src/cli/audit/check-goat-flow.ts` (search: `.goat-flow/hooks/policy-evaluation.mjs`).
+
+
+**Recurrence 2026-10-23:** The native-hook cutover stamped the package, instructions and mirrors to 1.19.0, and `check-versions` passed. Instruction parity and the full fast suite then failed because the prepared changelog heading was absent. The heading also requires a manifest snapshot. Include both paths in the reviewed bump packet before stamping. Evidence: `scripts/check-instruction-parity.mjs` (`readReleaseMetadata`), `test/unit/local-instructions.test.ts` (search: `rejects a live instruction header date that differs from the changelog release`), and `test/unit/manifest.test.ts` (search: `provides a readable snapshot for every changelog release`).
 
 ---
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -11,6 +12,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it, type TestContext } from "node:test";
 import { makeCurrentQualityReport } from "../fixtures/quality-report.js";
+import * as qualityHistory from "../../src/cli/quality/history.js";
+import { dispatchCommand } from "../../src/cli/cli-handlers.js";
+import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import {
   buildQualityHistoryRows,
   findLatestQualityReport,
@@ -90,4 +94,98 @@ it("retains project ownership through a real filesystem alias", (t) => {
       assert.deepEqual(history.warnings, []);
     }
   }
+});
+
+// Newer malformed, foreign and wrong-mode rows must not hide the newest eligible peer report.
+it("selects each peer's latest valid same-mode report without crossing project ownership", (t) => {
+  const root = project(t);
+  const foreign = project(t);
+  // Persist a valid report with controlled filename order, mode and project ownership.
+  const saveReport = (
+    id: string,
+    agent: "claude" | "codex" | "copilot",
+    mode = "skills",
+    owner = root,
+  ) => {
+    const report = {
+      ...makeCurrentQualityReport(owner, "Peer history fixture"),
+      agent,
+      quality_mode: mode,
+    };
+    writeFileSync(
+      join(root, ".goat-flow/logs/quality", `${id}.json`),
+      JSON.stringify(report),
+    );
+  };
+  saveReport("2026-07-31-0900-codex-aaaaa", "codex");
+  saveReport("2026-07-31-1000-codex-bbbbb", "codex");
+  saveReport("2026-07-31-1100-codex-ccccc", "codex", "process");
+  saveReport("2026-07-31-1200-codex-ddddd", "codex", "skills", foreign);
+  writeFileSync(
+    join(root, ".goat-flow/logs/quality/2026-07-31-1300-codex-eeeee.json"),
+    "invalid JSON",
+  );
+  saveReport("2026-07-31-1400-claude-fffff", "claude");
+  saveReport("2026-07-31-1500-copilot-ggggg", "copilot");
+  const result = qualityHistory.findLatestOtherAgentQualityReports(
+    root,
+    "claude",
+    "skills",
+  );
+  assert.deepEqual(
+    result.entries.map((entry) => entry.id),
+    ["2026-07-31-1500-copilot-ggggg", "2026-07-31-1000-codex-bbbbb"],
+  );
+  assert.equal(result.warnings.length, 2);
+  assert.ok(
+    result.warnings.some((warning) =>
+      warning.includes("report project does not match"),
+    ),
+  );
+});
+
+it("returns no peer reports for empty history", (t) => {
+  assert.deepEqual(
+    qualityHistory.findLatestOtherAgentQualityReports(
+      project(t),
+      "claude",
+      "skills",
+    ),
+    {
+      entries: [],
+      warnings: [],
+    },
+  );
+});
+
+it("passes saved peer claims through the CLI prompt entrypoint", async (t) => {
+  const root = project(t);
+  const report = makeCurrentQualityReport(root, "CLI_PEER_DETAIL_OMITTED");
+  report.agent = "codex";
+  report.findings[0]!.severity = "MAJOR";
+  report.findings[0]!.summary = "CLI peer claim retained";
+  writeFileSync(
+    join(root, ".goat-flow/logs/quality/2026-07-31-1200-codex-abcde.json"),
+    JSON.stringify(report),
+  );
+  const output = join(root, "prompt.json");
+  await dispatchCommand({
+    ...parseCLIArgs([
+      "quality",
+      "prompt",
+      root,
+      "--agent",
+      "claude",
+      "--mode",
+      "skills",
+      "--format",
+      "json",
+      "--output",
+      output,
+    ]),
+    projectPath: root,
+  });
+  const payload = JSON.parse(readFileSync(output, "utf8"));
+  assert.match(payload.prompt, /CLI peer claim retained/u);
+  assert.doesNotMatch(payload.prompt, /CLI_PEER_DETAIL_OMITTED/u);
 });

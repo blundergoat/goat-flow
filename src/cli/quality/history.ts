@@ -529,6 +529,47 @@ export function findLatestQualityReport(
 }
 
 /**
+ * Find one latest valid same-mode report per other agent for unscored prompt context.
+ * Reuse history admission so malformed or foreign-project reports cannot supply peer claims.
+ *
+ * @param projectPath - selected project whose quality history is read
+ * @param agent - current assessor, whose reports are excluded
+ * @param qualityMode - assessment mode the peer reports must share
+ * @returns newest-first peer reports and warnings from rejected candidates; missing history is empty
+ */
+export function findLatestOtherAgentQualityReports(
+  projectPath: string,
+  agent: AgentId,
+  qualityMode: QualityMode,
+): { entries: QualityHistoryEntry[]; warnings: string[] } {
+  const dir = getQualityLogsDir(projectPath);
+  if (!existsSync(dir)) return { entries: [], warnings: [] };
+
+  const entries = new Map<AgentId, QualityHistoryEntry>();
+  const warnings: string[] = [];
+  for (const filename of listHistoryFilenamesDesc(dir)) {
+    const parsedName = parseHistoryFilename(filename);
+    // Once a peer has a valid matching report, its older files cannot replace that selection.
+    if (
+      !parsedName ||
+      parsedName.agent === agent ||
+      entries.has(parsedName.agent)
+    )
+      continue;
+    const { entry, warning } = tryParseHistoryFile(
+      projectPath,
+      dir,
+      filename,
+      parsedName,
+    );
+    if (warning) warnings.push(warning);
+    if (entry && matchesQualityMode(entry, qualityMode))
+      entries.set(entry.agent, entry);
+  }
+  return { entries: [...entries.values()], warnings };
+}
+
+/**
  * Select visible quality-history entries after agent, mode, and limit filters.
  *
  * @param entries - pre-sorted quality-history entries; empty entries produce an empty visible list

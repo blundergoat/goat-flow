@@ -34,6 +34,7 @@ import {
   writeProjectFile,
 } from "./dashboard-server.helpers.js";
 import type { AgentId } from "../../src/cli/types.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 describe("dashboard /api/audit", () => {
   /** Read dashboard profile spans from an endpoint response body. */
   function getProfileSpans(body: unknown): Record<string, unknown>[] {
@@ -282,8 +283,8 @@ describe("dashboard /api/audit", () => {
 
       await writeProjectFile(
         project.root,
-        ".goat-flow/hooks/deny-dangerous.sh",
-        "#!/usr/bin/env bash\nexit 1\n",
+        ".goat-flow/hooks/deny-dangerous.mjs",
+        "process.exitCode = 1;\n",
       );
       const afterHook = await fetchProfiledAudit(project.root);
       assert.equal(afterHook.body.cached, false);
@@ -295,16 +296,16 @@ describe("dashboard /api/audit", () => {
 
       // Both new policy inputs must invalidate cached reports even when an edit preserves file size.
       for (const policyPath of [
-        ".goat-flow/hooks/deny-git-mutations.sh",
-        ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+        ".goat-flow/hooks/deny-git-mutations.mjs",
+        ".goat-flow/hooks/policy-evaluation.mjs",
       ]) {
-        await writeProjectFile(project.root, policyPath, "# policy AAAA\n");
+        await writeProjectFile(project.root, policyPath, "// policy AAAA\n");
         await fetchProfiledAudit(project.root);
         assert.equal(
           (await fetchProfiledAudit(project.root)).body.cached,
           true,
         );
-        await writeProjectFile(project.root, policyPath, "# policy BBBB\n");
+        await writeProjectFile(project.root, policyPath, "// policy BBBB\n");
         const afterPolicyEdit = await fetchProfiledAudit(project.root);
         assert.equal(afterPolicyEdit.body.cached, false, policyPath);
         assert.equal(
@@ -523,10 +524,13 @@ describe("dashboard /api/audit", () => {
     const markerPath = join(project.root, "launcher-executed.marker");
     try {
       // Install the real shared policy dependencies so the HTTP case inspects a complete hook installation.
-      for (const hookFile of [
-        "deny-git-mutations.sh",
-        "deny-dangerous/guard-runtime.sh",
-      ]) {
+      const policyFiles = new Set(
+        ["deny-dangerous", "deny-git-mutations"].flatMap(
+          (hookId) => getHookSpec(hookId)?.scriptFiles ?? [],
+        ),
+      );
+      assert.ok(policyFiles.size > 0);
+      for (const hookFile of policyFiles) {
         await writeProjectFile(
           project.root,
           `.goat-flow/hooks/${hookFile}`,
@@ -546,11 +550,11 @@ describe("dashboard /api/audit", () => {
                 hooks: [
                   {
                     type: "command",
-                    command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-dangerous.sh`,
+                    command: `touch "${markerPath}"; node .goat-flow/hooks/deny-dangerous.mjs`,
                   },
                   {
                     type: "command",
-                    command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-git-mutations.sh`,
+                    command: `touch "${markerPath}"; node .goat-flow/hooks/deny-git-mutations.mjs`,
                   },
                 ],
               },
@@ -664,12 +668,12 @@ describe("dashboard guarded hook actions", () => {
       // A shared policy module outside the two ownership files isolates file replacement from the mixed-choice policy review.
       const sharedPath = join(
         projectPath,
-        ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+        ".goat-flow/hooks/deny-dangerous/patterns-shell.mjs",
       );
       const officialBytes = readFileSync(sharedPath, "utf-8");
       writeFileSync(
         sharedPath,
-        `${officialBytes}\n# local hook customization\n`,
+        `${officialBytes}\n// local hook customization\n`,
       );
       const reviewResponse = await fetchJson(toggleEndpoint, {
         method: "POST",
@@ -690,7 +694,7 @@ describe("dashboard guarded hook actions", () => {
       );
 
       // A second editor save while the user reviews the dialog must invalidate its earlier approval.
-      writeFileSync(sharedPath, `${officialBytes}\n# revised customization\n`);
+      writeFileSync(sharedPath, `${officialBytes}\n// revised customization\n`);
       const stale = await fetchJson(toggleEndpoint, {
         method: "POST",
         body: JSON.stringify({
@@ -812,12 +816,9 @@ describe("dashboard guarded hook actions", () => {
         (await fetchJson(endpoint, { method: "POST", body: "{}" })).res.status,
         200,
       );
-      const hookPath = join(projectPath, ".goat-flow/hooks/deny-dangerous.sh");
+      const hookPath = join(projectPath, ".goat-flow/hooks/deny-dangerous.mjs");
       const officialBytes = readFileSync(hookPath, "utf-8");
-      writeFileSync(
-        hookPath,
-        "#!/usr/bin/env bash\n# goat-flow-hook-version: 999.0.0\n",
-      );
+      writeFileSync(hookPath, "// goat-flow-hook-version: 999.0.0\n");
       const newerSnapshot = hookApiFileSnapshot(projectPath);
       const newer = await fetchJson(endpoint, {
         method: "POST",

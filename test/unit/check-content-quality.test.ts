@@ -823,6 +823,7 @@ describe("runContentQualityChecks: target discovery", () => {
 
   it("runs readiness and semantic checks across discovered Markdown", () => {
     const publicDoc = "docs/harness-audit.md";
+    const maintainedReadme = ".goat-flow/plans/README.md";
     const localPlan = ".goat-flow/plans/_done/review/README.md";
     const customLogReadme = ".goat-flow/logs/custom/README.md";
     const privateToolDoc = ".tools/report.md";
@@ -839,11 +840,12 @@ describe("runContentQualityChecks: target discovery", () => {
     const ctx = makeCtx({
       fs: stubFS({
         exists: (path) =>
+          path === maintainedReadme ||
           [publicDoc, ...localArtifacts, targetPath].includes(path),
         glob: (pattern) =>
           pattern === "**/*.md" ? [publicDoc, ...localArtifacts] : [],
         readFile: (path) => {
-          if (path === publicDoc) {
+          if (path === publicDoc || path === maintainedReadme) {
             return [
               "## Open Questions",
               "- **Answer:**",
@@ -871,6 +873,7 @@ describe("runContentQualityChecks: target discovery", () => {
     assert.ok(
       findings.every((finding) => !localArtifacts.includes(finding.path)),
     );
+    assert.ok(findings.some((finding) => finding.path === maintainedReadme));
   });
 
   it("does not guess a target for an unqualified search anchor in a new sentence", () => {

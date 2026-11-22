@@ -22,6 +22,31 @@ import {
   writeProjectFile,
 } from "./dashboard-server.helpers.js";
 describe("dashboard /api/quality", () => {
+  it("passes peer claims to copy and staged-draft quality prompts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-quality-peers-"));
+    try {
+      const report = makeCurrentQualityReport(root, "API_PEER_DETAIL_OMITTED");
+      report.agent = "codex";
+      report.findings[0]!.severity = "MAJOR";
+      report.findings[0]!.summary = "API peer claim retained";
+      await writeProjectFile(
+        root,
+        ".goat-flow/logs/quality/2026-07-31-1200-codex-abcde.json",
+        JSON.stringify(report),
+      );
+      const { res, body } = await fetchJson(
+        `/api/quality?path=${encodeURIComponent(root)}&agent=claude&mode=skills&fast=true`,
+      );
+      assert.equal(res.status, 200);
+      const payload = expectRecord(body, "Peer quality response");
+      for (const prompt of [payload.prompt, payload.launchPrompt]) {
+        assert.match(String(prompt), /API peer claim retained/u);
+        assert.doesNotMatch(String(prompt), /API_PEER_DETAIL_OMITTED/u);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it("computes rerun spread beyond the requested history window and keeps filters", async () => {
     const root = await mkdtemp(join(tmpdir(), "goat-quality-spread-"));
     try {

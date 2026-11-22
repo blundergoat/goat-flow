@@ -50,6 +50,34 @@ export interface HookProviderCaptureEvidence {
     "visible" | "not-visible" | "not-applicable" | "not-tested";
 }
 
+/** Hashes bind a host receipt to its original runtime and capture inputs. */
+interface HookProviderHostCapture extends HookProviderCaptureEvidence {
+  configurationPath: string;
+  nodeVersion: string;
+  artifactSha256: string;
+  approvalPacketSha256: string;
+  producer: string;
+  reviewSha256?: string;
+  /** SHA256 values keyed by paths relative to workflow/hooks; retained as captured. */
+  runtimeSha256: Readonly<Record<string, string>>;
+}
+
+/** Host-specific delivery observations retained separately from effective support gates. */
+export interface HookProviderHostEvidence {
+  caseId: string;
+  host: "windows" | "wsl";
+  provider: AgentId;
+  canonicalEvent: HookLifecycleEvent;
+  providerEventName: string;
+  verification: "verified" | "incomplete" | "security-hold";
+  summary: string;
+  limitations: readonly string[];
+  /** Absent when no current-runtime capture is available; never infer delivery from the row. */
+  capture?: HookProviderHostCapture;
+  /** Earlier delivery on runtime bytes that no longer apply to this row. */
+  historicalCapture?: HookProviderHostCapture;
+}
+
 /** Versioned evidence record for one provider, mode, event, and canonical tool combination. */
 export interface HookProviderEvidenceRecord {
   schema: typeof HOOK_PROVIDER_EVIDENCE_SCHEMA;
@@ -226,11 +254,11 @@ export interface HookEffectiveState {
 }
 
 /**
- * Choose the first provider-evidence gap a hook status screen must explain.
- * Use before install checks so documentation never substitutes for a live result.
+ * Choose the first provider-evidence warning a hook status screen must explain.
+ * Use after install checks, so a fixable local gap stays visible, and before runtime checks, so documentation never replaces a live result.
  *
  * @param stateFacts - current provider facts; absent or stale layers keep support unverified
- * @returns provider status, or `undefined` when the UI may continue to install checks
+ * @returns provider status, or `undefined` when the UI may continue to runtime checks
  */
 function classifyProviderEvidenceState(
   stateFacts: HookEffectiveStateFacts,
@@ -248,11 +276,6 @@ function classifyProviderEvidenceState(
   // A current provider statement that excludes the event keeps the hook unavailable.
   if (stateFacts.providerDocumentation === "fresh-unsupported") {
     return { status: "provider-documented-unsupported", severity: "warning" };
-  }
-
-  // An untrusted live capture is dangerous because its result cannot justify execution.
-  if (stateFacts.providerCapture === "untrusted") {
-    return { status: "provider-capture-untrusted", severity: "danger" };
   }
 
   // Documentation without a live capture cannot become an effective support claim.
@@ -280,11 +303,11 @@ function classifyProviderEvidenceState(
 }
 
 /**
- * Choose the first local install or trust gap shown after provider support is proven.
- * Use when setup explains why a supported hook is not ready in this checkout.
+ * Choose the first local install or trust gap, shown before any provider-evidence warning.
+ * Use when setup explains why a hook is not ready in this checkout.
  *
  * @param stateFacts - current project facts; false values identify the first local gap
- * @returns install status, or `undefined` when the UI may continue to runtime checks
+ * @returns install status, or `undefined` when the UI may continue to provider-evidence checks
  */
 function classifyInstalledHookState(
   stateFacts: HookEffectiveStateFacts,
@@ -350,15 +373,20 @@ export function classifyHookEffectiveState(
   // A user-disabled hook is neutral because no coverage was requested.
   if (!stateFacts.isDesired) return { status: "disabled", severity: "neutral" };
 
-  const providerEvidenceState = classifyProviderEvidenceState(stateFacts);
-
-  // A provider gap stops setup before local registration can imply coverage.
-  if (providerEvidenceState) return providerEvidenceState;
+  // An untrusted live capture is dangerous because its result cannot justify execution, whatever the local state.
+  if (stateFacts.providerCapture === "untrusted") {
+    return { status: "provider-capture-untrusted", severity: "danger" };
+  }
 
   const installedHookState = classifyInstalledHookState(stateFacts);
 
-  // A local install gap explains why provider support is not active in this checkout.
+  // A missing, outdated or untrusted local install is fixable in this checkout, so it is shown before a provider warning.
   if (installedHookState) return installedHookState;
+
+  const providerEvidenceState = classifyProviderEvidenceState(stateFacts);
+
+  // A provider gap keeps a current local install from claiming coverage.
+  if (providerEvidenceState) return providerEvidenceState;
 
   const observedHookState = classifyObservedHookState(stateFacts);
 
@@ -377,6 +405,7 @@ export type HookResultOutcome =
 export type HookResultReasonCode =
   | "completed-clean"
   | "bounded-reentry-ended"
+  | "coverage-gap-reentry-ended"
   | "policy-blocked"
   | "findings-reported"
   | "coverage-incomplete"
@@ -566,8 +595,29 @@ export function validateHookResultEnvelope(
   // Invalid optional facts cannot authorize release or misstate omitted findings.
   if (metadataReason !== null) validationMessages.push(metadataReason);
 
+  const reentryReason = coverageGapReentryFailureReason(hookResult);
+  // A misused binary-gap terminal reason could present a block or an infrastructure retry as an ended replay.
+  if (reentryReason !== null) validationMessages.push(reentryReason);
+
   // An empty list lets the final adapter preserve this result for the user.
   return validationMessages;
+}
+
+/** Keep an ended binary-gap replay incomplete and outside the infrastructure allowance, as the runtime decoder does.
+ *
+ * @param hookResult - Neutral result; any other reason code passes this check unchanged.
+ * @returns Rejection reason, or null when the reason is absent or used as an incomplete result.
+ */
+function coverageGapReentryFailureReason(
+  hookResult: HookResultEnvelope,
+): string | null {
+  if (hookResult.reasonCode !== "coverage-gap-reentry-ended") return null;
+  const execution = hookResult.execution;
+  return hookResult.outcome === "incomplete" &&
+    execution.failureClass === undefined &&
+    execution.recovery === undefined
+    ? null
+    : "coverage-gap-reentry-ended requires an incomplete result without infrastructure recovery";
 }
 
 /** Validate supplied output and recovery facts with the same meaning as the managed runtime.

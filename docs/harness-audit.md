@@ -1,6 +1,6 @@
 # AI Harness Audit
 
-`npx @blundergoat/goat-flow@latest audit . --harness` adds 18 deterministic harness checks to the standard build audit. They inspect required files, registrations, deny patterns, and other local evidence without an LLM. Harness failures contribute to the overall audit status. Platform limits remain explicit: a runtime can pass with limited assurance where broader enforcement is unavailable.
+`npx @blundergoat/goat-flow@latest audit . --harness` adds 19 deterministic harness checks to the standard build audit. They inspect required files, registrations, deny patterns, and other local evidence without an LLM. Harness failures contribute to the overall audit status. Platform limits remain explicit: a runtime can pass with limited assurance where broader enforcement is unavailable.
 
 | Mode | Command | Question |
 |------|---------|----------|
@@ -24,7 +24,7 @@ The Agent Enforcement Matrix is an advisory comparison of evidence observed by t
 
 `hard`, `limited`, and `soft` are positive local strength labels; `missing` means the inspected local surface is absent or failed; `unknown` means the audit cannot infer the broader capability. A `hard` row is rejected unless local static or runtime evidence exists. Static test fixtures prove this contract shape only, never runtime agent behavior. Audit is static by default. For deeper configured-command proof after inspecting and trusting the checkout, use `goat-flow hooks verify . --agent <id> --scenario <deny-hook|git-mutations-hook|post-turn-hook|gruff-hook|all> --trusted-target`; `deny-hook` covers dangerous shell, secret and GitHub policy; `git-mutations-hook` covers native Git. `all` refreshes every group in one command. It runs fixed offline inputs through that agent's exact registered command, but does not exercise external-agent hook delivery or model visibility.
 
-Every audit also returns a `hookCoverage` section and renders Effective Hook Coverage in terminal and Markdown output. It reports the first unmet link for each selected agent: provider evidence, exact registration, current installed bytes, trusted paths, observed execution, delivered result, or configured scenario. The section has its own `pass`, `warning`, or `fail` status: all required rows effective is `pass`, a warning-only required gap is `warning`, and any required danger row is `fail`. Required means enabled and supported; disabled optional and provider-excluded rows remain visible but do not lower the aggregate. This status does not change the top-level audit verdict, so consumers must read both fields and must not use the top-level status alone to claim effective hooks. Repair commands are read-only guidance until the user runs them.
+Every audit also returns a `hookCoverage` section and renders Effective Hook Coverage in terminal and Markdown output. It reports the first unmet link for each selected agent: exact registration, current installed bytes, trusted paths, provider evidence, observed execution, delivered result, or configured scenario. An untrusted provider capture is reported before the local links. The section has its own `pass`, `warning`, or `fail` status: all required rows effective is `pass`, a warning-only required gap is `warning`, and any required danger row is `fail`. Required means enabled and supported; disabled optional and provider-excluded rows remain visible but do not lower the aggregate. This status does not change the top-level audit verdict, so consumers must read both fields and must not use the top-level status alone to claim effective hooks. Repair commands are read-only guidance until the user runs them.
 
 ## Check types
 
@@ -70,11 +70,11 @@ Every registered build and harness check now carries machine-readable `provenanc
 
 Provenance remains JSON-only. Terminal and Markdown output stays focused on status and remediation; inspect each check's `provenance` object for its justification trail.
 
-### The 18 checks by type
+### The 19 checks by type
 
 - **integrity (9):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
 - **advisory (7):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `deny-blocks-pipe-to-shell`, `settings-rules-matched`, `commit-guidance`
-- **metric (2):** `evidence-before-claims`, `post-turn-hook-integrity`
+- **metric (3):** `evidence-before-claims`, `post-turn-hook-integrity`, `milestone-commands-named`
 
 ---
 
@@ -137,10 +137,11 @@ Verification turns an agent's completion claim into inspectable evidence. The au
 
 Agents that run for minutes or hours need durable state. Without recovery mechanisms, a crashed session means starting from scratch.
 
-**Recovery checks (2):**
+**Recovery checks (3):**
 
 - `milestone-tracking` - `.goat-flow/plans/` exists as a readable directory. Does not score task count, checkbox completion, milestone status, testing gates, roadmap progress, or recency. Empty, planned, active, and long-term roadmap files are valid local workflow state.
 - `session-logs` - `.goat-flow/logs/sessions/` exists as a readable directory. The JSON details expose the top-level Markdown file count for orientation, but that count does not affect status or score.
+- `milestone-commands-named` - metric. Present agent instruction files name the milestone start, stop/finalize commands and immediate tick rule. Missing clauses lower the Recovery score without failing audit status. It reads instruction text, not plan files, and cannot prove those actions ran.
 
 **Not checked here:** whether entry counts are sufficient, recency, content quality of task or session files, current objective, completed work, last verification, next action, or end-to-end resumability. A fresh install passes with the Recovery evidence limit.
 

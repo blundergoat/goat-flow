@@ -12,6 +12,7 @@ import { describe, it } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -80,24 +81,47 @@ interface MeasuredConsumer {
   userConfig: string;
 }
 
+const installedConsumerSeeds = new Map<string, string>();
+
 /**
- * Install one agent, then reproduce the measured consumer edits on top of it.
+ * Copy one real installation per agent, then reproduce the measured consumer edits on top of it.
  *
  * Installing first is what makes the reproduction faithful: the recorded baseline hash equals the current package
  * template, which is exactly the unchanged-template state.
  *
  * @param agent - agent whose managed mirror is installed before the edits
  * @returns the target's paths plus the exact bytes the upgrade must preserve; it writes into a disposable target
- *   created by `makeTempProject`
+ *   created by `makeTempProject`, independently copied from the unmodified installed seed
  */
 function measuredConsumerTarget(agent: string): MeasuredConsumer {
+  let seed = installedConsumerSeeds.get(agent);
+  if (seed === undefined) {
+    seed = makeTempProject();
+    const firstInstall = runCliInstaller(seed, "--agent", agent);
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    installedConsumerSeeds.set(agent, seed);
+  }
+
   const projectPath = makeTempProject();
-  const firstInstall = runCliInstaller(projectPath, "--agent", agent);
-  assert.equal(
-    firstInstall.status,
-    0,
-    firstInstall.stderr || firstInstall.stdout,
-  );
+  const directories: Array<{ path: string; mode: number }> = [];
+  cpSync(seed, projectPath, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+    /** Recursive copies recreate directories with default modes; retain the seed's private permissions. */
+    filter(source, destination) {
+      const stats = lstatSync(source);
+      if (stats.isDirectory()) {
+        directories.push({ path: destination, mode: stats.mode & 0o777 });
+      }
+      return true;
+    },
+  });
+  for (const { path, mode } of directories) chmodSync(path, mode);
 
   const managedReadmePath = join(projectPath, MANAGED_README_PATH);
   const projectNotes = Array.from(
@@ -419,6 +443,7 @@ describe("install version admission", () => {
   });
 
   const [major, minor, patch] = AUDIT_VERSION.split(".").map(Number);
+  // A malformed value such as "not-a-release" fails the same full X.Y.Z check as the prerelease row, so it has no row of its own.
   const refusedVersions = [
     {
       name: "newer patch",
@@ -433,11 +458,6 @@ describe("install version admission", () => {
     {
       name: "missing",
       line: "# version omitted deliberately",
-      guidance: /review.*version/iu,
-    },
-    {
-      name: "malformed",
-      line: 'version: "not-a-release"',
       guidance: /review.*version/iu,
     },
     {
@@ -547,7 +567,7 @@ describe("install version admission", () => {
     );
     writeFileSync(
       configPath,
-      original.replace(/^version: "[^"]*"/mu, 'version: "0.0.0"'),
+      original.replace(/^version: "[^"]*"/mu, 'version: "1.16.0"'),
     );
     const upgrade = runCliInstaller(root, "--agent", "claude");
     assert.equal(upgrade.status, 0, upgrade.stderr || upgrade.stdout);

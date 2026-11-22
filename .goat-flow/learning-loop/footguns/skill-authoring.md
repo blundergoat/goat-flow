@@ -1,6 +1,6 @@
 ---
 category: skill-authoring
-last_reviewed: 2026-10-08
+last_reviewed: 2026-11-04
 ---
 
 **Scope:** Skill candidacy, versioning, tool-isolated execution, and runtime authoring traps. Editing shipped guidance, authority, and size caps lives in [skill-guidance.md](skill-guidance.md); mirror sync lives in [skills.md](skills.md).
@@ -33,7 +33,7 @@ last_reviewed: 2026-10-08
 
 **Why it happens:** Several helpers encode the current version independently, and the rename itself exercises none of them.
 
-**Evidence:** `src/cli/audit/check-goat-flow.ts` (search: `configVersionCurrent`) requires exact equality with `AUDIT_VERSION`; `test/fixtures/projects/index.ts` (search: `stubConfig`) is the shared stub; `src/cli/classify-state.ts` (search: `classifyInstalledProject`) compares complete release versions before routing current, outdated or refused installs; `workflow/install-goat-flow.sh` (search: `Read version from package.json`) must derive the install version rather than hardcode it. **Recurrence 2026-08-26:** renaming two writing playbooks left the quality snapshot with `reference:writing-style`, no rows for the replacements, and stale bands, so validation found 29 artifacts against 28 rows and measured changelog and release notes at 80% and 84% outside 72-76%; the snapshot script and fixture were retired on 2026-10-11, anchor `src/cli/quality/skill-quality.ts` (search: `scoreAllArtifacts`).
+**Evidence:** `src/cli/audit/check-goat-flow.ts` (search: `configVersionCurrent`) requires exact equality with `AUDIT_VERSION`; `test/fixtures/projects/index.ts` (search: `stubConfig`) is the shared stub; `src/cli/classify-state.ts` (search: `classifyInstalledProject`) compares complete release versions before routing current, outdated or refused installs; `src/cli/paths.ts` (search: `export function getPackageVersion`) must derive the install version rather than hardcode it. **Recurrence 2026-08-26:** renaming two writing playbooks left the quality snapshot with `reference:writing-style`, no rows for the replacements, and stale bands, so validation found 29 artifacts against 28 rows and measured changelog and release notes at 80% and 84% outside 72-76%; the snapshot script and fixture were retired on 2026-10-11, anchor `src/cli/quality/skill-quality.ts` (search: `scoreAllArtifacts`).
 
 ## Footgun: New skill proposals can be configuration systems shaped around one workflow rather than general-purpose tools
 
@@ -66,6 +66,8 @@ last_reviewed: 2026-10-08
 **Why it happens:** A fixture assembled from a committed checkout plus a hand-picked set of working-tree overlays is neither the committed tree nor the working tree. The overlay list is chosen for the owners a skill must read, so it tends to include the learning buckets the campaign is actively writing. Gitignored plan and log state is never copied and is often forbidden outright for containment, yet committed source legitimately cites it, so identifiers resolve inside the repository and dangle inside the fixture. Binding the overlays to committed bytes fixes the leak only until the leaking note is itself committed.
 
 **Evidence:** `.goat-flow/learning-loop/lessons/skill-trial-evidence.md` (search: `rewrote both decodeFixtureResult diagnostic descriptions`) states the seeded answer, names the rule under test and cites the exact test anchor; it reached an evaluator through the fixture's overlay set while uncommitted, then became committed. `test/unit/hook-provider-adapters.test.ts` (search: `HK-NA`) carries identifiers whose only referents are gitignored plan records, and an evaluator removed them as dangling provenance. `.goat-flow/skill-docs/skill-preamble.md` (search: `The host runs an exact zero-result search`) already rejects subagent negatives and is what refuted the claim.
+
+**Recurrence 2026-10-20, shipped policy corpus:** the corpus capture drops state the same way. ~~`captureProgram` in `scripts/check-hook-parity.mjs` (search: `name.includes('.git/objects')`)~~ (retired at commit `2cc5b6d2`) skipped every `.git/objects` and `.git/logs` tree, and stored a token that named one temporary file as a root `file` entry. Materialized as recorded, six saved-alias rows in a selected repository were allowed instead of blocked, because Git does not treat a `.git` directory without an object store as a repository; the file tokens crashed the self-test. `writeFixtureFiles` in `src/hooks/policy-corpus.mts` (search: `gets an empty store`) now recreates the store, `materializePolicyRow` gives each file token a file path, and `test/integration/hook-parity.test.ts` (search: `omits its object store`) covers both.
 
 ## Resolved Entries
 

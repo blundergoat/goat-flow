@@ -563,13 +563,6 @@ const ENROLLMENT_OWNERS = [
     ],
   },
   {
-    path: "workflow/install-goat-flow.sh",
-    required: [
-      "workflow/skills/playbooks/test-selection.md",
-      ".goat-flow/skill-docs/playbooks/test-selection.md",
-    ],
-  },
-  {
     path: "scripts/preflight-checks.sh",
     required: ["test-selection.md sync", "test-selection.md"],
   },

@@ -69,7 +69,7 @@ function walkGlobStar(
   }
 
   for (const entry of readDirEntries(resolvePath(dir))) {
-    if (entry.isDirectory() && isIgnoredDir(entry.name) === false) {
+    if (entry.isDirectory() && isIgnoredDir(entry.name, dir) === false) {
       walkGlob(
         root,
         resolvePath,
@@ -154,7 +154,7 @@ function walkGlobStarExists(
   for (const entry of readDirEntries(resolvePath(dir))) {
     if (
       entry.isDirectory() &&
-      isIgnoredDir(entry.name) === false &&
+      isIgnoredDir(entry.name, dir) === false &&
       walkGlobExists(
         root,
         resolvePath,
@@ -462,7 +462,15 @@ const IGNORED_DIRS = new Set([
   ".vscode",
 ]);
 
-/** Skip heavyweight or generated directories during recursive glob walking. */
-function isIgnoredDir(name: string): boolean {
-  return IGNORED_DIRS.has(name);
+const IGNORED_PROJECT_WORKING_DIRS = new Set([
+  ".goat-flow/plans",
+  ".goat-flow/scratchpad",
+]);
+
+/** Prune local working trees during discovery; explicitly rooted glob patterns still enter them. */
+function isIgnoredDir(name: string, parentPath: string): boolean {
+  const projectPath = join(parentPath, name).replace(/\\/g, "/");
+  return (
+    IGNORED_DIRS.has(name) || IGNORED_PROJECT_WORKING_DIRS.has(projectPath)
+  );
 }

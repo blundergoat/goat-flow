@@ -1,5 +1,6 @@
 /** Replays inert GraphQL requests through candidate hooks, including provider-shaped input. */
 import assert from "node:assert/strict";
+import { copyHookTree, spawnSelectedHook } from "../helpers/hook-entrypoint.js";
 import { runHookWithPayload } from "../helpers/check-installed-policy.js";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
@@ -10,9 +11,7 @@ import { after, describe, it } from "node:test";
 const fixture = mkdtempSync(resolve(tmpdir(), "goat-graphql-policy-"));
 const hooks = resolve(fixture, ".goat-flow/hooks");
 mkdirSync(hooks, { recursive: true });
-cpSync(resolve(import.meta.dirname, "../../workflow/hooks"), hooks, {
-  recursive: true,
-});
+copyHookTree(hooks);
 assert.equal(spawnSync("git", ["init", "-q", fixture]).status, 0);
 after(() => rmSync(fixture, { recursive: true, force: true }));
 
@@ -95,9 +94,9 @@ describe("GraphQL read-only policy", () => {
                 fixture,
                 JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
               )
-            : spawnSync(
-                "bash",
-                [resolve(hooks, "deny-git-mutations.sh"), "--check", command],
+            : spawnSelectedHook(
+                resolve(hooks, "deny-git-mutations.sh"),
+                ["--check", command],
                 { cwd: fixture, encoding: "utf8" },
               );
           assert.equal(result.status, expectedStatus, result.stderr);
@@ -121,13 +120,9 @@ describe("GraphQL dependency completeness", () => {
         cpSync(hooks, incompleteHooks, { recursive: true });
         rmSync(resolve(incompleteHooks, dependency));
         assert.equal(spawnSync("git", ["init", "-q", incomplete]).status, 0);
-        const result = spawnSync(
-          "bash",
-          [
-            resolve(incompleteHooks, "deny-git-mutations.sh"),
-            "--check",
-            allowed[0],
-          ],
+        const result = spawnSelectedHook(
+          resolve(incompleteHooks, "deny-git-mutations.sh"),
+          ["--check", allowed[0]],
           { cwd: incomplete, encoding: "utf8" },
         );
         assert.equal(result.status, 2, result.stderr);

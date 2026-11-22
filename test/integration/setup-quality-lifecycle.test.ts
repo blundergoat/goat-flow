@@ -165,6 +165,9 @@ Name the selected target and allowed files.
 ### ACT
 
 Make only approved target changes.
+Run \`goat-flow plans time start <milestone-file> --category product\` before editing.
+Run \`goat-flow plans time stop <milestone-file>\` at human gates and with \`--finalize\` at exit.
+Tick completed milestone tasks \`- [x]\` before starting the next task.
 
 ### VERIFY
 
@@ -440,6 +443,23 @@ describe("consumer setup to quality-report lifecycle", () => {
           ),
           true,
           `${playbookFilename} must reach a fresh consumer install`,
+        );
+      }
+
+      for (const [installedPath, sourcePath] of [
+        [
+          ".goat-flow/skill-docs/playbooks/writing-fidelity-audit.md",
+          "workflow/skills/playbooks/writing-fidelity-audit.md",
+        ],
+        [
+          ".agents/skills/goat-clarity/references/receipt-evidence.md",
+          "workflow/skills/goat-clarity/references/receipt-evidence.md",
+        ],
+      ]) {
+        assert.deepEqual(
+          readFileSync(join(consumerTargetPath, installedPath)),
+          readFileSync(join(CONTROLLING_WORKSPACE, sourcePath)),
+          `${installedPath} must reach the consumer unchanged`,
         );
       }
 

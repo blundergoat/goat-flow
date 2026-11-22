@@ -69,11 +69,11 @@ h) Execution Loop: READ -> SCOPE -> ACT -> VERIFY
    ### SCOPE
    Declare intent, complexity class, a proportionate checkpoint, mode, files allowed to change, non-goals, and blast radius. Expanding beyond scope = stop and re-scope with human. At the checkpoint, report evidence and re-classify before continuing. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
    ### ACT
-   Declare `State: [MODE] | Goal: [one line] | Exit: [condition]`. Mode must be Plan, Implement, Explain, Debug, or Review.
-   For milestone work, load `goat-plan`; start timing before the first source edit, stop its timer at human gates, resume after release, and finalize it at exit.
+   Declare `State: [MODE] | Goal: [one line] | Exit: [condition] | Milestone: [path or none] | Receipt: [open, stopped or none]`. Mode must be Plan, Implement, Explain, Debug, or Review.
+   For milestone work, load `goat-plan`; run `goat-flow plans time start <milestone-file> --category <product|proof|other>` before the first source edit, `goat-flow plans time stop <milestone-file>` at human gates, and add `--finalize` at exit. Resume with start after release. The CLI writes measured `Actual`; never invent it.
    If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.
    ### VERIFY
-   Run required checks for changed files. Check cross-references after renames. Tick milestone checkboxes immediately.
+   Run required checks for changed files. Check cross-references after renames. Milestone ticks are Definition of Done gate (7).
    Do not claim checks passed without the literal pass/fail line from this session.
    Stop the line when tests break, builds fail, or behaviour regresses.
    Continue after an isolated, in-scope verification failure only when evidence is preserved and the next diagnostic stays within scope. Stop for human direction when failure crosses documentation or contracts, breaks references, invalidates evidence, or requires expanding the write allowlist.
@@ -81,10 +81,13 @@ h) Execution Loop: READ -> SCOPE -> ACT -> VERIFY
    A new in-scope write is deliverable.
    A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery.
    Do not attribute a starting dirty path to this session unless the session also recorded writing it.
+   Preserve other writers' hunks in approved files.
+   Diagnose failure causes before calling them external; an untouched consumer may depend on changed code.
+   Keep mandatory failures visible; touched checks never replace a failed required gate.
    If VERIFY caught a failure or you corrected course, update the learning loop before DoD.
 
 i) Definition of Done
-   MUST confirm all six gates: lint/typecheck passes on changed files; no broken cross-references; no unapproved boundary changes; logs updated if tripped; working notes current; grep old pattern after renames.
+   MUST confirm all seven gates: lint/typecheck passes on changed files; no broken cross-references; no unapproved boundary changes; logs updated if tripped; working notes current; grep old pattern after renames; tick each completed milestone task `- [x]` before starting the next. `goat-flow plans check <plan-path> --strict` refuses handoff with open tasks but does not enforce earlier ticking.
    After context compaction or 15+ turns, checkpoint current state; before unrelated work, recommend a fresh thread to the user.
 
 j) Artifact Routing
@@ -105,6 +108,6 @@ k) Router Table
 
 ## Quality Bar
 
-Every line in the hot-path instruction file must be one of: behavioral rule, scope boundary, exact command, verification gate, router pointer, or composition rule. Domain knowledge, project history, API docs, and glossary entries belong in cold-path files. For strict Never/MUST constraints, state whether the constraint is prose-only or mechanically enforced when that distinction matters.
+Every line in the hot-path instruction file must be one of: behavioral rule, scope boundary, exact command, verification gate, router pointer, or composition rule. Domain knowledge, project history, API docs, and glossary entries belong in cold-path files. For strict Never/MUST constraints, state whether the constraint is prose-only or mechanically enforced when that distinction matters. Milestone timing and tick discipline are prose obligations; the invoked CLI checks receipt and handoff state, not earlier compliance.
 
 If you must weaken a MUST to meet the line target, the target is wrong - raise it, do not weaken the rule.

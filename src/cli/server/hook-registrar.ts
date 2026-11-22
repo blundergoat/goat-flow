@@ -1,9 +1,8 @@
 /**
- * Reconciles which hooks are registered against the agents actually installed in the user's selected project.
+ * Tracks installed hook registrations for each agent in the selected project.
  *
- * A user reaches this by toggling a hook in the dashboard Hooks view or running `goat-flow hooks sync` after an upgrade.
- *
- * Registration is per agent because each one stores hooks differently, so enabling one hook can mean editing several config files.
+ * Use when toggling a hook in the dashboard or running `goat-flow hooks sync` after an upgrade.
+ * Each agent has its own settings, so a single toggle can update several files.
  */
 import { statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
@@ -788,8 +787,9 @@ function applyScanRootRepairGuidance(
 }
 
 /**
- * Replace generic stale-install guidance with the proven managed-file direction.
- * Diverged and unclassified bytes stay command-free because status cannot promise a safe sync.
+ * Show the right Hooks page repair for an outdated or locally changed installed hook.
+ *
+ * @param installationIssue - The file or trust issue. Null leaves the existing repair guidance in place.
  */
 function applyManagedFileRepairGuidance(
   effectivePresentation: ReturnType<typeof effectiveAgentState>,
@@ -797,19 +797,20 @@ function applyManagedFileRepairGuidance(
   installationFacts: ManagedHookInstallationFacts,
 ): void {
   const changedPaths = installationFacts.changedPaths.join(", ");
-  // Known pristine history lets the page explain that a bundled refresh is safe.
+  // Files still matching the previous install can be safely refreshed with the bundled version.
   if (installationIssue === "installed-version-behind") {
+    // The installation-stale state already carries the sync command; only the summary names the safe direction.
     effectivePresentation.repairSummary =
       "Installed bytes still match the previous-install baseline, so sync safely advances the managed files to this registry version.";
     return;
   }
-  // Local edits need an explicit replacement review, so do not offer a command that implies unconditional repair.
+  // For example, a user who customized a managed script needs to review the replacement before syncing.
   if (installationIssue === "installed-content-diverged") {
     effectivePresentation.repairCommand = null;
     effectivePresentation.repairSummary = `A sync would overwrite local content at ${changedPaths}; it pauses for your review and explicit replacement approval on the Hooks page. Save wanted edits first.`;
     return;
   }
-  // Without matching history, differing bytes need review even though their origin is unknown.
+  // An install with no matching baseline needs the same review because the page cannot attribute the differences.
   if (installationIssue === "installed-version-unclassified") {
     effectivePresentation.repairCommand = null;
     effectivePresentation.repairSummary = `No matching previous-install baseline proves the drift direction at ${changedPaths}; Sync pauses for your review before replacing differing local bytes.`;
@@ -828,8 +829,10 @@ function supportedHookReason(
 }
 
 /**
- * Build one supported provider row for CLI, audit, and dashboard hook views.
- * Use when the manifest exposes registration surfaces for the selected agent.
+ * Build a CLI, audit, or dashboard status row for an agent that can register this hook.
+ * Show local registration, trust, and repair guidance alongside the agent's delivery evidence.
+ *
+ * @param scanRootState - Scan-folder validation, or null when this hook has no scan-folder requirement.
  */
 function supportedAgentHookState(
   projectPath: string,
@@ -888,7 +891,7 @@ function supportedAgentHookState(
     isRegistered,
     isCurrentVersionInstalled,
     isTrusted: localDetails.isTrusted,
-    // No registration issue means this command passed its check; file trust and delivery still have separate gates.
+    // A null registration issue leaves the row free of registration diagnostics. Trust and delivery have their own checks.
     registrationIssue: registrationState.registrationIssue ?? null,
     installationIssue: localDetails.installationIssue,
     ...effectivePresentation,
@@ -902,7 +905,7 @@ function supportedAgentHookState(
     scanRootState,
     localDetails.repairReason,
   );
-  // A null reason keeps healthy rows concise while preserving exact local repair context.
+  // Show the reason only when there is a local issue to explain.
   if (reason !== null) hookState.reason = reason;
   return hookState;
 }

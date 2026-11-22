@@ -14,14 +14,14 @@ The menu can start the dashboard, copy/update goat-flow system files, generate a
 
 ### `goat-flow audit [path] [flags]`
 
-Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (18 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status. Audit JSON/text also includes an advisory per-agent enforcement matrix; it explains hard, limited, soft, missing, and unknown enforcement evidence without changing pass/fail status.
+Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (19 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status. Audit JSON/text also includes an advisory per-agent enforcement matrix; it explains hard, limited, soft, missing, and unknown enforcement evidence without changing pass/fail status.
 
 | Flag | Description |
 |------|-------------|
 | `--agent <id>` | Filter to one manifest-backed agent id. Run `npx @blundergoat/goat-flow@latest manifest` to inspect the current registry. |
-| `--harness` | Add AI Harness Completeness scope (18 checks, installed/not-installed per concern) |
+| `--harness` | Add AI Harness Completeness scope (19 checks, classified by concern and impact) |
 | `--check-drift` | Add managed-artifact and peer-instruction drift detection |
-| `--check-content` | Add selected Markdown, framework-claim and release-snapshot checks |
+| `--check-content` | Add selected Markdown, instruction-rule, retired-command, framework-claim and release-snapshot checks |
 | `--trusted-target` | Execute the selected checkout's configured deny-hook handler and managed script for runtime proof. Omit this flag for static inspection. |
 | `--untrusted-target` | Deprecated compatibility alias for the static, non-executing default. It remains accepted throughout v1.16.x and will not be removed before v1.17.0. It cannot be combined with `--trusted-target`. |
 | `--format <type>` | Output: json, text, markdown, sarif (default: auto) |
@@ -64,7 +64,7 @@ npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness
 npx @blundergoat/goat-flow@latest quality . --agent codex          # Quality prompt for Codex
 ```
 
-The saver derives the date/time and a random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
+The saver derives the date/time and a random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`. Every mode also includes up to five serious claims from each other agent's latest valid same-mode report, without scores or detail text, and asks for a quiescent checkout with any snapshot drift recorded as a grounding limit.
 
 The CLI command composes the prompt with fresh, static audit context by default; add `--trusted-target` only after confirming the selected checkout may execute local hook code. The dashboard
 Quality page may use cached audit enrichment for passive page loads, but its
@@ -178,6 +178,10 @@ npx @blundergoat/goat-flow@latest quality validate .goat-flow/logs/quality/2026-
 ### `goat-flow quality save <project>`
 
 Persist one current quality report supplied as JSON on stdin. The command strictly accepts the report shape in memory, scrubs accepted string values, revalidates the report, verifies its project, current goat-flow version and mode-specific rubric id, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. Current reports include `assessment_context` for run comparability, `score_rationale` with evidence and deduction for all eight score axes, and a required `refuted_candidates` array that records the suspected findings the assessor ruled out. The array may be empty. Historical reports that predate these fields remain loadable through validate, history, and diff; a missing legacy refutation ledger is exposed as `[]`. The saver rejects caller-selected output paths and redirected report directories.
+
+Keep the complete report in memory until the saver prints `OK <absolute-report-path>`; do not trim findings to fit a transport limit. A tool or hook rejection before the saver runs means that attempt saved nothing. Do not repeat the unchanged rejected command or stage a raw file. Use a supported transport to a version-compatible saver, or report `persist-skipped: transport-unavailable`. If the saver reports a JSON, schema or ownership error, correct that error while retaining every finding and retry. For other save failures, report the error and keep the report unsaved until a supported retry succeeds.
+
+Enforced dashboard sessions retain their separate staged-draft contract: write the one permitted draft with the file tool and wait for the dashboard's receipt. Do not switch those sessions to a Bash saver or another destination.
 
 Each score axis accepts an integer from 0 through 25. Each setup/system total must equal its four axes and remains out of 100. Intermediate integers refine the existing rating bands; they do not imply one-point measurement accuracy.
 
@@ -424,7 +428,7 @@ Area enumeration excludes ignored untracked trees, symlink traversal, and nested
 A standalone folder uses the repository filesystem adapter's build/tool directory exclusions.
 Standalone areas containing ignore rules require explicit paths or a Git repository; capture refuses to guess their membership.
 Explicit paths may select an ignored regular file. An absent selected file stays in the inventory and cannot support an anchor.
-Symlinks, submodules, unmerged/intent-to-add/sparse indexes, and live comparisons needing content conversion are unsupported.
+Symlinks, submodules, unmerged/intent-to-add/sparse indexes, and live comparisons needing content conversion are unsupported; a conversion refusal names the first converting path and attribute, or the effective `core.autocrlf` value.
 Multiple merge bases require an explicit two-dot comparison. These refusals never fall back to HEAD or live bytes.
 
 The response has two members:
@@ -517,9 +521,9 @@ Structural V1–V6/V8 failures, including unknown degradation flags, exit `1`; a
 Validation prints its result to stdout unless `--output` selects a result file.
 
 ```bash
-goat-flow review validate-ledger --expected-version 1.18.0
-goat-flow review validate-draft --project /path/to/reviewed-project --expected-version 1.18.0
-goat-flow review validate review.md --project /path/to/reviewed-project --expected-version 1.18.0
+goat-flow review validate-ledger --expected-version <installed-skill-version>
+goat-flow review validate-draft --project /path/to/reviewed-project --expected-version <installed-skill-version>
+goat-flow review validate review.md --project /path/to/reviewed-project --expected-version <installed-skill-version>
 goat-flow review validate review.md --output validation.txt
 ```
 
@@ -690,7 +694,7 @@ The planning skill separately selects one session milestone and requires one fin
 
 Before using an older checker, stop every extra open receipt, retain one active milestone, and move the others to `blocked`. Each `Status reason:` records the prior state, downgrade pause, and cap-compatible resume condition. Rerun strict validation before downgrade; restore prior states only after lane-cap support returns, preserving task and receipt history.
 
-Both modes read milestone files only; authors separately reconcile ISSUE delivery bands with the headline and map Requirements to outcomes and proof. Strict validation checks supplied deterministic structure, not planning judgment. It does not infer risk level or require assumptions, manual proof, rollback, Boundary Notes, or other conditional fields. Default mode remains legacy-compatible, and neither mode reconstructs approval history or evaluates whether proof is semantically sufficient.
+Both modes read milestone files only; authors separately reconcile ISSUE likely minutes with the headline and map Requirements to outcomes and proof. Strict validation checks supplied deterministic structure, not planning judgment. It does not infer risk level or require assumptions, manual proof, rollback, Boundary Notes, or other conditional fields. Default mode remains legacy-compatible, and neither mode reconstructs approval history or evaluates whether proof is semantically sufficient.
 
 `Actual:` accepts four provenance states: `measured`, `retrospective`, `unavailable`, and `incomplete`. A `measured` Actual must reconcile with a finalized `## Timing Receipt` - its minute allocation and its cited raw seconds both have to match. Untagged legacy numerics classify as `retrospective`, so prose claiming measurement never promotes an Actual the receipt does not back. A malformed receipt fails strict validation when a `measured` Actual claims authority from it or while the receipt is active and controls executing work. Hand-written historical receipts sitting beside retrospective Actuals stay advisory, so finished plans are not invalidated by evidence nothing depends on.
 
@@ -799,9 +803,9 @@ Use `--dry-run` to inspect managed template drift without composing a prompt or 
 
 ### `goat-flow install [path] --agent <id> [--dry-run] [--force] [--update-config-version] [--clean-deprecated]`
 
-Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved; a source-backed replaceable file needs `--force-user-owned` plus a matching `--force-path`. Existing config choices and comments are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. Every valid older release, including an older patch, automatically receives the executing CLI's config version; v0.9 projects also receive deprecated-skill cleanup.
+Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved; a source-backed replaceable file needs `--force-user-owned` plus a matching `--force-path`. Existing config choices and comments are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. Supported older installations receive the executing CLI's config version. One-step upgrades start at 1.16.0; older projects must install 1.18.0 first, then retry 1.19.0.
 
-An existing config must record a complete numeric `X.Y.Z` release on a single top-level `version:` line; quoted keys, quoted values, anchors and inline comments are supported. Block scalars, aliases and flow mappings need owner review before installation because the line-based migration cannot preserve them safely. If the project is newer, upgrade the CLI before installing. If the saved version is missing, malformed, a prerelease or otherwise cannot be safely compared, review that value first. Public install, `setup --apply` and the direct Bash installer refuse these targets before writing config, managed files, registrations or receipts. Force and `--update-config-version` cannot override the refusal. A fresh target without a config remains installable.
+An existing config must record a complete numeric `X.Y.Z` release on a single top-level `version:` line; quoted keys, quoted values, anchors and inline comments are supported. Block scalars, aliases and flow mappings need owner review before installation because the line-based migration cannot preserve them safely. If the project is newer, upgrade the CLI before installing. If the saved version is missing, malformed, a prerelease or otherwise cannot be safely compared, review that value first. Public install and `setup --apply` refuse these targets before writing config, managed files, registrations or receipts. Force and `--update-config-version` cannot override the refusal. A fresh target without a config remains installable.
 
 Agent settings receive narrow in-place migrations. In both `.claude/settings.json` and `.claude/settings.local.json`, install preserves allow and ask arrays verbatim. It removes `MultiEdit` denies and normalizes deny tool names (`Write` and `NotebookEdit` to `Edit`, `Glob` to `Read`) before applying the remaining migrations: retiring old shell and folder-name rules, expanding broad environment denies, and pairing existing credential-store denies at home and in the project. These changes settle in one install; repeat installation preserves the resulting bytes. Inert allow/ask rules remain visible to audit for deliberate review rather than being activated automatically.
 
@@ -846,8 +850,6 @@ Before `managed.json` exists, the public CLI inventories every supported agent's
 
 The preview lists every path an approved install may write: source-backed `system-owned` manifest records and the selected agent's canonical skill mirror. It also lists `.goat-flow/config.yaml`, the agent's settings and hook config, the project root `.gitignore`, seeded policy guidance, the active-plan marker, commit guidance, `.goat-flow/state/install/managed.json`, every supported agent's `.goat-flow/state/install/<agent>.json` cutover marker, and the generated learning-loop indexes. Some rows are conditional, so the preview is a superset: `.goat-flow/plans/.active` is written only when exactly one version-named plan directory exists, and commit guidance only in a Git project. It does not enumerate removals: retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations are cleanup rather than writes.
 
-Direct `workflow/install-goat-flow.sh` execution remains a low-level copy helper only before v2 authority exists. It skips CLI admission, post-write verification, and receipt publication. After `managed.json` or any cutover marker exists, the script refuses before target mutation and prints the public `goat-flow install` command. Use the public CLI for managed installs so target verification and receipt publication stay in one claimed lifecycle.
-
 After managed verification, install-state recording, post-install writes and claim release succeed, public `install` and `setup --apply` print a short closing summary. It counts actual changed preview paths, names replaced local content and observed hook-registration changes by agent and hook, and reports preserved local edits. A disabled Stop registration can be removed; disabled deny policies retain their neutral registrations. Requested force flags alone do not count as completed replacements. Failed or interrupted installs do not print verified completion.
 
 The summary leaves project-specific content and preserved settings for review. It prints `audit`, `stats --check` and, for hook-capable agents, `hooks verify --trusted-target --scenario all` commands pinned to the executing package version and aimed at the selected target. Inspect and trust that checkout's hook configuration before runtime verification. Disabled hooks stay disabled; install does not run these remaining checks or claim the audit is clean. File counts cover previewed destinations, not cleanup removals.
@@ -858,7 +860,7 @@ A locally edited managed file no longer blocks an upgrade on its own. When your 
 
 The decisions guide, `.goat-flow/learning-loop/decisions/README.md`, has one ownership-transfer exception. Earlier releases seeded it as user-owned and recorded no baseline. An exact copy of a recognised released template refreshes automatically. An inherited custom or unrecognised copy stays `local-preserved`, even without install history or after later template changes; `--force` and `--force-managed` do not replace it. To adopt the current package guide, run `goat-flow install <project> --agent <agent> --force-path .goat-flow/learning-loop/decisions/README.md`. After verification it receives the normal package baseline and follows ordinary managed-file rules.
 
-Keeping an inherited guide leaves that path without a package baseline and prevents a fresh full-install receipt. Other verified files still update normally; the completion summary names the kept guide and adoption command. The same rules apply to a guide in the old `.goat-flow/decisions/` folder: preview inspects it before the installer moves it. Unsafe paths and invalid history still block. Direct Bash installation with a guide in either location refuses before mutation and points to the public CLI; fresh installs remain supported.
+Keeping an inherited guide leaves that path without a package baseline and prevents a fresh full-install receipt. Other verified files still update normally; the completion summary names the kept guide and adoption command. The same rules apply to a guide in the old `.goat-flow/decisions/` folder: preview inspects it before the installer moves it. Unsafe paths and invalid history still block. The Bash installer no longer ships; use the public CLI for fresh installs and upgrades.
 
 If the preview blocks, inspect the listed paths, then choose the narrowest authority that covers them:
 
@@ -870,6 +872,28 @@ If the preview blocks, inspect the listed paths, then choose the narrowest autho
 | `--force-user-owned` plus a matching `--force-path` | replaces exactly the named user-owned file from its template |
 
 `--force-user-owned` on its own exits 2: replacing your content is never a broad choice. A `--force-path` that matches no row in the preview also fails, naming why - a typo, or a user-owned path that still needs `--force-user-owned`. No authority reaches a symlinked, non-regular, or unreadable destination; those stay blocked until you repair the path. The preview itself needs no rollback because it changes nothing. Before an authorized replacement, preserve the listed files with version control or a separate backup; after apply, use that same VCS/backup evidence to restore them if the result is not wanted.
+
+### Upgrading to 1.19.0
+
+Use Node 20.12.0 or newer. From the target project, preview the pinned release before applying it:
+
+```bash
+npx @blundergoat/goat-flow@1.19.0 install . --agent <id> --dry-run
+npx @blundergoat/goat-flow@1.19.0 install . --agent <id>
+```
+
+These package commands apply after 1.19.0 is published. Before publication, use a reviewed local package or the contributor checkout command in the README.
+For a project older than 1.16.0, use `npx @blundergoat/goat-flow@1.18.0 install . --agent <id>` first.
+
+Install preserves saved hook choices and user configuration. It removes retired Bash hooks only when their bytes match the saved baseline;
+edited or unclassified copies remain for review. Sync refreshes hooks from the running CLI's bundle; it does not upgrade that CLI.
+After upgrading, restart the agent and replace old Bash self-test lines in project instructions with the Node commands in the
+[guardrails guide](guardrails.md#verification). The Copilot Unix registration still requires the provider's Bash launch field.
+
+If installation is interrupted, keep the same pinned package, inspect reported claims with `goat-flow claims inspect . --target <path>`,
+and use the [claim recovery command](#goat-flow-claims-inspectrecover-path---target-project-relative-path) only after confirming that the writer has stopped.
+Then rerun the pinned install. Do not delete install state or bypass an unresolved policy or local-file review.
+Downgrading to a Bash release is unsupported: its installer cannot restore the new registrations, removed files and Node-only prerequisites.
 
 ### Atomic installer writes
 
@@ -916,15 +940,23 @@ npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-
 npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook --trusted-target
 ```
 
+The [Windows and WSL capture matrix](../workflow/hooks/README.md#windows-and-wsl-delivery-captures) records delivery on both hosts. Claude Code PostToolUse and Stop and Copilot CLI PostToolUse have verified captures of the current hook runtime, so their registry entries report `scenario-unverified` until `hooks verify` passes for the project. Policy hooks and all Codex CLI entries report `provider-capture-stale` while their delivery evidence is pending.
+
+The following Codex captures are historical observations of their recorded registrations and runtime bytes.
+
 Goat Flow registers Codex project hooks for the `PreToolUse` deny policy, opt-in `PostToolUse` Gruff analysis on `apply_patch`, and default `Stop` safety. The Windows registration adds Codex's documented `commandWindows` override, which invalidated the earlier Codex CLI 0.147.0 `PostToolUse` and `Stop` delivery capture.
 
-On 2026-09-21, interactive Linux Codex CLI 0.155.1 delivered registered PreToolUse denials from both deny hooks after native project and handler review. Both probes were blocked before execution, harmless controls completed, and the model received the denial reasons. This capture supersedes the 0.149.0 evidence; each row remains `scenario-unverified` until its fixed local scenario group passes. It renews neither Gruff nor Stop.
+On 2026-09-21, interactive Linux Codex CLI 0.155.1 delivered registered PreToolUse denials from both deny hooks after native project and handler review. Both probes were blocked, harmless controls succeeded, and the model received the reasons. This superseded the 0.149.0 evidence and set both gates to `scenario-unverified` at the time. The current registry reports `provider-capture-stale` while delivery on the current runtime is pending. This historical capture covers PreToolUse.
 
-A trusted Codex CLI 0.149.1 `exec` capture subsequently completed `apply_patch`, ran Gruff, and delivered its analyzer-only marker through the changed PostToolUse registration. Its registry gate is `scenario-unverified`; the fixed local scenario must also pass before the hook is effective.
+A trusted Codex CLI 0.149.1 `exec` capture subsequently completed `apply_patch`, ran Gruff, and delivered its analyzer-only marker through the changed PostToolUse registration. Its registry gate became `scenario-unverified` at the time.
 
-On 2026-09-18, interactive Linux Codex CLI 0.154.0 delivered registered Stop feedback for a conflict, the model repaired the fixture during one automatic continuation, and clean Stop completed. Its registry gate is `scenario-unverified`; the fixed local scenario must also pass before the hook is effective.
+On 2026-09-18, interactive Linux Codex CLI 0.154.0 delivered registered Stop feedback for a conflict, the model repaired the fixture during one automatic continuation, and clean Stop completed. Its registry gate became `scenario-unverified` at the time.
 
-Documentation and captures have no calendar expiry. Revalidate after a relevant provider, mode, trust, event, hook, adapter, or registration change. Exact configured-command replay does not upgrade provider-delivery evidence. Project-layer trust and handler trust remain separate, and app-server, remote execution, other platforms and modes, and forced-timeout behavior are unclaimed. See the [hook runtime matrix](../workflow/hooks/README.md#agent-event-name-mapping) for registered and disabled combinations.
+Documentation and captures have no calendar expiry. Revalidate after a relevant provider, mode, trust, event, hook, adapter, or registration change. Exact configured-command replay does not upgrade provider-delivery evidence. Project-layer trust and handler trust remain separate, and app-server, remote execution, platforms and modes absent from the host-specific matrix, and forced-timeout behavior are unclaimed. See the [hook runtime matrix](../workflow/hooks/README.md#agent-event-name-mapping) for registered and disabled combinations.
+
+Linux/macOS compatibility is checked in the native CI matrix at consumer Node 20.12.0 and 24.21.0, using artifacts built with Node 24.21.0. The covered combinations are Claude and Codex PreToolUse, PostToolUse and Stop; Copilot CLI PreToolUse and PostToolUse; and Antigravity PreToolUse. PreToolUse coverage includes both independent deny policies. Native launcher, configured-command replay, evaluator and response-adapter checks establish compatibility at those boundaries.
+
+Live delivery through the current native hooks remains unverified on Linux and macOS. CI does not establish that an authenticated provider fired a hook, showed its result to the model or continued after Stop. The historical Linux captures above describe their tested registrations and runtime bytes; they do not renew delivery evidence for the native runtime. Check the applicable CI result and provider capture separately before making a support claim.
 
 `enable` and `disable` require a `<hook-id>` (exit 2 if omitted). `sync` reapplies the `.goat-flow/config.yaml` hook state to supported agent configurations in the selected project without changing which hooks are enabled. It copies official files bundled with the running CLI; it does not download a release or upgrade the package.
 

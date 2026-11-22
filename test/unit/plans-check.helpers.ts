@@ -1,7 +1,7 @@
 /**
- * Shared fixture builders for the `plans check` CLI suites.
- * Every case here works the same way: write a milestone the way an author would, run the real
- * CLI against it, and assert on the exact lines the author would read. These builders own the
+ * Shared fixture builders for the `plans check` suites.
+ * Every case here works the same way: write a milestone the way an author would, run the checker
+ * against it, and assert on the exact lines the author would read. These builders own the
  * milestone grammar - estimate lines, timing receipts, canonical sections - so a test states
  * only what it varies and the reader is not re-parsing boilerplate to find the point.
  *
@@ -22,6 +22,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { CLIError } from "../../src/cli/cli-error.js";
+import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { runPlansCheckReport } from "../../src/cli/plans-check.js";
 import type { PlanForecastRecord } from "../../src/cli/plans-forecast-context.js";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -162,12 +165,45 @@ export function writeRegisteredHistory(
   return directory;
 }
 
-/** Run the read-only plan checker through the real CLI.
+/** Run the read-only plan checker in this process and return what the CLI would print and exit with.
+ *
+ * Mirrors `src/cli/cli.ts`: a CLIError becomes its message on stderr with its exit code, and any other
+ * error becomes `Fatal error:` with exit 1. `--help` and `--version` are not handled here; use
+ * {@link runPlansCheckCli} for them and for the real-process contract.
+ *
+ * @param args - arguments entered after `plans check`; empty exercises its usage error
+ * @returns the exit status, stdout and stderr the plan author would see
+ * @throws Never; every checker error becomes a returned status and stderr text
+ */
+export function runPlansCheck(...args: string[]) {
+  try {
+    const { exitCode, report } = runPlansCheckReport(
+      parseCLIArgs(["plans", "check", ...args]),
+    );
+    return { status: exitCode, stdout: `${report}\n`, stderr: "" };
+  } catch (error) {
+    // The CLI prints an expected input error's message and exits with its code.
+    if (error instanceof CLIError) {
+      return {
+        status: error.exitCode,
+        stdout: "",
+        stderr: `${error.message}\n`,
+      };
+    }
+    return {
+      status: 1,
+      stdout: "",
+      stderr: `Fatal error: ${error instanceof Error ? error.message : String(error)}\n`,
+    };
+  }
+}
+
+/** Run the read-only plan checker through the real CLI process, for exit-code, usage and output-format contracts.
  *
  * @param args - arguments entered after `plans check`; empty exercises its usage error
  * @returns process metadata and the diagnostics shown to the plan author
  */
-export function runPlansCheck(...args: string[]) {
+export function runPlansCheckCli(...args: string[]) {
   return runPlansCommand("check", ...args);
 }
 

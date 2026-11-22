@@ -57,7 +57,7 @@ When `--check-drift` or `--check-content` is enabled, drift and content findings
 
 ### Harness mode (`--harness`)
 
-Adds 18 checks across the five harness concerns on top of the default build checks. Harness checks are deterministic but classified as **integrity** (installation drift), **advisory** (acknowledgeable practice), or **metric** (score-only maturity signal). JSON includes the status, impact, assurance, and framework-versus-target provenance needed to distinguish hard failures from limited or score-only evidence.
+Adds 19 checks across the five harness concerns on top of the default build checks. Harness checks are deterministic but classified as **integrity** (installation drift), **advisory** (acknowledgeable practice), or **metric** (score-only maturity signal). JSON includes the status, impact, assurance, and framework-versus-target provenance needed to distinguish hard failures from limited or score-only evidence.
 
 Harness checks are grouped by **concern** - the five surfaces the model in [harness-engineering.md](harness-engineering.md) defines, where that doc also gives the sources behind each one.
 
@@ -66,7 +66,7 @@ Harness checks are grouped by **concern** - the five surfaces the model in [harn
 | Context | 5 | Do instructions, required sections, and referenced paths exist within the configured limits? |
 | Constraints | 5 | Do installed deny layers cover the registered dangerous and secret-path patterns? |
 | Verification | 4 | Are hook registration, commit guidance, evidence rules, and applicable post-turn signals wired? |
-| Recovery | 2 | Do milestone and session-log storage surfaces exist? |
+| Recovery | 3 | Do recovery storage surfaces exist and instructions name milestone commands? |
 | Feedback Loop | 2 | Do learning-loop and decision surfaces exist? |
 
 Sample harness output:
@@ -74,7 +74,7 @@ Sample harness output:
 ```
 GOAT Flow Setup:          PASS
   Skills:                 8/8 installed
-  Config:                 valid, version 1.18.0
+  Config:                 valid, version 1.19.0
   InstructionFile:        118 lines
 
 Agent Setup:              PASS
@@ -85,7 +85,7 @@ AI Harness Completeness:  PASS
   Context:                PASS (5/5)
   Constraints:            FAIL (4/5) - pipe-to-shell not blocked for codex
   Verification:           PASS (4/4)
-  Recovery:               PASS (2/2)
+  Recovery:               PASS (3/3)
   Feedback Loop:          PASS (2/2)
 
 Result: FAIL (Constraints)

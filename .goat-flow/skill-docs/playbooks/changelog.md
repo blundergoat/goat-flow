@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.18.0"
+goat-flow-reference-version: "1.19.0"
 ---
 # Changelog
 
@@ -195,6 +195,8 @@ Before merging or tagging:
 - **Too long:** cut wrapper prose, duplicated context, and internal mechanism first; preserve public facts and migration detail.
 
 ## Related References
+
+- [`writing-fidelity-audit.md`](./writing-fidelity-audit.md) - source-visible meaning review for substantive recomposition or derivation with distinct claims, or unresolved fidelity.
 
 - [`release-notes.md`](./release-notes.md) - user-facing announcement derived from the changelog.
 - [`writing-human-facing-prose.md`](./writing-human-facing-prose.md) - core correctness and routing after audience, category, and version are settled.

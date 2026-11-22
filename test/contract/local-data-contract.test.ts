@@ -199,7 +199,6 @@ describe("local data contract", () => {
       "workflow/setup/reference/goat-flow-gitignore",
     );
     const installedGitignore = readContractFile(".goat-flow/.gitignore");
-    const installer = readContractFile("workflow/install-goat-flow.sh");
     const claimDirectory = ".goat-flow/state/locks/";
     const ignorePattern = "**/state/";
 
@@ -227,10 +226,6 @@ describe("local data contract", () => {
         .split(/\r?\n/u)
         .map((line) => line.trim())
         .includes(ignorePattern),
-    );
-    assert.match(
-      installer,
-      /for dir in [^\n]*\.goat-flow\/state\/locks[^\n]*; do/u,
     );
   });
 

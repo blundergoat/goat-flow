@@ -27,6 +27,12 @@ const PROSE_TARGETS = [
 
 const DOC_GLOB = "docs/*.md";
 const GLOSSARY_TARGET = ".goat-flow/glossary.md";
+// Instruction files receive command checks without inheriting numeric prose-claim patterns.
+const INSTRUCTION_COMMAND_TARGETS = [
+  "CLAUDE.md",
+  "AGENTS.md",
+  ".github/copilot-instructions.md",
+];
 
 /** Files where a loose `N views`/`N presets` pattern is safe because the file
  *  is dashboard-specific. Outside these files, the pattern would false-positive
@@ -172,12 +178,15 @@ const COUNT_CHECKS: CountClaimCheck[] = [
     rule: "harness-check-count-drift",
     // Tolerates adjectives between the count and "checks" (code-map.md says "N advisory/integrity/metric checks") and "the N harness concerns"
     // phrasing.
-    // Also covers the harness-specific inventory wording used by audit-checks.md, including Markdown-bold counts.
+    // Also covers the harness-specific inventory wording used by audit-checks.md, including Markdown-bold counts, and CONTRIBUTING.md's
+    // "N checks grouped by 5 concerns".
     pattern:
-      /\b(\d+)(?:\*\*)?\s+(?:(?:[\w/-]+\s+){0,3}checks\s+across\s+(?:the\s+)?\d+\s+(?:harness\s+)?concerns|deterministic\s+harness-completeness\s+checks?)\b/gi,
+      /\b(\d+)(?:\*\*)?\s+(?:(?:[\w/-]+\s+){0,3}checks\s+(?:across|grouped\s+by)\s+(?:the\s+)?\d+\s+(?:harness\s+)?concerns|deterministic\s+harness-completeness\s+checks?)\b/gi,
     /** Return the live harness checks across 5 concerns count. */
     actual: () => HARNESS_CHECKS.length,
     label: "harness checks across 5 concerns",
+    // code-map.md states this count inside its fenced directory tree, so skipping fences would leave that copy unchecked.
+    scanFenced: true,
   },
   {
     rule: "ai-harness-count-drift",
@@ -637,6 +646,12 @@ export function runFactualClaimChecks(ctx: AuditContext): {
     findings.push(...scanCountClaims(GLOSSARY_TARGET, glossary));
     findings.push(...scanConcernCountClaims(GLOSSARY_TARGET, glossary));
     findings.push(...scanRemovedCommands(GLOSSARY_TARGET, glossary));
+  }
+  for (const path of INSTRUCTION_COMMAND_TARGETS) {
+    const text = ctx.fs.readFile(path);
+    if (text === null) continue;
+    filesScanned++;
+    findings.push(...scanRemovedCommands(path, text));
   }
   // Dashboard-specific loose patterns (safe only on dashboard docs).
   for (const rel of DASHBOARD_SCOPED_TARGETS) {

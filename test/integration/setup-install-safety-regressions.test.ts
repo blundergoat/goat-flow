@@ -92,7 +92,7 @@ describe("setup safety regressions", () => {
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.equal(readFileSync(settings, "utf8"), foreignConfig);
       assert.ok(
-        existsSync(join(root, ".goat-flow/hooks/deny-git-mutations.sh")),
+        existsSync(join(root, ".goat-flow/hooks/deny-git-mutations.mjs")),
       );
     });
   }

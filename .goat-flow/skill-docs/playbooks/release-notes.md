@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.18.0"
+goat-flow-reference-version: "1.19.0"
 ---
 # Release Notes
 
@@ -165,6 +165,8 @@ Before publishing:
 - **Different headline requested:** use user impact, not internal implementation framing.
 
 ## Related References
+
+- [`writing-fidelity-audit.md`](./writing-fidelity-audit.md) - source-visible meaning review for substantive recomposition or derivation with distinct claims, or unresolved fidelity.
 
 - [`changelog.md`](./changelog.md) - source-of-truth release ledger.
 - [`writing-human-facing-prose.md`](./writing-human-facing-prose.md) - core correctness and diagnostic routing after audience and selection are settled.

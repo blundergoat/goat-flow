@@ -20,8 +20,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { renderInformationalRequest } from "../../src/cli/cli.js";
 import { CLIError } from "../../src/cli/cli-error.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
+import { runReviewRequest } from "../../src/cli/review-command.js";
 import {
   canonicalReviewJson,
   captureReviewSnapshot,
@@ -38,8 +40,46 @@ import {
   reviewReportTemplate,
 } from "./review-validate.helpers.js";
 
-/** Spawns the controlling source CLI from another directory; empty input deliberately provides no report evidence. */
+/**
+ * Run one review command in-process from `cwd` and return the output and exit status src/cli/cli.ts would give, so most tests start no CLI process.
+ * Side effect: mutates the test process's working directory to `cwd` for the call and restores it before returning.
+ *
+ * @param cwd - directory the command runs from; relative paths and the default --project resolve against it
+ * @param args - command arguments; a request with --output needs the real CLI, so those tests use {@link reviewCliProcess}
+ * @param input - stdin text; empty deliberately provides no report evidence
+ * @returns status, stdout and stderr in the shape spawnSync reports for the real CLI
+ * @throws for an --output request, and rethrows any non-CLIError failure that the real CLI would print as `Fatal error:` with exit 1
+ */
 function reviewCli(cwd: string, args: string[], input = "") {
+  const callerDirectory = process.cwd();
+  process.chdir(cwd);
+  try {
+    const request = parseCLIArgs(args);
+    const informational = renderInformationalRequest(args, request);
+    // Help and version print before any project or input is read, and exit 0.
+    if (informational !== null)
+      return { status: 0, stdout: `${informational}\n`, stderr: "" };
+    // Writing --output and confirming it on stderr is the real CLI's job, so this helper refuses rather than skipping the file.
+    if (request.output)
+      throw new Error("use reviewCliProcess for --output requests");
+    const { rendered, exitCode } = runReviewRequest(request, input);
+    return { status: exitCode, stdout: `${rendered}\n`, stderr: "" };
+  } catch (error) {
+    // A usage or input error prints only its message and exits with its code, as the CLI entry point does.
+    if (error instanceof CLIError)
+      return {
+        status: error.exitCode,
+        stdout: "",
+        stderr: `${error.message}\n`,
+      };
+    throw error;
+  } finally {
+    process.chdir(callerDirectory);
+  }
+}
+
+/** Spawns the controlling source CLI from another directory; empty input deliberately provides no report evidence. */
+function reviewCliProcess(cwd: string, args: string[], input = "") {
   return spawnSync(
     process.execPath,
     ["--import", import.meta.resolve("tsx"), CLI_PATH, ...args],
@@ -361,7 +401,7 @@ describe("review validate CLI", () => {
 
   it("accepts review help without a report and validates stdin end to end", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const help = reviewCli(projectRoot, ["review", "--help"], "");
+    const help = reviewCliProcess(projectRoot, ["review", "--help"], "");
     assert.equal(help.status, 0, help.stderr);
     assert.match(help.stdout, /review validate \[report-file\]/u);
     assert.match(help.stdout, /review validate-draft \[draft-envelope-file\]/u);
@@ -371,7 +411,7 @@ describe("review validate CLI", () => {
     assert.match(help.stdout, /capture refusals exit 2/iu);
 
     const report = validReview(projectRoot, "src/example.ts", "loadConfig");
-    const valid = reviewCli(projectRoot, ["review", "validate"], report);
+    const valid = reviewCliProcess(projectRoot, ["review", "validate"], report);
     assert.equal(valid.status, 0, valid.stderr);
     assert.match(valid.stdout, /review validate: PASS/u);
   });
@@ -409,7 +449,7 @@ describe("review validate CLI", () => {
     );
     const outputPath = join(outputRoot, "validation.txt");
     const report = validReview(projectRoot, "src/example.ts", "loadConfig");
-    const result = reviewCli(
+    const result = reviewCliProcess(
       projectRoot,
       ["review", "validate", "--output", outputPath],
       report,
@@ -431,7 +471,7 @@ describe("saved review project selection", () => {
     writeFileSync(reportPath, compact);
     /** Run a saved-report check from the chosen directory to expose confusion between input and reviewed-project paths. */
     const runReviewFromDirectory = (cwd: string, args: string[]) =>
-      reviewCli(cwd, ["review", ...args], "");
+      reviewCliProcess(cwd, ["review", ...args], "");
     const selected = runReviewFromDirectory(caller, [
       "validate",
       "report.md",

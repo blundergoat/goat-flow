@@ -82,6 +82,17 @@ function assertHarnessAssuranceContract(report: AuditReport): void {
     ),
   );
 
+  assert.ok(
+    report.concerns.recovery.limits.includes(
+      "Milestone command coverage is metric-only; instruction text does not prove that timing, ticking or handoff checks ran.",
+    ),
+  );
+  const milestoneCommands = report.scopes.harness?.checks.find(
+    (check) => check.id === "milestone-commands-named",
+  );
+  assertExists(milestoneCommands);
+  assert.equal(milestoneCommands.type, "metric");
+
   const recoveryCheckIds = new Set(["milestone-tracking", "session-logs"]);
   const recoveryChecks = report.scopes.harness?.checks.filter((check) =>
     recoveryCheckIds.has(check.id),

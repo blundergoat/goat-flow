@@ -1,101 +1,154 @@
 # Git commit message standard
 
-## Requirements for the commit message
+A commit message has a header, an optional body, and an optional
+`BREAKING CHANGE:` footer, in that order. Separate the parts with one blank
+line.
 
-### Branch-derived prefix
+## Inputs
 
-Read the branch with `git branch --show-current` and match the output against:
+A drafting tool fills in the two fields below. If a field still shows its
+placeholder in braces, read the branch with `git branch --show-current` and
+inspect the requested changes in the checkout.
 
-```
+Branch: {branch}
+
+Code changes:
+
+{diff}
+
+## Branch prefix
+
+Use the captured digits as the issue number when the branch matches this
+pattern.
+
+```text
 ^(feat|fix|chore|refactor|docs|test|perf|build|ci|security)/([0-9]+)([-_].*)?$
 ```
 
-| Branch output | Action |
-| ------------- | ------ |
-| Matches the pattern (`feat/123`, `fix/482-quote-paths`, `feat/91_drift_cache`) | Prefix the subject: `#<digits> type(scope): subject` |
-| Does not match (`main`, `feat/no-number`, `feat/123abc`, `release/1.4`) | No prefix |
-| Empty (detached HEAD: rebase, bisect, CI checkout) | No prefix |
+| Branch | Header prefix |
+| --- | --- |
+| `feat/123`, `fix/482-quote-paths`, `feat/91_drift_cache` | `#123 `, `#482 `, `#91 ` respectively |
+| `main`, `feat/no-number`, `feat/123abc`, `release/1.4` | None |
+| Empty (detached HEAD) or unavailable | None |
 
-Empty output means no prefix. Do not infer one from history, recent commits, or the diff.
+The branch supplies only the issue number. The changes supply the type, scope,
+and subject, so a `feat/` branch can carry a `fix` or `test` commit. Never
+infer an issue number from the diff or commit history.
 
-### Message shape
+## Header
 
+Use `type(scope): subject`. Prepend `#<digits> ` when the branch rule applies.
+For a breaking public contract, add `!` before the colon and add the footer
+described below. With both, the header is `#<digits> type(scope)!: subject`.
+
+Keep the entire header at 72 characters or fewer, counting the prefix and the
+`!` when present. If it runs over, shorten the subject and keep the prefix,
+type, and scope.
+
+### Type and scope
+
+Choose the type by the effect of the primary change.
+
+| Type | Use for |
+| --- | --- |
+| `feat` | A new capability |
+| `fix` | A correction to existing behaviour, including instructions that change how an agent acts |
+| `security` | A vulnerability fix or a tighter safety control |
+| `perf` | A measured speed or resource gain that preserves results |
+| `refactor` | Restructuring that preserves observable behaviour |
+| `docs` | Documentation changes that preserve product and agent behaviour |
+| `test` | Changes limited to tests for existing behaviour |
+| `build` | Build dependencies, toolchains, or packaging |
+| `ci` | Continuous integration configuration or workflows |
+| `chore` | Other routine maintenance |
+
+A regression test that accompanies a fix belongs to the `fix`.
+
+Use the most specific subsystem as the scope, in lowercase kebab-case: the
+module, package, service, or feature the change belongs to. For example, use
+`installer` for a hook installer fix. Reuse a specific scope from the commit
+history when one fits. When a change spans subsystems, use the one the primary
+change serves. Avoid catch-all scopes such as `core` or `misc` and scopes
+based on file kinds.
+
+### Subject
+
+- Use one imperative phrase that completes `If applied, this commit will ___`.
+- Name one observable change and the behaviour, identifier, setting, or version
+  it affects. When the commit holds several changes, name the primary one and
+  put the others in the body. Leave out words the scope already says.
+- Start the subject in lowercase unless it opens with a proper noun, an API
+  name, or an identifier. Backticks around identifiers are allowed. Omit the
+  final period.
+- Use a verb that describes the edit, such as `add`, `remove`, `replace`,
+  `rename`, `deny`, `cache`, `retry`, or `bump`. Avoid vague verbs such as
+  `enhance`, `improve`, and `update`.
+
+## Body and breaking changes
+
+Add a body when the reader needs the reason for the change, when the commit
+touches several behaviours, or when compatibility, migration, security,
+platform, or performance context matters. Otherwise the header is the whole
+message.
+
+- Open with the reason or constraint when the evidence supports it. If the
+  reason is unknown, describe the observed effect and omit guesses about
+  motivation.
+- Use up to six bullets when distinct supporting details help. Put the list
+  directly under the opening prose, with no blank line between them. Start
+  each bullet with `- ` and a capital letter, and end it with a period.
+- Put the most important bullet first and keep one fact per bullet. Name
+  affected behaviours or surfaces. Use `old -> new` for value changes when
+  both values matter.
+- Wrap prose at 72 columns. Indent continuation lines in bullets two spaces.
+  Keep paths, identifiers, and URLs intact if wrapping would split them.
+- Use concrete prose. Cut boilerplate such as `This commit`, restatements of
+  the subject, and bare file lists. Quote only the essential error line.
+- Ground claims in the diff or supplied context. Describe moves as moves.
+  Report measured gains and check results only when the evidence records them.
+
+For a breaking public contract, end the message with a `BREAKING CHANGE:`
+footer. Name the contract, who or what is affected, and how to migrate.
+
+## Content and drafting
+
+- Use repository-relative paths and plain ASCII punctuation. Use straight
+  quotes and spaced hyphens in place of typographic quotes and em dashes.
+- Omit secrets, credentials, tokens, connection strings, and machine-local
+  absolute paths.
+- Omit references a reader of the repository cannot resolve, such as ignored
+  or untracked local files, private planning labels, and drafting-session
+  names.
+- Omit self-narration, emoji, and gitmoji. Include tool or co-author footers
+  only when project instructions require them.
+- For a draft request, use the requested language, with English as the default.
+  Return one plain commit message without fences or commentary.
+
+## Worked examples
+
+Illustrative fix on `fix/482-quote-paths`.
+
+```text
+#482 fix(installer): quote path expansions
+
+The installer failed on paths with spaces because $TARGET was unquoted.
+- Add a regression test for paths with spaces.
 ```
-#123 type(scope): subject
 
-Body explaining why the change is needed.
-- one fact per bullet, naming real files, behaviours, APIs, commands, or versions
+Illustrative breaking change on `main`.
+
+```text
+feat(export)!: select reports by ID
+
+Report IDs let scripts target the same report after the list changes
+order.
+
+BREAKING CHANGE: --report takes a report ID. Replace list positions in
+scripts with their corresponding report IDs.
 ```
 
-### Subject rules
+Illustrative header-only commit on `main`.
 
-Subject lines are optimised for `git log`, changelogs, and bisect notes.
-
-- Imperative mood. Test: the subject must complete the sentence "If applied, this commit will
-  ___".
-- One line, as short as it can be while still naming the observable change, and never longer
-  than 72 characters including any `#<digits> ` prefix.
-- Lowercase after the colon unless the word is a proper noun, identifier, or API name.
-- No trailing period.
-- Name the observable change, not the quality aspiration.
-- One observable change per subject; secondary axes go in the body.
-- Backticks around identifiers are permitted.
-
-A verb is too weak when it only reports that something changed: *enhance, improve, streamline,
-clarify, polish, tweak*. Use a verb that names the actual edit: *add, remove, replace, rename,
-fix, deny, allow, gate, skip, cache, invalidate, log, retry, bump*. `update` earns its
-place only when the change is literally the update of a pinned value, and `bump` usually says
-that better.
-
-## Body rules
-
-Write a body when the subject alone does not explain the decision. Common cases:
-
-- The motivation is not obvious from the diff.
-- The change touches multiple behaviours under one scope.
-- Compatibility, security, migration, platform, or performance context matters.
-- A version bump, dependency change, or rename would be hard to understand from the subject
-  alone.
-
-The body explains why the change exists and names the real affected surfaces. Do not restate the
-diff mechanically.
-
-- Wrap body prose at 72 columns.
-- Open with the reason or constraint, not an announcement: no "This commit", "This change",
-  "This PR".
-- The weak-verb rule applies to bodies too.
-- Match claims to evidence: no "significantly improves robustness" padding, no hedging verified
-  facts with "should", and never claim a check passed unless it ran.
-- One fact per bullet. Cut bullets that restate the subject or the diff.
-- Quote the essential line of an error message, not the whole dump.
-
-```
-BAD:  This commit significantly improves installer reliability by enhancing path handling
-      and making various robustness improvements.
-
-GOOD: The installer failed on paths with spaces because $TARGET was unquoted.
-      - quote all path expansions in the hook installer
-      - add a regression test using a spaced tmpdir
-```
-
-## Never include
-
-- Secrets, tokens, credentials, or connection strings - in any line, including examples.
-- Machine-local absolute paths (`/home/...`, `C:\Users\...`). Repository-relative paths are
-  encouraged.
-- Agent self-narration: "as requested", "per the instructions", "I have updated".
-- Tool advertisements, generated-by footers, or co-author lines, unless the project's agent
-  instructions declare them.
-- Em dashes (U+2014), typographic quotes, emoji, or gitmoji. Use a spaced hyphen (` - `),
-  straight quotes, and plain ASCII punctuation.
-
-## Worked example
-
-```
-fix(installer): quote path expansions in the hook installer
-
-The installer failed on paths containing spaces because $TARGET was
-expanded unquoted at three call sites.
-- quote all path expansions in workflow/install-hooks.sh
-- add a regression test using a spaced tmpdir
+```text
+test(parser): cover empty input
 ```
