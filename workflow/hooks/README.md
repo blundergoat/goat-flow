@@ -31,28 +31,28 @@ GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `den
 
 Native `powershell` requests are inspected with PowerShell command context. Literal commands can reach their owning policies; unresolved dynamic execution, interpolation and session-state changes are refused. This is bounded command inspection, not a full PowerShell interpreter.
 
-The shared launcher and process supervision changes require fresh Windows and WSL delivery captures for every supported provider event. The affected registry entries report `provider-capture-stale`. Each retained capture applies to its recorded provider, mode, host, trust, registration and runtime bytes.
+The 2026-11-22 Claude Code, Copilot CLI and Antigravity captures verified delivery on both hosts for the current hook runtime. Their registry entries report `scenario-unverified` until `goat-flow hooks verify` passes for the project. Codex CLI entries report `provider-capture-stale` until the current runtime is captured. Each capture applies to its recorded provider, mode, host, trust, registration and runtime bytes.
 
 | Provider | Host | Version and mode | PreToolUse | PostToolUse | Stop |
 |---|---|---|---|---|---|
-| Claude Code | Windows | 2.1.325, interactive/manual | C1 stale | C2 stale | C3 stale |
+| Claude Code | Windows | 2.1.330, interactive/manual | C1 verified | C2 verified | C3 verified |
 | Codex CLI | Windows | 0.168.0 (historical C5/C6), exec/JSON | C4 incomplete | C5 incomplete | C6 incomplete |
-| Copilot CLI | Windows | 1.0.103, prompt/JSON | C7 stale | C8 stale | No delivery claim |
-| Antigravity | Windows | 1.4.8 was the historical capture, interactive/Request Review | C9 blocked | No delivery claim | No delivery claim |
-| Claude Code | WSL | 2.1.325, interactive/manual | C10 stale | C11 stale | C12 stale |
+| Copilot CLI | Windows | 1.0.103, prompt/JSON | C7 verified | C8 verified | No delivery claim |
+| Antigravity | Windows | 1.4.8, interactive/Request Review | C9 verified | No delivery claim | No delivery claim |
+| Claude Code | WSL | 2.1.330, interactive/manual | C10 verified | C11 verified | C12 verified |
 | Codex CLI | WSL | 0.169.0, exec/JSON | C13 stale | C14 stale | C15 stale |
-| Copilot CLI | WSL | 1.0.91, interactive/manual | C16 stale | C17 stale | No delivery claim |
-| Antigravity | WSL | 1.4.12, interactive/Request Review | C18 stale | No delivery claim | No delivery claim |
+| Copilot CLI | WSL | 1.0.114, interactive/manual | C16 verified | C17 verified | No delivery claim |
+| Antigravity | WSL | 1.4.12, interactive/Request Review | C18 verified | No delivery claim | No delivery claim |
 
 A verified PreToolUse capture delivers both policy reasons and allows the harmless controls. A verified PostToolUse capture delivers Gruff feedback to the model. The Stop captures record a block, a repair and a completed turn. Windows captures used Node 24.21.0 and WSL captures used Node 22.22.1. Raw hook stdin and forced-timeout behavior are outside this evidence.
 
-The Windows Claude PostToolUse run used a same-content Write and delivered Gruff feedback. Claude Code 2.1.325 records the Stop reason in the Stop summary’s hook errors. The controller ended the completed Claude sessions. In the WSL Claude pre-tool and post-tool runs, local inputs establish the approval sequence and the provider transcript includes Remote Control bridge records with no approval-channel field. WSL Codex pre-tool and post-tool used hook trust granted in a separate no-task session. The WSL Codex PostToolUse finding reached the model in a developer message. The WSL Codex Stop rollout records the repair and completion without a separate clean Stop record. Windows Copilot returned the expected Gruff feedback in the tool result and repeated it in the model reply. The WSL Antigravity model ID and native display showed low effort, and the provider rejected the separate effort flag.
+The Windows Claude PostToolUse run used a same-content Write and delivered Gruff feedback. Claude Code 2.1.330 records the Stop reason in the Stop summary’s hook errors. On Windows, its PreToolUse hook-error text also carried the inline launcher source to the model. The operator or controller ended each completed Claude session. In the WSL Claude runs, local inputs establish the approval sequence and the provider transcript includes Remote Control bridge records with no approval-channel field.
 
-In the historical captures, the earlier C1 changed from Opus 5.5 to Opus 4.8 after its initial controls. The earlier C16 included an accepted Sonnet 5.5 to Sonnet 5 fallback, conflicting native model labels and two batched file views.
+Copilot and Antigravity hook records name no owner, so the reason text attributes each denial. Windows Copilot returned the expected Gruff feedback in the tool result and repeated it in the model reply. In the WSL Copilot run, Copilot CLI 1.0.114 ran `command -v gh` without a prompt, so only `node --version` needed a one-time approval. Antigravity ran private 1.4.8 (Windows) and 1.4.12 (WSL) copies and records no approval channel; the local input sequence and timing establish the operator’s approvals. In the Windows Copilot and Antigravity captures, the deny-dangerous reason printed the denied path without its backslashes.
 
-The historical Windows Antigravity capture used a private read-only 1.4.8 copy. Its reviewed conversation recorded both policy denials on the earlier runtime. The current replacement stopped before refresh when the operator reported zero Defender detections against the packet’s baseline of three. The Windows Codex PreToolUse recapture stopped in sandbox setup before either policy probe ran. Codex CLI 0.168.0 delivered PostToolUse and Stop feedback on November 13 with the previous Windows commands. Their replacements did not start.
+WSL Codex pre-tool and post-tool used hook trust granted in a separate no-task session. The WSL Codex PostToolUse finding reached the model in a developer message. The WSL Codex Stop rollout records the repair and completion without a separate clean Stop record. The Windows Codex PreToolUse recapture stopped in sandbox setup before either policy probe ran. Codex CLI 0.168.0 delivered PostToolUse and Stop feedback on November 13 with the previous Windows commands. Their replacements did not start.
 
-The [capture records](../../src/cli/hook-provider-captures.ts) retain provider and configuration details, receipt digests and all 41 runtime-file hashes for verified and stale captures. The guard checks each verified capture against the current files its hook loads. Historical hashes stay as captured. The registry stores the reviewed support gate separately from the observations. Audit applicability still requires checking the installed provider version, host, registration and runtime bytes.
+The [capture records](../../src/cli/hook-provider-captures.ts) retain provider and configuration details, receipt digests and all 41 runtime-file hashes for verified and historical captures. The guard checks each verified capture against the current files its hook loads. Historical hashes stay as captured. The registry stores the reviewed support gate separately from the observations. Audit applicability still requires checking the installed provider version, host, registration and runtime bytes.
 
 ### Linux/macOS compatibility and live delivery
 

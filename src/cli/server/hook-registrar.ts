@@ -792,7 +792,6 @@ function applyScanRootRepairGuidance(
  * @param installationIssue - The file or trust issue. Null leaves the existing repair guidance in place.
  */
 function applyManagedFileRepairGuidance(
-  projectPath: string,
   effectivePresentation: ReturnType<typeof effectiveAgentState>,
   installationIssue: HookInstallationIssue | null,
   installationFacts: ManagedHookInstallationFacts,
@@ -800,11 +799,7 @@ function applyManagedFileRepairGuidance(
   const changedPaths = installationFacts.changedPaths.join(", ");
   // Files still matching the previous install can be safely refreshed with the bundled version.
   if (installationIssue === "installed-version-behind") {
-    // A safe local refresh is available even while the agent's delivery evidence needs renewal.
-    if (
-      effectivePresentation.effectiveState.status === "provider-capture-stale"
-    )
-      effectivePresentation.repairCommand = `goat-flow hooks sync ${JSON.stringify(resolve(projectPath))}`;
+    // The installation-stale state already carries the sync command; only the summary names the safe direction.
     effectivePresentation.repairSummary =
       "Installed bytes still match the previous-install baseline, so sync safely advances the managed files to this registry version.";
     return;
@@ -881,7 +876,6 @@ function supportedAgentHookState(
     isTrusted: localDetails.isTrusted,
   });
   applyManagedFileRepairGuidance(
-    projectPath,
     effectivePresentation,
     localDetails.installationIssue,
     installationFacts,

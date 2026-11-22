@@ -2,8 +2,6 @@
 
 ## Unreleased
 
-The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Later fixes are included in the v1.19.0 section below. Publication is pending.
-
 ## v1.19.0 - 2026-11-22
 
 ### Added
@@ -28,8 +26,8 @@ The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Later fix
 
 - **Plan layout and progress** - New plans separate notes, evidence and scripts; progress entries show timestamps and work time. Existing plans opt in.
 
-- **Windows and WSL hook delivery** - The shared launcher and process supervision changes require fresh delivery captures on both hosts. See the [capture matrix](workflow/hooks/README.md#windows-and-wsl-delivery-captures).
-  - All 18 combinations had verified delivery at the November 15 checkpoint (`d7f7a298`). Linux and macOS passed compatibility checks. Live provider delivery on those two platforms remains unverified.
+- **Windows and WSL hook delivery** - Claude Code, Copilot CLI and Antigravity hooks have verified delivery on both hosts, so the Hooks page and audit offer `goat-flow hooks verify` for them; Codex CLI still reports a stale provider capture. See the [capture matrix](workflow/hooks/README.md#windows-and-wsl-delivery-captures).
+  - Linux and macOS passed compatibility checks. Live provider delivery on those two platforms remains unverified.
 - **Hook policy checks no longer use the frozen Bash reference** - Release checks run the installed Node policy hooks against the shipped corpus on Linux, macOS, Windows and WSL; installs are unaffected.
 
 - **Stop hooks default to a 4 MiB whole-file scan limit** - Claude and Codex use `4194304` for `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES` unless you set it. Sync updates the registered Codex Stop command.
@@ -76,6 +74,7 @@ The 1.19.0 release candidate was approved at `d7f7a298` on 2026-11-15. Later fix
 
 - **Antigravity hooks start on Windows** - Hook commands now survive cmd.exe parsing; run `goat-flow hooks sync` to repair existing installs.
 - **Node hook verification** - Native registration audits use the configured hook filename, and policy self-tests fail when no cases run or the declared case count is wrong.
+- **Hook status shows local problems first** - The Hooks page and audit report a missing, outdated or untrusted local install before a provider-evidence warning, which previously hid it.
 - **Copilot hooks start on Windows** - Copilot's PowerShell hook commands now parse, so goat-flow hooks run instead of failing on every tool call; run `goat-flow hooks sync` to repair existing installs.
 - **Unchanged binary files no longer block every Stop** - The first Stop that skips a binary still blocks. If the only gaps on the continued Stop are the same unchanged binaries, it can finish with an incomplete-scan warning, including for staged assets over 256 MiB. A finding, changed binary or other skipped file still blocks. Run `goat-flow hooks sync` to update existing installs.
 - **goat-review continues when a `worktree` snapshot is refused** - On Git LFS or `text=auto` repositories, or Git for Windows with `core.autocrlf` set, the skill re-selects `staged` or explicit paths instead of stopping for a waiver, and the `review snapshot` refusal names the converting path and attribute or the `core.autocrlf` value.

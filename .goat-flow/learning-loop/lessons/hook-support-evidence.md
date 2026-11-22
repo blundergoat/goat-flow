@@ -183,10 +183,13 @@ Evidence: `test/fixtures/hooks-bash/workflow/hooks/deny-dangerous/guard-runtime.
 **Decision changed:** Read an approved capture packet's `sequence` and readiness text before its first phase, and wait or ask when a tool failure blocks that read.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-11-22
 
 **Prevention:** Before running any phase of an approved live-capture packet, read its whole `sequence` and `nativeReadiness` text and list the operator steps between phases. Wrappers and runners enforce recorded state, not the operator's own steps, so a capture gate can pass after a required review was skipped. Do not reconstruct the protocol from controller code when the packet text could not be read.
 
 **What happened:** An agent ran two Codex WSL rows six seconds apart after repeated permission-check failures had blocked its reads of the packet's sequence. That sequence required reviewing each transcript before the next row; the agent had checked only the first receipt's summary. Both captures stayed valid, and an independent adversarial review reported the skipped step.
+
+**Recurrence 2026-11-22:** With the packet read, an agent started the Windows Copilot PostToolUse row while the PreToolUse row's two independent reviews were still running in the background, although the sequence asked for that review first. Both reviews later passed and the review ledgers recorded the deviation. A background review counts as unfinished until its result is read, so the next row waits for it.
 
 **Related contract:** `.goat-flow/learning-loop/lessons/hook-support-evidence.md` (search: "Approval to proceed does not prove native trust was completed") keeps permission to run separate from what the operator actually observed.
 

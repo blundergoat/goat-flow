@@ -152,7 +152,7 @@ const HOOKS: HookSpec[] = [
     providerEvidence: {
       claude: {
         identity: "hook-provider-adapter.v1:claude:pre-tool",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "claude" &&
@@ -170,7 +170,7 @@ const HOOKS: HookSpec[] = [
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:pre-tool",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "antigravity" &&
@@ -179,7 +179,7 @@ const HOOKS: HookSpec[] = [
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:pre-tool",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "copilot" &&
@@ -207,7 +207,7 @@ const HOOKS: HookSpec[] = [
     providerEvidence: {
       claude: {
         identity: "hook-provider-adapter.v1:claude:pre-tool",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "claude" &&
@@ -225,7 +225,7 @@ const HOOKS: HookSpec[] = [
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:pre-tool",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "antigravity" &&
@@ -234,7 +234,7 @@ const HOOKS: HookSpec[] = [
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:pre-tool",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "copilot" &&
@@ -268,7 +268,7 @@ const HOOKS: HookSpec[] = [
     providerEvidence: {
       claude: {
         identity: "hook-provider-adapter.v1:claude:post-tool",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "claude" &&
@@ -295,7 +295,7 @@ const HOOKS: HookSpec[] = [
       },
       copilot: {
         identity: "hook-provider-adapter.v1:copilot:post-tool",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "copilot" &&
@@ -338,7 +338,7 @@ const HOOKS: HookSpec[] = [
     providerEvidence: {
       claude: {
         identity: "hook-provider-adapter.v1:claude:turn-stop",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
         hostCaptures: HOOK_PROVIDER_HOST_EVIDENCE.filter(
           (capture) =>
             capture.provider === "claude" &&

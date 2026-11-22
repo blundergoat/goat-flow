@@ -254,11 +254,11 @@ export interface HookEffectiveState {
 }
 
 /**
- * Choose the first provider-evidence gap a hook status screen must explain.
- * Use before install checks so documentation never substitutes for a live result.
+ * Choose the first provider-evidence warning a hook status screen must explain.
+ * Use after install checks, so a fixable local gap stays visible, and before runtime checks, so documentation never replaces a live result.
  *
  * @param stateFacts - current provider facts; absent or stale layers keep support unverified
- * @returns provider status, or `undefined` when the UI may continue to install checks
+ * @returns provider status, or `undefined` when the UI may continue to runtime checks
  */
 function classifyProviderEvidenceState(
   stateFacts: HookEffectiveStateFacts,
@@ -276,11 +276,6 @@ function classifyProviderEvidenceState(
   // A current provider statement that excludes the event keeps the hook unavailable.
   if (stateFacts.providerDocumentation === "fresh-unsupported") {
     return { status: "provider-documented-unsupported", severity: "warning" };
-  }
-
-  // An untrusted live capture is dangerous because its result cannot justify execution.
-  if (stateFacts.providerCapture === "untrusted") {
-    return { status: "provider-capture-untrusted", severity: "danger" };
   }
 
   // Documentation without a live capture cannot become an effective support claim.
@@ -308,11 +303,11 @@ function classifyProviderEvidenceState(
 }
 
 /**
- * Choose the first local install or trust gap shown after provider support is proven.
- * Use when setup explains why a supported hook is not ready in this checkout.
+ * Choose the first local install or trust gap, shown before any provider-evidence warning.
+ * Use when setup explains why a hook is not ready in this checkout.
  *
  * @param stateFacts - current project facts; false values identify the first local gap
- * @returns install status, or `undefined` when the UI may continue to runtime checks
+ * @returns install status, or `undefined` when the UI may continue to provider-evidence checks
  */
 function classifyInstalledHookState(
   stateFacts: HookEffectiveStateFacts,
@@ -378,15 +373,20 @@ export function classifyHookEffectiveState(
   // A user-disabled hook is neutral because no coverage was requested.
   if (!stateFacts.isDesired) return { status: "disabled", severity: "neutral" };
 
-  const providerEvidenceState = classifyProviderEvidenceState(stateFacts);
-
-  // A provider gap stops setup before local registration can imply coverage.
-  if (providerEvidenceState) return providerEvidenceState;
+  // An untrusted live capture is dangerous because its result cannot justify execution, whatever the local state.
+  if (stateFacts.providerCapture === "untrusted") {
+    return { status: "provider-capture-untrusted", severity: "danger" };
+  }
 
   const installedHookState = classifyInstalledHookState(stateFacts);
 
-  // A local install gap explains why provider support is not active in this checkout.
+  // A missing, outdated or untrusted local install is fixable in this checkout, so it is shown before a provider warning.
   if (installedHookState) return installedHookState;
+
+  const providerEvidenceState = classifyProviderEvidenceState(stateFacts);
+
+  // A provider gap keeps a current local install from claiming coverage.
+  if (providerEvidenceState) return providerEvidenceState;
 
   const observedHookState = classifyObservedHookState(stateFacts);
 

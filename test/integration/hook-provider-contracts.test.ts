@@ -432,6 +432,41 @@ describe("hook provider contracts", () => {
     );
   });
 
+  // A local gap the user can fix must not hide behind a provider warning; an untrusted capture still comes first.
+  it("shows local install gaps before provider warnings", () => {
+    for (const [localGap, expected] of [
+      [
+        { isRegistered: false },
+        { status: "not-registered", severity: "warning" },
+      ],
+      [
+        { isCurrentVersionInstalled: false },
+        { status: "installation-stale", severity: "warning" },
+      ],
+      [
+        { isTrusted: false },
+        { status: "runtime-untrusted", severity: "danger" },
+      ],
+    ] as const) {
+      assert.deepEqual(
+        classifyHookEffectiveState(
+          effectiveStateFacts({ providerCapture: "stale", ...localGap }),
+        ),
+        expected,
+        expected.status,
+      );
+    }
+    assert.deepEqual(
+      classifyHookEffectiveState(
+        effectiveStateFacts({
+          providerCapture: "untrusted",
+          isRegistered: false,
+        }),
+      ),
+      { status: "provider-capture-untrusted", severity: "danger" },
+    );
+  });
+
   describe("configured Gruff result delivery", () => {
     // Named cases show users whether analysis passed, found debt, failed, or timed out.
     for (const resultFixture of GRUFF_RESULT_FIXTURES) {

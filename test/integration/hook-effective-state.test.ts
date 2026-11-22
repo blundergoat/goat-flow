@@ -323,10 +323,10 @@ describe("effective hook state", () => {
       adapterVersion: "1",
       launcherDeadlineMs: 25_000,
     });
-    // Missing Claude evidence fails instead of presenting a fixture as live support.
+    // Reviewed Claude delivery still stops at the configured-scenario gate instead of presenting a fixture as live support.
     assert.equal(
       claudeProviderEvidence?.effectiveSupportGate,
-      "provider-capture-stale",
+      "scenario-unverified",
     );
     // Missing Antigravity evidence likewise fails the undelivered-result contract.
     assert.equal(
@@ -798,8 +798,12 @@ describe("effective hook state", () => {
     assert.match(terminalCoverageLine ?? "", /WARNING/u);
     assert.match(markdownReport, /## Effective Hook Coverage: WARNING/u);
     assert.match(terminalReport, /deny-dangerous\/claude:/u);
-    assert.match(terminalReport, /provider capture stale/u);
-    assert.equal(auditDenyState.repairCommand, null);
+    assert.match(terminalReport, /scenario unverified/u);
+    // Audit names the bounded verify command but never runs it.
+    assert.match(
+      auditDenyState.repairCommand ?? "",
+      /hooks verify .* --agent claude --scenario deny-hook --trusted-target/u,
+    );
     assert.equal(readFileSync(settingsPath, "utf-8"), settingsBeforeAudit);
   });
 
@@ -911,9 +915,10 @@ describe("effective hook state", () => {
       report.scenarios.map((scenario) => scenario.observed),
       ["blocked", "blocked", "allowed"],
     );
+    // With reviewed Claude delivery, the local scenario proof is the last gate before effective.
     assert.deepEqual(
       claudeHookState(projectPath, "deny-dangerous").effectiveState,
-      { status: "provider-capture-stale", severity: "warning" },
+      { status: "effective", severity: "success" },
     );
   });
 

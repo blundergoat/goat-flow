@@ -940,7 +940,7 @@ npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-
 npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook --trusted-target
 ```
 
-The [Windows and WSL capture matrix](../workflow/hooks/README.md#windows-and-wsl-delivery-captures) records the earlier delivery observations. The shared launcher and process supervision changes require fresh captures for supported events on both hosts. The registry reports `provider-capture-stale` while that delivery evidence is pending.
+The [Windows and WSL capture matrix](../workflow/hooks/README.md#windows-and-wsl-delivery-captures) records delivery on both hosts. Claude Code, Copilot CLI and Antigravity have verified captures of the current hook runtime, so their registry entries report `scenario-unverified` until `hooks verify` passes for the project. Codex CLI entries report `provider-capture-stale` while its delivery evidence is pending.
 
 The following Codex captures are historical observations of their recorded registrations and runtime bytes.
 
