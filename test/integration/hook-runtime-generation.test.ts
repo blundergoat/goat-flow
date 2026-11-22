@@ -1,6 +1,8 @@
 /** Real filesystem fixtures protect shipped generation, mirror drift and fail-closed checks. */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -194,4 +196,41 @@ test("missing sources, compiler mismatch and malformed input refuse generation b
   writeFileSync(join(root, "src/hooks/main.mts"), "export const value: = ;\n");
   assert.throws(() => generateHookRuntime(root, "--write"));
   assert.equal(existsSync(join(root, ".goat-flow/hooks")), false);
+});
+
+// A branch switch can leave TypeScript out of sync with the lockfile.
+// The fixture writes a mismatched compiler into a temporary checkout to verify the bump leaves both version files intact.
+test("version bump leaves package metadata intact when the hook compiler differs from the lockfile", (t) => {
+  const root = fixture(t);
+  mkdirSync(join(root, "scripts"));
+  copyFileSync(
+    new URL("../../scripts/bump-version.sh", import.meta.url),
+    join(root, "scripts/bump-version.sh"),
+  );
+  const compilerDirectory = join(root, "node_modules/typescript");
+  mkdirSync(compilerDirectory, { recursive: true });
+  writeFileSync(
+    join(compilerDirectory, "package.json"),
+    JSON.stringify({ type: "module", exports: "./index.js" }),
+  );
+  writeFileSync(
+    join(compilerDirectory, "index.js"),
+    'export default { version: "0.0.0" };\n',
+  );
+  const versionFiles = ["package.json", "package-lock.json"];
+  const before = versionFiles.map((file) => readFileSync(join(root, file)));
+
+  const result = spawnSync("bash", ["scripts/bump-version.sh", "patch"], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+
+  assert.ifError(result.error);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Run npm ci before bumping the version/u);
+  assert.deepEqual(
+    versionFiles.map((file) => readFileSync(join(root, file))),
+    before,
+  );
 });

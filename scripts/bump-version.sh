@@ -33,24 +33,36 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-OLD_VERSION=$(node -p "require('./package.json').version")
-
-# A bump keyword lets npm work out the next version; anything else must be an exact X.Y.Z.
+# A bump keyword lets npm select the next version. An explicit version must use X.Y.Z.
 case "$1" in
-  patch|minor|major)
-    npm version "$1" --no-git-tag-version >/dev/null
-    NEW_VERSION=$(node -p "require('./package.json').version")
-    ;;
+  patch|minor|major) ;;
   *)
     # Input such as "v1.18.0" or "1.18" is rejected here, before package.json changes.
     if [[ ! "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       echo "Error: '$1' is not a valid semver (X.Y.Z) or bump type (patch|minor|major)"
       exit 1
     fi
-    NEW_VERSION="$1"
-    npm version "$NEW_VERSION" --no-git-tag-version >/dev/null
     ;;
 esac
+
+# A fresh checkout needs the locked compiler to regenerate hooks. Check it before npm rewrites the version files.
+if ! node --input-type=module - 2>/dev/null <<'NODE'
+import { readFileSync } from "node:fs";
+import ts from "typescript";
+
+const lockfile = JSON.parse(readFileSync("package-lock.json", "utf8"));
+if (ts.version !== lockfile.packages?.["node_modules/typescript"]?.version) {
+  process.exitCode = 1;
+}
+NODE
+then
+  echo "Error: Hook generation requires the locked TypeScript version. Run npm ci before bumping the version." >&2
+  exit 1
+fi
+
+OLD_VERSION=$(node -p "require('./package.json').version")
+npm version "$1" --no-git-tag-version >/dev/null
+NEW_VERSION=$(node -p "require('./package.json').version")
 
 echo "Bumping ${OLD_VERSION} → ${NEW_VERSION}"
 
