@@ -521,10 +521,11 @@ async function dashboardLaunchPreset(
 ): Promise<void> {
   // A launch is already in progress, so ignore duplicate button clicks.
   if (ctx.launching) return;
+  const presetById = options.presetId
+    ? ctx.allPresets.find((p) => p.id === options.presetId)
+    : undefined;
   const preset =
-    (options.presetId
-      ? (ctx.allPresets.find((p) => p.id === options.presetId) ?? null)
-      : null) ??
+    presetById ??
     ctx.allPresets.find(
       (p) =>
         ctx.adaptPrompt(p.prompt) === ctx.adaptPrompt(prompt) ||
