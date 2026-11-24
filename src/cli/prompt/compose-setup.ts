@@ -28,6 +28,7 @@ function displayTemplatePath(relative: string): string {
 }
 import { classifyProjectState } from "../classify-state.js";
 import { createFS } from "../facts/fs.js";
+import { RETIRED_PATHS } from "../retired-paths.js";
 import { resolve } from "node:path";
 
 /**
@@ -498,6 +499,23 @@ function failedInstallChecks(auditReport: AuditReport): CheckResult[] {
 }
 
 /**
+ * Tell an upgrade what happens to old goat-flow files on disk now: install deletes each unedited one and names any it keeps.
+ *
+ * @param lines - prompt buffer, extended in place
+ * @param projectRoot - project the prompt is for
+ */
+function pushOldFileReview(lines: string[], projectRoot: string): void {
+  const projectFS = createFS(projectRoot);
+  const present = RETIRED_PATHS.filter((path) => projectFS.exists(path));
+  // A project without old goat-flow files has nothing to review.
+  if (present.length === 0) return;
+  lines.push(
+    `Old goat-flow files on disk now: ${present.map((path) => `\`${path}\``).join(", ")}. Install deletes each one whose bytes match its install record and names any it keeps. For each kept file, review it, carry over needed edits, then delete it or rerun install with \`--force-path <path>\`.`,
+  );
+  lines.push("");
+}
+
+/**
  * Append the detected-install-issues section to an upgrade prompt, or nothing when the audit found no install failures.
  *
  * @param lines - prompt buffer, extended in place
@@ -624,6 +642,7 @@ function renderUpgradeRedirect(
       "This refreshes skills, hooks, settings, and reference files to the current version.",
     );
     lines.push("");
+    pushOldFileReview(lines, facts.root);
 
     // Agents whose settings file carries user-owned permission rules get a reconcile step; hook-only agents skip straight to the rebuild.
     const rebuildStep = pushAgentSettingsReconcileStep(lines, agentId, 2);

@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-10-20
+last_reviewed: 2026-11-25
 ---
 
 **Scope:** Installing goat-flow into a project and migrating an existing install - what a package smoke proves, mirror fan-out, the scope a setup agent may write, and concepts that survive their own removal. Repo-wide gates that catch the fallout are [verification-preflight.md](verification-preflight.md).
@@ -177,3 +177,38 @@ last_reviewed: 2026-10-20
 **Recurrence 2026-10-08:** The setup fixture guessed the current-state action, omitted the required config state and created a legacy skill directory without the SKILL.md file the classifier probes. Its first run failed before the intended product assertions. After those contracts were corrected, the reviewed-repair assertion still reused a filesystem adapter whose cached contents predated the write. Read the real extraction options, state probes and adapter lifetime before modelling the workflow; use a fresh adapter after fixture changes. `test/integration/setup-install-deny-reconciliation.test.ts` (search: `Each audit needs a fresh adapter after a write`), `src/cli/classify-state.ts` (search: `collectOldSkills`), `src/cli/facts/orchestrator.ts` (search: `options.configState`) and `src/cli/facts/fs.ts` (search: `createCachedReadFile`) retain the contracts and corrected fixture.
 
 **Recurrence 2026-10-08:** The follow-up review reproduced a missing Claude credential deny appearing in a healthy Codex setup prompt. Omitting `--agent` makes the CLI gather aggregate facts and render a prompt for each agent from the shared report. The new required-check supplement treated those facts as if they belonged only to the rendered agent. Filter them by that agent before supplementing the report; leave the shared report unchanged. `src/cli/cli-handlers.ts` (search: `runSetupPipeline`), `src/cli/prompt/compose-setup.ts` (search: `facts.agents.filter`) and `test/integration/setup-install-deny-reconciliation.test.ts` (search: `keeps multi-agent deny failures in the matching agent prompt`) retain the reader contract, correction and failing-then-passing regression.
+
+## Lesson: A fail-closed dependency check reused for a notice reports problems that do not exist
+
+**Status:** active | **Created:** 2026-11-24
+**Decision changed:** Before reusing a check that treats unknown input as still dependent for user-facing output, require the reported condition to exist first.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Counting an unreadable config as a dependency is right before deleting files, because unknown means keep. The same answer in a closing summary becomes a false instruction. Before reusing such a check in a report, decide what the reader should see when the input is unreadable, and check that the reported condition exists. Evidence anchors: `src/cli/installer/retired-runtime.ts` (search: `an unreadable config alone must not report a pending runtime`), `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `lists an unreadable config only while a retired runtime file remains`).
+
+**What happened:** The install summary gained a "Runtime cleanup pending" block built from the retired-runtime dependency check, which lists unparsable or non-regular provider configs as dependent. A review probe installed two agents, made `.agents/hooks.json` unparsable and reinstalled claude. The summary told the user to install antigravity although no retired file existed, and that install could not clear the notice. The check now returns nothing once every retired file is gone.
+
+**Recurrence 2026-11-25:** Retired-row cleanup was widened for install to also drop stale-receipt references. Hook Sync calls the same function, so Sync began editing receipts while ADR-064 and Sync's own invariant said it never does. Review caught it from Sync's doc; both now state the exception. Before widening a shared helper, list every caller and recheck each one's documented contract. `src/cli/installer/retired-runtime.ts` (search: `forgetAbsentRetiredRows`), `src/cli/managed-setup-preview.ts` (search: `stale-receipt references for absent retired files`).
+
+## Lesson: A rollback copy retaken on every attempt loses the original after a failed attempt changes state
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** Before adding a backup taken at the start of an operation that can fail part-way and be rerun, record what the copy came from and keep a matching copy on the rerun.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** A trigger such as "the config still names the old release" stays true after a failed attempt has already moved or converted other state. Test the rerun against the oldest supported starting layout, not only the latest one. Evidence anchors: `src/cli/local-state-migration.ts` (search: `earlierAttemptBackup`), `test/integration/local-state-migration.test.ts` (search: `keeps the first attempt's pre-upgrade copy`).
+
+**What happened:** Install copied install state before an upgrade whenever the config named an older release. A reproduction installed release 1.16.0, made one template folder read-only so the upgrade failed after relocating and converting the install records, then reran it. The rerun replaced the copy with the converted records and told the user to restore into the new folder, which 1.16.0 does not read. A 1.18.0 project was unaffected because its records were already in the new form, which is why the first check missed it. The copy now has a record of its source release beside it, and a rerun from that release keeps it.
+
+## Lesson: A name-based exclude in a scratch-copy replay drops nested managed folders and fakes a blocked upgrade
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** Anchor every exclude in a scratch-copy upgrade replay to the project root and keep managed READMEs inside excluded local folders before treating a blocked preview as a product failure.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** An rsync rule such as `--exclude=vendor` matches every folder with that name, including the managed `.goat-flow/hooks/vendor/`; excluding `.goat-flow/logs` or `.goat-flow/scratchpad` wholesale also drops their managed README and `.gitignore` files. The preview then reports those managed files missing and blocks. Use root-anchored rules (`--exclude=/vendor`), include the managed files before excluding the rest of a local folder, and write long replay output to a file instead of piping it into `head`, which can end the run early. Evidence anchors: `src/cli/managed-setup-preview.ts` (search: `const BLOCKING_STATES`).
+
+**What happened:** An upgrade replay on a copy of a gruff port blocked on 10 missing managed files, all removed by the copy filter, and a `| head` cut the same run short after its first install. With root-anchored excludes the copy previewed as a warning and every install exited 0.

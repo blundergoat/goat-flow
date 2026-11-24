@@ -1,4 +1,7 @@
 /** Preserve active Codex permissions while migrating supported historical forms. */
+import { readFileSync } from "node:fs";
+import { getTemplatePath } from "../paths.js";
+
 const anySectionPattern = /^\s*\[[^\]]+\]\s*$/u;
 const tomlStringPattern = String.raw`(?:"((?:\\.|[^"\\])*)"|'([^']*)')`;
 const noneEntryPattern = new RegExp(
@@ -263,13 +266,7 @@ function permissionBlock(
     "glob_scan_max_depth = 3",
     "",
     `[permissions.${activeProfile}.filesystem.":workspace_roots"]`,
-    "# Deny rules win over allow/read rules on both Codex and Claude, so a broad",
-    "# .env* deny cannot be re-opened for the sample file. Real env variants are",
-    "# denied individually so .env.example stays readable, matching the Bash deny",
-    "# hook; nonstandard variants (e.g. .env.backup) are covered by that hook.",
-    "# Rules match secret content shapes and credential stores, never plain folder",
-    "# or file names such as secrets/ or credentials*, which collide with ordinary",
-    "# application code. The Bash deny hook covers shell access to home stores.",
+    ...workspaceRootTemplateComments(),
     '"**/.env" = "deny"',
     '"**/.env.local" = "deny"',
     '"**/.env.development" = "deny"',
@@ -297,6 +294,35 @@ function permissionBlock(
   for (const pattern of additionalDenyPatterns)
     canonicalBlock.push(`"${escapeTomlString(pattern)}" = "deny"`);
   return canonicalBlock;
+}
+
+let templateComments: string[] | undefined;
+
+/**
+ * Read the comment lines that open the shipped template's workspace-roots deny block, so a migrated profile explains its rules
+ * with the same, current text.
+ *
+ * @returns the comment lines in order, read once per process
+ * @throws Error when the packaged template cannot be read, because install cannot write the documented profile without it
+ */
+function workspaceRootTemplateComments(): string[] {
+  // The template does not change while the process runs, so one read serves every migration.
+  if (templateComments) return templateComments;
+  const lines = readFileSync(
+    getTemplatePath("workflow/hooks/agent-config/codex.toml"),
+    "utf8",
+  ).split(/\r?\n/u);
+  const header = lines.findIndex((line) =>
+    line.endsWith('.filesystem.":workspace_roots"]'),
+  );
+  const comments: string[] = [];
+  // Comments run from the block header to its first rule; a template without the block contributes none.
+  for (const line of header === -1 ? [] : lines.slice(header + 1)) {
+    if (!line.startsWith("#")) break;
+    comments.push(line);
+  }
+  templateComments = comments;
+  return comments;
 }
 
 /** Replace only selected regions and preserve surrounding user settings and newline style. */

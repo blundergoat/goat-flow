@@ -1,6 +1,6 @@
 ---
 category: verification-gate-runs
-last_reviewed: 2026-11-13
+last_reviewed: 2026-11-25
 ---
 
 **Scope:** Running gates during a change - stopping each edit batch at its declared proof, checking every target after a failed multi-file patch, invoking tools with the repository's own flags, and telling a transient gate failure from a task regression. Adding or trusting a repo-wide gate is [verification-preflight.md](verification-preflight.md); what a test must establish is [verification-testing.md](verification-testing.md).
@@ -124,3 +124,5 @@ last_reviewed: 2026-11-13
 **What happened:** After the Bash hook runtimes were removed, the fast suite passed all 3988 tests, but the slow suite failed 15. Upgrade and installer tests still used a removed launcher as their sample shared file, and an installer round-trip ran a `dist/` built before the source edit, so its audit provenance still named the deleted installer.
 
 **Evidence:** `scripts/run-tests.mjs` (search: `function isSlowTest`) keeps installer, dashboard and packaged-install suites out of the fast run. `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `drift audit should pass after round-trip install`) failed until `npm run build` refreshed `dist/`.
+
+**Recurrence 2026-11-25:** An installer change that deletes named retired files passed its listed owning suites and the fast suite, then a later change found `test/integration/setup-install-codex-config-migration.test.ts` (search: `--force-managed`) failing: it still expected `--force-path` to keep the file. No listed suite covered it. For any installer behaviour change, run every `test/integration/setup-install*.test.ts` file before the human gate; the 19 suites take about two minutes.

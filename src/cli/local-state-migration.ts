@@ -1,5 +1,14 @@
-/** Relocate legacy operational state during a quiescent, all-writers-upgraded install. */
-import { lstatSync, mkdirSync, readdirSync, renameSync } from "node:fs";
+/** Relocate legacy operational state, and save install state before an upgrade, during a quiescent, all-writers-upgraded install. */
+import {
+  cpSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import type { Stats } from "node:fs";
 import { join } from "node:path";
 
@@ -150,4 +159,99 @@ export function migrateLegacyLocalState(projectPath: string): boolean {
     renameSync(join(projectPath, from), join(projectPath, to));
   }
   return true;
+}
+
+const INSTALL_BACKUP = `${STATE_DIRECTORY}/install-before-upgrade`;
+/** Names the release and folder the copy came from; it sits beside the copy, so restoring the copy never carries it back. */
+const INSTALL_BACKUP_RECORD = `${INSTALL_BACKUP}.json`;
+
+/** The saved copy of install state, the folder it was copied from, and whether an earlier attempt of the same upgrade took it. */
+export interface InstallStateBackup {
+  backup: string;
+  source: string;
+  isFromEarlierAttempt: boolean;
+}
+
+/**
+ * Find the copy an earlier, failed attempt of the same upgrade saved. That attempt may have moved or converted install state
+ * before it failed, so its copy is the only one that still holds the earlier release's records.
+ *
+ * @param projectPath - selected real project root whose state folders were already inspected
+ * @param fromVersion - release the project's config names now; null never matches a saved copy
+ * @returns the kept copy, or null when no copy of this release exists and a new one must be taken
+ * @throws Error when the backup path is linked or not a directory, which is refused rather than deleted
+ */
+function earlierAttemptBackup(
+  projectPath: string,
+  fromVersion: string | null,
+): InstallStateBackup | null {
+  const hasCopy = directoryStats(projectPath, INSTALL_BACKUP) !== null;
+  const recordPath = join(projectPath, INSTALL_BACKUP_RECORD);
+  // Without a known release, a copy, and a regular record file, nothing shows the copy came from this upgrade.
+  if (
+    fromVersion === null ||
+    !hasCopy ||
+    !lstatSync(recordPath, { throwIfNoEntry: false })?.isFile()
+  )
+    return null;
+  try {
+    const record = JSON.parse(readFileSync(recordPath, "utf8")) as {
+      from?: unknown;
+      source?: unknown;
+    };
+    // Only a copy of this same release, taken from one of the two known state folders, is kept.
+    return record.from === fromVersion &&
+      (record.source === INSTALL_DIRECTORY || record.source === LEGACY_INSTALL)
+      ? {
+          backup: INSTALL_BACKUP,
+          source: record.source,
+          isFromEarlierAttempt: true,
+        }
+      : null;
+  } catch {
+    // An unreadable record cannot vouch for the copy, so a new copy replaces it.
+    return null;
+  }
+}
+
+/**
+ * Copy install state to one backup folder before a version-changing install first writes it, replacing a copy from any other
+ * release. A retry of the same upgrade keeps the copy its first attempt took.
+ * Side effects: reads the current or legacy install-state folder, creates the private state folder if needed, then rewrites the
+ * backup folder and the record beside it.
+ *
+ * @param projectPath - selected real project root, inspected before the upgrade's first state write
+ * @param fromVersion - release the project's config names before this install, recorded beside the copy; null when unknown
+ * @returns the backup folder, the folder it holds a copy of, and whether an earlier attempt's copy was kept; null when the project has no install state to copy
+ * @throws Error when a state path is linked or not a directory, or the copy fails; the caller stops before any state write
+ */
+export function backUpInstallState(
+  projectPath: string,
+  fromVersion: string | null,
+): InstallStateBackup | null {
+  const source = installStateRelativeDirectory(projectPath);
+  const earlier = earlierAttemptBackup(projectPath, fromVersion);
+  // A retried upgrade keeps the first attempt's copy, taken before that attempt moved or converted install state.
+  if (earlier) return earlier;
+  // A fresh project has no install state, so there is nothing to restore.
+  if (directoryStats(projectPath, source) === null) return null;
+  // The record goes first, so a copy interrupted part-way is never kept as a complete one.
+  rmSync(join(projectPath, INSTALL_BACKUP_RECORD), { force: true });
+  rmSync(join(projectPath, INSTALL_BACKUP), { recursive: true, force: true });
+  mkdirSync(join(projectPath, STATE_DIRECTORY), {
+    recursive: true,
+    mode: 0o700,
+  });
+  cpSync(join(projectPath, source), join(projectPath, INSTALL_BACKUP), {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+    verbatimSymlinks: true,
+  });
+  writeFileSync(
+    join(projectPath, INSTALL_BACKUP_RECORD),
+    `${JSON.stringify({ from: fromVersion, source })}\n`,
+    { mode: 0o600 },
+  );
+  return { backup: INSTALL_BACKUP, source, isFromEarlierAttempt: false };
 }

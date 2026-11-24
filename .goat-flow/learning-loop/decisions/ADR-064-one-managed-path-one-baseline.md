@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-27
-**Updated:** 2026-10-11 - the schema, canonical-byte, and lifecycle detail is replaced by pointers to the code that owns it; hook-only baseline publication was accepted on 2026-09-06.
+**Updated:** 2026-10-11 - the schema, canonical-byte, and lifecycle detail is replaced by pointers to the code that owns it; hook-only baseline publication was accepted on 2026-09-06. 2026-11-25 - install deletes proven retired files and forgets their rows (Consequences, Retired-path cleanup).
 
 ## Context
 
@@ -24,13 +24,13 @@ A row generation is a SHA-256 over the path, expected hash, and canonical proven
 
 ### Row and receipt transitions
 
-A verified public install writes, for every current system-owned exact-copy path in the selected agent's complete preview, the incoming package hash with `verified-install` provenance for the executing version, recomputes generations (identical rows keep theirs), and leaves rows outside its path set byte-identical, including other agents' unique rows and orphans. After all selected paths pass post-write verification, it replaces the selected agent's receipt with the exact sorted path/generation set just verified, then canonicalizes and atomically replaces `managed.json` once. Repeating a confirmed install produces identical bytes and no replacement.
+A verified public install writes, for every current system-owned exact-copy path in the selected agent's complete preview, the incoming package hash with `verified-install` provenance for the executing version, recomputes generations (identical rows keep theirs), and leaves rows outside its path set byte-identical, including other agents' unique rows and orphans, except as Retired-path cleanup below allows. After all selected paths pass post-write verification, it replaces the selected agent's receipt with the exact sorted path/generation set just verified, then canonicalizes and atomically replaces `managed.json` once. Repeating a confirmed install produces identical bytes and no replacement.
 
 A stored receipt is `confirmed` only when its package version equals the executing version, its path set equals the current system-owned exact-copy set for that agent, every referenced row exists at the referenced generation, every target is a safe regular file whose hash equals the row's expected hash, and that agent's legacy cutover marker is exact. Any of those failing makes it `stale`, which removes installation-selection authority but keeps the canonical row, because a legitimate local edit still needs the old expected hash to classify as `local-preserved` or `both-changed`. An agent imported from valid v1 state but not yet verified under v2 is `legacy-unconfirmed`. No directory or shared path is evidence that an agent is installed.
 
 ### Guarded hook-only row publication
 
-A guarded hook sync or toggle may publish canonical rows for the exact bundled hook dependencies it has just verified. It records the incoming package hash with existing `verified-install` provenance for the executing version and derives generations through the existing row constructor. It preserves unrelated rows and every existing agent receipt, and it neither creates nor refreshes a full-install receipt. A receipt that references a changed generation becomes stale under the existing receipt rules.
+A guarded hook sync or toggle may publish canonical rows for the exact bundled hook dependencies it has just verified. It records the incoming package hash with existing `verified-install` provenance for the executing version and derives generations through the existing row constructor. It preserves unrelated rows and every existing agent receipt, except for Retired-path cleanup below, and it neither creates nor refreshes a full-install receipt. A receipt that references a changed generation becomes stale under the existing receipt rules.
 
 Hook operations admit only clean missing or valid legacy evidence; malformed, conflicting, or cutover-incompatible state blocks before target mutation, and public install remains the cutover-recovery owner. Claims cover the complete operation, including state and marker destinations, until target verification and canonical publication finish. Missing history never authorizes replacing differing local files: differing unclassified files and proven divergence require explicit replacement intent bound to the selected project, action, destination identities, persisted choices, baseline and markers, and incoming bundle, and a changed review requires a fresh decision. Unsafe paths, newer scripts, and invalid history cannot be overridden. The writer is `src/cli/server/hook-operation.ts` (search: `executeHookChange`) with `src/cli/managed-setup-preview.ts` (search: `recordManagedHookAfterVerification`); `test/integration/managed-divergence-messaging.test.ts` (search: `before changing any hook destination`) reproduces the former registrar path mutating config before a malformed-provider refusal, replacing unclassified files without confirmation, and ignoring unsafe install-state evidence.
 
@@ -56,7 +56,7 @@ The claim protects the whole read, admission, mutation, verification, and public
 
 ### Orphans
 
-An orphan is a stored row absent from the manifest-derived managed path union and every stored receipt. It stays visible as `orphan` with no preview, overwrite, installed-agent, audit, or hook authority. Stale receipt references prevent orphan classification until the receipt is replaced. Rows are never deleted during bootstrap or ordinary install; a later explicit cleanup contract may remove proven orphans.
+An orphan is a stored row absent from the manifest-derived managed path union and every stored receipt. It stays visible as `orphan` with no preview, overwrite, installed-agent, audit, or hook authority. Stale receipt references prevent orphan classification until the receipt is replaced. Bootstrap never deletes rows. Ordinary install deletes only the rows Retired-path cleanup below names.
 
 ### Deterministic decision table
 
@@ -94,6 +94,17 @@ An orphan is a stored row absent from the manifest-derived managed path union an
 ### Storage relocation — 2026-09-13
 
 Installation evidence now lives in `.goat-flow/state/install/`; the former `.goat-flow/install-state/` directory is an upgrade input only. Public install validates its preview, then relocates the complete directory without rewriting records, rebuilds the preview and acquires its usual complete write-claim batch. Dry-run reads the sole existing location; two installation directories are ambiguous and block instead of selecting or merging their baselines. All writers must be stopped and upgraded before relocation; the user selected removal of old paths, so running an older CLI afterward is unsupported. Schemas, row generations, embedded receipt placement and per-agent cutover semantics remain unchanged. This is separate from the v1-to-v2 evidence migration. Evidence: `src/cli/local-state-migration.ts` (search: `installStateRelativeDirectory`), `test/integration/setup-install-shared-state.test.ts` (search: `previews legacy evidence without writes`).
+
+### Retired-path cleanup — 2026-11-25
+
+One table (`src/cli/retired-paths.ts`, search: `RETIRED_PATHS`) names the files earlier releases installed and this one dropped: the 10 retired Bash hook files and the 2 renamed writing playbooks, measured from real projects' install records. For each path, install:
+
+- deletes the file when its bytes equal the agreed record hash, including hashes still in v1 per-agent records, which convert unchanged;
+- keeps an edited, unrecorded, linked or user-owned-marked file and names it, with how to finish;
+- deletes an edited regular file only when `--force-path` names that exact path, and only at the bytes the preview showed; `--force-managed` never deletes edited bytes;
+- once the file is absent, drops its row and every stale-receipt reference to it; a guarded hook sync applies this step too.
+
+No other row is deleted; an orphan outside the table follows Orphans above. Evidence: `src/cli/installer/retired-runtime.ts` (search: `forgetAbsentRetiredRows`), `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `retired files recorded by an older release`).
 
 - Preview, post-verification, audit, and hook status consume one strict state facade; the hook-specific `expectedHashSets` reconciliation is obsolete.
 - The v2 file and cutover markers are gitignored local evidence and must not contain target bytes, absolute paths, timestamps, process IDs, or secrets.

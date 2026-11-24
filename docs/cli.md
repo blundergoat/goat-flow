@@ -848,7 +848,7 @@ Gitignored state is not disposable cache.
 
 Before `managed.json` exists, the public CLI inventories every supported agent's legacy `.goat-flow/state/install/<agent>.json` evidence together. Clean, version-ordered evidence bootstraps receipt-free v2 state. One malformed legacy file, or equal or unrankable versions that disagree on a path hash, blocks every agent because selecting one agent cannot resolve project-wide history. Repair the paths named by `goat-flow status . --format json`, then rerun that command; `--force` cannot choose baseline history. Once `managed.json` exists, legacy hashes never regain baseline authority. A public install publishes the v2 state and replaces every supported agent file with a hashless cutover marker under the complete write claims before target mutation. A missing or incompatible marker is reported as `cutover-incompatible` and repaired only through the public install path.
 
-The preview lists every path an approved install may write: source-backed `system-owned` manifest records and the selected agent's canonical skill mirror. It also lists `.goat-flow/config.yaml`, the agent's settings and hook config, the project root `.gitignore`, seeded policy guidance, the active-plan marker, commit guidance, `.goat-flow/state/install/managed.json`, every supported agent's `.goat-flow/state/install/<agent>.json` cutover marker, and the generated learning-loop indexes. Some rows are conditional, so the preview is a superset: `.goat-flow/plans/.active` is written only when exactly one version-named plan directory exists, and commit guidance only in a Git project. It does not enumerate removals: retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations are cleanup rather than writes.
+The preview lists every path an approved install may write: source-backed `system-owned` manifest records and the selected agent's canonical skill mirror. It also lists `.goat-flow/config.yaml`, the agent's settings and hook config, the project root `.gitignore`, seeded policy guidance, the active-plan marker, commit guidance, `.goat-flow/state/install/managed.json`, every supported agent's `.goat-flow/state/install/<agent>.json` cutover marker, and the generated learning-loop indexes. Some rows are conditional, so the preview is a superset: `.goat-flow/plans/.active` is written only when exactly one version-named plan directory exists, and commit guidance only in a Git project. Old goat-flow files (retired Bash hook files and renamed writing playbooks) appear as `remove`, `preserve` or `none` rows; deprecated skill folders that `--clean-deprecated` removes and pre-1.9 path migrations are not listed.
 
 After managed verification, install-state recording, post-install writes and claim release succeed, public `install` and `setup --apply` print a short closing summary. It counts actual changed preview paths, names replaced local content and observed hook-registration changes by agent and hook, and reports preserved local edits. A disabled Stop registration can be removed; disabled deny policies retain their neutral registrations. Requested force flags alone do not count as completed replacements. Failed or interrupted installs do not print verified completion.
 
@@ -885,10 +885,25 @@ npx @blundergoat/goat-flow@1.19.0 install . --agent <id>
 These package commands apply after 1.19.0 is published. Before publication, use a reviewed local package or the contributor checkout command in the README.
 For a project older than 1.16.0, use `npx @blundergoat/goat-flow@1.18.0 install . --agent <id>` first.
 
-Install preserves saved hook choices and user configuration. It removes retired Bash hooks only when their bytes match the saved baseline;
-edited or unclassified copies remain for review. Sync refreshes hooks from the running CLI's bundle; it does not upgrade that CLI.
+Install preserves saved hook choices and user configuration. It deletes an old goat-flow file (a retired Bash hook file or a renamed writing playbook)
+only when its bytes match the project's install record, including the per-agent records older releases kept.
+It keeps an edited or unrecorded copy, a symlink, or a playbook marked user-owned, and names each kept file in its output; the closing summary lists the ones still to review.
+To delete an edited copy after carrying over what you need, rerun install with `--force-path <path>` for that exact file;
+`--force-managed` never deletes edited bytes, and the project's Git history restores a deleted file. Once a file is gone, install drops its install record.
+When an edited old hook file is still registered, install stops for review first: `--force-managed` approves the switch and keeps the file, and `--force-path <path>` approves it and deletes the file.
+The preview shows each old file as `remove` (install deletes it), `preserve` (install keeps it) or `none` (already gone; only its record is dropped).
+Sync refreshes hooks from the running CLI's bundle; it does not upgrade that CLI.
 After upgrading, restart the agent and replace old Bash self-test lines in project instructions with the Node commands in the
 [guardrails guide](guardrails.md#verification). The Copilot Unix registration still requires the provider's Bash launch field.
+
+With several agents installed, run the pinned install once per agent, in any order. Each install moves its own agent off the retired Bash hooks; it also updates every installed agent's Git-mutation hook registration.
+While another agent's config still runs them, the hook files stay, the install still finishes, and its closing summary names each remaining config with its install command.
+The install for the last of those agents removes the retired files. Repeating a command whose `--force-path` names a conflict an earlier run already resolved prints a warning and continues.
+
+The first install that changes the project's release copies `.goat-flow/state/install/` (or the older `.goat-flow/install-state/`) to `.goat-flow/state/install-before-upgrade/`, replacing a copy from any other release.
+If that install fails and you rerun it, the rerun keeps the first copy, because the failed attempt may already have changed the install records.
+The install prints how to roll back: restore project files from Git, delete `.goat-flow/state/install/`, then copy the saved folder back to the location that message names.
+That restores the earlier release's files and install records exactly; it does not run an older installer.
 
 If installation is interrupted, keep the same pinned package, inspect reported claims with `goat-flow claims inspect . --target <path>`,
 and use the [claim recovery command](#goat-flow-claims-inspectrecover-path---target-project-relative-path) only after confirming that the writer has stopped.

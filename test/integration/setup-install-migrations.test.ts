@@ -189,7 +189,7 @@ require("node:module").syncBuiltinESMExports();
   // Historical incident anchor: "preserves retired writing playbooks when installing replacements".
   // Writes edited old copies and legacy state, then runs preview and the public install in a disposable project.
   // The invariant is removal after replacement; setup-install-renamed-playbooks.test.ts owns baseline-row retention.
-  it("removes renamed writing playbooks after installing replacements", () => {
+  it("keeps locally edited renamed writing playbooks after installing replacements", () => {
     const root = makeTempProject();
     const playbookDirectory = join(root, ".goat-flow/skill-docs/playbooks");
     mkdirSync(playbookDirectory, { recursive: true });
@@ -232,7 +232,7 @@ require("node:module").syncBuiltinESMExports();
     const report = JSON.parse(preview.stdout) as {
       files: { path: string; state: string; action: string }[];
     };
-    // Preview retains orphan baseline history; renamed-file cleanup happens separately during installation.
+    // Both copies differ from their install record, so the preview keeps them.
     for (const retiredPath of retiredPlaybookPaths) {
       const previewRow = report.files.find((file) => file.path === retiredPath);
       assert.ok(previewRow, `Preview must list ${retiredPath}`);
@@ -258,15 +258,15 @@ require("node:module").syncBuiltinESMExports();
         `Installed content: ${replacementPlaybook}`,
       );
     }
-    assert.equal(existsSync(retiredAgentPath), false);
-    assert.equal(existsSync(retiredHumanProse), false);
-    // The install log names each actual cleanup.
+    assert.equal(readFileSync(retiredAgentPath, "utf-8"), agentContent);
+    assert.equal(readFileSync(retiredHumanProse, "utf-8"), humanContent);
+    // The install log names each kept copy and how to finish removing it.
     for (const retiredPath of retiredPlaybookPaths) {
       assert.ok(
         install.stdout.includes(
-          `${retiredPath} (removed renamed playbook; use `,
+          `${retiredPath} (kept: edited or unrecorded old playbook; `,
         ),
-        `Missing removal notice for ${retiredPath}: ${install.stdout}`,
+        `Missing kept notice for ${retiredPath}: ${install.stdout}`,
       );
     }
   });

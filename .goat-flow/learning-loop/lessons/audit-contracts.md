@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-11-13
+last_reviewed: 2026-11-25
 ---
 
 **Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
@@ -177,3 +177,26 @@ The full gates then caught an unsupported standalone `Evidence` metadata label a
 **Recurrence 2026-10-01 (review helper):** The consumer helper combined dashboard files with CLI compiler settings, so classic browser globals appeared to have only local references. A revised helper then asserted five removed functions, but the compared source contained four; a follow-up diagnostic also failed to parse. The agent stopped patching that helper, reread the two compiler configurations and the actual declaration diff, then reran separate native programs with import-alias and awaited-import destructuring resolution. The completed receipt includes the live dashboard decoder caller and both CLI/server history callers. Evidence: `tsconfig.json` (search: `src/dashboard`), `tsconfig.dashboard.json` (search: `isolatedModules`), `src/dashboard/dashboard-setup-quality.ts` (search: `.map((row) => readQualityHistoryRow(row))`). The final preflight then rejected the added gitignored receipt citation as a durable evidence anchor. The entry now cites the tracked configuration and decoder caller; task-local execution receipts remain in the milestone. These were helper-evidence failures; no product behavior changed.
 
 **Recurrence 2026-11-13 (capture checks):** Two local checks imposed a different contract on valid capture inputs. A Python text read normalized a Windows fixture's CRLF bytes before comparing them with the packet. A review-index builder then assumed that Windows and WSL transcript extracts put their raw-source hash in the same field. Both checks stopped before their dependent writes. Reading the fixture without newline conversion and inspecting both extract shapes corrected the checks; the approved packets and capture evidence did not change. Preserve bytes when checking a digest-bound fixture, and inspect each producer's actual fields before aggregating its output. The capture metadata contract is `src/cli/hook-provider-captures.ts` (search: `artifactSha256`).
+
+## Lesson: A path scan over source files reports test data as calls
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** Before a content rule treats a path string as a call, limit it to files that execute commands (shell scripts, workflow YAML, package scripts) and run it against this repository's own tree.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** A string literal in `.mjs` or `.ts` source is as often fixture data as a command, and the content scan fails on any warning, so one fixture can turn a project's audit red. Scope caller scans by file kind, pin a quiet fixture-string case, and run `goat-flow audit . --check-content` on this repository before calling the rule done. Evidence anchors: `src/cli/retired-paths.ts` (search: `const SHELL_SCRIPT`), `test/unit/retired-hook-self-test.test.ts` (search: `a lesson and a Node fixture string stay quiet`), `src/cli/audit/audit-content.ts` (search: `warnings === 0 ? "pass" : "fail"`).
+
+**What happened:** A new rule reporting calls of retired hook paths first scanned every file under `scripts/`. Its own repository's content audit then failed on two JSON strings in a dashboard profiling script that writes a fake old-layout project. Limiting the scan to shell scripts, workflow YAML and `package.json` cleared it, and the real pre-upgrade project still showed every CI, preflight and instruction call.
+
+## Lesson: A warning folded into an existing check inherits that check's failure impact
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** Before recommending which existing harness check should carry a new warning, read that check's type and `failureImpact` and state the audit outcome a failure produces.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** An advisory check fails its whole concern unless it declares `failureImpact: "score-only"`, and impact is set per check, not per finding. A warning meant to inform must go in a score-only check, or it fails the audit for every project that has the gap. Evidence anchors: `src/cli/audit/harness-scoring.ts` (search: `export function classifyCheckImpact`), `src/cli/audit/harness/check-constraints.ts` (search: `function claudeAttributionGaps`).
+
+**What happened:** A missing-attribution warning was first recommended for, and built into, the commit-guidance check because the topic matched. That check blocks, so a real upgraded project without the three values would have failed its audit, though install never adds them. The impact was read only when a probe showed advisory failures marked scope-failing. The warning moved to the score-only settings check after the owner chose again.
+

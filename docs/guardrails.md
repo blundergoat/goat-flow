@@ -33,6 +33,26 @@ Enabled Claude Code deny hooks inspect literal native PowerShell commands with b
 - `goat-flow hooks list --json`
 - After trusting the selected checkout: `goat-flow hooks verify . --agent <id> --scenario all --trusted-target`
 
+To ask one policy whether it would block a command without running it, pass the command to `--check`, for example
+`node .goat-flow/hooks/deny-dangerous.mjs --check 'rm -rf /'`.
+
+### Replacing retired Bash hook commands
+
+Releases before 1.19.0 ran Bash hooks. Install removes their files once they are proven unedited, and lists each line in your
+instruction files, shell scripts, CI workflows and `package.json` that still calls one. `goat-flow audit . --check-content` reports the
+same calls in shell scripts, CI workflows and `package.json`. Neither changes your files.
+
+| Retired call | Use instead |
+| --- | --- |
+| `.goat-flow/hooks/deny-dangerous.sh` with `--self-test` or `--check` | `node .goat-flow/hooks/deny-dangerous.mjs` with the same option |
+| `.goat-flow/hooks/deny-git-mutations.sh` with `--self-test` or `--check` | `node .goat-flow/hooks/deny-git-mutations.mjs` with the same option |
+| `.goat-flow/hooks/post-turn-safety.sh --self-test` | `node .goat-flow/hooks/post-turn-safety.mjs --self-test` |
+| `.goat-flow/hooks/gruff-code-quality.sh --self-test` | `node .goat-flow/hooks/gruff-code-quality.mjs --self-test` |
+| `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` | `node .goat-flow/hooks/deny-dangerous.mjs --self-test=full` and `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=full` |
+| `.goat-flow/hooks/run-with-bash.mjs` | `.goat-flow/hooks/run-hook.mjs` |
+| `.goat-flow/hooks/deny-dangerous/guard-runtime.sh` or `patterns-*.sh` | Nothing: these were internal parts of the Bash runtime, so remove the call |
+| A `.goat-flow/hooks/` glob ending in `.sh`, such as a `shellcheck` step | Nothing matches it now: target `.goat-flow/hooks/**/*.mjs` or remove it |
+
 Both policies default on. Explicit upgrade migration preserves a saved Git-hook choice or inherits the previous dangerous-hook choice once. Ordinary toggles and `hooks sync` preserve saved choices and keep a missing Git choice on. Shared-file repairs can stale both proof records. `hooks sync` repairs installation, and each policy's verification group supplies fresh proof. Agents still never commit or push, regardless of toggle state.
 
 ## Troubleshooting a blocked check

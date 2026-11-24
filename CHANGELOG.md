@@ -5,6 +5,24 @@
 ### Added
 
 - **Antigravity on WSL: missing Node warning** - `audit` and `hooks verify` warn before a missing `node` blocks Antigravity's command and file tools.
+- **Install saves state before an upgrade** - The first install of a new release copies install state to `.goat-flow/state/install-before-upgrade/` and prints how to roll back. Rerunning a failed upgrade keeps that first copy.
+- **Install and audit list calls to removed hook files** - After an upgrade, install names each line in instruction files, shell scripts, CI workflows and `package.json` that still calls a retired goat-flow path, with the Node replacement. `audit --check-content` reports the same calls in scripts, workflows and `package.json`. Neither edits your files.
+- **Release notes ship with the package** - The published package now includes `CHANGELOG.md`.
+- **Install names each permission rule it changes** - The preview names every Claude or Codex deny rule install will remove, add or rewrite, and the closing summary leads with them whenever a deny is removed or narrowed.
+- **Audit reports missing Claude protections** - `deny-covers-secrets` lists template deny rules your settings lack, as notes that never fail the check; `settings-rules-matched` warns, without failing the audit, when a Claude attribution value is missing.
+
+### Changed
+
+- **`--force-path` on an edited old hook file now deletes it** - In 1.19.0 it approved the registration switch and kept the file. `--force-managed` still switches and keeps it, and the install refusal explains both.
+
+### Fixed
+
+- **Multi-agent upgrades no longer report `Fatal error`** - Each install finishes and lists the agents left; the last one removes the retired hooks.
+- **Retried `--force-path` no longer refused** - A named path that an earlier run already resolved now prints a warning and the install continues.
+- **Install reports rewritten hook registrations** - Kept hook config files show their registration updates, with a reminder to restart open agent sessions.
+- **Migrated Codex permission comments match the template** - A refreshed Codex permission profile now carries the template's comment, which says names such as `.env.backup` are blocked only in shell commands, by the hook, and not for direct file reads.
+- **Upgrades from releases before 1.17.0 no longer block on unedited old hooks** - Install trusts those releases' per-agent records, so only edited hook files need review.
+- **Edited old playbooks are no longer deleted on their name alone** - Install deletes a retired hook file or renamed writing playbook only when its bytes match the install record. It keeps and names an edited copy, deletes it when `--force-path` names it, and drops records of deleted files.
 
 ## v1.19.0 - 2026-11-22
 

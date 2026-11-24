@@ -85,13 +85,13 @@ describe("codex config migration", () => {
         V1_16_0_BASH_RUNNER,
       );
 
-      // The registered 1.16.0 runner has no saved install hash, so the user approves switching its registration by name.
+      // The registered 1.16.0 runner has no saved install hash, so the user approves switching its registration and keeps the file;
+      // naming the path with --force-path would delete it instead.
       const installResult = runCliInstaller(
         targetProjectPath,
         "--agent",
         "codex",
-        "--force-path",
-        ".goat-flow/hooks/run-with-bash.mjs",
+        "--force-managed",
       );
       // When setup fails, show whichever user-facing stream explains the problem.
       assert.equal(

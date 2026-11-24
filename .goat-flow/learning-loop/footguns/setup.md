@@ -29,7 +29,7 @@ last_reviewed: 2026-11-03
 
 **Prevention:** Inspect parsed command strings. Preserve dependencies when provider configuration cannot be read safely; malformed JSON is not evidence that a dependency is unused.
 
-**Evidence:** `src/cli/installer/retired-runtime.ts` (`hasRetiredRegistration`, `containsRetiredRuntime`) previously searched serialized JSON. A command with a quoted script path was missed because JSON inserted a backslash before its closing quote. `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `keeps registrations and dependencies while a runtime customization awaits migration consent`) now retains the quoted command and its dependencies until review.
+**Evidence:** `src/cli/installer/retired-runtime.ts` (`retiredRegistrationConfigs`, `containsRetiredRuntime`; formerly `hasRetiredRegistration`) previously searched serialized JSON. A command with a quoted script path was missed because JSON inserted a backslash before its closing quote. `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `keeps registrations and dependencies while a runtime customization awaits migration consent`) now retains the quoted command and its dependencies until review.
 
 ## Footgun: Non-exclusive staging copies follow a raced payload symlink
 

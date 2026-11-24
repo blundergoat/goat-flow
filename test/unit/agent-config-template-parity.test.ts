@@ -6,12 +6,35 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { migrateCodexPermissions } from "../../src/cli/installer/codex-permissions.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
 /** Escape a deny glob before embedding it in a regex that checks template parity. */
 function escapeRegExp(literalText: string): string {
   return literalText.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/**
+ * Read the comment lines that open the Codex workspace-roots deny block, up to its first rule.
+ *
+ * @param config - Codex TOML text
+ * @returns the comment lines in order; empty when the block or its comments are absent
+ */
+function workspaceRootComments(config: string): string[] {
+  const lines = config.split(/\r?\n/u);
+  const header = lines.findIndex((line) =>
+    line.endsWith('.filesystem.":workspace_roots"]'),
+  );
+  // A config without the workspace-roots block has no comments to compare.
+  if (header === -1) return [];
+  const comments: string[] = [];
+  // Comments run from the header to the first rule line.
+  for (const line of lines.slice(header + 1)) {
+    if (!line.startsWith("#")) break;
+    comments.push(line);
+  }
+  return comments;
 }
 
 describe("agent config template parity", () => {
@@ -272,4 +295,16 @@ describe("agent config template parity", () => {
       });
     }
   }
+  it("renders the migrated Codex permission comments from the shipped template", () => {
+    const legacy = codexTemplate.replace(
+      '.filesystem.":workspace_roots"]',
+      '.filesystem.":project_roots"]',
+    );
+    assert.notEqual(legacy, codexTemplate, "the template must hold the anchor");
+
+    assert.deepEqual(
+      workspaceRootComments(migrateCodexPermissions(legacy)),
+      workspaceRootComments(codexTemplate),
+    );
+  });
 });

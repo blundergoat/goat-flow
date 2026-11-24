@@ -20,8 +20,8 @@ import { readDecisionsReadmeTransfer } from "./decisions-readme-transfer.js";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import {
-  applyRuntimeRetirementPreview,
-  retireRuntimeRows,
+  applyRetirementPreview,
+  forgetAbsentRetiredRows,
 } from "./installer/retired-runtime.js";
 import { readProjectTextFile } from "./project-file.js";
 import { getSkillFiles, loadManifest } from "./manifest/manifest.js";
@@ -68,7 +68,7 @@ const BLOCKING_STATES = new Set<ManagedSetupFileState>([
 
 // Caveats every install preview prints, so the user knows which cleanup the listed rows leave out.
 const PREVIEW_LIMITS = [
-  "Removals - retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations - are cleanup rather than writes and are not enumerated here.",
+  "Old goat-flow files - the retired Bash hook files and the renamed writing playbooks - are listed above as remove, preserve or none rows. Not listed: deprecated skill folders that --clean-deprecated removes, and pre-1.9 path migrations.",
 ] as const;
 
 /**
@@ -1060,12 +1060,11 @@ export function buildManagedSetupPreview(
     );
   }
 
-  applyRuntimeRetirementPreview(
+  // Agreed hashes from an older release's per-agent records count too: the applying install converts them to shared state unchanged.
+  applyRetirementPreview(
     projectPath,
     files,
-    baseline.facade.source === "v2"
-      ? baseline.facade.expectedHashes
-      : new Map(),
+    baseline.facade.expectedHashes,
     new Set(Object.keys(loadManifest().file_ownership)),
     authority,
   );
@@ -1202,7 +1201,7 @@ function buildManagedInstallReceiptCandidate(
     if (previousReceiptIndex === -1) receipts.push(selectedReceipt);
     else receipts[previousReceiptIndex] = selectedReceipt;
   }
-  return retireRuntimeRows(
+  return forgetAbsentRetiredRows(
     projectPath,
     {
       schemaVersion: state.schemaVersion,
@@ -1215,7 +1214,8 @@ function buildManagedInstallReceiptCandidate(
 
 /**
  * Record verified Sync dependencies without claiming that the user completed a full install.
- * Invariant: unrelated rows and all existing receipts retain their data; changed generations may stale those receipts.
+ * Invariant: unrelated rows and existing receipts retain their data, except that rows and stale-receipt references for absent retired files are
+ * forgotten; changed generations may stale those receipts.
  *
  * @param projectPath - selected project whose state and file claims are held by the hook operation
  *
@@ -1260,7 +1260,7 @@ export function recordManagedHookAfterVerification(
       }),
     );
   }
-  const candidate = retireRuntimeRows(
+  const candidate = forgetAbsentRetiredRows(
     projectPath,
     {
       schemaVersion: state.schemaVersion,

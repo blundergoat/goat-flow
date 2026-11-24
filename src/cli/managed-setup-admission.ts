@@ -10,6 +10,7 @@ import {
   isBlockingManagedFile,
   type ManagedSetupPreview,
 } from "./managed-setup-preview.js";
+import { RETIRED_PATHS, RETIRED_RUNTIME_PATHS } from "./retired-paths.js";
 
 /**
  * Return concise conflict rows for the normal install error shown before any mutation.
@@ -72,6 +73,39 @@ function unmatchedPathReason(
   return "--force-path names no conflict in this preview; this path needs no authority.";
 }
 
+/**
+ * Decide whether a named path simply needs no authority now: a managed row whose conflict a previous run already resolved, or a
+ * retired file a previous run already deleted. Typos, user-owned rows missing `--force-user-owned` and refused rows stay blocking.
+ */
+function namesUnneededAuthority(
+  preview: ManagedSetupPreview,
+  namedPath: string,
+): boolean {
+  const row = preview.files.find((file) => file.path === namedPath);
+  // A retired file an earlier run already deleted has no row left, so naming it again needs nothing.
+  if (row === undefined) return RETIRED_PATHS.includes(namedPath);
+  return row.authority === "not-required" && row.ownership !== "user-owned";
+}
+
+/**
+ * Return one warning per named path that needs no authority in this preview, so a retried command can continue.
+ *
+ * @param preview - current managed report already resolved against the same authority
+ * @param authority - every authority the user supplied
+ * @returns warning lines for the CLI to print; empty when every named path matched an admitted conflict
+ */
+export function managedSetupAuthorityWarnings(
+  preview: ManagedSetupPreview,
+  authority: ManagedSetupAuthority,
+): string[] {
+  return unmatchedAuthorityPaths(authority, admittedAuthorityPaths(preview))
+    .filter((path) => namesUnneededAuthority(preview, path))
+    .map(
+      (path) =>
+        `Warning: --force-path ${path} names no conflict in this preview; this path needs no authority. Continuing.`,
+    );
+}
+
 /** List paths whose rows the supplied authority actually granted, for name matching. */
 function admittedAuthorityPaths(preview: ManagedSetupPreview): string[] {
   return preview.files
@@ -98,11 +132,11 @@ export function managedSetupAdmissionFailure(
 ): string | null {
   const unsafeManagedTarget =
     preview.baselineStatus === "invalid" || hasUnsafeManagedTarget(preview);
-  // A named path that matched nothing is a typo or stale instruction, never a silent no-op.
+  // A named path that matched nothing is a typo or stale instruction, never a silent no-op; a path that needs no authority only warns.
   const unmatchedPaths = unmatchedAuthorityPaths(
     authority,
     admittedAuthorityPaths(preview),
-  );
+  ).filter((path) => !namesUnneededAuthority(preview, path));
   if (unmatchedPaths.length > 0) {
     return `Managed setup blocked before changes:\n${unmatchedPaths
       .map((path) => `  - ${path}: ${unmatchedPathReason(preview, path)}`)
@@ -122,5 +156,11 @@ export function managedSetupAdmissionFailure(
   const nextAction = unsafeManagedTarget
     ? "Repair symlinked, non-regular, or unreadable target paths first; no authority bypasses path safety."
     : "After reviewing the differences, authorize each named replacement with --force-path <path>, or every listed managed conflict with --force-managed. These flags may recreate missing paths or discard local content where present.";
-  return `Managed setup blocked before changes:\n${conflicts}\nRun with --dry-run for the full report. ${nextAction}`;
+  // For an edited retired hook file the two flags differ: naming it deletes it, while --force-managed keeps it.
+  const retiredNote = withheldFiles.some((file) =>
+    RETIRED_RUNTIME_PATHS.includes(file.path),
+  )
+    ? " For an edited retired hook file, --force-path <path> switches its registration and deletes the file once no provider runs it; --force-managed switches the registration and keeps the file."
+    : "";
+  return `Managed setup blocked before changes:\n${conflicts}\nRun with --dry-run for the full report. ${nextAction}${retiredNote}`;
 }

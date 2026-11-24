@@ -43,7 +43,17 @@ import { migrateInstallerDirectories } from "./migrations.js";
 import {
   inspectRuntimeRetirement,
   removeRetiredRuntimeFile,
+  retiredRuntimeReferences,
 } from "./retired-runtime.js";
+import {
+  findRetiredPathReferences,
+  isUserOwnedPlaybook,
+  keptRetiredFileAdvice,
+  RENAMED_PLAYBOOKS,
+  retiredPathCallerFiles,
+} from "../retired-paths.js";
+import { createFS } from "../facts/fs.js";
+import { hashFile } from "../managed-setup-write-set.js";
 
 /** Per-path decisions come from the public preview and are never widened here. */
 export interface InstallerApplyOptions {
@@ -56,6 +66,8 @@ export interface InstallerApplyOptions {
   /** The public caller sets this only after it owns and revalidates the complete claim batch. */
   hasManagedAdmission?: boolean;
   retirementPaths?: readonly string[];
+  /** Edited retired files `--force-path` named, each with the bytes the preview showed; a later change keeps the file. */
+  forcedRetirements?: readonly { path: string; sha256: string }[];
   reviewedRuntimePaths?: readonly string[];
   output?: (message: string) => void;
   diagnostic?: (message: string) => void;
@@ -193,6 +205,7 @@ export function applyInstaller(options: InstallerApplyOptions): void {
   let copied = 0;
   let skipped = 0;
   let removed = 0;
+  // Copy one template, skipping preserved destinations and existing user-owned files; path admission throws on an unsafe destination.
   const copy = (
     source: string,
     destination: string,
@@ -212,7 +225,7 @@ export function applyInstaller(options: InstallerApplyOptions): void {
       lstatSync(target, { throwIfNoEntry: false })
     ) {
       skipped += 1;
-      output(`  · ${destination} (exists, skipped)`);
+      output(`  · ${destination} (exists, template not copied)`);
       return;
     }
     const sourcePath = getTemplatePath(source);
@@ -244,27 +257,39 @@ export function applyInstaller(options: InstallerApplyOptions): void {
 
   installSettings(options, profile.settings, copy, preserved);
 
-  if (profile.hooks_dir)
-    migrateRegistration(project, agent, null, preserved, options.diagnostic);
-  removed += finishRuntimeRetirement(options, retirement, output);
+  // An existing hook config keeps its other content but can still have its registrations rewritten; say so after its "exists" line.
+  if (
+    profile.hooks_dir &&
+    migrateRegistration(project, agent, null, preserved, options.diagnostic)
+  )
+    output(`  ✓ ${agent.hookConfigFile} (hook registrations updated in place)`);
+  removed += finishRuntimeRetirement(options, retirement.files, output);
   writeInitialPlanMarker(project);
-  removed += retireRenamedPlaybooks(project, output);
-  reportRenamedPlaybookReferences(project, output);
+  removed += retireRenamedPlaybooks(options, retirement.expected, output);
+  reportRetiredPathReferences(project, output);
   output(
     `HELPER DONE: ${copied} files copied, ${skipped} skipped, ${removed} stale removed`,
   );
 }
 
-/** Reject unresolved customization before any runtime or registration can change. */
-function prepareRuntimeRetirement(
-  options: InstallerApplyOptions,
-): ReturnType<typeof inspectRuntimeRetirement> {
+/**
+ * Reject unresolved customization before any runtime or registration can change.
+ * Hashes from an older release's per-agent records count once they agree, because install converts them to shared state unchanged.
+ *
+ * @param options - admitted install options, including the runtime paths the user reviewed
+ * @returns the retired runtime files with their status, and the recorded hashes later retirement checks compare against
+ * @throws Error when a registered retired file has edited bytes the user has not reviewed
+ */
+function prepareRuntimeRetirement(options: InstallerApplyOptions): {
+  files: ReturnType<typeof inspectRuntimeRetirement>;
+  expected: ReadonlyMap<string, string>;
+} {
   const project = options.projectPath;
   const manifest = loadManifest();
-  const baseline = assertManagedAdmission(options);
+  const expected = assertManagedAdmission(options).expectedHashes;
   const retirement = inspectRuntimeRetirement(
     project,
-    baseline.source === "v2" ? baseline.expectedHashes : new Map(),
+    expected,
     new Set(Object.keys(manifest.file_ownership)),
   );
   const reviewed = new Set(options.reviewedRuntimePaths);
@@ -278,7 +303,7 @@ function prepareRuntimeRetirement(
     );
   }
 
-  return retirement;
+  return { files: retirement, expected };
 }
 
 /** Hook entrypoints retain executable mode; ordinary templates remain data files. */
@@ -312,22 +337,80 @@ function installHookFiles(
   }
 }
 
-/** Remove only preview-admitted, still-matching retired files and return their actual count. */
+/**
+ * Remove only preview-admitted retired files whose bytes still match what the preview proved, and return their actual count.
+ * An unedited file matches its install record; an edited file matches the bytes shown when `--force-path` named it. Any other file stays,
+ * with one line saying it no longer runs. While another provider still runs the retired runtime, every file stays and the closing summary
+ * reports the cleanup as pending.
+ *
+ * @param options - admitted install options carrying the preview's removal paths and forced deletions
+ * @param retirement - retired runtime files inspected before registrations changed
+ * @param output - install log writer
+ * @returns how many files were deleted
+ * @throws Error when a file is due for deletion but the selected provider's own config still runs the retired runtime, because
+ *   re-running this install cannot fix that
+ */
 function finishRuntimeRetirement(
   options: InstallerApplyOptions,
   retirement: ReturnType<typeof inspectRuntimeRetirement>,
   output: (message: string) => void,
 ): number {
   const project = options.projectPath;
-  let removed = 0;
-  for (const file of retirement) {
-    if (file.canRemove && options.retirementPaths?.includes(file.path)) {
-      removeRetiredRuntimeFile(project, file);
-      removed += 1;
-      output(`  ✗ ${file.path} (removed verified retired runtime)`);
-    }
+  const forced = new Map(
+    (options.forcedRetirements ?? []).map((file) => [file.path, file.sha256]),
+  );
+  const removable = retirement.flatMap((file) => {
+    // Only rows the preview showed as removals are deleted here.
+    if (!options.retirementPaths?.includes(file.path)) return [];
+    // Unedited bytes are already proven by the install record.
+    if (file.canRemove) return [file];
+    const sha256 = forced.get(file.path);
+    // An edited file is deleted only at the exact bytes the preview showed when --force-path named it.
+    return sha256 === undefined
+      ? []
+      : [{ ...file, expectedSha256: sha256, canRemove: true }];
+  });
+  const kept = retirement.filter(
+    (file) =>
+      !removable.some((removal) => removal.path === file.path) &&
+      readManagedTargetEvidence(project, file.path).status !== "missing",
+  );
+  // Nothing retired is left on disk, so no provider dependency needs checking.
+  if (removable.length === 0 && kept.length === 0) return 0;
+  const references = retiredRuntimeReferences(project);
+  const ownReference = references.find(
+    (reference) => reference.agent === options.agent,
+  );
+  // A dependency left in the selected provider's own config is one that re-running this install cannot clear, so a planned deletion
+  // fails. With nothing due for deletion the files are simply reported as still in use below.
+  if (ownReference && removable.length > 0) {
+    throw new Error(
+      `Runtime migration is incomplete: ${ownReference.path} still references the retired runtime after this install. Its dependencies were preserved.`,
+    );
   }
-  return removed;
+  // Other providers still run these files; the install of the last of them removes them.
+  if (references.length > 0) {
+    output(
+      `  · ${removable.length + kept.length} retired runtime file(s) kept: still used by ${references.map((reference) => reference.path).join(", ")}`,
+    );
+    return 0;
+  }
+  // No provider depends on the retired runtime any more, so each admitted file is rechecked and removed.
+  for (const file of removable) {
+    removeRetiredRuntimeFile(project, file);
+    // A forced removal is a new row built from the preview's bytes; an unedited one is the inspected row itself.
+    output(
+      !retirement.includes(file)
+        ? `  ✗ ${file.path} (removed: named by --force-path; restore it from Git history if needed)`
+        : `  ✗ ${file.path} (removed verified retired runtime)`,
+    );
+  }
+  // Edited or unrecorded files stay; each line says what that means and how to finish.
+  for (const file of kept)
+    output(
+      `  · ${file.path} (kept: edited or unrecorded retired hook file; ${keptRetiredFileAdvice(file.path, readManagedTargetEvidence(project, file.path).status === "regular")})`,
+    );
+  return removable.length;
 }
 
 /** Only undeclared Markdown references belong to skill cleanup; preserve other user files. */
@@ -379,84 +462,145 @@ function writeInitialPlanMarker(project: string): void {
     });
 }
 
-/** Retain the existing explicit user-ownership exception for renamed writing playbooks. */
+/**
+ * Delete an old playbook only when the preview admitted it and its bytes still match what the preview proved: the install record
+ * for an unedited copy, or the bytes shown when `--force-path` named an edited one. A symlink, a playbook marked user-owned, or any
+ * other copy stays, with one line naming its replacement.
+ *
+ * @param options - admitted install options carrying the preview's removal paths and forced deletions
+ * @param expected - recorded hashes from shared or older per-agent install state
+ * @param output - install log writer
+ * @returns how many old playbooks were deleted
+ */
 function retireRenamedPlaybooks(
-  project: string,
+  options: InstallerApplyOptions,
+  expected: ReadonlyMap<string, string>,
   output: (message: string) => void,
 ): number {
+  const forced = new Map(
+    (options.forcedRetirements ?? []).map((file) => [file.path, file.sha256]),
+  );
   let removed = 0;
-  for (const [oldName, newName] of [
-    ["writing-for-agents.md", "writing-agent-facing-instructions.md"],
-    ["writing-style.md", "writing-human-facing-prose.md"],
-  ] as const) {
-    const relative = `.goat-flow/skill-docs/playbooks/${oldName}`;
-    const path = join(project, relative);
-    const stat = lstatSync(path, { throwIfNoEntry: false });
-    if (stat?.isSymbolicLink()) {
-      output(
-        `  · ${relative} (kept symlink; use .goat-flow/skill-docs/playbooks/${newName})`,
-      );
-      continue;
-    }
-    if (!stat?.isFile()) continue;
-    installerDestination(project, relative);
-    const content = readFileSync(path, "utf8");
-    if (isUserOwnedPlaybook(content)) {
-      output(
-        `  · ${relative} (kept user-owned playbook; use .goat-flow/skill-docs/playbooks/${newName})`,
-      );
-      continue;
-    }
-    unlinkSync(path);
-    removed += 1;
-    output(
-      `  ✗ ${relative} (removed renamed playbook; use .goat-flow/skill-docs/playbooks/${newName})`,
+  for (const [relative, replacement] of RENAMED_PLAYBOOKS)
+    removed += retireOldPlaybook(
+      options,
+      { relative, replacement, isForced: forced.has(relative) },
+      forced.get(relative) ?? expected.get(relative),
+      output,
     );
-  }
   return removed;
 }
 
-/** Only explicit frontmatter opts an obsolete playbook out of the existing rename cleanup. */
-function isUserOwnedPlaybook(content: string): boolean {
-  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(content);
-  let metadata: unknown;
-  try {
-    metadata = load(frontmatter?.[1] ?? "");
-  } catch {
-    return false;
-  }
-  return Boolean(
-    metadata &&
-    typeof metadata === "object" &&
-    "goat-flow-ownership" in metadata &&
-    metadata["goat-flow-ownership"] === "user-owned",
+/**
+ * Report whether the preview admitted deleting this retired path and its bytes still match the hash that admission rested on.
+ *
+ * @param options - admitted install options carrying the preview's removal paths
+ * @param relative - project-relative retired path
+ * @param proven - the forced preview bytes or the install record hash; undefined proves nothing
+ * @returns true only when deletion is admitted and the current file hash equals `proven`
+ */
+function isProvenRemoval(
+  options: InstallerApplyOptions,
+  relative: string,
+  proven: string | undefined,
+): boolean {
+  return (
+    options.retirementPaths?.includes(relative) === true &&
+    proven !== undefined &&
+    hashFile(join(options.projectPath, relative)) === proven
   );
 }
 
-/** Report stale instruction references without changing project-owned instructions. */
-function reportRenamedPlaybookReferences(
+/**
+ * Delete or keep one old playbook and write its outcome line.
+ *
+ * @param options - admitted install options carrying the preview's removal paths
+ * @param playbook - old path, its replacement, and whether `--force-path` named it
+ * @param proven - hash the bytes must still match: the forced preview bytes or the install record; undefined proves nothing
+ * @param output - install log writer
+ * @returns 1 when the file was deleted, otherwise 0
+ */
+function retireOldPlaybook(
+  options: InstallerApplyOptions,
+  playbook: { relative: string; replacement: string; isForced: boolean },
+  proven: string | undefined,
+  output: (message: string) => void,
+): number {
+  const { relative, replacement } = playbook;
+  const path = join(options.projectPath, relative);
+  const stat = lstatSync(path, { throwIfNoEntry: false });
+  // A linked copy belongs to whatever it points at, so it is never deleted.
+  if (stat?.isSymbolicLink()) {
+    output(`  · ${relative} (kept symlink; use ${replacement})`);
+    return 0;
+  }
+  // Nothing is installed at the old path.
+  if (!stat?.isFile()) return 0;
+  installerDestination(options.projectPath, relative);
+  // Explicit user-owned frontmatter opts the copy out of cleanup.
+  if (isUserOwnedPlaybook(readFileSync(path, "utf8"))) {
+    output(`  · ${relative} (kept user-owned playbook; use ${replacement})`);
+    return 0;
+  }
+  // The preview admitted this removal and the bytes still match what it proved.
+  if (isProvenRemoval(options, relative, proven)) {
+    unlinkSync(path);
+    output(
+      playbook.isForced
+        ? `  ✗ ${relative} (removed: named by --force-path; restore it from Git history if needed)`
+        : `  ✗ ${relative} (removed renamed playbook; use ${replacement})`,
+    );
+    return 1;
+  }
+  output(
+    `  · ${relative} (kept: edited or unrecorded old playbook; ${keptRetiredFileAdvice(relative, true)})`,
+  );
+  return 0;
+}
+
+/**
+ * Report each line in the project's instruction files, scripts, CI workflows and `package.json` that calls a retired path, with what
+ * to use instead. Those files are only read for this report; install never changes them.
+ *
+ * @param project - installed project root
+ * @param output - install log writer
+ */
+function reportRetiredPathReferences(
   project: string,
   output: (message: string) => void,
 ): void {
-  const renames = new Map([
-    ["writing-for-agents.md", "writing-agent-facing-instructions.md"],
-    ["writing-style.md", "writing-human-facing-prose.md"],
-  ]);
-  for (const instruction of new Set(
-    getAgentProfiles().map((agent) => agent.instructionFile),
-  )) {
-    if (readManagedTargetEvidence(project, instruction).status !== "regular")
-      continue;
-    readFileSync(join(project, instruction), "utf8")
-      .split(/\r?\n/u)
-      .forEach((line, index) => {
-        for (const [oldName, newName] of renames) {
-          if (!line.includes(oldName)) continue;
-          output(`  ${instruction}:${index + 1}: ${line}`);
-          output(`    ${oldName} → .goat-flow/skill-docs/playbooks/${newName}`);
-        }
-      });
+  const instructions = [
+    ...new Set(getAgentProfiles().map((agent) => agent.instructionFile)),
+  ];
+  const lines: string[] = [];
+  for (const path of [
+    ...instructions,
+    ...retiredPathCallerFiles(createFS(project)),
+  ]) {
+    // Only a safe regular file is read; a link or unreadable path is skipped.
+    if (readManagedTargetEvidence(project, path).status !== "regular") continue;
+    const text = readFileSync(join(project, path), "utf8");
+    let shownLine = 0;
+    // Each calling line is shown once, followed by the replacement for each retired path on it.
+    for (const reference of findRetiredPathReferences(
+      text,
+      instructions.includes(path),
+    )) {
+      // References arrive in line order, so a repeated line number means another path on the line already shown.
+      if (reference.line !== shownLine)
+        lines.push(`  ${path}:${reference.line}: ${reference.text}`);
+      shownLine = reference.line;
+      lines.push(
+        `    ${reference.token} → ${reference.replacement ?? reference.note}`,
+      );
+    }
   }
+  // A project that calls no retired path gets no heading.
+  if (lines.length === 0) return;
+  output(
+    "Project files that still call removed goat-flow paths (reported only; nothing was changed):",
+  );
+  for (const line of lines) output(line);
 }
 
 /** Seed missing config or apply only current-version and hook-toggle convergence. */

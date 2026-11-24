@@ -21,6 +21,10 @@ import {
   type MarkdownFence,
 } from "../facts/shared/search-anchors.js";
 import { STANDALONE_PLAYBOOK_FILES } from "./skill-docs-contract.js";
+import {
+  findRetiredPathReferences,
+  retiredPathCallerFiles,
+} from "../retired-paths.js";
 
 /**
  * Describe one prose pattern and the finding shown to the document's author.
@@ -576,7 +580,7 @@ function scanRetiredHookSelfTests(
   for (const [index, line] of text.split(/\r?\n/u).entries()) {
     // Match managed operands only; unrelated scripts and incidental path suffixes remain outside this migration warning.
     const commands = line.matchAll(
-      /(?:^|[\s`"'])((?:\.\/)?(?:\.goat-flow|workflow)[\\/]hooks[\\/](?:deny-dangerous|deny-git-mutations))\.sh["']?[ \t]+(--self-test(?:=(?:smoke|full))?)(?=$|[\s`"';|&])/gu,
+      /(?:^|[\s`"'])((?:\.\/)?(?:\.goat-flow|workflow)[\\/]hooks[\\/](?:deny-dangerous|deny-git-mutations|post-turn-safety|gruff-code-quality))\.sh["']?[ \t]+(--self-test(?:=(?:smoke|full))?)(?=$|[\s`"';|&])/gu,
     );
     for (const command of commands) {
       const [, operand, option] = command;
@@ -587,7 +591,7 @@ function scanRetiredHookSelfTests(
         rule: "retired-hook-self-test",
         path,
         line: index + 1,
-        message: `Instruction invokes the retired Bash policy self-test: ${scriptPath}.sh ${option}.`,
+        message: `Instruction invokes the retired Bash hook command: ${scriptPath}.sh ${option}.`,
         suggestion: `Run \`node ${scriptPath}.mjs ${option}\` instead.`,
       });
     }
@@ -777,6 +781,32 @@ function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
 }
 
 /**
+ * Report each call of a retired goat-flow path in the project's scripts, CI workflows and `package.json`, with what to use instead.
+ * Instruction files are left to the retired self-test rule, which checks only self-test calls; install's report lists their other references.
+ * Learning-loop or documentation mentions are not calls.
+ *
+ * @param ctx - selected project's read-only filesystem
+ * @returns one warning per retired path on a calling line; empty when no caller file names one
+ */
+function scanRetiredPathCallers(ctx: AuditContext): ContentFinding[] {
+  return retiredPathCallerFiles(ctx.fs).flatMap((path) =>
+    findRetiredPathReferences(ctx.fs.readFile(path) ?? "", false).map(
+      (reference): ContentFinding => ({
+        severity: "warning",
+        rule: "retired-path-reference",
+        path,
+        line: reference.line,
+        message: `Calls the removed goat-flow path ${reference.token}.`,
+        suggestion:
+          reference.replacement === null
+            ? (reference.note ?? "Remove this call.")
+            : `Use \`${reference.replacement}\` instead.`,
+      }),
+    ),
+  );
+}
+
+/**
  * Reads the configured documentation targets and reports prose, readiness, and evidence findings for the author.
  * Missing or unreadable files are skipped, leaving available guidance covered without treating a skipped file as a pass.
  *
@@ -826,5 +856,7 @@ export function runContentQualityChecks(ctx: AuditContext): {
     findings.push(...scanRetiredHookSelfTests(rel, text));
     findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
   }
+  // Scripts, CI workflows and package.json are checked only for calls of removed goat-flow paths; they are not prose, so they are not counted.
+  findings.push(...scanRetiredPathCallers(ctx));
   return { findings, filesScanned };
 }
