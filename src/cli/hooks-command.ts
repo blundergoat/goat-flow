@@ -5,6 +5,7 @@
  * Unknown hooks produce usage exit 2; other registrar failures produce exit 1.
  */
 
+import { warnIfAntigravityCannotStartNode } from "./antigravity-node-runtime.js";
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import { BATCH_HOOK_SCENARIOS } from "./cli-types.js";
@@ -213,6 +214,8 @@ export async function handleHooksCommand(options: ParsedCLI): Promise<void> {
         return;
       case "verify":
         await handleHookVerification(options);
+        // Local replay uses this terminal's PATH, so it can pass while Antigravity on WSL cannot start Node at all.
+        warnIfAntigravityCannotStartNode(options.projectPath, options.agent);
         return;
     }
   } catch (err) {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Antigravity on WSL: missing Node warning** - `audit` and `hooks verify` warn before a missing `node` blocks Antigravity's command and file tools.
+
 ## v1.19.0 - 2026-11-22
 
 ### Added
