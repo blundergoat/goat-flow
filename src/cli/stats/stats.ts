@@ -13,6 +13,7 @@ import type {
   ReadonlyFS,
 } from "../types.js";
 import type { IndexFreshness } from "./index-freshness.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 
 /**
  * Aggregated per-surface view over one learning-loop directory.
@@ -588,7 +589,7 @@ function collectActiveFootgunAnchorFindings(
     .map((entry) => ({
       file: entry.sourcePath,
       rule: "missing-anchor" as const,
-      message: `${entry.sourcePath}: active footgun "${entry.title}" is missing a valid evidence anchor; cite a repository-relative file path immediately followed by (search: "stable semantic needle")`,
+      message: `${entry.sourcePath}: active footgun "${entry.title}" is missing a valid evidence anchor; cite a backticked repository-relative file path immediately followed by a search needle from that file, in the form \`path/to/file.ts\` (search: \`text that appears once in the file\`)`,
     }));
 }
 
@@ -719,7 +720,7 @@ function collectIndexFindings(indexes: IndexFreshness[]): StatsFinding[] {
       .map((indexStatus) => ({
         file: indexStatus.indexPath,
         rule: "index-stale" as const,
-        message: `${indexStatus.indexPath}: generated index is stale; re-run \`goat-flow index\``,
+        message: `${indexStatus.indexPath}: generated index is stale; re-run \`${PINNED_GOAT_FLOW_INVOCATION} index\``,
       }))
   );
 }
@@ -737,7 +738,7 @@ function collectIndexWarnings(indexes: IndexFreshness[]): StatsWarning[] {
       .map((indexStatus) => ({
         file: indexStatus.indexPath,
         rule: "index-missing" as const,
-        message: `${indexStatus.indexPath}: INDEX.md not generated yet; run \`goat-flow index\``,
+        message: `${indexStatus.indexPath}: INDEX.md not generated yet; run \`${PINNED_GOAT_FLOW_INVOCATION} index\``,
       }))
   );
 }

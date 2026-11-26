@@ -9,6 +9,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pinnedGoatFlowCommand } from "../advised-command.js";
 import type { AgentId, SharedFacts } from "../types.js";
 import type { AuditConcernKey, AuditReport } from "../audit/types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
@@ -247,6 +248,12 @@ function appendContentSummary(lines: string[], report: AuditReport): void {
  */
 function appendHookCoverageSummary(lines: string[], report: AuditReport): void {
   const hookCoverage = report.hookCoverage;
+  // Coverage this CLI could not judge, such as a newer project's hooks, states the reason instead of a zero-count warning.
+  if (hookCoverage.skipped !== undefined) {
+    lines.push("");
+    lines.push(`- **Effective Hook Coverage**: SKIP (${hookCoverage.skipped})`);
+    return;
+  }
   // An agent-scoped audit and an all-agent audit produce the same sentence, so the scope is stated rather than left to the reader to assume.
   const coveredAgents =
     hookCoverage.selectedAgents.length > 0
@@ -336,7 +343,7 @@ export function renderDegradedNote(reason: AuditUnavailableReason): string {
     return [
       "",
       "> **Note:** The dashboard requested a fast quality prompt and no cached audit report was available.",
-      "> This does not mean the audit failed. Run the Re-audit action or `goat-flow audit . --harness --agent <id>` for live audit status.",
+      `> This does not mean the audit failed. Run the Re-audit action or \`${pinnedGoatFlowCommand("audit . --harness --agent <id>")}\` for live audit status.`,
       '> The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.',
       "> Continue the assessment, but do not infer setup failure from this cache miss.",
       "",
@@ -643,7 +650,7 @@ export function renderPriorReportContext(
       "A prior finding is a claim to re-test, not a fact. Validate its premise (who the violated standard binds, whether an accepted ADR already resolves it, whether the code still shows it) before carrying it forward; a prior severity is not evidence.",
     );
     lines.push(
-      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by root cause and affected behavior. Cite the matched prior finding ID in detail. This is your semantic judgment: exact-ID comparison can differ when summaries or locations change. Use `delta_tag: "new"` when it does not. Do NOT emit `absent` in current findings - absence is derived later by `goat-flow quality diff` when a prior finding id disappears from a later run, and it is not proof that the issue was resolved.',
+      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by root cause and affected behavior. Cite the matched prior finding ID in detail. This is your semantic judgment: exact-ID comparison can differ when summaries or locations change. Use `delta_tag: "new"` when it does not. Do NOT emit `absent` in current findings - absence is derived later by the `quality diff` command when a prior finding id disappears from a later run, and it is not proof that the issue was resolved.',
     );
     lines.push(
       `Set top-level \`prior_report_id\` to \`${priorReport.id}\` so readers can tell that \`delta_tag: "new"\` means newly discovered relative to that same-agent report, not necessarily newly introduced in the codebase.`,

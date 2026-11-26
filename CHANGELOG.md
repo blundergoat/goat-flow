@@ -10,10 +10,16 @@
 - **Release notes ship with the package** - The published package now includes `CHANGELOG.md`.
 - **Install names each permission rule it changes** - The preview names every Claude or Codex deny rule install will remove, add or rewrite, and the closing summary leads with them whenever a deny is removed or narrowed.
 - **Audit reports missing Claude protections** - `deny-covers-secrets` lists template deny rules your settings lack, as notes that never fail the check; `settings-rules-matched` warns, without failing the audit, when a Claude attribution value is missing.
+- **Audit flags a goat-flow release in an instruction heading** - The score-only `instruction-release-stamp` check names each heading that carries one and says to remove it after review; `.goat-flow/config.yaml` already records the release.
+- **Install preview opens with a summary** - `install --dry-run` first shows action counts, the user-owned and other agents' files it writes, and configs still running retired hooks.
+- **Install summary names tracked deletions and mode-only changes** - It lists removed files Git still tracks, to stage before you commit, and files whose mode changed with no content change.
 
 ### Changed
 
 - **`--force-path` on an edited old hook file now deletes it** - In 1.19.0 it approved the registration switch and kept the file. `--force-managed` still switches and keeps it, and the install refusal explains both.
+- **Printed fix commands name the running release** - Fix commands from audit, setup, `stats`, `status`, `index`, `skill doctor`, install refusals, the quality prompt and the Hooks page print `npx @blundergoat/goat-flow@<version> …`, not a bare `goat-flow` or `@latest`. Setup's audit gates keep the path of the CLI that printed them.
+- **A finished install previews `pass`** - `install --dry-run` reports `pass` when nothing is left to write or remove beyond rebuilt generated files such as indexes and install records; `ready` now means safe writes are waiting.
+- **`feedback-loop-active` reports every cause in one run** - Missing directories, stale references, invalid anchors and stale buckets appear together, and the JSON details name each stale bucket and its `last_reviewed` date.
 
 ### Fixed
 
@@ -23,6 +29,13 @@
 - **Migrated Codex permission comments match the template** - A refreshed Codex permission profile now carries the template's comment, which says names such as `.env.backup` are blocked only in shell commands, by the hook, and not for direct file reads.
 - **Upgrades from releases before 1.17.0 no longer block on unedited old hooks** - Install trusts those releases' per-agent records, so only edited hook files need review.
 - **Edited old playbooks are no longer deleted on their name alone** - Install deletes a retired hook file or renamed writing playbook only when its bytes match the install record. It keeps and names an edited copy, deletes it when `--force-path` names it, and drops records of deleted files.
+- **An older CLI no longer advises a downgrade** - When the project is on a newer goat-flow release, `audit` reports only the version mismatch and skips every other check and hook repair.
+- **Stale provider evidence says who refreshes it** - The Hooks page and audit say goat-flow refreshes a stale provider capture in a release; nothing in the project clears it.
+- **`stats --check` shows the accepted anchor form** - A footgun missing an evidence anchor now gets a backticked path and `(search: …)` example.
+- **Install preview no longer calls other agents' skills removed** - Files another installed agent manages read `peer-managed` with no action and no longer raise a `warning`.
+- **Install preview drops plan marker and commit guide rows install would skip** - Without one version-named plan folder or a Git repository, the preview no longer shows a `create` row for them.
+- **Install recommends only verify commands that can pass** - The summary prints `hooks verify --scenario all` only when every hook group is registered, otherwise one per registered group.
+- **`hooks verify` names an edited hook as changed** - A locally edited, registered hook reports `installed-content-diverged`, as the Hooks page does, instead of `hook-not-installed`.
 
 ## v1.19.0 - 2026-11-22
 

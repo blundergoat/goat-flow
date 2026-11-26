@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-11-25
+last_reviewed: 2026-11-26
 ---
 
 **Scope:** Installing goat-flow into a project and migrating an existing install - what a package smoke proves, mirror fan-out, the scope a setup agent may write, and concepts that survive their own removal. Repo-wide gates that catch the fallout are [verification-preflight.md](verification-preflight.md).
@@ -212,3 +212,14 @@ last_reviewed: 2026-11-25
 **Prevention:** An rsync rule such as `--exclude=vendor` matches every folder with that name, including the managed `.goat-flow/hooks/vendor/`; excluding `.goat-flow/logs` or `.goat-flow/scratchpad` wholesale also drops their managed README and `.gitignore` files. The preview then reports those managed files missing and blocks. Use root-anchored rules (`--exclude=/vendor`), include the managed files before excluding the rest of a local folder, and write long replay output to a file instead of piping it into `head`, which can end the run early. Evidence anchors: `src/cli/managed-setup-preview.ts` (search: `const BLOCKING_STATES`).
 
 **What happened:** An upgrade replay on a copy of a gruff port blocked on 10 missing managed files, all removed by the copy filter, and a `| head` cut the same run short after its first install. With root-anchored excludes the copy previewed as a warning and every install exited 0.
+
+## Lesson: A preview verdict proven only on projects the source CLI installed misses records the released version left behind
+
+**Status:** active | **Created:** 2026-11-26
+**Decision changed:** Before treating an install-preview verdict rule as done, replay it on a copy of a real project upgraded with the published release, not only on fixtures the source CLI installed.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** A fixture installed by the source CLI never holds state that only an older release writes, such as an install record for a file that release left behind after the file was deleted. Replay the preview on a copy of a project the published release upgraded before ticking a verdict claim, and add a failing-first fixture for any leftover the replay finds. Evidence anchors: `src/cli/managed-setup-preview.ts` (search: `a retired file already gone (action none) only drops its record`), `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `A record whose file is already gone needs no decision`).
+
+**What happened:** A new rule made a finished install preview `pass`. The four-agent fixture test passed, but a copy of a gruff port upgraded with the published release previewed `warning` for all four agents. The cause was one install record for a renamed playbook whose file was already gone: the published release kept such records, while the source CLI forgets them on its next install, so no fixture it built had one. The row needed no decision, so the verdict rule now ignores a retired row whose file is gone, and the absent-record test checks it.

@@ -9,10 +9,8 @@ import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import { validAgentFlags } from "./cli-agent-options.js";
 import type { ParsedCLI } from "./cli-types.js";
-import {
-  type ManagedSetupPreview,
-  renderManagedSetupPreviewText,
-} from "./managed-setup-preview.js";
+import type { ManagedSetupPreview } from "./managed-setup-preview.js";
+import { renderManagedSetupPreviewText } from "./managed-setup-preview-summary.js";
 import type { AgentId } from "./types.js";
 
 /**

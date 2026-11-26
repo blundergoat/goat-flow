@@ -22,6 +22,7 @@ import {
   evidencePath,
   spawnFailureFor,
 } from "./check-agent-deny-runtime.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 
 // === 4. Agent Deny Mechanism ===
 
@@ -71,8 +72,7 @@ function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
       return {
         check: "Agent deny mechanism",
         message: `Missing or unregistered deny-git-mutations policy for ${agentFacts.agent.id}`,
-        howToFix:
-          "Run goat-flow hooks sync, then verify both deny-hook and git-mutations-hook with --trusted-target.",
+        howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\`, then verify both deny-hook and git-mutations-hook with --trusted-target.`,
       };
     }
   }
@@ -261,7 +261,7 @@ function checkLegacyHookDrift(
           check: "Agent deny mechanism",
           message: `${legacyFile} is a legacy guardrail hook for ${agentId}; migrate to deny-dangerous.mjs`,
           evidence: evidencePath(legacyRelPath),
-          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to remove legacy guard hooks and install deny-dangerous.mjs.`,
+          howToFix: `Re-run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent ${agentId}\` to remove legacy guard hooks and install deny-dangerous.mjs.`,
         };
       }
     }
@@ -331,7 +331,7 @@ function checkTemplateDrift(
         check: "Agent deny mechanism",
         message: `${templateFile} is missing for ${agentId}`,
         evidence: evidencePath(installedRelPath),
-        howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to update the hook files.`,
+        howToFix: `Re-run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent ${agentId}\` to update the hook files.`,
       };
     }
     // Differences beyond trailing whitespace mean the user is running hook content that does not match this release.
@@ -340,7 +340,7 @@ function checkTemplateDrift(
         check: "Agent deny mechanism",
         message: `${templateFile} for ${agentId} differs from the current goat-flow template (v${AUDIT_VERSION})`,
         evidence: evidencePath(installedRelPath),
-        howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to update the hook files.`,
+        howToFix: `Re-run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent ${agentId}\` to update the hook files.`,
       };
     }
   }
@@ -392,7 +392,7 @@ function checkDispatcherSelfTest(
       check: "Agent deny mechanism",
       message: `Native self-test dispatcher is unavailable: ${dispatcherRelPath}`,
       evidence: evidencePath(dispatcherRelPath),
-      howToFix: "Run goat-flow hooks sync to install the native policy hook.",
+      howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\` to install the native policy hook.`,
     };
   }
   try {

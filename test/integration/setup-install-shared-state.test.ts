@@ -21,6 +21,7 @@ import {
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
+import { pinnedGoatFlowCommand } from "../../src/cli/advised-command.js";
 import {
   buildManagedSetupPreview,
   writeManagedInstallState,
@@ -520,9 +521,11 @@ describe("one baseline per managed path", () => {
 
     const directInstall = runInstaller(projectPath, "--agent", "codex");
     assert.equal(directInstall.status, 1, directInstall.stdout);
-    assert.match(
+    assert.ok(
+      directInstall.stderr.includes(
+        `managed install state requires the public CLI. Run: ${pinnedGoatFlowCommand(`install ${JSON.stringify(projectPath)} --agent "codex"`)}`,
+      ),
       directInstall.stderr,
-      /managed install state requires the public CLI\. Run: goat-flow install .* --agent "codex"/u,
     );
     assert.equal(
       readManagedState(projectPath).bytes,
@@ -787,7 +790,7 @@ require("node:module").syncBuiltinESMExports();
       assert.equal(failedInstall.status, 1, failedInstall.stdout);
       assert.equal(
         failedInstall.stderr.trim().split("\n").at(-1),
-        `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/state/install/, then rerun: goat-flow install '${projectPath.replace(/\\/gu, "/")}' --agent codex`,
+        `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/state/install/, then rerun: ${pinnedGoatFlowCommand(`install '${projectPath.replace(/\\/gu, "/")}' --agent codex`)}`,
       );
       assert.equal(readFileSync(cutoverMarkerPath, "utf-8"), oldCutoverMarker);
       assert.equal(readFileSync(hookPath, "utf-8"), expectedHookBytes);

@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-10-10
+last_reviewed: 2026-11-26
 ---
 
 **Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, naming the real failure class in retrieval terms, sizing a proposal to the reproduced defect, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
@@ -214,3 +214,14 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 **Root cause:** The instruction named two rules and asserted a relationship between them. Reading the instruction is not reading the rules, and a plausible relationship between two quoted fragments survives a check for whether the fragments exist. Nothing in the repair path required naming which axis each rule moved, so a category error passed as a citation.
 
 **Recurrence 2026-09-11:** A critique host verified a fresh-eyes finding that a plan never enumerated its five mutation dimensions by reading the owner document, not the cited row: the CL-STABILITY row already listed all five in other words, so the accepted amendment shrank to a cross-reference at apply time. Quote the cited span itself before confirming an absence claim. Evidence: .goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md (search: Capability-aware evaluation fixtures).
+
+## Lesson: A product default stated in a multiple-choice option is a claim to measure before asking
+
+**Status:** active | **Created:** 2026-11-26
+**Decision changed:** Before writing an option that says how the product behaves by default, read the default in source or measure it on a scratch install.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** The user picks an option on the premise its text states, so an unmeasured default can make the chosen option apply the wrong rule. Check hook, config and template defaults in the registry or with a fresh scratch install before the question, and state the measured value in the option. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `id: "gruff-code-quality"`), `src/cli/install-summary.ts` (search: `function runtimeVerifyLines`).
+
+**What happened:** A question about which hook verify command the install summary should print said Claude and Codex register every hook group, so they could keep the single all-groups line. A scratch install showed the Gruff hook is off by default, so Claude's all-groups run also exits 1. The chosen option was applied as its principle, one all-groups line only when every group is registered, by reading registrations after install, and the user was told the premise had been wrong.

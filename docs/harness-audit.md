@@ -1,6 +1,6 @@
 # AI Harness Audit
 
-`npx @blundergoat/goat-flow@latest audit . --harness` adds 19 deterministic harness checks to the standard build audit. They inspect required files, registrations, deny patterns, and other local evidence without an LLM. Harness failures contribute to the overall audit status. Platform limits remain explicit: a runtime can pass with limited assurance where broader enforcement is unavailable.
+`npx @blundergoat/goat-flow@latest audit . --harness` adds 20 deterministic harness checks to the standard build audit. They inspect required files, registrations, deny patterns, and other local evidence without an LLM. Harness failures contribute to the overall audit status. Platform limits remain explicit: a runtime can pass with limited assurance where broader enforcement is unavailable.
 
 | Mode | Command | Question |
 |------|---------|----------|
@@ -70,10 +70,10 @@ Every registered build and harness check now carries machine-readable `provenanc
 
 Provenance remains JSON-only. Terminal and Markdown output stays focused on status and remediation; inspect each check's `provenance` object for its justification trail.
 
-### The 19 checks by type
+### The 20 checks by type
 
 - **integrity (9):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
-- **advisory (7):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `deny-blocks-pipe-to-shell`, `settings-rules-matched`, `commit-guidance`
+- **advisory (8):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `instruction-release-stamp`, `deny-blocks-pipe-to-shell`, `settings-rules-matched`, `commit-guidance`
 - **metric (3):** `evidence-before-claims`, `post-turn-hook-integrity`, `milestone-commands-named`
 
 ---
@@ -84,13 +84,14 @@ Provenance remains JSON-only. Terminal and Markdown output stays focused on stat
 
 The agent can only work with what it sees. Stale router paths, missing execution loops, and oversized instruction files all degrade performance. The audit checks structural wiring only; use `quality` to assess whether the content is actually useful for this project.
 
-**Context checks (5):**
+**Context checks (6):**
 
 - `instruction-line-count` - each configured agent's instruction file is within the configured hard limit (`line-limits.limit` in `config.yaml`)
 - `execution-loop-present` - structural smoke check for the required Execution Loop heading plus READ / SCOPE / ACT / VERIFY vocabulary
 - `doc-paths-resolve` - router-table paths, architecture.md backtick paths, and backtick paths in a small set of doc files (`CONTRIBUTING.md`, `.goat-flow/code-map.md`, `.goat-flow/glossary.md`, `docs/cli.md`, `docs/audit-and-quality.md`) all resolve to real files on disk
 - `instruction-sections-present` - structural smoke check for hot-path contract headings (Truth Order, Execution Loop, Definition of Done, Router Table); advisory - skeleton overlays that defer to a shared instruction file will fail this check
 - `boundary-guidance-present` - structural smoke check for workspace boundary guidance (controlling workspace vs target workspace separation); advisory
+- `instruction-release-stamp` - no consumer instruction heading carries a goat-flow release, such as `goat-flow 1.19.0` or the framework's `- vX.Y.Z (date)` header form. `.goat-flow/config.yaml` records the installed release, so a stamp only drifts; the fix is to remove it through the project's instruction-file review. A product version in the heading is kept, and the goat-flow framework checkout is skipped because its headers stay versioned. Score-only advisory: a stamp lowers the Context score without failing the audit
 
 **Not checked here (belongs in quality):** whether instructions are specific to this project, whether footgun evidence is current, whether documentation content is accurate.
 

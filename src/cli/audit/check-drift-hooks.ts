@@ -31,6 +31,7 @@ import type { AgentProfile } from "../manifest/types.js";
 import type { DriftFinding } from "./types.js";
 import { readTemplateText } from "./artifact-templates.js";
 import { isAgentId, isRecord } from "./drift-values.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 
 // Find the shipped script or agent-config template to compare with the user's installed hook.
 function hookTemplatePath(
@@ -456,7 +457,7 @@ function hookContentMismatchMessage(
   const direction = managedSetupChangeDirection(state);
   // The installed bytes still match the recorded copy, so sync can bring this hook up to the selected version.
   if (direction === "behind" && baselineRow !== null) {
-    return `installed hook ${installedRel} is behind template ${templateRel}; its bytes still match the previous-install baseline (${managedBaselineProvenance(baselineRow)}), so run goat-flow hooks sync`;
+    return `installed hook ${installedRel} is behind template ${templateRel}; its bytes still match the previous-install baseline (${managedBaselineProvenance(baselineRow)}), so run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\``;
   }
   // Local content differs from the baseline; users need to preserve it before a replacement.
   if (direction === "diverged") {
@@ -467,7 +468,7 @@ function hookContentMismatchMessage(
         : `; the previous-install baseline (${managedBaselineProvenance(baselineRow)}) confirms the drift direction`;
     return `installed hook ${installedRel} diverged from template ${templateRel}${provenance}; sync would overwrite local content at ${installedRel}, so preserve or port that content before any explicit replacement`;
   }
-  return `hook template (${templateRel}) and installed copy (${installedRel}) differ, but no matching previous-install baseline proves the direction; compare them before you run goat-flow hooks sync, which replaces current managed bytes at ${installedRel}`;
+  return `hook template (${templateRel}) and installed copy (${installedRel}) differ, but no matching previous-install baseline proves the direction; compare them before you run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\`, which replaces current managed bytes at ${installedRel}`;
 }
 
 /**
@@ -500,7 +501,7 @@ function compareHookArtifact(
     findings.push({
       kind: "missing",
       path: installedRel,
-      message: `hook template ${templateRel} has no installed copy at ${installedRel}; run goat-flow hooks sync`,
+      message: `hook template ${templateRel} has no installed copy at ${installedRel}; run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\``,
     });
     return;
   }
@@ -700,7 +701,7 @@ function compareManagedHookCommand(
   findings.push({
     kind: "content",
     path: installedConfig.hookConfigPath,
-    message: `${hookSpec.id}: registered launcher command differs from the managed command; run goat-flow hooks sync`,
+    message: `${hookSpec.id}: registered launcher command differs from the managed command; run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\``,
   });
   return 1;
 }
@@ -745,7 +746,7 @@ function compareManagedHookTimeout(
   findings.push({
     kind: "content",
     path: installedConfig.hookConfigPath,
-    message: `${hookSpec.id}: registered runner timeout ${staleTimeoutLabels(staleTimeoutCommands, timeoutField)}; registry requires ${expectedTimeoutSeconds}s; run goat-flow hooks sync`,
+    message: `${hookSpec.id}: registered runner timeout ${staleTimeoutLabels(staleTimeoutCommands, timeoutField)}; registry requires ${expectedTimeoutSeconds}s; run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\``,
   });
   return 1;
 }
@@ -910,7 +911,7 @@ export function findDeprecatedHookFiles(
     findings.push({
       kind: "deprecated",
       path: installedHookPath,
-      message: `deprecated hook remains installed; run goat-flow hooks sync to remove ${installedHookPath}`,
+      message: `deprecated hook remains installed; run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\` to remove ${installedHookPath}`,
     });
   }
   return deprecatedHookNames.length;

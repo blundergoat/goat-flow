@@ -9,10 +9,15 @@ import {
 import { basename, extname, join, posix } from "node:path";
 import { load } from "js-yaml";
 import { inspectPolicyUpgrade } from "../../../workflow/hooks/hook-policy-state.cjs";
+import { pinnedGoatFlowCommand } from "../advised-command.js";
 import { getAgentProfile, getAgentProfiles } from "../agents/registry.js";
 import { loadConfig } from "../config/reader.js";
 import { loadManifest, getSkillFiles } from "../manifest/manifest.js";
-import { readManagedTargetEvidence } from "../managed-setup-write-set.js";
+import {
+  PLAN_MARKER_PATH,
+  readManagedTargetEvidence,
+  versionPlanDirectories,
+} from "../managed-setup-write-set.js";
 import { readManagedInstallStateFacade } from "../managed-setup-state.js";
 import { getPackageVersion, getTemplatePath } from "../paths.js";
 import { prepareAgentHookState } from "../server/agent-hook-writer.js";
@@ -446,18 +451,15 @@ function pruneSkillReferences(
 
 /** An existing marker or ambiguous directory list always preserves the user's choice. */
 function writeInitialPlanMarker(project: string): void {
-  const marker = ".goat-flow/plans/.active";
   if (
-    lstatSync(installerDestination(project, marker), { throwIfNoEntry: false })
+    lstatSync(installerDestination(project, PLAN_MARKER_PATH), {
+      throwIfNoEntry: false,
+    })
   )
     return;
-  const versions = readdirSync(join(project, ".goat-flow/plans"), {
-    withFileTypes: true,
-  }).filter(
-    (entry) => entry.isDirectory() && /^\d+\.\d+\.\d+/u.test(entry.name),
-  );
+  const versions = versionPlanDirectories(project);
   if (versions.length === 1 && versions[0])
-    writeInstallerFile(project, marker, `${versions[0].name}\n`, {
+    writeInstallerFile(project, PLAN_MARKER_PATH, `${versions[0]}\n`, {
       createOnly: true,
     });
 }
@@ -747,6 +749,10 @@ function assertManagedAdmission(
   options: InstallerApplyOptions,
 ): ReturnType<typeof readManagedInstallStateFacade> {
   const project = options.projectPath;
+  // Each refusal below names the public install of this release, which takes the claims this direct path lacks.
+  const publicInstall = pinnedGoatFlowCommand(
+    `install ${JSON.stringify(project)} --agent ${JSON.stringify(options.agent)}`,
+  );
   if (
     !options.hasManagedAdmission &&
     [".goat-flow/install-state", ".goat-flow/write-claims"].some((path) =>
@@ -754,7 +760,7 @@ function assertManagedAdmission(
     )
   ) {
     throw new Error(
-      `legacy local state requires migration. Run: goat-flow install ${JSON.stringify(project)} --agent ${JSON.stringify(options.agent)}`,
+      `legacy local state requires migration. Run: ${publicInstall}`,
     );
   }
   if (
@@ -764,7 +770,7 @@ function assertManagedAdmission(
     })
   ) {
     throw new Error(
-      `managed install state requires the public CLI. Run: goat-flow install ${JSON.stringify(project)} --agent ${JSON.stringify(options.agent)}`,
+      `managed install state requires the public CLI. Run: ${publicInstall}`,
     );
   }
   if (
@@ -775,7 +781,7 @@ function assertManagedAdmission(
     ].some((path) => lstatSync(join(project, path), { throwIfNoEntry: false }))
   ) {
     throw new Error(
-      `decisions guide ownership requires the public CLI. Run: goat-flow install ${JSON.stringify(project)} --agent ${JSON.stringify(options.agent)}`,
+      `decisions guide ownership requires the public CLI. Run: ${publicInstall}`,
     );
   }
   const baseline = readManagedInstallStateFacade(project);

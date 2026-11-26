@@ -26,6 +26,7 @@ import {
 import { buildProjectStructure } from "./audit-structure.js";
 import { agentSummary, setupSummary } from "./audit-summaries.js";
 import { targetUsesNewerGoatFlow } from "./check-agent-common.js";
+import { AUDIT_VERSION } from "../constants.js";
 import {
   addStructuralAssuranceLimits,
   addUniqueConcernLimit,
@@ -468,6 +469,99 @@ function overallStatus(
     : "fail";
 }
 
+// The one check that can speak for a newer install: it names the version gap without prescribing this CLI's files.
+const NEWER_TARGET_CHECK_ID = "config-version";
+
+/**
+ * Record a build check that did not run, so renderers show it as skipped rather than passed.
+ *
+ * @param check - registered build check withheld from this report
+ * @returns a skipped row carrying the check's provenance and no failure detail
+ */
+function skippedBuildCheck(check: BuildCheck): CheckResult {
+  return {
+    id: check.id,
+    name: check.name,
+    status: "skipped",
+    ...classifyCheckImpact("skipped", undefined),
+    provenance: labelEvidencePathBases(check.provenance),
+    evidenceKind: check.evidenceKind,
+  };
+}
+
+/**
+ * Describe hook coverage this CLI cannot judge, because its hook registry is older than the project's install.
+ *
+ * @param ctx - audit context whose configuration names the newer release
+ * @returns an empty coverage report whose `skipped` text names both releases
+ */
+function skippedHookCoverage(ctx: AuditContext): AuditHookCoverageReport {
+  return {
+    status: "warning",
+    selectedAgents: [],
+    summary: {
+      selectedSurfaces: 0,
+      requiredSurfaces: 0,
+      requiredIneffective: 0,
+      effective: 0,
+      warning: 0,
+      danger: 0,
+      disabled: 0,
+    },
+    hooks: [],
+    skipped: `the project's goat-flow ${ctx.config.config.version} is newer than this CLI (${AUDIT_VERSION}), whose hook registry cannot judge the installed hooks`,
+  };
+}
+
+/**
+ * Build the report for a project whose goat-flow release is newer than this CLI.
+ *
+ * Every other check, the harness, drift, content and hook coverage would judge the install by this CLI's older templates and registry,
+ * and their fixes, such as this CLI's `hooks sync`, would rewrite the newer install backwards.
+ *
+ * @param ctx - audit context whose valid configuration names a newer release
+ * @param projectPath - target root recorded in the report
+ * @param options - audit switches; harness, drift and content requests are recorded but not run
+ * @returns a failing report whose only finding is the config-version mismatch, with every other check skipped
+ */
+function newerTargetReport(
+  ctx: AuditContext,
+  projectPath: string,
+  options: AuditOptions,
+): AuditReport {
+  const scopeChecks: Record<AuditScopeName, CheckResult[]> = {
+    setup: [],
+    agent: [],
+  };
+  // Only the version check runs; the rest stay listed as skipped so the report cannot read as a pass on them.
+  for (const check of [...SETUP_CHECKS, ...AGENT_CHECKS]) {
+    scopeChecks[check.scope].push(
+      check.id === NEWER_TARGET_CHECK_ID
+        ? runSingleBuildCheck(ctx, check)
+        : skippedBuildCheck(check),
+    );
+  }
+  const setup = buildScope(scopeChecks.setup, setupSummary(ctx));
+  const agent = buildScope(scopeChecks.agent, agentSummary(ctx));
+  const status = overallStatus(setup, agent, null, null, null);
+  return {
+    command: "audit",
+    harness: options.harness,
+    status,
+    target: projectPath,
+    scopes: { setup, agent, harness: null },
+    concerns: null,
+    enforcement: buildEnforcementMatrix(ctx.agents, {
+      agentScope: agent,
+      denyMechanismEvidenceLevel: denyMechanismEvidenceLevel(options),
+    }),
+    hookCoverage: skippedHookCoverage(ctx),
+    drift: null,
+    content: null,
+    overall: { status },
+  };
+}
+
 /**
  * Run the audit against a project and return the full report.
  *
@@ -495,6 +589,10 @@ function runAuditFromContext(
   // Calls outside a batch use the single-run timing label; this does not change which checks the user receives.
   const profileScope = options.profileScope ?? "single";
   validateProvenanceWithProfile(ctx, options, profileScope);
+  // A newer install would be judged by this CLI's older templates everywhere else, so the version finding is the whole report.
+  if (targetUsesNewerGoatFlow(ctx)) {
+    return newerTargetReport(ctx, projectPath, options);
+  }
   const { setup: setupScope, agent: agentScope } = span(
     options.profile,
     `${profileScope} build checks`,

@@ -354,15 +354,96 @@ function stateFolderBytes(
   return files;
 }
 
+/** The parts of a JSON install preview these tests read. */
+interface PreviewReport {
+  verdict: string;
+  files: Array<{ path: string; state: string; action: string }>;
+  summary?: {
+    pendingRuntimeCleanup: Array<{ agent: string; path: string }>;
+    userOwnedWrites: string[];
+    peerAgentWrites: Array<{ agent: string; path: string }>;
+  };
+}
+
+/**
+ * Spawn one dry-run install preview and return its stdout; the dry run writes nothing to the project.
+ *
+ * @param project - installed project to preview
+ * @param agent - agent whose install is previewed
+ * @param format - output format passed to the CLI
+ * @returns the preview's stdout
+ */
+function dryRunOutput(
+  project: string,
+  agent: AgentId,
+  format: "json" | "text",
+): string {
+  const preview = runCliInstaller(
+    project,
+    "--agent",
+    agent,
+    "--dry-run",
+    "--format",
+    format,
+  );
+  assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+  return preview.stdout;
+}
+
+/**
+ * Spawn one JSON dry-run install preview and parse it; the dry run writes nothing to the project.
+ *
+ * @param project - installed project to preview
+ * @param agent - agent whose install is previewed
+ * @returns the parsed preview report
+ */
+function dryRunReport(project: string, agent: AgentId): PreviewReport {
+  return JSON.parse(dryRunOutput(project, agent, "json")) as PreviewReport;
+}
+
+/**
+ * Name the provider configs an install leaves on the retired hooks: those of every provider still to install.
+ * Invariant: rows are sorted by agent, so they compare equal to a sorted preview list.
+ *
+ * @param remaining - providers not yet installed after this one
+ * @returns config rows in the preview's pending-cleanup shape
+ */
+function expectedPendingCleanup(
+  remaining: readonly AgentId[],
+): Array<{ agent: string; path: string }> {
+  return remaining
+    .map((agent) => ({
+      agent,
+      path: getAgentProfile(agent).hookConfigFile ?? "",
+    }))
+    .sort((left, right) => left.agent.localeCompare(right.agent));
+}
+
 /**
  * Install each provider in one order and check every step's exit, pending notice, retired files and backup.
  *
- * @returns the retired runtime paths still on disk after the last install; empty means cleanup finished
+ * @returns the upgraded project and the retired runtime paths still on disk after the last install; empty means cleanup finished
  */
-function upgradeAgentByAgent(order: readonly AgentId[]): string[] {
+function upgradeAgentByAgent(order: readonly AgentId[]): {
+  project: string;
+  remaining: string[];
+} {
   const project = multiAgentProject();
   const stateBefore = stateFolderBytes(project, STATE_DIRECTORY);
   for (const [index, agent] of order.entries()) {
+    const remaining = order.slice(index + 1);
+    // The first and last previews bracket the run: every other provider is pending first, and none is pending last.
+    if (index === 0 || remaining.length === 0) {
+      const pending = dryRunReport(project, agent).summary
+        ?.pendingRuntimeCleanup;
+      assert.deepEqual(
+        [...(pending ?? [])].sort((left, right) =>
+          left.agent.localeCompare(right.agent),
+        ),
+        expectedPendingCleanup(remaining),
+        `${agent}: preview predicts pending cleanup`,
+      );
+    }
     const install = runCliInstaller(project, "--agent", agent);
     const output = `${install.stdout}\n${install.stderr}`;
     assert.equal(install.status, 0, output);
@@ -372,7 +453,6 @@ function upgradeAgentByAgent(order: readonly AgentId[]): string[] {
     if (index === 0) assert.match(output, /install-before-upgrade/u);
     else assert.doesNotMatch(output, /install-before-upgrade/u);
     assert.deepEqual(stateFolderBytes(project, STATE_BACKUP), stateBefore);
-    const remaining = order.slice(index + 1);
     // Retired files stay until the last provider stops using them, and the summary names each provider still to install.
     if (remaining.length > 0) {
       assert.ok(existsSync(join(project, ENTRY)), `${agent}: entry kept`);
@@ -396,7 +476,30 @@ function upgradeAgentByAgent(order: readonly AgentId[]): string[] {
   const repeat = runCliInstaller(project, "--agent", order.at(-1) ?? "claude");
   assert.equal(repeat.status, 0, `${repeat.stdout}\n${repeat.stderr}`);
   assert.deepEqual(projectFileHashes(project), before);
-  return [ENTRY, LIBRARY].filter((path) => existsSync(join(project, path)));
+  return {
+    project,
+    remaining: [ENTRY, LIBRARY].filter((path) =>
+      existsSync(join(project, path)),
+    ),
+  };
+}
+
+/**
+ * List the rows of one agent's preview that sit in another agent's skills folder but are not labelled as that install's files.
+ *
+ * @param report - parsed preview for `agent`
+ * @param agent - agent whose preview was read
+ * @returns mislabelled rows as `path [state/action]`; empty means every peer skill row is labelled peer-managed with no action
+ */
+function mislabelledPeerRows(report: PreviewReport, agent: AgentId): string[] {
+  const ownSkills = getAgentProfile(agent).skillsDir;
+  const peerSkills = PROVIDERS.map(
+    (provider) => getAgentProfile(provider).skillsDir,
+  ).filter((skillsDir) => skillsDir !== ownSkills);
+  return report.files
+    .filter((file) => peerSkills.some((dir) => file.path.startsWith(`${dir}/`)))
+    .filter((file) => file.state !== "peer-managed" || file.action !== "none")
+    .map((file) => `${file.path} [${file.state}/${file.action}]`);
 }
 
 describe("pending retired runtime references", () => {
@@ -415,12 +518,53 @@ describe("pending retired runtime references", () => {
 describe("agent-by-agent upgrade from the retired runtime", () => {
   // Spawns four installs into a copied fixture; the first install writes the pre-upgrade state backup.
   it("finishes every install in registry order and removes retired files once", () => {
-    assert.deepEqual(upgradeAgentByAgent(PROVIDERS), []);
+    assert.deepEqual(upgradeAgentByAgent(PROVIDERS).remaining, []);
   });
 
   // Spawns the same installs in reverse, so the last provider to move off the runtime differs.
   it("finishes every install in reverse order and removes retired files once", () => {
-    assert.deepEqual(upgradeAgentByAgent([...PROVIDERS].reverse()), []);
+    assert.deepEqual(
+      upgradeAgentByAgent([...PROVIDERS].reverse()).remaining,
+      [],
+    );
+  });
+
+  // Spawns the registry-order upgrade, then one dry-run preview per agent; previews write nothing.
+  it("previews the finished four-agent upgrade as pass, with peer skills labelled", () => {
+    const { project } = upgradeAgentByAgent(PROVIDERS);
+    const outcomes = PROVIDERS.map((agent) => {
+      const report = dryRunReport(project, agent);
+      return {
+        agent,
+        verdict: report.verdict,
+        mislabelled: mislabelledPeerRows(report, agent),
+        removed: report.files
+          .filter((file) => file.state === "removed")
+          .map((file) => file.path),
+        writes: report.summary?.userOwnedWrites,
+      };
+    });
+    assert.deepEqual(
+      outcomes,
+      PROVIDERS.map((agent) => ({
+        agent,
+        verdict: "pass",
+        mislabelled: [],
+        removed: [],
+        writes: [],
+      })),
+    );
+    const text = dryRunOutput(project, "claude", "text");
+    assert.match(text, /^Verdict: pass$/mu);
+    assert.match(text, /^Actions: \d+ none\b/mu);
+    assert.match(text, /^User-owned files this install writes: none$/mu);
+    assert.match(text, /^Peer-agent files this install writes: none$/mu);
+    assert.doesNotMatch(text, /Runtime cleanup pending/u);
+    // Codex and Antigravity share one skills folder, so its rows name both installs.
+    assert.match(
+      text,
+      /\.agents\/skills\/\S+ \[peer-managed\] - The codex and antigravity installs manage this path;/u,
+    );
   });
 });
 
@@ -593,11 +737,21 @@ describe("retired files recorded by an older release", () => {
       ),
     });
 
+    const absentPaths = absent.map(({ path }) => path);
+    // A record whose file is already gone needs no decision, so it leaves the finished Claude install at pass.
+    const preview = dryRunReport(project, "claude");
+    assert.deepEqual(
+      preview.files
+        .filter((file) => absentPaths.includes(file.path))
+        .map((file) => `${file.path} ${file.state}/${file.action}`),
+      absentPaths.map((path) => `${path} removed/none`),
+    );
+    assert.equal(preview.verdict, "pass");
+
     const install = runCliInstaller(project, "--agent", "claude");
     assert.equal(install.status, 0, install.stderr || install.stdout);
     const after = readManagedInstallStateFacade(project).state;
     assert.ok(after);
-    const absentPaths = absent.map(({ path }) => path);
     assert.deepEqual(
       after.files.filter((row) => absentPaths.includes(row.path)),
       [],

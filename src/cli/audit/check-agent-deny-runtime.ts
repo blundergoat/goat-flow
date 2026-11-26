@@ -18,6 +18,7 @@ import { join, posix } from "node:path";
 import { agentHookSpawnDescriptor } from "../hook-spawn-descriptor.js";
 import type { InstallerSpawnSpec } from "../install-invocation.js";
 import type { AuditContext, AuditFailure } from "./types.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 
 /**
  * Describe why audit could not start a hook and how the user can retry.
@@ -943,7 +944,7 @@ function directHookInvocation(
   if (!denyRelPath.endsWith(".mjs")) {
     return {
       message: "Native direct audit requires a .mjs hook.",
-      howToFix: "Run goat-flow hooks sync to install the native policy hook.",
+      howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\` to install the native policy hook.`,
     };
   }
   return {
@@ -1032,7 +1033,7 @@ export function configuredHookRuntimeFailure(
     return {
       check: "Agent deny mechanism",
       message: `Native policy registrations are unavailable for ${agentFacts.agent.id}; no runtime replay was verified.`,
-      howToFix: "Run goat-flow hooks sync to register both native policies.",
+      howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\` to register both native policies.`,
     };
   }
   // Each configured guard must preserve the same safe-and-blocked user outcomes.
@@ -1064,7 +1065,7 @@ export function configuredHookRuntimeFailure(
       return {
         check: "Agent deny mechanism",
         message: `${script} is not registered for ${agentFacts.agent.id}`,
-        howToFix: "Run goat-flow hooks sync and verify both policy hooks.",
+        howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\` and verify both policy hooks.`,
       };
     }
   }

@@ -11,6 +11,7 @@ import {
   specProvenance,
   uniquePaths,
 } from "./check-agent-common.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 
 /**
  * Expose object-shaped parsed settings for the selected agent's key checks.
@@ -77,8 +78,7 @@ function checkCodexDeprecatedHooksFlag(ctx: AuditContext): AuditFailure | null {
       message:
         "Deprecated Codex feature flag in .codex/config.toml: [features].codex_hooks",
       evidence: agentFacts.agent.settingsFile ?? ".codex/config.toml",
-      howToFix:
-        "Replace `codex_hooks` with `hooks` under `[features]`, or run `goat-flow install . --agent codex` to migrate the setting.",
+      howToFix: `Replace \`codex_hooks\` with \`hooks\` under \`[features]\`, or run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent codex\` to migrate the setting.`,
     };
   }
   return null;
@@ -108,8 +108,7 @@ function checkCodexHooksEnabled(ctx: AuditContext): AuditFailure | null {
       message:
         "Codex hooks are installed but .codex/config.toml does not enable [features].hooks = true",
       evidence: agentFacts.agent.settingsFile ?? ".codex/config.toml",
-      howToFix:
-        "Add `hooks = true` under `[features]` in .codex/config.toml, or run `goat-flow install . --agent codex` to install the current Codex settings template.",
+      howToFix: `Add \`hooks = true\` under \`[features]\` in .codex/config.toml, or run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent codex\` to install the current Codex settings template.`,
     };
   }
   return null;
@@ -366,8 +365,7 @@ function checkCodexWorkspaceRootInvalidGlobs(
         legacyAnchors,
       ),
       evidence: agentFacts.agent.settingsFile ?? ".codex/config.toml",
-      howToFix:
-        "Run `goat-flow install . --agent codex` (without --force) to migrate the .codex/config.toml filesystem block in place. The installer rewrites filename globs to canonical subtree denies (e.g. `.ssh/**`, `.aws/**`) and drops retired folder-name patterns. Filename-level protections are covered by .goat-flow/hooks/deny-dangerous.mjs.",
+      howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent codex\` (without --force) to migrate the .codex/config.toml filesystem block in place. The installer rewrites filename globs to canonical subtree denies (e.g. \`.ssh/**\`, \`.aws/**\`) and drops retired folder-name patterns. Filename-level protections are covered by .goat-flow/hooks/deny-dangerous.mjs.`,
     };
   }
   return null;

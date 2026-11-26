@@ -32,6 +32,7 @@ import {
   type BucketSection,
 } from "../../src/cli/stats/stats.js";
 import type { SharedFacts } from "../../src/cli/types.js";
+import { pinnedGoatFlowCommand } from "../../src/cli/advised-command.js";
 
 const BUCKET_PATHS: Record<IndexBucket, string> = {
   footguns: ".goat-flow/learning-loop/footguns/",
@@ -282,7 +283,12 @@ describe("checkStats index-fresh integration", () => {
     const verdict = checkStats(reportWith(indexes));
     assert.equal(verdict.status, "fail");
     assert.equal(verdict.findings[0]?.rule, "index-stale");
-    assert.match(verdict.findings[0]?.message ?? "", /goat-flow index/);
+    assert.ok(
+      (verdict.findings[0]?.message ?? "").includes(
+        pinnedGoatFlowCommand("index"),
+      ),
+      verdict.findings[0]?.message,
+    );
   });
 
   it("passes with an index-missing warning when an index was never generated", () => {

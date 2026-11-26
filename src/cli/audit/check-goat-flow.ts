@@ -18,6 +18,7 @@ import {
   STANDALONE_PLAYBOOK_FILES,
   textReferencesProjectPath,
 } from "./skill-docs-contract.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 
 const VERIFIED_ON = "2026-05-03";
 const SECURITY_POLICY_PATH = ".goat-flow/security-policy.md";
@@ -172,8 +173,7 @@ const lessons: BuildCheck = {
       check: "Lessons",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
-      howToFix:
-        "Create lessons directory by running `goat-flow setup` or `mkdir -p .goat-flow/learning-loop/lessons`.",
+      howToFix: `Create lessons directory by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\` or \`mkdir -p .goat-flow/learning-loop/lessons\`.`,
     };
   },
 };
@@ -198,8 +198,7 @@ const footguns: BuildCheck = {
       check: "Footguns",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
-      howToFix:
-        "Create footguns directory by running `goat-flow setup` or `mkdir -p .goat-flow/learning-loop/footguns`.",
+      howToFix: `Create footguns directory by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\` or \`mkdir -p .goat-flow/learning-loop/footguns\`.`,
     };
   },
 };
@@ -220,8 +219,7 @@ const architecture: BuildCheck = {
       check: "Architecture",
       message: "Missing: .goat-flow/architecture.md",
       evidence: ".goat-flow/architecture.md",
-      howToFix:
-        "Create .goat-flow/architecture.md by running `goat-flow setup`.",
+      howToFix: `Create .goat-flow/architecture.md by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\`.`,
     };
   },
 };
@@ -242,7 +240,7 @@ const codeMap: BuildCheck = {
       check: "Code map",
       message: "Missing: .goat-flow/code-map.md",
       evidence: ".goat-flow/code-map.md",
-      howToFix: "Create .goat-flow/code-map.md by running `goat-flow setup`.",
+      howToFix: `Create .goat-flow/code-map.md by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\`.`,
     };
   },
 };
@@ -263,7 +261,7 @@ const glossary: BuildCheck = {
       check: "Glossary",
       message: "Missing: .goat-flow/glossary.md",
       evidence: ".goat-flow/glossary.md",
-      howToFix: "Create .goat-flow/glossary.md by running `goat-flow setup`.",
+      howToFix: `Create .goat-flow/glossary.md by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\`.`,
     };
   },
 };
@@ -284,8 +282,7 @@ const patterns: BuildCheck = {
       check: "Patterns",
       message: "Missing: .goat-flow/learning-loop/patterns/README.md",
       evidence: ".goat-flow/learning-loop/patterns/README.md",
-      howToFix:
-        "Create .goat-flow/learning-loop/patterns/ directory by running `goat-flow setup`.",
+      howToFix: `Create .goat-flow/learning-loop/patterns/ directory by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\`.`,
     };
   },
 };
@@ -310,8 +307,7 @@ const decisions: BuildCheck = {
       check: "Decisions",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
-      howToFix:
-        "Create decisions directory by running `goat-flow setup` or `mkdir -p .goat-flow/learning-loop/decisions`.",
+      howToFix: `Create decisions directory by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\` or \`mkdir -p .goat-flow/learning-loop/decisions\`.`,
     };
   },
 };
@@ -337,8 +333,7 @@ const sessionLogs: BuildCheck = {
       check: "Session logs",
       message: "Missing or unusable: .goat-flow/logs/sessions/",
       evidence: ".goat-flow/logs/sessions/",
-      howToFix:
-        "Ensure .goat-flow/logs/sessions/ is a readable directory, then run `goat-flow setup` if it is missing.",
+      howToFix: `Ensure .goat-flow/logs/sessions/ is a readable directory, then run \`${PINNED_GOAT_FLOW_INVOCATION} setup\` if it is missing.`,
     };
   },
 };
@@ -372,8 +367,7 @@ const plans: BuildCheck = {
       check: "Plans",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
-      howToFix:
-        "Create plans directory by running `goat-flow setup`. README.md signals the dir is local-session-state by design.",
+      howToFix: `Create plans directory by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\`. README.md signals the dir is local-session-state by design.`,
     };
   },
 };
@@ -401,8 +395,7 @@ const scratchpad: BuildCheck = {
       check: "Scratchpad",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
-      howToFix:
-        "Create scratchpad directory by running `goat-flow setup`. README.md signals the dir is local WIP by design.",
+      howToFix: `Create scratchpad directory by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\`. README.md signals the dir is local WIP by design.`,
     };
   },
 };
@@ -421,8 +414,7 @@ const goatFlowGitignoreContent: BuildCheck = {
         check: "goat-flow gitignore exceptions",
         message: "Missing: .goat-flow/.gitignore",
         evidence: ".goat-flow/.gitignore",
-        howToFix:
-          "Run `goat-flow install . --agent <id>` to copy the current gitignore template. The installer always overwrites .goat-flow/.gitignore.",
+        howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent <id>\` to copy the current gitignore template. The installer always overwrites .goat-flow/.gitignore.`,
       };
     }
     const content = ctx.fs.readFile(".goat-flow/.gitignore") ?? "";
@@ -448,8 +440,7 @@ const goatFlowGitignoreContent: BuildCheck = {
       check: "goat-flow gitignore exceptions",
       message: `.goat-flow/.gitignore ${mismatch}. Stale gitignores silently hide committed skill docs, hook policy, top-level guides, or workspace anchors from git - or over-commit local-only logs.`,
       evidence: ".goat-flow/.gitignore",
-      howToFix:
-        "Run `goat-flow install . --agent <id>` to refresh .goat-flow/.gitignore from the current template. After it overwrites, `git add .goat-flow/skill-docs/playbooks/ .goat-flow/skill-docs/` to track files that were previously hidden.",
+      howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent <id>\` to refresh .goat-flow/.gitignore from the current template. After it overwrites, \`git add .goat-flow/skill-docs/playbooks/ .goat-flow/skill-docs/\` to track files that were previously hidden.`,
     };
   },
 };
@@ -475,8 +466,7 @@ const instructionFileSkillReferencePointer: BuildCheck = {
         check: "Instruction file skill-docs pointer",
         message: `Shared reference/playbook pack is incomplete. Missing: ${missingReferenceFiles.join(", ")}`,
         evidence: missingReferenceFiles[0],
-        howToFix:
-          "Refresh with `goat-flow install . --agent <agent>`. The index files are load-bearing and must be installed with the shared skill-docs/playbook pack.",
+        howToFix: `Refresh with \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent <agent>\`. The index files are load-bearing and must be installed with the shared skill-docs/playbook pack.`,
       };
     }
 
@@ -585,7 +575,7 @@ const otherFiles: BuildCheck = {
         check: "Other required files",
         message: `Missing: ${missing.join(", ")}`,
         evidence: missing[0],
-        howToFix: `Create ${missing.join(", ")} by running \`goat-flow setup\` or creating them manually.`,
+        howToFix: `Create ${missing.join(", ")} by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\` or creating them manually.`,
       };
     }
     return installedSecurityPolicyDiscoveryFailure(ctx);
@@ -606,7 +596,7 @@ const configExistsAndParses: BuildCheck = {
       return {
         check: "Config file",
         message: ".goat-flow/config.yaml does not exist",
-        howToFix: "Create .goat-flow/config.yaml by running `goat-flow setup`.",
+        howToFix: `Create .goat-flow/config.yaml by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\`.`,
       };
     }
     if (ctx.config.parseError) {
@@ -665,7 +655,7 @@ const configVersionCurrent: BuildCheck = {
       return {
         check: "Config version",
         message: `Config version ${version} does not match current ${AUDIT_VERSION}`,
-        howToFix: `Run \`goat-flow install . --agent <id> --update-config-version\` or update the version field in .goat-flow/config.yaml to "${AUDIT_VERSION}".`,
+        howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent <id> --update-config-version\` or update the version field in .goat-flow/config.yaml to "${AUDIT_VERSION}".`,
       };
     }
     return null;
@@ -705,7 +695,7 @@ const hookVersionCurrent: BuildCheck = {
           check: "Hook version",
           message: `${relPath} is missing from the installed hook dispatcher set`,
           evidence: relPath,
-          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} hooks sync\` to install the required hook files.`,
+          howToFix: `Re-run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\` to install the required hook files.`,
         };
       }
       const stamped = content.match(
@@ -716,7 +706,7 @@ const hookVersionCurrent: BuildCheck = {
           check: "Hook version",
           message: `${relPath} has no goat-flow-hook-version stamp (installed before ${AUDIT_VERSION})`,
           evidence: relPath,
-          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} hooks sync\` to update the hook files.`,
+          howToFix: `Re-run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\` to update the hook files.`,
         };
       }
       const stampedVersion = stamped[1];
@@ -739,7 +729,7 @@ const hookVersionCurrent: BuildCheck = {
           check: "Hook version",
           message: `${relPath} is goat-flow-hook-version ${stampedVersion} but the current release is ${AUDIT_VERSION}`,
           evidence: relPath,
-          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} hooks sync\` to update the hook files.`,
+          howToFix: `Re-run \`${PINNED_GOAT_FLOW_INVOCATION} hooks sync\` to update the hook files.`,
         };
       }
     }

@@ -18,6 +18,7 @@ import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
 import { pathWriteClaimInspectCommand } from "./claims-command.js";
 import type { ParsedCLI } from "./cli-types.js";
+import { pinnedGoatFlowCommand } from "./advised-command.js";
 import { createFS } from "./facts/fs.js";
 import { applyInstaller, installerVersionBlocker } from "./installer/apply.js";
 import {
@@ -30,6 +31,7 @@ import {
 import {
   emitInstallSummary,
   hookRegistrationEdit,
+  observeInstallFileModes,
   observeInstallHookRegistrations,
   renderInstallSummary,
 } from "./install-summary.js";
@@ -41,6 +43,10 @@ import {
   recordManagedInstallAfterVerification,
   type ManagedSetupPreview,
 } from "./managed-setup-preview.js";
+import {
+  settleManagedSetupPreview,
+  type ManagedSetupAgentPath,
+} from "./managed-setup-preview-summary.js";
 import {
   managedSetupAdmissionFailure,
   managedSetupAuthorityWarnings,
@@ -638,6 +644,9 @@ function buildInstallPreview(
     authority,
     pendingMigrations(options, agent),
   );
+  const siblingWrites: ManagedSetupAgentPath[] = [];
+  // Sibling rows can only add work, so the combined preview may pass only when the selected agent's preview already did.
+  const mayPass = preview.verdict === "pass";
   // Check installed sibling providers because shared Git protection may require changes beyond the selected agent.
   for (const sibling of getAgentProfiles()) {
     // The selected provider is already covered, and a provider without a hook file has no sibling migration row.
@@ -665,13 +674,22 @@ function buildInstallPreview(
       (file) => file.path === sibling.hookConfigFile,
     );
     // Add a sibling destination only once so the user sees one row per affected file.
-    if (row && !preview.files.some((file) => file.path === row.path))
+    if (row && !preview.files.some((file) => file.path === row.path)) {
       preview.files.push(row);
+      siblingWrites.push({ agent: sibling.id, path: row.path });
+    }
     // A blocked or unmanaged sibling file makes the shared install require review before replacement.
     if (row && (isBlockingManagedFile(row) || row.state === "unmanaged"))
       preview.verdict = "blocked";
   }
   preview.files.sort((left, right) => left.path.localeCompare(right.path));
+  // Sibling rows change the counts and can make a finished-looking install still need writes.
+  settleManagedSetupPreview(
+    options.projectPath,
+    preview,
+    mayPass,
+    siblingWrites,
+  );
   return preview;
 }
 
@@ -708,7 +726,7 @@ function managedInstallStateRecovery(
   agent: AgentId,
 ): CLIError {
   return new CLIError(
-    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/state/install/, then rerun: goat-flow install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`,
+    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/state/install/, then rerun: ${pinnedGoatFlowCommand(`install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`)}`,
     1,
   );
 }
@@ -780,6 +798,11 @@ function runClaimedManagedInstall(
     options.projectPath,
     installPreview,
   );
+  // Modes are read before apply, which rewrites unchanged files with its own modes.
+  const modesBefore = observeInstallFileModes(
+    options.projectPath,
+    installPreview,
+  );
   // Permission changes are read from the settings as they are now, because apply rewrites them.
   const permissionChanges = pendingPermissionChanges(
     options.projectPath,
@@ -848,6 +871,7 @@ function runClaimedManagedInstall(
       installPreview,
       hookObservations,
       permissionChanges,
+      modesBefore,
     ),
   );
 }

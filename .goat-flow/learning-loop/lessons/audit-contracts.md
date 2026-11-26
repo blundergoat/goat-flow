@@ -200,3 +200,25 @@ The full gates then caught an unsupported standalone `Evidence` metadata label a
 
 **What happened:** A missing-attribution warning was first recommended for, and built into, the commit-guidance check because the topic matched. That check blocks, so a real upgraded project without the three values would have failed its audit, though install never adds them. The impact was read only when a probe showed advisory failures marked scope-failing. The warning moved to the score-only settings check after the owner chose again.
 
+## Lesson: A new harness check ID moves count claims in files outside the approved docs
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** Before proposing a new audit check ID, run the content audit once with the check registered and list every file whose count it flags, so the scope question names them up front.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Check counts are claimed in docs, the landing page, the dashboard About page, the glossary, the architecture and code-map files, CONTRIBUTING and registry tests. `node --import tsx src/cli/cli.ts audit . --agent claude --check-content` names each stale claim; `test/unit/provenance-types.test.ts` (search: `expectedRegisteredCheckCount`) and `test/unit/audit-command/scoring-model.test.ts` (search: `keeps unrelated concern scores`) pin the registry size and a concern score. Evidence anchors: `src/cli/audit/check-factual-claims.ts` (search: `harness checks across 5 concerns`).
+
+**What happened:** A score-only warning needed its own check, because the only score-only check covered another concern. Approval covered `docs/` edits, but the content audit then flagged stale counts in four files outside that area, one of them a protected boundary, and three tests failed on the registry size. Work stopped for a second approval that one command at scope time would have avoided.
+
+## Lesson: A finding that quotes a target file's text must pass the single-line character policy
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** When a check copies text from the audited project into a finding, strip it with the shared single-line policy before it reaches a message.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Harness findings reach terminal output unfiltered, and a target checkout is untrusted input. Apply `UNSAFE_SINGLE_LINE_CHARACTER` from `src/cli/terminal-safe-text.ts` (search: `export const UNSAFE_SINGLE_LINE_CHARACTER`) globally, as `src/cli/audit/harness/check-release-stamp.ts` (search: `UNSAFE_HEADING_CHARACTERS`) does, and add a test case with an escape and a bidirectional override.
+
+**What happened:** A new check quoted an instruction file's first heading in its finding. A review probe put an ESC sequence and a right-to-left override in the heading, and both reached the finding text, so a crafted checkout could rewrite or reorder a line of the auditor's terminal. The heading now passes through the shared policy, and a test pins it.
+

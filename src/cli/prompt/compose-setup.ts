@@ -30,6 +30,7 @@ import { classifyProjectState } from "../classify-state.js";
 import { createFS } from "../facts/fs.js";
 import { RETIRED_PATHS } from "../retired-paths.js";
 import { resolve } from "node:path";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 
 /**
  * Choose how the target project appears in commands the prompt tells the user to run.
@@ -52,7 +53,7 @@ function targetArg(projectRoot: string): string {
  * @returns the full npx command line; never empty
  */
 function installCommand(projectRoot: string, agentId: AgentId): string {
-  return `npx @blundergoat/goat-flow@latest install ${targetArg(projectRoot)} --agent ${agentId}`;
+  return `${PINNED_GOAT_FLOW_INVOCATION} install ${targetArg(projectRoot)} --agent ${agentId}`;
 }
 
 // ----------------------------------------------------------------
@@ -202,9 +203,11 @@ function renderAuditPass(
   lines.push("");
   lines.push("**Maintenance:**");
   lines.push(
-    "- After upgrading goat-flow, re-run `goat-flow audit` to check for new checks",
+    "- After upgrading goat-flow, re-run `npx @blundergoat/goat-flow@<new version> audit` to check for new checks",
   );
-  lines.push("- Run `goat-flow audit` in CI to catch drift");
+  lines.push(
+    `- Run \`${PINNED_GOAT_FLOW_INVOCATION} audit\` in CI to catch drift`,
+  );
   lines.push(
     "- Review `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/` after incidents",
   );

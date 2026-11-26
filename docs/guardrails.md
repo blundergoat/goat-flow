@@ -31,7 +31,7 @@ Enabled Claude Code deny hooks inspect literal native PowerShell commands with b
 - `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=smoke`
 - `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=full`
 - `goat-flow hooks list --json`
-- After trusting the selected checkout: `goat-flow hooks verify . --agent <id> --scenario all --trusted-target`
+- After trusting the selected checkout: `goat-flow hooks verify . --agent <id> --scenario all --trusted-target` when every hook group is registered for that agent; otherwise run the per-group commands the install summary prints, because an unregistered group fails the all-groups run
 
 To ask one policy whether it would block a command without running it, pass the command to `--check`, for example
 `node .goat-flow/hooks/deny-dangerous.mjs --check 'rm -rf /'`.

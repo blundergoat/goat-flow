@@ -61,6 +61,7 @@ import {
   type HookChangeIntent,
   type HookReplacementConfirmation,
 } from "./hook-operation.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 
 const REMOVED_HOOK_TOMBSTONES: HookSpec[] = [
   {
@@ -478,7 +479,15 @@ function effectiveStateRepair(
         "The hook is intentionally disabled; enable it when this coverage is wanted.",
     };
   }
-  // Provider evidence gaps require new proof rather than a local project mutation.
+  // The shipped registry marks this capture stale, so only a goat-flow release can refresh it; no project action clears the warning.
+  if (effectiveState.status === "provider-capture-stale") {
+    return {
+      command: null,
+      summary:
+        "goat-flow maintainers refresh this provider capture in a goat-flow release; nothing in this project clears the warning. Upgrade goat-flow when a newer release is available.",
+    };
+  }
+  // Other provider evidence gaps require new proof rather than a local project mutation.
   if (effectiveState.status.startsWith("provider-")) {
     return {
       command: null,
@@ -489,7 +498,7 @@ function effectiveStateRepair(
   // Missing or stale managed files can be restored through the canonical sync path.
   if (HOOK_SYNC_REPAIR_STATES.has(effectiveState.status)) {
     return {
-      command: `goat-flow hooks sync ${quotedProjectPath}`,
+      command: `${PINNED_GOAT_FLOW_INVOCATION} hooks sync ${quotedProjectPath}`,
       summary:
         "Re-sync the selected project to restore the registry-owned command and current hook files.",
     };
@@ -505,7 +514,7 @@ function effectiveStateRepair(
   // Missing runtime proof has one bounded offline verification command for the user.
   if (HOOK_VERIFY_REPAIR_STATES.has(effectiveState.status)) {
     return {
-      command: `goat-flow hooks verify ${quotedProjectPath} --agent ${agent.id} --scenario ${hookScenarioForHookId(spec.id)} --trusted-target`,
+      command: `${PINNED_GOAT_FLOW_INVOCATION} hooks verify ${quotedProjectPath} --agent ${agent.id} --scenario ${hookScenarioForHookId(spec.id)} --trusted-target`,
       summary:
         "After confirming the checkout is trusted, run the explicit configured-command scenarios; normal audit does not execute project hooks.",
     };

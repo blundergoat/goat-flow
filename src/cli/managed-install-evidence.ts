@@ -16,6 +16,7 @@ import {
 } from "./managed-setup-preview.js";
 import { getPackageVersion } from "./paths.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
+import { pinnedGoatFlowCommand } from "./advised-command.js";
 
 const MANAGED_INSTALL_EVIDENCE_SCHEMA =
   "goat-flow.managed-install-evidence.v1" as const;
@@ -73,14 +74,18 @@ export function quoteManagedInstallProjectArgument(
   return `'${escapedPath}'`;
 }
 
-/** Build the public install command that can verify one agent without force. */
+/** Build the public install command, pinned to this release, that can verify one agent without force. */
 function installCommand(projectPath: string, agent: AgentId): string {
-  return `goat-flow install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`;
+  return pinnedGoatFlowCommand(
+    `install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`,
+  );
 }
 
-/** Build the read-only recheck command used after repairing blocking global evidence. */
+/** Build the read-only recheck command, pinned to this release, used after repairing blocking global evidence. */
 function statusCommand(projectPath: string): string {
-  return `goat-flow status ${quoteManagedInstallProjectArgument(projectPath)} --format json`;
+  return pinnedGoatFlowCommand(
+    `status ${quoteManagedInstallProjectArgument(projectPath)} --format json`,
+  );
 }
 
 /** Sort portable paths by their UTF-8 bytes, matching managed-state ordering. */

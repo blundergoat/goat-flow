@@ -11,6 +11,7 @@ import {
   getSkillNames,
   getStaleSkillNames,
 } from "./constants.js";
+import { pinnedGoatFlowCommand } from "./advised-command.js";
 import { getAgentProfiles } from "./agents/registry.js";
 import type { AgentProfile } from "./types.js";
 import { load } from "js-yaml";
@@ -247,7 +248,7 @@ function classifyInstalledProject(
     return {
       state: "current",
       action: "audit",
-      details: `Current version (${version}) - run \`goat-flow audit . --agent <agent>\` for per-agent validation`,
+      details: `Current version (${version}) - run \`${pinnedGoatFlowCommand("audit . --agent <agent>")}\` for per-agent validation`,
       version,
     };
   }

@@ -52,7 +52,7 @@ function getRepoAudit(opts: {
 }
 
 describe("audit against a project from a newer goat-flow release", () => {
-  it("reports version skew without older-template agent or drift findings", () => {
+  it("reports only the version finding, with no repair command from the older CLI", () => {
     const futureVersion = "999.0.0";
     const base = createFS(PROJECT_ROOT);
     const fs = {
@@ -73,26 +73,38 @@ describe("audit against a project from a newer goat-flow release", () => {
 
     const report = runAudit(fs, PROJECT_ROOT, {
       agentFilter: "codex",
-      harness: false,
+      harness: true,
       checkDrift: true,
       checkContent: true,
       denyMechanismEvidenceLevel: "static",
     });
 
-    const setupFailures = report.scopes.setup.checks
-      .filter((check) => check.status === "fail")
-      .map((check) => check.id);
-    assert.deepEqual(setupFailures, ["config-version", "hook-version"]);
-    for (const id of ["agent-skills", "agent-guardrails"]) {
-      const check = report.scopes.agent.checks.find(
-        (candidate) => candidate.id === id,
-      );
+    // An older CLI judging a newer install by its own templates would advise a downgrade, so the version finding is the whole report.
+    const failures = [
+      ...report.scopes.setup.checks,
+      ...report.scopes.agent.checks,
+    ].filter((check) => check.status === "fail");
+    assert.deepEqual(
+      failures.map((check) => check.id),
+      ["config-version"],
+    );
+    assert.match(failures[0]?.failure?.howToFix ?? "", /stale side/u);
+    for (const id of ["hook-version", "agent-skills", "agent-guardrails"]) {
+      const check = [
+        ...report.scopes.setup.checks,
+        ...report.scopes.agent.checks,
+      ].find((candidate) => candidate.id === id);
       assertExists(check);
       assert.equal(check.status, "skipped");
       assert.equal(check.failure, undefined);
     }
+    assert.equal(report.scopes.harness, null);
+    assert.equal(report.concerns, null);
     assert.equal(report.drift, null);
     assert.equal(report.content, null);
+    // The older registry's hook states would offer its own `hooks sync`, which overwrites the newer hook files.
+    assert.deepEqual(report.hookCoverage.hooks, []);
+    assert.match(report.hookCoverage.skipped ?? "", /newer/u);
   });
 });
 
@@ -700,5 +712,44 @@ describe("harness scoring honesty", () => {
 
     assert.equal(result.status, "fail");
     assert.match(result.findings.join("\n"), /2 stale file reference/);
+  });
+
+  it("reports stale references and stale bucket reviews in one run", () => {
+    const check = HARNESS_CHECKS.find((c) => c.id === "feedback-loop-active");
+    assert.ok(check, "feedback-loop-active check must exist");
+    const shared = makeSharedFacts();
+    shared.footguns.staleRefs = ["missing-footgun-ref.md"];
+    shared.lessons.buckets = [
+      {
+        path: ".goat-flow/learning-loop/lessons/old-bucket.md",
+        lastReviewed: "2025-01-02",
+        freshnessDays: 400,
+        freshnessBand: "stale",
+        entryCount: 1,
+        staleRefs: [],
+        invalidLineRefs: [],
+        maxEntryDate: null,
+        sizeBytes: 10,
+        lineCount: 1,
+        graduationCandidates: [],
+      },
+    ];
+    const result = check.run(
+      makeCtx({ facts: { ...makeCtx().facts, shared } }),
+    );
+
+    // Fixing one cause and rerunning to find the next cost every port an extra audit round.
+    assert.equal(result.status, "fail");
+    const findings = result.findings.join("\n");
+    assert.match(findings, /1 stale file reference/u);
+    assert.match(findings, /lessons\/old-bucket\.md/u);
+    assert.match((result.howToFix ?? []).join("\n"), /stats \. --check/u);
+    assert.match((result.howToFix ?? []).join("\n"), /last_reviewed/u);
+    assert.deepEqual(result.details?.freshness?.[0]?.staleBuckets, [
+      {
+        path: ".goat-flow/learning-loop/lessons/old-bucket.md",
+        lastReviewed: "2025-01-02",
+      },
+    ]);
   });
 });

@@ -52,6 +52,7 @@ import {
   runSkillDoctor,
 } from "../../src/cli/skill-doctor.js";
 import type { CanonicalSkillRead } from "../../src/cli/skill-doctor.js";
+import { pinnedGoatFlowCommand } from "../../src/cli/advised-command.js";
 import {
   HOOK_STUB,
   setupFixture,
@@ -342,7 +343,10 @@ describe("managed divergence messaging", () => {
       );
       assert.ok(behindFinding, "audit must report the older managed hook");
       assert.match(behindFinding.message, /behind/u);
-      assert.match(behindFinding.message, /run goat-flow hooks sync/u);
+      assert.ok(
+        behindFinding.message.includes(pinnedGoatFlowCommand("hooks sync")),
+        behindFinding.message,
+      );
 
       writeClaudeBaseline(auditProjectPath, auditManagedPath, HOOK_STUB);
       writeFileSync(auditInstalledPath, `${HOOK_STUB}# local safety fix\n`);
@@ -361,7 +365,10 @@ describe("managed divergence messaging", () => {
         divergedFinding.message,
         /sync would overwrite local content/u,
       );
-      assert.doesNotMatch(divergedFinding.message, /run goat-flow hooks sync/u);
+      assert.ok(
+        !divergedFinding.message.includes(pinnedGoatFlowCommand("hooks sync")),
+        divergedFinding.message,
+      );
 
       const hookManagedPath = ".goat-flow/hooks/post-turn-safety.mjs";
       const hookInstalledPath = join(hookProjectPath, hookManagedPath);
@@ -500,9 +507,7 @@ describe("managed divergence messaging", () => {
         assert.ok(
           skill.remediation.every(
             (command) =>
-              !/^goat-flow install <project-path> --agent [a-z]+$/u.test(
-                command,
-              ),
+              !/ install <project-path> --agent [a-z]+$/u.test(command),
           ),
         );
       }

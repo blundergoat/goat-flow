@@ -27,6 +27,7 @@ import { buildAgentHookDescriptor } from "../../src/cli/server/agent-hook-comman
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import { pinnedGoatFlowCommand } from "../../src/cli/advised-command.js";
 
 describe("checkDrift: hook templates", () => {
   // Fixture writes stale settings because the stable drift contract must fail at 60s and pass at 90s.
@@ -133,7 +134,10 @@ describe("checkDrift: hook templates", () => {
         missingFinding,
         `expected missing hook script finding, findings=${JSON.stringify(missingScriptReport.findings)}`,
       );
-      assert.match(missingFinding.message, /run goat-flow hooks sync/u);
+      assert.ok(
+        missingFinding.message.includes(pinnedGoatFlowCommand("hooks sync")),
+        missingFinding.message,
+      );
       writeFileSync(
         join(root, ".goat-flow", "hooks", "deny-dangerous.mjs"),
         HOOK_LAUNCHER_STUB,
@@ -160,7 +164,10 @@ describe("checkDrift: hook templates", () => {
         staleFinding,
         `expected stale launcher finding, findings=${JSON.stringify(staleLauncherReport.findings)}`,
       );
-      assert.match(staleFinding.message, /run goat-flow hooks sync/u);
+      assert.ok(
+        staleFinding.message.includes(pinnedGoatFlowCommand("hooks sync")),
+        staleFinding.message,
+      );
       assert.doesNotMatch(staleFinding.message, /deliver/iu);
       writeFileSync(
         join(root, ".goat-flow", "hooks", "run-hook.mjs"),
@@ -369,7 +376,7 @@ describe("checkDrift: hook templates", () => {
           (finding) =>
             finding.kind === "deprecated" &&
             finding.path === ".goat-flow/hooks/plan-checkbox-guard.sh" &&
-            finding.message.includes("goat-flow hooks sync"),
+            finding.message.includes(pinnedGoatFlowCommand("hooks sync")),
         ),
         `expected actionable deprecated-hook finding, findings=${JSON.stringify(report.findings)}`,
       );
