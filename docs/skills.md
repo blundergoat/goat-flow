@@ -225,6 +225,8 @@ flowchart TD
 
 Structured code review and quality audit with negative verification.
 
+Once the scope is clear, reviews above 20 files or 3,000 changed lines announce their chunks and proceed automatically. The final report records coverage and consolidates the results.
+
 | Mode | Trigger | What it does |
 |------|---------|-------------|
 | **Diff Review** | review, PR, diff | Quick runs the diff-only suspicion pass then grounded verification; Full continues into Pass 2.5, the spec-drift offer, and the optional refuter offer |

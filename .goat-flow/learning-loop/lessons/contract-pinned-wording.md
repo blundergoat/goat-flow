@@ -1,6 +1,6 @@
 ---
 category: contract-pinned-wording
-last_reviewed: 2026-10-22
+last_reviewed: 2026-11-28
 ---
 
 **Scope:** Changing prose, a path, an adjacent section, or a word budget that tests or semantic anchors already pin, and the full-suite failures that follow when the exact old text was not searched first. Other pinned-contract lessons, such as anchor-preserving compaction and user-visible serialization, are [contract-testing.md](contract-testing.md); instruction and reference word budgets are [instruction-word-budgets.md](instruction-word-budgets.md).
@@ -9,7 +9,7 @@ last_reviewed: 2026-10-22
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** OBSERVED
 **Severity:** INTEGRATION
-**Incident count:** 30 | **Latest occurrence:** 2026-11-28
+**Incident count:** 31 | **Latest occurrence:** 2026-11-28
 **Merged:** 2026-10-11 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split to recover its headroom.
 
 **Prevention:** Before changing prose, a path, or an adjacent command, search the tests and durable semantic anchors for the exact old text; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest. When fixture size feeds a derived assertion, recompute it with the production formula after every fixture edit. Update a contract only when product semantics change. Before drafting in a near-cap skill, measure the current word budget and pay for additions from unpinned text; before quoting a budget or score outcome, measure the exact sizes with the function the gate uses and state the margin.
@@ -35,7 +35,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 - **Recurrence 2026-08-03:** The first GREEN wording for oversized review scope and critique context merging pushed `goat-review` and `goat-critique`
   from 2495/2494 words to 2592/2531; budget-neutral rewrites finished at 2498/2495. `workflow/skills/goat-review/SKILL.md` (search: `never guess
   commit windows`), `workflow/skills/goat-critique/SKILL.md` (search: `never replace baseline context`),
-  `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`).
+  `test/contract/skill-hardening-review-1.test.ts` (search: `announces chunks and proceeds automatically within an oversized selected scope`).
 - **Recurrence 2026-08-09:** A new roadmap passed `plans check --strict` after six mid-proof estimates were fixed, while 24 `Read first` anchors still
   named stale paths or paraphrases; each validator proves only its named contract, so paths and semantic anchors need their own exact check.
   `src/cli/plans-check.ts` (search: `mid-proof item(s) missing an (est: ...) entry`), `test/unit/plans-check-lifecycle.test.ts` (search: `strict mode
@@ -106,3 +106,5 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 - **Recurrence 2026-11-28:** Adding the existing-test run to goat-qa's Phase 2 gate sentence failed the same goat-qa contract as the 2026-08-23 recurrence. The RED run could not show it, because the old sentence was still present then. Only searching the tests for the exact old sentence before drafting would have caught it. The fix loosened the pattern to the invariant (gap analysis, Refuted Candidates and Verification Integrity after the disproval pass), so the new wording is not pinned twice. `test/contract/skill-hardening-skills-1.test.ts` (search: `requires goat-qa Standard-mode gap output`).
 
 - **Recurrence 2026-11-28 (manifest list):** The next goat-qa change searched the tests for every sentence it rewrote, but not for the manifest array it extended. A contract that compares goat-qa's whole reference list for exact equality failed only after the guidance landed. Pins include data shapes: search the tests for the exact list or key being changed, not only the prose. `test/contract/skill-hardening-skills-1.test.ts` (search: `loads goat-qa output templates progressively from canonical references`).
+
+- **Recurrence 2026-11-28 (review chunking):** Capitalizing `never guess commit windows` failed a case-sensitive contract. Renaming `stops oversized inferred branch scopes before review begins` also left two lessons with stale citations. Preserve exact phrases when the rule stays the same and update citations when a test changes behavior. `test/contract/skill-hardening-review-1.test.ts` (search: `announces chunks and proceeds automatically within an oversized selected scope`).

@@ -346,7 +346,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
     });
   });
 
-  it("stops oversized inferred branch scopes before review begins", () => {
+  it("announces chunks and proceeds automatically within an oversized selected scope", () => {
     assertForEachTarget(canonicalSkillPaths("goat-review"), (skillPath) => {
       const scope = readMarkdownSection(
         skillPath,
@@ -356,18 +356,28 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
 
       assert.match(
         scope,
-        /measure diff[\s\S]+20 files or 3000 changed lines/u,
+        /above 20 files or 3000 changed lines[^\n]+split the selected scope/iu,
         skillPath,
       );
       assert.match(
         scope,
-        /20 files or 3000 changed lines[\s\S]+stop before Pass 1/u,
+        /Announce the chunks and continue without waiting for approval/u,
+        skillPath,
+      );
+      assert.match(
+        scope,
+        /Record `chunking=accepted` for the adopted plan/u,
+        skillPath,
+      );
+      assert.match(
+        scope,
+        /Ask when a time limit forces a choice about scope/u,
         skillPath,
       );
       assert.match(scope, /never guess commit windows/u, skillPath);
       assert.match(
         scope,
-        /request PR\/base\/head[^\n]+commit\/range[^\n]+worktree[^\n]+area/iu,
+        /request PR\/base\/head[^\n]+commit\/range[^\n]+worktree[^\n]+area[^\n]+if the scope is ambiguous/iu,
         skillPath,
       );
       assert.match(
@@ -389,15 +399,9 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
 
       assert.match(
         scope,
-        /above 20 files or 3000 changed lines[^\n]+propose chunks[^\n]+stop before Pass 1/iu,
+        /(?:declined chunking|declines chunking before Pass 1)[^\n]+scope snapshot[^\n]+`Review stopped: chunking-declined`[^\n]+stops? without findings/iu,
         skillPath,
       );
-      assert.match(
-        scope,
-        /declined chunking[^\n]+scope snapshot[^\n]+`Review stopped: chunking-declined`[^\n]+stops without findings/iu,
-        skillPath,
-      );
-      assert.match(scope, /`Review stopped: chunking-declined`/u, skillPath);
       assert.match(
         constraints,
         /oversized scopes never enter Pass 1 unchunked/u,

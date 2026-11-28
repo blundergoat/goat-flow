@@ -20,7 +20,8 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth read `.goat-flow/s
 Select diff (Quick), PR (Quick default), or area audit (Full).
 
 - If user already says "quick", "PR", or "full", or the dispatcher set depth, follow unless material risk forces Full; clarify vague scope.
-- Use explicit input, then combined dirty worktree; else measure diff. Above 20 files or 3000 changed lines, propose chunks and stop before Pass 1; review accepted chunks only. Declined chunking emits the scope snapshot and `Review stopped: chunking-declined`, then stops without findings. Request PR/base/head, commit/range, worktree, or area; never guess commit windows.
+- Use explicit input, then combined dirty worktree, then measure the diff. Request PR/base/head, commit/range, worktree, or area if the scope is ambiguous, and never guess commit windows.
+- Above 20 files or 3000 changed lines, split the selected scope per `references/examples.md` → Frozen Bundle. Announce the chunks and continue without waiting for approval. Record `chunking=accepted` for the adopted plan. Ask when a time limit forces a choice about scope. If the user declines chunking before Pass 1, emit the scope snapshot and `Review stopped: chunking-declined`, then stop without findings.
 
 **PR/base, clean worktree:** without checkout, resolve explicit → configured (`.goat-flow/config.yaml` → `skills.goat-review.local_pr_base`) → remote HEAD → prompt → `main`; fetch only with network approval. Record URL/baseRefName/source/SHA/failures. Automated-review conclusions stay unread until both local passes finish.
 
