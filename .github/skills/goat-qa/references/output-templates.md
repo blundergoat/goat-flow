@@ -28,6 +28,37 @@ Read this reference only when rendering the final response. Select the template 
 - Evidence limit: [unavailable source, runtime, or tool context]
 ```
 
+### Fix Replay mode
+
+```markdown
+## Fix Replay
+- Claimed fix: [what changed and the failure it is said to fix]
+- Recorded reproduction: [source and steps, or `none recorded`]
+
+| Step | Expected | Recorded original | Observed now | Evidence |
+|------|----------|-------------------|--------------|----------|
+
+## Existing-Test Results
+| Command | Directory | Exit | Pass | Fail | Skip | Unverified scope |
+|---------|-----------|------|------|------|------|------------------|
+
+## Verdict
+[verified | failed | unverified] - [reason, and what stays unverified]
+
+## Refuted Candidates
+| Claim | Why Excluded | File | Line | Evidence Quality | Evidence Method | Evidence Summary | Command | Exit Code | Excerpt |
+|-------|--------------|------|------|------------------|-----------------|------------------|---------|-----------|---------|
+<!-- One row per `kill as false positive`; write `None` when there are no rows. Use `—` for nullable or optional fields. -->
+
+## Verification Integrity
+- Reproduction source: [path or link, or `none recorded`]
+- Commands run: [each row in Existing-Test Results]
+- Browser: [browser and mode used, or `not needed` / `blocked: <reason>`]
+- Screenshots: [each kept capture's path, with its `meta.json`, or `none needed`]
+- Proof classes: <N> RUNTIME / <M> CONTRACT-GREP / <K> STATIC / <L> NOT-REPRODUCED
+- Evidence limit: [unreplayed steps, missing tools, or other limits]
+```
+
 ### Standard mode - Phase 2 output (diff-driven, present at BLOCKING GATE)
 
 ```markdown
@@ -47,6 +78,15 @@ Read this reference only when rendering the final response. Select the template 
 | Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
 |-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
 
+## Existing-Test Results  <!-- one row per command from Existing-Test Execution; omit the table on an analysis-only request -->
+| Command | Directory | Exit | Pass | Fail | Skip | Unverified scope |
+|---------|-----------|------|------|------|------|------------------|
+
+## Browser Checks  <!-- one row per affected journey; omit when the change has no browser-visible behaviour -->
+| Journey | Page | Steps | Expected | Observed | Evidence | Status |
+|---------|------|-------|----------|----------|----------|--------|
+<!-- Status: verified | failed | blocked | untested. Evidence: request or screenshot link, or `none`. -->
+
 ## Refuted Candidates
 | Claim | Why Excluded | File | Line | Evidence Quality | Evidence Method | Evidence Summary | Command | Exit Code | Excerpt |
 |-------|--------------|------|------|------------------|-----------------|------------------|---------|-----------|---------|
@@ -57,7 +97,11 @@ Read this reference only when rendering the final response. Select the template 
 - Tests read: [list]
 - Tests not read / unavailable: [list or `none`]
 - Commands discovered: [test/lint commands found]
-- Commands run: `none` (goat-qa does not execute tests)
+- Commands run: [each row in Existing-Test Results, or `none (analysis-only request)`]
+- Checks not run: [optional, slow, networked, or credentialed suites skipped and why, or `none`]
+- New failures: [failing test and exit status, handed to `/goat-debug`, or `none`]
+- Browser: [browser and mode used, or `not needed` / `blocked: <reason>`]
+- Screenshots: [each kept capture's path, with its `meta.json`, or `none needed`]
 - Runtime execution by others: [who ran what, or `none observed`]
 - Coverage claim basis: [OBSERVED | INFERRED | UNVERIFIED]
 - Proof classes: <N> RUNTIME / <M> CONTRACT-GREP / <K> STATIC / <L> NOT-REPRODUCED
@@ -121,6 +165,10 @@ this plan after them and do not repeat the ledger or the integrity section.
 | Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
 |-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
 
+## Existing-Test Results  <!-- only when the user asked for a run; otherwise omit the table -->
+| Command | Directory | Exit | Pass | Fail | Skip | Unverified scope |
+|---------|-----------|------|------|------|------|------------------|
+
 ## Refuted Candidates
 | Claim | Why Excluded | File | Line | Evidence Quality | Evidence Method | Evidence Summary | Command | Exit Code | Excerpt |
 |-------|--------------|------|------|------------------|-----------------|------------------|---------|-----------|---------|
@@ -131,7 +179,7 @@ this plan after them and do not repeat the ledger or the integrity section.
 - Tests read: [list]
 - Tests not read / unavailable: [list or `none`]
 - Commands discovered: [test/lint commands found]
-- Commands run: `none` (goat-qa does not execute tests)
+- Commands run: [each row in Existing-Test Results, or `none` when no run was requested]
 - Coverage claim basis: [OBSERVED | INFERRED | UNVERIFIED]
 - Proof classes: <N> RUNTIME / <M> CONTRACT-GREP / <K> STATIC / <L> NOT-REPRODUCED
 - Analysis confidence: [HIGH | MEDIUM | LOW] - [rationale]

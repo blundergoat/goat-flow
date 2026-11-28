@@ -143,7 +143,7 @@ Confirm before proceeding. Ask only what's missing.
 1. **Page list** - explicit URLs, manifest path, or a diff to derive from
 2. **Auth** - required? If yes: storage state path, login flow, or none
 3. **Viewport** - default `1280x800` desktop unless stated; `390x844` for mobile checks
-4. **Output dir** - always `.goat-flow/logs/sessions/<date>-<label>/` (gitignored, local-only). Screenshots go in a `screenshots/` subdirectory. **NEVER write captures to the project root, `captures/`, or any tracked directory.** Page captures are session artifacts, not committed project files
+4. **Output dir** - keep records and the index in `<output_dir>`, normally `.goat-flow/logs/sessions/<date>-<label>/` (gitignored, local-only). Use `<output_dir>/screenshots/` as `<screenshot_dir>`. When goat-qa names a plan, use the Screenshot Evidence path under the plan's gitignored `evidence/` folder. **NEVER write captures to the project root, `captures/`, or any tracked directory.** Page captures are session artifacts, not committed project files
 5. **Project reference** - does one exist at `.goat-flow/learning-loop/patterns/<project>-playwright.md`? Read it now if so. Also run the footgun grep for the target area against `.goat-flow/learning-loop/footguns/` per `skill-preamble.md`
 6. **Playwright tier** - run the availability check; record which tier will be used
 
@@ -168,7 +168,7 @@ For each URL:
   - Network idle polling (fallback)
   - Fixed time delay (last resort; mark capture's load as INFERRED)
 3. **Apply project reference fixes** - hide debug toolbars, dismiss banners, wait for app-specific JS init, anything documented in the project reference
-4. **Screenshot** - full page, save to `<output_dir>/screenshots/<slug>.png`. Slug is derived from the URL path (strip query params and fragments; use param values only if two URLs share the same path). Collisions get a numeric suffix. On a failed load, make one best-effort capture after recording the failure reason; if capture is impossible, record `screenshot: not captured (<reason>)`
+4. **Screenshot** - full page, save to `<screenshot_dir>/<slug>.png`. For a plan capture, use the filename and directory from the goat-qa Screenshot Evidence rules. Slug is derived from the URL path (strip query params and fragments; use param values only if two URLs share the same path). Collisions get a numeric suffix. On a failed load, make one best-effort capture after recording the failure reason; if capture is impossible, record `screenshot: not captured (<reason>)`
 5. **Capture metadata** - URL, page title, viewport, UTC ISO 8601 timestamp, console error count (count only, do not paste contents). If the integration tier cannot capture console errors, note `not captured (<tier>)` instead of omitting the field
 6. **Write MD record** to `<output_dir>/<slug>.md` using the output format below
 
@@ -234,7 +234,7 @@ One MD file per page:
 **Load verification:** text / selector / network-idle / time (INFERRED)
 **Console errors:** <count>
 
-**Screenshot:** [<page title>](./screenshots/<slug>.png) / not captured (<reason>)
+**Screenshot:** [<page title>](<relative-path-from-output-dir-to-screenshot>) / not captured (<reason>)
 
 ## Notes
 
@@ -247,7 +247,7 @@ One MD file per page:
 
 ## Discipline
 
-- **Output location:** all capture artifacts (MD records, screenshots, index) MUST go inside `.goat-flow/logs/sessions/<date>-<label>/`. Never create a `captures/`, `screenshots/`, or any other directory at the project root. Page captures are gitignored session artifacts.
+- **Output location:** all capture artifacts (MD records, screenshots, index) MUST go inside `.goat-flow/logs/sessions/<date>-<label>/`, except screenshots a goat-qa run saves under a named plan's `evidence/` folder; the session records and index then link to them. Never create a `captures/`, `screenshots/`, or any other directory at the project root. Page captures are gitignored session artifacts.
 - **Artifact routing:** build each narrative MD record and index in memory, then send it through the version-compatible redactor from `.goat-flow/skill-docs/skill-preamble.md`; only the redactor destination becomes durable. Keep raw console/network machine diagnostics in a fresh bounded temporary file only long enough to extract sanitized fields. Screenshots are binary evidence: review them for sensitive content before moving them from a temporary path; do not claim a prose redactor reviewed pixels.
 - Screenshot evidence is OBSERVED. Any post-capture interpretation in the Notes section is INFERRED unless mapped to a `file + semantic anchor` or repeatable reproduction.
 - Failures are recorded, never skipped. A run that captured 8 of 10 pages with 2 failures is more honest than a run that silently dropped 2.

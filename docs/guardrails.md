@@ -31,7 +31,27 @@ Enabled Claude Code deny hooks inspect literal native PowerShell commands with b
 - `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=smoke`
 - `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=full`
 - `goat-flow hooks list --json`
-- After trusting the selected checkout: `goat-flow hooks verify . --agent <id> --scenario all --trusted-target`
+- After trusting the selected checkout: `goat-flow hooks verify . --agent <id> --scenario all --trusted-target` when every hook group is registered for that agent; otherwise run the per-group commands the install summary prints, because an unregistered group fails the all-groups run
+
+To ask one policy whether it would block a command without running it, pass the command to `--check`, for example
+`node .goat-flow/hooks/deny-dangerous.mjs --check 'rm -rf /'`.
+
+### Replacing retired Bash hook commands
+
+Releases before 1.19.0 ran Bash hooks. Install removes their files once they are proven unedited, and lists each line in your
+instruction files, shell scripts, CI workflows and `package.json` that still calls one. `goat-flow audit . --check-content` reports the
+same calls in shell scripts, CI workflows and `package.json`. Neither changes your files.
+
+| Retired call | Use instead |
+| --- | --- |
+| `.goat-flow/hooks/deny-dangerous.sh` with `--self-test` or `--check` | `node .goat-flow/hooks/deny-dangerous.mjs` with the same option |
+| `.goat-flow/hooks/deny-git-mutations.sh` with `--self-test` or `--check` | `node .goat-flow/hooks/deny-git-mutations.mjs` with the same option |
+| `.goat-flow/hooks/post-turn-safety.sh --self-test` | `node .goat-flow/hooks/post-turn-safety.mjs --self-test` |
+| `.goat-flow/hooks/gruff-code-quality.sh --self-test` | `node .goat-flow/hooks/gruff-code-quality.mjs --self-test` |
+| `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` | `node .goat-flow/hooks/deny-dangerous.mjs --self-test=full` and `node .goat-flow/hooks/deny-git-mutations.mjs --self-test=full` |
+| `.goat-flow/hooks/run-with-bash.mjs` | `.goat-flow/hooks/run-hook.mjs` |
+| `.goat-flow/hooks/deny-dangerous/guard-runtime.sh` or `patterns-*.sh` | Nothing: these were internal parts of the Bash runtime, so remove the call |
+| A `.goat-flow/hooks/` glob ending in `.sh`, such as a `shellcheck` step | Nothing matches it now: target `.goat-flow/hooks/**/*.mjs` or remove it |
 
 Both policies default on. Explicit upgrade migration preserves a saved Git-hook choice or inherits the previous dangerous-hook choice once. Ordinary toggles and `hooks sync` preserve saved choices and keep a missing Git choice on. Shared-file repairs can stale both proof records. `hooks sync` repairs installation, and each policy's verification group supplies fresh proof. Agents still never commit or push, regardless of toggle state.
 
@@ -44,6 +64,7 @@ A policy denial means the hook rejected the proposed command. An unavailable pol
 | A named policy or command-syntax denial | Review the proposed command against the named rule. Retrying after a delay does not change the rule. |
 | `Cannot inspect native PowerShell execution or session-state changes` | Use separate literal commands without dynamic syntax. A PowerShell launcher does not change the proposed command's shell; retain its tool-shell context when retrying. |
 | `Policy hook unavailable` | Read the named hook and reason. Check Node availability and the installed entrypoint and shared policy store; repair an incomplete installation before retrying. |
+| `sh: 1: node: not found` or `node: Permission denied` at exit status 127 | Node never started, so no policy code ran; this is the host-prerequisite failure described below the table. The agent may run hooks with a different PATH than your terminal: Antigravity on WSL starts them without your shell profile, so it cannot see a `node` from nvm, fnm, volta, asdf or mise. `Permission denied` means a non-executable entry named `node`, such as a directory, came first on that PATH. Install Node where the system PATH finds it, such as the NodeSource `nodejs` package at `/usr/bin/node`. On WSL, `goat-flow audit` and `goat-flow hooks verify --agent antigravity` print a warning when this applies. |
 | `exceeded its deadline; process-tree termination was requested` | The launcher reached its deadline. Let other verification work finish, then retry the same check once on its own. If it times out again, retain the diagnostic and investigate the named hook. A successful sequential retry does not establish what caused the original timeout. |
 | `hook timeout configuration is invalid` | Remove or correct `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS`. An unset or empty value uses the registered deadline; a supplied value must be a positive whole number of milliseconds. Values above the registered ceiling are capped at that ceiling. |
 

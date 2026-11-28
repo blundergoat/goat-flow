@@ -1,7 +1,8 @@
 /**
  * Context concern: Is the agent's map accurate and structurally complete?
  *
- * 5 deterministic checks (instruction size, execution loop, doc paths, instruction sections, boundary guidance).
+ * Deterministic checks: instruction size, execution loop, doc paths, instruction sections, boundary guidance, and the heading release
+ * stamp from `check-release-stamp.ts`.
  * Content-quality judgments (e.g. footgun evidence currency) live in the `quality` assessment prompt, not here.
  */
 import type {
@@ -12,6 +13,8 @@ import type {
 import type { CheckEvidence } from "../provenance-types.js";
 import { getRequiredInstructionSections } from "../../manifest/manifest-json.js";
 import { pass, fail, extractBacktickPaths } from "./helpers.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../../advised-command.js";
+import { RELEASE_STAMP_CHECKS } from "./check-release-stamp.js";
 
 /** The execution-loop section label the manifest declares. Used by
  *  `executionLoopPresent` to find the heading regex. Change here only if the
@@ -154,7 +157,7 @@ const instructionLineCount: HarnessCheck = {
         findings.push(`${agentFacts.agent.id}: no instruction file`);
         recs.push(`Create ${agentFacts.agent.instructionFile}`);
         fixes.push(
-          `Create ${agentFacts.agent.instructionFile} by running \`goat-flow setup\`.`,
+          `Create ${agentFacts.agent.instructionFile} by running \`${PINNED_GOAT_FLOW_INVOCATION} setup\`.`,
         );
         lineCounts.push({
           agent: agentFacts.agent.id,
@@ -698,4 +701,5 @@ export const CONTEXT_CHECKS: HarnessCheck[] = [
   docPathsResolve,
   instructionSectionsPresent,
   boundaryGuidancePresentCheck,
+  ...RELEASE_STAMP_CHECKS,
 ];

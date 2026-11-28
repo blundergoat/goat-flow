@@ -11,6 +11,8 @@ import type {
 import type { CheckEvidence } from "../provenance-types.js";
 import { pass, fail } from "./helpers.js";
 import { missingRequiredClaudeReadDenies } from "../../facts/agent/settings.js";
+import { readFileSync } from "node:fs";
+import { getTemplatePath } from "../../paths.js";
 
 const VERIFIED_ON = "2026-04-19";
 
@@ -199,6 +201,57 @@ function denyRegistrationDetails(
   };
 }
 
+let templateDenyRules: readonly string[] | undefined;
+
+/**
+ * Read the shipped Claude template's deny rules, once per process.
+ *
+ * @returns the template's deny rules in template order
+ * @throws Error when the packaged template cannot be read or parsed
+ */
+function claudeTemplateDenyRules(): readonly string[] {
+  // The packaged template does not change while the process runs, so one read serves every audit.
+  if (templateDenyRules) return templateDenyRules;
+  const template = JSON.parse(
+    readFileSync(
+      getTemplatePath("workflow/hooks/agent-config/claude.json"),
+      "utf8",
+    ),
+  ) as { permissions?: { deny?: unknown } };
+  const deny = template.permissions?.deny;
+  templateDenyRules = Array.isArray(deny)
+    ? deny.filter((rule): rule is string => typeof rule === "string")
+    : [];
+  return templateDenyRules;
+}
+
+/**
+ * Name the template deny rules each Claude agent's settings lack. A project may have removed a rule on purpose and nothing records
+ * that, so this is a note on the check, never a failure, and it says install does not add them.
+ *
+ * @param agents - audited agents; only valid Claude settings are compared
+ * @returns one note per Claude settings file that lacks template rules; empty when every template rule is present
+ */
+function missingTemplateDenyNotes(agents: AuditContext["agents"]): string[] {
+  return agents.flatMap((agentFacts) => {
+    // Only Claude JSON settings use the template's deny rule grammar.
+    if (agentFacts.agent.id !== "claude" || !agentFacts.settings.valid)
+      return [];
+    const deny = (
+      agentFacts.settings.parsed as { permissions?: { deny?: unknown } } | null
+    )?.permissions?.deny;
+    const present = new Set(Array.isArray(deny) ? deny : []);
+    const absent = claudeTemplateDenyRules().filter(
+      (rule) => !present.has(rule),
+    );
+    // A settings file holding every template rule needs no note.
+    if (absent.length === 0) return [];
+    return [
+      `claude: ${absent.length} template deny rule(s) not in ${agentFacts.agent.settingsFile}; install never adds rules to existing settings, so add any you want: ${absent.join(", ")}`,
+    ];
+  });
+}
+
 /** Required constraint shared with setup without running unrelated harness advisories. */
 export const denyCoversSecrets = {
   id: "deny-covers-secrets",
@@ -249,6 +302,7 @@ export const denyCoversSecrets = {
         ),
       );
     }
+    findings.push(...missingTemplateDenyNotes(ctx.agents));
     if (!anyUncovered) {
       const result = pass(findings, details);
       if (scriptOnly.length === 0) return result;
@@ -632,6 +686,83 @@ function collectStaleSettingsRules(
   return stale;
 }
 
+/** The attribution values setup writes for Claude, with what a different value means for the user. */
+const CLAUDE_ATTRIBUTION: readonly (readonly [
+  string,
+  string | boolean,
+  string,
+])[] = [
+  ["commit", "", 'is not "", so Claude adds a co-author line to commits'],
+  [
+    "pr",
+    "",
+    'is not "", so Claude adds attribution to pull request descriptions',
+  ],
+  ["sessionUrl", false, "is not false, so Claude adds a session link"],
+];
+const ATTRIBUTION_RECOMMENDATION =
+  "Disable Claude attribution so commits and pull requests follow the project's commit guidance.";
+const ATTRIBUTION_FIX =
+  'Merge attribution.commit: "", attribution.pr: "" and attribution.sessionUrl: false into .claude/settings.json, keeping other settings; install preserves existing settings, so it does not add them.';
+
+/**
+ * Name each Claude attribution value that differs from what setup writes. Install preserves existing settings, so it never fixes these.
+ *
+ * @param agentFacts - one audited agent with valid JSON settings
+ * @returns one finding per differing value; empty when every value matches or the agent is not Claude
+ */
+function claudeAttributionGaps(
+  agentFacts: AuditContext["agents"][number],
+): string[] {
+  // Only Claude settings carry these attribution values.
+  if (agentFacts.agent.id !== "claude") return [];
+  const attribution =
+    (
+      agentFacts.settings.parsed as {
+        attribution?: Record<string, unknown>;
+      } | null
+    )?.attribution ?? {};
+  return CLAUDE_ATTRIBUTION.filter(
+    ([key, value]) => attribution[key] !== value,
+  ).map(
+    ([key, , consequence]) =>
+      `claude: ${agentFacts.agent.settingsFile} attribution.${key} ${consequence}`,
+  );
+}
+
+/**
+ * Build the advice for a failing settings check. Each kind of gap brings its own advice, so a settings file with only one kind is not
+ * told about the other.
+ *
+ * @param staleTools - tool names of inert permission rule forms found; empty when none
+ * @param hasAttributionGaps - whether any Claude attribution value differs from what setup writes
+ * @returns the recommendations and fixes to show, in that order of gap kind
+ */
+function settingsGapAdvice(
+  staleTools: ReadonlySet<string>,
+  hasAttributionGaps: boolean,
+): { recommendations: string[]; fixes: string[] } {
+  const recommendations: string[] = [];
+  const fixes: string[] = [];
+  // Inert rule forms get the review advice that names the forms found.
+  if (staleTools.size > 0) {
+    const staleForms = [...staleTools].map((tool) => `${tool}(...)`).join(", ");
+    const formLabel = staleTools.size === 1 ? "form" : "forms";
+    recommendations.push(
+      `Claude Code accepts but does not consult the ${staleForms} permission rule ${formLabel} reported here; treat them as inert configuration, not enforcement.`,
+    );
+    fixes.push(
+      "Review the reported inert rules with the project owner. An approved install normalizes or removes stale deny rules and prints the changes, but preserves allow and ask arrays verbatim. Review those separately: activating an inert allow or ask rule changes its meaning.",
+    );
+  }
+  // Missing attribution values get the merge instruction, because install never adds them.
+  if (hasAttributionGaps) {
+    recommendations.push(ATTRIBUTION_RECOMMENDATION);
+    fixes.push(ATTRIBUTION_FIX);
+  }
+  return { recommendations, fixes };
+}
+
 const settingsRulesMatched: HarnessCheck = {
   id: "settings-rules-matched",
   name: "Permission rules use forms the agent matches",
@@ -651,6 +782,7 @@ const settingsRulesMatched: HarnessCheck = {
     const failures: string[] = [];
     const denyMatrix: NonNullable<HarnessCheckDetails["denyMatrix"]> = [];
     const staleTools = new Set<string>();
+    let hasAttributionGaps = false;
     let eligible = 0;
     for (const agentFacts of ctx.agents) {
       const settingsFile = agentFacts.agent.settingsFile;
@@ -676,6 +808,12 @@ const settingsRulesMatched: HarnessCheck = {
           `${agentFacts.agent.id}: ${stale.length} permission rule(s) the agent never matches - ${stale.map((rule) => rule.display).join("; ")}`,
         );
       }
+      const attributionGaps = claudeAttributionGaps(agentFacts);
+      // A missing attribution value is a second score-only gap in the same settings file.
+      if (attributionGaps.length > 0) {
+        hasAttributionGaps = true;
+        failures.push(...attributionGaps);
+      }
     }
     if (eligible === 0) {
       return pass(["No agents with JSON permission-rule settings to check"], {
@@ -683,18 +821,10 @@ const settingsRulesMatched: HarnessCheck = {
       });
     }
     if (failures.length === 0) return pass(findings, { denyMatrix });
-    const staleForms = [...staleTools].map((tool) => `${tool}(...)`).join(", ");
-    const formLabel = staleTools.size === 1 ? "form" : "forms";
-    return fail(
-      failures,
-      [
-        `Claude Code accepts but does not consult the ${staleForms} permission rule ${formLabel} reported here; treat them as inert configuration, not enforcement.`,
-      ],
-      [
-        "Review the reported inert rules with the project owner. An approved install normalizes or removes stale deny rules and prints the changes, but preserves allow and ask arrays verbatim. Review those separately: activating an inert allow or ask rule changes its meaning.",
-      ],
-      { denyMatrix },
-    );
+    const advice = settingsGapAdvice(staleTools, hasAttributionGaps);
+    return fail(failures, advice.recommendations, advice.fixes, {
+      denyMatrix,
+    });
   },
 };
 

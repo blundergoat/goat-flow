@@ -16,6 +16,7 @@ import {
   targetUsesNewerGoatFlow,
   uniquePaths,
 } from "./check-agent-common.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 
 // === 1. Agent Instruction ===
 
@@ -80,7 +81,7 @@ function checkInstructionPresent(ctx: AuditContext): AuditFailure | null {
   return {
     check: "Agent instruction file",
     message: `Missing: ${ctx.agentFilter} (${instructionFile})`,
-    howToFix: `Create ${instructionFile} by running \`goat-flow setup --agent ${ctx.agentFilter}\`.`,
+    howToFix: `Create ${instructionFile} by running \`${PINNED_GOAT_FLOW_INVOCATION} setup --agent ${ctx.agentFilter}\`.`,
   };
 }
 
@@ -105,8 +106,7 @@ function checkSupportedInstructionFilesPresent(
   return {
     check: "Agent instruction file",
     message: `Supported agent instruction files missing: ${missing.join(", ")}`,
-    howToFix:
-      "Run `goat-flow setup --agent <id>` for each missing agent, or use `goat-flow audit . --agent <id>` to scope the audit to one agent.",
+    howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} setup --agent <id>\` for each missing agent, or use \`${PINNED_GOAT_FLOW_INVOCATION} audit . --agent <id>\` to scope the audit to one agent.`,
   };
 }
 
@@ -123,8 +123,7 @@ function checkAnyAgentConfigured(ctx: AuditContext): AuditFailure | null {
   return {
     check: "Agent instruction file",
     message: "No supported agent instruction files found",
-    howToFix:
-      "Run `goat-flow setup --agent <id>` for the agent this repo should manage, then complete the project-specific setup steps.",
+    howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} setup --agent <id>\` for the agent this repo should manage, then complete the project-specific setup steps.`,
   };
 }
 
@@ -182,7 +181,7 @@ function checkCopilotCommitInstructionsPresent(
     check: "Agent instruction file",
     message: `Missing: copilot (${copilotInstruction} must reference ${preferredCommitGuide})`,
     evidence: copilotInstruction,
-    howToFix: `Add a ## Commit Messages section to ${copilotInstruction} that references ${preferredCommitGuide}, then rerun \`goat-flow audit --agent copilot\`.`,
+    howToFix: `Add a ## Commit Messages section to ${copilotInstruction} that references ${preferredCommitGuide}, then rerun \`${PINNED_GOAT_FLOW_INVOCATION} audit --agent copilot\`.`,
   };
 }
 
@@ -235,7 +234,7 @@ function checkOrphanedArtifacts(ctx: AuditContext): AuditFailure | null {
   return {
     check: "Agent instruction file",
     message: `Agent artifacts exist but instruction ${noun} missing: ${missing.join(", ")}`,
-    howToFix: `Run \`goat-flow setup --agent <id>\` for each listed agent to recreate the instruction file, or remove the stale agent directories.`,
+    howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} setup --agent <id>\` for each listed agent to recreate the instruction file, or remove the stale agent directories.`,
   };
 }
 
@@ -342,8 +341,7 @@ function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
     check: "Agent skills",
     message: `Missing skill files: ${missing.join(", ")}`,
     evidence: missing[0],
-    howToFix:
-      "Re-install skills by running `goat-flow install . --agent <id>` for the affected agent.",
+    howToFix: `Re-install skills by running \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent <id>\` for the affected agent.`,
   };
 }
 
@@ -412,8 +410,7 @@ function checkUnexpectedSkillReferences(
     check: "Agent skills",
     message: `Unexpected stale skill reference files found: ${unexpectedSkillReferences.join(", ")}`,
     evidence: unexpectedSkillReferences[0],
-    howToFix:
-      "Run `goat-flow install . --agent <id>` for the affected agent. The installer prunes manifest-unlisted skill reference files during upgrades.",
+    howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent <id>\` for the affected agent. The installer prunes manifest-unlisted skill reference files during upgrades.`,
   };
 }
 
@@ -450,8 +447,7 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
       check: "Agent skills",
       message: `Missing goat-flow-skill-version: ${skillsWithoutVersion.join(", ")}`,
       evidence: skillsWithoutVersion[0],
-      howToFix:
-        "Re-install skills by running `goat-flow install . --agent <id>` for the affected agent.",
+      howToFix: `Re-install skills by running \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent <id>\` for the affected agent.`,
     };
   }
   // Stale skill versions need reinstall guidance with the expected version.
@@ -460,8 +456,7 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
       check: "Agent skills",
       message: `Version mismatch (expected ${AUDIT_VERSION}): ${skillsWithVersionMismatch.join(", ")}`,
       evidence: skillsWithVersionMismatch[0],
-      howToFix:
-        "Re-install skills by running `goat-flow install . --agent <id>` for the affected agent.",
+      howToFix: `Re-install skills by running \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent <id>\` for the affected agent.`,
     };
   }
   return null;

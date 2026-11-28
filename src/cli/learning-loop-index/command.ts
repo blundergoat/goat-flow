@@ -5,6 +5,7 @@
  *
  * Indexes are always regenerated from the bucket files rather than edited by hand, so retrieval reflects what is actually stored.
  */
+import { pinnedGoatFlowCommand } from "../advised-command.js";
 import type { ParsedCLI } from "../cli-types.js";
 import { writeOutput } from "../cli-output.js";
 import { loadConfig } from "../config/reader.js";
@@ -32,7 +33,7 @@ export function emitIndexGenerationInstallResult(projectPath: string): void {
   console.log("");
   console.log("Learning-loop indexes:");
   console.log(
-    `  ✓ ${written.length} INDEX.md file(s) regenerated (re-run \`goat-flow index\` after editing entries)`,
+    `  ✓ ${written.length} INDEX.md file(s) regenerated (re-run \`${pinnedGoatFlowCommand("index")}\` after editing entries)`,
   );
   for (const diagnostic of results.flatMap((result) => result.diagnostics)) {
     console.warn(`  ! ${diagnostic}`);

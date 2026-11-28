@@ -1,6 +1,6 @@
 ---
 category: verification-gate-runs
-last_reviewed: 2026-11-13
+last_reviewed: 2026-11-28
 ---
 
 **Scope:** Running gates during a change - stopping each edit batch at its declared proof, checking every target after a failed multi-file patch, invoking tools with the repository's own flags, and telling a transient gate failure from a task regression. Adding or trusting a repo-wide gate is [verification-preflight.md](verification-preflight.md); what a test must establish is [verification-testing.md](verification-testing.md).
@@ -124,3 +124,20 @@ last_reviewed: 2026-11-13
 **What happened:** After the Bash hook runtimes were removed, the fast suite passed all 3988 tests, but the slow suite failed 15. Upgrade and installer tests still used a removed launcher as their sample shared file, and an installer round-trip ran a `dist/` built before the source edit, so its audit provenance still named the deleted installer.
 
 **Evidence:** `scripts/run-tests.mjs` (search: `function isSlowTest`) keeps installer, dashboard and packaged-install suites out of the fast run. `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `drift audit should pass after round-trip install`) failed until `npm run build` refreshed `dist/`.
+
+**Recurrence 2026-11-25:** An installer change that deletes named retired files passed its listed owning suites and the fast suite, then a later change found `test/integration/setup-install-codex-config-migration.test.ts` (search: `--force-managed`) failing: it still expected `--force-path` to keep the file. No listed suite covered it. For any installer behaviour change, run every `test/integration/setup-install*.test.ts` file before the human gate; the 19 suites take about two minutes.
+
+---
+
+## Lesson: Verify the staged snapshot before calling a commit ready
+
+**Status:** active | **Created:** 2026-11-28 | **Evidence:** OBSERVED
+**Decision changed:** Check that the proposed commit includes the source and fixtures required by its tests before using local results to support a commit-readiness claim.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** Inspect `git diff --cached --name-status` before calling a commit ready. When the staged files differ from the verified worktree, run the affected tests from the staged snapshot in an isolated checkout. After a push, compare the workflow run's head SHA with the current PR head before interpreting its results.
+
+**What happened:** Before PR #71's commit `9cc9364`, the local verification covered the full worktree and the index was empty. The commit included the updated eval tests and left their implementation and fixture changes in the worktree. Both fast shards failed. An isolated export of the published commit reproduced all seven failures on Node 20.20.2. The matching local eval files cleared both shards on that version. [GitHub Actions run](https://github.com/blundergoat/goat-flow/actions/runs/46106284102)
+
+**Evidence:** `test/unit/evals-reference-boundaries.test.ts` (search: `citationEntryPath`) imported an export absent from the committed fixture. `.github/workflows/ci.yml` (search: `npm run test:fast -- --shard=`) runs those tests in the PR checkout.

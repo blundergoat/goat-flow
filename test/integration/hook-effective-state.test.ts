@@ -419,6 +419,24 @@ describe("effective hook state", () => {
     );
   });
 
+  // The shipped registry sets the stale-capture state, so the page must not imply the project can clear it.
+  it("says goat-flow refreshes stale provider evidence in a release", () => {
+    const projectPath = createClaudeProject();
+    syncHookStates(projectPath);
+    recordCanonicalManagedHookBaseline(projectPath, [
+      ".goat-flow/hooks/deny-dangerous.mjs",
+    ]);
+    const denyHookState = claudeHookState(projectPath, "deny-dangerous");
+
+    assert.deepEqual(denyHookState.effectiveState, {
+      status: "provider-capture-stale",
+      severity: "warning",
+    });
+    assert.equal(denyHookState.repairCommand, null);
+    assert.match(denyHookState.repairSummary, /goat-flow release/u);
+    assert.match(denyHookState.repairSummary, /nothing in this project/iu);
+  });
+
   /**
    * Fixture purpose: omit install state so status cannot guess whether changed bytes are old or local.
    *

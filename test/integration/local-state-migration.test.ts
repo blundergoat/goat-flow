@@ -1,5 +1,7 @@
 /** Upgrade contracts use real directories and the public installer in disposable projects. */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import {
   existsSync,
   mkdirSync,
@@ -10,7 +12,10 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { migrateLegacyLocalState } from "../../src/cli/local-state-migration.js";
+import {
+  backUpInstallState,
+  migrateLegacyLocalState,
+} from "../../src/cli/local-state-migration.js";
 import { readManagedInstallStateFacade } from "../../src/cli/managed-setup-state.js";
 import {
   acquirePathWriteClaims,
@@ -154,6 +159,70 @@ describe("local operational-state directory migration", () => {
     assert.equal(existsSync(join(root, ".goat-flow/write-claims")), false);
     assert.equal(
       readFileSync(join(root, ".goat-flow/state/install/managed.json"), "utf8"),
+      "preserved evidence\n",
+    );
+  });
+
+  // Writes a legacy project, then moves and rewrites its records the way a failed first upgrade attempt can before retrying.
+  it("keeps the first attempt's pre-upgrade copy when the same upgrade is retried", () => {
+    const root = legacyProject();
+    const backup = ".goat-flow/state/install-before-upgrade";
+    assert.deepEqual(backUpInstallState(root, "1.16.0"), {
+      backup,
+      source: ".goat-flow/install-state",
+      isFromEarlierAttempt: false,
+    });
+    assert.equal(migrateLegacyLocalState(root), true);
+    writeFileSync(
+      join(root, ".goat-flow/state/install/managed.json"),
+      "converted evidence\n",
+    );
+
+    assert.deepEqual(backUpInstallState(root, "1.16.0"), {
+      backup,
+      source: ".goat-flow/install-state",
+      isFromEarlierAttempt: true,
+    });
+    assert.equal(
+      readFileSync(join(root, backup, "managed.json"), "utf8"),
+      "preserved evidence\n",
+    );
+
+    // An upgrade from a different release replaces the copy.
+    assert.deepEqual(backUpInstallState(root, "1.19.0"), {
+      backup,
+      source: ".goat-flow/state/install",
+      isFromEarlierAttempt: false,
+    });
+    assert.equal(
+      readFileSync(join(root, backup, "managed.json"), "utf8"),
+      "converted evidence\n",
+    );
+  });
+
+  it("preserves the previous install backup when staging the next copy fails", (t) => {
+    const root = legacyProject();
+    const backup = backUpInstallState(root, "1.16.0");
+    assert.ok(backup);
+    const record = join(root, `${backup.backup}.json`);
+    const savedRecord = readFileSync(record);
+    assert.equal(migrateLegacyLocalState(root), true);
+    t.mock.method(fs, "cpSync", () => {
+      throw new Error("injected backup copy failure");
+    });
+    syncBuiltinESMExports();
+    try {
+      assert.throws(
+        () => backUpInstallState(root, "1.19.0"),
+        /injected backup copy failure/u,
+      );
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+    assert.deepEqual(readFileSync(record), savedRecord);
+    assert.equal(
+      readFileSync(join(root, backup.backup, "managed.json"), "utf8"),
       "preserved evidence\n",
     );
   });

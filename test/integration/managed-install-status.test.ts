@@ -25,6 +25,7 @@ import {
   quoteManagedInstallProjectArgument,
   type ManagedInstallEvidenceReport,
 } from "../../src/cli/managed-install-evidence.js";
+import { pinnedGoatFlowCommand } from "../../src/cli/advised-command.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { dispatchCommand } from "../../src/cli/cli-handlers.js";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
@@ -317,9 +318,13 @@ describe("managed install status evidence", () => {
     assert.match(markdown.stdout, /stale.*agent=codex/iu);
     assert.equal(stale.canSelectInstalledAgent, false);
     assert.match(stale.reason, /target bytes|cutover marker/iu);
-    assert.match(stale.recovery ?? "", /goat-flow install .* --agent codex/u);
     assert.ok(
-      stale.recovery?.includes(quoteManagedInstallProjectArgument(projectPath)),
+      stale.recovery?.includes(
+        pinnedGoatFlowCommand(
+          `install ${quoteManagedInstallProjectArgument(projectPath)} --agent codex`,
+        ),
+      ),
+      stale.recovery ?? "",
     );
     assert.doesNotMatch(stale.recovery ?? "", /run:.*--force/iu);
 
@@ -330,7 +335,14 @@ describe("managed install status evidence", () => {
     ]);
     assert.equal(cutover.canSelectInstalledAgent, false);
     assert.match(cutover.reason, /cannot select .*installed agent/iu);
-    assert.match(cutover.recovery ?? "", /goat-flow install .* --agent codex/u);
+    assert.ok(
+      cutover.recovery?.includes(
+        pinnedGoatFlowCommand(
+          `install ${quoteManagedInstallProjectArgument(projectPath)} --agent codex`,
+        ),
+      ),
+      cutover.recovery ?? "",
+    );
     assert.doesNotMatch(cutover.recovery ?? "", /run:.*--force/iu);
   });
 
@@ -344,7 +356,14 @@ describe("managed install status evidence", () => {
     assert.deepEqual(legacy.subjects.paths, [SHARED_PATH]);
     assert.equal(legacy.canSelectInstalledAgent, false);
     assert.match(legacy.reason, /no v2 receipt.*current.*target bytes/iu);
-    assert.match(legacy.recovery ?? "", /goat-flow install .* --agent codex/u);
+    assert.ok(
+      legacy.recovery?.includes(
+        pinnedGoatFlowCommand(
+          `install ${quoteManagedInstallProjectArgument(projectPath)} --agent codex`,
+        ),
+      ),
+      legacy.recovery ?? "",
+    );
     assert.doesNotMatch(legacy.recovery ?? "", /run:.*--force/iu);
   });
 
@@ -363,14 +382,13 @@ describe("managed install status evidence", () => {
     assert.deepEqual(malformed.subjects.paths, [evidencePath]);
     assert.equal(malformed.canSelectInstalledAgent, false);
     assert.match(malformed.reason, /blocks every agent/iu);
-    assert.match(
-      malformed.recovery ?? "",
-      /goat-flow status .* --format json/u,
-    );
     assert.ok(
       malformed.recovery?.includes(
-        quoteManagedInstallProjectArgument(projectPath),
+        pinnedGoatFlowCommand(
+          `status ${quoteManagedInstallProjectArgument(projectPath)} --format json`,
+        ),
       ),
+      malformed.recovery ?? "",
     );
     assert.doesNotMatch(malformed.recovery ?? "", /run:.*--force/iu);
   });
@@ -388,9 +406,13 @@ describe("managed install status evidence", () => {
     assert.equal(conflicting.canSelectInstalledAgent, false);
     assert.match(conflicting.reason, /cannot select .*installed agent/iu);
     assert.match(conflicting.recovery ?? "", /one verified historical hash/iu);
-    assert.match(
+    assert.ok(
+      conflicting.recovery?.includes(
+        pinnedGoatFlowCommand(
+          `status ${quoteManagedInstallProjectArgument(projectPath)} --format json`,
+        ),
+      ),
       conflicting.recovery ?? "",
-      /goat-flow status .* --format json/u,
     );
     assert.doesNotMatch(conflicting.recovery ?? "", /run:.*--force/iu);
   });

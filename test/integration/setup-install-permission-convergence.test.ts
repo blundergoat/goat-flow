@@ -245,3 +245,40 @@ describe("Claude permission convergence", () => {
     );
   });
 });
+
+describe("permission changes named before and after install", () => {
+  // Writes a Claude settings file holding a broad .env deny and a retired rule; the preview and the closing summary must name both.
+  it("names each removed or narrowed deny rule in the preview and first in the closing summary", () => {
+    const root = installedProject();
+    const path = join(root, ".claude/settings.json");
+    const settings = JSON.parse(readFileSync(path, "utf8"));
+    settings.permissions.deny.push("Read(**/.env*)", "Bash(*sudo *)");
+    writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
+
+    const reason =
+      previewRows(root).find((row) => row.path === ".claude/settings.json")
+        ?.reason ?? "";
+    assert.match(reason, /Read\(\*\*\/\.env\*\)/u);
+    assert.match(reason, /Bash\(\*sudo \*\)/u);
+
+    const result = runCliInstaller(root, "--agent", "claude");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const lines = result.stdout.split("\n");
+    const verified = lines.findIndex((line) =>
+      line.startsWith("Install verified for claude"),
+    );
+    assert.equal(
+      lines[verified + 1],
+      "Permission changes (deny rules removed or narrowed):",
+    );
+    const block = lines.slice(verified + 2, verified + 8).join("\n");
+    assert.match(
+      block,
+      /\.claude\/settings\.json: - Claude deny rule removed: "Read\(\*\*\/\.env\*\)"/u,
+    );
+    assert.match(
+      block,
+      /\.claude\/settings\.json: - retired Claude deny rule removed: "Bash\(\*sudo \*\)"/u,
+    );
+  });
+});

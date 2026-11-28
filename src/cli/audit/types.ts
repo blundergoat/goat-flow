@@ -103,6 +103,8 @@ export interface AuditHookCoverageReport {
     disabled: number;
   };
   hooks: HookState[];
+  /** Why coverage was not judged, such as a project on a newer goat-flow release than this CLI; absent when coverage was read. */
+  skipped?: string;
 }
 
 /** Top-level audit JSON schema returned by CLI and dashboard audit routes. */
@@ -373,11 +375,20 @@ export interface HarnessCheckDetails {
     fileCount: number;
     mostRecent?: string;
   }[];
+  /** instruction-release-stamp: each agent's instruction heading and whether it carries a goat-flow release */
+  releaseStamps?: {
+    agent: AgentId;
+    file: string;
+    heading: string | null;
+    stamped: boolean;
+  }[];
   /** feedback-loop-active / decisions-tracked */
   freshness?: {
     agent: AgentId;
     fresh: number;
     aging: number;
     stale: number;
+    /** feedback-loop-active only: each bucket whose `last_reviewed` date is past the stale threshold, with that date */
+    staleBuckets?: { path: string; lastReviewed: string | null }[];
   }[];
 }

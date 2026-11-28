@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-11-03
+last_reviewed: 2026-11-28
 ---
 
 ## Footgun: Repository mirror syncs leave stale install hashes behind
@@ -29,7 +29,7 @@ last_reviewed: 2026-11-03
 
 **Prevention:** Inspect parsed command strings. Preserve dependencies when provider configuration cannot be read safely; malformed JSON is not evidence that a dependency is unused.
 
-**Evidence:** `src/cli/installer/retired-runtime.ts` (`hasRetiredRegistration`, `containsRetiredRuntime`) previously searched serialized JSON. A command with a quoted script path was missed because JSON inserted a backslash before its closing quote. `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `keeps registrations and dependencies while a runtime customization awaits migration consent`) now retains the quoted command and its dependencies until review.
+**Evidence:** `src/cli/installer/retired-runtime.ts` (`retiredRegistrationConfigs`, `containsRetiredRuntime`; formerly `hasRetiredRegistration`) previously searched serialized JSON. A command with a quoted script path was missed because JSON inserted a backslash before its closing quote. `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `keeps registrations and dependencies while a runtime customization awaits migration consent`) now retains the quoted command and its dependencies until review.
 
 ## Footgun: Non-exclusive staging copies follow a raced payload symlink
 
@@ -56,6 +56,10 @@ last_reviewed: 2026-11-03
 **Evidence:** While implementing the 1.16.0 `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` changed and `install` exited 0, but the retired Bash installer still replaced every system-owned destination. The fix was a decision channel: `src/cli/install-command.ts` (search: `preservePaths: installPreview.files`) now passes those per-row decisions to `applyInstaller`; `src/cli/installer/apply.ts` (search: `preserved.has(destination)`) honors them at the write. The retired Bash installer used the same decision channel as flags.
 
 **Reporting recurrence 2026-10-09 (ACTUAL_MEASURED):** Closing output must distinguish requested state from completed writes across the same boundary. The summary fixture initially inferred registration removal from a disabled deny choice, but the installer retained its neutral registration. `scripts/generate-managed-hook-desired-state.mjs` (search: `retainRegistrationWhenDisabled`) publishes that retention contract; Stop registration does not have that retention. A non-Git fixture also lacked a Stop registration before apply, so absence afterward could not prove removal. `test/integration/setup-install-upgrade-summary.test.ts` (search: `names replaced local content and disabled registration removals after verification`) now establishes the initial registration in a Git fixture, verifies actual Stop removal and deny retention, and couples the closing output to target bytes. `src/cli/install-summary.ts` (search: `completedHookChanges`) compares registry readings before and after apply rather than treating preview edit phrases or flags as results. For failure injection, ensure a changed baseline or missing selected receipt reaches the required write: preservable local edits and identical state bytes legitimately skip those failure boundaries.
+
+**Claim recurrence 2026-11-28 (ACTUAL_MEASURED):** The PR #71 fix initially let a preserved retired symlink through admission, but the public installer still requested a write claim for the path and refused the install. Use the same preserved-retirement predicate for admission and the claim set. Verify the ordinary install preserves the link and that explicit force still fails. Evidence: `src/cli/managed-setup-admission.ts` (search: `isPreservedRetiredPath`), `src/cli/install-command.ts` (search: `acquireManagedInstallClaims`), and `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `preserves a retired playbook symlink`).
+
+**Apply recurrence 2026-11-28 (ACTUAL_MEASURED):** A hard-linked retired playbook passed admission but stopped the public installer during cleanup. Apply recognized symlinks separately and still ran write-target validation on hard links. Keep unsafe or unreadable retired files when cleanup inspects them. Evidence: `src/cli/installer/apply.ts` (search: `retireOldPlaybook`) and `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `preserves a hard-linked retired playbook`).
 
 ## Footgun: Optional-hook agent profiles break when installer treats hooks as universal
 

@@ -50,7 +50,7 @@ Reuse 2-3 overlapping session logs instead of re-deriving context.
 
 **The gate rule:** Infer supplied answers. With clear intent, target, and boundary, confirm once and proceed. Ask only at a genuine fork. A detailed brief or "skip Step 0" proceeds.
 
-**Planning/interview boundary:** Default interview budget: one decision-bearing question at a time, no more than three per message or three rounds. Extend only when the user requests a deeper interview. When the budget is exhausted, present remaining choices with a recommended default and stop. Planning permission is not implementation permission. Do not implement unless the original directive authorized implementation or the user now selects it.
+**Planning/interview boundary:** Default interview budget: one decision-bearing question at a time, no more than three per message or three rounds. Extend only when the user requests a deeper interview. goat-critique planning intake uses its own adaptive budget, normally five to twenty questions in batches of three to five. When the budget is exhausted, present remaining choices with a recommended default and stop. Planning permission is not implementation permission. Do not implement unless the original directive authorized implementation or the user now selects it.
 
 A clear implementation directive proceeds after required READ and SCOPE; do not manufacture interview questions. "Update the plan" means write the plan, not execute it: a plan-only request stops at the handoff while explicit implementation authorizes execution.
 

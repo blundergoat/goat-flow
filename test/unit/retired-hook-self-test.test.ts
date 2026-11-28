@@ -102,3 +102,113 @@ test("read-only content audit includes nested instructions and leaves the suppli
   );
   assert.deepEqual([...files.entries()], before);
 });
+
+test("instruction audit covers all four retired hook entrypoints", () => {
+  const text = [
+    "bash .goat-flow/hooks/post-turn-safety.sh --self-test",
+    "bash .goat-flow/hooks/gruff-code-quality.sh --self-test",
+  ].join("\n");
+  const findings = scanContentQuality("CLAUDE.md", text).filter(
+    (row) => row.rule === RULE,
+  );
+  assert.deepEqual(
+    findings.map((row) => [row.line, row.suggestion]),
+    [
+      [
+        1,
+        "Run `node .goat-flow/hooks/post-turn-safety.mjs --self-test` instead.",
+      ],
+      [
+        2,
+        "Run `node .goat-flow/hooks/gruff-code-quality.mjs --self-test` instead.",
+      ],
+    ],
+  );
+});
+
+// Builds an in-memory project whose script, CI workflow and package.json call removed hook files; a lesson and a Node fixture string stay quiet.
+test("content audit reports each retired-path call in scripts, CI workflows and package.json", () => {
+  const files = new Map([
+    [
+      "scripts/preflight.sh",
+      [
+        "#!/usr/bin/env bash",
+        "if [ -f .goat-flow/hooks/deny-dangerous.sh ]; then",
+        "  bash .goat-flow/hooks/deny-dangerous.sh --self-test",
+        "fi",
+        "shellcheck .goat-flow/hooks/*/*.sh",
+        "shellcheck .goat-flow/hooks/local-*.sh",
+        "shellcheck .goat-flow/hooks/*.sh",
+      ].join("\n"),
+    ],
+    ["scripts/clean.sh", "rm -rf dist\n"],
+    [
+      "scripts/profile.mjs",
+      'writeFileSync(path, ".goat-flow/hooks/deny-dangerous.sh");\n',
+    ],
+    [
+      ".github/workflows/ci.yml",
+      "      - run: bash .goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh\n",
+    ],
+    [
+      "package.json",
+      '{ "scripts": { "hooks": "bash ./.goat-flow/hooks/deny-git-mutations.sh --check" } }\n',
+    ],
+    [
+      ".goat-flow/learning-loop/lessons/hooks.md",
+      "The old `.goat-flow/hooks/deny-dangerous.sh` runtime was retired.\n",
+    ],
+  ]);
+  const directories = new Map([
+    ["scripts", ["preflight.sh", "clean.sh", "profile.mjs"]],
+    [".github/workflows", ["ci.yml"]],
+    [".goat-flow/learning-loop/lessons/", ["hooks.md"]],
+  ]);
+  const ctx = makeCtx({
+    fs: stubFS({
+      exists: (path) => files.has(path) || directories.has(path),
+      isReadableDirectory: (path) => directories.has(path),
+      listDir: (path) => directories.get(path) ?? [],
+      readFile: (path) => files.get(path) ?? null,
+      glob: (pattern) =>
+        pattern === ".goat-flow/hooks/*.sh"
+          ? [".goat-flow/hooks/local-lint.sh"]
+          : [],
+    }),
+  });
+
+  const findings = runContentQualityChecks(ctx).findings.filter(
+    (finding) => finding.rule === "retired-path-reference",
+  );
+
+  assert.deepEqual(
+    findings.map((finding) => [finding.path, finding.line, finding.suggestion]),
+    [
+      [
+        ".github/workflows/ci.yml",
+        1,
+        "Use `node .goat-flow/hooks/deny-dangerous.mjs --self-test=full and node .goat-flow/hooks/deny-git-mutations.mjs --self-test=full` instead.",
+      ],
+      [
+        "package.json",
+        1,
+        "Use `node .goat-flow/hooks/deny-git-mutations.mjs --check` instead.",
+      ],
+      [
+        "scripts/preflight.sh",
+        2,
+        "Use `node .goat-flow/hooks/deny-dangerous.mjs` instead.",
+      ],
+      [
+        "scripts/preflight.sh",
+        3,
+        "Use `node .goat-flow/hooks/deny-dangerous.mjs --self-test` instead.",
+      ],
+      [
+        "scripts/preflight.sh",
+        5,
+        "This glob targets retired Bash hooks. To check the Node hooks, use `.goat-flow/hooks/**/*.mjs`.",
+      ],
+    ],
+  );
+});

@@ -486,13 +486,13 @@ describe("goat-qa application of test-selection doctrine", () => {
   });
 
   it("loads the owner without weakening risk, coverage, or actor boundaries", () => {
-    // All QA copies must retain the report-only boundary and distinguish structural checks from behavioral evidence.
+    // All QA copies must keep QA from writing tests and distinguish structural checks from behavioral evidence.
     for (const qaRoot of QA_ROOTS) {
       const skillPath = `${qaRoot}/SKILL.md`;
       const content = readFileSync(skillPath, "utf8");
       assert.match(content, /test-selection\.md/u, skillPath);
-      assert.match(content, /It neither writes nor runs tests/u, skillPath);
-      assert.match(content, /NEVER:[^\n]+Run or write tests/u, skillPath);
+      assert.match(content, /It never writes tests/u, skillPath);
+      assert.match(content, /NEVER:[^\n]+Write or edit tests/u, skillPath);
       assert.match(content, /### Exhaustive priority matrix/u, skillPath);
       assert.match(content, /STRUCTURAL is not BEHAVIOURAL/u, skillPath);
       assert.match(

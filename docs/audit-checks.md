@@ -1,9 +1,9 @@
 # Deterministic Audit Checks
 
-`npx @blundergoat/goat-flow@latest audit` currently has 39 executed check rows and 38 unique stable check ids:
+`npx @blundergoat/goat-flow@latest audit` currently has 40 executed check rows and 39 unique stable check ids:
 
 - **20 build checks**: 16 setup-scope checks plus 4 agent-scope checks
-- **19 harness checks**: additional checks enabled by `--harness`
+- **20 harness checks**: additional checks enabled by `--harness`
 
 The totals differ because `session-logs` runs once in setup scope and once in the Recovery harness concern. The duplicate id intentionally represents the same invariant in two execution scopes; changing it would change downstream SARIF rule identity.
 
@@ -62,7 +62,7 @@ Aggregate-mode nuance:
 
 `--check-content` runs three scanners and describes their coverage in text, Markdown and JSON:
 
-- Prose, readiness and semantic anchors in selected Markdown. Curated guidance and installed skills receive prose checks; learning-loop buckets receive incident-appropriate rules, and additional eligible Markdown receives readiness and anchor checks. Local working artifacts are excluded.
+- Prose, readiness and semantic anchors in selected Markdown. Curated guidance and installed skills receive prose checks; learning-loop buckets receive incident-appropriate rules, and additional eligible Markdown receives readiness and anchor checks. Local working artifacts are excluded. The same scanner reports calls of retired goat-flow hook paths in shell scripts under `scripts/`, CI workflows and `package.json`, and retired hook self-tests in instruction files; the [guardrails guide](guardrails.md#replacing-retired-bash-hook-commands) lists each replacement.
 - Supported framework claims in current guidance against live goat-flow registries and source. These checks cover named counts, paths, removed-command examples, lifetime evidence and specific semantic claims; historical learning-loop records remain outside this framework-claim scan.
 - Release count claims in `CHANGELOG.md` and the optional .goat-flow/scratchpad/release.md draft against available matching manifest snapshots. Missing snapshots are skipped.
 
@@ -70,7 +70,7 @@ Removed top-level commands are matched only when written as a code-span or shell
 
 ## Harness Checks
 
-`npx @blundergoat/goat-flow@latest audit . --harness` adds **19** deterministic harness-completeness checks on top of the 20 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
+`npx @blundergoat/goat-flow@latest audit . --harness` adds **20** deterministic harness-completeness checks on top of the 20 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
 
 | Concern | Check id | Type | What it validates |
 |---------|----------|------|-------------------|
@@ -79,11 +79,12 @@ Removed top-level commands are matched only when written as a code-span or shell
 | Context | `doc-paths-resolve` | `integrity` | Router-table paths, `.goat-flow/architecture.md` backtick paths, and curated audit/glossary docs backtick paths resolve to real files |
 | Context | `instruction-sections-present` | `advisory` | Structural smoke check for required hot-path headings: Truth Order, Execution Loop, Definition of Done, and Router Table |
 | Context | `boundary-guidance-present` | `advisory` | Structural smoke check for workspace boundary guidance (controlling workspace vs target workspace separation) |
-| Constraints | `deny-covers-secrets` | `integrity` | Direct literal secret-path reads are blocked by the deny layer; agents with file-read deny need both settings/Codex permission coverage and Bash-hook direct-path coverage. Codex permission coverage is limited to exact paths and trailing `/**` subtrees accepted by the current CLI. Script-only agents can pass with `assurance: "limited"` because file-read deny is unavailable; a 100 constraints score means known deny-pattern coverage, not broad file read/write enforcement. |
+| Context | `instruction-release-stamp` | `advisory` | Score-only: no consumer instruction heading carries a goat-flow release, such as `goat-flow 1.19.0` or the framework's `- vX.Y.Z (date)` form, because `.goat-flow/config.yaml` records the installed release. Product versions are kept, and the goat-flow framework checkout is skipped |
+| Constraints | `deny-covers-secrets` | `integrity` | Direct literal secret-path reads are blocked by the deny layer; agents with file-read deny need both settings/Codex permission coverage and Bash-hook direct-path coverage. Codex permission coverage is limited to exact paths and trailing `/**` subtrees accepted by the current CLI. Script-only agents can pass with `assurance: "limited"` because file-read deny is unavailable; a 100 constraints score means known deny-pattern coverage, not broad file read/write enforcement. For Claude it also lists, as notes, the template deny rules the settings lack; they never fail the check, because install never adds rules to existing settings and a project may have removed one on purpose. |
 | Constraints | `deny-blocks-dangerous` | `integrity` | Deny patterns block broad recursive deletion, all git push (ADR-025), and `chmod` |
 | Constraints | `deny-blocks-pipe-to-shell` | `advisory` | Deny patterns block `curl \| bash` and `wget \| sh` pipe-to-shell execution |
 | Constraints | `deny-hook-registered` | `integrity` | Both policy hooks exist and are registered at their canonical paths in the correct pre-tool hook slot |
-| Constraints | `settings-rules-matched` | `advisory` | JSON permission rules (deny/allow/ask) use forms Claude Code consults. Its [permissions documentation](https://code.claude.com/docs/en/permissions) says file permissions consult `Edit(path)` and `Read(path)`, while path rules for `Write`, `NotebookEdit`, `Glob`, and legacy `MultiEdit` are accepted but not consulted. The audit reports inert forms as a score-only warning. An approved install normalizes or removes stale deny rules and prints the changes, but preserves allow and ask arrays verbatim. Review those separately: activating an inert allow or ask rule changes its meaning. |
+| Constraints | `settings-rules-matched` | `advisory` | JSON permission rules (deny/allow/ask) use forms Claude Code consults. Its [permissions documentation](https://code.claude.com/docs/en/permissions) says file permissions consult `Edit(path)` and `Read(path)`, while path rules for `Write`, `NotebookEdit`, `Glob`, and legacy `MultiEdit` are accepted but not consulted. The audit reports inert forms as a score-only warning. An approved install normalizes or removes stale deny rules and prints the changes, but preserves allow and ask arrays verbatim. Review those separately: activating an inert allow or ask rule changes its meaning. It also warns, score-only, when `.claude/settings.json` lacks `attribution.commit: ""`, `attribution.pr: ""` or `attribution.sessionUrl: false`, which setup writes; install preserves existing settings, so it never adds them. |
 | Verification | `hooks-registered` | `integrity` | Post-turn hook registrations and on-disk hook files stay in sync |
 | Verification | `commit-guidance` | `advisory` | For targets containing `.git`, commit guidance exists at preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md`; targets without `.git` skip the check, and old GitHub commit-guidance locations are flagged as misplaced |
 | Verification | `evidence-before-claims` | `metric` | Present instruction files carry the Hallucination red-flags clauses and Rationalisations-to-reject pointer |
@@ -102,7 +103,7 @@ Removed top-level commands are matched only when written as a code-span or shell
 | `npx @blundergoat/goat-flow@latest audit . --agent <id>` | Same 20 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
 | `npx @blundergoat/goat-flow@latest audit . --check-drift` | 20 build checks + artifact and instruction drift | Validates canonical sources, installed mirrors, IDs, frontmatter, referenced resources, and sibling instruction parity |
 | `npx @blundergoat/goat-flow@latest audit . --check-content` | 20 build checks + content scans | Checks selected Markdown, supported framework claims and release counts against available snapshots |
-| `npx @blundergoat/goat-flow@latest audit . --harness` | 20 build + 19 harness = 39 checks | Adds harness completeness, still deterministic |
+| `npx @blundergoat/goat-flow@latest audit . --harness` | 20 build + 20 harness = 40 checks | Adds harness completeness, still deterministic |
 
 The Recovery metric `milestone-commands-named` checks instruction text for start, stop/finalize and immediate ticking. Missing clauses affect its score, not audit status; local plan files are never read.
 

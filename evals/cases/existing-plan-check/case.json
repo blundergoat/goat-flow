@@ -1,0 +1,45 @@
+{
+  "id": "existing-plan-check",
+  "fixture": "checkout",
+  "request": "/goat-critique Check the existing plan in .goat-flow/plans/checkout-savings/ against the current code and ask me about anything that is out of date.",
+  "owners": [
+    "workflow/skills/goat-critique/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    "workflow/skills/goat-critique/references/interactive-intake.md",
+    "workflow/skills/goat-critique/references/rubric-examples.md",
+    "workflow/skills/goat-critique/references/sub-agent-directives.md"
+  ],
+  "rows": [
+    {
+      "id": "project-bytes",
+      "kind": "mechanical",
+      "label": "Fixture bytes match the before snapshot"
+    },
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "stale-facts",
+      "kind": "mechanical",
+      "label": "The answer identifies at least three seeded stale facts"
+    },
+    {
+      "id": "correct-path",
+      "kind": "mechanical",
+      "label": "The working discount module is left out of the stale findings"
+    },
+    {
+      "id": "no-critique-verdict",
+      "kind": "mechanical",
+      "label": "The answer contains no critique verdict"
+    },
+    {
+      "id": "existing-plan-questions",
+      "kind": "judgement",
+      "label": "Review choices, recommendations, permission to apply, and the named plan as the only edit target"
+    }
+  ]
+}

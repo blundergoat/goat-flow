@@ -360,6 +360,29 @@ describe("quality report contract: audit evidence", () => {
     assertDisclosesIneffectiveHook("harness", auditReport, "FAIL", "DANGER");
   });
 
+  // A newer project's hooks are not judged by an older CLI, so the assessor must see why instead of a zero-count warning.
+  it("states why hook coverage was skipped", () => {
+    const reason =
+      "the project's goat-flow 999.0.0 is newer than this CLI, whose hook registry cannot judge the installed hooks";
+    const auditReport = {
+      ...makePassingAuditWithHookGap("warning"),
+      hookCoverage: {
+        ...makeIneffectiveHookCoverage("warning"),
+        selectedAgents: [],
+        hooks: [],
+        skipped: reason,
+      },
+    };
+    const prompt = composeQuality({
+      ...makeInput("harness"),
+      auditReport,
+    }).prompt;
+    assert.ok(
+      prompt.includes(`- **Effective Hook Coverage**: SKIP (${reason})`),
+    );
+    assert.doesNotMatch(prompt, /required surface\(s\) ineffective/u);
+  });
+
   it("names the agents a coverage result covers", () => {
     // A one-agent audit and an all-agent audit render the same sentence, so the row must say which scope produced it.
     const narrowed = makePassingAuditWithHookGap();

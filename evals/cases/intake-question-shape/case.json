@@ -1,0 +1,50 @@
+{
+  "id": "intake-question-shape",
+  "fixture": "checkout",
+  "request": "/goat-critique Interview me to plan the loyalty points feature in docs/briefs/loyalty-points.md before we build it. Write the plan to .goat-flow/plans/loyalty-points/.",
+  "owners": [
+    "workflow/skills/goat-critique/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    "workflow/skills/goat-critique/references/interactive-intake.md",
+    "workflow/skills/goat-critique/references/rubric-examples.md",
+    "workflow/skills/goat-critique/references/sub-agent-directives.md"
+  ],
+  "rows": [
+    {
+      "id": "project-bytes",
+      "kind": "mechanical",
+      "label": "Fixture bytes match the before snapshot"
+    },
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "no-agent-calls",
+      "kind": "mechanical",
+      "label": "The transcript contains no critic launches"
+    },
+    {
+      "id": "intake-batch",
+      "kind": "mechanical",
+      "label": "The first batch contains three to five questions"
+    },
+    {
+      "id": "intake-choices",
+      "kind": "mechanical",
+      "label": "Each question has three choices and a recommendation, with room for another answer"
+    },
+    {
+      "id": "no-critique-verdict",
+      "kind": "mechanical",
+      "label": "The answer contains no critique verdict"
+    },
+    {
+      "id": "intake-topics",
+      "kind": "judgement",
+      "label": "Review the questions for discount basis, rounding, expiry and refunds and for reopening settled points"
+    }
+  ]
+}

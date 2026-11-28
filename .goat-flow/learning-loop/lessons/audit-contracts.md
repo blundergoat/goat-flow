@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-11-13
+last_reviewed: 2026-11-25
 ---
 
 **Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
@@ -177,3 +177,48 @@ The full gates then caught an unsupported standalone `Evidence` metadata label a
 **Recurrence 2026-10-01 (review helper):** The consumer helper combined dashboard files with CLI compiler settings, so classic browser globals appeared to have only local references. A revised helper then asserted five removed functions, but the compared source contained four; a follow-up diagnostic also failed to parse. The agent stopped patching that helper, reread the two compiler configurations and the actual declaration diff, then reran separate native programs with import-alias and awaited-import destructuring resolution. The completed receipt includes the live dashboard decoder caller and both CLI/server history callers. Evidence: `tsconfig.json` (search: `src/dashboard`), `tsconfig.dashboard.json` (search: `isolatedModules`), `src/dashboard/dashboard-setup-quality.ts` (search: `.map((row) => readQualityHistoryRow(row))`). The final preflight then rejected the added gitignored receipt citation as a durable evidence anchor. The entry now cites the tracked configuration and decoder caller; task-local execution receipts remain in the milestone. These were helper-evidence failures; no product behavior changed.
 
 **Recurrence 2026-11-13 (capture checks):** Two local checks imposed a different contract on valid capture inputs. A Python text read normalized a Windows fixture's CRLF bytes before comparing them with the packet. A review-index builder then assumed that Windows and WSL transcript extracts put their raw-source hash in the same field. Both checks stopped before their dependent writes. Reading the fixture without newline conversion and inspecting both extract shapes corrected the checks; the approved packets and capture evidence did not change. Preserve bytes when checking a digest-bound fixture, and inspect each producer's actual fields before aggregating its output. The capture metadata contract is `src/cli/hook-provider-captures.ts` (search: `artifactSha256`).
+
+## Lesson: A path scan over source files reports test data as calls
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** Before a content rule treats a path string as a call, limit it to files that execute commands (shell scripts, workflow YAML, package scripts) and run it against this repository's own tree.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** A string literal in `.mjs` or `.ts` source is as often fixture data as a command, and the content scan fails on any warning, so one fixture can turn a project's audit red. Scope caller scans by file kind, pin a quiet fixture-string case, and run `goat-flow audit . --check-content` on this repository before calling the rule done. Evidence anchors: `src/cli/retired-paths.ts` (search: `const SHELL_SCRIPT`), `test/unit/retired-hook-self-test.test.ts` (search: `a lesson and a Node fixture string stay quiet`), `src/cli/audit/audit-content.ts` (search: `warnings === 0 ? "pass" : "fail"`).
+
+**What happened:** A new rule reporting calls of retired hook paths first scanned every file under `scripts/`. Its own repository's content audit then failed on two JSON strings in a dashboard profiling script that writes a fake old-layout project. Limiting the scan to shell scripts, workflow YAML and `package.json` cleared it, and the real pre-upgrade project still showed every CI, preflight and instruction call.
+
+## Lesson: A warning folded into an existing check inherits that check's failure impact
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** Before recommending which existing harness check should carry a new warning, read that check's type and `failureImpact` and state the audit outcome a failure produces.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** An advisory check fails its whole concern unless it declares `failureImpact: "score-only"`, and impact is set per check, not per finding. A warning meant to inform must go in a score-only check, or it fails the audit for every project that has the gap. Evidence anchors: `src/cli/audit/harness-scoring.ts` (search: `export function classifyCheckImpact`), `src/cli/audit/harness/check-constraints.ts` (search: `function claudeAttributionGaps`).
+
+**What happened:** A missing-attribution warning was first recommended for, and built into, the commit-guidance check because the topic matched. That check blocks, so a real upgraded project without the three values would have failed its audit, though install never adds them. The impact was read only when a probe showed advisory failures marked scope-failing. The warning moved to the score-only settings check after the owner chose again.
+
+## Lesson: A new harness check ID moves count claims in files outside the approved docs
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** Before proposing a new audit check ID, run the content audit once with the check registered and list every file whose count it flags, so the scope question names them up front.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Check counts are claimed in docs, the landing page, the dashboard About page, the glossary, the architecture and code-map files, CONTRIBUTING and registry tests. `node --import tsx src/cli/cli.ts audit . --agent claude --check-content` names each stale claim; `test/unit/provenance-types.test.ts` (search: `expectedRegisteredCheckCount`) and `test/unit/audit-command/scoring-model.test.ts` (search: `keeps unrelated concern scores`) pin the registry size and a concern score. Evidence anchors: `src/cli/audit/check-factual-claims.ts` (search: `harness checks across 5 concerns`).
+
+**What happened:** A score-only warning needed its own check, because the only score-only check covered another concern. Approval covered `docs/` edits, but the content audit then flagged stale counts in four files outside that area, one of them a protected boundary, and three tests failed on the registry size. Work stopped for a second approval that one command at scope time would have avoided.
+
+## Lesson: A finding that quotes a target file's text must pass the single-line character policy
+
+**Status:** active | **Created:** 2026-11-25
+**Decision changed:** When a check copies text from the audited project into a finding, strip it with the shared single-line policy before it reaches a message.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Harness findings reach terminal output unfiltered, and a target checkout is untrusted input. Apply `UNSAFE_SINGLE_LINE_CHARACTER` from `src/cli/terminal-safe-text.ts` (search: `export const UNSAFE_SINGLE_LINE_CHARACTER`) globally, as `src/cli/audit/harness/check-release-stamp.ts` (search: `UNSAFE_HEADING_CHARACTERS`) does, and add a test case with an escape and a bidirectional override.
+
+**What happened:** A new check quoted an instruction file's first heading in its finding. A review probe put an ESC sequence and a right-to-left override in the heading, and both reached the finding text, so a crafted checkout could rewrite or reorder a line of the auditor's terminal. The heading now passes through the shared policy, and a test pins it.
+

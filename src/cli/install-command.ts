@@ -7,7 +7,10 @@
 import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { inspectPolicyUpgrade } from "../../workflow/hooks/hook-policy-state.cjs";
-import { migrateLegacyLocalState } from "./local-state-migration.js";
+import {
+  backUpInstallState,
+  migrateLegacyLocalState,
+} from "./local-state-migration.js";
 import { readManagedInstallStateFacade } from "./managed-setup-state.js";
 
 import { getAgentProfile, getAgentProfiles } from "./agents/registry.js";
@@ -15,11 +18,20 @@ import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
 import { pathWriteClaimInspectCommand } from "./claims-command.js";
 import type { ParsedCLI } from "./cli-types.js";
+import { pinnedGoatFlowCommand } from "./advised-command.js";
 import { createFS } from "./facts/fs.js";
 import { applyInstaller, installerVersionBlocker } from "./installer/apply.js";
 import {
+  claudePermissionsNeedMigration,
+  codexPermissionProfileNeedsMigration,
+  hasDeprecatedCodexHooksFlag,
+  permissionChangeLines,
+  withRuleNames,
+} from "./install-settings-preview.js";
+import {
   emitInstallSummary,
   hookRegistrationEdit,
+  observeInstallFileModes,
   observeInstallHookRegistrations,
   renderInstallSummary,
 } from "./install-summary.js";
@@ -31,7 +43,15 @@ import {
   recordManagedInstallAfterVerification,
   type ManagedSetupPreview,
 } from "./managed-setup-preview.js";
-import { managedSetupAdmissionFailure } from "./managed-setup-admission.js";
+import {
+  settleManagedSetupPreview,
+  type ManagedSetupAgentPath,
+} from "./managed-setup-preview-summary.js";
+import {
+  isPreservedRetiredPath,
+  managedSetupAdmissionFailure,
+  managedSetupAuthorityWarnings,
+} from "./managed-setup-admission.js";
 import { quoteManagedInstallProjectArgument } from "./managed-install-evidence.js";
 import type { ManagedSetupAuthority } from "./managed-setup-authority.js";
 import { readManagedTargetEvidence } from "./managed-setup-write-set.js";
@@ -318,343 +338,6 @@ function addPendingMigration(
   migrations.set(path, existing ? `${existing} ${summary}` : summary);
 }
 
-/**
- * Return whether supplied Codex TOML still declares the retired feature key.
- * Side effects: updates only local parser state and never changes the supplied text or filesystem.
- */
-function hasDeprecatedCodexHooksFlag(settingsText: string): boolean {
-  let section = "";
-  // Inspect saved feature assignments to decide whether the user's Codex settings need the retired flag migration.
-  for (const line of settingsText.split(/\r?\n/u)) {
-    const sectionMatch = /^\s*\[([^\]]+)\]\s*(?:#.*)?$/u.exec(line);
-    // Track the TOML section so a hook flag is read in its actual settings table.
-    if (sectionMatch) {
-      section = sectionMatch[1]?.trim() ?? "";
-      continue;
-    }
-    const assignment =
-      /^\s*([A-Za-z0-9_.-]+)\s*=\s*(?:true|false)\s*(?:#.*)?$/u.exec(line);
-    // Unrelated or non-boolean assignments cannot establish the retired hook feature choice.
-    if (!assignment) continue;
-    const rawKey = assignment[1] ?? "";
-    const normalizedKey =
-      section === "features" && !rawKey.includes(".")
-        ? `features.${rawKey}`
-        : rawKey;
-    // A retired hook flag makes these settings eligible for the install preview's migration notice.
-    if (normalizedKey === "features.codex_hooks") return true;
-  }
-  return false;
-}
-
-/** Canonical Codex deny patterns whose absence makes the active permission profile migratable. */
-const CODEX_CANONICAL_DENY_PATTERNS = [
-  "**/.env",
-  "**/.env.local",
-  "**/.env.development",
-  "**/.env.production",
-  "**/.env.staging",
-  "**/.env.test",
-  "**/.envrc",
-  "**/.env.*.local",
-  "**/.ssh/**",
-  "**/.aws/**",
-  "**/.gnupg/**",
-  "**/.config/gcloud/**",
-  "**/.docker/**",
-  "**/.kube/**",
-  "**/.npmrc",
-  "**/.netrc",
-  "**/.git-credentials",
-  "**/.config/gh/hosts.yml",
-  "**/.pgpass",
-  "**/.pypirc",
-  "**/*.pem",
-  "**/*.key",
-  "**/*.pfx",
-] as const;
-
-/**
- * Retire earlier Codex denies that also blocked application names such as secrets routes and credentials.ts providers.
- *
- * A profile retaining one needs refresh; identical user-added patterns cannot be distinguished, so install reports each removal.
- */
-const CODEX_RETIRED_DENY_PATTERNS = [
-  "**/secrets/**",
-  "**/credentials*",
-] as const;
-
-/** Claude deny rules goat-flow used to ship and now removes on upgrade; the Bash deny hook owns shell command policy. */
-const CLAUDE_RETIRED_DENY_RULES = new Set([
-  "Bash(*sudo *)",
-  "Bash(*mkfs*)",
-  "Bash(*dd if=*)",
-  "Bash(*git reset --hard*)",
-  "Read(**/secrets/**)",
-  "Edit(**/secrets/**)",
-  "Read(**/credentials*)",
-  "Edit(**/credentials*)",
-]);
-
-/**
- * Legacy file-only rules expand to paired home/project directory protection during upgrade.
- * Current credential-store rules are inspected separately so a complete pair keeps its saved order.
- */
-const CLAUDE_LEGACY_CREDENTIAL_FILE_RULES = new Set([
-  "Read(**/.docker/config.json)",
-  "Read(**/.kube/config)",
-  "Edit(**/.docker/config.json)",
-  "Edit(**/.kube/config)",
-]);
-
-/** Credential stores whose existing Claude deny receives a missing home or project partner during setup. */
-const CLAUDE_PAIRED_CREDENTIAL_STORES = new Set([
-  ".ssh/**",
-  ".aws/**",
-  ".gnupg/**",
-  ".config/gcloud/**",
-  ".docker/**",
-  ".kube/**",
-  ".npmrc",
-  ".pypirc",
-  ".netrc",
-  ".git-credentials",
-  ".config/gh/hosts.yml",
-  ".pgpass",
-]);
-
-/** Escape literal text before matching one TOML key. */
-function escapeRegularExpression(literalText: string): string {
-  return literalText.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-}
-
-/** Return whether the selected Codex permission profile has any configured surface. */
-function hasCodexPermissionSurface(
-  settingsText: string,
-  defaultProfile: string,
-  hasDefaultProfile: boolean,
-): boolean {
-  const escapedProfile = escapeRegularExpression(defaultProfile);
-  const profileSections = [
-    new RegExp(`^\\s*\\[\\s*permissions\\.${escapedProfile}\\s*\\]\\s*$`, "mu"),
-    new RegExp(
-      `^\\s*\\[\\s*permissions\\.${escapedProfile}\\.filesystem(?:\\..+)?\\s*\\]\\s*$`,
-      "mu",
-    ),
-  ];
-  return (
-    hasDefaultProfile ||
-    profileSections.some((section) => section.test(settingsText))
-  );
-}
-
-/** Active Codex permission-profile tables separated by the policy they carry. */
-interface CodexPermissionProfileText {
-  profile: string;
-  filesystem: string;
-}
-
-/**
- * Read only the selected Codex permission profile's TOML regions.
- *
- * The standalone installer rewrites these regions and preserves every other profile, so preview
- * must not let an inactive profile satisfy or trigger an active-profile migration check.
- */
-function selectedCodexPermissionProfileText(
-  settingsText: string,
-  defaultProfile: string,
-): CodexPermissionProfileText {
-  const escapedProfile = escapeRegularExpression(defaultProfile);
-  const profileSection = new RegExp(
-    `^\\s*\\[\\s*permissions\\.${escapedProfile}\\s*\\]\\s*$`,
-    "u",
-  );
-  const filesystemSection = new RegExp(
-    `^\\s*\\[\\s*permissions\\.${escapedProfile}\\.filesystem(?:\\..+)?\\s*\\]\\s*$`,
-    "u",
-  );
-  const anySection = /^\s*\[[^\]]+\]\s*$/u;
-  const selectedLines: Record<keyof CodexPermissionProfileText, string[]> = {
-    profile: [],
-    filesystem: [],
-  };
-  let selectedSection: keyof CodexPermissionProfileText | null = null;
-
-  // Collect only the active Codex profile's settings before deciding what the install will refresh.
-  for (const line of settingsText.split(/\r?\n/u)) {
-    // The active profile table supplies its base permission metadata.
-    if (profileSection.test(line)) {
-      selectedSection = "profile";
-      // The active filesystem table supplies the user's current path restrictions.
-    } else if (filesystemSection.test(line)) {
-      selectedSection = "filesystem";
-      // Another table ends the active profile region and remains outside this migration check.
-    } else if (anySection.test(line)) {
-      selectedSection = null;
-    }
-    // Only active profile lines contribute to the user's permission migration decision.
-    if (selectedSection !== null) selectedLines[selectedSection].push(line);
-  }
-
-  return {
-    profile: selectedLines.profile.join("\n"),
-    filesystem: selectedLines.filesystem.join("\n"),
-  };
-}
-
-/**
- * Build the line matcher for one workspace-root deny entry as the profile file writes it.
- *
- * @param pattern - exact glob key, quoted either way in the TOML line
- * @returns multiline regex that matches `"<pattern>" = "deny"` on its own line
- */
-function codexDenyLinePattern(pattern: string): RegExp {
-  return new RegExp(
-    `^[ \\t]*["']${escapeRegularExpression(pattern)}["'][ \\t]*=[ \\t]*["']deny["']`,
-    "mu",
-  );
-}
-
-/** Return whether any canonical Codex deny rule is absent from the selected profile. */
-function isCanonicalCodexDenyMissing(settingsText: string): boolean {
-  return CODEX_CANONICAL_DENY_PATTERNS.some(
-    (pattern) => settingsText.match(codexDenyLinePattern(pattern)) === null,
-  );
-}
-
-/**
- * Return whether the selected profile still carries a deny pattern goat-flow retired.
- * A user upgrading from an older template sees "refresh the Codex permission profile" in the preview and the pattern named in the output.
- *
- * @param settingsText - filesystem region of the active profile; an empty region reports false
- * @returns true when at least one retired pattern is still denied
- */
-function hasRetiredCodexDenyPattern(settingsText: string): boolean {
-  return CODEX_RETIRED_DENY_PATTERNS.some(
-    (pattern) => settingsText.match(codexDenyLinePattern(pattern)) !== null,
-  );
-}
-
-/**
- * Return whether supplied Codex permission text triggers canonical migration.
- * Side effects: none; all matching reads only the supplied string.
- */
-function codexPermissionProfileNeedsMigration(settingsText: string): boolean {
-  const defaultProfile =
-    /^\s*default_permissions\s*=\s*["']([^"']+)["']/mu.exec(
-      settingsText,
-    )?.[1] ?? "goat-flow";
-  const hasDefaultProfile = /^\s*default_permissions\s*=/mu.test(settingsText);
-  // Without an active permission surface, this project has no existing Codex profile to refresh.
-  if (
-    !hasCodexPermissionSurface(settingsText, defaultProfile, hasDefaultProfile)
-  )
-    return false;
-
-  const selectedProfile = selectedCodexPermissionProfileText(
-    settingsText,
-    defaultProfile,
-  );
-  const hasLegacyAccess = /=\s*["']none["']/u.test(selectedProfile.filesystem);
-  const hasLegacyAnchor = /["']:project_roots["']/u.test(
-    selectedProfile.filesystem,
-  );
-  const missingWorkspaceExtension =
-    defaultProfile === "goat-flow" &&
-    hasDefaultProfile &&
-    !/^\s*extends\s*=\s*["']:workspace["']/mu.test(selectedProfile.profile);
-  return [
-    hasLegacyAccess,
-    hasLegacyAnchor,
-    missingWorkspaceExtension,
-    isCanonicalCodexDenyMissing(selectedProfile.filesystem),
-    hasRetiredCodexDenyPattern(selectedProfile.filesystem),
-  ].some(Boolean);
-}
-
-/**
- * Return whether supplied Claude permissions contain a rule install rewrites or removes.
- * Side effects: none; malformed JSON is treated as preserved, matching standalone apply.
- *
- * @param settingsText - current JSON bytes from a safe regular settings file
- *
- * @returns true only when a recognized stale rule would be changed
- * @throws Never; parse failures return false
- */
-function claudePermissionsNeedMigration(settingsText: string): boolean {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(settingsText) as unknown;
-  } catch {
-    // Hand-edited invalid JSON stays preserved during setup, so this preview names no permission-rule migration.
-    return false;
-  }
-  // Malformed settings cannot supply a Claude permission migration preview.
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-    return false;
-  const permissions = (parsed as Record<string, unknown>).permissions;
-  // A missing or malformed permissions object has no rule lists for this migration to inspect.
-  if (
-    permissions === null ||
-    typeof permissions !== "object" ||
-    Array.isArray(permissions)
-  )
-    return false;
-  const rules = (permissions as Record<string, unknown>).deny;
-  // Install preserves allow/ask spellings, including inert rules, until the owner reviews them.
-  return (
-    Array.isArray(rules) &&
-    rules.some((rule) => installRewritesClaudeRule(rule, rules))
-  );
-}
-
-/** Check whether the preview needs a missing home or project deny for a credential store the developer already protects. */
-function isIncompleteClaudeCredentialPair(
-  rule: string,
-  savedRules: readonly unknown[],
-): boolean {
-  const credentialRule = /^(Read|Edit)\((~\/|\*\*\/)(.+)\)$/u.exec(rule);
-  const credentialStore = credentialRule?.[3];
-  // An ordinary application path is outside the credential-store policy and receives no additional deny.
-  if (
-    !credentialRule ||
-    credentialStore === undefined ||
-    !CLAUDE_PAIRED_CREDENTIAL_STORES.has(credentialStore)
-  )
-    return false;
-  const otherLocation = credentialRule[2] === "~/" ? "**/" : "~/";
-  return !savedRules.includes(
-    `${credentialRule[1]}(${otherLocation}${credentialStore})`,
-  );
-}
-
-/**
- * Decide whether install would change one Claude permission rule during an upgrade.
- *
- * Only deny rules are normalized, retired, expanded, or paired across credential locations.
- * The caller excludes allow/ask choices from this migration.
- *
- * @param rule - one raw list entry; a non-string entry is left untouched and reports false
- * @param savedRules - entries in the same saved list; a missing partner requires migration, while a complete pair stays unchanged
- * @returns true when the standalone installer would remove or rewrite this entry
- */
-function installRewritesClaudeRule(
-  rule: unknown,
-  savedRules: readonly unknown[],
-): boolean {
-  // A non-string permission entry cannot identify a tool rule that setup rewrites.
-  if (typeof rule !== "string") return false;
-  // These retired tool spellings need repair before Claude can enforce the user's file rules.
-  if (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(.*\)$/u.test(rule)) return true;
-  return (
-    rule === "Read(**/.env*)" ||
-    rule === "Edit(**/.env*)" ||
-    CLAUDE_RETIRED_DENY_RULES.has(rule) ||
-    CLAUDE_LEGACY_CREDENTIAL_FILE_RULES.has(rule) ||
-    isIncompleteClaudeCredentialPair(rule, savedRules)
-  );
-}
-
 /** Name the selected provider's existing settings files that install may migrate. */
 function agentSettingsPaths(settingsFile: string, agent: AgentId): string[] {
   return agent === "claude"
@@ -674,16 +357,50 @@ function pendingAgentSettingsEdits(
     if (hasDeprecatedCodexHooksFlag(settingsText)) {
       edits.push("migrate the deprecated codex_hooks feature flag");
     }
-    // An outdated permission profile adds its refresh notice to the user's preview.
+    // An outdated permission profile adds its refresh notice, naming each rule the refresh changes.
     if (codexPermissionProfileNeedsMigration(settingsText)) {
-      edits.push("refresh the Codex permission profile");
+      edits.push(
+        withRuleNames(
+          "refresh the Codex permission profile",
+          permissionChangeLines(settingsText, agent),
+        ),
+      );
     }
   }
-  // Claude's stale permission rules add their repair notice to the user's preview.
+  // Claude's stale permission rules add their repair notice, naming each rule the repair changes.
   if (agent === "claude" && claudePermissionsNeedMigration(settingsText)) {
-    edits.push("repair stale, unmatched, or retired Claude permission rules");
+    edits.push(
+      withRuleNames(
+        "repair stale, unmatched, or retired Claude permission rules",
+        permissionChangeLines(settingsText, agent),
+      ),
+    );
   }
   return edits;
+}
+
+/**
+ * List every permission-rule change install will make to the selected provider's existing settings files, before it runs.
+ *
+ * @param projectPath - admitted project, read before any settings file changes
+ * @param agent - selected provider
+ * @returns lines of the form `<settings path>: <change>`; empty when no settings file changes a rule
+ */
+function pendingPermissionChanges(
+  projectPath: string,
+  agent: AgentId,
+): string[] {
+  const settingsFile = getAgentProfile(agent).settingsFile;
+  // A provider without settings has no permission rules to change.
+  if (settingsFile === null) return [];
+  return agentSettingsPaths(settingsFile, agent).flatMap((settingsPath) => {
+    const settingsText = readExistingTargetText(projectPath, settingsPath);
+    // A missing or unsafe settings file is left alone, so it has no changes to report.
+    if (settingsText === null) return [];
+    return permissionChangeLines(settingsText, agent).map(
+      (change) => `${settingsPath}: ${change}`,
+    );
+  });
 }
 
 /** Name in-place settings migrations for the selected provider and optional local override. */
@@ -863,7 +580,7 @@ function managedInstallClaimError(
 }
 
 /**
- * Capture and acquire the complete previewed target-and-state write set.
+ * Capture and acquire the previewed target-and-state write set, excluding retired paths that will be preserved.
  * Error behavior: throws an install-specific CLI error for reusable claim refusals; unexpected failures propagate.
  */
 function acquireManagedInstallClaims(
@@ -871,10 +588,12 @@ function acquireManagedInstallClaims(
   preview: ManagedSetupPreview,
 ): PathWriteClaimBatch {
   try {
-    const requests = preview.files.map((file) => ({
-      targetPath: file.path,
-      expectedIdentity: readPathWriteTargetIdentity(projectPath, file.path),
-    }));
+    const requests = preview.files
+      .filter((file) => !isPreservedRetiredPath(file))
+      .map((file) => ({
+        targetPath: file.path,
+        expectedIdentity: readPathWriteTargetIdentity(projectPath, file.path),
+      }));
     return acquirePathWriteClaims(projectPath, requests);
   } catch (error) {
     // A write-claim refusal becomes an install-specific recovery error before the project can be changed.
@@ -928,6 +647,9 @@ function buildInstallPreview(
     authority,
     pendingMigrations(options, agent),
   );
+  const siblingWrites: ManagedSetupAgentPath[] = [];
+  // Sibling rows can only add work, so the combined preview may pass only when the selected agent's preview already did.
+  const mayPass = preview.verdict === "pass";
   // Check installed sibling providers because shared Git protection may require changes beyond the selected agent.
   for (const sibling of getAgentProfiles()) {
     // The selected provider is already covered, and a provider without a hook file has no sibling migration row.
@@ -955,13 +677,22 @@ function buildInstallPreview(
       (file) => file.path === sibling.hookConfigFile,
     );
     // Add a sibling destination only once so the user sees one row per affected file.
-    if (row && !preview.files.some((file) => file.path === row.path))
+    if (row && !preview.files.some((file) => file.path === row.path)) {
       preview.files.push(row);
+      siblingWrites.push({ agent: sibling.id, path: row.path });
+    }
     // A blocked or unmanaged sibling file makes the shared install require review before replacement.
     if (row && (isBlockingManagedFile(row) || row.state === "unmanaged"))
       preview.verdict = "blocked";
   }
   preview.files.sort((left, right) => left.path.localeCompare(right.path));
+  // Sibling rows change the counts and can make a finished-looking install still need writes.
+  settleManagedSetupPreview(
+    options.projectPath,
+    preview,
+    mayPass,
+    siblingWrites,
+  );
   return preview;
 }
 
@@ -998,7 +729,7 @@ function managedInstallStateRecovery(
   agent: AgentId,
 ): CLIError {
   return new CLIError(
-    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/state/install/, then rerun: goat-flow install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`,
+    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/state/install/, then rerun: ${pinnedGoatFlowCommand(`install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`)}`,
     1,
   );
 }
@@ -1070,6 +801,16 @@ function runClaimedManagedInstall(
     options.projectPath,
     installPreview,
   );
+  // Modes are read before apply, which rewrites unchanged files with its own modes.
+  const modesBefore = observeInstallFileModes(
+    options.projectPath,
+    installPreview,
+  );
+  // Permission changes are read from the settings as they are now, because apply rewrites them.
+  const permissionChanges = pendingPermissionChanges(
+    options.projectPath,
+    agent,
+  );
   // V2 state and every old-reader marker become visible while the complete claim batch is held, before the Node writer mutates targets.
   prepareManagedInstallStateForApply(options.projectPath);
   applyInstaller({
@@ -1087,10 +828,19 @@ function runClaimedManagedInstall(
     retirementPaths: installPreview.files
       .filter((file) => file.action === "remove")
       .map((file) => file.path),
+    // An edited retired file named by --force-path is deleted only at the bytes this preview showed.
+    forcedRetirements: installPreview.files.flatMap((file) =>
+      file.action === "remove" &&
+      file.authority === "granted-path" &&
+      file.currentSha256 !== null
+        ? [{ path: file.path, sha256: file.currentSha256 }]
+        : [],
+    ),
+    // A reviewed registered runtime either keeps its file (migrate) or, when its exact path was named, deletes it (remove).
     reviewedRuntimePaths: installPreview.files
       .filter(
         (file) =>
-          file.action === "migrate" &&
+          ["migrate", "remove"].includes(file.action) &&
           ["granted-path", "granted-managed"].includes(file.authority),
       )
       .map((file) => file.path),
@@ -1119,7 +869,13 @@ function runClaimedManagedInstall(
   emitCommitGuidanceInstallResult(options.projectPath, agent);
   emitIndexGenerationInstallResult(options.projectPath);
   return Promise.resolve(
-    renderInstallSummary(options.projectPath, installPreview, hookObservations),
+    renderInstallSummary(
+      options.projectPath,
+      installPreview,
+      hookObservations,
+      permissionChanges,
+      modesBefore,
+    ),
   );
 }
 
@@ -1186,6 +942,42 @@ export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
 }
 
 /**
+ * Save install state before the first state write of an install that changes the project's release, and print how to restore it.
+ * Only the first agent of an upgrade changes the release, so later agents keep that copy; so does a retry after a failed first attempt.
+ *
+ * @param projectPath - admitted project, before legacy relocation or any install-state write
+ * @param agent - selected agent whose classification reads the project's saved release
+ * @throws CLIError when the copy cannot be taken; install records and project files have not changed at that point
+ */
+function saveInstallStateBeforeUpgrade(
+  projectPath: string,
+  agent: AgentId,
+): void {
+  const projectState = classifyProjectState(createFS(projectPath), agent);
+  // Only a release change needs a rollback point; a same-release install keeps the earlier copy.
+  if (projectState.state !== "outdated") return;
+  let saved: ReturnType<typeof backUpInstallState>;
+  try {
+    saved = backUpInstallState(projectPath, projectState.version ?? null);
+  } catch (error) {
+    // Without a rollback point the upgrade stops before its first write.
+    throw new CLIError(
+      `Install state could not be saved before the upgrade (${error instanceof Error ? error.message : String(error)}). Install records and project files were not changed.`,
+      1,
+    );
+  }
+  // A project without install state has nothing to restore.
+  if (saved === null) return;
+  const from = projectState.version ?? "the earlier release";
+  const location = saved.isFromEarlierAttempt
+    ? `Install state from ${from} was saved to ${saved.backup}/ by an earlier attempt of this upgrade; that copy is kept.`
+    : `Install state from ${from} saved to ${saved.backup}/.`;
+  console.log(
+    `${location} To restore tracked files and install records, restore the tracked files from Git, remove the current .goat-flow/state/install/ directory, and restore the saved folder to ${saved.source}/. The backup contains install records only. Save local edits separately before authorizing retired-file deletion.`,
+  );
+}
+
+/**
  * Complete ordinary installation after the user selects an agent and any required policy review is resolved.
  * Preview, file authority and write claims still govern every installed file and its verified receipt.
  *
@@ -1222,6 +1014,14 @@ async function installManagedFiles(
   );
   // A conflict report is returned before the writer starts, so the user's target remains unchanged.
   if (overwriteBlocker !== null) throw new CLIError(overwriteBlocker, 1);
+  // A retried command can name paths a previous run already resolved; each is reported once and the install continues.
+  for (const warning of managedSetupAuthorityWarnings(
+    installPreview,
+    authority,
+  ))
+    console.error(warning);
+
+  saveInstallStateBeforeUpgrade(options.projectPath, selectedAgent);
 
   // Relocation is an apply-only upgrade step, after preview and launch admission.
   try {

@@ -16,8 +16,8 @@ import {
   CANONICAL_SKILL_ROOT,
 } from "./skill-hardening.helpers.js";
 
-// Users can finish goat-qa through five output variants, and each one must show what the agent disproved.
-const GOAT_QA_FINAL_OUTPUT_VARIANT_COUNT = 5;
+// Users can finish goat-qa through six output variants, and each one must show what the agent disproved.
+const GOAT_QA_FINAL_OUTPUT_VARIANT_COUNT = 6;
 
 describe("skill hardening contracts: debug, qa, critique, security, dispatcher (1/2)", () => {
   it("keeps goat-debug bisect reporting-only until explicit approval", () => {
@@ -604,7 +604,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
-        /Run the Candidate Disproval Pass, then present gap analysis, Refuted Candidates, and Verification Integrity/u,
+        /the Candidate Disproval Pass, then present gap analysis, [^.\n]*Refuted Candidates, and Verification Integrity/u,
         skillPath,
       );
       assert.match(
@@ -661,6 +661,8 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     };
     assert.deepStrictEqual(manifest.skills.references["goat-qa"], [
       "references/output-templates.md",
+      "references/execution.md",
+      "references/manual-testing.md",
     ]);
   });
 

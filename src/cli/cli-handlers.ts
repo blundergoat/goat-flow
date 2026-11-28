@@ -456,6 +456,10 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
   }
 
   writeOutput(options, rendered);
+  // After the report, so a long audit does not scroll away a host problem that blocks every Antigravity tool call.
+  const { warnIfAntigravityCannotStartNode } =
+    await import("./antigravity-node-runtime.js");
+  warnIfAntigravityCannotStartNode(options.projectPath, options.agent ?? null);
 
   if (report.status === "fail") {
     process.exitCode = 1;

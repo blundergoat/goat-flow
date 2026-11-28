@@ -11,6 +11,7 @@ import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { checkArtifactIntegrity } from "../../src/cli/audit/check-artifact-integrity.js";
 import { createFS } from "../../src/cli/facts/fs.js";
+import { buildManagedSetupPreview } from "../../src/cli/managed-setup-preview.js";
 import {
   makeTempProject,
   PROJECT_ROOT,
@@ -28,6 +29,36 @@ const RENAMES = [
 function writeTarget(root: string, path: string, text: string): void {
   mkdirSync(dirname(join(root, path)), { recursive: true });
   writeFileSync(join(root, path), text);
+}
+
+/**
+ * Write a 1.16.0-shaped per-agent record whose hash for each path is the given bytes' hash, as that release recorded on install.
+ * Side effects: writes `.goat-flow/state/install/codex.json` in the temporary project.
+ *
+ * @param root - temporary project root
+ * @param recorded - each recorded path with the bytes its release installed; the file on disk may differ
+ */
+function writeLegacyRecord(
+  root: string,
+  recorded: readonly (readonly [string, string])[],
+): void {
+  writeTarget(
+    root,
+    ".goat-flow/state/install/codex.json",
+    JSON.stringify(
+      {
+        schemaVersion: "goat-flow.install-state.v1",
+        agent: "codex",
+        goatFlowVersion: "1.16.0",
+        files: recorded.map(([path, bytes]) => ({
+          path,
+          expectedSha256: createHash("sha256").update(bytes).digest("hex"),
+        })),
+      },
+      null,
+      2,
+    ) + "\n",
+  );
 }
 
 /**
@@ -71,9 +102,17 @@ function artifactFindings(root: string) {
   });
 }
 
+/** Read every path the shared install state still records for the temporary project. */
+function recordedPaths(root: string): string[] {
+  const state = JSON.parse(
+    readFileSync(join(root, ".goat-flow/state/install/managed.json"), "utf-8"),
+  ) as { files: { path: string }[] };
+  return state.files.map((row) => row.path);
+}
+
 describe("renamed writing playbook cleanup", () => {
-  // Writes both old copies and all distinct manifest instruction paths; cleanup must report references without editing instructions.
-  it("removes both copies and reports stale instruction lines without editing them", () => {
+  // Writes both unrecorded old copies and all distinct manifest instruction paths; nothing proves the copies unedited, so both stay named.
+  it("keeps unrecorded copies and reports stale instruction lines without editing them", () => {
     const root = makeTempProject();
     for (const [oldName] of RENAMES)
       writeTarget(
@@ -82,7 +121,10 @@ describe("renamed writing playbook cleanup", () => {
         "# Locally edited guidance\n",
       );
     const instructions = [
-      ["AGENTS.md", `Read ${PLAYBOOK_ROOT}/writing-style.md.\n`],
+      [
+        "AGENTS.md",
+        `Read ${PLAYBOOK_ROOT}/writing-style.md and writing-for-agents.md.\n`,
+      ],
       ["CLAUDE.md", "Read writing-for-agents.md.\n"],
       [".github/copilot-instructions.md", "Read writing-style.md.\n"],
     ];
@@ -94,12 +136,12 @@ describe("renamed writing playbook cleanup", () => {
     );
     const result = runPlaybookInstaller(root);
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.equal(
-      (result.stdout.match(/removed renamed playbook/gu) ?? []).length,
-      2,
-    );
+    assert.doesNotMatch(result.stdout, /removed renamed playbook/u);
     for (const [oldName, newName] of RENAMES) {
-      assert.equal(existsSync(join(root, PLAYBOOK_ROOT, oldName)), false);
+      assert.equal(
+        readFileSync(join(root, PLAYBOOK_ROOT, oldName), "utf-8"),
+        "# Locally edited guidance\n",
+      );
       assert.equal(
         readFileSync(join(root, PLAYBOOK_ROOT, newName), "utf-8"),
         readFileSync(
@@ -109,15 +151,25 @@ describe("renamed writing playbook cleanup", () => {
       );
       assert.ok(
         result.stdout.includes(
-          `${oldName} (removed renamed playbook; use ${PLAYBOOK_ROOT}/${newName}`,
+          `${oldName} (kept: edited or unrecorded old playbook; it will not be updated. Carry over needed edits to ${PLAYBOOK_ROOT}/${newName}`,
         ),
       );
     }
     for (const [path, text] of instructions) {
       assert.equal(readFileSync(join(root, path), "utf-8"), text);
-      assert.ok(result.stdout.includes(`${path}:1: ${text.trim()}`));
+      assert.ok(result.stdout.includes(`${path}:1: `));
+      assert.ok(!result.stdout.includes(text.trim()));
     }
-    assert.equal((result.stdout.match(/AGENTS\.md:1:/gu) ?? []).length, 1);
+    assert.ok(
+      result.stdout.includes(
+        `AGENTS.md:1: ${PLAYBOOK_ROOT}/writing-style.md → ${PLAYBOOK_ROOT}/writing-human-facing-prose.md`,
+      ),
+    );
+    assert.ok(
+      result.stdout.includes(
+        `AGENTS.md:1: writing-for-agents.md → ${PLAYBOOK_ROOT}/writing-agent-facing-instructions.md`,
+      ),
+    );
     assert.equal(existsSync(join(root, PLAYBOOK_ROOT, "retired.md")), true);
     const repeat = runCliInstaller(root, "--agent", "codex");
     assert.equal(repeat.status, 0, repeat.stderr || repeat.stdout);
@@ -138,17 +190,18 @@ describe("renamed writing playbook cleanup", () => {
     const owned =
       '---\r\n"goat-flow-ownership": "user-owned" # project guidance\r\n---\r\n# Local writing\r\n';
     const ownedPath = `${PLAYBOOK_ROOT}/writing-style.md`;
+    const lookalike = "# Local writing\ngoat-flow-ownership: user-owned\n";
     writeTarget(root, ownedPath, owned);
-    writeTarget(
-      root,
-      `${PLAYBOOK_ROOT}/writing-for-agents.md`,
-      "# Local writing\ngoat-flow-ownership: user-owned\n",
-    );
+    writeTarget(root, `${PLAYBOOK_ROOT}/writing-for-agents.md`, lookalike);
+    writeLegacyRecord(root, [
+      [ownedPath, owned],
+      [`${PLAYBOOK_ROOT}/writing-for-agents.md`, lookalike],
+    ]);
     assert.equal(
       artifactFindings(root).some((finding) => finding.path === ownedPath),
       false,
     );
-    const result = runPlaybookInstaller(root);
+    const result = runCliInstaller(root, "--agent", "codex");
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(readFileSync(join(root, ownedPath), "utf-8"), owned);
     assert.equal(
@@ -187,12 +240,11 @@ describe("renamed writing playbook cleanup", () => {
     assert.doesNotMatch(result.stdout, /removed renamed playbook/u);
   });
 
-  // Installs a 1.16.0-shaped legacy history with one unchanged and one edited copy; cleanup must retain both baseline rows.
-  it("removes legacy copies through public install while retaining their baseline rows", () => {
+  // Installs a 1.16.0-shaped legacy history with one unchanged and one edited copy, then reruns naming the edited copy.
+  it("removes the unedited legacy copy and its row, and the edited one only when --force-path names it", () => {
     const root = makeTempProject();
     const baseline =
       '---\ngoat-flow-reference-version: "1.16.0"\n---\n# Writing guidance\n';
-    const expectedSha256 = createHash("sha256").update(baseline).digest("hex");
     for (const [oldName] of RENAMES)
       writeTarget(
         root,
@@ -201,22 +253,9 @@ describe("renamed writing playbook cleanup", () => {
           ? baseline
           : `${baseline}\nLocal edits.\n`,
       );
-    writeTarget(
+    writeLegacyRecord(
       root,
-      ".goat-flow/state/install/codex.json",
-      JSON.stringify(
-        {
-          schemaVersion: "goat-flow.install-state.v1",
-          agent: "codex",
-          goatFlowVersion: "1.16.0",
-          files: RENAMES.map(([oldName]) => ({
-            path: `${PLAYBOOK_ROOT}/${oldName}`,
-            expectedSha256,
-          })),
-        },
-        null,
-        2,
-      ) + "\n",
+      RENAMES.map(([oldName]) => [`${PLAYBOOK_ROOT}/${oldName}`, baseline]),
     );
     const before = artifactFindings(root);
     for (const [oldName, newName] of RENAMES) {
@@ -229,30 +268,107 @@ describe("renamed writing playbook cleanup", () => {
       );
       assert.match(
         finding.message,
-        /next install removes regular system-owned copies/u,
+        /Install removes an unedited managed copy/u,
       );
-      assert.match(finding.message, /linked copies are kept/u);
+      assert.match(
+        finding.message,
+        /For an edited regular copy, .*--force-path/u,
+      );
+      assert.match(
+        finding.message,
+        /Remove a linked copy manually after review/u,
+      );
       assert.doesNotMatch(finding.message, /SHARED_ARTIFACT_MIRRORS/u);
     }
+    const edited = `${PLAYBOOK_ROOT}/writing-for-agents.md`;
+    const unedited = `${PLAYBOOK_ROOT}/writing-style.md`;
+    const actions = new Map(
+      buildManagedSetupPreview(root, "codex").files.map((file) => [
+        file.path,
+        file.action,
+      ]),
+    );
+    assert.equal(actions.get(unedited), "remove");
+    assert.equal(actions.get(edited), "preserve");
+
     const result = runCliInstaller(root, "--agent", "codex");
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    const state = JSON.parse(
-      readFileSync(
-        join(root, ".goat-flow/state/install/managed.json"),
-        "utf-8",
-      ),
+    assert.equal(existsSync(join(root, unedited)), false);
+    assert.equal(
+      readFileSync(join(root, edited), "utf-8"),
+      `${baseline}\nLocal edits.\n`,
     );
-    for (const [oldName, newName] of RENAMES) {
-      assert.equal(existsSync(join(root, PLAYBOOK_ROOT, oldName)), false);
-      assert.equal(existsSync(join(root, PLAYBOOK_ROOT, newName)), true);
-      assert.equal(
-        state.files.find(
-          (row: { path: string }) => row.path === `${PLAYBOOK_ROOT}/${oldName}`,
-        )?.expectedSha256,
-        expectedSha256,
-      );
-    }
-    assert.match(result.stdout, /HELPER DONE: .*2 stale removed/u);
+    assert.ok(
+      existsSync(join(root, PLAYBOOK_ROOT, "writing-human-facing-prose.md")),
+    );
+    assert.match(result.stdout, /HELPER DONE: .*1 stale removed/u);
+    assert.match(result.stdout, new RegExp(`--force-path ${edited}`, "u"));
     assert.match(result.stdout, /Install verified for codex/u);
+    const rowsAfterUpgrade = recordedPaths(root);
+    assert.equal(rowsAfterUpgrade.includes(unedited), false);
+    assert.equal(rowsAfterUpgrade.includes(edited), true);
+
+    const forced = runCliInstaller(
+      root,
+      "--agent",
+      "codex",
+      "--force-path",
+      edited,
+    );
+    assert.equal(forced.status, 0, forced.stderr || forced.stdout);
+    assert.equal(existsSync(join(root, edited)), false);
+    assert.match(forced.stdout, /restore it from Git history/u);
+    assert.equal(recordedPaths(root).includes(edited), false);
+  });
+});
+
+describe("retired path references after install", () => {
+  // Writes an instruction file, script, CI workflow and package.json that call removed hook paths, plus a lesson that only mentions one.
+  it("lists each retired token and replacement without copying the surrounding line", () => {
+    const root = makeTempProject();
+    const callers: (readonly [string, string])[] = [
+      [
+        "CLAUDE.md",
+        "Run bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke before handoff.\n",
+      ],
+      [
+        "scripts/preflight.sh",
+        "#!/usr/bin/env bash\nbash .goat-flow/hooks/post-turn-safety.sh --self-test\n",
+      ],
+      [
+        ".github/workflows/ci.yml",
+        "      - run: shellcheck .goat-flow/hooks/*/*.sh\n",
+      ],
+      [
+        "package.json",
+        '{ "scripts": { "hooks": "node .goat-flow/hooks/run-with-bash.mjs" } }\n',
+      ],
+      [
+        ".goat-flow/learning-loop/lessons/hooks.md",
+        "The old `.goat-flow/hooks/deny-dangerous.sh` runtime was retired.\n",
+      ],
+    ];
+    for (const [path, text] of callers) writeTarget(root, path, text);
+
+    const result = runCliInstaller(root, "--agent", "claude");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(
+      result.stdout,
+      /Project files that still call removed goat-flow paths/u,
+    );
+    for (const expected of [
+      "CLAUDE.md:1: .goat-flow/hooks/deny-dangerous.sh → node .goat-flow/hooks/deny-dangerous.mjs --self-test=smoke",
+      "scripts/preflight.sh:2: .goat-flow/hooks/post-turn-safety.sh → node .goat-flow/hooks/post-turn-safety.mjs --self-test",
+      ".github/workflows/ci.yml:1: .goat-flow/hooks/*/*.sh → This glob targets retired Bash hooks.",
+      "package.json:1: .goat-flow/hooks/run-with-bash.mjs → .goat-flow/hooks/run-hook.mjs",
+    ])
+      assert.ok(result.stdout.includes(expected), `missing: ${expected}`);
+    assert.doesNotMatch(result.stdout, /lessons\/hooks\.md:/u);
+    assert.doesNotMatch(result.stdout, /before handoff/u);
+    assert.deepEqual(
+      callers.map(([path]) => readFileSync(join(root, path), "utf-8")),
+      callers.map(([, text]) => text),
+    );
   });
 });

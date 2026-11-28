@@ -20,6 +20,7 @@ import {
   stubAgentFacts,
   stubFS,
 } from "./helpers.js";
+import { pinnedGoatFlowCommand } from "../../src.js";
 
 describe("plaintext credential-store coverage", () => {
   it("does not count Git credentials as Claude private-key coverage", () => {
@@ -384,7 +385,12 @@ describe("codex settings feature flags", () => {
 
     assertExists(result);
     assert.match(result.message, /Deprecated Codex feature flag/);
-    assert.match(result.howToFix ?? "", /goat-flow install \. --agent codex/);
+    assert.ok(
+      (result.howToFix ?? "").includes(
+        pinnedGoatFlowCommand("install . --agent codex"),
+      ),
+      result.howToFix,
+    );
   });
 });
 

@@ -10,6 +10,7 @@ import {
   parseMarkdownFrontmatter,
   skillContentsEquivalent,
 } from "./audit/check-drift.js";
+import { pinnedGoatFlowCommand } from "./advised-command.js";
 import { getAgentProfile, getAgentProfiles } from "./agents/registry.js";
 import { CLIError } from "./cli-error.js";
 import type { ParsedCLI } from "./cli-types.js";
@@ -407,12 +408,18 @@ function skillRemediation(
   if (hasProblems) {
     commands.push(
       mirrorStatus === "drift"
-        ? `goat-flow install <project-path> --agent ${agentProfile.id} --dry-run`
-        : `goat-flow install <project-path> --agent ${agentProfile.id}`,
+        ? pinnedGoatFlowCommand(
+            `install <project-path> --agent ${agentProfile.id} --dry-run`,
+          )
+        : pinnedGoatFlowCommand(
+            `install <project-path> --agent ${agentProfile.id}`,
+          ),
     );
   }
   commands.push(
-    `goat-flow audit <project-path> --agent ${agentProfile.id} --check-drift`,
+    pinnedGoatFlowCommand(
+      `audit <project-path> --agent ${agentProfile.id} --check-drift`,
+    ),
   );
   return commands;
 }

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-19
-**Updated:** 2026-10-11 - the skill size claim is dropped; the lifecycle became host-owned on 2026-08-30. Absorbed (removed): ADR-011-critique-mob-core-features.
+**Updated:** 2026-11-28 - planning intake added as a separate entry that runs no critique; 2026-10-11 - the skill size claim is dropped; the lifecycle became host-owned on 2026-08-30. Absorbed (removed): ADR-011-critique-mob-core-features.
 
 ## Context
 
@@ -18,10 +18,12 @@ goat-critique runs in one mode: full delegated, and it remains a core feature.
 
 **Mode contract.**
 1. The mandatory lifecycle is Phases 1-5 plus Phase 5.5 meta-audit and Phase 5.6 outcome capture. Phase 1 spawns three isolated critique sub-agents, Phase 3 may spawn up to three cross-exam agents when disputes require them, and Phase 5.5 always spawns one meta-agent. No inline role-play substitute is permitted.
-2. The lifecycle is host-owned. The host runs Phases 1-5.6, spawns the bounded roles, presents both human gates, and captures the Phase 5.6 response. A forked sub-agent asked to run goat-critique returns control before Phase 1, so shared sub-agent gate conversion never fires.
+2. The lifecycle is host-owned. The host runs Phases 1-5.6, spawns the bounded roles, presents both human gates, and captures the Phase 5.6 response. Any sub-agent asked to run goat-critique, including a forked sub-agent, returns control before Phase 1 and never spawns the critics itself, so shared sub-agent gate conversion never fires.
 3. Skill-chained entry runs the full lifecycle and skips only intake confirmation.
 4. One output template ships; the dual Quick/Full template is gone.
 5. The `SKILLS_DOC_STALE_PHRASES` entry asserting "quick mode skips cross-examination" (`src/cli/audit/check-factual-semantic-drift.ts`, search: `SKILLS_DOC_STALE_PHRASES`) was removed, because it would false-positive on correct docs.
+
+**Planning intake (2026-11-28).** Planning intake is a separate entry, not a critique mode. A request to be interviewed for a plan, or to check an existing plan for stale facts, runs in the current context: it spawns no critics, gives no critique verdict and hands the answers to goat-plan, which keeps plan-writing authority. An existing plan changes only when the request asks for the update or the user's reply explicitly approves it. Because intake runs no critique phase, item 2 does not stop a sub-agent from running it; with no human available, the sub-agent returns its question batch. A concrete artifact with no planning request still gets the full lifecycle above. On 2026-11-24 the maintainer kept the interview in goat-critique and declined moving it to goat-plan.
 
 The original "if delegation is unavailable, redirect to `/goat-review`" rule was superseded on 2026-04-23: all four supported runtimes ship sub-agent delegation (`.goat-flow/learning-loop/lessons/agent-tooling.md`, search: `Sub-agent delegation is universal`).
 
@@ -40,6 +42,7 @@ The original "if delegation is unavailable, redirect to `/goat-review`" rule was
 - Open Questions appear only when cross-examination was inconclusive, not because it was skipped.
 - The Core Trio lens survives inside every delegated sub-agent; only inline application retired.
 - The shipped skill states the rule at `.claude/skills/goat-critique/SKILL.md` (search: `goat-critique runs only full delegated mode`) and spawns per (search: `Spawn all three sub-agents in parallel`); public docs at `docs/skills.md` (search: `goat-critique runs in one mode`).
+- Planning intake lives at `.claude/skills/goat-critique/references/interactive-intake.md` (search: `This is a quick factual pass, not a critique`); `.claude/skills/goat-critique/SKILL.md` selects it (search: `selects planning intake instead of critique`).
 
 ## Revisit Triggers
 

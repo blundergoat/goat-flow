@@ -1,6 +1,6 @@
 ---
 category: contract-pinned-wording
-last_reviewed: 2026-10-22
+last_reviewed: 2026-11-28
 ---
 
 **Scope:** Changing prose, a path, an adjacent section, or a word budget that tests or semantic anchors already pin, and the full-suite failures that follow when the exact old text was not searched first. Other pinned-contract lessons, such as anchor-preserving compaction and user-visible serialization, are [contract-testing.md](contract-testing.md); instruction and reference word budgets are [instruction-word-budgets.md](instruction-word-budgets.md).
@@ -9,12 +9,16 @@ last_reviewed: 2026-10-22
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** OBSERVED
 **Severity:** INTEGRATION
-**Incident count:** 28 | **Latest occurrence:** 2026-10-18
+**Incident count:** 34 | **Latest occurrence:** 2026-11-28
 **Merged:** 2026-10-11 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split to recover its headroom.
 
 **Prevention:** Before changing prose, a path, or an adjacent command, search the tests and durable semantic anchors for the exact old text; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest. When fixture size feeds a derived assertion, recompute it with the production formula after every fixture edit. Update a contract only when product semantics change. Before drafting in a near-cap skill, measure the current word budget and pay for additions from unpinned text; before quoting a budget or score outcome, measure the exact sizes with the function the gate uses and state the margin.
 
 Read Markdown helper signatures before calling them; a setup exception is not evidence that the intended contract is missing.
+
+- **Recurrence 2026-11-28 (PR #71):** Changing installer advice to a release-pinned npm command left both direct-Bash decisions-guide assertions expecting `goat-flow install`. Slow shard 5/6 failed on both paths, and a focused local replay reproduced both failures. Search the old invocation across integration tests when command guidance changes. Run the affected slow suite and assert the running release, target and provider. Evidence: `src/cli/installer/apply.ts` (search: `decisions guide ownership requires the public CLI`) and `test/integration/setup-install-decisions-readme.test.ts` (search: `refuses direct Bash before mutation when an inherited guide exists`).
+- **Recurrence 2026-11-28 (PR #71 evals):** A dispatcher-route negative control landed in the preceding stale-plan test and failed with `report is not defined`. Anchor edits to the test name and run the owning suite after adding the assertion. Evidence: `test/unit/evals-cases.test.ts` (search: `the dispatcher case checks the interview route field`).
+- **Recurrence 2026-11-28 (PR #71 retirement diagnostics):** Two existing assertions still expected old audit advice and raw caller lines after install began reporting only the location, retired token and replacement. Update every output assertion in the owning suite when the report changes. Preserve checks that diagnostics identify the caller and leave its bytes intact. Evidence: `test/integration/setup-install-renamed-playbooks.test.ts` (search: `lists each retired token and replacement`).
 
 **What happened:** Removing one forbidden phrase and changing dashboard quality-report ownership failed two contract checks in the first full `npm test`: a skill-hardening contract still required the "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message. `test/contract/skill-hardening-shared-3.test.ts` (search: `hardening debt`).
 
@@ -35,7 +39,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 - **Recurrence 2026-08-03:** The first GREEN wording for oversized review scope and critique context merging pushed `goat-review` and `goat-critique`
   from 2495/2494 words to 2592/2531; budget-neutral rewrites finished at 2498/2495. `workflow/skills/goat-review/SKILL.md` (search: `never guess
   commit windows`), `workflow/skills/goat-critique/SKILL.md` (search: `never replace baseline context`),
-  `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`).
+  `test/contract/skill-hardening-review-1.test.ts` (search: `announces chunks and proceeds automatically within an oversized selected scope`).
 - **Recurrence 2026-08-09:** A new roadmap passed `plans check --strict` after six mid-proof estimates were fixed, while 24 `Read first` anchors still
   named stale paths or paraphrases; each validator proves only its named contract, so paths and semantic anchors need their own exact check.
   `src/cli/plans-check.ts` (search: `mid-proof item(s) missing an (est: ...) entry`), `test/unit/plans-check-lifecycle.test.ts` (search: `strict mode
@@ -102,3 +106,9 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 **Recurrence 2026-10-11:** Removing the runner's performance mode also rewrote the adjacent concurrency ternary; the first fast suite failed one source-regex pin that the grep for the removed mode's names could not find. Restoring the pinned line fixed it: search each adjacent edited line for its exact text. `scripts/run-tests.mjs` (search: `testConcurrencyForMode`), `test/integration/preflight-progress.test.ts` (search: `keeps fast concurrency bounded`).
 
 - **Recurrence 2026-10-18:** Moving quality version/rubric cases from CLI processes to the shared parser modes renamed a test title still cited by a lesson. All 151 focused tests passed, but preflight reported a stale reference. Restore the stable test title when changing execution level, or migrate its durable consumers in the same packet; assertion equivalence alone does not preserve retrieval. Evidence: `test/unit/quality-subcommands.test.ts` (search: `parses ${name} as legacy and rejects it under current schema rules`) and `.goat-flow/learning-loop/lessons/audit-contracts.md` (search: `Recurrence 2026-09-30`).
+
+- **Recurrence 2026-11-28:** Adding the existing-test run to goat-qa's Phase 2 gate sentence failed the same goat-qa contract as the 2026-08-23 recurrence. The RED run could not show it, because the old sentence was still present then. Only searching the tests for the exact old sentence before drafting would have caught it. The fix loosened the pattern to the invariant (gap analysis, Refuted Candidates and Verification Integrity after the disproval pass), so the new wording is not pinned twice. `test/contract/skill-hardening-skills-1.test.ts` (search: `requires goat-qa Standard-mode gap output`).
+
+- **Recurrence 2026-11-28 (manifest list):** The next goat-qa change searched the tests for every sentence it rewrote, but not for the manifest array it extended. A contract that compares goat-qa's whole reference list for exact equality failed only after the guidance landed. Pins include data shapes: search the tests for the exact list or key being changed, not only the prose. `test/contract/skill-hardening-skills-1.test.ts` (search: `loads goat-qa output templates progressively from canonical references`).
+
+- **Recurrence 2026-11-28 (review chunking):** Capitalizing `never guess commit windows` failed a case-sensitive contract. Renaming `stops oversized inferred branch scopes before review begins` also left two lessons with stale citations. Preserve exact phrases when the rule stays the same and update citations when a test changes behavior. `test/contract/skill-hardening-review-1.test.ts` (search: `announces chunks and proceeds automatically within an oversized selected scope`).

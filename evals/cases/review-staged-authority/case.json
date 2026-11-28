@@ -1,0 +1,46 @@
+{
+  "id": "review-staged-authority",
+  "fixture": "staged-review",
+  "harness": "codex",
+  "request": "/goat-review Review only the staged changes in this project. Cite the staged source for each finding.",
+  "owners": [
+    "workflow/skills/goat-review/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    "workflow/skills/goat-review/references/examples.md",
+    "workflow/skills/goat-review/references/review-traps.md",
+    "docs/cli.md"
+  ],
+  "rows": [
+    {
+      "id": "project-bytes",
+      "kind": "mechanical",
+      "label": "The working-tree files match the before snapshot"
+    },
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "review-index-unchanged",
+      "kind": "mechanical",
+      "label": "The selected project's index entries are unchanged"
+    },
+    {
+      "id": "review-staged-snapshot",
+      "kind": "mechanical",
+      "label": "Review captured the prepared staged authority"
+    },
+    {
+      "id": "review-staged-source",
+      "kind": "mechanical",
+      "label": "A staged-source read returned the faulty discount expression"
+    },
+    {
+      "id": "review-staged-finding",
+      "kind": "judgement",
+      "label": "The finding cites the staged Math.floor in applyDiscount and omits working-tree-only changes"
+    }
+  ]
+}

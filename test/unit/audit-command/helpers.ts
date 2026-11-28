@@ -272,7 +272,13 @@ export function stubAgentFacts(
       lineCount: 100,
       sections: new Map(),
     },
-    settings: { exists: true, valid: true, parsed: {}, hasDenyPatterns: true },
+    // A healthy Claude agent carries the attribution values setup writes, so commit-guidance has nothing to report.
+    settings: {
+      exists: true,
+      valid: true,
+      parsed: { attribution: { commit: "", pr: "", sessionUrl: false } },
+      hasDenyPatterns: true,
+    },
     skills: {
       installedDirs: [],
       found: [

@@ -23,7 +23,10 @@ import {
   type AgentHookHandlerDescriptor,
 } from "./server/agent-hook-command.js";
 import type { AgentHookRegistrationIssue } from "./server/agent-hook-writer.js";
-import { readAllHookStates } from "./server/hook-registrar.js";
+import {
+  readAllHookStates,
+  type HookAgentState,
+} from "./server/hook-registrar.js";
 import { getHookSpec } from "./server/hooks-registry.js";
 import type { AgentId } from "./types.js";
 
@@ -50,6 +53,7 @@ export type HookRuntimeReasonCode =
   | "agent-hook-unsupported"
   | "hook-disabled"
   | "hook-not-installed"
+  | "installed-content-diverged"
   | "event-mismatch"
   | "matcher-mismatch"
   | "target-marked-untrusted"
@@ -145,11 +149,12 @@ export function managedHookReasonCode(
   return null;
 }
 
-/** Preserve exact configured registration drift when it prevents a replay. */
+/** Preserve exact configured registration drift, or a locally edited hook file, when it prevents a replay. */
 function configuredRegistrationReasonCode(
   isSupported: boolean,
   isEnabled: boolean,
   registrationIssue: AgentHookRegistrationIssue | null,
+  installationIssue: HookAgentState["installationIssue"],
 ): HookRuntimeReasonCode | null {
   // Provider support and user intent take precedence over stale registration detail.
   if (!isSupported || !isEnabled) return null;
@@ -159,6 +164,9 @@ function configuredRegistrationReasonCode(
   ) {
     return registrationIssue;
   }
+  // A registered hook whose file was edited is installed and may be running; Hooks names the same state, so the reason matches it.
+  if (installationIssue === "installed-content-diverged")
+    return installationIssue;
   return null;
 }
 
@@ -482,6 +490,7 @@ function readManagedConfiguredHookState(
         agentHookState.supported,
         hookState.enabled,
         agentHookState.registrationIssue,
+        agentHookState.installationIssue,
       ) ??
       managedHookReasonCode(
         agentHookState.supported,

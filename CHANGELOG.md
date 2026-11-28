@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+### Added
+
+- **Antigravity on WSL: missing Node warning** - `audit` and `hooks verify` warn before a missing `node` blocks Antigravity's command and file tools.
+- **Install backs up its records before an upgrade** - Install saves its records in `.goat-flow/state/install-before-upgrade/` and reuses the first backup on retry. Save local edits before upgrading. A rollback restores tracked files from Git and install records from the backup.
+- **Install and audit report calls to retired files** - Install reports the location, retired path and replacement or removal advice in instructions, shell scripts, CI workflows and `package.json`. `audit --check-content` also checks shell scripts, workflows and `package.json`.
+- **Release notes ship with the package** - The published package now includes `CHANGELOG.md`.
+- **Install names each permission rule it changes** - The preview names every Claude or Codex deny rule install will remove, add or rewrite, and the closing summary leads with them whenever a deny is removed or narrowed.
+- **Audit reports missing Claude protections** - `deny-covers-secrets` lists template deny rules your settings lack, as notes that never fail the check; `settings-rules-matched` warns, without failing the audit, when a Claude attribution value is missing.
+- **Audit flags a goat-flow release in an instruction heading** - The score-only `instruction-release-stamp` check names each heading that carries one and says to remove it after review; `.goat-flow/config.yaml` already records the release.
+- **Install preview opens with a summary** - `install --dry-run` first shows action counts, the user-owned and other agents' files it writes, and configs still running retired hooks.
+- **Install summary names tracked deletions and mode-only changes** - It lists removed files Git still tracks, to stage before you commit, and files whose mode changed with no content change.
+- **`/goat-qa` records each affected page journey** - When browser checks run, QA marks each journey verified, failed, blocked or untested.
+- **`/goat-qa` verifies a claimed fix** - Ask it to verify a fix and it replays the fix's recorded failure, then runs the regression checks. A fix with no recorded reproduction stays unverified, and `/goat` now routes "verify my fix" to QA.
+- **`/goat-qa` saves screenshots as plan evidence** - When a claim needs visible proof and the request names a plan, reviewed screenshots go under that plan's `evidence/` folder with descriptive names and a `meta.json`.
+- **`/goat-qa` verifies the served build before browser testing** - QA confirms the build, account and route before testing and gives human testers page-specific steps. When page text stays the same, it can use a build ID, asset hash or changed behaviour.
+- **Browser checks launch their own headless Chrome** - When no browser is running but Chrome is installed, the browser-use playbook starts an isolated headless instance with a scratch profile once browser control is approved, instead of asking you to start a browser.
+- **`/goat-critique` interviews you before planning** - It asks about open choices in batches of three to five, then hands the answers to `/goat-plan`. Ask to save the plan if you want it written to disk.
+- **`/goat-critique` checks existing plans for stale facts** - It checks cited paths, totals, dates and dependencies, and lists open choices when you request no questions. It edits the named plan only when you request or approve the update.
+
+### Changed
+
+- **BREAKING: `--force-path <path>` can delete an edited retired hook** - In 1.19.0 this flag kept the file after switching registrations. Install now deletes it once every provider is off the retired runtime and the bytes still match the preview. Use `--force-managed` to switch registrations and keep the file.
+- **Printed fix commands name the running release** - Fix commands from audit, setup, `stats`, `status`, `index`, `skill doctor`, install refusals, the quality prompt and the Hooks page print `npx @blundergoat/goat-flow@<version> …`, not a bare `goat-flow` or `@latest`. Setup's audit gates keep the path of the CLI that printed them.
+- **A finished install previews `pass`** - `install --dry-run` reports `pass` when nothing is left to write or remove beyond rebuilt generated files such as indexes and install records; `ready` now means safe writes are waiting.
+- **`feedback-loop-active` reports every cause in one run** - Missing directories, stale references, invalid anchors and stale buckets appear together, and the JSON details name each stale bucket and its `last_reviewed` date.
+- **BREAKING: `/goat-qa` runs existing checks by default in Standard mode** - QA reports command exit status and test pass, fail and skip counts, and flags changes to pre-existing untracked files. Ask for analysis only to skip checks, browser journeys and fix replay.
+- **`/goat-review` continues oversized reviews automatically** - Once the scope is clear, reviews over 20 files or 3,000 changed lines announce their chunks and proceed.
+
+### Fixed
+
+- **`/goat-critique` run by any sub-agent hands control back** - Every sub-agent now stops after intake and leaves the critics and gates to the main session; before, the rule named only a forked sub-agent.
+- **Multi-agent upgrades keep hooks that other providers still use** - Install lists the remaining providers and keeps the retired runtime until the last provider migrates.
+- **Retried `--force-path` no longer refused** - A named path that an earlier run already resolved now prints a warning and the install continues.
+- **Install reports rewritten hook registrations** - Kept hook config files show their registration updates, with a reminder to restart open agent sessions.
+- **Migrated Codex permission comments match the template** - A refreshed Codex permission profile now carries the template's comment, which says names such as `.env.backup` are blocked only in shell commands, by the hook, and not for direct file reads.
+- **Upgrades from releases before 1.17.0 no longer block on unedited old hooks** - Install trusts those releases' per-agent records, so only edited hook files need review.
+- **Install preserves retired files that need review** - Automatic removal requires a matching install record. Install keeps edited or unrecorded copies, linked or unreadable files, and user-owned playbooks for review, and drops records for retired files that are gone.
+- **An older CLI no longer advises a downgrade** - When the project is on a newer goat-flow release, `audit` reports only the version mismatch and skips every other check and hook repair.
+- **Stale provider evidence says who refreshes it** - The Hooks page and audit say goat-flow refreshes a stale provider capture in a release; nothing in the project clears it.
+- **`stats --check` shows the accepted anchor form** - A footgun missing an evidence anchor now gets a backticked path and `(search: …)` example.
+- **Install preview no longer calls other agents' skills removed** - Files another installed agent manages read `peer-managed` with no action and no longer raise a `warning`.
+- **Install preview drops plan marker and commit guide rows install would skip** - Without one version-named plan folder or a Git repository, the preview no longer shows a `create` row for them.
+- **Install recommends only verify commands that can pass** - The summary prints `hooks verify --scenario all` only when every hook group is registered, otherwise one per registered group.
+- **`hooks verify` names an edited hook as changed** - A locally edited, registered hook reports `installed-content-diverged`, as the Hooks page does, instead of `hook-not-installed`.
+
 ## v1.19.0 - 2026-11-22
 
 ### Added

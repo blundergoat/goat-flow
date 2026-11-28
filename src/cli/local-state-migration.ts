@@ -1,5 +1,15 @@
-/** Relocate legacy operational state during a quiescent, all-writers-upgraded install. */
-import { lstatSync, mkdirSync, readdirSync, renameSync } from "node:fs";
+/** Relocate legacy operational state, and save install state before an upgrade, during a quiescent, all-writers-upgraded install. */
+import {
+  cpSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import type { Stats } from "node:fs";
 import { join } from "node:path";
 
@@ -150,4 +160,150 @@ export function migrateLegacyLocalState(projectPath: string): boolean {
     renameSync(join(projectPath, from), join(projectPath, to));
   }
   return true;
+}
+
+const INSTALL_BACKUP = `${STATE_DIRECTORY}/install-before-upgrade`;
+/** Names the release and folder the copy came from; it sits beside the copy, so restoring the copy never carries it back. */
+const INSTALL_BACKUP_RECORD = `${INSTALL_BACKUP}.json`;
+
+/** The saved copy of install state, the folder it was copied from, and whether an earlier attempt of the same upgrade took it. */
+export interface InstallStateBackup {
+  backup: string;
+  source: string;
+  isFromEarlierAttempt: boolean;
+}
+
+/**
+ * Find the copy an earlier, failed attempt of the same upgrade saved. That attempt may have moved or converted install state
+ * before it failed, so its copy is the only one that still holds the earlier release's records.
+ *
+ * @param projectPath - selected real project root whose state folders were already inspected
+ * @param fromVersion - release the project's config names now; null never matches a saved copy
+ * @returns the kept copy, or null when no copy of this release exists and a new one must be taken
+ * @throws Error when the backup path is linked or not a directory, which is refused rather than deleted
+ */
+function earlierAttemptBackup(
+  projectPath: string,
+  fromVersion: string | null,
+): InstallStateBackup | null {
+  const hasCopy = directoryStats(projectPath, INSTALL_BACKUP) !== null;
+  const recordPath = join(projectPath, INSTALL_BACKUP_RECORD);
+  // Without a known release, a copy, and a regular record file, nothing shows the copy came from this upgrade.
+  if (
+    fromVersion === null ||
+    !hasCopy ||
+    !lstatSync(recordPath, { throwIfNoEntry: false })?.isFile()
+  )
+    return null;
+  try {
+    const record = JSON.parse(readFileSync(recordPath, "utf8")) as {
+      from?: unknown;
+      source?: unknown;
+    };
+    // Only a copy of this same release, taken from one of the two known state folders, is kept.
+    return record.from === fromVersion &&
+      (record.source === INSTALL_DIRECTORY || record.source === LEGACY_INSTALL)
+      ? {
+          backup: INSTALL_BACKUP,
+          source: record.source,
+          isFromEarlierAttempt: true,
+        }
+      : null;
+  } catch {
+    // An unreadable record cannot vouch for the copy, so a new copy replaces it.
+    return null;
+  }
+}
+
+/**
+ * Copy install state to one backup folder before a version-changing install first writes it, replacing a copy from any other
+ * release. A retry of the same upgrade keeps the copy its first attempt took.
+ * Side effects: reads the current or legacy install-state folder, creates the private state folder if needed, then rewrites the
+ * backup folder and the record beside it.
+ *
+ * @param projectPath - selected real project root, inspected before the upgrade's first state write
+ * @param fromVersion - release the project's config names before this install, recorded beside the copy; null when unknown
+ * @returns the backup folder, the folder it holds a copy of, and whether an earlier attempt's copy was kept; null when the project has no install state to copy
+ * @throws Error when a state path is linked or not a directory, or the copy fails; the caller stops before any state write
+ */
+export function backUpInstallState(
+  projectPath: string,
+  fromVersion: string | null,
+): InstallStateBackup | null {
+  const source = installStateRelativeDirectory(projectPath);
+  const earlier = earlierAttemptBackup(projectPath, fromVersion);
+  // A retried upgrade keeps the first attempt's copy, taken before that attempt moved or converted install state.
+  if (earlier) return earlier;
+  // A fresh project has no install state, so there is nothing to restore.
+  if (directoryStats(projectPath, source) === null) return null;
+  const state = join(projectPath, STATE_DIRECTORY);
+  mkdirSync(state, {
+    recursive: true,
+    mode: 0o700,
+  });
+  const staging = mkdtempSync(join(state, ".install-backup-"));
+  const copy = join(staging, "copy");
+  const record = join(staging, "record.json");
+  let canCleanStaging = true;
+  try {
+    cpSync(join(projectPath, source), copy, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+      verbatimSymlinks: true,
+    });
+    writeFileSync(
+      record,
+      `${JSON.stringify({ from: fromVersion, source })}\n`,
+      {
+        mode: 0o600,
+        flag: "wx",
+      },
+    );
+    // If publishing or restoring fails, keep the staging folder with any saved copies.
+    canCleanStaging = false;
+    publishInstallBackup(projectPath, staging, copy, record);
+    canCleanStaging = true;
+  } finally {
+    if (canCleanStaging) rmSync(staging, { recursive: true, force: true });
+  }
+  return { backup: INSTALL_BACKUP, source, isFromEarlierAttempt: false };
+}
+
+/**
+ * Move the finished copy and receipt into place after saving any previous pair in staging.
+ * Throws on a publish error after attempting to restore the previous pair.
+ */
+function publishInstallBackup(
+  projectPath: string,
+  staging: string,
+  copy: string,
+  record: string,
+): void {
+  const backup = join(projectPath, INSTALL_BACKUP);
+  const receipt = join(projectPath, INSTALL_BACKUP_RECORD);
+  const previousReceipt = lstatSync(receipt, { throwIfNoEntry: false });
+  if (previousReceipt && !previousReceipt.isFile())
+    throw new Error(`${INSTALL_BACKUP_RECORD} must be a regular file.`);
+  let hasNewCopy = false;
+  const moved: { original: string; saved: string }[] = [];
+  try {
+    for (const [original, name] of [
+      [receipt, "previous.json"],
+      [backup, "previous"],
+    ] as const) {
+      if (!lstatSync(original, { throwIfNoEntry: false })) continue;
+      const saved = join(staging, name);
+      renameSync(original, saved);
+      moved.push({ original, saved });
+    }
+    renameSync(copy, backup);
+    hasNewCopy = true;
+    renameSync(record, receipt);
+  } catch (error) {
+    if (hasNewCopy) renameSync(backup, copy);
+    for (const { original, saved } of moved.reverse())
+      renameSync(saved, original);
+    throw error;
+  }
 }

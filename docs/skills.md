@@ -35,9 +35,9 @@ flowchart LR
 | [/goat-debug](#goat-debug) | Diagnosis-first debugging + investigate mode + browser evidence | No fixes until human reviews diagnosis | Bug or test failure, UI issues, exploring unfamiliar code |
 | [/goat-plan](#goat-plan) | Milestone planning with claim-based Proof | Human approval closes every milestone and the final plan | Create, update, reconcile or resume plans |
 | [/goat-review](#goat-review) | Structured code review + quality audit | Negative verification before presenting findings | Before merging, quality audits |
-| [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Runs only with delegated sub-agents; blocks on unresolved disputes before synthesis | High-stakes decisions, plans, assessments |
+| [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact; planning interviews | Critique runs only with delegated sub-agents; blocks on unresolved disputes before synthesis | High-stakes decisions, plans, assessments |
 | [/goat-security](#goat-security) | Threat-model-driven security assessment | MUST re-check framework/tooling mitigations before flagging findings | Before releases, after dependency changes, during audits |
-| [/goat-qa](#goat-qa) | Testing gap analysis and verification planning | Does not run or write tests; generates gap analysis and testing plan | After a milestone or 30-60 min of coding |
+| [/goat-qa](#goat-qa) | Testing gap analysis, existing-test runs, browser checks and fix replay | Runs the project's existing checks and affected browser journeys, replays claimed fixes, and never writes tests; generates gap analysis and testing plan | After a milestone or 30-60 min of coding |
 | [/goat-clarity](#goat-clarity) | Bounded comment, documentation, naming, and private-placement remediation | Freezes writable paths before editing; an enumerated public-name rename set needs a second Scope v2 approval | When selected source code needs a clarity pass without behaviour changes |
 
 ---
@@ -53,11 +53,12 @@ flowchart LR
 | "I'm new to this project" | /goat-debug (investigate mode) | Progressive depth reading + orientation |
 | "How should we build this feature?" | /goat-plan | Planning before implementing |
 | "Are these changes safe to merge?" | /goat-review | Reviewing changes, not finding new issues |
-| "How do we verify coverage for this work?" | /goat-qa | Risk-based testing gap analysis (planning, not execution) |
+| "How do we verify coverage for this work?" | /goat-qa | Risk-based testing gap analysis, plus a run of the project's existing checks |
 | "The UI is broken / rendering wrong" | /goat-debug | Browser evidence capture via browser-use CLI |
-| "Is this bug fix verified?" | /goat-debug | Re-run the original repro and adjacent regressions |
+| "Is this bug fix verified?" | /goat-qa | Replays the recorded failure, then runs the regression checks |
 | "Is this diff/PR verified?" | /goat-review | Two-pass review with Review Integrity |
 | "Is this plan/assessment sound?" | /goat-critique | Multi-perspective critique before shipping |
+| "Interview me before we plan this" | /goat-critique | Planning intake: short batches of questions, then `/goat-plan` writes the plan |
 | "Bring these comments and names up to standard" | /goat-clarity | Applies a bounded remediation pass instead of returning review findings |
 
 ---
@@ -91,15 +92,15 @@ The dispatcher forwards the complete brief and any user-requested depth. Destina
 
 | Intent | Terminal outcome |
 |--------|------------------|
-| Bug, failure, unexpected behaviour; verify a fix | `/goat-debug` (diagnose) |
+| Bug, failure, unexpected behaviour | `/goat-debug` (diagnose) |
 | Browser-visible issue | Browser evidence first; then `/goat-debug` (diagnose) |
 | Understand, explain, explore unfamiliar code | `/goat-debug` (investigate) |
 | GOAT Flow setup/process/harness/skills quality assessment | `goat-flow quality` CLI/dashboard prompt flow; no goat skill wrapper |
 | Code quality review, area audit, diff check | `/goat-review` |
-| Multi-perspective critique | `/goat-critique` |
+| Multi-perspective critique; planning interview | `/goat-critique` |
 | Security, compliance, dependency audit | `/goat-security` |
 | Comment, documentation, naming, or private-placement remediation | `/goat-clarity` |
-| Testing gaps, coverage, verification planning | `/goat-qa` |
+| Testing gaps, coverage, verification planning, existing-test runs, verify a fix | `/goat-qa` |
 | Bare task path (no action verb) | Read-only context; do not update `.active`, milestone status, or code |
 | Plan/design or non-trivial build/change | `/goat-plan`; build/change carries `return-to-implement`, while plan/design stops after planning |
 | Hotfix or simple implementation (1-2 files, obvious change) | Direct execution loop with a Route Snapshot; no skill |
@@ -224,6 +225,8 @@ flowchart TD
 
 Structured code review and quality audit with negative verification.
 
+Once the scope is clear, reviews above 20 files or 3,000 changed lines announce their chunks and proceed automatically. The final report records coverage and consolidates the results.
+
 | Mode | Trigger | What it does |
 |------|---------|-------------|
 | **Diff Review** | review, PR, diff | Quick runs the diff-only suspicion pass then grounded verification; Full continues into Pass 2.5, the spec-drift offer, and the optional refuter offer |
@@ -269,6 +272,8 @@ Pass 3 is optional and requires explicit informed approval. An uncited or unreso
 ## /goat-critique
 
 Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, with Phases 1-5 plus mandatory meta-audit (5.5) and outcome capture (5.6). The host/root owns the lifecycle and human gates; spawned agents perform bounded critique, cross-exam, or meta-audit roles. Rationale: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md`.
+
+**Planning intake** is a separate entry that runs no critique. Ask to be interviewed for a plan and it asks only the open choices that would change the plan, three to five at a time, each with three short options and a recommendation; then it hands your answers, and any choice still open, to `/goat-plan`. Point it at an existing plan and it first checks the plan's cited paths and search anchors against the current code, recomputes its totals from their parts and compares its dates and dependencies with today and the plan folder, then asks about what is out of date. Intake spawns no critics and gives no critique verdict. A plan-only request ends with the plan, and an existing plan changes only when you ask for the update or approve it in your reply.
 
 | Delegation | Phases |
 |------------|--------|
@@ -384,12 +389,15 @@ The supported environment is an explicitly trusted checkout with trusted tools. 
 
 ## /goat-qa
 
-Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort. Does not write test code - hands off to the coding agent.
+Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort. In Standard mode it also runs the target project's existing checks before its Phase 2 gate and reports each command's real result. It never writes or edits tests or application code, and it hands a new failure to `/goat-debug`. An explicit analysis-only request runs nothing.
+
+When the change alters a page, QA also exercises each affected page in a browser and records each journey as verified, failed, blocked or untested. For a claimed fix, it replays the fix's recorded failure and then runs the regression checks that own the behaviour. It saves screenshots only when a claim needs visible proof, under the named plan's `evidence/` folder. Its manual-testing rules come from real local-testing failures, where setup or driver faults looked like product defects.
 
 | Mode | Trigger | What it does |
 |------|---------|-------------|
-| **Standard** | test gaps, verify coverage, what's risky | Risk-based gap analysis for recent changes |
-| **Audit** | test audit, coverage | Audit existing test coverage for a codebase area |
+| **Standard** | test gaps, verify coverage, what's risky | Risk-based gap analysis for recent changes, then a run of the existing checks that cover them |
+| **Audit** | test audit, coverage | Audit existing test coverage for a codebase area; runs checks only when asked |
+| **Fix Replay** | verify my fix | Replay the fix's recorded failure, then run its regression checks; no recorded reproduction means unverified |
 | **Regression Guard** | after bug fix | Define invariants and assess coverage for a specific fix |
 
 ```mermaid
@@ -399,7 +407,8 @@ flowchart TD
     subgraph GapAnalysis["Gap Analysis"]
         P1["Phase 1: Change Risk Map\nRead actual diff, not just file names\nClassify: CRITICAL / HIGH / MEDIUM / LOW\nTrace blast radius for CRITICAL/HIGH"]
         P1 -->|"CHECKPOINT"| P2["Phase 2: Gap Analysis\nCompare risk vs coverage\nUndertested risks + Misaligned effort"]
-        P2 -->|"BLOCKING GATE unless test-plan intent is explicit"| P3["Phase 3: Targeted Testing Plan\nMust test / Should test / Safe to skip\nTime estimates for manual items"]
+        P2 --> Run["Run existing checks\nFocused tests + required checks\nSkipped on analysis-only requests"]
+        Run -->|"BLOCKING GATE unless test-plan intent is explicit"| P3["Phase 3: Targeted Testing Plan\nMust test / Should test / Safe to skip\nTime estimates for manual items"]
     end
 
     P3 -->|"CHECKPOINT"| Close["Closing"]

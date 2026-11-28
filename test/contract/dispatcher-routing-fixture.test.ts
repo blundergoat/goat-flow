@@ -17,7 +17,7 @@ import {
 
 const DISPATCHER_PATH = "workflow/skills/goat/SKILL.md";
 const FIXTURE_PATH = "test/fixtures/dispatcher-routing/cases.jsonl";
-const EXPECTED_CASE_COUNT = 18;
+const EXPECTED_CASE_COUNT = 21;
 const ROUTE_KINDS = [
   "skill",
   "quality-flow",

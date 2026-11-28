@@ -1,0 +1,36 @@
+{
+  "id": "qa-analysis-only",
+  "fixture": "qa-project",
+  "request": "/goat-qa Analysis only, don't run anything: what testing gaps does my uncommitted change leave?",
+  "owners": [
+    "workflow/skills/goat-qa/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    ".goat-flow/skill-docs/playbooks/test-selection.md",
+    "workflow/skills/goat-qa/references/execution.md",
+    "workflow/skills/goat-qa/references/output-templates.md",
+    "workflow/skills/goat-qa/references/manual-testing.md"
+  ],
+  "rows": [
+    {
+      "id": "project-bytes",
+      "kind": "mechanical",
+      "label": "Fixture bytes match the before snapshot"
+    },
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "qa-ledger",
+      "kind": "mechanical",
+      "label": "The fixture's test-run ledger has no entries"
+    },
+    {
+      "id": "qa-none",
+      "kind": "mechanical",
+      "label": "The report states no project checks executed in analysis-only mode"
+    }
+  ]
+}

@@ -7,7 +7,13 @@
  *
  * Removals and legacy path migrations are deliberately absent: they are cleanup, not writes, and the preview declares that boundary in its limits.
  */
-import { closeSync, lstatSync, openSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+} from "node:fs";
 import { join, posix } from "node:path";
 
 import type {
@@ -23,6 +29,11 @@ import { loadManifest } from "./manifest/manifest.js";
 import { hashDescriptorSha256 } from "./project-file.js";
 import { pendingCommitGuidanceMigrationInstructionPath } from "./prompt/commit-guidance.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
+
+// Local pointer to the active plan folder; install seeds it once in a project with exactly one version-named plan folder.
+export const PLAN_MARKER_PATH = ".goat-flow/plans/.active";
+// Commit-message guide install seeds in a Git project that has none.
+const COMMIT_GUIDE_PATH = "docs/coding-standards/git-commit-message.md";
 
 /** Filesystem evidence for a destination, gathered without following target symlinks. */
 export type ManagedTargetStatus =
@@ -225,6 +236,49 @@ function agentProjectWrites(agent: AgentId): ProjectWriteDefinition[] {
 }
 
 /**
+ * List the version-named plan folders install may point `.goat-flow/plans/.active` at.
+ *
+ * @param projectPath - selected target root
+ * @returns folder names in directory order; empty when the plans folder does not exist yet
+ * @throws the read error when the plans folder exists but cannot be listed
+ */
+export function versionPlanDirectories(projectPath: string): string[] {
+  try {
+    return readdirSync(join(projectPath, ".goat-flow/plans"), {
+      withFileTypes: true,
+    })
+      .filter(
+        (entry) => entry.isDirectory() && /^\d+\.\d+\.\d+/u.test(entry.name),
+      )
+      .map((entry) => entry.name);
+  } catch (error) {
+    // A first install has no plans folder yet, so there is no folder to point the marker at.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+/**
+ * Report whether the preview lists the plans marker: apply may write it, using apply's own condition, or one already exists.
+ *
+ * @param projectPath - selected target root
+ * @returns true when a marker already exists, exactly one version-named plan folder exists, or the folder cannot be read
+ */
+function previewListsPlanMarker(projectPath: string): boolean {
+  try {
+    // An existing marker keeps its row, so the preview reports it as preserved or unsafe.
+    if (
+      lstatSync(join(projectPath, PLAN_MARKER_PATH), { throwIfNoEntry: false })
+    )
+      return true;
+    return versionPlanDirectories(projectPath).length === 1;
+  } catch {
+    // An unreadable plans folder keeps the row, so the preview's own path checks report it.
+    return true;
+  }
+}
+
+/**
  * Collect destinations the installer script and install command write outside manifest ownership.
  * Each row states the condition install applies, because several are written only in one project shape.
  */
@@ -244,22 +298,33 @@ function conditionalProjectWrites(
       reason:
         "Install appends a node_modules/ ignore line when one is missing and never rewrites your other entries.",
     },
-    {
-      path: ".goat-flow/plans/.active",
-      ownership: "user-owned",
-      seedable: true,
-      replaceable: false,
-      reason:
-        "Install writes this marker only when no marker exists and the target holds exactly one version-named plan directory.",
-    },
-    {
-      path: "docs/coding-standards/git-commit-message.md",
-      ownership: "user-owned",
-      seedable: true,
-      replaceable: false,
-      reason:
-        "Install seeds commit guidance only in a Git project that has no guide at this path.",
-    },
+    // Apply writes the marker only in one project shape; the preview lists it then, or when a marker already exists.
+    ...(previewListsPlanMarker(projectPath)
+      ? [
+          {
+            path: PLAN_MARKER_PATH,
+            ownership: "user-owned" as const,
+            seedable: true,
+            replaceable: false,
+            reason:
+              "Install writes this marker only when no marker exists and the target holds exactly one version-named plan directory.",
+          },
+        ]
+      : []),
+    // Apply seeds the guide only in a Git project; an existing guide keeps its row so the preview reports it preserved.
+    ...(existsSync(join(projectPath, ".git")) ||
+    existsSync(join(projectPath, COMMIT_GUIDE_PATH))
+      ? [
+          {
+            path: COMMIT_GUIDE_PATH,
+            ownership: "user-owned" as const,
+            seedable: true,
+            replaceable: false,
+            reason:
+              "Install seeds commit guidance only in a Git project that has no guide at this path.",
+          },
+        ]
+      : []),
     ...(commitGuidanceBridgePath === null
       ? []
       : [

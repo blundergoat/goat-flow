@@ -15,6 +15,7 @@ import type {
   ContentReport,
   DriftReport,
 } from "./types.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../advised-command.js";
 export { renderAuditSarif } from "./sarif.js";
 
 // === Text renderer ===
@@ -101,6 +102,10 @@ function hookSeverityLabel(
 
 /** Render coverage per agent because shared files cannot prove shared provider support. */
 function renderHookCoverage(hookCoverage: AuditHookCoverageReport): string {
+  // Unjudged coverage says why, rather than printing a zero count that reads as a pass.
+  if (hookCoverage.skipped !== undefined) {
+    return `${BOLD}Effective Hook Coverage:${RESET}  ${statusBadge("skipped")}  ${DIM}(${hookCoverage.skipped})${RESET}`;
+  }
   const lines = [
     `${BOLD}Effective Hook Coverage:${RESET}  ${statusBadge(hookCoverage.status)}  ${DIM}(${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only)${RESET}`,
   ];
@@ -162,8 +167,11 @@ const CONCERN_LABELS: Record<AuditConcernKey, string> = {
  */
 function renderHarnessConcerns(report: AuditReport, lines: string[]): void {
   if (!report.concerns || !report.scopes.harness) {
+    // A requested harness can be withheld only when the project is newer than this CLI, so the tip would be wrong.
     lines.push(
-      `${DIM}Tip: Run with --harness for AI harness completeness checks across 5 concerns.${RESET}`,
+      report.harness
+        ? `${DIM}Harness checks skipped: this CLI is older than the project's goat-flow release.${RESET}`
+        : `${DIM}Tip: Run with --harness for AI harness completeness checks across 5 concerns.${RESET}`,
     );
     return;
   }
@@ -329,7 +337,7 @@ function renderTextDriftFindings(drift: DriftReport, lines: string[]): void {
   if (staleAgents.size > 0) {
     const agentList = [...staleAgents].sort().join(" / ");
     lines.push(
-      `  ${DIM}Multi-agent drift: run \`goat-flow install . --agent <agent>\` for each stale agent (${agentList}).${RESET}`,
+      `  ${DIM}Multi-agent drift: run \`${PINNED_GOAT_FLOW_INVOCATION} install . --agent <agent>\` for each stale agent (${agentList}).${RESET}`,
     );
   }
 }
@@ -376,6 +384,11 @@ function renderMdHookCoverage(
   lines: string[],
 ): void {
   lines.push("");
+  // Unjudged coverage says why, rather than printing a zero count that reads as a pass.
+  if (hookCoverage.skipped !== undefined) {
+    lines.push(`## Effective Hook Coverage: SKIP (${hookCoverage.skipped})`);
+    return;
+  }
   lines.push(
     `## Effective Hook Coverage: ${mdScopeStatus(hookCoverage.status)} (${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only)`,
   );
@@ -408,8 +421,11 @@ function renderMdHookCoverage(
  */
 function renderMdHarnessConcerns(report: AuditReport, lines: string[]): void {
   if (!report.concerns || !report.scopes.harness) {
+    // A requested harness can be withheld only when the project is newer than this CLI, so the tip would be wrong.
     lines.push(
-      "> Tip: Run with --harness for AI harness completeness checks across 5 concerns.",
+      report.harness
+        ? "> Harness checks skipped: this CLI is older than the project's goat-flow release."
+        : "> Tip: Run with --harness for AI harness completeness checks across 5 concerns.",
     );
     lines.push("");
     return;

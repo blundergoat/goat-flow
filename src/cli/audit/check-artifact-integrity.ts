@@ -20,6 +20,7 @@ import {
   type ArtifactMirrorSpec,
 } from "./artifact-templates.js";
 import { checkResourceReferences } from "./resource-references.js";
+import { RENAMED_PLAYBOOKS } from "../retired-paths.js";
 
 /**
  * Select the sources and installed skill mirrors included in artifact integrity checks.
@@ -50,12 +51,6 @@ interface SkillIdentity {
 }
 
 const USER_OWNED_PLAYBOOK_MARKER = "user-owned";
-
-/** The two old installed names whose next install supplies and retains their replacements. */
-const RENAMED_WRITING_PLAYBOOKS: Readonly<Record<string, string>> = {
-  [`${INSTALLED_SHARED_ROOT}/playbooks/writing-style.md`]: `${INSTALLED_SHARED_ROOT}/playbooks/writing-human-facing-prose.md`,
-  [`${INSTALLED_SHARED_ROOT}/playbooks/writing-for-agents.md`]: `${INSTALLED_SHARED_ROOT}/playbooks/writing-agent-facing-instructions.md`,
-};
 
 /**
  * Read a non-empty skill name from YAML frontmatter.
@@ -391,12 +386,12 @@ function checkSharedFileSets(
     if (declaredInstalled.has(installedPath)) continue;
     // Consumer-authored playbooks are valid local extensions, not package leftovers.
     if (isUserOwnedConsumerPlaybook(fs, installedPath)) continue;
-    const renamedTo = RENAMED_WRITING_PLAYBOOKS[installedPath];
+    const renamedTo = RENAMED_PLAYBOOKS.get(installedPath);
     findings.push({
       kind: "orphan",
       path: installedPath,
       message: renamedTo
-        ? `writing playbook ${installedPath} was renamed to ${renamedTo}; the next install removes regular system-owned copies after writing their replacements; linked copies are kept`
+        ? `writing playbook ${installedPath} was renamed to ${renamedTo}. Install removes an unedited managed copy after writing the replacement. For an edited regular copy, carry over your edits before deleting it or using --force-path ${installedPath}. Remove a linked copy manually after review.`
         : `stale installed shared artifact ${installedPath}; no canonical workflow source is mapped in check-artifact-integrity.ts SHARED_ARTIFACT_MIRRORS`,
     });
   }

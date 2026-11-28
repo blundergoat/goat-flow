@@ -396,7 +396,8 @@ describe("managed setup preview", () => {
     const clarityFile = report.files.find(
       (file) => file.path === CODEX_GOAT_CLARITY_PATH,
     );
-    assert.equal(report.verdict, "ready");
+    // The repeated install left nothing to write, so the preview reports the install as finished.
+    assert.equal(report.verdict, "pass");
     assert.equal(clarityFile?.state, "unchanged");
     assert.equal(clarityFile?.action, "none");
   });

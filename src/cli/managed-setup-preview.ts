@@ -20,8 +20,8 @@ import { readDecisionsReadmeTransfer } from "./decisions-readme-transfer.js";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import {
-  applyRuntimeRetirementPreview,
-  retireRuntimeRows,
+  applyRetirementPreview,
+  forgetAbsentRetiredRows,
 } from "./installer/retired-runtime.js";
 import { readProjectTextFile } from "./project-file.js";
 import { getSkillFiles, loadManifest } from "./manifest/manifest.js";
@@ -50,6 +50,13 @@ import {
   type ManagedSetupAuthorityDecision,
 } from "./managed-setup-authority.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
+import {
+  emptyManagedSetupPreviewSummary,
+  labelPeerManagedRow,
+  peerSkillOwners,
+  settleManagedSetupPreview,
+  type ManagedSetupPreviewSummary,
+} from "./managed-setup-preview-summary.js";
 
 export {
   managedInstallStatePath,
@@ -68,7 +75,7 @@ const BLOCKING_STATES = new Set<ManagedSetupFileState>([
 
 // Caveats every install preview prints, so the user knows which cleanup the listed rows leave out.
 const PREVIEW_LIMITS = [
-  "Removals - retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations - are cleanup rather than writes and are not enumerated here.",
+  "Old goat-flow files - the retired Bash hook files and the renamed writing playbooks - are listed above as remove, preserve or none rows. Not listed: deprecated skill folders that --clean-deprecated removes, and pre-1.9 path migrations.",
 ] as const;
 
 /**
@@ -87,6 +94,7 @@ export type ManagedSetupFileState =
   | "added"
   | "adopted"
   | "removed"
+  | "peer-managed"
   | "missing"
   | "unmanaged"
   | "local-preserved"
@@ -100,7 +108,7 @@ export type ManagedSetupChangeDirection =
   "current" | "behind" | "diverged" | "unclassified";
 
 /** Action shown beside one path so users know what an approved install would do. */
-type ManagedSetupAction =
+export type ManagedSetupAction =
   | "none"
   | "create"
   | "replace"
@@ -111,7 +119,7 @@ type ManagedSetupAction =
   | "remove";
 
 /** Overall preview outcome used by the CLI before it starts the installer. */
-type ManagedSetupVerdict = "ready" | "warning" | "blocked";
+type ManagedSetupVerdict = "pass" | "ready" | "warning" | "blocked";
 
 /** Whether a usable previous-install baseline was available for comparison. */
 export type ManagedSetupBaselineStatus =
@@ -406,6 +414,7 @@ export interface ManagedSetupPreview {
   goatFlowVersion: string;
   baselineStatus: ManagedSetupBaselineStatus;
   verdict: ManagedSetupVerdict;
+  summary: ManagedSetupPreviewSummary;
   limits: string[];
   files: ManagedSetupPreviewFile[];
 }
@@ -458,6 +467,11 @@ const STATE_PRESENTATION: Record<
     action: "preserve",
     reason:
       "The previous install managed this path, but the current package no longer does.",
+  },
+  "peer-managed": {
+    action: "none",
+    reason:
+      "Another agent's install manages this path; this install leaves it unchanged.",
   },
   missing: {
     action: "protect",
@@ -808,9 +822,13 @@ function previewVerdict(
     )
   )
     return "blocked";
-  // Retired paths are preserved and pre-baseline adoptions replace bytes, so both still deserve user attention before the installer runs.
+  // Retired paths still on disk and pre-baseline adoptions deserve attention; a retired file already gone (action none) only drops its record.
   if (
-    files.some((file) => file.state === "removed" || file.state === "adopted")
+    files.some(
+      (file) =>
+        (file.state === "removed" && file.action !== "none") ||
+        file.state === "adopted",
+    )
   ) {
     return "warning";
   }
@@ -1043,29 +1061,31 @@ export function buildManagedSetupPreview(
     );
   }
 
+  const peerOwners = peerSkillOwners(agent, baseline.facade);
   // Baseline-only paths remain on disk unless the user later chooses a separate cleanup action.
   for (const [managedPath, expectedSha256] of baseline.facade.expectedHashes) {
     // Current templates were already classified, so only retired baseline paths remain here.
     if (currentTemplatePaths.has(managedPath)) continue;
-    files.push(
-      buildPreviewFile(
-        managedPath,
-        projectPath,
-        expectedSha256,
-        readManagedTargetEvidence(projectPath, managedPath),
-        null,
-        baseline.status,
-        authority,
-      ),
+    const row = buildPreviewFile(
+      managedPath,
+      projectPath,
+      expectedSha256,
+      readManagedTargetEvidence(projectPath, managedPath),
+      null,
+      baseline.status,
+      authority,
     );
+    const owners = peerOwners.get(managedPath);
+    // Another agent's install still ships this path, so it is that install's file, not a retired one.
+    if (owners) labelPeerManagedRow(row, owners);
+    files.push(row);
   }
 
-  applyRuntimeRetirementPreview(
+  // Agreed hashes from an older release's per-agent records count too: the applying install converts them to shared state unchanged.
+  applyRetirementPreview(
     projectPath,
     files,
-    baseline.facade.source === "v2"
-      ? baseline.facade.expectedHashes
-      : new Map(),
+    baseline.facade.expectedHashes,
     new Set(Object.keys(loadManifest().file_ownership)),
     authority,
   );
@@ -1094,46 +1114,26 @@ export function buildManagedSetupPreview(
     goatFlowVersion,
   );
   appendManagedInstallPreviewLimits(limits, baseline, staleReceiptAgents);
-  return {
+  const preview: ManagedSetupPreview = {
     schemaVersion: MANAGED_SETUP_PREVIEW_SCHEMA,
     coverage: "install-write-set",
     agent,
     goatFlowVersion,
     baselineStatus: baseline.status,
     verdict: previewVerdict(files, baseline.status),
+    summary: emptyManagedSetupPreviewSummary(),
     limits,
     files,
   };
+  // A stale receipt for this agent is rewritten by install, so this install is not finished yet.
+  settleManagedSetupPreview(
+    projectPath,
+    preview,
+    !staleReceiptAgents.includes(agent),
+  );
+  return preview;
 }
 
-/**
- * Render the preview in plain English for terminal users deciding whether to proceed.
- *
- * @param preview - complete managed report; an empty files list shows only verdict and limits
- * @returns terminal text with one row per file; never empty for a valid preview
- */
-export function renderManagedSetupPreviewText(
-  preview: ManagedSetupPreview,
-): string {
-  const lines = [
-    `Managed setup preview (${preview.agent})`,
-    `Verdict: ${preview.verdict}`,
-    `Coverage: ${preview.coverage}`,
-    `Baseline: ${preview.baselineStatus}`,
-    "",
-    "Files install may write:",
-  ];
-  // Every row stays grep-friendly while explaining the action in user language.
-  for (const file of preview.files) {
-    lines.push(
-      `  ${file.action.padEnd(10)} ${file.ownership.padEnd(12)} ${file.path} [${file.state}] - ${file.reason}`,
-    );
-  }
-  lines.push("", "Limits:");
-  // Limits prevent users from mistaking this focused preview for a full migration simulation.
-  for (const limit of preview.limits) lines.push(`  - ${limit}`);
-  return lines.join("\n");
-}
 /**
  * Build verified baseline rows and a full-install receipt after checking the user's installed files.
  *
@@ -1202,7 +1202,7 @@ function buildManagedInstallReceiptCandidate(
     if (previousReceiptIndex === -1) receipts.push(selectedReceipt);
     else receipts[previousReceiptIndex] = selectedReceipt;
   }
-  return retireRuntimeRows(
+  return forgetAbsentRetiredRows(
     projectPath,
     {
       schemaVersion: state.schemaVersion,
@@ -1215,7 +1215,8 @@ function buildManagedInstallReceiptCandidate(
 
 /**
  * Record verified Sync dependencies without claiming that the user completed a full install.
- * Invariant: unrelated rows and all existing receipts retain their data; changed generations may stale those receipts.
+ * Invariant: unrelated rows and existing receipts retain their data, except that rows and stale-receipt references for absent retired files are
+ * forgotten; changed generations may stale those receipts.
  *
  * @param projectPath - selected project whose state and file claims are held by the hook operation
  *
@@ -1260,7 +1261,7 @@ export function recordManagedHookAfterVerification(
       }),
     );
   }
-  const candidate = retireRuntimeRows(
+  const candidate = forgetAbsentRetiredRows(
     projectPath,
     {
       schemaVersion: state.schemaVersion,

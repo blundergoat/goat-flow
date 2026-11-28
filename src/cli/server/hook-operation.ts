@@ -19,6 +19,7 @@ import {
   inspectRuntimeRetirement,
   removeRetiredRuntimeFile,
 } from "../installer/retired-runtime.js";
+import { pinnedGoatFlowCommand } from "../advised-command.js";
 import { pathWriteClaimInspectCommand } from "../claims-command.js";
 import { AUDIT_VERSION } from "../constants.js";
 import {
@@ -206,7 +207,7 @@ export class PreparedHookChange {
       this.baseline.status !== "loaded"
     ) {
       throw new HookManagedInstallationError(
-        `${this.baseline.error ?? "Managed install history is unavailable."} Repair install-state evidence with goat-flow install before syncing hooks.`,
+        `${this.baseline.error ?? "Managed install history is unavailable."} Repair install-state evidence with ${pinnedGoatFlowCommand("install <project-path> --agent <id>")} before syncing hooks.`,
         409,
         {
           code: "hook-change-refused",
@@ -658,8 +659,7 @@ export class PreparedHookChange {
           hookIds: [],
           replacementAvailable: false,
           changedPaths,
-          recovery:
-            "Inspect changed paths. Repair filesystem access; use goat-flow install for incomplete cutover, then retry hook sync.",
+          recovery: `Inspect changed paths. Repair filesystem access; use ${pinnedGoatFlowCommand("install <project-path> --agent <id>")} for incomplete cutover, then retry hook sync.`,
         },
       );
     }

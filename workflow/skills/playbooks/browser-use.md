@@ -114,6 +114,12 @@ Use `js()` for targeted DOM inspection/extraction when coordinates cannot answer
 
 For scrolling, consult the installed helper signature: `scroll(x, y, dy=..., dx=...)` takes viewport pointer coordinates plus deltas. Scroll at the observed scrollable region and refresh evidence. For selects/custom dropdowns, open and choose the observed option using pointer/key interaction. Raw CDP parameters are keyword arguments: `cdp("Domain.method", parameter=value)`; the second positional argument is a session ID.
 
+Interaction traps:
+
+- To press Enter where the page cancels the keydown, as lookups and pickers do, send one CDP `Input.dispatchKeyEvent` `keyDown` that carries `text: "\r"`, then a `keyUp`. A key path that adds a separate `char` event can submit a form a real keyboard would not.
+- In a background or headless tab, read element text with `textContent`. An empty `innerText` beside populated links is an extraction fault, not a missing result.
+- Before triggering an irreversible request (send, publish, pay), stub it so any handler error aborts the request. Confirm the stub answers a harmless request first, and check the record's state before and after.
+
 ## Browser Modes
 
 | Context | Selection and ownership |
@@ -124,6 +130,10 @@ For scrolling, consult the installed helper signature: `scroll(x, y, dy=..., dx=
 | Remote/cloud | Use only when installed skill text documents it and the user approves provisioning, account access, cost, and cleanup. A daemon name is not a separate local profile. |
 
 Do not silently switch browser contexts after a connection failure. Resolve the intended browser first. No profile sync, authenticated-profile use, or cloud provisioning follows from a public-page smoke request.
+
+### Owned headless browser
+
+No running browser is not a blocker when a Chrome or Chromium binary exists and the task approves browser control. Launch a dedicated headless instance with a fresh scratch profile on a loopback debugging port, for example `google-chrome --headless=new --remote-debugging-port=<port> --user-data-dir=<scratch-dir> --no-first-run --no-default-browser-check about:blank`. Confirm `http://127.0.0.1:<port>/json/version` answers, then connect through the Explicit CDP browser mode. Pair each newly launched instance with its own session or daemon name; this is not a way around a timeout on the same browser. Drive only sessions you started, and never close or reload another. Record the instance's PID when you launch it and stop it by that PID when done. To stop it by pattern instead, run the stop as its own command, apart from the launch, and bracket one character, as in `pkill -f 'remote-debugging-por[t]=<port>'`; a launch flag in the same command line would let the pattern match your own shell.
 
 ## Login and Sensitive Evidence
 

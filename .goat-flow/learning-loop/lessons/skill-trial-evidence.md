@@ -1,6 +1,6 @@
 ---
 category: skill-trial-evidence
-last_reviewed: 2026-11-03
+last_reviewed: 2026-11-28
 ---
 
 **Scope:** Skill-trial evidence: validate produced output, observe the action behind a behavioural claim, run every evaluation fixture, and keep an unskilled baseline loaded with every current owner before crediting a candidate.
@@ -41,6 +41,8 @@ Before ticking any RUNTIME or [agent-evaluated] proof item, name the specific de
 
 The approved selector-wide clarification then produced a replacement with all seventeen case rows before naming/comment owners, but it rewrote both decodeFixtureResult diagnostic descriptions to match the assertion failure. Its tool-free clarification says the BLOCKED-ON-BEHAVIOUR distinction was read but never evaluated. Parsed syntax and seventeen passing tests preserved executable behavior; neither established permission to normalize this registered behavior conflict. Credit the demonstrated ordering separately and retain the failed conflict-preservation criterion. Evidence: `workflow/skills/goat-clarity/SKILL.md` (search: `When a comment is false because behaviour is defective`) and `test/unit/hook-provider-adapters.test.ts` (search: `function decodeFixtureResult`).
 
+**Recurrence 2026-11-28:** A goat-qa change planned a browser-check rule because the skill text had no browser route. The baseline, with the unchanged skill, already drove a headless browser on a UI change and found a real defect. It got there through the shared preamble's localhost rule and the harness instruction file. The rule was cut to the per-journey record the baseline lacked; fix replay and screenshot discipline, which the baseline really lacked, stayed. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `For URL, local HTML, localhost, screenshot, rendered UI`).
+
 ---
 
 ## Lesson: Evidence tooling is evidence, so run the fixture and re-derive every count
@@ -48,7 +50,7 @@ The approved selector-wide clarification then produced a replacement with all se
 **Status:** active | **Created:** 2026-09-07 | **Evidence:** OBSERVED
 **Severity:** CORRECTNESS
 **Decision changed:** Execute every evaluation fixture and re-derive run counts from artifacts before any claim rests on them; a scorer and its fixtures are graded material, not scaffolding.
-**Incident count:** 17 | **Latest occurrence:** 2026-10-18
+**Incident count:** 22 | **Latest occurrence:** 2026-11-28
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
 
@@ -101,6 +103,16 @@ The preservation comparison then rejected its own prospectively advancing timing
 **Recurrence 2026-10-18 (consumer-copy probe):** A temporary runner extracted the real consumer fixture but omitted its imported `assert` dependency, so qualification stopped with `ReferenceError` before any fixture comparison. Bind the helper’s imported dependencies when executing extracted source. With that binding restored, unchanged case bodies produced copies matching the original bytes, modes and preview rows, and mutations stayed isolated. The applied copy callback also introduced a missing-internal-function-doc advisory. Moving the existing permission explanation above that callback removed it without executable changes; compare stable analyzer identities before claiming no introduced findings. Evidence: `test/integration/setup-install-upgrade-1150.test.ts` (search: `measuredConsumerTarget`).
 
 ---
+
+**Recurrence 2026-11-28 (M11):** A file URL working directory failed the owner read check. Inspect real events and decode file URLs at collection. Evidence: `evals/lib/transcript.mjs` (search: `readCodexTranscript`).
+
+**Recurrence 2026-11-28 (M12):** Relative reads, numbered routes and question tables triggered false failures. Keep original scores and rescore the same reports. Evidence: `evals/lib/case.mjs` (search: `intakeTable`).
+
+**Recurrence 2026-11-28 (M13):** The synthetic dependency plan showed M02 waiting on M03, but strict validation rejected missing stop criteria and the completed milestone's Actual field. Run strict validation before dispatch and require exit zero alongside the intended dependency state. Evidence: `evals/fixtures/milestone-order/build.mjs` (search: `unavailable: synthetic fixture baseline`).
+
+**Recurrence 2026-11-28 (M13 debug):** Two Codex samples tried to avoid the QA fixture's out-of-project ledger append and reached the diagnosis gate without running the original reproduction. Disable QA-only instrumentation in diagnosis fixtures and keep the first score when rerunning a repaired fixture. Evidence: `test/unit/evals-workflow-gates.test.ts` (search: `without writing the QA trial ledger`).
+
+**Recurrence 2026-11-28 (M13 scoring):** The scorer missed `npm_config_logs_max=0 npm test`. Recheck the same transcript after recognizing the assignment prefix in `evals/lib/transcript.mjs` (search: `testInvocation`).
 
 ## Lesson: Skill RED baselines must retain current owner guidance
 

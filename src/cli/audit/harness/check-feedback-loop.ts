@@ -9,6 +9,7 @@ import type {
 } from "../types.js";
 import type { CheckEvidence } from "../provenance-types.js";
 import { pass, fail } from "./helpers.js";
+import { PINNED_GOAT_FLOW_INVOCATION } from "../../advised-command.js";
 
 const VERIFIED_ON = "2026-04-18";
 const EMPTY_LEARNING_LOOP_DIAGNOSTICS = new Set([
@@ -68,18 +69,148 @@ function learningLoopFreshnessDetails(ctx: AuditContext): HarnessCheckDetails {
   const aging = buckets.filter(
     (bucket) => bucket.freshnessBand === "aging",
   ).length;
-  const stale = buckets.filter(
-    (bucket) => bucket.freshnessBand === "stale",
-  ).length;
+  const staleBuckets = buckets
+    .filter((bucket) => bucket.freshnessBand === "stale")
+    .map((bucket) => ({
+      path: bucket.path,
+      lastReviewed: bucket.lastReviewed,
+    }));
   return {
     // Every audited agent sees the same project-level memory freshness in the dashboard.
     freshness: ctx.agents.map((agentFacts) => ({
       agent: agentFacts.agent.id,
       fresh,
       aging,
-      stale,
+      stale: staleBuckets.length,
+      staleBuckets,
     })),
   };
+}
+
+/** One failing cause of the feedback-loop check: the finding lines, the recommendation and the fix a user acts on. */
+interface FeedbackLoopCause {
+  findings: string[];
+  recommendation: string;
+  howToFix: string;
+}
+
+/**
+ * Report a missing footguns or lessons directory, which leaves future incidents and corrections nowhere durable to go.
+ *
+ * @param ctx - audit context supplying the configured learning-loop paths and their existence facts
+ * @returns the cause naming each missing directory, or null when both exist
+ */
+function missingDirectoryCause(ctx: AuditContext): FeedbackLoopCause | null {
+  const { footguns, lessons } = ctx.facts.shared;
+  const missing = [
+    ...(footguns.exists ? [] : [ctx.config.config.footguns.path]),
+    ...(lessons.exists ? [] : [ctx.config.config.lessons.path]),
+  ];
+  // Both directories exist, so storage is not a cause.
+  if (missing.length === 0) return null;
+  return {
+    findings: [],
+    recommendation: `Create missing directories: ${missing.join(", ")}`,
+    howToFix: `Create ${missing.join(" and ")} to enable the feedback loop.`,
+  };
+}
+
+/**
+ * Report learning-loop entries that cite files which no longer exist, which can send the user to removed code.
+ *
+ * @param ctx - audit context supplying footgun and lesson stale-reference facts
+ * @returns the cause with the stale-reference count, or null when every cited path resolves
+ */
+function staleReferenceCause(ctx: AuditContext): FeedbackLoopCause | null {
+  const totalStale =
+    ctx.facts.shared.footguns.staleRefs.length +
+    ctx.facts.shared.lessons.staleRefs.length;
+  // Every cited path resolves, so references are not a cause.
+  if (totalStale === 0) return null;
+  return {
+    findings: [
+      `${totalStale} stale file reference(s) in learning loop entries`,
+    ],
+    recommendation:
+      "Fix stale footgun/lesson file references or remove local-path markup",
+    howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} stats . --check\`, then update the cited footgun/lesson entries so every backticked local path resolves or is rewritten as external incident prose.`,
+  };
+}
+
+/**
+ * Report brittle line references and malformed bucket metadata, which make durable guidance untrustworthy.
+ *
+ * @param ctx - audit context supplying invalid line references and bucket format diagnostics
+ * @returns the cause listing each problem, or null when anchors and metadata are valid
+ */
+function invalidReferenceCause(ctx: AuditContext): FeedbackLoopCause | null {
+  const invalidLineRefs = [
+    ...ctx.facts.shared.footguns.invalidLineRefs,
+    ...ctx.facts.shared.lessons.invalidLineRefs,
+  ];
+  const formatDiagnostics = [
+    ctx.facts.shared.footguns.formatDiagnostic,
+    ctx.facts.shared.lessons.formatDiagnostic,
+  ].filter(isActionableFormatDiagnostic);
+  // Anchors and metadata are valid, so neither is a cause.
+  if (invalidLineRefs.length === 0 && formatDiagnostics.length === 0) {
+    return null;
+  }
+  return {
+    findings: [
+      ...invalidLineRefs.map((ref) => `Invalid learning-loop line ref: ${ref}`),
+      ...formatDiagnostics,
+    ],
+    recommendation:
+      "Fix invalid learning-loop line refs and bucket metadata before trusting feedback-loop health",
+    howToFix: `Run \`${PINNED_GOAT_FLOW_INVOCATION} stats . --check\`, replace brittle file:line references with semantic anchors, and add valid bucket frontmatter.`,
+  };
+}
+
+/**
+ * Report buckets whose last review is old enough that their advice may no longer match the project.
+ *
+ * @param ctx - audit context supplying footgun and lesson bucket freshness
+ * @returns the cause naming each stale bucket, or null when every bucket was reviewed recently
+ */
+function staleBucketCause(ctx: AuditContext): FeedbackLoopCause | null {
+  const staleBuckets = [
+    ...ctx.facts.shared.footguns.buckets,
+    ...ctx.facts.shared.lessons.buckets,
+  ].filter((bucket) => bucket.freshnessBand === "stale");
+  // Every bucket was reviewed recently, so freshness is not a cause.
+  if (staleBuckets.length === 0) return null;
+  return {
+    findings: [
+      `${staleBuckets.length} learning-loop bucket(s) have stale last_reviewed dates: ${staleBuckets
+        .map((bucket) => bucket.path)
+        .join(", ")}`,
+    ],
+    recommendation:
+      "Review stale learning-loop buckets and update last_reviewed",
+    howToFix:
+      "Review each stale bucket, fix any stale advice, and update its YYYY-MM-DD last_reviewed frontmatter.",
+  };
+}
+
+/**
+ * Describe the footguns and lessons directories in the order the check reports them.
+ *
+ * @param ctx - audit context supplying directory existence, entry counts and bucket counts
+ * @returns one line per directory, stating its entries or that it is missing
+ */
+function directoryFindings(ctx: AuditContext): string[] {
+  const { footguns, lessons } = ctx.facts.shared;
+  return [
+    // An available footgun directory is valid even before the user's first incident.
+    footguns.exists
+      ? `Footguns directory exists (${footguns.entryCount} entries across ${footguns.buckets.length} files)`
+      : "Footguns directory missing",
+    // An available lessons directory lets future verification failures become durable guidance.
+    lessons.exists
+      ? `Lessons directory exists (${lessons.entryCount} entries across ${lessons.buckets.length} files)`
+      : "Lessons directory missing",
+  ];
 }
 
 /**
@@ -112,114 +243,26 @@ const feedbackLoopActive: HarnessCheck = {
   ]),
   /** Run the Feedback loop directories exist check. */
   run: (ctx) => {
-    const findings: string[] = [];
-    const missing: string[] = [];
     const details = learningLoopFreshnessDetails(ctx);
-
-    const footgunsDir = ctx.config.config.footguns.path;
-    const lessonsDir = ctx.config.config.lessons.path;
-
-    // An available footgun directory is valid even before the user's first incident.
-    if (ctx.facts.shared.footguns.exists) {
-      const fileCount = ctx.facts.shared.footguns.buckets.length;
-      findings.push(
-        `Footguns directory exists (${ctx.facts.shared.footguns.entryCount} entries across ${fileCount} files)`,
-      );
-    } else {
-      // Without the directory, future safety incidents have no durable destination.
-      findings.push("Footguns directory missing");
-      missing.push(footgunsDir);
-    }
-
-    // An available lessons directory lets future verification failures become durable guidance.
-    if (ctx.facts.shared.lessons.exists) {
-      const fileCount = ctx.facts.shared.lessons.buckets.length;
-      findings.push(
-        `Lessons directory exists (${ctx.facts.shared.lessons.entryCount} entries across ${fileCount} files)`,
-      );
-    } else {
-      // Without the directory, corrected agent behavior cannot survive the current session.
-      findings.push("Lessons directory missing");
-      missing.push(lessonsDir);
-    }
-
-    // Missing storage blocks the feedback loop before any content-quality check can help.
-    if (missing.length > 0) {
-      return fail(
-        findings,
-        [`Create missing directories: ${missing.join(", ")}`],
-        [`Create ${missing.join(" and ")} to enable the feedback loop.`],
-        details,
-      );
-    }
-
-    const footgunStale = ctx.facts.shared.footguns.staleRefs;
-    const lessonStale = ctx.facts.shared.lessons.staleRefs;
-    const totalStale = footgunStale.length + lessonStale.length;
-    const invalidLineRefs = [
-      ...ctx.facts.shared.footguns.invalidLineRefs,
-      ...ctx.facts.shared.lessons.invalidLineRefs,
+    // Collect every cause before returning, so one run names everything to fix instead of one cause per audit.
+    const causes = [
+      missingDirectoryCause(ctx),
+      staleReferenceCause(ctx),
+      invalidReferenceCause(ctx),
+      staleBucketCause(ctx),
+    ].filter((cause): cause is FeedbackLoopCause => cause !== null);
+    const findings = [
+      ...directoryFindings(ctx),
+      ...causes.flatMap((cause) => cause.findings),
     ];
-    const formatDiagnostics = [
-      ctx.facts.shared.footguns.formatDiagnostic,
-      ctx.facts.shared.lessons.formatDiagnostic,
-    ].filter(isActionableFormatDiagnostic);
-    const staleBuckets = [
-      ...ctx.facts.shared.footguns.buckets,
-      ...ctx.facts.shared.lessons.buckets,
-    ].filter((bucket) => bucket.freshnessBand === "stale");
-    // Stale evidence can send the user to removed files, so it remains a blocking integrity failure.
-    if (totalStale > 0) {
-      findings.push(
-        `${totalStale} stale file reference(s) in learning loop entries`,
-      );
-      return fail(
-        findings,
-        [
-          "Fix stale footgun/lesson file references or remove local-path markup",
-        ],
-        [
-          "Run `npx @blundergoat/goat-flow@latest stats . --check`, then update the cited footgun/lesson entries so every backticked local path resolves or is rewritten as external incident prose.",
-        ],
-        details,
-      );
-    }
-    // Invalid anchors or malformed metadata make apparently durable guidance untrustworthy.
-    if (invalidLineRefs.length > 0 || formatDiagnostics.length > 0) {
-      findings.push(
-        ...invalidLineRefs.map(
-          (ref) => `Invalid learning-loop line ref: ${ref}`,
-        ),
-        ...formatDiagnostics,
-      );
-      return fail(
-        findings,
-        [
-          "Fix invalid learning-loop line refs and bucket metadata before trusting feedback-loop health",
-        ],
-        [
-          "Run `goat-flow stats . --check`, replace brittle file:line references with semantic anchors, and add valid bucket frontmatter.",
-        ],
-        details,
-      );
-    }
-    // Old bucket reviews warn that guidance may no longer match the user's current project.
-    if (staleBuckets.length > 0) {
-      findings.push(
-        `${staleBuckets.length} learning-loop bucket(s) have stale last_reviewed dates: ${staleBuckets
-          .map((bucket) => bucket.path)
-          .join(", ")}`,
-      );
-      return fail(
-        findings,
-        ["Review stale learning-loop buckets and update last_reviewed"],
-        [
-          "Review each stale bucket, fix any stale advice, and update its YYYY-MM-DD last_reviewed frontmatter.",
-        ],
-        details,
-      );
-    }
-    return pass(findings, details);
+    // No cause means storage exists and every reference, anchor, bucket metadata block and bucket review is current.
+    if (causes.length === 0) return pass(findings, details);
+    return fail(
+      findings,
+      causes.map((cause) => cause.recommendation),
+      causes.map((cause) => cause.howToFix),
+      details,
+    );
   },
 };
 

@@ -100,7 +100,7 @@ last_reviewed: 2026-11-14
 
 **What happened:** The change pre-created the destination but expected a directory move. Correct per-entry moves and `target exists, left old entry in place` failed the test. Anchor: `test/integration/setup-install-migrations.test.ts` (search: `migrates legacy skill docs without overwriting target collisions`).
 
-**Recurrence 2026-10-09:** The change expected `2 removed`; the helper printed `2 stale removed` after removal/history passed. Shell rejected CLI-only `--dry-run`. Audit also promised removal for symlinks; advice now names regular copies and says links stay. Anchors: `test/integration/setup-install-renamed-playbooks.test.ts` (search: `HELPER DONE:`), `src/cli/audit/check-artifact-integrity.ts` (search: `RENAMED_WRITING_PLAYBOOKS`).
+**Recurrence 2026-10-09:** The change expected `2 removed`; the helper printed `2 stale removed` after removal/history passed. Shell rejected CLI-only `--dry-run`. Audit also promised removal for symlinks; advice now names regular copies and says links stay. Anchors: `test/integration/setup-install-renamed-playbooks.test.ts` (search: `HELPER DONE:`), `src/cli/audit/check-artifact-integrity.ts` (search: `RENAMED_PLAYBOOKS.get`).
 
 ---
 

@@ -270,7 +270,7 @@ describe("install force authority", () => {
     assert.equal(readFileSync(configPath, "utf-8"), configBefore);
   });
 
-  it("rejects a named path that matches no conflict", () => {
+  it("rejects a named path absent from the preview", () => {
     const target = conflictedTarget();
 
     const mistyped = runCliInstaller(
@@ -288,6 +288,27 @@ describe("install force authority", () => {
       target.localBytes,
       "a rejected authority must leave every conflict untouched",
     );
+  });
+
+  it("warns and continues when a retried named path no longer needs authority", () => {
+    const target = conflictedTarget();
+    const command = [
+      "--agent",
+      "codex",
+      "--force-path",
+      FIRST_CONFLICT_PATH,
+      "--force-path",
+      SECOND_CONFLICT_PATH,
+    ];
+    const first = runCliInstaller(target.projectPath, ...command);
+    assert.equal(first.status, 0, first.stderr);
+
+    // The same command again names two paths that the first run already resolved.
+    const retry = runCliInstaller(target.projectPath, ...command);
+
+    assert.equal(retry.status, 0, retry.stderr);
+    assert.match(retry.stderr, /needs no authority/u);
+    assert.match(retry.stdout, /Install verified for codex/u);
   });
 
   it("rejects a broad user-owned override with no named path", () => {

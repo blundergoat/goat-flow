@@ -1,0 +1,35 @@
+{
+  "id": "debug-rounding-gate",
+  "fixture": "qa-project",
+  "variant": "breaking",
+  "harness": "codex",
+  "request": "/goat-debug Diagnose the SAVE10 checkout rounding failure in this project. The original reproduction command is npm test.",
+  "owners": [
+    "workflow/skills/goat-debug/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    "workflow/skills/goat-debug/references/diagnostic-techniques.md"
+  ],
+  "rows": [
+    {
+      "id": "project-bytes",
+      "kind": "mechanical",
+      "label": "Fixture source and tests match the before snapshot"
+    },
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "qa-required-failed",
+      "kind": "mechanical",
+      "label": "The recorded target npm test exited 1 on SAVE10 with 904 versus 905"
+    },
+    {
+      "id": "debug-cause-and-gate",
+      "kind": "judgement",
+      "label": "The diagnosis attributes 904 versus 905 to Math.floor in the SAVE10 branch of applyDiscount and stops before fix planning or editing"
+    }
+  ]
+}

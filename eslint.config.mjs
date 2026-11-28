@@ -75,7 +75,7 @@ export default tseslint.config(
   {
     // Plain ESM maintenance scripts run directly by Node; they belong to no
     // tsconfig project, so typed linting would reject them at parse time.
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "evals/**/*.mjs"],
     extends: [tseslint.configs.disableTypeChecked],
   },
   {

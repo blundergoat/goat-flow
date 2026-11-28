@@ -12,6 +12,7 @@ import {
   runSkillDoctor,
   type CanonicalSkillRead,
 } from "../../src/cli/skill-doctor.js";
+import { pinnedGoatFlowCommand } from "../../src/cli/advised-command.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
 const CODEX_PROFILE: AgentProfile = {
@@ -134,14 +135,10 @@ describe("skill doctor", () => {
       skill.blockingReasons.join("\n"),
       /installed SKILL\.md is missing/i,
     );
-    assert.match(
-      skill.remediation.join("\n"),
-      /goat-flow install <project-path> --agent codex/,
-    );
-    assert.match(
-      skill.remediation.join("\n"),
-      /audit <project-path> --agent codex --check-drift/,
-    );
+    assert.deepEqual(skill.remediation, [
+      pinnedGoatFlowCommand("install <project-path> --agent codex"),
+      pinnedGoatFlowCommand("audit <project-path> --agent codex --check-drift"),
+    ]);
   });
 
   it("blocks malformed frontmatter with the installed path in evidence", () => {
@@ -245,8 +242,7 @@ describe("skill doctor", () => {
     );
     assert.ok(
       skill.remediation.every(
-        (command) =>
-          !/^goat-flow install <project-path> --agent [a-z]+$/u.test(command),
+        (command) => !/ install <project-path> --agent [a-z]+$/u.test(command),
       ),
       `drift remediation must not silently replace the mirror: ${skill.remediation.join("\n")}`,
     );

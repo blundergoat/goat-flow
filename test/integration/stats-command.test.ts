@@ -797,6 +797,11 @@ describe("goat-flow stats --check", () => {
       ".goat-flow/learning-loop/footguns/hooks.md",
     );
     assert.ok(anchorFindings[0]?.message.includes('"bare path only"'));
+    // Passing entries cite a backticked path and needle; the message shows that form so a fix is copyable.
+    assert.match(
+      anchorFindings[0]?.message ?? "",
+      /`[^`]+` \(search: `[^`]+`\)/u,
+    );
     assert.ok(
       !anchorFindings[0]?.message.includes("semantic anchor control"),
       "a valid search anchor must remain an accepted visible control",
