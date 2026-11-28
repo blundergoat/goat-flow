@@ -1,5 +1,7 @@
 /** Upgrade contracts use real directories and the public installer in disposable projects. */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import {
   existsSync,
   mkdirSync,
@@ -195,6 +197,33 @@ describe("local operational-state directory migration", () => {
     assert.equal(
       readFileSync(join(root, backup, "managed.json"), "utf8"),
       "converted evidence\n",
+    );
+  });
+
+  it("preserves the previous install backup when staging the next copy fails", (t) => {
+    const root = legacyProject();
+    const backup = backUpInstallState(root, "1.16.0");
+    assert.ok(backup);
+    const record = join(root, `${backup.backup}.json`);
+    const savedRecord = readFileSync(record);
+    assert.equal(migrateLegacyLocalState(root), true);
+    t.mock.method(fs, "cpSync", () => {
+      throw new Error("injected backup copy failure");
+    });
+    syncBuiltinESMExports();
+    try {
+      assert.throws(
+        () => backUpInstallState(root, "1.19.0"),
+        /injected backup copy failure/u,
+      );
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+    assert.deepEqual(readFileSync(record), savedRecord);
+    assert.equal(
+      readFileSync(join(root, backup.backup, "managed.json"), "utf8"),
+      "preserved evidence\n",
     );
   });
 

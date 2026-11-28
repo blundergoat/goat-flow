@@ -3,6 +3,7 @@ import {
   cpSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -235,23 +236,74 @@ export function backUpInstallState(
   if (earlier) return earlier;
   // A fresh project has no install state, so there is nothing to restore.
   if (directoryStats(projectPath, source) === null) return null;
-  // The record goes first, so a copy interrupted part-way is never kept as a complete one.
-  rmSync(join(projectPath, INSTALL_BACKUP_RECORD), { force: true });
-  rmSync(join(projectPath, INSTALL_BACKUP), { recursive: true, force: true });
-  mkdirSync(join(projectPath, STATE_DIRECTORY), {
+  const state = join(projectPath, STATE_DIRECTORY);
+  mkdirSync(state, {
     recursive: true,
     mode: 0o700,
   });
-  cpSync(join(projectPath, source), join(projectPath, INSTALL_BACKUP), {
-    recursive: true,
-    errorOnExist: true,
-    force: false,
-    verbatimSymlinks: true,
-  });
-  writeFileSync(
-    join(projectPath, INSTALL_BACKUP_RECORD),
-    `${JSON.stringify({ from: fromVersion, source })}\n`,
-    { mode: 0o600 },
-  );
+  const staging = mkdtempSync(join(state, ".install-backup-"));
+  const copy = join(staging, "copy");
+  const record = join(staging, "record.json");
+  let canCleanStaging = true;
+  try {
+    cpSync(join(projectPath, source), copy, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+      verbatimSymlinks: true,
+    });
+    writeFileSync(
+      record,
+      `${JSON.stringify({ from: fromVersion, source })}\n`,
+      {
+        mode: 0o600,
+        flag: "wx",
+      },
+    );
+    // If publishing or restoring fails, keep the staging folder with any saved copies.
+    canCleanStaging = false;
+    publishInstallBackup(projectPath, staging, copy, record);
+    canCleanStaging = true;
+  } finally {
+    if (canCleanStaging) rmSync(staging, { recursive: true, force: true });
+  }
   return { backup: INSTALL_BACKUP, source, isFromEarlierAttempt: false };
+}
+
+/**
+ * Move the finished copy and receipt into place after saving any previous pair in staging.
+ * Throws on a publish error after attempting to restore the previous pair.
+ */
+function publishInstallBackup(
+  projectPath: string,
+  staging: string,
+  copy: string,
+  record: string,
+): void {
+  const backup = join(projectPath, INSTALL_BACKUP);
+  const receipt = join(projectPath, INSTALL_BACKUP_RECORD);
+  const previousReceipt = lstatSync(receipt, { throwIfNoEntry: false });
+  if (previousReceipt && !previousReceipt.isFile())
+    throw new Error(`${INSTALL_BACKUP_RECORD} must be a regular file.`);
+  let hasNewCopy = false;
+  const moved: { original: string; saved: string }[] = [];
+  try {
+    for (const [original, name] of [
+      [receipt, "previous.json"],
+      [backup, "previous"],
+    ] as const) {
+      if (!lstatSync(original, { throwIfNoEntry: false })) continue;
+      const saved = join(staging, name);
+      renameSync(original, saved);
+      moved.push({ original, saved });
+    }
+    renameSync(copy, backup);
+    hasNewCopy = true;
+    renameSync(record, receipt);
+  } catch (error) {
+    if (hasNewCopy) renameSync(backup, copy);
+    for (const { original, saved } of moved.reverse())
+      renameSync(saved, original);
+    throw error;
+  }
 }

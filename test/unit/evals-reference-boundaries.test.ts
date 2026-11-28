@@ -1,5 +1,6 @@
 /** Verifies that scored evidence preserves the requested source boundaries. */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -9,12 +10,14 @@ import {
   buildCitedComment,
   citedCommentAnchor,
   citedSourcePath,
+  citationEntryPath,
   compareCitedComment,
 } from "../../evals/fixtures/cited-comment/build.mjs";
 import { stagedRoundingExpression } from "../../evals/fixtures/staged-review/build.mjs";
 import { scoreSample, validateCase } from "../../evals/lib/case.mjs";
 import {
   recordedCitedComment,
+  recordedClaudeOwnerRead,
   recordedPreparedOwnerRead,
   recordedStagedReviewEvidence,
 } from "../../evals/lib/transcript.mjs";
@@ -36,9 +39,12 @@ test("only the prepared stage and observed index bytes support the staged review
   const definition = loadCase("review-staged-authority");
   const project = resolve("synthetic-review-project");
   // Labelled snippets represent completed command records for this scorer.
+  const contents = `return ${stagedRoundingExpression};\n`;
   const baseline = {
     fingerprint: "prepared-stage-fingerprint",
-    blob: "prepared-stage-blob",
+    blob: createHash("sha256")
+      .update(`blob ${Buffer.byteLength(contents)}\0${contents}`)
+      .digest("hex"),
   };
   const snapshot = {
     cwd: project,
@@ -65,12 +71,8 @@ test("only the prepared stage and observed index bytes support the staged review
   const source = {
     cwd: project,
     exit_code: 0,
-    command: [
-      "bash",
-      "-lc",
-      "git --no-pager diff --cached -- src/discount.mjs",
-    ],
-    aggregated_output: stagedRoundingExpression,
+    command: ["bash", "-lc", "git --no-pager show :src/discount.mjs"],
+    aggregated_output: contents,
   };
   // Vary authority and reads independently of the unchanged checkout.
   const score = (commands: (typeof snapshot)[], isIndexUnchanged = true) =>
@@ -82,6 +84,16 @@ test("only the prepared stage and observed index bytes support the staged review
     });
 
   assert.equal(score([snapshot, source]).status, "pass");
+  assert.equal(
+    score([
+      snapshot,
+      {
+        ...source,
+        aggregated_output: contents + "// different staged blob\n",
+      },
+    ]).status,
+    "fail",
+  );
   assert.equal(
     score([
       {
@@ -174,6 +186,38 @@ test("the collector binds prepared owner bytes to the recorded working directory
   );
 });
 
+test("Claude owner reads must cover the full prepared file", () => {
+  const owner = resolve("prepared/owner.md");
+  const contents = "# Owner\n\nRead the instructions.\n";
+  const read = (range = {}) => [
+    { input: { file_path: owner, ...range }, content: contents },
+  ];
+  assert.equal(recordedClaudeOwnerRead(read(), owner, contents), true);
+  assert.equal(
+    recordedClaudeOwnerRead(
+      [{ input: { file_path: owner }, content: "     1\t# Owner\n" }],
+      owner,
+      contents,
+    ),
+    false,
+  );
+  const numbered = [
+    {
+      input: { file_path: owner },
+      content: "     1\t# Owner\n     2\t\n     3\tRead the instructions.\n",
+    },
+  ];
+  assert.equal(recordedClaudeOwnerRead(numbered, owner, contents), true);
+  assert.equal(
+    recordedClaudeOwnerRead(read({ limit: 1 }), owner, contents),
+    false,
+  );
+  assert.equal(
+    recordedClaudeOwnerRead(read({ offset: 2 }), owner, contents),
+    false,
+  );
+});
+
 // The real fixture has separate comment, code, test, and citation bytes.
 test("a comment cleanup preserves its cited anchor and all other fixture bytes", (t) => {
   const project = mkdtempSync(join(tmpdir(), "eval-comment-anchor-"));
@@ -183,11 +227,13 @@ test("a comment cleanup preserves its cited anchor and all other fixture bytes",
   const sourcePath = join(project, citedSourcePath);
   const original = readFileSync(sourcePath, "utf8");
   const before = hashProject(project);
-  const entry = readFileSync(
-    join(project, ".goat-flow/learning-loop/lessons/comment-citations.md"),
-    "utf8",
-  );
-  const citation = { cwd: project, exit_code: 0, aggregated_output: entry };
+  const entry = readFileSync(join(project, citationEntryPath), "utf8");
+  const citation = {
+    cwd: project,
+    exit_code: 0,
+    command: ["cat", citationEntryPath],
+    aggregated_output: entry,
+  };
   const score = (observations = [citation]) =>
     scoreSample(definition, {
       harnessStatusUnchanged: true,
@@ -207,6 +253,10 @@ test("a comment cleanup preserves its cited anchor and all other fixture bytes",
   assert.notEqual(trimmed, original);
   writeFileSync(sourcePath, trimmed);
   assert.equal(score().status, "pass");
+  assert.equal(
+    score([{ ...citation, command: ["cat", citedSourcePath] }]).status,
+    "fail",
+  );
   assert.equal(
     score([]).rows.find(({ id }) => id === "clarity-citation-observed")?.passed,
     false,

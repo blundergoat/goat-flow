@@ -9,6 +9,7 @@ import type { ManagedSetupAuthority } from "./managed-setup-authority.js";
 import {
   isBlockingManagedFile,
   type ManagedSetupPreview,
+  type ManagedSetupPreviewFile,
 } from "./managed-setup-preview.js";
 import { RETIRED_PATHS, RETIRED_RUNTIME_PATHS } from "./retired-paths.js";
 
@@ -21,10 +22,7 @@ import { RETIRED_PATHS, RETIRED_RUNTIME_PATHS } from "./retired-paths.js";
 function managedSetupBlockingSummary(preview: ManagedSetupPreview): string[] {
   // Conflicts and unsafe write-set destinations both need a path-specific repair line.
   const blockingFiles = preview.files.filter(
-    (file) =>
-      isBlockingManagedFile(file) ||
-      file.currentStatus === "non-regular" ||
-      file.currentStatus === "unreadable",
+    (file) => isBlockingManagedFile(file) || isUnsafeManagedTarget(file),
   );
   // Each path stays on one line so users can inspect or copy it directly.
   const lines = blockingFiles.map(
@@ -44,11 +42,28 @@ function managedSetupBlockingSummary(preview: ManagedSetupPreview): string[] {
  * Use before honoring force so explicit conflict replacement never becomes path redirection.
  */
 function hasUnsafeManagedTarget(preview: ManagedSetupPreview): boolean {
-  // Every preview row is a possible install write, including generated and user-owned destinations.
-  return preview.files.some(
-    (file) =>
-      file.currentStatus === "non-regular" ||
-      file.currentStatus === "unreadable",
+  return preview.files.some(isUnsafeManagedTarget);
+}
+
+/**
+ * Identify retired rows that do not require admission or claims as write targets.
+ * @param file - preview row, including any named authority
+ * @returns true when install only observes the retired path
+ */
+export function isPreservedRetiredPath(file: ManagedSetupPreviewFile): boolean {
+  return (
+    file.state === "removed" &&
+    file.action === "preserve" &&
+    file.authority === "not-required" &&
+    RETIRED_PATHS.includes(file.path)
+  );
+}
+
+/** Keep path safety in force for destinations that may receive a write. */
+function isUnsafeManagedTarget(file: ManagedSetupPreviewFile): boolean {
+  if (isPreservedRetiredPath(file)) return false;
+  return (
+    file.currentStatus === "non-regular" || file.currentStatus === "unreadable"
   );
 }
 

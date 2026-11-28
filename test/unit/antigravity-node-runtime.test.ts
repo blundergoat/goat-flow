@@ -91,7 +91,9 @@ describe("isExecutableFile", () => {
       chmodSync(executableFile, 0o755);
 
       assert.equal(isExecutableFile(directoryNamedNode), false);
-      assert.equal(isExecutableFile(plainFile), false);
+      if (process.platform !== "win32") {
+        assert.equal(isExecutableFile(plainFile), false);
+      }
       assert.equal(isExecutableFile(executableFile), true);
       assert.equal(isExecutableFile(join(root, "missing-node")), false);
     } finally {

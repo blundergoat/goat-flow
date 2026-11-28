@@ -7,7 +7,7 @@ Read this reference before driving a browser for QA or writing manual test steps
 
 ## Prove the Environment First
 
-- Before the first step, prove the running app serves the changed code: reload, then confirm that text from the new code is present and text from the old code is absent. When the change is in a front-end bundle, disable the browser cache first.
+- Before the first step, prove the running app serves the changed code: disable the browser cache for front-end bundle changes, then reload. Check text changes when they distinguish the builds. For other changes, verify a build ID, served asset hash, or observable behaviour that distinguishes the builds.
 - Take a "before" reading before the first edit, or against the original file. A reading taken after the edit is not a baseline.
 - Treat implausible local state, such as an empty database, as a timing question first. Services started minutes ago may still be migrating or seeding, so read again before reporting it.
 - Ask before restarting, rebuilding, or resetting shared services or data, because a person may be testing against them. Never run a reset or rebuild command the project marks off-limits.
@@ -39,7 +39,7 @@ Read this reference before driving a browser for QA or writing manual test steps
 
 ## Judge the Result
 
-- Visible means it has size. Assert geometry or computed display, not DOM presence or a class name.
+- Verify rendered visibility, including the element’s computed visibility and any hiding, clipping, or opacity from ancestors. Use geometry as supporting evidence.
 - Derive expected values from the input, not from the output payload, and read text as it renders.
 - A correct answer or summary does not prove its links work. Open each linked destination, and treat a failed content request behind a loaded page as a failure.
 - A success status can hide a failure, such as a form re-rendered with errors or a login page served in place of data. Read the visible error or body before blaming the field under test.

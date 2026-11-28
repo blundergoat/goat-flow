@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { getTemplatePath } from "../../src/cli/paths.js";
+import { getPackageVersion, getTemplatePath } from "../../src/cli/paths.js";
 import {
   canonicalManagedInstallStateBytes,
   type ManagedInstallStateV2,
@@ -301,7 +301,12 @@ describe("decisions guide ownership transfer", () => {
       const root = inheritedTarget(CUSTOM_GUIDE, false, guidePath);
       const result = runInstaller(root, "--agent", "claude");
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /goat-flow install/u);
+      assert.ok(
+        result.stderr.includes(
+          `decisions guide ownership requires the public CLI. Run: npx @blundergoat/goat-flow@${getPackageVersion()} install ${JSON.stringify(root)} --agent "claude"`,
+        ),
+        result.stderr,
+      );
       assert.equal(readFileSync(join(root, guidePath), "utf8"), CUSTOM_GUIDE);
       assert.equal(existsSync(join(root, ".goat-flow/config.yaml")), false);
       assert.equal(existsSync(join(root, ".claude")), false);

@@ -137,6 +137,8 @@ test("content audit reports each retired-path call in scripts, CI workflows and 
         "  bash .goat-flow/hooks/deny-dangerous.sh --self-test",
         "fi",
         "shellcheck .goat-flow/hooks/*/*.sh",
+        "shellcheck .goat-flow/hooks/local-*.sh",
+        "shellcheck .goat-flow/hooks/*.sh",
       ].join("\n"),
     ],
     ["scripts/clean.sh", "rm -rf dist\n"],
@@ -168,6 +170,10 @@ test("content audit reports each retired-path call in scripts, CI workflows and 
       isReadableDirectory: (path) => directories.has(path),
       listDir: (path) => directories.get(path) ?? [],
       readFile: (path) => files.get(path) ?? null,
+      glob: (pattern) =>
+        pattern === ".goat-flow/hooks/*.sh"
+          ? [".goat-flow/hooks/local-lint.sh"]
+          : [],
     }),
   });
 
@@ -201,7 +207,7 @@ test("content audit reports each retired-path call in scripts, CI workflows and 
       [
         "scripts/preflight.sh",
         5,
-        "This glob matches only the retired Bash hook files, so it now finds nothing; target `.goat-flow/hooks/**/*.mjs` or remove it.",
+        "This glob targets retired Bash hooks. To check the Node hooks, use `.goat-flow/hooks/**/*.mjs`.",
       ],
     ],
   );

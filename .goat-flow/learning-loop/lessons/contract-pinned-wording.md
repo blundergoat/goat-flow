@@ -9,12 +9,16 @@ last_reviewed: 2026-11-28
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** OBSERVED
 **Severity:** INTEGRATION
-**Incident count:** 31 | **Latest occurrence:** 2026-11-28
+**Incident count:** 34 | **Latest occurrence:** 2026-11-28
 **Merged:** 2026-10-11 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split to recover its headroom.
 
 **Prevention:** Before changing prose, a path, or an adjacent command, search the tests and durable semantic anchors for the exact old text; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest. When fixture size feeds a derived assertion, recompute it with the production formula after every fixture edit. Update a contract only when product semantics change. Before drafting in a near-cap skill, measure the current word budget and pay for additions from unpinned text; before quoting a budget or score outcome, measure the exact sizes with the function the gate uses and state the margin.
 
 Read Markdown helper signatures before calling them; a setup exception is not evidence that the intended contract is missing.
+
+- **Recurrence 2026-11-28 (PR #71):** Changing installer advice to a release-pinned npm command left both direct-Bash decisions-guide assertions expecting `goat-flow install`. Slow shard 5/6 failed on both paths, and a focused local replay reproduced both failures. Search the old invocation across integration tests when command guidance changes. Run the affected slow suite and assert the running release, target and provider. Evidence: `src/cli/installer/apply.ts` (search: `decisions guide ownership requires the public CLI`) and `test/integration/setup-install-decisions-readme.test.ts` (search: `refuses direct Bash before mutation when an inherited guide exists`).
+- **Recurrence 2026-11-28 (PR #71 evals):** A dispatcher-route negative control landed in the preceding stale-plan test and failed with `report is not defined`. Anchor edits to the test name and run the owning suite after adding the assertion. Evidence: `test/unit/evals-cases.test.ts` (search: `the dispatcher case checks the interview route field`).
+- **Recurrence 2026-11-28 (PR #71 retirement diagnostics):** Two existing assertions still expected old audit advice and raw caller lines after install began reporting only the location, retired token and replacement. Update every output assertion in the owning suite when the report changes. Preserve checks that diagnostics identify the caller and leave its bytes intact. Evidence: `test/integration/setup-install-renamed-playbooks.test.ts` (search: `lists each retired token and replacement`).
 
 **What happened:** Removing one forbidden phrase and changing dashboard quality-report ownership failed two contract checks in the first full `npm test`: a skill-hardening contract still required the "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message. `test/contract/skill-hardening-shared-3.test.ts` (search: `hardening debt`).
 

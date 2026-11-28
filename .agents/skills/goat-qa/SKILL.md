@@ -57,9 +57,9 @@ Mock collaborator call counts, call order, non-calls, and simulated cooperation 
 
 ## Existing-Test Execution
 
-Standard mode runs existing checks after gap analysis and before its Phase 2 gate. Audit runs them only on request; Regression Guard never does. An explicit analysis-only, no-run, or assessment-only request runs nothing: report `Commands run: none (analysis-only request)`.
+Standard mode runs existing checks after gap analysis and before its Phase 2 gate. Audit runs them only on request; Regression Guard never does. An explicit analysis-only, no-run, or assessment-only request runs nothing, including browser checks and Fix Replay. Report `Commands run: none (analysis-only request)`, journeys as untested, and any claimed fix as unverified.
 
-Before the first command, read `references/execution.md` and follow its Existing Checks steps. When the change alters a page or other browser-visible behaviour, also follow its Browser Checks; capture screenshots only under its Screenshot Evidence rules.
+Before the first command, read `references/execution.md` and follow its Existing Checks steps. When execution is authorized and the change alters a page or other browser-visible behaviour, also follow its Browser Checks; capture screenshots only under its Screenshot Evidence rules.
 
 ## Candidate Disproval Pass
 
@@ -75,7 +75,7 @@ Preserve every killed candidate under `Refuted Candidates`: claim, exclusion rea
 
 **Mode detection - scope wins over vocabulary:**
 
-- Explicit request to verify a claimed fix → Fix Replay mode: read `references/execution.md` and follow its Fix Replay steps
+- Explicit request to verify a claimed fix → Fix Replay mode: apply the analysis-only rule above, then follow `references/execution.md` when execution is authorized
 - Explicit request to preserve a verified fix, prevent regression, or add regression guards → Regression Guard mode
 - Explicit diff, PR, branch, changed-file, or recent-change scope → Standard mode (quick depth), even when the request also says "audit", "coverage", or "gaps"
 - Explicit codebase area, directory, module, or risk-class coverage audit with no recent-change scope → Audit mode (full depth)

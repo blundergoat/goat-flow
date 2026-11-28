@@ -513,7 +513,7 @@ function pushOldFileReview(lines: string[], projectRoot: string): void {
   // A project without old goat-flow files has nothing to review.
   if (present.length === 0) return;
   lines.push(
-    `Old goat-flow files on disk now: ${present.map((path) => `\`${path}\``).join(", ")}. Install deletes each one whose bytes match its install record and names any it keeps. For each kept file, review it, carry over needed edits, then delete it or rerun install with \`--force-path <path>\`.`,
+    `Old goat-flow files on disk now: ${present.map((path) => `\`${path}\``).join(", ")}. Install deletes matching managed copies once they are safe to retire and names any it keeps. Migrate every provider that still references a retired hook before deleting that hook or its dependencies. For other kept files, review them and carry over needed edits before deleting them or using \`--force-path <path>\` on an eligible regular file.`,
   );
   lines.push("");
 }

@@ -49,6 +49,7 @@ import {
   inspectRuntimeRetirement,
   removeRetiredRuntimeFile,
   retiredRuntimeReferences,
+  type RuntimeRetirementFile,
 } from "./retired-runtime.js";
 import {
   findRetiredPathReferences,
@@ -367,13 +368,11 @@ function finishRuntimeRetirement(
   const removable = retirement.flatMap((file) => {
     // Only rows the preview showed as removals are deleted here.
     if (!options.retirementPaths?.includes(file.path)) return [];
-    // Unedited bytes are already proven by the install record.
-    if (file.canRemove) return [file];
     const sha256 = forced.get(file.path);
-    // An edited file is deleted only at the exact bytes the preview showed when --force-path named it.
-    return sha256 === undefined
-      ? []
-      : [{ ...file, expectedSha256: sha256, canRemove: true }];
+    // A named removal stays bound to the preview even if the file now matches the install record.
+    if (sha256 !== undefined)
+      return [{ ...file, expectedSha256: sha256, canRemove: true }];
+    return file.canRemove ? [file] : [];
   });
   const kept = retirement.filter(
     (file) =>
@@ -390,7 +389,7 @@ function finishRuntimeRetirement(
   // fails. With nothing due for deletion the files are simply reported as still in use below.
   if (ownReference && removable.length > 0) {
     throw new Error(
-      `Runtime migration is incomplete: ${ownReference.path} still references the retired runtime after this install. Its dependencies were preserved.`,
+      `Runtime migration is incomplete: ${ownReference.path} still references the retired runtime. The install may have updated project files and registrations before this check. Its dependencies were preserved and no new receipt was written. Migrate the remaining registrations in ${ownReference.path} and retry the public install.`,
     );
   }
   // Other providers still run these files; the install of the last of them removes them.
@@ -400,22 +399,44 @@ function finishRuntimeRetirement(
     );
     return 0;
   }
-  // No provider depends on the retired runtime any more, so each admitted file is rechecked and removed.
-  for (const file of removable) {
-    removeRetiredRuntimeFile(project, file);
-    // A forced removal is a new row built from the preview's bytes; an unedited one is the inspected row itself.
-    output(
-      !retirement.includes(file)
-        ? `  ✗ ${file.path} (removed: named by --force-path; restore it from Git history if needed)`
-        : `  ✗ ${file.path} (removed verified retired runtime)`,
-    );
-  }
+  const removed = removeAdmittedRuntimeFiles(
+    project,
+    removable,
+    forced,
+    output,
+  );
   // Edited or unrecorded files stay; each line says what that means and how to finish.
   for (const file of kept)
     output(
       `  · ${file.path} (kept: edited or unrecorded retired hook file; ${keptRetiredFileAdvice(file.path, readManagedTargetEvidence(project, file.path).status === "regular")})`,
     );
-  return removable.length;
+  return removed;
+}
+
+/** Recheck admitted runtime files, report their outcomes and count actual removals. */
+function removeAdmittedRuntimeFiles(
+  project: string,
+  files: readonly RuntimeRetirementFile[],
+  forced: ReadonlyMap<string, string>,
+  output: (message: string) => void,
+): number {
+  let removed = 0;
+  for (const file of files) {
+    switch (removeRetiredRuntimeFile(project, file, true)) {
+      case "changed":
+        output(`  · ${file.path} (kept: changed after the retirement preview)`);
+        break;
+      case "removed":
+        removed++;
+        output(
+          forced.has(file.path)
+            ? `  ✗ ${file.path} (removed: named by --force-path; restore it from Git history if needed)`
+            : `  ✗ ${file.path} (removed verified retired runtime)`,
+        );
+        break;
+    }
+  }
+  return removed;
 }
 
 /** Only undeclared Markdown references belong to skill cleanup; preserve other user files. */
@@ -530,22 +551,27 @@ function retireOldPlaybook(
 ): number {
   const { relative, replacement } = playbook;
   const path = join(options.projectPath, relative);
-  const stat = lstatSync(path, { throwIfNoEntry: false });
-  // A linked copy belongs to whatever it points at, so it is never deleted.
-  if (stat?.isSymbolicLink()) {
-    output(`  · ${relative} (kept symlink; use ${replacement})`);
+  let canRemove: boolean;
+  try {
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    if (!stat) return 0;
+    if (stat.isSymbolicLink()) {
+      output(`  · ${relative} (kept symlink; use ${replacement})`);
+      return 0;
+    }
+    installerDestination(options.projectPath, relative);
+    if (isUserOwnedPlaybook(readFileSync(path, "utf8"))) {
+      output(`  · ${relative} (kept user-owned playbook; use ${replacement})`);
+      return 0;
+    }
+    canRemove = isProvenRemoval(options, relative, proven);
+  } catch {
+    output(
+      `  · ${relative} (kept: unsafe or unreadable old playbook; use ${replacement})`,
+    );
     return 0;
   }
-  // Nothing is installed at the old path.
-  if (!stat?.isFile()) return 0;
-  installerDestination(options.projectPath, relative);
-  // Explicit user-owned frontmatter opts the copy out of cleanup.
-  if (isUserOwnedPlaybook(readFileSync(path, "utf8"))) {
-    output(`  · ${relative} (kept user-owned playbook; use ${replacement})`);
-    return 0;
-  }
-  // The preview admitted this removal and the bytes still match what it proved.
-  if (isProvenRemoval(options, relative, proven)) {
+  if (canRemove) {
     unlinkSync(path);
     output(
       playbook.isForced
@@ -574,26 +600,18 @@ function reportRetiredPathReferences(
   const instructions = [
     ...new Set(getAgentProfiles().map((agent) => agent.instructionFile)),
   ];
+  const fs = createFS(project, { boundedReads: true });
   const lines: string[] = [];
-  for (const path of [
-    ...instructions,
-    ...retiredPathCallerFiles(createFS(project)),
-  ]) {
-    // Only a safe regular file is read; a link or unreadable path is skipped.
-    if (readManagedTargetEvidence(project, path).status !== "regular") continue;
-    const text = readFileSync(join(project, path), "utf8");
-    let shownLine = 0;
-    // Each calling line is shown once, followed by the replacement for each retired path on it.
+  for (const path of [...instructions, ...retiredPathCallerFiles(fs)]) {
+    const text = fs.readFile(path);
+    if (text === null) continue;
     for (const reference of findRetiredPathReferences(
       text,
       instructions.includes(path),
+      fs,
     )) {
-      // References arrive in line order, so a repeated line number means another path on the line already shown.
-      if (reference.line !== shownLine)
-        lines.push(`  ${path}:${reference.line}: ${reference.text}`);
-      shownLine = reference.line;
       lines.push(
-        `    ${reference.token} → ${reference.replacement ?? reference.note}`,
+        `  ${path}:${reference.line}: ${reference.token} → ${reference.replacement ?? reference.note}`,
       );
     }
   }

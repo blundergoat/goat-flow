@@ -48,6 +48,7 @@ import {
   type ManagedSetupAgentPath,
 } from "./managed-setup-preview-summary.js";
 import {
+  isPreservedRetiredPath,
   managedSetupAdmissionFailure,
   managedSetupAuthorityWarnings,
 } from "./managed-setup-admission.js";
@@ -579,7 +580,7 @@ function managedInstallClaimError(
 }
 
 /**
- * Capture and acquire the complete previewed target-and-state write set.
+ * Capture and acquire the previewed target-and-state write set, excluding retired paths that will be preserved.
  * Error behavior: throws an install-specific CLI error for reusable claim refusals; unexpected failures propagate.
  */
 function acquireManagedInstallClaims(
@@ -587,10 +588,12 @@ function acquireManagedInstallClaims(
   preview: ManagedSetupPreview,
 ): PathWriteClaimBatch {
   try {
-    const requests = preview.files.map((file) => ({
-      targetPath: file.path,
-      expectedIdentity: readPathWriteTargetIdentity(projectPath, file.path),
-    }));
+    const requests = preview.files
+      .filter((file) => !isPreservedRetiredPath(file))
+      .map((file) => ({
+        targetPath: file.path,
+        expectedIdentity: readPathWriteTargetIdentity(projectPath, file.path),
+      }));
     return acquirePathWriteClaims(projectPath, requests);
   } catch (error) {
     // A write-claim refusal becomes an install-specific recovery error before the project can be changed.
@@ -970,7 +973,7 @@ function saveInstallStateBeforeUpgrade(
     ? `Install state from ${from} was saved to ${saved.backup}/ by an earlier attempt of this upgrade; that copy is kept.`
     : `Install state from ${from} saved to ${saved.backup}/.`;
   console.log(
-    `${location} To roll back this upgrade: restore project files from Git, delete .goat-flow/state/install/, then copy the saved folder back to ${saved.source}/.`,
+    `${location} To restore tracked files and install records, restore the tracked files from Git, remove the current .goat-flow/state/install/ directory, and restore the saved folder to ${saved.source}/. The backup contains install records only. Save local edits separately before authorizing retired-file deletion.`,
   );
 }
 

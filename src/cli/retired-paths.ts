@@ -103,8 +103,6 @@ export function keptRetiredFileAdvice(
 export interface RetiredPathReference {
   /** 1-based line number */
   line: number;
-  /** the line, trimmed */
-  text: string;
   /** the retired path, option or glob as written, without a leading `./` */
   token: string;
   /** the command or path to use instead; null when nothing replaces it, and `note` says what to do */
@@ -119,7 +117,7 @@ type RetiredReplacement = Pick<RetiredPathReference, "replacement" | "note">;
 const RETIRED_COMMAND =
   /(?<![\w./-])(?:\.\/)?(\.goat-flow\/(?:hooks|skill-docs\/playbooks)\/[\w.*/-]*[\w*])["']?(?:[ \t]+(--(?:self-test(?:=(?:smoke|full))?|check))(?![\w-]))?/gu;
 const GLOB_NOTE =
-  "This glob matches only the retired Bash hook files, so it now finds nothing; target `.goat-flow/hooks/**/*.mjs` or remove it.";
+  "This glob targets retired Bash hooks. To check the Node hooks, use `.goat-flow/hooks/**/*.mjs`.";
 const INTERNAL_NOTE =
   "This file was an internal part of the retired Bash runtime and has no direct replacement; remove the call.";
 
@@ -154,22 +152,24 @@ function replacementFor(
 
 /**
  * Find each call of a retired path on every line of one project file.
- * A `.goat-flow/hooks/` glob ending in `.sh` counts, because it now matches only retired files.
+ * Report a hook glob when it covers the retired inventory and has no matches outside it.
  *
  * @param text - complete file text
  * @param includeBarePlaybookNames - true for instruction files, where agents are told to read a playbook by name alone
+ * @param fs - project filesystem used to distinguish retired and local hook globs
  * @returns references in line order; empty when the file calls no retired path
  */
 export function findRetiredPathReferences(
   text: string,
   includeBarePlaybookNames: boolean,
+  fs: Pick<ReadonlyFS, "glob">,
 ): RetiredPathReference[] {
   const references: RetiredPathReference[] = [];
   for (const [index, raw] of text.split(/\r?\n/u).entries()) {
-    const found = retiredReferencesOnLine(raw, includeBarePlaybookNames);
+    const found = retiredReferencesOnLine(raw, includeBarePlaybookNames, fs);
     // Each reference keeps its line so the report points the user at the exact place to change.
     for (const reference of found)
-      references.push({ line: index + 1, text: raw.trim(), ...reference });
+      references.push({ line: index + 1, ...reference });
   }
   return references;
 }
@@ -178,21 +178,47 @@ export function findRetiredPathReferences(
 function retiredReferencesOnLine(
   line: string,
   includeBarePlaybookNames: boolean,
+  fs: Pick<ReadonlyFS, "glob">,
 ): (RetiredReplacement & { token: string })[] {
   const found: (RetiredReplacement & { token: string })[] = [];
   for (const [, path, option] of line.matchAll(RETIRED_COMMAND)) {
     // The pattern always captures a path; this guard only narrows the type.
     if (path === undefined) continue;
-    // A Bash glob over the hook folder now matches nothing that runs.
-    if (path.includes("*") && path.startsWith(HOOKS) && path.endsWith(".sh"))
+    if (isRetiredHookGlob(path, fs))
       found.push({ token: path, replacement: null, note: GLOB_NOTE });
     else if (RETIRED_PATHS.includes(path))
       found.push({ token: path, ...replacementFor(path, option) });
   }
-  // Instruction files may name a renamed playbook without its folder; a line that already gave the full path is not reported twice.
-  if (includeBarePlaybookNames && found.length === 0)
-    found.push(...barePlaybookReferences(line));
+  // Mask full paths so bare names elsewhere on the same line remain visible.
+  if (includeBarePlaybookNames)
+    found.push(...barePlaybookReferences(line.replace(RETIRED_COMMAND, " ")));
   return found;
+}
+
+/** Use the project's glob results to protect callers of local shell files. */
+function isRetiredHookGlob(
+  path: string,
+  fs: Pick<ReadonlyFS, "glob">,
+): boolean {
+  if (
+    !path.startsWith(`${HOOKS}/`) ||
+    !path.endsWith(".sh") ||
+    !path.includes("*")
+  )
+    return false;
+  const glob = path
+    .split(/(\*\*\/|\*)/u)
+    .map((part) => {
+      if (part === "**/") return "(?:[^/]+/)*";
+      if (part === "*") return "[^/]*";
+      return part.replaceAll(".", "\\.");
+    })
+    .join("");
+  const pattern = new RegExp(`^${glob}$`, "u");
+  return (
+    RETIRED_RUNTIME_PATHS.some((retired) => pattern.test(retired)) &&
+    fs.glob(path).every((match) => RETIRED_RUNTIME_PATHS.includes(match))
+  );
 }
 
 /** List each renamed playbook a line names by file name alone, with the playbook that replaced it. */
@@ -205,7 +231,12 @@ function barePlaybookReferences(
       replacement: newPath,
       note: null,
     }))
-    .filter(({ token }) => line.includes(token));
+    .filter(({ token }) =>
+      new RegExp(
+        `(?<![\\w./-])${token.replaceAll(".", "\\.")}(?![\\w/-]|\\.[\\w])`,
+        "u",
+      ).test(line),
+    );
 }
 
 /** A shell script: a `.sh`, `.bash`, `.zsh` or `.ps1` file, or a file named without an extension, as executables often are. */

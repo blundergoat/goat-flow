@@ -109,6 +109,23 @@ test("Codex evidence binds the agent handle and decodes the recorded command cwd
   assert.equal(sample.agentCalls, 0);
   assert.equal(sample.report, report);
   assert.equal(sample.commands[0].cwd, project);
+  const lateCommand = [
+    ...transcript.slice(0, -1),
+    transcript[2],
+    transcript[4],
+  ];
+  assert.equal(
+    readCodexTranscript(
+      lateCommand.map((event) => JSON.stringify(event)).join("\n"),
+      handle,
+    ).commands.length,
+    1,
+  );
+  assert.equal(
+    readCodexTranscript(jsonl + "\n" + JSON.stringify(transcript[2]), handle)
+      .commands.length,
+    1,
+  );
   assert.throws(
     () => readCodexTranscript(jsonl, "/root/m11_sample_2"),
     /agent handle/,

@@ -28,7 +28,7 @@ When the request names an existing plan, check it before asking anything. This i
 - Recompute stated totals from their parts.
 - Compare dated facts and named dependencies with today's date and the plan folder.
 
-Report each stale fact with its evidence, leave correct facts alone, and ask about the stale ones with the same question shape. If the request did not ask for updates, also ask whether to apply them. The named plan's files are the only update target.
+Report each stale fact with its evidence and leave correct facts alone. When the user requests no questions, list open choices and stop. Otherwise, ask about stale facts with the same question shape. If the request did not ask for updates, also ask whether to apply them. The named plan's files are the only update target.
 
 ## Hand Off to goat-plan
 
@@ -42,8 +42,9 @@ When the answers settle the plan, load goat-plan and give it:
 
 goat-plan selects the mode from that authority:
 
-- **A new plan with a named destination:** File-Write mode at that destination.
+- **Writes forbidden:** Read-Only Analysis, even with a named destination.
+- **A new plan with a named destination and write authority:** File-Write mode at that destination.
 - **An existing plan:** Named-File Update of the checked files when the request asks for updates or the user's reply explicitly approves them; otherwise Read-Only Analysis, with the corrected text presented inline.
-- **No destination, or files forbidden:** Read-Only Analysis, with the plan presented inline.
+- **Otherwise:** Read-Only Analysis, with the plan presented inline.
 
 Answers to choice questions never widen authority; only an explicit approval in the user's reply adds an update. A plan-only request stops after the plan is delivered, and nothing is implemented.

@@ -108,9 +108,13 @@ describe("goat-qa existing-test execution", () => {
           /Skip optional suites unless requested; ask before a required check that is slow, networked, or credentialed\. Name each check skipped/u,
           /from the target project root, never the harness repository/u,
           /never edit, add, skip, or delete tests or application code, or change configuration to pass/u,
-          /Before and after, compare tracked-file status and diff and the untracked-file list; a changed tracked file or a removed untracked file is a mutation: stop and report it/u,
-          /command, directory, exit status, runner pass\/fail\/skip counts, and unverified scope/u,
-          /A test run with zero tests or no counts is unverified, not passed/u,
+          /Before the first check, record fingerprints for existing untracked files/u,
+          /Before and after each check, compare tracked status and diff/u,
+          /After each check, also compare the original untracked fingerprints/u,
+          /Stop and report any tracked change or any file from the original untracked baseline that changed or disappeared/u,
+          /command, directory, exit status, and unverified scope/u,
+          /For tests, include runner pass\/fail\/skip counts/u,
+          /A test run with zero tests or no counts is unverified\. For other checks, use exit status and output/u,
           /hand off to `\/goat-debug`/u,
           /Never fix, rerun until green, or hide skips/u,
         ],
@@ -128,7 +132,9 @@ describe("goat-qa existing-test execution", () => {
         section,
         [
           /An explicit analysis-only, no-run, or assessment-only request runs nothing/u,
+          /including browser checks and Fix Replay/u,
           /`Commands run: none \(analysis-only request\)`/u,
+          /journeys as untested, and any claimed fix as unverified/u,
         ],
         skillPath,
       );
@@ -212,7 +218,8 @@ describe("goat-qa execution authority outside the skill", () => {
         section,
         [
           /are report-only by default/u,
-          /`\/goat-qa` may also run the target project's existing checks; untracked output those commands normally produce is not a mutation\./u,
+          /`\/goat-qa` may also run the target project's existing checks; they may create their usual untracked outputs/u,
+          /Stop and report changes to tracked files or to any untracked file that existed before the first check/u,
         ],
         preamblePath,
       );
@@ -283,8 +290,8 @@ describe("goat-qa browser checks, fix replay and screenshots", () => {
       assertMatchesAll(
         content,
         [
-          /When the change alters a page or other browser-visible behaviour, also follow its Browser Checks; capture screenshots only under its Screenshot Evidence rules\./u,
-          /Explicit request to verify a claimed fix → Fix Replay mode: read `references\/execution\.md` and follow its Fix Replay steps/u,
+          /When execution is authorized and the change alters a page or other browser-visible behaviour, also follow its Browser Checks; capture screenshots only under its Screenshot Evidence rules\./u,
+          /Explicit request to verify a claimed fix → Fix Replay mode: apply the analysis-only rule above, then follow `references\/execution\.md` when execution is authorized/u,
         ],
         skillPath,
       );
@@ -365,7 +372,8 @@ describe("goat-qa browser checks, fix replay and screenshots", () => {
           /confirm the workspace, tenant, and role the app actually landed on/u,
           /start in a fresh browser context and go straight there/u,
           /Confirm an action was accepted/u,
-          /Visible means it has size/u,
+          /verify a build ID, served asset hash, or observable behaviour that distinguishes the builds/u,
+          /Verify rendered visibility, including the element’s computed visibility and any hiding, clipping, or opacity from ancestors/u,
           /Give every step the page \(URL\) and account it runs on/u,
           /Never print personal data, credentials, or one-time codes/u,
           /Ask before a step that really sends, publishes, or pays/u,
@@ -456,7 +464,12 @@ describe("goat-qa browser checks, fix replay and screenshots", () => {
       const capturePath = `${playbookRoot}/page-capture.md`;
       assert.match(
         readProjectFile(capturePath),
-        /When a goat-qa run names a selected plan, its screenshots go under that plan's gitignored `evidence\/` folder instead/u,
+        /When goat-qa names a plan, use the Screenshot Evidence path under the plan's gitignored `evidence\/` folder/u,
+        capturePath,
+      );
+      assert.match(
+        readProjectFile(capturePath),
+        /keep records and the index in `<output_dir>`/u,
         capturePath,
       );
     });

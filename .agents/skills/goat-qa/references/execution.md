@@ -8,13 +8,13 @@ Read this reference before goat-qa runs a command, drives a browser, replays a f
 ## Existing Checks
 
 1. **Select** from the target project's instruction Essential Commands, `package.json` scripts, or documented runner: focused tests for the changed behaviour plus checks the project marks required. Skip optional suites unless requested; ask before a required check that is slow, networked, or credentialed. Name each check skipped.
-2. **Run** each from the target project root, never the harness repository; never edit, add, skip, or delete tests or application code, or change configuration to pass. Before and after, compare tracked-file status and diff and the untracked-file list; a changed tracked file or a removed untracked file is a mutation: stop and report it.
-3. **Record** command, directory, exit status, runner pass/fail/skip counts, and unverified scope. A test run with zero tests or no counts is unverified, not passed.
+2. **Run** each from the target project root, never the harness repository; never edit, add, skip, or delete tests or application code, or change configuration to pass. Before the first check, record fingerprints for existing untracked files. Before and after each check, compare tracked status and diff. After each check, also compare the original untracked fingerprints. Stop and report any tracked change or any file from the original untracked baseline that changed or disappeared.
+3. **Record** command, directory, exit status, and unverified scope. For tests, include runner pass/fail/skip counts. A test run with zero tests or no counts is unverified. For other checks, use exit status and output.
 4. **New failure:** stop dependent work, keep the output, and hand off to `/goat-debug`. Never fix, rerun until green, or hide skips.
 
 ## Browser Checks
 
-The shared preamble already sends browser-visible work to `.goat-flow/skill-docs/playbooks/browser-use.md`. When the change alters a page or flow, exercise each affected journey there as well as running the existing checks, and:
+The shared preamble already sends browser-visible work to `.goat-flow/skill-docs/playbooks/browser-use.md`. When execution is authorized and the change alters a page or flow, exercise each affected journey there as well as running the existing checks, and:
 
 1. **Prepare** with `references/manual-testing.md`: prove the environment, account and served code before the first step.
 2. **Record** per journey: page, steps, expected, observed, evidence, and status `verified`, `failed`, `blocked`, or `untested`.
@@ -22,7 +22,7 @@ The shared preamble already sends browser-visible work to `.goat-flow/skill-docs
 
 ## Fix Replay
 
-Use this for an explicit request to verify a claimed fix; it replaces Phases 1-3.
+Use this for an explicit request to verify a claimed fix. It replaces Phases 1-3. For an analysis-only request, report the claim as unverified and skip replay and regressions.
 
 1. **Find** the fix's recorded reproduction: a bug report, issue, failing test, or earlier report with steps, input, and the expected and observed results.
 2. **Replay** those steps on the current code, following Browser Checks when the original failure was browser-visible, and record what you observe against the recorded original failure.

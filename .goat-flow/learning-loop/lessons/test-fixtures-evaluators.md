@@ -73,7 +73,7 @@ last_reviewed: 2026-11-28
 
 **Status:** active | **Created:** 2026-11-28 | **Evidence:** OBSERVED
 **Decision changed:** Match complete owner reads and snapshot records before attributing a compound command failure to them.
-**Incident count:** 2
+**Incident count:** 4
 **Latest occurrence:** 2026-11-28
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -83,6 +83,10 @@ last_reviewed: 2026-11-28
 **What happened:** One review sample emitted the staged snapshot before a later command failed against an unborn HEAD. Two clarity samples fully read their owners from the sample or owner directory, which the collector rejected. A fresh sample read the exact absolute owner paths from the harness root and exposed the same assumption. The clarity fixture also needed the matching source redactor to exercise an edit. The focused validator test caught an owner-diagnostic change. Evidence: `evals/lib/transcript.mjs` (search: `recordedPreparedOwnerRead`) and `test/unit/evals-reference-boundaries.test.ts` (search: `only the prepared stage`).
 
 **Recurrence 2026-11-28:** A transcript command reading a backup with identical bytes satisfied the owner check because its filename began with the prepared path. The focused test now rejects that command and checks a quoted relative read. Evidence: `test/unit/evals-reference-boundaries.test.ts` (search: `binds prepared owner bytes`).
+
+**Recurrence 2026-11-28 (PR #71):** The review found that the scorer accepted a staged source fragment even though the prepared snapshot identified a particular Git blob. The command could show different bytes with the same expression. Verify the blob ID from the full observed output and use the command-specific status for compound shell runs. Evidence: `test/unit/evals-reference-boundaries.test.ts` (search: `only the prepared stage`) and `test/unit/evals-cases.test.ts` (search: `npm test; exit 1`).
+
+**Recurrence 2026-11-28 (PR #71 recheck):** The Codex collector counted a command between the final answer and task completion. The milestone scorer also missed an indented invocation. Bound evidence by the earlier delivery event and exercise command parsing with ordinary shell whitespace. Evidence: `test/unit/evals-kit.test.ts` (search: `lateCommand`) and `test/unit/evals-workflow-gates.test.ts` (search: `a correct planning answer fails if a timer start targeted blocked M02`).
 
 ## Lesson: A pinned policy fixture needs tree metadata for review snapshots
 

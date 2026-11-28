@@ -70,6 +70,16 @@ test("the required QA eval distinguishes the seeded failure from a claimed resul
       .rows.filter((row) => !row.passed)
       .map((row) => row.id);
   assert.deepEqual(failedRows(sample), []);
+  assert.deepEqual(
+    failedRows({
+      ...sample,
+      report: sample.report.replace(
+        "with code 1",
+        "with code 0. The diagnostic exited with code 1",
+      ),
+    }),
+    ["qa-failure-report"],
+  );
   const table = [
     "| Command | Directory | Exit | Pass | Fail | Skip |",
     "|---|---|---:|---:|---:|---:|",
@@ -99,6 +109,20 @@ git status --short`,
     aggregated_output: result.stdout + "npm test exit: 1\n",
   };
   assert.equal(recordedRequiredQaFailure([commandRecord], project), true);
+  assert.equal(
+    recordedRequiredQaFailure(
+      [
+        {
+          ...commandRecord,
+          command: ["bash", "-lc", "npm test; exit 1"],
+          exit_code: 1,
+          aggregated_output: result.stdout,
+        },
+      ],
+      project,
+    ),
+    false,
+  );
   assert.equal(
     recordedRequiredQaFailure(
       [{ ...commandRecord, command: ["npm test"] }],
@@ -243,6 +267,14 @@ test("the M03 single-question control fails I1 on a one-sample denominator", () 
   for (const report of formats) {
     assert.equal(scoreSample(definition, { ...sample, report }).status, "pass");
   }
+  const blank = answer.replace(/- [ABC]\. .+/gu, (line) => line.slice(0, 4));
+  assert.equal(
+    scoreSample(definition, {
+      ...sample,
+      report: blank + "\nRecommended: choose carefully",
+    }).status,
+    "fail",
+  );
   assert.equal(
     scoreSample(definition, {
       ...sample,
@@ -299,6 +331,13 @@ test("the dispatcher case checks the interview route field and records a second 
     "Intent: Interview the user about the open choices\nRoute: /goat-critique\n\nIntent: Write the milestone plan\nRoute: /goat-plan";
   const result = scoreSample(definition, { ...unchanged, report });
   assert.equal(result.status, "pass");
+  assert.equal(
+    scoreSample(definition, {
+      ...unchanged,
+      report: report.replace("/goat-critique", "/goat-critique-old"),
+    }).status,
+    "fail",
+  );
   assert.match(
     result.rows.find((row) => row.id === "interview-route").evidence,
     /Additional/,

@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   cpSync,
   existsSync,
+  linkSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -19,6 +21,7 @@ import {
   makeTempProject,
   PROJECT_ROOT,
   runCliInstaller,
+  symlinkFileOrSkip,
 } from "./setup-install.helpers.js";
 import {
   createManagedInstallStateRow,
@@ -144,6 +147,22 @@ describe("stored-baseline runtime retirement", () => {
       "locally edited runtime\n",
     );
     assert.ok(existsSync(join(project, unclassified)));
+  });
+
+  it("reports a runtime file as kept when its admitted bytes change", () => {
+    const { project, expected } = fixture();
+    const admitted = inspectRuntimeRetirement(
+      project,
+      expected,
+      new Set(),
+    ).find((file) => file.path === ENTRY);
+    assert.ok(admitted?.canRemove);
+    write(project, ENTRY, "locally edited after preview\n");
+    assert.equal(removeRetiredRuntimeFile(project, admitted, true), "changed");
+    assert.equal(
+      readFileSync(join(project, ENTRY), "utf8"),
+      "locally edited after preview\n",
+    );
   });
 
   it("keeps registrations and dependencies while a runtime customization awaits migration consent", () => {
@@ -328,7 +347,7 @@ function projectFileHashes(project: string): Map<string, string> {
   const walk = (directory: string): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const absolute = join(directory, entry.name);
-      const path = relative(project, absolute);
+      const path = relative(project, absolute).replaceAll("\\", "/");
       // Receipts and logs record each run by design; they are not project content.
       if (path === ".goat-flow/state" || path === ".goat-flow/logs") continue;
       if (entry.isDirectory()) walk(absolute);
@@ -619,6 +638,44 @@ function olderRecordsProject(): string {
 }
 
 describe("retired files recorded by an older release", () => {
+  it("preserves a hard-linked retired playbook during an ordinary install", () => {
+    const project = makeTempProject();
+    const target = join(project, "local-style.md");
+    writeFileSync(target, "# Local style\n");
+    mkdirSync(dirname(join(project, STALE_PLAYBOOK)), { recursive: true });
+    linkSync(target, join(project, STALE_PLAYBOOK));
+
+    const install = runCliInstaller(project, "--agent", "claude");
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    assert.match(install.stdout, /kept: unsafe or unreadable old playbook/u);
+    assert.equal(lstatSync(join(project, STALE_PLAYBOOK)).nlink, 2);
+    assert.equal(readFileSync(target, "utf8"), "# Local style\n");
+  });
+
+  it("preserves a retired playbook symlink and refuses an explicit forced removal", (t) => {
+    const project = makeTempProject();
+    const target = join(project, "local-style.md");
+    writeFileSync(target, "# Local style\n");
+    mkdirSync(dirname(join(project, STALE_PLAYBOOK)), { recursive: true });
+    if (!symlinkFileOrSkip(t, target, join(project, STALE_PLAYBOOK))) return;
+
+    const install = runCliInstaller(project, "--agent", "claude");
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    assert.ok(lstatSync(join(project, STALE_PLAYBOOK)).isSymbolicLink());
+
+    const forced = runCliInstaller(
+      project,
+      "--agent",
+      "claude",
+      "--force-path",
+      STALE_PLAYBOOK,
+    );
+    assert.equal(forced.status, 1, forced.stdout);
+    assert.match(forced.stderr, /no authority bypasses path safety/u);
+    assert.ok(lstatSync(join(project, STALE_PLAYBOOK)).isSymbolicLink());
+    assert.equal(readFileSync(target, "utf8"), "# Local style\n");
+  });
+
   // Writes a v1-record project and spawns setup and two installs; the preview, output and saved state show delete, keep and forced delete.
   it("removes unedited files on the first upgrade and an edited one only when --force-path names it", () => {
     const project = olderRecordsProject();

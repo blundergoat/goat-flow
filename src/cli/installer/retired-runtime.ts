@@ -164,14 +164,17 @@ export function inspectRuntimeRetirement(
  *
  * @param project - selected project root containing the retired file
  * @param file - one retirement row; only a row whose current bytes still match its saved hash is deleted
- * @throws Error when any provider config still references the retired runtime, or the file changed after review; bytes are preserved
+ * @param keepChanged - allow install to report a changed file as kept
+ * @returns whether the file was removed, absent, or kept after a change
+ * @throws Error when a provider still references the runtime or a changed file cannot be kept by the caller
  */
 export function removeRetiredRuntimeFile(
   project: string,
   file: RuntimeRetirementFile,
-): void {
+  keepChanged = false,
+): "removed" | "absent" | "changed" {
   const current = readManagedTargetEvidence(project, file.path);
-  if (current.status === "missing") return;
+  if (current.status === "missing") return "absent";
   const references = retiredRuntimeReferences(project);
   // Install checks for remaining providers before calling; for other callers, such as hook sync, this guard stops a deletion that would break one.
   if (references.length > 0) {
@@ -184,11 +187,13 @@ export function removeRetiredRuntimeFile(
     current.status !== "regular" ||
     current.sha256 !== file.expectedSha256
   ) {
+    if (keepChanged) return "changed";
     throw new Error(
       `Retired runtime changed before cleanup: ${file.path}. Existing bytes were preserved.`,
     );
   }
   unlinkSync(join(project, file.path));
+  return "removed";
 }
 
 /**

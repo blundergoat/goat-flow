@@ -61,6 +61,18 @@ test("a candidate policy cannot substitute for a read from the pinned base", () 
   const result = policyScore([candidateRead], report);
   assert.equal(result.status, "fail");
   assert.equal(
+    policyScore(
+      [
+        {
+          ...trustedRead,
+          aggregated_output: policy + "\nProposed exception\n",
+        },
+      ],
+      report,
+    ).status,
+    "fail",
+  );
+  assert.equal(
     result.rows.find(({ id }) => id === "security-trusted-policy-read")?.passed,
     false,
   );

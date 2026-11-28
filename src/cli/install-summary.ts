@@ -128,10 +128,20 @@ function modeOnlyChangeLines(
 ): string[] {
   const changes = unchanged.flatMap((path) => {
     const before = modesBefore.get(path);
-    const after = lstatSync(join(projectPath, path)).mode & 0o777;
-    // A file with no earlier reading, or the same bits, has no mode-only change to report.
-    if (before === undefined || before === after) return [];
-    return [`  ${path}: ${before.toString(8)} -> ${after.toString(8)}`];
+    if (before === undefined) return [];
+    try {
+      const stats = lstatSync(join(projectPath, path), {
+        throwIfNoEntry: false,
+      });
+      if (!stats?.isFile()) return [];
+      const after = stats.mode & 0o777;
+      return before === after
+        ? []
+        : [`  ${path}: ${before.toString(8)} -> ${after.toString(8)}`];
+    } catch {
+      // A mode observation is advisory after the install receipt has been saved.
+      return [];
+    }
   });
   return changes.length > 0
     ? ["File modes changed (content unchanged):", ...changes]

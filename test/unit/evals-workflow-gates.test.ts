@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { blockedMilestonePath } from "../../evals/fixtures/milestone-order/build.mjs";
 import {
@@ -74,6 +74,10 @@ test("the debug eval requires a recorded reproduction with the expected cents", 
 
   assert.equal(score([failure]).status, "pass");
   assert.equal(
+    score([{ ...failure, command: ["bash", "-lc", "  npm test"] }]).status,
+    "pass",
+  );
+  assert.equal(
     score([
       {
         ...failure,
@@ -122,6 +126,16 @@ test("a correct planning answer fails if a timer start targeted blocked M02", ()
   );
   assert.equal(
     score(`goat-flow plans time start ${blockedMilestonePath}`).status,
+    "fail",
+  );
+  assert.equal(
+    score(`  goat-flow plans time start ${blockedMilestonePath}`).status,
+    "fail",
+  );
+  assert.equal(
+    score(
+      `cd ${dirname(blockedMilestonePath)} && goat-flow plans time start ${basename(blockedMilestonePath)}`,
+    ).status,
     "fail",
   );
   assert.equal(

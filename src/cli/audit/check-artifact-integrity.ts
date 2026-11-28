@@ -391,7 +391,7 @@ function checkSharedFileSets(
       kind: "orphan",
       path: installedPath,
       message: renamedTo
-        ? `writing playbook ${installedPath} was renamed to ${renamedTo}; the next install removes an unedited copy after writing its replacement and keeps an edited or linked one until you delete it or rerun install with --force-path ${installedPath}`
+        ? `writing playbook ${installedPath} was renamed to ${renamedTo}. Install removes an unedited managed copy after writing the replacement. For an edited regular copy, carry over your edits before deleting it or using --force-path ${installedPath}. Remove a linked copy manually after review.`
         : `stale installed shared artifact ${installedPath}; no canonical workflow source is mapped in check-artifact-integrity.ts SHARED_ARTIFACT_MIRRORS`,
     });
   }

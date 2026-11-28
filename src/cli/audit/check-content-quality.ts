@@ -790,7 +790,7 @@ function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
  */
 function scanRetiredPathCallers(ctx: AuditContext): ContentFinding[] {
   return retiredPathCallerFiles(ctx.fs).flatMap((path) =>
-    findRetiredPathReferences(ctx.fs.readFile(path) ?? "", false).map(
+    findRetiredPathReferences(ctx.fs.readFile(path) ?? "", false, ctx.fs).map(
       (reference): ContentFinding => ({
         severity: "warning",
         rule: "retired-path-reference",

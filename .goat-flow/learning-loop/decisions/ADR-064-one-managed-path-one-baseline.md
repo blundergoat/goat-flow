@@ -99,9 +99,9 @@ Installation evidence now lives in `.goat-flow/state/install/`; the former `.goa
 
 One table (`src/cli/retired-paths.ts`, search: `RETIRED_PATHS`) names the files earlier releases installed and this one dropped: the 10 retired Bash hook files and the 2 renamed writing playbooks, measured from real projects' install records. For each path, install:
 
-- deletes the file when its bytes equal the agreed record hash, including hashes still in v1 per-agent records, which convert unchanged;
+- deletes the file when its bytes equal the agreed record hash, including hashes in v1 per-agent records that convert unchanged. Retired runtime files also require every provider to stop referencing the retired runtime.
 - keeps an edited, unrecorded, linked or user-owned-marked file and names it, with how to finish;
-- deletes an edited regular file only when `--force-path` names that exact path, and only at the bytes the preview showed; `--force-managed` never deletes edited bytes;
+- deletes an edited regular file only when `--force-path` names that exact path and the bytes still match the preview. The same provider check applies to retired runtime files. `--force-managed` preserves edited bytes.
 - once the file is absent, drops its row and every stale-receipt reference to it; a guarded hook sync applies this step too.
 
 No other row is deleted; an orphan outside the table follows Orphans above. Evidence: `src/cli/installer/retired-runtime.ts` (search: `forgetAbsentRetiredRows`), `test/integration/setup-install-retired-runtime-cleanup.test.ts` (search: `retired files recorded by an older release`).

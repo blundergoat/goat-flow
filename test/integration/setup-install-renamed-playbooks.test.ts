@@ -121,7 +121,10 @@ describe("renamed writing playbook cleanup", () => {
         "# Locally edited guidance\n",
       );
     const instructions = [
-      ["AGENTS.md", `Read ${PLAYBOOK_ROOT}/writing-style.md.\n`],
+      [
+        "AGENTS.md",
+        `Read ${PLAYBOOK_ROOT}/writing-style.md and writing-for-agents.md.\n`,
+      ],
       ["CLAUDE.md", "Read writing-for-agents.md.\n"],
       [".github/copilot-instructions.md", "Read writing-style.md.\n"],
     ];
@@ -154,9 +157,19 @@ describe("renamed writing playbook cleanup", () => {
     }
     for (const [path, text] of instructions) {
       assert.equal(readFileSync(join(root, path), "utf-8"), text);
-      assert.ok(result.stdout.includes(`${path}:1: ${text.trim()}`));
+      assert.ok(result.stdout.includes(`${path}:1: `));
+      assert.ok(!result.stdout.includes(text.trim()));
     }
-    assert.equal((result.stdout.match(/AGENTS\.md:1:/gu) ?? []).length, 1);
+    assert.ok(
+      result.stdout.includes(
+        `AGENTS.md:1: ${PLAYBOOK_ROOT}/writing-style.md → ${PLAYBOOK_ROOT}/writing-human-facing-prose.md`,
+      ),
+    );
+    assert.ok(
+      result.stdout.includes(
+        `AGENTS.md:1: writing-for-agents.md → ${PLAYBOOK_ROOT}/writing-agent-facing-instructions.md`,
+      ),
+    );
     assert.equal(existsSync(join(root, PLAYBOOK_ROOT, "retired.md")), true);
     const repeat = runCliInstaller(root, "--agent", "codex");
     assert.equal(repeat.status, 0, repeat.stderr || repeat.stdout);
@@ -253,8 +266,18 @@ describe("renamed writing playbook cleanup", () => {
       assert.ok(
         finding.message.includes(`was renamed to ${PLAYBOOK_ROOT}/${newName}`),
       );
-      assert.match(finding.message, /next install removes an unedited copy/u);
-      assert.match(finding.message, /--force-path/u);
+      assert.match(
+        finding.message,
+        /Install removes an unedited managed copy/u,
+      );
+      assert.match(
+        finding.message,
+        /For an edited regular copy, .*--force-path/u,
+      );
+      assert.match(
+        finding.message,
+        /Remove a linked copy manually after review/u,
+      );
       assert.doesNotMatch(finding.message, /SHARED_ARTIFACT_MIRRORS/u);
     }
     const edited = `${PLAYBOOK_ROOT}/writing-for-agents.md`;
@@ -301,7 +324,7 @@ describe("renamed writing playbook cleanup", () => {
 
 describe("retired path references after install", () => {
   // Writes an instruction file, script, CI workflow and package.json that call removed hook paths, plus a lesson that only mentions one.
-  it("lists each calling line with its replacement and edits nothing", () => {
+  it("lists each retired token and replacement without copying the surrounding line", () => {
     const root = makeTempProject();
     const callers: (readonly [string, string])[] = [
       [
@@ -335,16 +358,14 @@ describe("retired path references after install", () => {
       /Project files that still call removed goat-flow paths/u,
     );
     for (const expected of [
-      "CLAUDE.md:1: Run bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke before handoff.",
-      "    .goat-flow/hooks/deny-dangerous.sh → node .goat-flow/hooks/deny-dangerous.mjs --self-test=smoke",
-      "scripts/preflight.sh:2: bash .goat-flow/hooks/post-turn-safety.sh --self-test",
-      "    .goat-flow/hooks/post-turn-safety.sh → node .goat-flow/hooks/post-turn-safety.mjs --self-test",
-      ".github/workflows/ci.yml:1: - run: shellcheck .goat-flow/hooks/*/*.sh",
-      "package.json:1:",
-      "    .goat-flow/hooks/run-with-bash.mjs → .goat-flow/hooks/run-hook.mjs",
+      "CLAUDE.md:1: .goat-flow/hooks/deny-dangerous.sh → node .goat-flow/hooks/deny-dangerous.mjs --self-test=smoke",
+      "scripts/preflight.sh:2: .goat-flow/hooks/post-turn-safety.sh → node .goat-flow/hooks/post-turn-safety.mjs --self-test",
+      ".github/workflows/ci.yml:1: .goat-flow/hooks/*/*.sh → This glob targets retired Bash hooks.",
+      "package.json:1: .goat-flow/hooks/run-with-bash.mjs → .goat-flow/hooks/run-hook.mjs",
     ])
       assert.ok(result.stdout.includes(expected), `missing: ${expected}`);
     assert.doesNotMatch(result.stdout, /lessons\/hooks\.md:/u);
+    assert.doesNotMatch(result.stdout, /before handoff/u);
     assert.deepEqual(
       callers.map(([path]) => readFileSync(join(root, path), "utf-8")),
       callers.map(([, text]) => text),
