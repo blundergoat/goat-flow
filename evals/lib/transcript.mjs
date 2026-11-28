@@ -1,14 +1,13 @@
 /** Reads native sub-agent transcripts for the host-run skill checks. */
-import { relative, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   citedCommentAnchor,
   citedSourcePath,
+  citationEntryPath,
 } from "../fixtures/cited-comment/build.mjs";
-import {
-  stagedDiscountPath,
-  stagedRoundingExpression,
-} from "../fixtures/staged-review/build.mjs";
+import { stagedDiscountPath } from "../fixtures/staged-review/build.mjs";
 
 function parseLine(line, index) {
   try {
@@ -84,9 +83,9 @@ export function readTranscript(jsonl) {
   return {
     agentId,
     prompts,
-    readPaths: successful
+    reads: successful
       .filter(({ name }) => name === "Read")
-      .map(({ input }) => input?.file_path),
+      .map(({ id, input }) => ({ input, content: results.get(id).content })),
     report,
     toolCalls: calls.size,
     agentCalls: used.filter(({ name }) => name === "Agent").length,
@@ -120,20 +119,27 @@ export function readCodexTranscript(jsonl, agentHandle) {
   const responses = events
     .filter((event) => event.type === "response_item")
     .map((event) => event.payload);
+  const messages = events
+    .filter((event) => event.type === "event_msg")
+    .map((event) => event.payload);
+  const { answer, completion } = codexCompletion(responses, messages);
+  const cutoff = events.findIndex(
+    ({ payload }) => payload === answer || payload === completion,
+  );
+  const evidence = events.slice(0, cutoff);
   const calls = new Map(
-    responses
+    evidence
+      .filter((event) => event.type === "response_item")
+      .map((event) => event.payload)
       .filter(
         (item) =>
           item.type === "function_call" || item.type === "custom_tool_call",
       )
       .map((item) => [item.call_id, item.name]),
   );
-  const messages = events
+  const commands = evidence
     .filter((event) => event.type === "event_msg")
-    .map((event) => event.payload);
-  const completion = codexCompletion(responses, messages);
-
-  const commands = messages
+    .map((event) => event.payload)
     .filter((message) => message.type === "item_completed")
     .map((message) => message.item)
     .filter((item) => item?.type === "CommandExecution")
@@ -154,6 +160,7 @@ export function readCodexTranscript(jsonl, agentHandle) {
   };
 }
 
+/** Match both delivery boundaries. Throws if they disagree or the rollout contains more than one answer. */
 function codexCompletion(responses, messages) {
   const reports = responses.filter(
     (item) =>
@@ -177,18 +184,19 @@ function codexCompletion(responses, messages) {
   ) {
     throw new Error("Codex transcript must contain one completed final answer");
   }
-  return completions[0];
+  return { answer: reports[0], completion: completions[0] };
 }
 
 const npmTest = String.raw`(?:[A-Za-z_]\w*=[^\s;&|]+[ \t]+)*npm[ \t]+(?:run[ \t]+)?test`;
 const testInvocation = new RegExp(
-  String.raw`(?:^|[;&\n]\s*)${npmTest}(?=[\s;&|]|$)`,
+  String.raw`(?:^|[;&\n])\s*${npmTest}(?=[\s;&|]|$)`,
   "u",
 );
+const standaloneTest = new RegExp(String.raw`^\s*${npmTest}\s*$`, "u");
 // A compound command can continue after the suite fails. Require the status
 // print to capture the immediately preceding npm invocation.
 const capturedTestExit = new RegExp(
-  String.raw`(?:^|\n)${npmTest}[ \t]*\n([\w]+)=\$\?\n[ \t]*printf '[^'\n]*npm test exit(?: (?:code|status))?: %s[^'\n]*' "\$\1"`,
+  String.raw`(?:^|\n)[ \t]*${npmTest}[ \t]*\n[ \t]*([\w]+)=\$\?\n[ \t]*printf '[^'\n]*npm test exit(?: (?:code|status))?: %s[^'\n]*' "\$\1"`,
   "u",
 );
 
@@ -212,7 +220,7 @@ export function recordedRequiredQaFailure(commands, project, assertion) {
     )
       return false;
     return (
-      item.exit_code === 1 ||
+      (standaloneTest.test(command) && item.exit_code === 1) ||
       (capturedTestExit.test(command) &&
         /^[ \t]*npm test exit(?: (?:code|status))?:\s*1[ \t]*$/imu.test(output))
     );
@@ -226,13 +234,57 @@ export function recordedRequiredQaFailure(commands, project, assertion) {
  */
 export function recordedMilestoneTimerStart(commands, milestone) {
   const invocation =
-    /(?:^|[;&|\n]\s*)(?:(?:[^\s;&|]*\/)?goat-flow|node\s+[^\n;&|]*?\bcli\.ts["']?)\s+plans\s+time\s+start\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/gu;
-  return commands.some(({ command, cwd }) => {
+    /(?:^|[;&|\n])\s*(?:(?:[^\s;&|]*\/)?goat-flow|node\s+[^\n;&|]*?\bcli\.ts["']?)\s+plans\s+time\s+start\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/gu;
+  let hasUnresolvedTarget = false;
+  for (const { command, cwd } of commands) {
     const shell = command?.at(-1) ?? "";
-    return [...shell.matchAll(invocation)].some(
-      ([, doubleQuoted, singleQuoted, bare]) =>
-        resolve(cwd, doubleQuoted ?? singleQuoted ?? bare) === milestone,
-    );
+    for (const match of shell.matchAll(invocation)) {
+      const [, doubleQuoted, singleQuoted, bare] = match;
+      const target = doubleQuoted ?? singleQuoted ?? bare;
+      if (basename(target) !== basename(milestone)) continue;
+      const changesDirectory =
+        /(?:^|[;&|\n()])\s*(?:cd|pushd|popd)(?=[ \t;&|\n)]|$)/u.test(
+          shell.slice(0, match.index),
+        );
+      if (!isAbsolute(target) && (!cwd || changesDirectory)) {
+        hasUnresolvedTarget = true;
+      } else if (resolve(cwd ?? "", target) === milestone) {
+        return true;
+      }
+    }
+  }
+  return hasUnresolvedTarget ? undefined : false;
+}
+
+/**
+ * Confirms a successful Claude Read covered every line of the prepared owner.
+ * @param {object[]} reads - Successful Read calls and their returned text.
+ * @param {string} owner - Absolute prepared owner path.
+ * @param {string} contents - Prepared owner text.
+ */
+export function recordedClaudeOwnerRead(reads, owner, contents) {
+  const expected = contents.replace(/\r?\n$/u, "").split(/\r?\n/u);
+  return reads.some(({ input, content }) => {
+    if (
+      input?.file_path !== owner ||
+      (input.offset !== undefined && input.offset !== 1) ||
+      (input.limit !== undefined && input.limit < expected.length)
+    )
+      return false;
+    const output = Array.isArray(content)
+      ? content
+          .filter((block) => block.type === "text")
+          .map((block) => block.text)
+          .join("\n")
+      : content;
+    if (typeof output !== "string") return false;
+    const lines = output.split(/\r?\n/u);
+    return expected.every((line, index) => {
+      const actual = lines[index];
+      if (actual === line) return true;
+      const numbered = /^[ \t]*(\d+)[ \t]*(?:\t|→)(.*)$/u.exec(actual ?? "");
+      return Number(numbered?.[1]) === index + 1 && numbered?.[2] === line;
+    });
   });
 }
 
@@ -297,7 +349,7 @@ function containsStagedSnapshot(output, baseline) {
 export function recordedStagedReviewEvidence(commands, project, baseline) {
   const local = (commands ?? []).filter(({ cwd }) => cwd === project);
   const stageRead =
-    /(?:^|[;&|\n]\s*)git\b[^\n;&|]*\b(?:diff\b[^\n;&|]*\s--(?:cached|staged)\b|show\b[^\n;&|]*\s["']?:(?:0:)?src\/discount\.mjs\b)/u;
+    /^\s*git(?:\s+--no-pager)?\s+show\s+["']?:(?:0:)?src\/discount\.mjs["']?\s*$/u;
   return {
     reviewStagedSnapshotObserved: local.some(
       ({ command, aggregated_output }) =>
@@ -308,12 +360,18 @@ export function recordedStagedReviewEvidence(commands, project, baseline) {
       ({ command, aggregated_output, exit_code }) => {
         if (exit_code !== 0) return false;
         const shell = command?.at(-1) ?? "";
-        const readsStageBlob =
-          /\bgit\s+cat-file\s+-p\s+/u.test(shell) &&
-          shell.includes(baseline.blob);
+        const blobRead = /^\s*git\s+cat-file\s+-p\s+([a-f0-9]+)\s*$/u.exec(
+          shell,
+        );
+        const algorithm = baseline.blob.length === 64 ? "sha256" : "sha1";
+        const output = aggregated_output ?? "";
+        const blob = createHash(algorithm)
+          .update(`blob ${Buffer.byteLength(output)}\0`)
+          .update(output)
+          .digest("hex");
         return (
-          (stageRead.test(shell) || readsStageBlob) &&
-          aggregated_output?.includes(stagedRoundingExpression)
+          (stageRead.test(shell) || blobRead?.[1] === baseline.blob) &&
+          blob === baseline.blob
         );
       },
     ),
@@ -327,13 +385,17 @@ export function recordedStagedReviewEvidence(commands, project, baseline) {
  */
 export function recordedCitedComment(commands, project) {
   const searchAnchor = '(search: "' + citedCommentAnchor + '")';
-  return (commands ?? []).some(
-    ({ cwd, exit_code, aggregated_output }) =>
+  const entry = resolve(project, citationEntryPath);
+  return (commands ?? []).some((item) => {
+    const { cwd, command, aggregated_output } = item;
+    const shell = command?.join(" ");
+    return (
       cwd === project &&
-      exit_code === 0 &&
+      /(?:^|\s)(?:cat|sed|rg|grep|head|tail)[ \t]+/u.test(shell ?? "") &&
       aggregated_output?.includes(citedSourcePath) &&
-      aggregated_output?.includes(searchAnchor),
-  );
+      recordedPreparedOwnerRead([item], entry, searchAnchor)
+    );
+  });
 }
 
 /**
@@ -362,14 +424,12 @@ export function recordedTrustedPolicyRead(commands, project, baseline, policy) {
 
 /** Checks raw policy output or a bounded JSON record containing the same full bytes. */
 function containsTrustedPolicyOutput(output, selector, policy) {
-  if (output?.includes(policy)) return true;
-  return output?.split("\n").some((line) => {
-    if (!line.startsWith("{")) return false;
-    try {
-      const fields = Object.values(JSON.parse(line));
-      return fields.includes(selector) && fields.includes(policy);
-    } catch {
-      return false;
-    }
-  });
+  if (output === policy) return true;
+  if (!output?.trimStart().startsWith("{")) return false;
+  try {
+    const fields = Object.values(JSON.parse(output));
+    return fields.includes(selector) && fields.includes(policy);
+  } catch {
+    return false;
+  }
 }

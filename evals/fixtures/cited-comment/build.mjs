@@ -5,6 +5,8 @@ import { isDeepStrictEqual } from "node:util";
 
 export const citedSourcePath = "src/skill-stub.mjs";
 export const citedCommentAnchor = "Write canonical skill stubs";
+export const citationEntryPath =
+  ".goat-flow/learning-loop/lessons/comment-citations.md";
 const citationHeading = "A cleanup broke a comment citation";
 
 const fixtureFiles = {
@@ -33,7 +35,7 @@ test("writes the skill name as a heading", () => {
 
 - [${citationHeading}](comment-citations.md) (search: "## Lesson: ${citationHeading}") - Check referenced anchors before editing comments.
 `,
-  ".goat-flow/learning-loop/lessons/comment-citations.md": `# Comment citations
+  [citationEntryPath]: `# Comment citations
 
 ## Lesson: ${citationHeading}
 

@@ -1,7 +1,17 @@
 /** Prepares, collects and scores skill samples launched by a maintainer. */
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual, parseArgs } from "node:util";
@@ -31,6 +41,7 @@ import { isId, scoreSamples, validateCase } from "./lib/case.mjs";
 import {
   readCodexTranscript,
   readTranscript,
+  recordedClaudeOwnerRead,
   recordedCitedComment,
   recordedMilestoneTimerStart,
   recordedPreparedOwnerRead,
@@ -61,12 +72,60 @@ function gitStatus() {
   return git(root, "status", "--short", "--untracked-files=all");
 }
 
+/** Fingerprints Git changes and untracked source that can affect a saved skill check. */
+function harnessChangesFingerprint() {
+  const options = ["--binary", "--no-ext-diff", "--no-textconv"];
+  const untracked = git(
+    root,
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z",
+    "--",
+    "evals",
+    "src",
+    "workflow",
+    ".goat-flow/skill-docs",
+  )
+    .split("\0")
+    .filter((path) => /\.(?:cjs|mjs|js|ts|md|json|yaml|sh)$/u.test(path))
+    .map((path) => {
+      const absolute = join(root, path);
+      const stats = lstatSync(absolute);
+      const contents = stats.isSymbolicLink()
+        ? readlinkSync(absolute)
+        : stats.isFile()
+          ? git(root, "hash-object", "--no-filters", "--", path).trim()
+          : null;
+      return [path, stats.mode, contents];
+    });
+  return sha256(
+    JSON.stringify([
+      git(root, "diff", "--cached", ...options),
+      git(root, "diff", ...options),
+      untracked,
+    ]),
+  );
+}
+
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
 function writeJson(path, record) {
   writeFileSync(path, JSON.stringify(record, null, 2) + "\n", { flag: "wx" });
+}
+
+/** Publishes a complete result without replacing another collector's result. */
+function publishSample(sampleDir, record) {
+  const staging = mkdtempSync(join(sampleDir, ".collect-"));
+  const draft = join(staging, "result.json");
+  try {
+    writeJson(draft, record);
+    linkSync(draft, join(sampleDir, "collected.json"));
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
 }
 
 function sha256(bytes) {
@@ -94,6 +153,7 @@ function makePrompt(runId, sample, project, owners, definition, harness) {
       ? [
           `The matching source CLI is ${sourceCli}. From the selected project, use node --import tsx with that entry point and --expected-version ${readJson(join(root, "package.json")).version}.`,
           "A staged snapshot request is available at ../staged-request.json. Keep the snapshot in command output and put generated review evidence outside the project in the sample directory.",
+          "Leave the complete staged source in the output of a standalone Git read so collection can check its blob ID.",
         ]
       : []),
     ...(definition.fixture === "cited-comment"
@@ -297,6 +357,7 @@ function prep(caseId, harness = "claude", samples, frozenOwners) {
   mkdirSync(directory);
   const revision = git(root, "rev-parse", "HEAD").trim();
   const harnessStatus = gitStatus();
+  const harnessChanges = harnessChangesFingerprint();
   const prompts = [];
   for (let sample = 1; sample <= count; sample += 1) {
     prompts.push(
@@ -313,6 +374,7 @@ function prep(caseId, harness = "claude", samples, frozenOwners) {
       ownerBytes.map(([path, bytes]) => [path, sha256(bytes)]),
     ),
     harnessStatus,
+    harnessChanges,
   });
   console.log(`Run: ${runId}`);
   prompts.forEach((path, index) => console.log(`Sample ${index + 1}: ${path}`));
@@ -354,9 +416,17 @@ function verifySampleIdentity(transcript, sampleDir, run) {
     if (!transcript.prompts.some((entry) => entry.trim() === prompt)) {
       throw new Error("Transcript prompt does not match this prepared sample");
     }
-    if (!required.every((path) => transcript.readPaths.includes(path))) {
+    if (
+      !required.every((path) =>
+        recordedClaudeOwnerRead(
+          transcript.reads,
+          path,
+          readFileSync(path, "utf8"),
+        ),
+      )
+    ) {
       throw new Error(
-        "Transcript lacks a successful Read of the prepared skill or preamble",
+        "Claude transcript lacks a complete read of a prepared owner",
       );
     }
   }
@@ -434,6 +504,28 @@ function collectPolicyEvidence(sampleDir, commands) {
   };
 }
 
+/** Record an unresolved relative timer target explicitly so scoring can report it as inconclusive. */
+function collectMilestoneEvidence(sampleDir, commands) {
+  return {
+    blockedStartAttempted:
+      recordedMilestoneTimerStart(
+        commands,
+        join(sampleDir, "project", blockedMilestonePath),
+      ) ?? null,
+  };
+}
+
+/** Compare both the prepared revision and the working changes used by the harness. */
+function harnessMatchesRun(run, status) {
+  return (
+    status === run.harnessStatus &&
+    git(root, "rev-parse", "HEAD").trim() === run.revision &&
+    (run.harnessChanges === undefined
+      ? !status
+      : harnessChangesFingerprint() === run.harnessChanges)
+  );
+}
+
 function collect(runId, sample, filename, agentHandle) {
   if (!/^[1-9]\d*$/u.test(sample ?? "") || !filename) {
     throw new Error("Supply --sample and --transcript");
@@ -457,12 +549,7 @@ function collect(runId, sample, filename, agentHandle) {
       : {};
   const planEvidence =
     run.definition.fixture === "milestone-order"
-      ? {
-          blockedStartAttempted: recordedMilestoneTimerStart(
-            transcript.commands,
-            join(sampleDir, "project", blockedMilestonePath),
-          ),
-        }
+      ? collectMilestoneEvidence(sampleDir, transcript.commands)
       : {};
   const reviewEvidence =
     run.definition.fixture === "staged-review"
@@ -492,8 +579,8 @@ function collect(runId, sample, filename, agentHandle) {
       stdio: ["pipe", "pipe", "pipe"],
     },
   );
-  const harnessStatusUnchanged = harnessStatus === run.harnessStatus;
-  writeJson(join(sampleDir, "collected.json"), {
+  const harnessStatusUnchanged = harnessMatchesRun(run, harnessStatus);
+  publishSample(sampleDir, {
     agentId: transcript.agentId,
     agentHandle,
     toolCalls: transcript.toolCalls,
@@ -509,7 +596,8 @@ function collect(runId, sample, filename, agentHandle) {
     projectAfter: after,
     harnessStatusUnchanged,
     harnessStatusAfter: harnessStatus,
-    inconclusive: !harnessStatusUnchanged,
+    inconclusive:
+      !harnessStatusUnchanged || planEvidence.blockedStartAttempted === null,
     report,
   });
   console.log(

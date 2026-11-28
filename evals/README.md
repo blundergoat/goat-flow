@@ -36,6 +36,6 @@ node evals/run.mjs collect --run <id> --sample <n> --transcript <file> --agent <
 node evals/run.mjs score --run <id>
 ```
 
-Collect all three samples before scoring. The score report includes the result of each mechanical row and any rows for maintainer review. Exit 0 requires 3/3. A failed, missing, invalid or inconclusive sample keeps its place in the denominator. Collection errors leave the sample open for retry with the correct transcript. A changed harness status is inconclusive and needs investigation. Equal listings establish only that Git reported the same status.
+Collect all three samples before scoring. The score report includes the result of each mechanical row and any rows for maintainer review. Exit 0 requires 3/3. A failed, missing, invalid or inconclusive sample keeps its place in the denominator. Collection errors leave the sample open for retry with the correct transcript. A changed harness revision, Git status, tracked diff, or untracked source under the eval, CLI, workflow and skill reference trees makes the sample inconclusive.
 
 The `--agent` argument is required for Codex collection. Find `run.json`, the per-sample evidence and `score.md` in gitignored `.goat-flow/logs/evals/<id>/`. The run records the harness, repository revision and owner-file hashes. Codex collection also retains available timing and token counts.

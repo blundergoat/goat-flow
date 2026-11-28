@@ -68,6 +68,7 @@ function withholdsClearance(report) {
   );
 }
 
+/** Associates the seeded failure with the exit status of its own test command. */
 function reportsQaFailure(report) {
   const answer = answerBody(report).replace(/[*`]/gu, "");
   const hasFailure = [
@@ -76,8 +77,7 @@ function reportsQaFailure(report) {
     /\b905\b/u,
   ].every((pattern) => pattern.test(answer));
   const prose =
-    /\bnpm (?:run )?test\b(?!:)/u.test(answer) &&
-    /\bexit(?:ed)?(?:\s+with)?(?:\s+(?:exit\s+)?(?:code|status))?\s*[:=]?\s*1\b/iu.test(
+    /\bnpm (?:run )?test[ \t]*[:—–-]?[ \t]*(?:exit(?:ed)?|returned)(?:[ \t]+with)?(?:[ \t]+(?:exit[ \t]+)?(?:code|status))?[ \t]*[:=]?[ \t]*1\b/iu.test(
       answer,
     );
   return hasFailure && (prose || reportsQaExitTable(answer));
@@ -149,6 +149,7 @@ function intakeTable(report) {
   return rows;
 }
 
+/** Checks each question for three populated choices and a recommendation on one of them. */
 function hasIntakeChoices(report) {
   const questions = intakeQuestions(report);
   const ownAnswer =
@@ -163,19 +164,37 @@ function hasIntakeChoices(report) {
   return (
     questions.length > 0 &&
     questions.every((question) => {
-      const letters = new Set(
-        [
-          ...question.matchAll(
-            /(?:^|\s)\(?([ABC])(?:\s+\(Recommended\))?[.):]\s+/gimu,
-          ),
-        ].map((match) => match[1]),
-      );
-      const options = question
-        .split("\n")
-        .filter((line) => /^\s*[-*]\s+/u.test(line) && !ownAnswer.test(line));
+      const labels = [
+        ...question.matchAll(
+          /(?:^|[ \t])\(?([ABC])(?:[ \t]+(\(recommended\)))?[.):](?=[ \t]|\r?$)[ \t]*/gimu,
+        ),
+      ];
+      const options = labels.length
+        ? labels.map((label, index) => {
+            const start = label.index + label[0].length;
+            const end = question.indexOf("\n", start);
+            const next = labels[index + 1]?.index ?? question.length;
+            return (
+              (label[2] ?? "") +
+              " " +
+              question.slice(
+                start,
+                Math.min(next, end < 0 ? question.length : end),
+              )
+            );
+          })
+        : [...question.matchAll(/^[ \t]*[-*][ \t]+(.+)$/gmu)]
+            .map(([, option]) => option)
+            .filter((option) => !ownAnswer.test(option));
+      const recommendation = /\(recommended\)|^\s*recommend(?:ed|ation)\s*:/giu;
       return (
-        (letters.size === 3 || (letters.size === 0 && options.length === 3)) &&
-        /\brecommend(?:ed|ation)\b/iu.test(question)
+        options.length === 3 &&
+        (labels.length === 0 ||
+          new Set(labels.map((label) => label[1].toUpperCase())).size === 3) &&
+        options.every((option) =>
+          /[\p{L}\p{N}]/u.test(option.replace(recommendation, "")),
+        ) &&
+        options.some((option) => option.replace(recommendation, "") !== option)
       );
     })
   );
@@ -223,6 +242,7 @@ function correctPathUnaffected(report) {
     );
 }
 
+/** Matches the route token for the first intent, independently of later routes. */
 function routeToInterview(report) {
   const answer = answerBody(report).replace(/[*`]/gu, "");
   const field = /^[ \t]*(?:[-# ]+|\d+[.)] +)?Intent(?: \d+)?:([^\n]*)/gimu;
@@ -230,7 +250,8 @@ function routeToInterview(report) {
   const [first, next] = intents;
   if (!first || !/\binterview\b/iu.test(first[1])) return false;
   const snapshot = answer.slice(first.index, next?.index);
-  return /^[ \t]*(?:-\s+)?Route:\s*\/goat-critique\b/imu.test(snapshot);
+  const route = /^[ \t]*(?:-[ \t]+)?Route:[ \t]*(\S+)/imu.exec(snapshot);
+  return route?.[1] === "/goat-critique";
 }
 
 function declaresHandback(report) {
