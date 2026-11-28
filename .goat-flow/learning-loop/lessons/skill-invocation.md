@@ -1,6 +1,6 @@
 ---
 category: skill-invocation
-last_reviewed: 2026-09-05
+last_reviewed: 2026-11-28
 ---
 
 **Scope:** What an explicit skill invocation obliges - not downgrading it by judgment, treating it as delegation consent, honouring plan-only scope, and not assuming goat skills are the only skills present. Reading the request itself is [agent-routing.md](agent-routing.md).
@@ -84,3 +84,16 @@ last_reviewed: 2026-09-05
 **What happened:** A human testing gate prompt said to list all directories under the installed skills path and named the only ones allowed, which would report any project's own skills as violations.
 
 **Root cause:** A check written against this repository's contents was phrased as a universal invariant.
+
+---
+
+## Lesson: A hand-back rule that names one kind of sub-agent holds only some of the time
+
+**Status:** active | **Created:** 2026-11-28
+**Decision changed:** A skill rule telling sub-agents to hand control back names every sub-agent and the forbidden action, and a wording change to it is credited only after at least three fresh runs.
+
+**Prevention:** Write the rule as "Any sub-agent, including a forked sub-agent, returns control before Phase 1" and name what it must not do ("it never spawns the critics itself"). Judge a sub-agent control trial on three or more fresh runs of the same request: one pass or one failure per wording says nothing about that wording. Evidence anchor: `workflow/skills/goat-critique/SKILL.md` (search: `Any sub-agent, including a forked sub-agent, returns control before Phase 1`).
+
+**What happened:** While adding goat-critique's planning-intake entry, a registered trial asked an ordinary sub-agent to critique a brief. It spawned three critics and ran Phases 1-3 itself, although Step 0 said "A forked sub-agent returns control before Phase 1". Over four skill versions run once each, two runs handed control back and two did not. The agent first credited one sentence of the new entry, from a single control run and a single passing rerun; the next wording change failed again. After the rule itself named any sub-agent and forbade spawning, three independent runs all handed control back.
+
+**Root cause:** The rule bound only "a forked sub-agent", and the trial agents were told they were "a sub-agent of the session's host". Every passing report quoted the rule and neither failing report mentioned it, which points to agents not applying it to themselves. Single samples made run-to-run variance look like a wording effect.

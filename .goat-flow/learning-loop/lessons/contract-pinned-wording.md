@@ -9,7 +9,7 @@ last_reviewed: 2026-10-22
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** OBSERVED
 **Severity:** INTEGRATION
-**Incident count:** 28 | **Latest occurrence:** 2026-10-18
+**Incident count:** 30 | **Latest occurrence:** 2026-11-28
 **Merged:** 2026-10-11 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split to recover its headroom.
 
 **Prevention:** Before changing prose, a path, or an adjacent command, search the tests and durable semantic anchors for the exact old text; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest. When fixture size feeds a derived assertion, recompute it with the production formula after every fixture edit. Update a contract only when product semantics change. Before drafting in a near-cap skill, measure the current word budget and pay for additions from unpinned text; before quoting a budget or score outcome, measure the exact sizes with the function the gate uses and state the margin.
@@ -102,3 +102,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 **Recurrence 2026-10-11:** Removing the runner's performance mode also rewrote the adjacent concurrency ternary; the first fast suite failed one source-regex pin that the grep for the removed mode's names could not find. Restoring the pinned line fixed it: search each adjacent edited line for its exact text. `scripts/run-tests.mjs` (search: `testConcurrencyForMode`), `test/integration/preflight-progress.test.ts` (search: `keeps fast concurrency bounded`).
 
 - **Recurrence 2026-10-18:** Moving quality version/rubric cases from CLI processes to the shared parser modes renamed a test title still cited by a lesson. All 151 focused tests passed, but preflight reported a stale reference. Restore the stable test title when changing execution level, or migrate its durable consumers in the same packet; assertion equivalence alone does not preserve retrieval. Evidence: `test/unit/quality-subcommands.test.ts` (search: `parses ${name} as legacy and rejects it under current schema rules`) and `.goat-flow/learning-loop/lessons/audit-contracts.md` (search: `Recurrence 2026-09-30`).
+
+- **Recurrence 2026-11-28:** Adding the existing-test run to goat-qa's Phase 2 gate sentence failed the same goat-qa contract as the 2026-08-23 recurrence. The RED run could not show it, because the old sentence was still present then. Only searching the tests for the exact old sentence before drafting would have caught it. The fix loosened the pattern to the invariant (gap analysis, Refuted Candidates and Verification Integrity after the disproval pass), so the new wording is not pinned twice. `test/contract/skill-hardening-skills-1.test.ts` (search: `requires goat-qa Standard-mode gap output`).
+
+- **Recurrence 2026-11-28 (manifest list):** The next goat-qa change searched the tests for every sentence it rewrote, but not for the manifest array it extended. A contract that compares goat-qa's whole reference list for exact equality failed only after the guidance landed. Pins include data shapes: search the tests for the exact list or key being changed, not only the prose. `test/contract/skill-hardening-skills-1.test.ts` (search: `loads goat-qa output templates progressively from canonical references`).

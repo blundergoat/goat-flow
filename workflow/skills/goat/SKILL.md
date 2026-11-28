@@ -15,7 +15,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
 - **ALWAYS:** Honor explicit invocations; answer simple facts directly; split other intents and route each.
 - **DEFER TO:** Routed skills, direct execution for simple changes, or direct answers.
 
-**If a symptom tempts code reading, STOP.** The dispatcher routes; the routed skill investigates.
+**If a symptom tempts code reading, STOP:** the routed skill investigates.
 
 | Excuse | Reality |
 |--------|---------|
@@ -49,15 +49,15 @@ Only user-requested depth is forwarded; otherwise destination Step 0 selects. Ma
 
 | Intent | Route |
 |--------|-------|
-| Bug, failure, unexpected behaviour; verify a fix | `/goat-debug` |
+| Bug, failure, unexpected behaviour | `/goat-debug` |
 | Browser-visible issue | Browser evidence first; then `/goat-debug` (Diagnose mode) |
 | Understand, explain, explore unfamiliar code | `/goat-debug` (Investigate mode) |
 | GOAT Flow setup/process/harness/skills quality assessment | `goat-flow quality` CLI/dashboard prompt flow (no goat skill wrapper) |
 | Code quality review, area audit, diff check | `/goat-review` |
-| Multi-perspective critique | `/goat-critique` |
+| Multi-perspective critique; planning interview | `/goat-critique` |
 | Security, compliance, dependency audit | `/goat-security` |
 | Comment, documentation, naming, or private-placement remediation | `/goat-clarity` |
-| Testing gaps, coverage, verification planning | `/goat-qa` |
+| Testing gaps, coverage, verification planning, existing-test runs, verify a fix | `/goat-qa` |
 | Bare task path (no action verb) | Bare or ambiguous task paths are read-only context. Do not update `.active`, milestone status, or code from a path alone |
 | Plan/design or non-trivial build/change | `/goat-plan`; build/change carries `return-to-implement`, plan/design stops after planning |
 | Hotfix or simple implementation (1-2 files, obvious change) | No skill; use execution loop directly |

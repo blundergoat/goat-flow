@@ -13,7 +13,7 @@ Goat-* Step 0 replaces READ and selects depth. SCOPE gates writes by mode or app
 
 ## Report-Only Skill Contract
 
-`/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default: findings and required gitignored artifacts. They MUST NOT mutate the target artifact or committed files without a separate apply, edit, update, fix, or implement instruction.
+`/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default: findings and required gitignored artifacts. They MUST NOT mutate the target artifact or committed files without a separate apply, edit, update, fix, or implement instruction. `/goat-qa` may also run the target project's existing checks; untracked output those commands normally produce is not a mutation.
 
 ## Durable Local Text Redaction
 

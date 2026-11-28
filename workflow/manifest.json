@@ -512,7 +512,8 @@
       ],
       "goat-critique": [
         "references/rubric-examples.md",
-        "references/sub-agent-directives.md"
+        "references/sub-agent-directives.md",
+        "references/interactive-intake.md"
       ],
       "goat-review": [
         "references/examples.md",
@@ -527,7 +528,11 @@
         "references/supply-chain-and-cicd.md",
         "references/project-policy-template.md"
       ],
-      "goat-qa": ["references/output-templates.md"],
+      "goat-qa": [
+        "references/output-templates.md",
+        "references/execution.md",
+        "references/manual-testing.md"
+      ],
       "goat-clarity": ["references/target-scope-and-evidence.md", "references/receipt-evidence.md"]
     },
     "stale_names": [

@@ -13,10 +13,14 @@ Read `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-
 
 Use for multi-perspective critique of a plan, security assessment, debug hypotheses, review, test strategy, architecture, or refactor.
 
+## Planning Intake
+
+A request to be interviewed for a plan, or to check an existing plan for stale facts, selects planning intake instead of critique. Intake runs in the current context, spawns no critics, gives no critique verdict and hands answers to goat-plan; read `references/interactive-intake.md` and follow it. If the request could mean critiquing an artifact or planning from it, ask one short question before assuming plan-writing authority. A concrete artifact with no planning request goes to Step 0 for full delegated critique.
+
 ## Boundary Commands
 
 - **NEVER:** Replace delegation with inline role-play, skip phases, or auto-apply recommendations.
-- **ALWAYS:** Treat explicit invocation as consent for the full delegated protocol on a concrete artifact.
+- **ALWAYS:** Treat explicit invocation as consent for the full delegated protocol on a concrete artifact, except planning intake.
 - **DEFER TO:** Before invocation, create missing artifacts, answer simple facts, or use `/goat-review` for trivial work; explicit `/goat-critique` runs fully.
 
 | Excuse | Reality |
@@ -38,7 +42,7 @@ goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 out
 - Require a concrete artifact, not a vague idea.
 - Select its Critique Rubric; ask if unclear.
 - Run preamble retrieval for artifact/risk terms; record misses without broad-loading buckets.
-- **Host ownership:** The host/root context owns Phases 1-5.6. A forked sub-agent returns control before Phase 1 and does not apply the shared sub-agent gate conversion. The host spawns agents, presents gates, and resumes Phase 5.6 after the response. Direct/chained host entry needs no delegation prompt; chained entry skips only intake confirmation.
+- **Host ownership:** The host/root context owns Phases 1-5.6. Any sub-agent, including a forked sub-agent, returns control before Phase 1 and does not apply the shared sub-agent gate conversion; it never spawns the critics itself. The host spawns agents, presents gates, and resumes Phase 5.6 after the response. Direct/chained host entry needs no delegation prompt; chained entry skips only intake confirmation.
 - **Resume:** For saved work, apply **Saved records and recovery** in `references/rubric-examples.md` before generating critics.
 - **Differential mode detection:** For matching artifact identity within 30 days, apply **Differential baselines** in `references/rubric-examples.md`: offer prior findings and available diff to A/B; C stays cold. Phase 5 links the baseline record and reports deltas.
 - **Read context map:** Read only the selected rubric's `###` map under Rubric Context Maps in `references/rubric-examples.md`. Merge the selected rubric map into the fixed A/B/C split; never replace baseline context. Other reference sections load at the phase that names them.
@@ -157,8 +161,8 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 
 ## Constraints
 
-- MUST run in one mode: full delegated, Phases 1-5 plus 5.5/5.6, three critique sub-agents plus one meta-agent.
-- Explicit `$goat-critique` or `/goat-critique` invocation IS consent to spawn sub-agents and the full protocol. Do NOT ask again.
+- Critique MUST run in one mode: full delegated, Phases 1-5 plus 5.5/5.6, three critique sub-agents plus one meta-agent.
+- Explicit `$goat-critique` or `/goat-critique` invocation IS consent to spawn sub-agents and the full protocol for critique. Do NOT ask again.
 - Report-only by default. Do not mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement. If interrupted, freeze writes.
 - MUST Spawn all three sub-agents in a single parallel batch. Preserve separate input payloads and no result sharing; timing alone does not prove independence.
 - MUST set max 5 tool-call budget per critique sub-agent; log calls/limit when exposed, otherwise unavailable markers. Do not claim mechanical enforcement when counts are unavailable.

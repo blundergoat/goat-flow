@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-06
-**Updated:** 2026-10-11 - absorbed records are cited by filename slug because the same numbers also belong to other records in the history, and the adoption table no longer cites this record as its own evidence. Absorbed (all removed): ADR-002-replace-preflight-with-security-skill, ADR-016-dispatcher-is-canonical-skill, ADR-017-consolidate-skills-9-to-6, ADR-018-no-goat-verify-skill, ADR-019-rename-sbao-to-critique-and-test-to-qa, ADR-050-no-goat-audit-skill.
+**Updated:** 2026-11-28 - goat-qa may run a target project's existing checks in Standard mode, exercise affected pages in a browser, and verify a claimed fix by replaying its recorded failure. It still never writes tests, reviews code or certifies merges, and new failures go to goat-debug. 2026-10-11 - absorbed records are cited by filename slug because the same numbers also belong to other records in the history, and the adoption table no longer cites this record as its own evidence. Absorbed (all removed): ADR-002-replace-preflight-with-security-skill, ADR-016-dispatcher-is-canonical-skill, ADR-017-consolidate-skills-9-to-6, ADR-018-no-goat-verify-skill, ADR-019-rename-sbao-to-critique-and-test-to-qa, ADR-050-no-goat-audit-skill.
 
 ## Context
 
@@ -33,7 +33,7 @@ Current canonical set, 8 total: `/goat`, `/goat-debug`, `/goat-plan`, `/goat-rev
 
 `goat-security` also gained Compliance and Dependency-audit modes in the 9-to-6 pass. Installed skills are never deleted from consumer projects when they leave the expected list.
 
-Rejecting `goat-verify` carried four obligations, all shipped: a `## Proof Gate` section in `workflow/skills/reference/skill-preamble.md` and its installed copy (Identify, Run fresh, Read, Verify, Cite), asserted by `test/integration/preamble-sync.test.ts`; routing hygiene so the dispatcher says "verification planning" and `goat-qa` declares `**NEVER:** Run or write tests, verify fixes, review code, or certify merges`; a one-line Proof Gate reference at each skill's handoff or gate; and targeted imports into `goat-debug` (boundary instrumentation in D1, the Causation / Necessity / Sufficiency gate and 5-Whys in D2, the 3-fix abort rule and rerun-original-repro requirement in D4). Per-skill gates stay heterogeneous by design; a generic numeric confidence gate was rejected because a score is itself a hedge.
+Rejecting `goat-verify` carried four obligations, all shipped: a `## Proof Gate` section in `workflow/skills/reference/skill-preamble.md` and its installed copy (Identify, Run fresh, Read, Verify, Cite), asserted by `test/integration/preamble-sync.test.ts`; routing hygiene so the dispatcher says "verification planning" and `goat-qa` declares `**NEVER:** Write or edit tests or application code, generate test code, review code, or certify merges` (narrowed on 2026-11-28 from a rule that also forbade running tests and verifying fixes); a one-line Proof Gate reference at each skill's handoff or gate; and targeted imports into `goat-debug` (boundary instrumentation in D1, the Causation / Necessity / Sufficiency gate and 5-Whys in D2, the 3-fix abort rule and rerun-original-repro requirement in D4). Per-skill gates stay heterogeneous by design; a generic numeric confidence gate was rejected because a score is itself a hedge.
 
 ### Adoption rulings
 
@@ -47,7 +47,7 @@ Rejecting `goat-verify` carried four obligations, all shipped: a `## Proof Gate`
 | Old | New | Why the old name failed |
 | --- | --- | --- |
 | `goat-sbao` | `goat-critique` | An acronym with no scaffolding at the slash layer while every other surface taught "critique" |
-| `goat-test` | `goat-qa` | Collided with the developer meaning; the skill neither writes nor runs tests |
+| `goat-test` | `goat-qa` | Collided with the developer meaning; when renamed, the skill neither wrote nor ran tests |
 
 The CLI rename of `critique` to `quality` (commit `054bde2`) freed the name. `/goat-critique` and `/goat-review` are distinguished by scope, artifact, and orchestration depth, not by the slash token.
 

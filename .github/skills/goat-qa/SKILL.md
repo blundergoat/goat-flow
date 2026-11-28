@@ -12,13 +12,13 @@ On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## When to Use
 
-goat-qa maps changed code or a codebase area to coverage and prioritized must/should/skip guidance. It neither writes nor runs tests.
+goat-qa maps changed code or a codebase area to coverage and prioritized must/should/skip guidance. In Standard mode it also runs the target project's existing checks and reports their real results. It never writes tests.
 
 ## Boundary Commands
 
-- **NEVER:** Run or write tests, verify fixes, review code, or certify merges.
-- **ALWAYS:** Map code risk to tests read; return tiers with Verification Integrity.
-- **DEFER TO:** Direct test execution, `/goat-debug`, `/goat-review`, `/goat-plan`, or the dispatcher.
+- **NEVER:** Write or edit tests or application code, generate test code, review code, or certify merges.
+- **ALWAYS:** Map code risk to tests read; report each check run with its actual result; return tiers with Verification Integrity.
+- **DEFER TO:** `/goat-debug` for new failures and their root cause, `/goat-review`, `/goat-plan`, or the dispatcher.
 
 | Excuse | Reality |
 |--------|---------|
@@ -55,6 +55,12 @@ The playbook owns creation, existing-test, added-test, removed-test, and relocat
 
 Mock collaborator call counts, call order, non-calls, and simulated cooperation remain `STRUCTURAL` unless the interaction is a named public protocol; they earn no integration confidence. Prefer consolidation when nearby cases lack distinct regression stories. Every recommendation carries the playbook's compact record. goat-qa stays report-only: ordinary ACT must re-read current code and coverage before any separately approved add, move, consolidation, or prune action.
 
+## Existing-Test Execution
+
+Standard mode runs existing checks after gap analysis and before its Phase 2 gate. Audit runs them only on request; Regression Guard never does. An explicit analysis-only, no-run, or assessment-only request runs nothing: report `Commands run: none (analysis-only request)`.
+
+Before the first command, read `references/execution.md` and follow its Existing Checks steps. When the change alters a page or other browser-visible behaviour, also follow its Browser Checks; capture screenshots only under its Screenshot Evidence rules.
+
 ## Candidate Disproval Pass
 
 Run this pass immediately before every gated or final output. Re-read the evidence for each candidate and assign exactly one outcome:
@@ -69,6 +75,7 @@ Preserve every killed candidate under `Refuted Candidates`: claim, exclusion rea
 
 **Mode detection - scope wins over vocabulary:**
 
+- Explicit request to verify a claimed fix → Fix Replay mode: read `references/execution.md` and follow its Fix Replay steps
 - Explicit request to preserve a verified fix, prevent regression, or add regression guards → Regression Guard mode
 - Explicit diff, PR, branch, changed-file, or recent-change scope → Standard mode (quick depth), even when the request also says "audit", "coverage", or "gaps"
 - Explicit codebase area, directory, module, or risk-class coverage audit with no recent-change scope → Audit mode (full depth)
@@ -76,7 +83,7 @@ Preserve every killed candidate under `Refuted Candidates`: claim, exclusion rea
 
 **Depth mapping:** Regression Guard reads cited evidence plus code/tests; Standard reads changes; Audit reads a no-diff area. Scope semantics outrank dispatcher depth.
 
-**Gather:** scope, existing test plan (if any), audience. Check instruction Essential Commands or `package.json` for test/lint commands.
+**Gather:** scope, existing test plan (if any), audience.
 
 **Standard Scope-Size Gate:** Count changed files before deep analysis. If too large, rank a load-bearing/interface slice; proceed after confirmation.
 
@@ -131,7 +138,7 @@ For CRITICAL items with no coverage, annotate why: new path / missed coverage on
 
 Map each stated expectation to the code path that implements it. Gaps between intent and code are undertested-risk candidates.
 
-**BLOCKING GATE (auto-released on explicit test-plan intent):** Run the Candidate Disproval Pass, then present gap analysis, Refuted Candidates, and Verification Integrity. Ask "Continue to Phase 3, or adjust first?" unless the invocation explicitly requested what to test or a test plan; then treat it as a CHECKPOINT and continue. Reserve diagrams for Phase 3, then suggest `/goat-plan`.
+**BLOCKING GATE (auto-released on explicit test-plan intent):** Run Existing-Test Execution and the Candidate Disproval Pass, then present gap analysis, test results, Refuted Candidates, and Verification Integrity. Ask "Continue to Phase 3, or adjust first?" unless the invocation explicitly requested what to test or a test plan; then treat it as a CHECKPOINT and continue. Reserve diagrams for Phase 3, then suggest `/goat-plan`.
 
 **Illustrative scenario - input/output shape only; never evidence.**
 
@@ -214,7 +221,6 @@ After a verified fix, cite its source; define the human-readable invariants; com
 
 ## Constraints
 
-- goat-qa is a testing GAP ANALYSER - it finds mismatches between code (changed or existing) and testing coverage
 - MUST compare in-scope code against existing testing coverage (manual plan, automated tests, or neither)
 - MUST assess gaps in BOTH directions: undertested risks AND misaligned test effort; report `none found` rather than inventing either
 - MUST use the declared mode's priority tiers: Standard uses "must test / should test / safe to skip"; Audit uses "Blocking / High-value / Defer"
@@ -222,9 +228,7 @@ After a verified fix, cite its source; define the human-readable invariants; com
 - MUST run the Candidate Disproval Pass before every gated or final output and preserve killed candidates under Refuted Candidates
 - MUST apply the preamble's Proof Gate to every claim made in the gap analysis or testing plan.
 - MUST apply `test-selection.md` before recommending an addition or an existing-test change; priority never substitutes for disposition
-- MUST NOT generate test code - hand off to the coding agent
 - If flow diagrams are requested, use Mermaid flowcharts (8-15 nodes, happy path first, annotate gap status per node).
-- Regression guard: MUST state invariants as human-readable sentences; MUST cite prior fix-verification source; MUST NOT verify the fix itself
 - MUST defend zero-gap results explicitly: state what was checked and why no gaps surfaced. Zero gaps without justification is an error condition, not a clean bill.
 
 ## Output Format

@@ -41,6 +41,8 @@ Before ticking any RUNTIME or [agent-evaluated] proof item, name the specific de
 
 The approved selector-wide clarification then produced a replacement with all seventeen case rows before naming/comment owners, but it rewrote both decodeFixtureResult diagnostic descriptions to match the assertion failure. Its tool-free clarification says the BLOCKED-ON-BEHAVIOUR distinction was read but never evaluated. Parsed syntax and seventeen passing tests preserved executable behavior; neither established permission to normalize this registered behavior conflict. Credit the demonstrated ordering separately and retain the failed conflict-preservation criterion. Evidence: `workflow/skills/goat-clarity/SKILL.md` (search: `When a comment is false because behaviour is defective`) and `test/unit/hook-provider-adapters.test.ts` (search: `function decodeFixtureResult`).
 
+**Recurrence 2026-11-28:** A goat-qa change planned a browser-check rule because the skill text had no browser route. The baseline, with the unchanged skill, already drove a headless browser on a UI change and found a real defect. It got there through the shared preamble's localhost rule and the harness instruction file. The rule was cut to the per-journey record the baseline lacked; fix replay and screenshot discipline, which the baseline really lacked, stayed. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `For URL, local HTML, localhost, screenshot, rendered UI`).
+
 ---
 
 ## Lesson: Evidence tooling is evidence, so run the fixture and re-derive every count
