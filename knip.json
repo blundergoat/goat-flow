@@ -1,9 +1,10 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["scripts/*.mjs", "test/**/*.test.ts", "src/hooks/**/*.mts"],
+  "entry": ["scripts/*.mjs", "evals/run.mjs", "test/**/*.test.ts", "src/hooks/**/*.mts"],
   "project": [
     "src/**/*.ts",
     "scripts/**/*.mjs",
+    "evals/**/*.mjs",
     "test/**/*.ts",
     "src/hooks/**/*.mts"
   ],

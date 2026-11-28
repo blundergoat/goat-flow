@@ -1,0 +1,34 @@
+{
+  "id": "plan-blocked-milestone",
+  "fixture": "milestone-order",
+  "harness": "codex",
+  "request": "/goat-plan Resume M02 in .goat-flow/plans/dependency-order/. Start M02 if it is eligible.",
+  "owners": [
+    "workflow/skills/goat-plan/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    "workflow/skills/goat-plan/references/milestone-examples.md"
+  ],
+  "rows": [
+    {
+      "id": "project-bytes",
+      "kind": "mechanical",
+      "label": "Plan bytes and timing receipt state match the before snapshot"
+    },
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "no-blocked-milestone-start",
+      "kind": "mechanical",
+      "label": "The rollout contains no command to start M02's timer"
+    },
+    {
+      "id": "blocked-prerequisite",
+      "kind": "judgement",
+      "label": "The report identifies incomplete M03 as M02's prerequisite and stops the requested activation"
+    }
+  ]
+}

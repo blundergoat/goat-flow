@@ -1,6 +1,6 @@
 ---
 category: test-fixtures-evaluators
-last_reviewed: 2026-09-19
+last_reviewed: 2026-11-28
 ---
 
 **Scope:** Fixtures for skill-evaluation trials - pressure scenarios that isolate one rule, evaluator prompts and restrictions, worktree scheduling for parallel evaluator runs, and what a blind evaluator or executor session loads at start. Test-suite fixtures are [test-fixtures.md](test-fixtures.md); scoring what a trial produced is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -57,3 +57,53 @@ last_reviewed: 2026-09-19
 **What happened:** On 2026-09-19 a diagnosing session froze forecast predictions for eleven not-started milestones as a shadow test and told the requester that the executing agent must not see them. For the convenience of later analysis sessions it then saved a memory entry that named the rules under test and the measured rates. The executor of the first milestone, a second Claude Code session in the same checkout, opened that memory file after its timer was finalized and reported the exposure in its closeout. Its own timing predated the read and the dated predictions stayed unseen, but it then knew the rules for the ten milestones still to run. The memory file was rewritten without rules or rates, its index line now steers executors away from the prediction files, and the requester was advised to continue in a fresh session.
 
 **Root cause:** The agent treated its memory as a private notebook. It guarded the plan-local prediction files, then copied their sensitive part into the one place every session in the checkout reads.
+
+## Lesson: Nested Node fixtures inherit the parent test context
+
+**Status:** active | **Created:** 2026-11-28 | **Evidence:** OBSERVED
+**Decision changed:** Give a fixture child its own Node test context when its stdout is evidence.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Clear the child's inherited `NODE_TEST_CONTEXT` and request TAP before matching assertion output.
+
+**What happened:** The required-QA eval's focused test received binary runner messages from the nested fixture, including its assertion failure. The TAP matcher rejected the output. A fresh test context produced TAP with the same failure and exit code. Evidence: `test/unit/evals-cases.test.ts` (search: `fixtureEnv`).
+
+## Lesson: Eval collection must bind the observed evidence to its source
+
+**Status:** active | **Created:** 2026-11-28 | **Evidence:** OBSERVED
+**Decision changed:** Match complete owner reads and snapshot records before attributing a compound command failure to them.
+**Incident count:** 2
+**Latest occurrence:** 2026-11-28
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Match each prepared owner path as a command argument, use the recorded working directory for relative paths, and check the full owner bytes. For staged reviews, bind the complete snapshot to the prepared index blob and fingerprint. Preserve the `owner paths` diagnostic when changing the owner allowlist.
+
+**What happened:** One review sample emitted the staged snapshot before a later command failed against an unborn HEAD. Two clarity samples fully read their owners from the sample or owner directory, which the collector rejected. A fresh sample read the exact absolute owner paths from the harness root and exposed the same assumption. The clarity fixture also needed the matching source redactor to exercise an edit. The focused validator test caught an owner-diagnostic change. Evidence: `evals/lib/transcript.mjs` (search: `recordedPreparedOwnerRead`) and `test/unit/evals-reference-boundaries.test.ts` (search: `only the prepared stage`).
+
+**Recurrence 2026-11-28:** A transcript command reading a backup with identical bytes satisfied the owner check because its filename began with the prepared path. The focused test now rejects that command and checks a quoted relative read. Evidence: `test/unit/evals-reference-boundaries.test.ts` (search: `binds prepared owner bytes`).
+
+## Lesson: A pinned policy fixture needs tree metadata for review snapshots
+
+**Status:** active | **Created:** 2026-11-28 | **Evidence:** OBSERVED
+**Decision changed:** Verify the policy fixture with the version-matched snapshot reader before launching samples.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Copy the pinned commit, its tree metadata, and the selected policy blob. Keep unrelated file contents outside the fixture. Verify the selected path in the snapshot. Tell samples which comparison source applies when fixture HEAD is unborn, and bound their inventory to the assessed path.
+
+**What happened:** The policy-only fixture resolved `git show` with just the policy's ancestor trees. The snapshot reader enumerated the full tree and exited 2 on missing sibling metadata. Adding the directory objects let the snapshot resolve the selected policy. The first Codex run still missed the trusted read twice when broader metadata inspection hit tool limits. The scoped rerun emitted one complete policy as JSON and one clearance decision with a dash. Match the selector and exact decoded bytes, and read the explicit clearance decision. Evidence: `evals/fixtures/policy-authority/build.mjs` (search: `buildPolicyAuthority`), `evals/run.mjs` (search: `HEAD is unborn`), and `test/unit/evals-policy-authority.test.ts` (search: `recorded as JSON`).
+
+Preflight also found an export used only by the temporary qualification command. Keep the fixture's `policyExceptionId` private unless a checked-in consumer imports it.
+
+## Lesson: Clear inherited Git overrides before preparing eval fixtures
+
+**Status:** active | **Created:** 2026-11-28 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Bind runner Git commands and snapshot preparation to the explicitly selected repository.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Clear inherited `GIT_*` variables when the eval runner selects a repository via its working directory or `--project`. Verify that each prepared fixture has its own index.
+
+**What happened:** `prep --case critique-handback` returned success with `GIT_INDEX_FILE` set and wrote the inherited index outside its fixtures. After the fix, all six samples prepared for `critique-handback` and `review-staged-authority` used fixture indexes under the same environment override. Evidence: `evals/run.mjs` (search: `const gitEnv`).

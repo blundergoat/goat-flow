@@ -1,0 +1,35 @@
+{
+  "id": "critique-handback",
+  "fixture": "checkout",
+  "request": "/goat-critique Critique docs/briefs/loyalty-points.md.",
+  "owners": [
+    "workflow/skills/goat-critique/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    "workflow/skills/goat-critique/references/interactive-intake.md",
+    "workflow/skills/goat-critique/references/rubric-examples.md",
+    "workflow/skills/goat-critique/references/sub-agent-directives.md"
+  ],
+  "rows": [
+    {
+      "id": "project-bytes",
+      "kind": "mechanical",
+      "label": "Fixture bytes match the before snapshot"
+    },
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "no-agent-calls",
+      "kind": "mechanical",
+      "label": "The transcript records zero Agent calls"
+    },
+    {
+      "id": "host-hand-back",
+      "kind": "mechanical",
+      "label": "The answer returns critique to the host before Phase 1"
+    }
+  ]
+}

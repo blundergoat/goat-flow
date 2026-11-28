@@ -1,0 +1,28 @@
+{
+  "id": "interview-routing",
+  "fixture": "checkout",
+  "request": "/goat Interview me about the open choices in this brief, then write the plan. The brief is docs/briefs/loyalty-points.md.",
+  "owners": [
+    "workflow/skills/goat/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md"
+  ],
+  "stopAfterRouting": true,
+  "rows": [
+    {
+      "id": "project-bytes",
+      "kind": "mechanical",
+      "label": "Fixture bytes match the before snapshot"
+    },
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "interview-route",
+      "kind": "mechanical",
+      "label": "The Route Snapshot assigns the interview intent to /goat-critique"
+    }
+  ]
+}

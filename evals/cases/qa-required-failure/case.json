@@ -1,0 +1,48 @@
+{
+  "id": "qa-required-failure",
+  "fixture": "qa-project",
+  "request": "/goat-qa Check my uncommitted change. What does it put at risk, and is it covered?",
+  "owners": [
+    "workflow/skills/goat-qa/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    ".goat-flow/skill-docs/playbooks/test-selection.md",
+    "workflow/skills/goat-qa/references/execution.md",
+    "workflow/skills/goat-qa/references/output-templates.md",
+    "workflow/skills/goat-qa/references/manual-testing.md"
+  ],
+  "rows": [
+    {
+      "id": "project-bytes",
+      "kind": "mechanical",
+      "label": "Fixture bytes match the before snapshot"
+    },
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "qa-required-tests",
+      "kind": "mechanical",
+      "label": "Both required test files ran in the target fixture"
+    },
+    {
+      "id": "qa-optional-skipped",
+      "kind": "mechanical",
+      "label": "The optional checkout suite stayed unexecuted"
+    },
+    {
+      "id": "qa-required-failed",
+      "kind": "mechanical",
+      "label": "The target npm test command exited 1 on the seeded SAVE10 rounding assertion"
+    },
+    {
+      "id": "qa-failure-report",
+      "kind": "mechanical",
+      "label": "The report carries the failed check, exit code, and observed versus expected cents"
+    }
+  ],
+  "harness": "codex",
+  "variant": "breaking"
+}

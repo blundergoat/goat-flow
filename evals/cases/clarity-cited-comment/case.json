@@ -1,0 +1,42 @@
+{
+  "id": "clarity-cited-comment",
+  "fixture": "cited-comment",
+  "harness": "codex",
+  "request": "/goat-clarity Tighten the doc comment above canonicalSkillStub in src/skill-stub.mjs. Keep the implementation and tests as they are.",
+  "owners": [
+    "workflow/skills/goat-clarity/SKILL.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    "workflow/skills/goat-clarity/references/target-scope-and-evidence.md",
+    "workflow/skills/goat-clarity/references/receipt-evidence.md",
+    ".goat-flow/skill-docs/playbooks/code-comments.md",
+    ".goat-flow/skill-docs/playbooks/test-selection.md"
+  ],
+  "rows": [
+    {
+      "id": "harness-status",
+      "kind": "mechanical",
+      "label": "Harness Git status matches the before listing"
+    },
+    {
+      "id": "clarity-citation-observed",
+      "kind": "mechanical",
+      "label": "The rollout shows a read of the learning-loop citation"
+    },
+    {
+      "id": "clarity-anchor-preserved",
+      "kind": "mechanical",
+      "label": "The cited phrase still resolves inside the selected comment"
+    },
+    {
+      "id": "clarity-other-bytes-preserved",
+      "kind": "mechanical",
+      "label": "Executable source, tests, and other fixture files match the before snapshot"
+    },
+    {
+      "id": "clarity-citation-decision",
+      "kind": "judgement",
+      "label": "The answer explains the citation and preserves it while editing or pauses before touching it"
+    }
+  ]
+}

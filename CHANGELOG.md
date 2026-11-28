@@ -13,6 +13,13 @@
 - **Audit flags a goat-flow release in an instruction heading** - The score-only `instruction-release-stamp` check names each heading that carries one and says to remove it after review; `.goat-flow/config.yaml` already records the release.
 - **Install preview opens with a summary** - `install --dry-run` first shows action counts, the user-owned and other agents' files it writes, and configs still running retired hooks.
 - **Install summary names tracked deletions and mode-only changes** - It lists removed files Git still tracks, to stage before you commit, and files whose mode changed with no content change.
+- **`/goat-qa` records each affected page journey** - When a change alters a page, QA checks it in a browser and marks each journey verified, failed, blocked or untested. A passing test suite never counts for a page nobody opened.
+- **`/goat-qa` verifies a claimed fix** - Ask it to verify a fix and it replays the fix's recorded failure, then runs the regression checks. A fix with no recorded reproduction stays unverified, and `/goat` now routes "verify my fix" to QA.
+- **`/goat-qa` saves screenshots as plan evidence** - When a claim needs visible proof and the request names a plan, reviewed screenshots go under that plan's `evidence/` folder with descriptive names and a `meta.json`.
+- **`/goat-qa` manual-testing rules** - Before a browser check, QA proves the app serves the new code, uses the right account and reaches the page the way a user does, and it writes page-specific steps for human testers.
+- **Browser checks launch their own headless Chrome** - When no browser is running but Chrome is installed, the browser-use playbook starts an isolated headless instance with a scratch profile once browser control is approved, instead of asking you to start a browser.
+- **`/goat-critique` interviews you before planning** - Ask to be interviewed for a plan and it asks only the open choices, three to five at a time, then `/goat-plan` writes the plan from your answers. Critiquing a finished artifact is unchanged.
+- **`/goat-critique` checks an existing plan for stale facts** - It reports cited paths, totals, dates and dependencies that are out of date and asks how to fix each one. It changes only that plan, and only when you ask for or approve the update.
 
 ### Changed
 
@@ -20,9 +27,11 @@
 - **Printed fix commands name the running release** - Fix commands from audit, setup, `stats`, `status`, `index`, `skill doctor`, install refusals, the quality prompt and the Hooks page print `npx @blundergoat/goat-flow@<version> …`, not a bare `goat-flow` or `@latest`. Setup's audit gates keep the path of the CLI that printed them.
 - **A finished install previews `pass`** - `install --dry-run` reports `pass` when nothing is left to write or remove beyond rebuilt generated files such as indexes and install records; `ready` now means safe writes are waiting.
 - **`feedback-loop-active` reports every cause in one run** - Missing directories, stale references, invalid anchors and stale buckets appear together, and the JSON details name each stale bucket and its `last_reviewed` date.
+- **`/goat-qa` runs your existing tests** - In Standard mode it runs the focused and required checks for a change and reports each command's exit status and pass, fail and skip counts. It still never writes tests, and an analysis-only request runs nothing.
 
 ### Fixed
 
+- **`/goat-critique` run by any sub-agent hands control back** - Every sub-agent now stops after intake and leaves the critics and gates to the main session; before, the rule named only a forked sub-agent.
 - **Multi-agent upgrades no longer report `Fatal error`** - Each install finishes and lists the agents left; the last one removes the retired hooks.
 - **Retried `--force-path` no longer refused** - A named path that an earlier run already resolved now prints a warning and the install continues.
 - **Install reports rewritten hook registrations** - Kept hook config files show their registration updates, with a reminder to restart open agent sessions.

@@ -35,6 +35,20 @@ Any failure exits 1, and no check autofixes files. Guidance checks may take long
 than ordinary source checks. Owning test suites and full preflight remain required;
 Knip runs in preflight. The full trigger table is in `scripts/check-touched.mjs`.
 
+## Saved skill checks
+
+Before a release or after changing skill guidance, maintainers can run eleven
+saved cases on demand from a native Codex session.
+
+- `critique-handback`, `intake-question-shape`, `existing-plan-check` and `interview-routing`
+- `qa-analysis-only` and `qa-required-failure`
+- `debug-rounding-gate` and `plan-blocked-milestone`
+- `review-staged-authority` and `clarity-cited-comment`
+- `security-trusted-policy`
+
+The security case reads a policy from a pinned commit available in the local checkout.
+Live runs stay outside CI. Follow the [saved skill check instructions](evals/README.md).
+
 ## Test structure
 
 Tests live in `test/` with subdirectories:
